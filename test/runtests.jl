@@ -1,6 +1,12 @@
-using Taped
-using Test
+using
+    ReverseDiff,
+    Taped,
+    Test,
+    Umlaut
+
+include("test_resources.jl")
 
 @testset "Taped.jl" begin
-    # Write your tests here.
+    include("tracing.jl")
+    include("algorithmic_differentiation.jl")
 end

@@ -1,13 +1,22 @@
 name = "Taped"
 uuid = "07d77754-e150-4737-8c94-cd238a1fb45b"
-authors = ["Will Tebbutt <wt0881@my.bristol.ac.uk> and contributors"]
+authors = ["Will Tebbutt and contributors"]
 version = "1.0.0-DEV"
 
+[deps]
+ChainRules = "082447d4-558c-5d27-93f4-14fc19e9eca2"
+ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
+DiffRules = "b552c78f-8df3-52c6-915a-8e097449b14b"
+Umlaut = "92992a2b-8ce5-4a9c-bb9d-58be9a7dc841"
+
 [compat]
+ReverseDiff = "1"
+Umlaut = "0.5"
 julia = "1"
 
 [extras]
+ReverseDiff = "37e2e3b7-166d-5795-8a7a-e32c996b4267"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test"]
+test = ["ReverseDiff", "Test"]
