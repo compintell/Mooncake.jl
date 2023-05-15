@@ -14,18 +14,17 @@
             ReverseDiff.gradient(x -> compiled_tape(f, only(x)), [x]),
             ReverseDiff.gradient(x -> f(only(x)), [x]),
         )
-        # display(@code_warntype optimize=false compiled_tape(f, x))
-        # println()
     end
 
     @testset "value-dependent control flow" begin
         f = TestResources.value_dependent_control_flow
         x = 5.0
-        val, tape = Taped.taped_trace(f, x, 5; ctx=Taped.RMADContext())
+        ctx = Taped.RMADContext()
+        val, tape = Taped.taped_trace(f, x, 5; ctx)
         @test_throws ErrorException play!(tape, f, x, 4)
     end
 
-    @testset "value_and_derivative" for (f, x) in TestResources.UNARY_FUNCTIONS[1:1]
+    @testset "value_and_derivative($f, $x)" for (f, x) in TestResources.UNARY_FUNCTIONS
         @test isapprox(
             only(ReverseDiff.gradient(x -> f(only(x)), [x])),
             last(Taped.value_and_derivative(f, x)),
