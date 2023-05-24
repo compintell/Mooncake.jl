@@ -1,3 +1,6 @@
+# This is a proof-of-concept prototype, not something for general use.
+# It is not maintained, nor will PRs against it be accepted.
+
 # Define batch types.
 struct Batch{T, Tbatch}
     batch::Tbatch

@@ -1,3 +1,6 @@
+# This is a proof-of-concept prototype, not something for general use.
+# It is not maintained, nor will PRs against it be accepted.
+
 struct ForwardsModeADContext end
 
 const FMC = ForwardsModeADContext
@@ -19,19 +22,16 @@ function frule(::typeof(cos), x::Dual{<:Union{Float32, Float64}})
     return Dual(cos(x.x), -sin(x.x) * x.dx)
 end
 
+# Non-participatory operations.
 frule(::typeof(>), a::Int, b::Int) = a > b
 frule(::typeof(-), a::Int, b::Int) = a - b
 frule(::Colon, a::Int, b::Int) = a:b
 frule(::typeof(iterate), x...) = iterate(x...)
 frule(::typeof(===), x, y) = x === y
-
-# Hacky
 function frule(f::Core.IntrinsicFunction, x)
-    if f === Core.Intrinsics.not_int
-        return f(x)
-    end
+    f === Core.Intrinsics.not_int && return f(x)
+    throw(error("unknown intrinsic $f"))
 end
-
 frule(::typeof(getfield), x::Tuple, v::Int) = getfield(x, v)
 
 function to_forwards_mode_ad(tape::Tape{FMC}, args...)

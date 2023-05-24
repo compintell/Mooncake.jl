@@ -4,7 +4,7 @@ using
     Test,
     Umlaut
 
-using Taped: Dual, to_forwards_mode_ad
+using Taped: Dual, to_forwards_mode_ad, Shadow, to_reverse_mode_ad
 
 include("test_resources.jl")
 
@@ -13,5 +13,5 @@ include("test_resources.jl")
     include("is_pure.jl")
     include("vmap.jl")
     include("forwards_mode_ad.jl")
-    # include("algorithmic_differentiation.jl")
+    include("reverse_mode_ad.jl")
 end
