@@ -33,14 +33,6 @@ function _v_eval(::typeof(Base.abs_float), x::Batch{Float64})
     return Batch{Float64}(map(Base.abs_float, x.batch))
 end
 
-# _v_eval(::typeof(Base.sle_int), x::Int, y::Int) = Base.sle_int(x, y)
-# _v_eval(::typeof(Core.apply_type), x...) = Core.apply_type(x...)
-# _v_eval(::typeof(fieldtype), s::DataType, x::Int) = fieldtype(s, x)
-# function _v_eval(::typeof(Base.slt_int), x...)
-#     @show typeof.(x) 
-#     return Base.slt_int(x...)
-# end
-
 # vectorise modifies a tape, based on the input arguments.
 function vectorise(tape::Tape, args...)
     new_tape = Tape(tape.c)
