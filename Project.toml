@@ -4,12 +4,6 @@ authors = ["Will Tebbutt and contributors"]
 version = "1.0.0-DEV"
 
 [deps]
-Accessors = "7d9f7c33-5ae7-4f3b-8dc6-eff91059b697"
-ChainRules = "082447d4-558c-5d27-93f4-14fc19e9eca2"
-ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
-ConstructionBase = "187b0558-2788-49d3-abe0-74a17ed4e7c9"
-DiffRules = "b552c78f-8df3-52c6-915a-8e097449b14b"
-Setfield = "efcf1570-3423-57d1-acb7-fd33fddbac46"
 Umlaut = "92992a2b-8ce5-4a9c-bb9d-58be9a7dc841"
 
 [compat]

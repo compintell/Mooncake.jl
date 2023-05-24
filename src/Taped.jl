@@ -1,10 +1,17 @@
 module Taped
 
-using Accessors, ChainRules, ChainRulesCore, ConstructionBase, DiffRules, Umlaut
+using Umlaut
+import Umlaut: isprimitive, Frame, Tracer
 
-import Umlaut: isprimitive
-
+# Core functionality.
 include("tracing.jl")
-include("algorithmic_differentiation.jl")
+
+# Functions of tapes.
+include("is_pure.jl")
+
+# Specific transformation examples.
+include("vmap.jl")
+
+# include("algorithmic_differentiation.jl")
 
 end

@@ -294,45 +294,7 @@ for (M, f, arity) in DiffRules.diffrules(; filter_modules=[:Base])
     end
 end
 
-struct ConditionalCheck{Tv}
-    value::Tv
-end
-
-function verify(check::ConditionalCheck, new_value)
-    check.value == new_value && return
-    throw(error(
-        "Control flow has changed between the current execution and when this tape was " *
-        "constructed. Please re-write your code to ensure that the same branches are " *
-        "taken each time that your function is executed.",
-    ))
-end
-
 ChainRulesCore.@non_differentiable verify(::ConditionalCheck, ::Any)
-
-function Umlaut.handle_gotoifnot_node!(
-    t::Umlaut.Tracer{<:RMADContext}, cf::Core.GotoIfNot, frame::Umlaut.Frame
-)
-    return if cf.cond isa Umlaut.Argument || cf.cond isa Umlaut.SSAValue
-        # resolve tape var
-        v = t.tape[frame.ir2tape[cf.cond]].val
-        push!(t.tape, mkcall(verify, ConditionalCheck(v), frame.ir2tape[cf.cond]))
-        v
-    elseif cf.cond isa Bool
-        # literal condition (e.g. while true)
-        cf.cond
-    elseif cf.cond == Expr(:boundscheck)
-        # boundscheck expression must be evaluated on some later stage
-        # of interpretation that we don't have access to on this level
-        # so just skipping the check instead
-        true
-    else
-        exc = AssertionError(
-            "Expected goto condition to be of type Argument, " *
-            "SSAValue or Bool, but got $(cf.cond). \n\nFull IR: \n\n$(ir)\n"
-        )
-        throw(exc)
-    end
-end
 
 function Umlaut.inputs!(tape::Tape{<:RMADContext}, vals...)
     @assert(isempty(tape) || length(inputs(tape)) == length(vals) || get(tape.meta, :isva, false),
