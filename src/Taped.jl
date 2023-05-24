@@ -11,6 +11,7 @@ include("is_pure.jl")
 
 # Specific transformation examples.
 include("vmap.jl")
+include("forwards_mode_ad.jl")
 
 # include("algorithmic_differentiation.jl")
 

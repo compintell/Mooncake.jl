@@ -48,7 +48,6 @@ function vectorise(tape::Tape, args...)
     return new_tape
 end
 
-vectorise(x::Input) = x
 vectorise(x::Constant) = x
 vectorise(x::Call) = mkcall(_v_eval, x.fn, map(unbind, x.args)...)
 
