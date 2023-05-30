@@ -1,6 +1,6 @@
 module Taped
 
-using DiffRules, Distributions, Umlaut
+using DiffRules, Distributions, LinearAlgebra, Umlaut
 import Umlaut: isprimitive, Frame, Tracer
 
 # Core functionality.
@@ -14,5 +14,6 @@ include("vmap.jl")
 include("forwards_mode_ad.jl")
 include("reverse_mode_ad.jl")
 include("logpdf.jl")
+include("inplace.jl")
 
 end

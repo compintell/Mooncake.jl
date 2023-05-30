@@ -2,6 +2,8 @@ using Distributions, ReverseDiff, Taped, Test, Umlaut
 
 using Taped: Dual, Shadow, to_forwards_mode_ad, to_reverse_mode_ad, assume
 
+import Taped: InplaceData
+
 include("test_resources.jl")
 
 @testset "Taped.jl" begin
@@ -11,4 +13,5 @@ include("test_resources.jl")
     include("forwards_mode_ad.jl")
     include("reverse_mode_ad.jl")
     include("logpdf.jl")
+    include("inplace.jl")
 end
