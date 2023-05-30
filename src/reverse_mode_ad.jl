@@ -1,7 +1,7 @@
 # This is a proof-of-concept prototype, not something for general use.
 # It is not maintained, nor will PRs against it be accepted.
 
-struct ReverseModeADContext end
+struct ReverseModeADContext <: TapedContext end
 
 const RMC = ReverseModeADContext
 
@@ -14,24 +14,24 @@ end
 primal(x::Shadow) = x.x
 shadow(x::Shadow) = x.dx
 
-isprimitive(::typeof(sin), x::Float64) = true
+isprimitive(::RMC, ::typeof(sin), x::Float64) = true
 function rrule(::typeof(sin), x::Shadow{Float64})
     dy = Ref(0.0)
     function sin_pullback!()
-        shadow(x)[] += dy[] * cos(x.x)
+        shadow(x)[] += dy[] * cos(primal(x))
         return nothing
     end
-    return Shadow(sin(x.x), dy, sin_pullback!)
+    return Shadow(sin(primal(x)), dy, sin_pullback!)
 end
 
-isprimitive(::typeof(cos), x::Float64) = true
+isprimitive(::RMC, ::typeof(cos), x::Float64) = true
 function rrule(::typeof(cos), x::Shadow{Float64})
     dy = Ref(0.0)
     function cos_pullback!()
-        shadow(x)[] -= dy[] * sin(x.x)
+        shadow(x)[] -= dy[] * sin(primal(x))
         return nothing
     end
-    return Shadow(cos(x.x), dy, cos_pullback!)
+    return Shadow(cos(primal(x)), dy, cos_pullback!)
 end
 
 # Non-participatory operations.
@@ -46,14 +46,11 @@ function rrule(f::Core.IntrinsicFunction, x)
 end
 rrule(::typeof(getfield), x::Tuple, v::Int) = getfield(x, v)
 
-function to_reverse_mode_ad(tape::Tape{RMC}, args...)
+function to_reverse_mode_ad(tape::Tape{RMC})
     new_tape = Tape(tape.c)
-    for (n, arg) in enumerate(args)
-        a_type = typeof(tape.ops[n].val)
-        @assert typeof(arg) == a_type || typeof(arg) <: Shadow{a_type}
-        push!(new_tape, Input(arg))
-    end
-    for op in tape.ops[length(args)+1:end]
+
+    # Transform forwards pass, replacing ops with associated rrule calls.
+    for op in tape.ops
         push!(new_tape, to_reverse_mode_ad(op))
     end
     new_tape.result = unbind(tape.result)
@@ -66,13 +63,14 @@ function to_reverse_mode_ad(tape::Tape{RMC}, args...)
     return new_tape
 end
 
-function seed_return!(x::Shadow{Float64})
-    x.dx[] = 1.0
-end
-seed_return!(x) = throw(error("Expected Shadow, got $(typeof(x))"))
-
+to_reverse_mode_ad(x::Input) = x
 to_reverse_mode_ad(x::Constant) = x
 to_reverse_mode_ad(x::Call) = mkcall(rrule, x.fn, map(unbind, x.args)...)
+
+function seed_return!(x::Shadow{Float64})
+    shadow(x)[] = 1.0
+end
+seed_return!(x) = throw(error("Expected Shadow, got $(typeof(x))"))
 
 function run_pullback!(x::Shadow)
     x.pb! === nothing && return nothing

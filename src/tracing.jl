@@ -1,6 +1,8 @@
-struct TapedContext end
+abstract type TapedContext end
 
-const TC = TapedContext
+struct ConcreteTapedContext <: TapedContext end
+
+const TC = ConcreteTapedContext
 
 struct ConditionalCheck{Tv}
     value::Tv
@@ -15,7 +17,9 @@ function verify(check::ConditionalCheck, new_value)
     ))
 end
 
-function Umlaut.handle_gotoifnot_node!(t::Tracer{<:TC}, cf::Core.GotoIfNot, frame::Frame)
+function Umlaut.handle_gotoifnot_node!(
+    t::Tracer{<:TapedContext}, cf::Core.GotoIfNot, frame::Frame
+)
     return if cf.cond isa Umlaut.Argument || cf.cond isa Umlaut.SSAValue
         # resolve tape var
         v = t.tape[frame.ir2tape[cf.cond]].val
@@ -39,8 +43,8 @@ function Umlaut.handle_gotoifnot_node!(t::Tracer{<:TC}, cf::Core.GotoIfNot, fram
 end
 
 # By default, things are not primitive.
-isprimitive(::TC, ::F, x...) where {F} = false
+isprimitive(::TapedContext, ::F, x...) where {F} = false
 
 # Umlaut versions of IR nodes and built-ins must be primitive.
-isprimitive(::TC, ::typeof(Umlaut.__new__), T, x...) = true
-isprimitive(::TC, ::Core.Builtin, x...) = true
+isprimitive(::TapedContext, ::typeof(Umlaut.__new__), T, x...) = true
+isprimitive(::TapedContext, ::Core.Builtin, x...) = true

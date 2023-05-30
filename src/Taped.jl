@@ -1,6 +1,6 @@
 module Taped
 
-using Umlaut
+using Distributions, Umlaut
 import Umlaut: isprimitive, Frame, Tracer
 
 # Core functionality.
@@ -13,7 +13,6 @@ include("is_pure.jl")
 include("vmap.jl")
 include("forwards_mode_ad.jl")
 include("reverse_mode_ad.jl")
-
-# include("algorithmic_differentiation.jl")
+include("logpdf.jl")
 
 end

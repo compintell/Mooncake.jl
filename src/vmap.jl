@@ -11,7 +11,7 @@ end
 
 batch_type(::Float64) = Vector{Float64}
 
-struct VMapContext end
+struct VMapContext <: TapedContext end
 
 const VMC = VMapContext
 

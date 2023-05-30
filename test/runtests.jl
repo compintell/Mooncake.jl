@@ -1,10 +1,11 @@
 using
+    Distributions,
     ReverseDiff,
     Taped,
     Test,
     Umlaut
 
-using Taped: Dual, to_forwards_mode_ad, Shadow, to_reverse_mode_ad
+using Taped: Dual, Shadow, to_forwards_mode_ad, to_reverse_mode_ad, assume
 
 include("test_resources.jl")
 
@@ -14,4 +15,5 @@ include("test_resources.jl")
     include("vmap.jl")
     include("forwards_mode_ad.jl")
     include("reverse_mode_ad.jl")
+    include("logpdf.jl")
 end
