@@ -4,6 +4,7 @@ authors = ["Will Tebbutt and contributors"]
 version = "1.0.0-DEV"
 
 [deps]
+DiffRules = "b552c78f-8df3-52c6-915a-8e097449b14b"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 Umlaut = "92992a2b-8ce5-4a9c-bb9d-58be9a7dc841"
 

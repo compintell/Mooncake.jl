@@ -1,9 +1,4 @@
-using
-    Distributions,
-    ReverseDiff,
-    Taped,
-    Test,
-    Umlaut
+using Distributions, ReverseDiff, Taped, Test, Umlaut
 
 using Taped: Dual, Shadow, to_forwards_mode_ad, to_reverse_mode_ad, assume
 

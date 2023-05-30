@@ -26,11 +26,10 @@ frule(::typeof(-), a::Int, b::Int) = a - b
 frule(::Colon, a::Int, b::Int) = a:b
 frule(::typeof(iterate), x...) = iterate(x...)
 frule(::typeof(===), x, y) = x === y
-function frule(f::Core.IntrinsicFunction, x)
-    f === Core.Intrinsics.not_int && return f(x)
+function frule(f::Core.IntrinsicFunction, x...)
+    f === Core.Intrinsics.not_int && return f(x...)
     throw(error("unknown intrinsic $f"))
 end
-frule(::typeof(getfield), x::Tuple, v::Int) = getfield(x, v)
 
 function to_forwards_mode_ad(tape::Tape{FMC})
     new_tape = Tape(tape.c)

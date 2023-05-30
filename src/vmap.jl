@@ -15,7 +15,6 @@ struct VMapContext <: TapedContext end
 
 const VMC = VMapContext
 
-isprimitive(::VMC, f::F, x...) where {F} = isprimitive(TC(), f, x...)
 function _v_eval(f::F, x...) where {F}
     try
         return f(x...)
