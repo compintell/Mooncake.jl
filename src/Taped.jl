@@ -1,7 +1,9 @@
 module Taped
 
-using DiffRules, Distributions, LinearAlgebra, Umlaut
+using DiffRules, Distributions, FunctionWrappers, LinearAlgebra, Umlaut
 import Umlaut: isprimitive, Frame, Tracer
+
+using FunctionWrappers: FunctionWrapper
 
 # Core functionality.
 include("tracing.jl")
@@ -15,5 +17,8 @@ include("forwards_mode_ad.jl")
 include("reverse_mode_ad.jl")
 include("logpdf.jl")
 include("inplace.jl")
+include("accelerate_tape.jl")
+
+export primal, shadow
 
 end

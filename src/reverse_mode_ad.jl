@@ -5,33 +5,47 @@ struct ReverseModeADContext <: TapedContext end
 
 const RMC = ReverseModeADContext
 
-struct Shadow{Tx, Tdx, Tpb}
+struct Shadow{Tx, Tdx<:Ref, Tpb}
     x::Tx
-    dx::Ref{Tdx}
+    dx::Tdx
     pb!::Tpb
 end
 
 primal(x::Shadow) = x.x
 shadow(x::Shadow) = x.dx
 
-isprimitive(::RMC, ::typeof(sin), x::Float64) = true
-function rrule(::typeof(sin), x::Shadow{Float64})
+isprimitive(::RMC, ::typeof(sin), ::Float64) = true
+function build_rrule(::typeof(sin), ::Float64)
     dy = Ref(0.0)
-    function sin_pullback!()
-        shadow(x)[] += dy[] * cos(primal(x))
-        return nothing
+    function sin_rrule(::typeof(sin), x::Shadow{Float64})
+        dy[] = 0.0
+        dx = shadow(x)
+        x = primal(x)
+        partial = cos(x)
+        function sin_pullback!()
+            dx[] += dy[] * partial
+            return nothing
+        end
+        return Shadow(sin(x), dy, sin_pullback!)
     end
-    return Shadow(sin(primal(x)), dy, sin_pullback!)
+    return sin_rrule
 end
 
-isprimitive(::RMC, ::typeof(cos), x::Float64) = true
-function rrule(::typeof(cos), x::Shadow{Float64})
+isprimitive(::RMC, ::typeof(cos), ::Float64) = true
+function build_rrule(::typeof(cos), ::Float64)
     dy = Ref(0.0)
-    function cos_pullback!()
-        shadow(x)[] -= dy[] * sin(primal(x))
-        return nothing
+    function cos_rrule(::typeof(cos), x::Shadow{Float64})
+        dy[] = 0.0
+        dx = shadow(x)
+        x = primal(x)
+        partial = -sin(x)
+        function cos_pullback!()
+            dx[] = dy[] * partial
+            return nothing
+        end
+        return Shadow(cos(x), dy, cos_pullback!)
     end
-    return Shadow(cos(primal(x)), dy, cos_pullback!)
+    return cos_rrule
 end
 
 # Non-participatory operations.
@@ -44,7 +58,10 @@ function rrule(f::Core.IntrinsicFunction, x)
     f === Core.Intrinsics.not_int && return f(x)
     throw(error("unknown intrinsic $f"))
 end
-rrule(::typeof(getfield), x::Tuple, v::Int) = getfield(x, v)
+
+function rrule(::typeof(getfield), x::Tuple, v::Int) 
+    return getfield(x, v)
+end
 
 function to_reverse_mode_ad(tape::Tape{RMC})
     new_tape = Tape(tape.c)
@@ -63,9 +80,12 @@ function to_reverse_mode_ad(tape::Tape{RMC})
     return new_tape
 end
 
-to_reverse_mode_ad(x::Input) = x
-to_reverse_mode_ad(x::Constant) = x
-to_reverse_mode_ad(x::Call) = mkcall(rrule, x.fn, map(unbind, x.args)...)
+to_reverse_mode_ad(x::Input) = Input(x.val)
+to_reverse_mode_ad(x::Constant) = Constant(x.val)
+function to_reverse_mode_ad(x::Call)
+    _rrule = build_rrule(x.fn, map(x -> x.op.val, x.args)...) 
+    return mkcall(_rrule, x.fn, map(unbind, x.args)...)
+end
 
 function seed_return!(x::Shadow{Float64})
     shadow(x)[] = 1.0
