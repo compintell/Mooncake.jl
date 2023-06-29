@@ -1,15 +1,26 @@
+rd_grad(f, x::Float64) = ReverseDiff.gradient(x -> f(only(x)), [x])[1]
+function rd_grad(f, x::Array{Float64})
+    return only(FiniteDifferences.grad(central_fdm(5, 1), f ∘ copy, x))
+end
+
+function test_ad(f, x)
+    x_copy = copy(x)
+    dx, g = Taped.gradient(f, x)
+    @test rd_grad(f, x_copy) ≈ dx
+    @test x_copy ≈ x
+
+    @test rd_grad(f, x_copy) ≈ g(f, x)
+    @test x_copy ≈ x
+end
+
 @testset "reverse_mode_ad" begin
-    @testset for (f, x) in TestResources.UNARY_FUNCTIONS[1:2]
-        _, tape = Umlaut.trace(f, x; ctx=Taped.RMC())
-        x_dx = Shadow(x, Ref(0.0), nothing)
-        rm_tape = to_reverse_mode_ad(tape)
-        play!(rm_tape, f, x_dx)
-        @test ReverseDiff.gradient(x -> f(only(x)), [x])[1] ≈ Taped.shadow(x_dx)[]
+    @testset for (f, x) in TestResources.UNARY_FUNCTIONS[1:7]
+        test_ad(f, x)
     end
 end
 
 function performance_test()
-    x = Shadow(5.0, Ref(0.0), nothing)
+    x = Shadow(5.0, Ref(0.0))
     y = Taped.rrule(sin, x)
     shadow(y)[] = 1.0
 

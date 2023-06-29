@@ -1,9 +1,22 @@
 module Taped
 
-using DiffRules, Distributions, FunctionWrappers, LinearAlgebra, Umlaut
+using
+    ChainRulesCore,
+    DiffRules,
+    Distributions,
+    FiniteDifferences,
+    FunctionWrappers,
+    LinearAlgebra,
+    Random,
+    Setfield,
+    Umlaut,
+    Test
+
 import Umlaut: isprimitive, Frame, Tracer
 
 using FunctionWrappers: FunctionWrapper
+
+using Core.Intrinsics: not_int, sle_int, slt_int, sub_int, add_int
 
 # Core functionality.
 include("tracing.jl")
@@ -14,11 +27,22 @@ include("is_pure.jl")
 # Functions of tapes which output tapes.
 include("vmap.jl")
 include("forwards_mode_ad.jl")
+include("tangents.jl")
 include("reverse_mode_ad.jl")
+include("testing.jl")
 include("logpdf.jl")
 include("inplace.jl")
 include("accelerate_tape.jl")
 
-export primal, shadow
+export
+    primal,
+    shadow,
+    randn_tangent,
+    increment!!,
+    increment_field!!,
+    Tangent,
+    MutableTangent,
+    set_to_zero!!,
+    set_field_to_zero!!
 
 end
