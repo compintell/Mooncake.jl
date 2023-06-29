@@ -22,7 +22,8 @@ using Taped:
     accelerate,
     execute!,
     AcceleratedTape,
-    Tangent
+    Tangent,
+    _wrap_field
 
 import Taped: InplaceData
 

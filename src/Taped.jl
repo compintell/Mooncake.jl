@@ -16,6 +16,8 @@ import Umlaut: isprimitive, Frame, Tracer
 
 using FunctionWrappers: FunctionWrapper
 
+using Base: IEEEFloat
+
 using Core.Intrinsics: not_int, sle_int, slt_int, sub_int, add_int
 
 # Core functionality.
@@ -42,7 +44,10 @@ export
     increment_field!!,
     Tangent,
     MutableTangent,
+    PossiblyUninitTangent,
     set_to_zero!!,
-    set_field_to_zero!!
+    set_field_to_zero!!,
+    tangent_type,
+    zero_tangent
 
 end

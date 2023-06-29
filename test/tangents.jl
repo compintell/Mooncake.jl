@@ -15,50 +15,169 @@ function test_increment!!(z_target::T, x::T, y::T) where {T}
     @test z == z_target
 end
 
-function test_randn_tangent(rng::AbstractRNG, x)
-    r = randn_tangent(rng, x)
-    @test typeof(r) == typeof(x)
-    if !(x isa NoTangent) # don't test for singleton type
-        @test randn_tangent(rng, x) !== r
+function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P, T}
+
+    # Verify that interface `tangent_type` runs.
+    Tt = tangent_type(P)
+    t = randn_tangent(rng, p)
+    z = zero_tangent(p)
+
+    # Check that user-provided tangents have the same type as `tangent_type` expects.
+    @test T == Tt
+
+    # Check that ismutabletype(P) => ismutabletype(T)
+    if ismutabletype(P)
+        @test ismutabletype(Tt)
     end
+
+    # Check that tangents are of the correct type.
+    @test Tt == typeof(t)
+    @test Tt == typeof(z)
+
+    # Check that zero_tangent is deterministic.
+    @test z == Taped.zero_tangent(p)
+
+    # Check that randn_tangent is not deterministic when it ought not to be.
+    if !(Tt === NoTangent) # don't test for singleton type
+        @test randn_tangent(rng, p) !== t
+    end
+
+    # Verify that the zero tangent is zero via its action.
+    zc = deepcopy(z)
+    tc = deepcopy(t)
+    @test increment!!(zc, zc) == zc
+    @test increment!!(zc, tc) == tc
+    @test increment!!(tc, zc) == tc
+
+    if ismutabletype(P)
+        @test increment!!(zc, zc) === zc
+        @test increment!!(tc, zc) === tc
+        @test increment!!(zc, tc) === zc
+        @test increment!!(tc, tc) === tc
+    end
+
+    z_pred = increment!!(x, y)
+    @test z_pred == z_target
+    if ismutabletype(P)
+        @test z_pred === x
+    end
+
+    # If t or z is a NoTangent, then the other must also be. If neither are zero, then
+    # `t` must not be zero, and adding `t` to itself should produce a different tangent.
+    if t === NoTangent() || z === NoTangent()
+        @test tc == zc
+    else
+        @test !(zc == tc)
+        if !ismutabletype(P)
+            @test !(increment!!(tc, tc) == tc)
+        end
+    end
+
+    # Adding things preserves types.
+    @test increment!!(zc, zc) isa Tt
+    @test increment!!(zc, tc) isa Tt
+    @test increment!!(tc, zc) isa Tt
+
+    # Setting to zero equals zero.
+    @test set_to_zero!!(tc) == z
+    if ismutabletype(P)
+        @test set_to_zero!!(tc) === tc
+    end
+
+    # # Check that the inner product works, and is bilinear.
+    # for a in (z, t), b in (z, t)
+    #     v = inner_product(a, b)
+    #     @test v isa Float64
+    #     @test 2v ≈ inner_product(a, b + b) rtol=1e-2 atol=1e-2
+    #     @test 2v ≈ inner_product(a + a, b) rtol=1e-2 atol=1e-2
+    # end
 end
 
-function test_tangent(rng::AbstractRNG, z_target::T, x::T, y::T) where {T}
-    test_increment!!(z_target, x, y)
-    test_randn_tangent(rng, x)
+struct StructFoo
+    a::Float64
+    b::Vector{Float64}
+    StructFoo(a::Float64, b::Vector{Float64}) = new(a, b)
+    StructFoo(a::Float64) = new(a)
+end
+
+mutable struct MutableFoo
+    a::Float64
+    b::Vector{Float64}
+    MutableFoo(a::Float64, b::Vector{Float64}) = new(a, b)
+    MutableFoo(a::Float64) = new(a)
 end
 
 @testset "tangents" begin
     rng = Xoshiro(123456)
-    test_tangent(rng, NoTangent(), NoTangent(), NoTangent())
+    test_tangent(rng, sin, NoTangent(), NoTangent(), NoTangent())
 
-    for T in [Float16, Float32, Float64]
-        test_tangent(rng, T(9), T(5), T(4))
+    @testset "$T" for T in [Float16, Float32, Float64]
+        test_tangent(rng, T(10), T(9), T(5), T(4))
     end
 
-    x = randn(5)
-    y = randn(5)
-    test_tangent(rng, x + y, x, y)
+    @testset "Vector{Float64}" begin
+        p = randn(5)
+        x = randn(5)
+        y = randn(5)
+        test_tangent(rng, p, x + y, x, y)
+    end
 
-    x = (5.0, randn(5))
-    y = (4.0, randn(5))
-    z = (9.0, x[2] + y[2])
-    test_tangent(rng, z, x, y)
+    @testset "Tuple{Float64, Vector{Float64}}" begin
+        p = (6.0, randn(5))
+        x = (5.0, randn(5))
+        y = (4.0, randn(5))
+        z = (9.0, x[2] + y[2])
+        test_tangent(rng, p, z, x, y)
+    end
 
-    x = (a=5.0, b=randn(5))
-    y = (a=4.0, b=rand(5))
-    z = (a=9.0, b=x.b + y.b)
-    test_tangent(rng, z, x, y)
+    @testset "NamedTuple{(:a, :b), Tuple{Float64, Vector{Float64}}}" begin
+        p = (a=6.0, b=randn(5))
+        x = (a=5.0, b=randn(5))
+        y = (a=4.0, b=rand(5))
+        z = (a=9.0, b=x.b + y.b)
+        test_tangent(rng, p, z, x, y)
+    end
 
-    x = Taped.Tangent((x=5.0, y=randn(5)))
-    y = Taped.Tangent((x=4.0, y=randn(5)))
-    z = Taped.Tangent((x=9.0, y=x.fields.y + y.fields.y))
-    test_tangent(rng, z, x, y)
+    @testset "StructFoo (full init)" begin
+        p = StructFoo(6.0, randn(5))
+        x = Tangent(map(_wrap_field, (a=5.0, b=randn(5))))
+        y = Tangent(map(_wrap_field, (a=4.0, b=randn(5))))
+        z = Tangent(map(_wrap_field, (a=9.0, b=x.fields.b.tangent + y.fields.b.tangent)))
+        test_tangent(rng, p, z, x, y)
+    end
 
-    x = Taped.MutableTangent((x=5.0, y=randn(5)))
-    y = Taped.MutableTangent((x=4.0, y=rand(5)))
-    z = Taped.MutableTangent((x=9.0, y=x.fields.y + y.fields.y))
-    test_tangent(rng, z, x, y)
+    T_b = PossiblyUninitTangent{Vector{Float64}}
+    @testset "StructFoo (partial init)" begin
+        p = StructFoo(6.0)
+        x = Tangent((a=_wrap_field(5.0), b=T_b()))
+        y = Tangent((a=_wrap_field(4.0), b=T_b()))
+        z = Tangent((a=_wrap_field(9.0), b=T_b()))
+        test_tangent(rng, p, z, x, y)
+
+        x_init = Tangent(map(_wrap_field, (a=5.0, b=randn(5))))
+        @test_throws ErrorException increment!!(x_init, x)
+        @test_throws ErrorException increment!!(x, x_init)
+    end
+
+    @testset "MutableFoo (full init)" begin
+        p = MutableFoo(6.0, randn(5))
+        x = MutableTangent(map(_wrap_field, (a=5.0, b=randn(5))))
+        y = MutableTangent(map(_wrap_field, (a=4.0, b=rand(5))))
+        z = MutableTangent(map(_wrap_field, (a=9.0, b=x.fields.b.tangent + y.fields.b.tangent)))
+        test_tangent(rng, p, z, x, y)
+    end
+
+    @testset "MutableFoo (partial init)" begin
+        p = MutableFoo(6.0)
+        x = MutableTangent((a=_wrap_field(5.0), b=T_b()))
+        y = MutableTangent((a=_wrap_field(4.0), b=T_b()))
+        z = MutableTangent((a=_wrap_field(9.0), b=T_b()))
+        test_tangent(rng, p, z, x, y)
+
+        x_init = MutableTangent(map(_wrap_field, (a=5.0, b=randn(5))))
+        @test_throws ErrorException increment!!(x_init, x)
+        @test_throws ErrorException increment!!(x, x_init)
+    end
 
     @testset "increment_field!!" begin
         @testset "tuple" begin
@@ -92,27 +211,6 @@ end
         end
     end
 
-    @testset "set_to_zero!!" begin
-        @test set_to_zero!!(NoTangent()) === NoTangent()
-        for T in [Float16, Float32, Float64]
-            @test set_to_zero!!(T(5.0)) === T(0.0)
-        end
-        @test set_to_zero!!((5.0, NoTangent())) === (0.0, NoTangent())
-
-        nt = (a=5.0, b=NoTangent())
-        @test set_to_zero!!(nt) === (a=0.0, b=NoTangent())
-
-        x = randn(5)
-        @test set_to_zero!!(x) == zero(x)
-        @test set_to_zero!!(x) === x
-
-        @test set_to_zero!!(Tangent(nt)) == Tangent((a=0.0, b=NoTangent()))
-
-        x = MutableTangent(nt)
-        @test set_to_zero!!(x) === x
-        @test x == MutableTangent((a=0.0, b=NoTangent()))
-    end
-
     @testset "set_field_to_zero!!" begin
         nt = (a=5.0, b=4.0)
         nt2 = (a=0.0, b=4.0)
@@ -125,3 +223,195 @@ end
         @test set_field_to_zero!!(x, :a) === x
     end
 end
+
+
+# The goal of these tests is to check that we can indeed generate tangent types for anything
+# that we will encounter in the Julia language. We try to achieve this by pulling in types
+# from LinearAlgebra, and Random, and generating tangents for them.
+# Need to improve coverage of Base / Core really.
+# It was these tests which made me aware of the issues around uninitialised values.
+
+#
+# Utility functionality for getting good test coverage of the types in a given module.
+#
+
+# function items_in(m::Module)
+#     if m === Core.Compiler
+#         @info "not getting names in Core"
+#         return []
+#     end
+#     @info "gathering items in $m"
+#     defined_names = filter(name -> isdefined(m, name), names(m; all=true))
+#     return map(name -> getfield(m, name), defined_names)
+# end
+
+# function modules_in(m::Module)
+#     if m === Core
+#         @info "not getting names in Core"
+#         return []
+#     end
+#     @info "gathering items in $m"
+#     defined_names = filter(name -> isdefined(m, name), names(m; all=false))
+#     items = map(name -> getfield(m, name), defined_names)
+#     return filter(item -> item isa Module && item !== m, items)
+# end
+
+# function types_in(m::Module)
+#     return filter(item -> item isa Type, items_in(m))
+# end
+
+# function concrete_types_in(m::Module)
+#     return filter(isconcretetype, types_in(m))
+# end
+
+# function struct_types_in(m::Module)
+#     return filter(isstructtype, types_in(m))
+# end
+
+# function primitive_types_in(m::Module)
+#     return filter(isprimitivetype, types_in(m))
+# end
+
+# function non_abstract_types_in(m::Module)
+#     return filter(!isabstracttype, types_in(m))
+# end
+
+
+# # Primitives are required to explicitly declare a method of `zero_tangent` which applies
+# # to them. They must not hit the generic fallback. This function checks that there are no
+# # primitives within the specified module which don't hit a generic fallback.
+# function verify_zero_for_primitives_in(m::Module)
+#     return filter(t -> isprimitivetype(t), types_in(m))
+# end
+
+
+# # A toy type on which to test tangent stuff in a variety of situations.
+# struct Foo{T, V}
+#     x::T
+#     y::V
+#     Foo{T, V}(x, y) where {T, V} = new{T, V}(x, y)
+#     Foo{T, V}(x) where {T, V} = new{T, V}(x)
+#     Foo(x, y) = new{typeof(x), typeof(y)}(x, y)
+# end
+
+# function test_basic_tangents(rng::AbstractRNG)
+#     @testset "typeof($x)" for x in [
+#         Foo(5.0, 5.0),
+#         Foo{Float64, Ref{Float64}}(5.0),
+#         Foo{Any, Ref{Float64}}(5.0),
+#     ]
+#         test_tangent(rng, x, 1e-3)
+#     end
+# end
+
+# function test_tricky_tangents(rng::AbstractRNG)
+#     @testset "typeof($x)" for x in [
+#         Foo(5.0, 5.0),
+#         Foo{Float64, Int64}(5.0),
+#         Foo{Int64, Int64}(5, 4),
+#         Foo{Real, Float64}(5.0, 4.0),
+#         Foo{Real, Float64}(5.0),
+#         Foo{Float64, Float64}(5.0),
+#         Foo{Float64, Vector{Float64}}(5.0),
+#         Foo{Real, Real}(5.0),
+#         Foo{Union{Float64, Int64}, Int64}(5.0, 4),
+#         Foo{Union{Float64, Int64}, Int64}(5.0),
+#         Foo{DataType, Float64}(Float64),
+#         Foo{DataType, Int64}(Float64),
+#     ]
+#         test_tangent(rng, x, 1e-3)
+#     end
+# end
+
+# function primitives_for_LinearAlgebra()
+#     return [
+#         Adjoint(randn(4, 5)),
+#         Bidiagonal(randn(5, 5), :U),
+#         bunchkaufman(Symmetric(randn(5, 5))),
+#         cholesky(collect(Matrix{Float64}(I, 3, 3))),
+#         cholesky(collect(Matrix{Float64}(I, 3, 3)), Val(:true)),
+#         ColumnNorm(),
+#         Diagonal(randn(4)),
+#         eigen(randn(3, 3)),
+#         GeneralizedEigen(randn(3), randn(3, 3)),
+#         svd(randn(3, 3), randn(3, 3)),
+#         schur(randn(3, 3), randn(3, 3)),
+#         Hermitian(randn(3, 3)),
+#         hessenberg(randn(3, 3)),
+#         LAPACKException(5),
+#         ldlt(SymTridiagonal(randn(3), randn(2))),
+#         lq(randn(3, 3)),
+#         lu(randn(3, 3)),
+#         LowerTriangular(randn(3, 3)),
+#         NoPivot(),
+#         PosDefException(5),
+#         qr(randn(2, 4)),
+#         qr(randn(2, 4), ColumnNorm()),
+#         RankDeficientException(5),
+#         RowMaximum(),
+#         svd(randn(2, 3)),
+#         schur(randn(2, 2)),
+#         SingularException(5),
+#         SymTridiagonal(randn(3), randn(2)),
+#         Symmetric(randn(3, 3)),
+#         Transpose(randn(3, 3)),
+#         Tridiagonal(randn(5, 5)),
+#         UniformScaling(5.0),
+#         UnitLowerTriangular(randn(5, 5)),
+#         UnitUpperTriangular(randn(5, 5)),
+#         UpperHessenberg(randn(5, 5)),
+#         UpperTriangular(randn(3, 3)),
+#         ZeroPivotException(5),
+#     ]
+# end
+
+# function primitives_for_Random()
+#     return [
+#         MersenneTwister(1), Xoshiro(1), RandomDevice(), TaskLocalRNG()
+#     ]
+# end
+
+# function test_many_tangents(rng)
+#     @testset "$(typeof(x))" for x in vcat(
+#         [
+#             Int8(5), Int16(5), Int32(5), Int64(5), Int128(5),
+#             UInt8(5), UInt16(5), UInt32(5), UInt64(5), UInt128(5),
+#             Float16(5.0), Float32(4.0), Float64(3.0), BigFloat(10.0),
+#         ],
+#         [randn(T, inds...)
+#             for T in [Float16, Float32, Float64]
+#             for inds in ((3, ), (3, 4), (3, 4, 5))
+#         ],
+#         [
+#             fill(1, 3), fill(1, 3, 4), fill(1, 4, 5, 6),
+#         ],
+#         primitives_for_LinearAlgebra(),
+#         primitives_for_Random(),
+#     )
+#         test_tangent(rng, x, 1e-3)
+#     end
+# end
+
+# # Verify that the tangent type of everything in the `m` can be determined.
+# # This is a surprisingly hard condition to satisfy.
+# function get_unique_tangent_types(m::Module)
+#     types_in_m = filter(x -> x isa Type, items_in(m))
+#     unique(map(tangent_type, types_in_m))
+#     return unique(map(tangent_type ∘ typeof, items_in(m)))
+# end
+
+# # Recursively gather all of the objects in all of the modules accessible from `m`.
+# # Most of these things will be types, functions, etc, rather than instances of them.
+# # This is useful, because it's lots of random stuff that you don't typically think of as
+# # being AD-related, and should mostly have `NoTangent` tangents.
+# # Test this to ensure that that actually happens!
+# function gather_objects(m::Module)
+#     get_unique_tangent_types(m)
+#     foreach(gather_objects, modules_in(m))
+# end
+
+# @testset "tangent_types" begin
+#     test_basic_tangents(Xoshiro(123456))
+#     test_many_tangents(Xoshiro(123456))
+#     test_tricky_tangents(Xoshiro(123456))
+# end
