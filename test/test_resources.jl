@@ -1,5 +1,7 @@
 module TestResources
 
+using ..Taped
+
 test_sin(x) = sin(x)
 
 test_cos_sin(x) = cos(sin(x))
@@ -37,6 +39,54 @@ function test_mutable_struct(x)
     return foo.x
 end
 
+struct StructFoo
+    a::Real
+    b::Vector{Float64}
+    StructFoo(a::Float64, b::Vector{Float64}) = new(a, b)
+    StructFoo(a::Float64) = new(a)
+end
+
+function equal_field(a, b, f)
+    (!isdefined(a, f) || !isdefined(b, f)) && return true
+    return getfield(a, f) == getfield(b, f)
+end
+
+Base.:(==)(a::StructFoo, b::StructFoo) = equal_field(a, b, :a) && equal_field(a, b, :b)
+
+Taped._add_to_primal(p::StructFoo, t::Tangent) = Taped._containerlike_add_to_primal(p, t)
+Taped._diff(p::StructFoo, q::StructFoo) = Taped._containerlike_diff(p, q)
+
+mutable struct MutableFoo
+    a::Float64
+    b::Vector{Float64}
+    MutableFoo(a::Float64, b::Vector{Float64}) = new(a, b)
+    MutableFoo(a::Float64) = new(a)
+end
+
+Base.:(==)(a::MutableFoo, b::MutableFoo) = equal_field(a, b, :a) && equal_field(a, b, :b)
+
+function Taped._add_to_primal(p::MutableFoo, t::MutableTangent)
+    return Taped._containerlike_add_to_primal(p, t)
+end
+Taped._diff(p::MutableFoo, q::MutableFoo) = Taped._containerlike_diff(p, q)
+
+test_struct_partial_init(a::Float64) = StructFoo(a).a
+
+test_mutable_partial_init(a::Float64) = MutableFoo(a).a
+
+function test_naive_mat_mul!(C::Matrix{T}, A::Matrix{T}, B::Matrix{T}) where {T<:Real}
+    for p in 1:size(C, 1)
+        for q in 1:size(C, 2)
+            C[p, q] = zero(T)
+            for r in 1:size(A, 2)
+                C[p, q] += A[p, r] * B[r, q]
+            end
+        end
+    end
+    return C
+end
+
+
 const UNARY_FUNCTIONS = [
     (test_sin, 1.0),
     (test_cos_sin, 2.0),
@@ -45,6 +95,8 @@ const UNARY_FUNCTIONS = [
     (test_while_loop, 2.0),
     (test_for_loop, 3.0),
     (test_mutable_struct, 5.0),
+    # (test_struct_partial_init, 3.5),
+    # (test_mutable_partial_init, 3.3),
 ]
 
 function value_dependent_control_flow(x, n)

@@ -48,6 +48,10 @@ export
     set_to_zero!!,
     set_field_to_zero!!,
     tangent_type,
-    zero_tangent
+    zero_tangent,
+    _scale,
+    _add_to_primal,
+    _diff,
+    _dot
 
 end

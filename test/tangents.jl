@@ -15,6 +15,9 @@ function test_increment!!(z_target::T, x::T, y::T) where {T}
     @test z == z_target
 end
 
+tangent(nt::NamedTuple) = Tangent(map(PossiblyUninitTangent, nt))
+mutable_tangent(nt::NamedTuple) = MutableTangent(map(PossiblyUninitTangent, nt))
+
 function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P, T}
 
     # Verify that interface `tangent_type` runs.
@@ -26,7 +29,7 @@ function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P,
     @test T == Tt
 
     # Check that ismutabletype(P) => ismutabletype(T)
-    if ismutabletype(P)
+    if ismutabletype(P) && !(Tt == NoTangent)
         @test ismutabletype(Tt)
     end
 
@@ -36,11 +39,6 @@ function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P,
 
     # Check that zero_tangent is deterministic.
     @test z == Taped.zero_tangent(p)
-
-    # Check that randn_tangent is not deterministic when it ought not to be.
-    if !(Tt === NoTangent) # don't test for singleton type
-        @test randn_tangent(rng, p) !== t
-    end
 
     # Verify that the zero tangent is zero via its action.
     zc = deepcopy(z)
@@ -62,12 +60,8 @@ function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P,
         @test z_pred === x
     end
 
-    # If t or z is a NoTangent, then the other must also be. If neither are zero, then
-    # `t` must not be zero, and adding `t` to itself should produce a different tangent.
-    if t === NoTangent() || z === NoTangent()
-        @test tc == zc
-    else
-        @test !(zc == tc)
+    # If t isn't the zero element, then adding it to itself must change its value.
+    if t != z
         if !ismutabletype(P)
             @test !(increment!!(tc, tc) == tc)
         end
@@ -83,28 +77,19 @@ function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P,
     if ismutabletype(P)
         @test set_to_zero!!(tc) === tc
     end
-
-    # # Check that the inner product works, and is bilinear.
-    # for a in (z, t), b in (z, t)
-    #     v = inner_product(a, b)
-    #     @test v isa Float64
-    #     @test 2v ≈ inner_product(a, b + b) rtol=1e-2 atol=1e-2
-    #     @test 2v ≈ inner_product(a + a, b) rtol=1e-2 atol=1e-2
-    # end
 end
 
-struct StructFoo
-    a::Float64
-    b::Vector{Float64}
-    StructFoo(a::Float64, b::Vector{Float64}) = new(a, b)
-    StructFoo(a::Float64) = new(a)
-end
-
-mutable struct MutableFoo
-    a::Float64
-    b::Vector{Float64}
-    MutableFoo(a::Float64, b::Vector{Float64}) = new(a, b)
-    MutableFoo(a::Float64) = new(a)
+function test_test_interface(p::P, t::T) where {P, T}
+    @assert tangent_type(P) == T
+    @test _scale(2.0, t) isa T
+    @test _add_to_primal(p, t) isa P
+    @test _add_to_primal(p, zero_tangent(p)) == p
+    @test _diff(p, p) isa T
+    @test _diff(p, p) == zero_tangent(p)
+    @test _dot(t, t) isa Float64
+    @test _dot(t, t) >= 0.0
+    @test _dot(t, zero_tangent(p)) == 0.0
+    @test _dot(t, increment!!(deepcopy(t), t)) ≈ 2 * _dot(t, t)
 end
 
 @testset "tangents" begin
@@ -113,6 +98,7 @@ end
 
     @testset "$T" for T in [Float16, Float32, Float64]
         test_tangent(rng, T(10), T(9), T(5), T(4))
+        test_test_interface(T(10), T(9))
     end
 
     @testset "Vector{Float64}" begin
@@ -120,6 +106,7 @@ end
         x = randn(5)
         y = randn(5)
         test_tangent(rng, p, x + y, x, y)
+        test_test_interface(p, x)
     end
 
     @testset "Tuple{Float64, Vector{Float64}}" begin
@@ -128,6 +115,7 @@ end
         y = (4.0, randn(5))
         z = (9.0, x[2] + y[2])
         test_tangent(rng, p, z, x, y)
+        test_test_interface(p, x)
     end
 
     @testset "NamedTuple{(:a, :b), Tuple{Float64, Vector{Float64}}}" begin
@@ -136,48 +124,93 @@ end
         y = (a=4.0, b=rand(5))
         z = (a=9.0, b=x.b + y.b)
         test_tangent(rng, p, z, x, y)
+        test_test_interface(p, x)
     end
 
     @testset "StructFoo (full init)" begin
-        p = StructFoo(6.0, randn(5))
-        x = Tangent(map(_wrap_field, (a=5.0, b=randn(5))))
-        y = Tangent(map(_wrap_field, (a=4.0, b=randn(5))))
-        z = Tangent(map(_wrap_field, (a=9.0, b=x.fields.b.tangent + y.fields.b.tangent)))
+        p = TestResources.StructFoo(6.0, randn(5))
+        _tangent = nt -> Taped.build_tangent(typeof(p), nt...)
+        x = _tangent((a=5.0, b=randn(5)))
+        y = _tangent((a=4.0, b=randn(5)))
+        z = _tangent((a=9.0, b=x.fields.b.tangent + y.fields.b.tangent))
         test_tangent(rng, p, z, x, y)
+        test_test_interface(p, x)
+
+        # Verify tangent generation works correctly.
+        t = _tangent((a=5.0, b=randn(5)))
+        @test Taped.is_init(t.fields.a) == true
+        @test Taped.is_init(t.fields.b) == true
     end
 
     T_b = PossiblyUninitTangent{Vector{Float64}}
     @testset "StructFoo (partial init)" begin
-        p = StructFoo(6.0)
-        x = Tangent((a=_wrap_field(5.0), b=T_b()))
-        y = Tangent((a=_wrap_field(4.0), b=T_b()))
-        z = Tangent((a=_wrap_field(9.0), b=T_b()))
+        p = TestResources.StructFoo(6.0)
+        _tangent = nt -> Taped.build_tangent(typeof(p), nt...)
+        x = _tangent((a=5.0,))
+        y = _tangent((a=4.0,))
+        z = _tangent((a=9.0,))
         test_tangent(rng, p, z, x, y)
 
-        x_init = Tangent(map(_wrap_field, (a=5.0, b=randn(5))))
+        x_init = _tangent((a=5.0, b=randn(5)))
         @test_throws ErrorException increment!!(x_init, x)
         @test_throws ErrorException increment!!(x, x_init)
+
+        # Verify tangent generation works correctly.
+        t = Taped.build_tangent(TestResources.StructFoo, 5.0)
+        @test Taped.is_init(t.fields.a) == true
+        @test Taped.is_init(t.fields.b) == false
     end
 
     @testset "MutableFoo (full init)" begin
-        p = MutableFoo(6.0, randn(5))
-        x = MutableTangent(map(_wrap_field, (a=5.0, b=randn(5))))
-        y = MutableTangent(map(_wrap_field, (a=4.0, b=rand(5))))
-        z = MutableTangent(map(_wrap_field, (a=9.0, b=x.fields.b.tangent + y.fields.b.tangent)))
+        p = TestResources.MutableFoo(6.0, randn(5))
+        x = mutable_tangent((a=5.0, b=randn(5)))
+        y = mutable_tangent((a=4.0, b=rand(5)))
+        z = mutable_tangent((a=9.0, b=x.fields.b.tangent + y.fields.b.tangent))
         test_tangent(rng, p, z, x, y)
+        test_test_interface(p, x)
+
+        # Verify tangent generation works correctly.
+        t = Taped.build_tangent(TestResources.MutableFoo, 5.0, randn(5))
+        @test Taped.is_init(t.fields.a) == true
+        @test Taped.is_init(t.fields.b) == true
     end
 
     @testset "MutableFoo (partial init)" begin
-        p = MutableFoo(6.0)
+        p = TestResources.MutableFoo(6.0)
         x = MutableTangent((a=_wrap_field(5.0), b=T_b()))
         y = MutableTangent((a=_wrap_field(4.0), b=T_b()))
         z = MutableTangent((a=_wrap_field(9.0), b=T_b()))
         test_tangent(rng, p, z, x, y)
 
-        x_init = MutableTangent(map(_wrap_field, (a=5.0, b=randn(5))))
+        x_init = mutable_tangent((a=5.0, b=randn(5)))
         @test_throws ErrorException increment!!(x_init, x)
         @test_throws ErrorException increment!!(x, x_init)
+
+        # Verify tangent generation works correctly.
+        t = Taped.build_tangent(TestResources.MutableFoo, 5.0)
+        @test Taped.is_init(t.fields.a) == true
+        @test Taped.is_init(t.fields.b) == false
     end
+
+    @testset "UnitRange{Int}" begin
+        p = UnitRange{Int}(5, 7)
+        x = Taped.build_tangent(typeof(p), NoTangent(), NoTangent())
+        test_tangent(rng, p, x, x, x)
+
+        # Verify tangent generation works correctly.
+        t = Taped.build_tangent(UnitRange{Int}, NoTangent(), NoTangent())
+        @test Taped.is_init(t.fields.start) == true
+        @test Taped.is_init(t.fields.stop) == true
+    end
+
+    @testset "types" begin
+        @testset "$T" for T in [Array, Float64, Union{Float64, Float32}, Union, UnionAll]
+            test_tangent(rng, T, NoTangent(), NoTangent(), NoTangent())
+        end
+    end
+
+    test_tangent(rng, Core.Intrinsics.xor_int, NoTangent(), NoTangent(), NoTangent())
+    test_tangent(rng, typeof(<:), NoTangent(), NoTangent(), NoTangent())
 
     @testset "increment_field!!" begin
         @testset "tuple" begin
@@ -193,20 +226,20 @@ end
             @test increment_field!!(x, y, :b) == (a=5.0, b=7.0)
         end
         @testset "Tangent" begin
-            x = Tangent((a=5.0, b=4.0))
+            x = tangent((a=5.0, b=4.0))
             y = 3.0
-            @test increment_field!!(x, y, :a) == Tangent((a=8.0, b=4.0))
-            @test increment_field!!(x, y, :b) == Tangent((a=5.0, b=7.0))
+            @test increment_field!!(x, y, :a) == tangent((a=8.0, b=4.0))
+            @test increment_field!!(x, y, :b) == tangent((a=5.0, b=7.0))
         end
         @testset "MutableTangent" begin
-            x = MutableTangent((a=5.0, b=4.0))
+            x = mutable_tangent((a=5.0, b=4.0))
             y = 3.0
-            @test increment_field!!(x, y, :a) == MutableTangent((a=8.0, b=4.0))
+            @test increment_field!!(x, y, :a) == mutable_tangent((a=8.0, b=4.0))
             @test increment_field!!(x, y, :a) === x
 
-            x = MutableTangent((a=5.0, b=4.0))
+            x = mutable_tangent((a=5.0, b=4.0))
             y = 3.0
-            @test increment_field!!(x, y, :b) == MutableTangent((a=5.0, b=7.0))
+            @test increment_field!!(x, y, :b) == mutable_tangent((a=5.0, b=7.0))
             @test increment_field!!(x, y, :b) === x
         end
     end
@@ -216,10 +249,10 @@ end
         nt2 = (a=0.0, b=4.0)
         @test set_field_to_zero!!(nt, :a) == nt2
         @test set_field_to_zero!!((5.0, 4.0), 2) == (5.0, 0.0)
-        @test set_field_to_zero!!(Tangent(nt), :a) == Tangent(nt2)
+        @test set_field_to_zero!!(tangent(nt), :a) == tangent(nt2)
 
-        x = MutableTangent(nt)
-        @test set_field_to_zero!!(x, :a) == MutableTangent(nt2)
+        x = mutable_tangent(nt)
+        @test set_field_to_zero!!(x, :a) == mutable_tangent(nt2)
         @test set_field_to_zero!!(x, :a) === x
     end
 end

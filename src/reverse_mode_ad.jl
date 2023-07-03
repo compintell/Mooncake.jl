@@ -13,6 +13,13 @@ end
 primal(x::CoDual) = x.x
 shadow(x::CoDual) = x.dx
 
+function verify_codual_type(::CoDual{P, T}) where {P, T}
+    Tt = tangent_type(P)
+    if Tt !== T
+        throw(error("for primal of type $P, expected tangent of type $Tt, but found $T"))
+    end
+end
+
 struct CoInstruction{Tinputs, Toutput, Tpb}
     inputs::Tinputs
     output::Toutput
@@ -34,7 +41,9 @@ end
 function (instruction::CoInstruction)(inputs::CoInstruction...)
     input_refs = map(x -> x.output, inputs)
     input_values = map(getindex, input_refs)
+    foreach(verify_codual_type, input_values)
     output_value, pb!! = rrule!!(input_values...)
+    verify_codual_type(output_value)
     output_ref = instruction.output
     output_ref[] = output_value
     pb_ref = instruction.pb
@@ -66,16 +75,13 @@ function rrule!!(::CoDual{typeof(verify)}, args...)
     return CoDual(verify(map(primal, args)...), NoTangent()), NoPullback()
 end
 
-function build_tangent(::Type{T}, nt::NamedTuple) where {T}
-    return (ismutabletype(T) ? MutableTangent : Tangent)(nt)
-end
-
 function rrule!!(::CoDual{typeof(Umlaut.__new__)}, xs...)
     y = Umlaut.__new__(map(primal, xs)...)
-    T = primal(xs[1])
-    dy = build_tangent(T, NamedTuple{fieldnames(T)}(map(shadow, xs[2:end])))
+    P = primal(xs[1])
+    dy = build_tangent(P, map(shadow, xs[2:end])...)
     function __new__pullback(dy, ::NoTangent, ::NoTangent, dxs...)
-        return NoTangent(), NoTangent(), map(increment!!, dxs, dy.fields)...
+        new_dxs = map((x, y) -> increment!!(x, _value(y)), dxs, dy.fields)
+        return NoTangent(), NoTangent(), new_dxs...
     end
     return CoDual(y, dy), __new__pullback
 end
@@ -157,16 +163,10 @@ end
 
 function rrule!!(::CoDual{typeof(getfield)}, value::CoDual, name::CoDual)
     _name = primal(name)
-    function getfield_pullback(dy, ::NoTangent, ::NoTangent, ::NoTangent)
-        return NoTangent(), NoTangent(), NoTangent()
-    end
     function getfield_pullback(dy, ::NoTangent, dvalue, ::NoTangent)
         return NoTangent(), increment_field!!(dvalue, dy, _name), NoTangent()
     end
-    y = CoDual(
-        getfield(primal(value), _name),
-        getfield(get_fields(shadow(value)), _name),
-    )
+    y = CoDual(getfield(primal(value), _name), _getfield(shadow(value), _name))
     return y, getfield_pullback
 end
 
@@ -185,10 +185,12 @@ end
 
 function rrule!!(::CoDual{typeof(setfield!)}, value, name, x)
     _name = primal(name)
+    old_x = isdefined(primal(value), _name) ? getfield(primal(value), _name) : nothing
     function setfield!_pullback(dy, ::NoTangent, dvalue, ::NoTangent, dx)
-        dx = increment!!(dx, getfield(get_fields(dvalue), _name))
         set_field_to_zero!!(dvalue, _name)
-        return NoTangent(), dvalue, NoTangent(), dx
+        new_dx = increment!!(dx, dy)
+        old_x !== nothing && setfield!(primal(value), _name, old_x)
+        return NoTangent(), dvalue, NoTangent(), new_dx
     end
     y = CoDual(
         setfield!(primal(value), _name, primal(x)),
@@ -202,7 +204,7 @@ end
 
 function rrule!!(::CoDual{typeof(tuple)}, args...)
     y = CoDual(tuple(map(primal, args)...), tuple(map(shadow, args)...))
-    tuple_pullback(dy, ::NoTangent, dargs...) = map(increment!!, dargs, dy)
+    tuple_pullback(dy, ::NoTangent, dargs...) = NoTangent(), map(increment!!, dargs, dy)...
     return y, tuple_pullback
 end
 
@@ -213,7 +215,7 @@ function rrule!!(::CoDual{typeof(typeassert)}, x, type)
     return CoDual(typeassert(primal(x), primal(type)), shadow(x)), typeassert_pullback
 end
 
-rrule!!(::CoDual{typeof(typeof)}, x) = CoDual(typeof(x), NoTangent()), NoPullback()
+rrule!!(::CoDual{typeof(typeof)}, x) = CoDual(typeof(primal(x)), NoTangent()), NoPullback()
 
 #
 # (in-principle) non-essential rules
@@ -265,15 +267,16 @@ function rrule!!(
     A::CoDual{<:Array, TdA},
     v::CoDual,
     inds::CoDual{Int}...,
-)where {V, TdA <: Array{V}}
+) where {V, TdA <: Array{V}}
     ind_primals = map(primal, inds)
     old_A_v = getindex(primal(A), ind_primals...)
+    old_A_v_t = getindex(shadow(A), ind_primals...)
     setindex!(primal(A), primal(v), ind_primals...)
     setindex!(shadow(A), shadow(v), ind_primals...)
-    function setindex_pullback!!(dA::TdA, ::NoTangent, _::TdA, dv, dinds::NoTangent...)
-        setindex!(primal(A), old_A_v, ind_primals...)
+    function setindex_pullback!!(dA::TdA, ::NoTangent, dA2::TdA, dv, dinds::NoTangent...)
         dv_new = increment!!(dv, getindex(dA, ind_primals...))
-        setindex!(dA, 0.0, ind_primals...) # needs to be generalised
+        setindex!(primal(A), old_A_v, ind_primals...)
+        setindex!(dA, old_A_v_t, ind_primals...)
         return NoTangent(), dA, dv_new, dinds...
     end
     return A, setindex_pullback!!
@@ -309,11 +312,15 @@ end
 const_coinstruction(x::CoDual) = CoInstruction(nothing, Ref(x), nothing)
 
 to_reverse_mode_ad(x::Input, new_tape) = Input(x.val)
-to_reverse_mode_ad(x::Constant, new_tape) = Constant(const_coinstruction(CoDual(x.val, NoTangent())))
+function to_reverse_mode_ad(x::Constant, new_tape)
+    return Constant(const_coinstruction(CoDual(x.val, zero_tangent(x.val))))
+end
 function to_reverse_mode_ad(x::Call, new_tape)
-    f = x.fn isa CoInstruction ? x.fn : const_coinstruction(CoDual(x.fn, NoTangent()))
+    f = x.fn isa CoInstruction ? x.fn : const_coinstruction(CoDual(x.fn, zero_tangent(x.fn)))
     raw_args = map(x -> x isa Variable ? new_tape[x].val : x, x.args)
-    args = map(x -> x isa CoInstruction ? x : const_coinstruction(CoDual(x, NoTangent())), raw_args)
+    args = map(raw_args) do x
+        x isa CoInstruction ? x : const_coinstruction(CoDual(x, zero_tangent(x)))
+    end
     return mkcall(build_coinstruction(f, args...), f, args...)
 end
 
@@ -341,3 +348,8 @@ function gradient(f, x)
 
     return shadow(x_dx.output[]), _gradient
 end
+
+# # I need to implement this in order to have a consistent interface.
+# function rrule!!(::CoDual{Tf}, x::CoDual...) where {Tf}
+
+# end
