@@ -1,4 +1,14 @@
 """
+    NoTangent
+
+The type in question has no meaningful notion of a tangent space.
+Generally, you shouldn't use this -- just let the default recursive tangent
+construction work.
+You might need to use this for `primitive type`s though.
+"""
+struct NoTangent end
+
+"""
     PossiblyUninitTangent{T}
 
 Represents a `T` which maybe or may not be present. Does not distinguish between 0 and

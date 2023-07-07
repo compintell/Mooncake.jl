@@ -1,13 +1,11 @@
 using
-    ChainRulesCore,
-    FiniteDifferences,
     LinearAlgebra,
     Random,
     Taped,
     Test,
     Umlaut
 
-using Taped: CoDual, to_reverse_mode_ad, Tangent, _wrap_field
+using Taped: CoDual, to_reverse_mode_ad, _wrap_field
 
 include("test_resources.jl")
 

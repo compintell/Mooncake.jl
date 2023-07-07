@@ -1,11 +1,7 @@
 module Taped
 
 using
-    ChainRulesCore,
     DiffRules,
-    Distributions,
-    FiniteDifferences,
-    FunctionWrappers,
     LinearAlgebra,
     Random,
     Setfield,
@@ -13,8 +9,6 @@ using
     Test
 
 import Umlaut: isprimitive, Frame, Tracer
-
-using FunctionWrappers: FunctionWrapper
 
 using Base: IEEEFloat
 
@@ -36,6 +30,7 @@ export
     randn_tangent,
     increment!!,
     increment_field!!,
+    NoTangent,
     Tangent,
     MutableTangent,
     PossiblyUninitTangent,
