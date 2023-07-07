@@ -1,6 +1,3 @@
-# This is a proof-of-concept prototype, not something for general use.
-# It is not maintained, nor will PRs against it be accepted.
-
 struct ReverseModeADContext <: TapedContext end
 
 const RMC = ReverseModeADContext
