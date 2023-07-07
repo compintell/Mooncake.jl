@@ -82,19 +82,23 @@ end
 function test_test_interface(p::P, t::T) where {P, T}
     @assert tangent_type(P) == T
     @test _scale(2.0, t) isa T
-    @test _add_to_primal(p, t) isa P
-    @test _add_to_primal(p, zero_tangent(p)) == p
-    @test _diff(p, p) isa T
-    @test _diff(p, p) == zero_tangent(p)
     @test _dot(t, t) isa Float64
     @test _dot(t, t) >= 0.0
     @test _dot(t, zero_tangent(p)) == 0.0
     @test _dot(t, increment!!(deepcopy(t), t)) ≈ 2 * _dot(t, t)
+    @test _add_to_primal(p, t) isa P
+    @test _add_to_primal(p, zero_tangent(p)) == p
+    @test _diff(p, p) isa T
+    @test _diff(p, p) == zero_tangent(p)
 end
 
 @testset "tangents" begin
     rng = Xoshiro(123456)
-    test_tangent(rng, sin, NoTangent(), NoTangent(), NoTangent())
+    @testset "sin" begin
+        t = Tangent((;))
+        test_tangent(rng, sin, t, t, t)
+        test_test_interface(sin, t)
+    end
 
     @testset "$T" for T in [Float16, Float32, Float64]
         test_tangent(rng, T(10), T(9), T(5), T(4))
@@ -125,6 +129,12 @@ end
         z = (a=9.0, b=x.b + y.b)
         test_tangent(rng, p, z, x, y)
         test_test_interface(p, x)
+    end
+
+    @testset "NamedTuple{(), Tuple{}}" begin
+        p = (;)
+        x = (;)
+        test_tangent(rng, p, x, x, x)
     end
 
     @testset "StructFoo (full init)" begin

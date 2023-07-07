@@ -2,11 +2,14 @@ module TestResources
 
 using ..Taped
 
+using LinearAlgebra
+
 test_sin(x) = sin(x)
 
 test_cos_sin(x) = cos(sin(x))
 
-test_getindex(x::AbstractVector{<:Real}) = sin(x[1])
+# test_getindex(x::AbstractVector{<:Real}) = sin(x[1])
+test_getindex(x::AbstractArray{<:Real}) = x[1]
 
 function test_mutation!(x::AbstractVector{<:Real})
     x[1] = sin(x[2])
@@ -31,6 +34,16 @@ end
 
 mutable struct Foo
     x::Real
+end
+
+test_mutable_struct_basic(x) = Foo(x).x
+
+test_mutable_struct_basic_sin(x) = sin(Foo(x).x)
+
+function test_mutable_struct_setfield(x)
+    foo = Foo(1.0)
+    foo.x = x
+    return foo.x
 end
 
 function test_mutable_struct(x)
@@ -86,17 +99,27 @@ function test_naive_mat_mul!(C::Matrix{T}, A::Matrix{T}, B::Matrix{T}) where {T<
     return C
 end
 
+test_diagonal_to_matrix(D::Diagonal) = Matrix(D)
 
-const UNARY_FUNCTIONS = [
+const TEST_FUNCTIONS = [
     (test_sin, 1.0),
     (test_cos_sin, 2.0),
     (test_getindex, [1.0, 2.0]),
     (test_mutation!, [1.0, 2.0]),
     (test_while_loop, 2.0),
     (test_for_loop, 3.0),
+    (test_mutable_struct_basic, 5.0),
+    (test_mutable_struct_basic_sin, 5.0),
+    (test_mutable_struct_setfield, 4.0),
     (test_mutable_struct, 5.0),
-    # (test_struct_partial_init, 3.5),
-    # (test_mutable_partial_init, 3.3),
+    (test_struct_partial_init, 3.5),
+    (test_mutable_partial_init, 3.3),
+    (test_naive_mat_mul!, randn(2, 1), randn(2, 1), randn(1, 1)),
+    ((A, C) -> test_naive_mat_mul!(C, A, A), randn(2, 2), randn(2, 2)),
+    # (sum, randn(3)), # falls over due to Umlaut limitation
+    # (test_diagonal_to_matrix, Diagonal(randn(3))),
+    # (ldiv!, randn(2, 2), Diagonal(randn(2)), randn(2, 2)),
+    # (kron!, randn(4, 4), Diagonal(randn(2)), randn(2, 2)),
 ]
 
 function value_dependent_control_flow(x, n)

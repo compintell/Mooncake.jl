@@ -1,22 +1,3 @@
-# IGNORE THIS COMMENT. NEEDS REVISING!
-# The entire set of valid operations on tangents is:
-# - ==(::AbstractTangent, ::AbstractTangent). Must not error.
-# - +(::AbstractTangent, ::AbstractTangent). Must not error.
-# - *(a::Float64, ::AbstractTangent). Must not error.
-#
-# The entire set of functions that we add to primals / their types is:
-# - tangent_type(::Type{P}) = tangent-type of primal type. Must not error.
-# - zero_tangent(x) = zero tangent associated to primal x. Must not error.
-# - randn_tangent(rng, x) = same as zero_tangent, but each dimension sampled from zero-mean
-#   Must not error.
-# - increment!!(x::P, ẋ::T)::P where P is a primal type, and T must be the tangent
-#   type output by `tangent_type(T)`. Adds `ẋ` to `x` if possible. May throw an error if
-#   `x + ẋ` is not a valid location at which to construct an instance of type `P`.
-#
-# Currently, this code focusses on correctness / coverage, rather than performance.
-# Will need to be optimised via generated functions in reality. This is definitely doable
-# though.
-
 """
     PossiblyUninitTangent{T}
 
@@ -75,8 +56,8 @@ function build_tangent(::Type{P}, fields...) where {P}
     return tangent_type(P)(NamedTuple{fieldnames(P)}(tangent_values))
 end
 
-_getfield(v, f) = getfield(v, f)
-_getfield(v::Union{Tangent, MutableTangent}, f) = _value(getfield(v.fields, f))
+_getfield(v, f...) = getfield(v, f...)
+_getfield(v::Union{Tangent, MutableTangent}, f...) = _value(getfield(v.fields, f...))
 
 _value(v::PossiblyUninitTangent) = v.tangent
 _value(v) = v
@@ -86,17 +67,6 @@ _value(v) = v
 
 The type used to represent the tangent of an object of type `T` must be unique, and
 determined entirely by its type.
-
-If this function runs on a given type, then its possible to verify that all other functions
-produce the correct type. It's also straightforward to ensure that all of the types in a
-given module have a `tangent_type` defined using this function and a simple testing utility.
-This is important because it's necessary for every single type in the type system to have
-its `tangent_type` defined.
-Fortunately, these can mostly be derived automatically.
-
-This restriction exists to ensure that it's possible to achieve type-stability in dynamic
-code. It prevents some kinds of optimisation from being possible. Notably, those derived
-from the use of `ZeroTangent`s and `Thunk`s.
 """
 tangent_type(T)
 
@@ -155,8 +125,8 @@ function tangent_type(P::Type)
     # The same goes for if the type has any undetermined type parameters.
     (isabstracttype(P) || !isconcretetype(P)) && return Any
 
-    # If P has no fields / is a singleton-type, it must have no tangent.
-    Base.issingletontype(P) && return NoTangent
+    # # If P has no fields / is a singleton-type, it must have no tangent.
+    # Base.issingletontype(P) && return NoTangent
 
     # Derive tangent type.
     tangent_field_names = fieldnames(P)
@@ -166,8 +136,51 @@ function tangent_type(P::Type)
 end
 
 """
+    zero_tangent(x)
+
+Returns the unique zero element of the tangent space of `x`.
+It is an error for the zero element of the tangent space of `x` to be represented by
+anything other than that which this function returns.
+"""
+zero_tangent(x)
+zero_tangent(::Union{Int8, Int16, Int32, Int64, Int128}) = NoTangent()
+zero_tangent(x::IEEEFloat) = zero(x)
+function zero_tangent(x::Array{P, N}) where {P, N}
+    return tangent_type(P) == NoTangent ? NoTangent() : map(zero_tangent, x)
+end
+zero_tangent(x::Union{Tuple, NamedTuple}) = map(zero_tangent, x)
+@noinline function zero_tangent(x::P) where {P}
+
+    tangent_type(P) == NoTangent && return NoTangent()
+
+    # This method can only handle struct types. Tell user to implement tangent type
+    # directly for primitive types.
+    isprimitivetype(P) && throw(error(
+        "$P is a primitive type. Implement a method of `zero_tangent` for it."
+    ))
+
+    # Derive zero tangent. Tangent types of fields, and types of zeros need only agree
+    # if field types are concrete.
+    tangent_field_names = fieldnames(P)
+    tangent_field_types = map(tangent_type, fieldtypes(P))
+    tangent_field_zeros = map(tangent_field_names, tangent_field_types) do field_name, T
+        if isdefined(x, field_name)
+            return PossiblyUninitTangent{T}(zero_tangent(getfield(x, field_name)))
+        else
+            return PossiblyUninitTangent{T}()
+        end
+    end
+    wrapped_tangent_field_types = map(_wrap_type, tangent_field_types)
+    Tbacking = NamedTuple{tangent_field_names, Tuple{wrapped_tangent_field_types...}}
+    backing = Tbacking(tangent_field_zeros)
+    T = ismutabletype(P) ? MutableTangent : Tangent
+    return T{Tbacking}(backing)
+end
+
+"""
     randn_tangent(rng::AbstractRNG, x::T) where {T}
 
+Required for testing.
 Generate a randomly-chosen tangent to `x`.
 """
 randn_tangent(::AbstractRNG, ::NoTangent) = NoTangent()
@@ -236,6 +249,24 @@ function increment!!(x::T, y::T) where {T<:MutableTangent}
 end
 
 """
+    set_to_zero!!(x)
+
+Set `x` to its zero element (`x` should be a tangent, so the zero must exist).
+"""
+set_to_zero!!(::NoTangent) = NoTangent()
+set_to_zero!!(x::Base.IEEEFloat) = zero(x)
+set_to_zero!!(x::Union{Tuple, NamedTuple}) = map(set_to_zero!!, x)
+set_to_zero!!(x::Array) = map!(set_to_zero!!, x, x)
+function set_to_zero!!(x::T) where {T<:PossiblyUninitTangent}
+    return is_init(x) ? T(set_to_zero!!(x.tangent)) : x
+end
+set_to_zero!!(x::Tangent) = Tangent(set_to_zero!!(x.fields))
+function set_to_zero!!(x::MutableTangent)
+    x.fields = set_to_zero!!(x.fields)
+    return x
+end
+
+"""
     increment_field!!(x::T, y::V, f) where {T, V}
 
 `increment!!` the field `f` of `x` by `y`, and return the updated `x`.
@@ -255,24 +286,6 @@ function increment_field!!(x::MutableTangent{T}, y, f) where {T}
 end
 
 """
-    set_to_zero!!(x)
-
-Set `x` to its zero element (`x` should be a tangent, so the zero must exist).
-"""
-set_to_zero!!(::NoTangent) = NoTangent()
-set_to_zero!!(x::Base.IEEEFloat) = zero(x)
-set_to_zero!!(x::Union{Tuple, NamedTuple}) = map(set_to_zero!!, x)
-set_to_zero!!(x::Array) = map!(set_to_zero!!, x, x)
-function set_to_zero!!(x::T) where {T<:PossiblyUninitTangent}
-    return is_init(x) ? T(set_to_zero!!(x.tangent)) : x
-end
-set_to_zero!!(x::Tangent) = Tangent(set_to_zero!!(x.fields))
-function set_to_zero!!(x::MutableTangent)
-    x.fields = set_to_zero!!(x.fields)
-    return x
-end
-
-"""
     set_field_to_zero!!(x, f)
 
 Set the field `f` of `x` to zero -- `f` can be an integer if `x` is a `Tuple`.
@@ -288,48 +301,14 @@ function set_field_to_zero!!(x::MutableTangent, f)
 end
 
 """
-    zero_tangent(x)
+    _scale(a::Float64, t::T) where {T}
 
-Returns the unique zero element of the tangent space of `x`.
-It is an error for the zero element of the tangent space of `x` to be represented by
-anything other than that which this function returns.
+Required for testing.
+Should be defined for all standard tangent types.
+
+Multiply tangent `t` by scalar `a`. Always possible because any given tangent type must
+correspond to a vector field. Not using `*` in order to avoid piracy.
 """
-zero_tangent(x)
-zero_tangent(::Union{Int8, Int16, Int32, Int64, Int128}) = NoTangent()
-zero_tangent(x::IEEEFloat) = zero(x)
-function zero_tangent(x::Array{P, N}) where {P, N}
-    return tangent_type(P) == NoTangent ? NoTangent() : map(zero_tangent, x)
-end
-zero_tangent(x::Union{Tuple, NamedTuple}) = map(zero_tangent, x)
-function zero_tangent(x::P) where {P}
-
-    tangent_type(P) == NoTangent && return NoTangent()
-
-    # This method can only handle struct types. Tell user to implement tangent type
-    # directly for primitive types.
-    isprimitivetype(P) && throw(error(
-        "$P is a primitive type. Implement a method of `zero_tangent` for it."
-    ))
-
-    # Derive zero tangent. Tangent types of fields, and types of zeros need only agree
-    # if field types are concrete.
-    tangent_field_names = fieldnames(P)
-    tangent_field_types = map(tangent_type, fieldtypes(P))
-    tangent_field_zeros = map(tangent_field_names, tangent_field_types) do field_name, T
-        if isdefined(x, field_name)
-            return PossiblyUninitTangent{T}(zero_tangent(getfield(x, field_name)))
-        else
-            return PossiblyUninitTangent{T}()
-        end
-    end
-    wrapped_tangent_field_types = map(_wrap_type, tangent_field_types)
-    Tbacking = NamedTuple{tangent_field_names, Tuple{wrapped_tangent_field_types...}}
-    backing = Tbacking(tangent_field_zeros)
-    T = ismutabletype(P) ? MutableTangent : Tangent
-    return T{Tbacking}(backing)
-end
-
-# Scaling for tangents.
 _scale(::Float64, ::NoTangent) = NoTangent()
 _scale(a::Float64, t::T) where {T<:IEEEFloat} = T(a * t)
 _scale(a::Float64, t::Array) = map(Base.Fix1(_scale, a), t)
@@ -344,30 +323,42 @@ end
 _scale(a::Float64, t::T) where {T<:Union{Tangent, MutableTangent}} = T(_scale(a, t.fields))
 
 """
+    _dot(t::T, s::T)::Float64 where {T}
 
+Required for testing.
+Should be defined for all standard tangent types.
+
+Inner product between tangents `t` and `s`. Must return a `Float64`.
+Always available because all tangent types correspond to finite-dimensional vector spaces.
 """
 _dot(::NoTangent, ::NoTangent) = 0.0
 _dot(t::T, s::T) where {T<:IEEEFloat} = Float64(t * s)
 _dot(t::T, s::T) where {T<:Array} = sum(map(_dot, t, s))
-_dot(t::T, s::T) where {T<:Union{Tuple, NamedTuple}} = sum(map(_dot, t, s))
+_dot(t::T, s::T) where {T<:Union{Tuple, NamedTuple}} = sum(map(_dot, t, s); init=0.0)
 function _dot(t::T, s::T) where {T<:PossiblyUninitTangent}
     is_init(t) && is_init(s) && return _dot(t.tangent, s.tangent)
     return 0.0
 end
 function _dot(t::T, s::T) where {T<:Union{Tangent, MutableTangent}}
-    return sum(map(_dot, t.fields, s.fields))
+    return sum(map(_dot, t.fields, s.fields); init=0.0)
 end
 
 """
     _add_to_primal(p::P, t::T) where {P, T}
 
-Adds `t` to `p`, returning a `P`. It should be the case that `tangnet_type(P) == T`.
+Required for testing.
+_Not_ currently defined by default.
+`_containerlike_add_to_primal` is potentially what you want to target when implementing for
+a particular primal-tangent pair.
+
+Adds `t` to `p`, returning a `P`. It must be the case that `tangnet_type(P) == T`.
 """
 _add_to_primal(x, ::NoTangent) = x
 _add_to_primal(x::T, t::T) where {T<:IEEEFloat} = x + t
 _add_to_primal(x::Array, t::Array) = map(_add_to_primal, x, t)
 _add_to_primal(x::Tuple, t::Tuple) = map(_add_to_primal, x, t)
 _add_to_primal(x::NamedTuple, t::NamedTuple) = map(_add_to_primal, x, t)
+_add_to_primal(x, ::Tangent{NamedTuple{(), Tuple{}}}) = x
 
 function _containerlike_add_to_primal(p::T, t::Union{Tangent, MutableTangent}) where {T}
     tmp = map(fieldnames(T)) do f
@@ -379,16 +370,21 @@ function _containerlike_add_to_primal(p::T, t::Union{Tangent, MutableTangent}) w
     return T(tmp...)
 end
 
-_add_to_primal(p::UnitRange, t) = _containerlike_add_to_primal(p, t)
-
 """
     _diff(p::P, q::P) where {P}
+
+Required for testing.
+_Not_ currently defined by default.
+`_containerlike_diff` is potentially what you want to target when implementing for
+a particular primal-tangent pair.
 
 Computes the difference between `p` and `q`, which _must_ be of the same type, `P`.
 Returns a tangent of type `tangent_type(P)`.
 """
 function _diff(::P, ::P) where {P}
     tangent_type(P) === NoTangent && return NoTangent()
+    T = Tangent{NamedTuple{(), Tuple{}}}
+    tangent_type(P) === T && return T((;))
     error("tangent_type(P) is not NoTangent, and no other method provided")
 end
 _diff(p::P, q::P) where {P<:IEEEFloat} = p - q
@@ -403,4 +399,7 @@ function _containerlike_diff(p::P, q::P) where {P}
     return build_tangent(P, diffed_fields...)
 end
 
-_diff(p::P, q::P) where {P<:UnitRange} = _containerlike_diff(p, q)
+for _P in [UnitRange, Transpose, Adjoint, SubArray]
+    @eval _add_to_primal(p::$_P, t) = _containerlike_add_to_primal(p, t)
+    @eval _diff(p::P, q::P) where {P<:$_P} = _containerlike_diff(p, q)
+end

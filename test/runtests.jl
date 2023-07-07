@@ -1,42 +1,18 @@
 using
-    BenchmarkTools,
     ChainRulesCore,
-    Distributions,
     FiniteDifferences,
-    FunctionWrappers,
+    LinearAlgebra,
     Random,
-    ReverseDiff,
     Taped,
     Test,
     Umlaut
 
-using FunctionWrappers: FunctionWrapper
-
-using Taped:
-    Dual,
-    CoDual,
-    to_forwards_mode_ad,
-    to_reverse_mode_ad,
-    assume,
-    Instruction,
-    accelerate,
-    execute!,
-    AcceleratedTape,
-    Tangent,
-    _wrap_field
-
-import Taped: InplaceData
+using Taped: CoDual, to_reverse_mode_ad, Tangent, _wrap_field
 
 include("test_resources.jl")
 
 @testset "Taped.jl" begin
-    # include("tracing.jl")
-    # include("is_pure.jl")
-    # include("vmap.jl")
-    # include("forwards_mode_ad.jl")
+    include("tracing.jl")
     include("tangents.jl")
     include("reverse_mode_ad.jl")
-    # include("logpdf.jl")
-    # include("inplace.jl")
-    # include("accelerate_tape.jl")
 end

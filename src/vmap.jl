@@ -52,6 +52,3 @@ end
 
 vectorise(x::Constant) = x
 vectorise(x::Call) = mkcall(_v_eval, x.fn, map(unbind, x.args)...)
-
-unbind(v::Variable) = Variable(v.id)
-unbind(v) = v

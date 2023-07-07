@@ -22,7 +22,9 @@ function Umlaut.handle_gotoifnot_node!(
 )
     return if cf.cond isa Umlaut.Argument || cf.cond isa Umlaut.SSAValue
         # resolve tape var
-        v = t.tape[frame.ir2tape[cf.cond]].val
+        c = frame.ir2tape[cf.cond]
+        !isa(c, Umlaut.Variable) && return c
+        v = t.tape[c].val
         push!(t.tape, mkcall(verify, ConditionalCheck(v), frame.ir2tape[cf.cond]))
         v
     elseif cf.cond isa Bool
@@ -48,3 +50,6 @@ isprimitive(::TapedContext, ::F, x...) where {F} = false
 # Umlaut versions of IR nodes and built-ins must be primitive.
 isprimitive(::TapedContext, ::typeof(Umlaut.__new__), T, x...) = true
 isprimitive(::TapedContext, ::Core.Builtin, x...) = true
+
+unbind(v::Variable) = Variable(v.id)
+unbind(v) = v

@@ -18,23 +18,17 @@ using FunctionWrappers: FunctionWrapper
 
 using Base: IEEEFloat
 
-using Core.Intrinsics: not_int, sle_int, slt_int, sub_int, add_int
+using Core.Intrinsics:
+    not_int, sitofp, sle_int, slt_int, sub_int, add_int, add_float, mul_float, eq_float,
+    bitcast, mul_int, and_int, or_int
 
 # Core functionality.
 include("tracing.jl")
 
-# Functions of tapes which don't output another tape.
-include("is_pure.jl")
-
 # Functions of tapes which output tapes.
-include("vmap.jl")
-include("forwards_mode_ad.jl")
 include("tangents.jl")
 include("reverse_mode_ad.jl")
 include("testing.jl")
-include("logpdf.jl")
-include("inplace.jl")
-include("accelerate_tape.jl")
 
 export
     primal,
