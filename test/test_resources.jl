@@ -102,24 +102,24 @@ end
 test_diagonal_to_matrix(D::Diagonal) = Matrix(D)
 
 const TEST_FUNCTIONS = [
-    (test_sin, 1.0),
-    (test_cos_sin, 2.0),
-    (test_getindex, [1.0, 2.0]),
-    (test_mutation!, [1.0, 2.0]),
-    (test_while_loop, 2.0),
-    (test_for_loop, 3.0),
-    (test_mutable_struct_basic, 5.0),
-    (test_mutable_struct_basic_sin, 5.0),
-    (test_mutable_struct_setfield, 4.0),
-    (test_mutable_struct, 5.0),
-    (test_struct_partial_init, 3.5),
-    (test_mutable_partial_init, 3.3),
-    (test_naive_mat_mul!, randn(2, 1), randn(2, 1), randn(1, 1)),
-    ((A, C) -> test_naive_mat_mul!(C, A, A), randn(2, 2), randn(2, 2)),
-    # (sum, randn(3)), # falls over due to Umlaut limitation
-    # (test_diagonal_to_matrix, Diagonal(randn(3))),
-    # (ldiv!, randn(2, 2), Diagonal(randn(2)), randn(2, 2)),
-    # (kron!, randn(4, 4), Diagonal(randn(2)), randn(2, 2)),
+    (false, test_sin, 1.0),
+    (false, test_cos_sin, 2.0),
+    (false, test_getindex, [1.0, 2.0]),
+    (false, test_mutation!, [1.0, 2.0]),
+    (false, test_while_loop, 2.0),
+    (false, test_for_loop, 3.0),
+    (false, test_mutable_struct_basic, 5.0),
+    (false, test_mutable_struct_basic_sin, 5.0),
+    (false, test_mutable_struct_setfield, 4.0),
+    (false, test_mutable_struct, 5.0),
+    (false, test_struct_partial_init, 3.5),
+    (false, test_mutable_partial_init, 3.3),
+    (false, test_naive_mat_mul!, randn(2, 1), randn(2, 1), randn(1, 1)),
+    (false, (A, C) -> test_naive_mat_mul!(C, A, A), randn(2, 2), randn(2, 2)),
+    (false, sum, randn(3)),
+    (false, test_diagonal_to_matrix, Diagonal(randn(3))),
+    (false, ldiv!, randn(2, 2), Diagonal(randn(2)), randn(2, 2)),
+    (false, kron!, randn(4, 4), Diagonal(randn(2)), randn(2, 2)),
 ]
 
 function value_dependent_control_flow(x, n)

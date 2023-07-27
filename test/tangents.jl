@@ -100,6 +100,8 @@ end
         test_test_interface(sin, t)
     end
 
+    # NOTE: ADD INTERFACE-ONLY TEST FOR LAZY STRING
+
     @testset "$T" for T in [Float16, Float32, Float64]
         test_tangent(rng, T(10), T(9), T(5), T(4))
         test_test_interface(T(10), T(9))
@@ -110,6 +112,17 @@ end
         x = randn(5)
         y = randn(5)
         test_tangent(rng, p, x + y, x, y)
+        test_test_interface(p, x)
+    end
+
+    @testset "Vector{Int}" begin
+        p = rand(Int, 5)
+        x = fill(NoTangent(), 5)
+        y = fill(NoTangent(), 5)
+        z = fill(NoTangent(), 5)
+        # x = rand(Int, 5)
+        # y = rand(Int, 5)
+        test_tangent(rng, p, z, x, y)
         test_test_interface(p, x)
     end
 
@@ -223,7 +236,10 @@ end
     test_tangent(rng, typeof(<:), NoTangent(), NoTangent(), NoTangent())
 
     @testset "increment_field!!" begin
-        @testset "tuple" begin
+        @testset "NoTangent" begin
+            @test increment_field!!(NoTangent(), NoTangent(), :a) == NoTangent()
+        end
+        @testset "Tuple" begin
             x = (5.0, 4.0)
             y = 3.0
             @test increment_field!!(x, y, 1) == (8.0, 4.0)

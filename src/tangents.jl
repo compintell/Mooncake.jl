@@ -68,6 +68,7 @@ end
 
 _getfield(v, f...) = getfield(v, f...)
 _getfield(v::Union{Tangent, MutableTangent}, f...) = _value(getfield(v.fields, f...))
+_getfield(v::NoTangent, f...) = NoTangent()
 
 _value(v::PossiblyUninitTangent) = v.tangent
 _value(v) = v
@@ -108,15 +109,23 @@ tangent_type(::Type{P}) where {P<:IEEEFloat} = P
 
 tangent_type(::Type{<:Core.LLVMPtr}) = NoTangent
 
-function tangent_type(::Type{<:Array{P, N}}) where {P, N}
-    return tangent_type(P) === NoTangent ? NoTangent : Array{tangent_type(P), N}
-end
+tangent_type(::Type{String}) = NoTangent
+
+tangent_type(::Type{<:Array{P, N}}) where {P, N} = Array{tangent_type(P), N}
 
 tangent_type(::Type{<:Array{P, N} where {P}}) where {N} = Array{Any, N}
 
 tangent_type(::Type{<:MersenneTwister}) = NoTangent
 
-tangent_type(::Type{T}) where {T<:Tuple} = Tuple{map(tangent_type, fieldtypes(T))...}
+tangent_type(::Type{Core.TypeName}) = NoTangent
+
+function tangent_type(::Type{T}) where {T<:Tuple}
+    if isconcretetype(T)
+        return Tuple{map(tangent_type, fieldtypes(T))...}
+    else
+        return Tuple
+    end
+end
 
 tangent_type(::Type{NamedTuple{N, T}}) where {N, T<:Tuple} = NamedTuple{N, tangent_type(T)}
 
@@ -135,9 +144,6 @@ function tangent_type(P::Type)
     # The same goes for if the type has any undetermined type parameters.
     (isabstracttype(P) || !isconcretetype(P)) && return Any
 
-    # # If P has no fields / is a singleton-type, it must have no tangent.
-    # Base.issingletontype(P) && return NoTangent
-
     # Derive tangent type.
     tangent_field_names = fieldnames(P)
     tangent_field_types = map(t -> _wrap_type(tangent_type(t)), fieldtypes(P))
@@ -155,9 +161,7 @@ anything other than that which this function returns.
 zero_tangent(x)
 zero_tangent(::Union{Int8, Int16, Int32, Int64, Int128}) = NoTangent()
 zero_tangent(x::IEEEFloat) = zero(x)
-function zero_tangent(x::Array{P, N}) where {P, N}
-    return tangent_type(P) == NoTangent ? NoTangent() : map(zero_tangent, x)
-end
+zero_tangent(x::Array{P, N}) where {P, N} = map(zero_tangent, x)
 zero_tangent(x::Union{Tuple, NamedTuple}) = map(zero_tangent, x)
 @noinline function zero_tangent(x::P) where {P}
 
@@ -195,10 +199,7 @@ Generate a randomly-chosen tangent to `x`.
 """
 randn_tangent(::AbstractRNG, ::NoTangent) = NoTangent()
 randn_tangent(rng::AbstractRNG, ::T) where {T<:IEEEFloat} = randn(rng, T)
-function randn_tangent(rng::AbstractRNG, x::Array{T}) where {T}
-    tangent_type(T) === NoTangent && return NoTangent()
-    return map(x -> randn_tangent(rng, x), x)
-end
+randn_tangent(rng::AbstractRNG, x::Array{T}) where {T} = map(x -> randn_tangent(rng, x), x)
 function randn_tangent(rng::AbstractRNG, x::Union{Tuple, NamedTuple})
     return map(x -> randn_tangent(rng, x), x)
 end
@@ -242,7 +243,11 @@ This must apply recursively if `T` is a composite type whose fields are mutable.
 """
 increment!!(::NoTangent, ::NoTangent) = NoTangent()
 increment!!(x::T, y::T) where {T<:IEEEFloat} = x + y
-increment!!(x::T, y::T) where {T<:Array} = x === y ? x : x .+= y
+increment!!(x::Ptr{T}, y::Ptr{T}) where {T} = x === y ? x : throw(error("eurgh"))
+function increment!!(x::T, y::T) where {T<:Array}
+    x === y || map!(increment!!, x, x, y)
+    return x
+end
 increment!!(x::T, y::T) where {T<:Tuple} = map(increment!!, x, y)
 increment!!(x::T, y::T) where {T<:NamedTuple} = map(increment!!, x, y)
 function increment!!(x::T, y::T) where {T<:PossiblyUninitTangent}
@@ -281,6 +286,7 @@ end
 
 `increment!!` the field `f` of `x` by `y`, and return the updated `x`.
 """
+increment_field!!(::NoTangent, ::NoTangent, f) = NoTangent()
 increment_field!!(x::NamedTuple, y, f) = @set x.$f = increment!!(getfield(x, f), y)
 function increment_field!!(x::Tuple, y, i::Int)
     return ntuple(n -> n == i ? increment!!(x[n], y) : x[n], length(x))
@@ -409,7 +415,7 @@ function _containerlike_diff(p::P, q::P) where {P}
     return build_tangent(P, diffed_fields...)
 end
 
-for _P in [UnitRange, Transpose, Adjoint, SubArray]
+for _P in [UnitRange, Transpose, Adjoint, SubArray, Base.RefValue, LazyString, Diagonal]
     @eval _add_to_primal(p::$_P, t) = _containerlike_add_to_primal(p, t)
     @eval _diff(p::P, q::P) where {P<:$_P} = _containerlike_diff(p, q)
 end

@@ -39,9 +39,6 @@ function test_rmad(rng::AbstractRNG, f, x...)
     @test all(map(isequal, x, map(primal, x_x̄)))
 
     # pullbacks increment, so have to compare to the incremented quantity.
-    # @show ȳ_delta
-    # @show x̄_delta
-    # @show x̄
     @test _dot(ȳ_delta, ẏ) + _dot(x̄_delta, ẋ_post) ≈ _dot(x̄, ẋ) rtol=1e-3 atol=1e-3
 end
 
