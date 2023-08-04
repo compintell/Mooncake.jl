@@ -14,6 +14,7 @@ Umlaut = "92992a2b-8ce5-4a9c-bb9d-58be9a7dc841"
 
 [compat]
 DiffRules = "1"
+ExprTools = "0.1"
 Setfield = "1"
 Umlaut = "0.5"
 julia = "1"
