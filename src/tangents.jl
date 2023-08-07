@@ -66,10 +66,6 @@ function build_tangent(::Type{P}, fields...) where {P}
     return tangent_type(P)(NamedTuple{fieldnames(P)}(tangent_values))
 end
 
-_getfield(v, f...) = getfield(v, f...)
-_getfield(v::Union{Tangent, MutableTangent}, f...) = _value(getfield(v.fields, f...))
-_getfield(v::NoTangent, f...) = NoTangent()
-
 _value(v::PossiblyUninitTangent) = v.tangent
 _value(v) = v
 
@@ -85,6 +81,11 @@ function tangent_type(x)
     throw(error("$x is not a type. Perhaps you meant typeof(x)?"))
 end
 
+# This is essential for DataType, as the recursive definition always recurses infinitely,
+# because one of the fieldtypes is itself always a DataType. In particular, we'll always
+# eventually hit `Any`, whose `super` field is `Any`.
+# This makes it clear that we can't recursively construct tangents for data structures which
+# refer to themselves...
 tangent_type(::Type{<:Type}) = NoTangent
 
 tangent_type(::Type{Ptr{P}}) where {P} = Ptr{tangent_type(P)}

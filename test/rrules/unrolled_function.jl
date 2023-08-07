@@ -1,0 +1,49 @@
+@testset "reverse_mode_ad" begin
+    @testset for (interface_only, f, x...) in vcat(
+        TestResources.TEST_FUNCTIONS,
+        [
+            (false, getindex, randn(5), 4),
+            (false, getindex, randn(5, 4), 1, 3),
+            (false, setindex!, randn(5), 4.0, 3),
+            (false, setindex!, randn(5, 4), 3.0, 1, 3),
+            (false, x -> getglobal(Main, :sin)(x), 5.0),
+            (false, x -> pointerref(bitcast(Ptr{Float64}, pointer_from_objref(Ref(x))), 1, 1), 5.0),
+            (false, x -> Ref(x)[], 5.0),
+            (false, x -> unsafe_load(bitcast(Ptr{Float64}, pointer_from_objref(Ref(x)))), 5.0),
+            (false, x -> unsafe_load(Base.unsafe_convert(Ptr{Float64}, x)), randn(5)),
+            (false, view, randn(5, 4), 1, 1),
+            (false, view, randn(5, 4), 2:3, 1),
+            (false, view, randn(5, 4), 1, 2:3),
+            (false, view, randn(5, 4), 2:3, 2:4),
+            (true, Array{Float64, 1}, undef, (1, )),
+            (true, Array{Float64, 2}, undef, (2, 3)),
+            (true, Array{Float64, 3}, undef, (2, 3, 4)),
+            # (true, Xoshiro, 123456),
+            # (false, push!, randn(5), 3.0),
+        ],
+        # These all work fine, but take a long time to run.
+        vec(map(Iterators.product(
+            [randn(3, 5), transpose(randn(5, 3)), adjoint(randn(5, 3))],
+            [
+                randn(3, 4),
+                # transpose(randn(4, 3)),
+                # adjoint(randn(4, 3)),
+                # view(randn(5, 5), 1:3, 1:4),
+                # transpose(view(randn(5, 5), 1:4, 1:3)),
+                # adjoint(view(randn(5, 5), 1:4, 1:3)),
+            ],
+            [
+                randn(4, 5),
+                # transpose(randn(5, 4)),
+                # adjoint(randn(5, 4)),
+                # view(randn(5, 5), 1:4, 1:5),
+                # transpose(view(randn(5, 5), 1:5, 1:4)),
+                # adjoint(view(randn(5, 5), 1:5, 1:4)),
+            ],
+        )) do (A, B, C)
+            (false, mul!, A, B, C, randn(), randn())
+        end),
+    )
+        test_taped_rrule!!(Xoshiro(123456), f, map(deepcopy, x)...; interface_only)
+    end
+end
