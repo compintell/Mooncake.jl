@@ -2,7 +2,7 @@
     @testset "foreigncalls that should never be hit: $name" for name in [
         :jl_alloc_array_1d, :jl_alloc_array_2d, :jl_alloc_array_3d, :jl_new_array,
         :jl_array_grow_end, :jl_array_del_end, :jl_array_copy, :jl_type_intersection,
-        :memset,
+        :memset, :jl_get_tls_world_age,
     ]
         @test_throws(
             ErrorException,
@@ -41,6 +41,8 @@
         (false, typeintersect, Float64, Int),
         (false, fill!, rand(Int8, 5), Int8(2)),
         (false, fill!, rand(UInt8, 5), UInt8(2)),
+        (false, Core.Compiler.return_type, sin, Tuple{Float64}),
+        (false, Core.Compiler.return_type, Tuple{typeof(sin), Float64}),
     ]
         test_rrule!!(Xoshiro(123456), f, x...; interface_only)
     end

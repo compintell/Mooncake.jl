@@ -416,7 +416,9 @@ function _containerlike_diff(p::P, q::P) where {P}
     return build_tangent(P, diffed_fields...)
 end
 
-for _P in [UnitRange, Transpose, Adjoint, SubArray, Base.RefValue, LazyString, Diagonal]
+for _P in [
+    UnitRange, Transpose, Adjoint, SubArray, Base.RefValue, LazyString, Diagonal, Xoshiro
+]
     @eval _add_to_primal(p::$_P, t) = _containerlike_add_to_primal(p, t)
     @eval _diff(p::P, q::P) where {P<:$_P} = _containerlike_diff(p, q)
 end

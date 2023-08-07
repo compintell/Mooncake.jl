@@ -74,8 +74,8 @@ function test_rrule!!(rng::AbstractRNG, x...; interface_only=false, is_primitive
         @test typeof(shadow(x_x̄)) == tangent_type(typeof(primal(x_x̄)))
     end
 
-    # Attempt to run primal programme. Throw the original exception and provide a little
-    # additional context
+    # Attempt to run primal programme. If the primal programme throws, display the original
+    # exception and throw an additional exception which points this out.
     x_p = map(primal, x_x̄)
     x_p = (x_p[1], map(deepcopy, x_p[2:end])...)
     try
@@ -96,8 +96,8 @@ function test_rrule!!(rng::AbstractRNG, x...; interface_only=false, is_primitive
 
     # Check output and incremented shadow types are correct.
     @test y_ȳ isa CoDual
-    @test typeof(primal(y_ȳ)) == typeof(x[1](x[2:end]...))
-    !interface_only && @test primal(y_ȳ) == x[1](x[2:end]...)
+    @test typeof(primal(y_ȳ)) == typeof(x_copy[1](map(deepcopy, x_copy[2:end])...))
+    !interface_only && @test primal(y_ȳ) == x_copy[1](map(deepcopy, x_copy[2:end])...)
     @test shadow(y_ȳ) isa tangent_type(typeof(primal(y_ȳ)))
     x̄_new = pb!!(shadow(y_ȳ), x̄...)
     @test all(map((a, b) -> typeof(a) == typeof(b), x̄_new, x̄))

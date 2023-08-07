@@ -113,7 +113,7 @@
         (false, __intrinsic__, Val(Intrinsics.not_int), 5),
         (false, __intrinsic__, Val(Intrinsics.or_int), 5, 5),
         # pointerref -- integration tested because pointers are awkward
-        # pointerset -- NEEDS IMPLEMENTING AND TESTING
+        # pointerset -- integration tested because pointers are awkward
         # rem_float -- untested and unimplemented because seemingly unused on master
         # rem_float_fast -- untested and unimplemented because seemingly unused on master
         (false, __intrinsic__, Val(Intrinsics.rint_llvm), 5),
@@ -140,6 +140,21 @@
         (false, __intrinsic__, Val(Intrinsics.zext_int), Int64, 0xffffffff),
 
         # Non-intrinsic built-ins:
+        # Core._abstracttype -- NEEDS IMPLEMENTING AND TESTING
+        # Core._apply_iterate -- NEEDS IMPLEMENTING AND TESTING
+        # Core._apply_pure -- NEEDS IMPLEMENTING AND TESTING
+        # Core._call_in_world -- NEEDS IMPLEMENTING AND TESTING
+        # Core._call_in_world_total -- NEEDS IMPLEMENTING AND TESTING
+        # Core._call_latest -- NEEDS IMPLEMENTING AND TESTING
+        # Core._compute_sparams -- NEEDS IMPLEMENTING AND TESTING
+        # Core._equiv_typedef -- NEEDS IMPLEMENTING AND TESTING
+        # Core._expr -- NEEDS IMPLEMENTING AND TESTING
+        # Core._primitivetype -- NEEDS IMPLEMENTING AND TESTING
+        # Core._setsuper! -- NEEDS IMPLEMENTING AND TESTING
+        # Core._structtype -- NEEDS IMPLEMENTING AND TESTING
+        # Core._svec_ref -- NEEDS IMPLEMENTING AND TESTING
+        # Core._typebody! -- NEEDS IMPLEMENTING AND TESTING
+        (true, Core._typevar, :T, Union{}, Any),
         (false, <:, Float64, Int),
         (false, <:, Any, Float64),
         (false, <:, Float64, Any),
@@ -151,10 +166,17 @@
         (false, Core.apply_type, Array, Float64, 2),
         (false, Core.arraysize, randn(5, 4, 3), 2),
         (false, Core.arraysize, randn(5, 4, 3, 2, 1), 100),
+        # Core.compilerbarrier -- NEEDS IMPLEMENTING AND TESTING
+        # Core.const_arrayref -- NEEDS IMPLEMENTING AND TESTING
+        # Core.donotdelete -- NEEDS IMPLEMENTING AND TESTING
+        # Core.finalizer -- NEEDS IMPLEMENTING AND TESTING
+        # Core.get_binding_type -- NEEDS IMPLEMENTING AND TESTING
         (false, Core.ifelse, true, randn(5), 1),
         (false, Core.ifelse, false, randn(5), 2),
+        # Core.set_binding_type! -- NEEDS IMPLEMENTING AND TESTING
         (false, Core.sizeof, Float64),
         (false, Core.sizeof, randn(5)),
+        # Core.svec -- NEEDS IMPLEMENTING AND TESTING
         (false, Base.arrayref, true, randn(5), 1),
         (false, Base.arrayref, false, randn(4), 1),
         (false, Base.arrayref, true, randn(5, 4), 1, 1),
@@ -178,16 +200,25 @@
         (false, getfield, UnitRange{Int}(5:9), :start),
         (false, getfield, UnitRange{Int}(5:9), :stop),
         (false, getfield, (5.0, ), 1, false),
-        (false, getfield, UInt8, :types), # 
+        (false, getfield, UInt8, :name),
+        (false, getfield, UInt8, :super),
+        (true, getfield, UInt8, :layout),
+        (false, getfield, UInt8, :hash),
+        (false, getfield, UInt8, :flags),
         # getglobal requires compositional testing, because you can't deepcopy a module
+        # invoke -- NEEDS IMPLEMENTING AND TESTING
         (false, isa, 5.0, Float64),
         (false, isa, 1, Float64),
         (false, isdefined, TestResources.MutableFoo(5.0, randn(5)), :sim),
         (false, isdefined, TestResources.MutableFoo(5.0, randn(5)), :a),
+        # modifyfield! -- NEEDS IMPLEMENTING AND TESTING
         (false, nfields, TestResources.MutableFoo),
         (false, nfields, TestResources.StructFoo),
+        # replacefield! -- NEEDS IMPLEMENTING AND TESTING
         (false, setfield!, TestResources.MutableFoo(5.0, randn(5)), :a, 4.0),
         (false, setfield!, TestResources.MutableFoo(5.0, randn(5)), :b, randn(5)),
+        # swapfield! -- NEEDS IMPLEMENTING AND TESTING
+        # throw -- NEEDS IMPLEMENTING AND TESTING
         (false, tuple, 5.0, 4.0),
         (false, tuple, randn(5), 5.0),
         (false, tuple, randn(5), randn(4)),

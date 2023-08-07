@@ -246,13 +246,30 @@ function rrule!!(::CoDual{typeof(__intrinsic__)}, ::CoDual{Val{pointerref}}, x, 
     function pointerref_pullback!!(da, df, dv, dx, dy, dz)
         dx_v = pointerref(dx, _y, _z)
         new_dx_v = increment!!(dx_v, da)
-        Intrinsics.pointerset(dx, new_dx_v, _y, _z)
+        pointerset(dx, new_dx_v, _y, _z)
         return df, dv, dx, dy, dz
     end
     return a, pointerref_pullback!!
 end
 
-# pointerset -- interesting and probably needs implementing
+using .Intrinsics: pointerset
+function rrule!!(::CoDual{typeof(__intrinsic__)}, ::CoDual{Val{pointerset}}, p, x, idx, z)
+    _p = primal(p)
+    _idx = primal(idx)
+    _z = primal(z)
+    old_value = pointerref(_p, _idx, _z)
+    old_shadow = pointerref(shadow(p), _idx, _z)
+    function pointerset_pullback!!(_, df, dv, dp, dx, didx, dz)
+        dx_new = increment!!(dx, pointerref(dp, _idx, _z))
+        pointerset(_p, old_value, _idx, _z)
+        pointerset(dp, old_shadow, _idx, _z)
+        return df, dv, dp, dx_new, didx, dz
+    end
+    pointerset(_p, primal(x), _idx, _z)
+    pointerset(shadow(p), shadow(x), _idx, _z)
+    return p, pointerset_pullback!!
+end
+
 # rem_float -- appears to be unused
 # rem_float_fast -- appears to be unused
 @inactive_intrinsic Intrinsics.rint_llvm
@@ -340,9 +357,15 @@ end
 # Core._typebody!
 # Core._typevar
 
+function rrule!!(::CoDual{typeof(Core._typevar)}, args...)
+    y = Core._typevar(map(primal, args)...)
+    return CoDual(y, zero_tangent(y)), NoPullback()
+end
+
 function rrule!!(::CoDual{typeof(Core.apply_type)}, args...)
     arg_primals = map(primal, args)
     T = Core.apply_type(arg_primals...)
+    @show T
     return CoDual(T, zero_tangent(T)), NoPullback()
 end
 
@@ -426,10 +449,13 @@ end
 function rrule!!(::CoDual{typeof(getfield)}, value::CoDual, name::CoDual)
     _name = primal(name)
     function getfield_pullback(dy, ::NoTangent, dvalue, ::NoTangent)
-        new_dvalue = increment_field!!(dvalue, dy, _name)
+        new_dvalue = _increment_field!!(dvalue, dy, _name)
         return NoTangent(), new_dvalue, NoTangent()
     end
-    y = CoDual(getfield(primal(value), _name), _getfield(shadow(value), _name))
+    y = CoDual(
+        getfield(primal(value), _name),
+        _get_shadow_field(primal(value), shadow(value), _name),
+    )
     return y, getfield_pullback
 end
 
@@ -437,22 +463,28 @@ function rrule!!(::CoDual{typeof(getfield)}, value::CoDual, name::CoDual, order:
     _name = primal(name)
     _order = primal(order)
     function getfield_pullback(dy, df, dvalue, dname, dorder)
-        new_dvalue = increment_field!!(dvalue, dy, _name)
+        new_dvalue = _increment_field!!(dvalue, dy, _name)
         return df, new_dvalue, dname, dorder
     end
     _order = _order isa Expr ? true : _order
     y = CoDual(
         getfield(primal(value), _name, _order),
-        _getfield(shadow(value), _name, _order),
+        _get_shadow_field(primal(value), shadow(value), _name, _order),
     )
     return y, getfield_pullback
 end
 
-_getfield(v, f...) = getfield(v, f...)
-_getfield(v::Union{Tangent, MutableTangent}, f...) = _value(getfield(v.fields, f...))
-_getfield(v::NoTangent, f...) = NoTangent()
+_get_shadow_field(_, shadow, f...) = getfield(shadow, f...)
+function _get_shadow_field(_, shadow::Union{Tangent, MutableTangent}, f...)
+    return _value(getfield(shadow.fields, f...))
+end
+_get_shadow_field(primal, shadow::NoTangent, f...) = uninit_tangent(getfield(primal, f...))
 
-# getglobal
+_increment_field!!(x, y, f) = increment_field!!(x, y, f)
+_increment_field!!(x::NoTangent, y, f) = x
+
+uninit_tangent(x) = zero_tangent(x)
+uninit_tangent(x::Ptr{P}) where {P} = bitcast(Ptr{tangent_type(P)}, x)
 
 function rrule!!(::CoDual{typeof(getglobal)}, a, b)
     v = getglobal(primal(a), primal(b))

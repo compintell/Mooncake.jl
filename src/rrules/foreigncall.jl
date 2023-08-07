@@ -95,6 +95,12 @@ function rrule!!(
     return a, fill!_pullback!!
 end
 
+isprimitive(::RMC, ::typeof(Core.Compiler.return_type), args...) = true
+function rrule!!(::CoDual{typeof(Core.Compiler.return_type)}, args...)
+    y = Core.Compiler.return_type(map(primal, args)...)
+    return CoDual(y, zero_tangent(y)), NoPullback()
+end
+
 
 
 #
@@ -120,7 +126,7 @@ end
 for name in [
     :(:jl_alloc_array_1d), :(:jl_alloc_array_2d), :(:jl_alloc_array_3d), :(:jl_new_array),
     :(:jl_array_grow_end), :(:jl_array_del_end), :(:jl_array_copy),
-    :(:jl_type_intersection), :(:memset),
+    :(:jl_type_intersection), :(:memset), :(:jl_get_tls_world_age),
 ]
     @eval function rrule!!(::CoDual{typeof(__foreigncall__)}, ::CoDual{Val{$name}}, args...)
         nm = $name

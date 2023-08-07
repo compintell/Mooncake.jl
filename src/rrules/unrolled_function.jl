@@ -119,6 +119,9 @@ end
 
 function rrule!!(f::CoDual{<:UnrolledFunction}, args...)
     tape = primal(f).tape
+    display(tape)
+    println()
+
     wrapped_args = map(const_coinstruction, args)
     inputs!(tape, wrapped_args...)
 
