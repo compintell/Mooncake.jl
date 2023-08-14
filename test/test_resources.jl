@@ -8,7 +8,6 @@ test_sin(x) = sin(x)
 
 test_cos_sin(x) = cos(sin(x))
 
-# test_getindex(x::AbstractVector{<:Real}) = sin(x[1])
 test_getindex(x::AbstractArray{<:Real}) = x[1]
 
 function test_mutation!(x::AbstractVector{<:Real})
@@ -101,6 +100,10 @@ end
 
 test_diagonal_to_matrix(D::Diagonal) = Matrix(D)
 
+relu(x) = max(x, zero(x))
+
+test_mlp(x, W1, W2) = W2 * relu.(W1 * x)
+
 const TEST_FUNCTIONS = [
     (false, test_sin, 1.0),
     (false, test_cos_sin, 2.0),
@@ -120,6 +123,7 @@ const TEST_FUNCTIONS = [
     (false, test_diagonal_to_matrix, Diagonal(randn(3))),
     (false, ldiv!, randn(2, 2), Diagonal(randn(2)), randn(2, 2)),
     (false, kron!, randn(4, 4), Diagonal(randn(2)), randn(2, 2)),
+    (false, test_mlp, randn(5, 2), randn(7, 5), randn(3, 7)),
 ]
 
 function value_dependent_control_flow(x, n)
