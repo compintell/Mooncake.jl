@@ -7,7 +7,7 @@ using
     Setfield,
     Umlaut
 
-import Umlaut: isprimitive, Frame, Tracer, __foreigncall__, __intrinsic__
+import Umlaut: isprimitive, Frame, Tracer, __foreigncall__
 
 using Base:
     IEEEFloat, unsafe_convert, unsafe_pointer_to_objref, pointer_from_objref, arrayref,

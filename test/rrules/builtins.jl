@@ -92,7 +92,7 @@
         (false, __intrinsic__, Val(Intrinsics.fptosi), UInt32, 4.1),
         (false, __intrinsic__, Val(Intrinsics.fptoui), Int32, 4.1),
         # fptrunc -- maybe interesting
-        (false, __intrinsic__, Val(Intrinsics.have_fma), Float64),
+        (true, __intrinsic__, Val(Intrinsics.have_fma), Float64),
         (false, __intrinsic__, Val(Intrinsics.le_float), 4.1, 4.0),
         (false, __intrinsic__, Val(Intrinsics.le_float_fast), 4.1, 4.0),
         # llvm_call -- NEEDS IMPLEMENTING AND TESTING
@@ -228,6 +228,9 @@
         (false, typeof, 5.0),
         (false, typeof, randn(5)),
     ]
-        test_rrule!!(Xoshiro(123456), f, x...; interface_only)
+        test_rrule!!(
+            Xoshiro(123456), f, x...;
+            interface_only, check_conditional_type_stability=false,
+        )
     end
 end

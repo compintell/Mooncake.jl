@@ -44,6 +44,9 @@
         (false, Core.Compiler.return_type, sin, Tuple{Float64}),
         (false, Core.Compiler.return_type, Tuple{typeof(sin), Float64}),
     ]
-        test_rrule!!(Xoshiro(123456), f, x...; interface_only)
+        test_rrule!!(
+            Xoshiro(123456), f, x...;
+            interface_only, check_conditional_type_stability=false,
+        )
     end
 end

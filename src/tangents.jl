@@ -140,8 +140,6 @@ function tangent_type(P::Type)
         "$P is a primitive type. Implement a method of `tangent_type` for it."
     ))
 
-    Base.issingletontype(P) && return NoTangent
-
     # If the type is a Union, then take the union type of its arguments.
     P isa Union && return Union{tangent_type(P.a), tangent_type(P.b)}
 

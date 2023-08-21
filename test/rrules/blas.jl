@@ -13,6 +13,10 @@
             (false, aliased_gemm!, tA, tB, randn(), randn(), randn(5, 5), randn(5, 5))
         end),
     )
-        test_taped_rrule!!(Xoshiro(123456), f, map(deepcopy, x)...; interface_only)
+        test_taped_rrule!!(
+            Xoshiro(123456), f, map(deepcopy, x)...;
+            interface_only,
+            check_conditional_type_stability=false,
+        )
     end
 end

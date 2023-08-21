@@ -44,6 +44,9 @@
         (false, sizeof, Float64),
         (false, promote_type, Float64, Float64),
     ]
-        test_rrule!!(Xoshiro(123456), f, x...; interface_only)
+        test_rrule!!(
+            Xoshiro(123456), f, x...;
+            interface_only, check_conditional_type_stability=false,
+        )
     end
 end

@@ -35,7 +35,7 @@ function isprimitive(::RMC, args...)
 end
 isprimitive(::RMC, ::typeof(Umlaut.__new__), T, x...) = true
 isprimitive(::RMC, ::typeof(Umlaut.__foreigncall__), args...) = true
-isprimitive(::RMC, ::typeof(Umlaut.__intrinsic__), args...) = true
+isprimitive(::RMC, ::typeof(__intrinsic__), args...) = true
 isprimitive(::RMC, ::Core.Builtin, x...) = true
 
 

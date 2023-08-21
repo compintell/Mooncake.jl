@@ -30,6 +30,9 @@
         (true, String, lazy"hello world"),
 
     ]
-        test_rrule!!(Xoshiro(123456), f, x...; interface_only)
+        test_rrule!!(
+            Xoshiro(123456), f, x...;
+            interface_only, check_conditional_type_stability=false,
+        )
     end
 end

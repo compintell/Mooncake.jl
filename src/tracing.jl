@@ -44,13 +44,15 @@ function Umlaut.handle_gotoifnot_node!(
     end
 end
 
+__intrinsic__(::Val{f}, args::Vararg{Any, N}) where {f, N} = (f)(args...)
+
 # By default, things are not primitive.
 isprimitive(::TapedContext, ::F, x...) where {F} = false
 
 # Umlaut versions of IR nodes and built-ins must be primitive.
 isprimitive(::TapedContext, ::typeof(Umlaut.__new__), T, x...) = true
 isprimitive(::TapedContext, ::typeof(Umlaut.__foreigncall__), args...) = true
-isprimitive(::TapedContext, ::typeof(Umlaut.__intrinsic__), args...) = true
+isprimitive(::TapedContext, ::typeof(__intrinsic__), args...) = true
 isprimitive(::TapedContext, ::Core.Builtin, x...) = true
 
 unbind(v::Variable) = Variable(v.id)

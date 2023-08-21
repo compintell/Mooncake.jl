@@ -9,6 +9,8 @@
 # As of version 1.9.2 of Julia, there are exactly 139 examples of `Core.Builtin`s.
 #
 
+
+
 # Note: performance is not considered _at_ _all_ in this implementation.
 function rrule!!(f::CoDual{<:Core.IntrinsicFunction}, args...)
     y, pb!! = rrule!!(
@@ -365,7 +367,6 @@ end
 function rrule!!(::CoDual{typeof(Core.apply_type)}, args...)
     arg_primals = map(primal, args)
     T = Core.apply_type(arg_primals...)
-    @show T
     return CoDual(T, zero_tangent(T)), NoPullback()
 end
 
@@ -482,9 +483,6 @@ _get_shadow_field(primal, shadow::NoTangent, f...) = uninit_tangent(getfield(pri
 
 _increment_field!!(x, y, f) = increment_field!!(x, y, f)
 _increment_field!!(x::NoTangent, y, f) = x
-
-uninit_tangent(x) = zero_tangent(x)
-uninit_tangent(x::Ptr{P}) where {P} = bitcast(Ptr{tangent_type(P)}, x)
 
 function rrule!!(::CoDual{typeof(getglobal)}, a, b)
     v = getglobal(primal(a), primal(b))

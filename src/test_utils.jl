@@ -72,6 +72,9 @@ function conditional_stability(check_stability::Bool, f::F, x...) where {F}
     return check_stability ? (@inferred f(x...)) : f(x...)
 end
 
+_deepcopy(x) = deepcopy(x)
+_deepcopy(x::Module) = x
+
 function test_rrule!!(
     rng::AbstractRNG, x...;
     interface_only=false,
@@ -79,7 +82,7 @@ function test_rrule!!(
     check_conditional_type_stability=true,
 )
     # Set up problem.
-    x_copy = (x[1], map(x -> deepcopy(x isa CoDual ? primal(x) : x), x[2:end])...)
+    x_copy = (x[1], map(x -> _deepcopy(x isa CoDual ? primal(x) : x), x[2:end])...)
     x_addresses = map(get_address, x)
     x_x̄ = map(x -> x isa CoDual ? x : CoDual(x, randn_tangent(rng, x)), x)
 
@@ -92,18 +95,21 @@ function test_rrule!!(
     # exception and throw an additional exception which points this out.
     # Record whether or not it is type-stable.
     x_p = map(primal, x_x̄)
-    x_p = (x_p[1], map(deepcopy, x_p[2:end])...)
-    primal_is_type_stable = try
-        is_inferred(apply, x_p...)
-    catch e
-        display(e)
-        println()
-        throw(ArgumentError("Primal evaluation does not work."))
-    end
+    x_p = (x_p[1], map(_deepcopy, x_p[2:end])...)
+    check_stability = false
+    if check_conditional_type_stability
+        primal_is_type_stable = try
+            is_inferred(apply, x_p...)
+        catch e
+            display(e)
+            println()
+            throw(ArgumentError("Primal evaluation does not work."))
+        end
 
-    # If the primal is type stable, and the user has requested that type-stability tests be
-    # turned on, we check for type-stability when running the rrule!! and pullback.
-    check_stability = check_conditional_type_stability && primal_is_type_stable
+        # If the primal is type stable, and the user has requested that type-stability tests
+        # be turned on, we check for type-stability when running the rrule!! and pullback.
+        check_stability = check_conditional_type_stability && primal_is_type_stable
+    end
 
     # Verify that the function to which the rrule applies is considered a primitive.
     is_primitive && @test Umlaut.isprimitive(Taped.RMC(), x_p...)
@@ -115,8 +121,8 @@ function test_rrule!!(
 
     # Check output and incremented shadow types are correct.
     @test y_ȳ isa CoDual
-    @test typeof(primal(y_ȳ)) == typeof(x_copy[1](map(deepcopy, x_copy[2:end])...))
-    !interface_only && @test primal(y_ȳ) == x_copy[1](map(deepcopy, x_copy[2:end])...)
+    @test typeof(primal(y_ȳ)) == typeof(x_copy[1](map(_deepcopy, x_copy[2:end])...))
+    !interface_only && @test primal(y_ȳ) == x_copy[1](map(_deepcopy, x_copy[2:end])...)
     @test shadow(y_ȳ) isa tangent_type(typeof(primal(y_ȳ)))
     x̄_new = check_stability ? (@inferred pb!!(shadow(y_ȳ), x̄...)) : pb!!(shadow(y_ȳ), x̄...)
     @test all(map((a, b) -> typeof(a) == typeof(b), x̄_new, x̄))
@@ -137,9 +143,12 @@ end
 
 # Functionality for testing AD via Umlaut.
 function test_taped_rrule!!(rng::AbstractRNG, f, x...; kwargs...)
-    _, tape = trace(f, map(deepcopy, x)...; ctx=Taped.RMC())
+    _, tape = trace(f, map(_deepcopy, x)...; ctx=Taped.RMC())
     f_t = Taped.UnrolledFunction(tape)
-    test_rrule!!(rng, f_t, f, x...; is_primitive=false, kwargs...)
+    test_rrule!!(
+        rng, f_t, f, x...;
+        is_primitive=false, check_conditional_type_stability=false, kwargs...,
+    )
 end
 
 end

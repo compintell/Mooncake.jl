@@ -28,3 +28,31 @@ include("test_resources.jl")
         include(joinpath("rrules", "unrolled_function.jl"))
     end
 end
+
+
+# v_fargs = unsplat!(t, v_fargs)
+# # note: we need to extract IR before vararg grouping, which may change
+# # v_fargs, thus invalidating method search
+# ir = getcode(code_signature(t.tape.c, v_fargs)...)
+# sparams, sparams_dict = get_static_params(t, v_fargs)
+# v_fargs = group_varargs!(t, v_fargs)
+# frame = Frame(t.tape, ir, v_fargs...)
+# push!(t.stack, frame)
+
+
+# -macro __new__(T, arg)
+# -    esc(Expr(:new, T, arg))
+# end
+
+# -# """
+# -#     __new__(T, args...)
+# -# User-level version of the `new()` pseudofunction.
+# -# Can be used to construct most Julia types, including structs
+# -# without default constructors, closures, etc.
+# -# """
+# -# @inline function __new__(T, args...)
+# -#     @__splatnew__(T, args)
+# -# end
+# -
+# -@inline @generated __new__(T, x...) = Expr(:new, :T, map(n -> :(x[$n]), 1:length(x))...)
+# -# @inline @generated __splatnew__(T, x...) = Expr(:splatnew, :T, :x)
