@@ -12,10 +12,17 @@ end
 input_shadows(x::CoInstruction) = map(shadow ∘ getindex, x.inputs)
 output_shadow(x::CoInstruction) = shadow(x.output[])
 
+function optimised_rrule!!(args...)
+    primals = map(primal, args)
+    any(might_be_active ∘ typeof, primals) && return rrule!!(args...)
+    y = primals[1](primals[2:end]...)
+    return CoDual(y, uninit_tangent(y)), NoPullback()
+end
+
 function build_coinstruction(inputs::CoInstruction...)
     input_refs = map(x -> x.output, inputs)
     input_values = map(getindex, input_refs)
-    output_value, pb!! = rrule!!(input_values...)
+    output_value, pb!! = optimised_rrule!!(input_values...)
     output_ref = Ref(output_value)
     pb_ref = Ref(pb!!)
     return CoInstruction(input_refs, output_ref, pb_ref)
@@ -25,7 +32,7 @@ function (instruction::CoInstruction)(inputs::CoInstruction...)
     input_refs = map(x -> x.output, inputs)
     input_values = map(getindex, input_refs)
     foreach(verify_codual_type, input_values)
-    output_value, pb!! = rrule!!(input_values...)
+    output_value, pb!! = optimised_rrule!!(input_values...)
     verify_codual_type(output_value)
     output_ref = instruction.output
     output_ref[] = output_value
@@ -79,14 +86,14 @@ const_coinstruction(x::CoDual) = CoInstruction(nothing, Ref(x), nothing)
 
 to_reverse_mode_ad(x::Input, new_tape) = Input(x.val)
 function to_reverse_mode_ad(x::Constant, new_tape)
-    return Constant(const_coinstruction(CoDual(x.val, zero_tangent(x.val))))
+    return Constant(const_coinstruction(CoDual(x.val, uninit_tangent(x.val))))
 end
 function to_reverse_mode_ad(x::Call, new_tape)
     f = x.fn isa Variable ? new_tape[x.fn].val : x.fn
-    f = f isa CoInstruction ? f : const_coinstruction(CoDual(f, zero_tangent(f)))
+    f = f isa CoInstruction ? f : const_coinstruction(CoDual(f, uninit_tangent(f)))
     raw_args = map(x -> x isa Variable ? new_tape[x].val : x, x.args)
     args = map(raw_args) do x
-        x isa CoInstruction ? x : const_coinstruction(CoDual(x, zero_tangent(x)))
+        x isa CoInstruction ? x : const_coinstruction(CoDual(x, uninit_tangent(x)))
     end
     v = build_coinstruction(f, args...)
     return mkcall(v, f, args...; val=v)
@@ -119,8 +126,6 @@ end
 
 function rrule!!(f::CoDual{<:UnrolledFunction}, args...)
     tape = primal(f).tape
-    display(tape)
-    println()
 
     wrapped_args = map(const_coinstruction, args)
     inputs!(tape, wrapped_args...)

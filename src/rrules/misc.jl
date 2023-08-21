@@ -6,22 +6,20 @@
 isprimitive(::RMC, ::typeof(sin), ::Float64) = true
 function rrule!!(::CoDual{typeof(sin)}, x::CoDual{Float64})
     x = primal(x)
-    partial = cos(x)
+    y, partial = sincos(x)
     function sin_pullback!!(dy::Float64, dsin, dx::Float64)
         return dsin, increment!!(dx, dy * partial)
     end
-    y = sin(x)
     return CoDual(y, zero(y)), sin_pullback!!
 end
 
 isprimitive(::RMC, ::typeof(cos), ::Float64) = true
 function rrule!!(::CoDual{typeof(cos)}, x::CoDual{Float64})
     x = primal(x)
-    partial = -sin(x)
+    neg_partial, y = sincos(x)
     function cos_pullback!!(dy::Float64, dcos, dx::Float64)
-        return dcos, increment!!(dx, dy * partial)
+        return dcos, increment!!(dx, -dy * neg_partial)
     end
-    y = cos(x)
     return CoDual(y, zero(y)), cos_pullback!!
 end
 

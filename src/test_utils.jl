@@ -62,10 +62,24 @@ get_address(x) = ismutable(x) ? pointer_from_objref(x) : nothing
 
 apply(f, x...) = f(x...)
 
-function test_rrule!!(rng::AbstractRNG, x...; interface_only=false, is_primitive=true)
+function is_inferred(f::F, x...) where {F}
+    static_type = only(Base.return_types(f, map(Core.Typeof, x)))
+    dynamic_type = Core.Typeof(f(map(deepcopy, x)...))
+    return static_type == dynamic_type
+end
 
+function conditional_stability(check_stability::Bool, f::F, x...) where {F}
+    return check_stability ? (@inferred f(x...)) : f(x...)
+end
+
+function test_rrule!!(
+    rng::AbstractRNG, x...;
+    interface_only=false,
+    is_primitive=true,
+    check_conditional_type_stability=true,
+)
     # Set up problem.
-    x_copy = (x[1], map(deepcopy, x[2:end])...)
+    x_copy = (x[1], map(x -> deepcopy(x isa CoDual ? primal(x) : x), x[2:end])...)
     x_addresses = map(get_address, x)
     x_x̄ = map(x -> x isa CoDual ? x : CoDual(x, randn_tangent(rng, x)), x)
 
@@ -76,21 +90,26 @@ function test_rrule!!(rng::AbstractRNG, x...; interface_only=false, is_primitive
 
     # Attempt to run primal programme. If the primal programme throws, display the original
     # exception and throw an additional exception which points this out.
+    # Record whether or not it is type-stable.
     x_p = map(primal, x_x̄)
     x_p = (x_p[1], map(deepcopy, x_p[2:end])...)
-    try
-        apply(x_p...)
+    primal_is_type_stable = try
+        is_inferred(apply, x_p...)
     catch e
         display(e)
         println()
         throw(ArgumentError("Primal evaluation does not work."))
     end
 
+    # If the primal is type stable, and the user has requested that type-stability tests be
+    # turned on, we check for type-stability when running the rrule!! and pullback.
+    check_stability = check_conditional_type_stability && primal_is_type_stable
+
     # Verify that the function to which the rrule applies is considered a primitive.
     is_primitive && @test Umlaut.isprimitive(Taped.RMC(), x_p...)
 
     # Run the rrule and extract results.
-    y_ȳ, pb!! = Taped.rrule!!(x_x̄...)
+    y_ȳ, pb!! = check_stability ? (@inferred Taped.rrule!!(x_x̄...)) : Taped.rrule!!(x_x̄...)
     x = map(primal, x_x̄)
     x̄ = map(shadow, x_x̄)
 
@@ -99,7 +118,7 @@ function test_rrule!!(rng::AbstractRNG, x...; interface_only=false, is_primitive
     @test typeof(primal(y_ȳ)) == typeof(x_copy[1](map(deepcopy, x_copy[2:end])...))
     !interface_only && @test primal(y_ȳ) == x_copy[1](map(deepcopy, x_copy[2:end])...)
     @test shadow(y_ȳ) isa tangent_type(typeof(primal(y_ȳ)))
-    x̄_new = pb!!(shadow(y_ȳ), x̄...)
+    x̄_new = check_stability ? (@inferred pb!!(shadow(y_ȳ), x̄...)) : pb!!(shadow(y_ȳ), x̄...)
     @test all(map((a, b) -> typeof(a) == typeof(b), x̄_new, x̄))
 
     # Check aliasing.
@@ -116,10 +135,11 @@ function test_rrule!!(rng::AbstractRNG, x...; interface_only=false, is_primitive
     !interface_only && test_rmad(rng, x...)
 end
 
-function test_taped_rrule!!(rng::AbstractRNG, f, x...; interface_only=false)
+# Functionality for testing AD via Umlaut.
+function test_taped_rrule!!(rng::AbstractRNG, f, x...; kwargs...)
     _, tape = trace(f, map(deepcopy, x)...; ctx=Taped.RMC())
     f_t = Taped.UnrolledFunction(tape)
-    test_rrule!!(rng, f_t, f, x...; interface_only, is_primitive=false)
+    test_rrule!!(rng, f_t, f, x...; is_primitive=false, kwargs...)
 end
 
 end

@@ -88,6 +88,8 @@ end
 # refer to themselves...
 tangent_type(::Type{<:Type}) = NoTangent
 
+tangent_type(::Type{<:TypeVar}) = NoTangent
+
 tangent_type(::Type{Ptr{P}}) where {P} = Ptr{tangent_type(P)}
 
 tangent_type(::Type{<:Ptr}) = NoTangent
@@ -137,6 +139,8 @@ function tangent_type(P::Type)
     isprimitivetype(P) && throw(error(
         "$P is a primitive type. Implement a method of `tangent_type` for it."
     ))
+
+    Base.issingletontype(P) && return NoTangent
 
     # If the type is a Union, then take the union type of its arguments.
     P isa Union && return Union{tangent_type(P.a), tangent_type(P.b)}
@@ -191,6 +195,22 @@ zero_tangent(x::Union{Tuple, NamedTuple}) = map(zero_tangent, x)
     T = ismutabletype(P) ? MutableTangent : Tangent
     return T{Tbacking}(backing)
 end
+
+"""
+    uninit_tangent(x)
+
+Related to `zero_tangent`, but a bit different. Check current implementation for
+details -- this docstring is intentionally non-specific in order to avoid becoming outdated.
+"""
+uninit_tangent(x) = zero_tangent(x)
+uninit_tangent(x::Ptr{P}) where {P} = bitcast(Ptr{tangent_type(P)}, x)
+
+"""
+    uninit_codual(x)
+
+See implementation for details, as this function is subject to change.
+"""
+uninit_codual(x) = CoDual(x, uninit_tangent(x))
 
 """
     randn_tangent(rng::AbstractRNG, x::T) where {T}
@@ -422,3 +442,12 @@ for _P in [
     @eval _add_to_primal(p::$_P, t) = _containerlike_add_to_primal(p, t)
     @eval _diff(p::P, q::P) where {P<:$_P} = _containerlike_diff(p, q)
 end
+
+function might_be_active(::Type{P}) where {P}
+    tangent_type(P) == NoTangent && return false
+    Base.issingletontype(P) && return false
+    Base.isabstracttype(P) && return true
+    isprimitivetype(P) && return true
+    return any(might_be_active, fieldtypes(P))
+end
+might_be_active(::Type{<:Array{P}}) where {P} = might_be_active(P)

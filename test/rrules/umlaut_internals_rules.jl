@@ -1,4 +1,4 @@
-@testset "reverse_mode_ad" begin
+@testset "umlaut_internals_rules" begin
 
     @testset "misc utility" begin
         x = randn(4, 5)
