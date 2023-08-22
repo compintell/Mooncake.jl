@@ -2,7 +2,7 @@ module TestResources
 
 using ..Taped
 
-using LinearAlgebra
+using LinearAlgebra, Setfield
 
 test_sin(x) = sin(x)
 
@@ -132,6 +132,30 @@ function value_dependent_control_flow(x, n)
         n -= 1
     end
     return x
+end
+
+my_setfield!(args...) = setfield!(args...)
+
+function _setfield!(value::MutableTangent, name, x)
+    @set value.fields.$name = x
+    return x
+end
+
+function Taped.rrule!!(::Taped.CoDual{typeof(my_setfield!)}, value, name, x)
+    _name = primal(name)
+    old_x = isdefined(primal(value), _name) ? getfield(primal(value), _name) : nothing
+    function setfield!_pullback(dy, df, dvalue, ::NoTangent, dx)
+        new_dx = increment!!(dx, getfield(dvalue.fields, _name).tangent)
+        set_field_to_zero!!(dvalue, _name)
+        new_dx = increment!!(new_dx, dy)
+        old_x !== nothing && setfield!(primal(value), _name, old_x)
+        return df, dvalue, NoTangent(), new_dx
+    end
+    y = Taped.CoDual(
+        setfield!(primal(value), _name, primal(x)),
+        _setfield!(shadow(value), _name, shadow(x)),
+    )
+    return y, setfield!_pullback
 end
 
 end
