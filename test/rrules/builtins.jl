@@ -180,7 +180,11 @@
         (false, fieldtype, TestResources.MutableFoo, :a),
         (false, fieldtype, TestResources.MutableFoo, :b),
         (true, getfield, TestResources.StructFoo(5.0), :a),
+        (false, getfield, TestResources.StructFoo(5.0, randn(5)), :a),
         (false, getfield, TestResources.StructFoo(5.0, randn(5)), :b),
+        (true, getfield, TestResources.StructFoo(5.0), 1),
+        (false, getfield, TestResources.StructFoo(5.0, randn(5)), 1),
+        (false, getfield, TestResources.StructFoo(5.0, randn(5)), 2),
         (true, getfield, TestResources.MutableFoo(5.0), :a),
         (false, getfield, TestResources.MutableFoo(5.0, randn(5)), :b),
         (false, getfield, UnitRange{Int}(5:9), :start),
@@ -203,6 +207,8 @@
         # replacefield! -- NEEDS IMPLEMENTING AND TESTING
         (false, setfield!, TestResources.MutableFoo(5.0, randn(5)), :a, 4.0),
         (false, setfield!, TestResources.MutableFoo(5.0, randn(5)), :b, randn(5)),
+        (false, setfield!, TestResources.MutableFoo(5.0, randn(5)), 1, 4.0),
+        (false, setfield!, TestResources.MutableFoo(5.0, randn(5)), 2, randn(5)),
         # swapfield! -- NEEDS IMPLEMENTING AND TESTING
         # throw -- NEEDS IMPLEMENTING AND TESTING
         (false, tuple, 5.0, 4.0),

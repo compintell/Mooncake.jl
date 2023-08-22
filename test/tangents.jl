@@ -17,6 +17,10 @@ end
 
 tangent(nt::NamedTuple) = Tangent(map(PossiblyUninitTangent, nt))
 mutable_tangent(nt::NamedTuple) = MutableTangent(map(PossiblyUninitTangent, nt))
+function mutable_tangent(::Type{P}, nt::NamedTuple{names}) where {P, names}
+    v = map((P, x) -> PossiblyUninitTangent{tangent_type(P)}(x), fieldtypes(P), nt)
+    return MutableTangent(NamedTuple{names}(v))
+end
 
 function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P, T}
 
@@ -165,7 +169,7 @@ end
         @test Taped.is_init(t.fields.b) == true
     end
 
-    T_b = PossiblyUninitTangent{Vector{Float64}}
+    T_b = PossiblyUninitTangent{Any}
     @testset "StructFoo (partial init)" begin
         p = TestResources.StructFoo(6.0)
         _tangent = nt -> Taped.build_tangent(typeof(p), nt...)
@@ -185,15 +189,16 @@ end
     end
 
     @testset "MutableFoo (full init)" begin
+        _tangent = (args...) -> Taped.build_tangent(TestResources.MutableFoo, args...)
         p = TestResources.MutableFoo(6.0, randn(5))
-        x = mutable_tangent((a=5.0, b=randn(5)))
-        y = mutable_tangent((a=4.0, b=rand(5)))
-        z = mutable_tangent((a=9.0, b=x.fields.b.tangent + y.fields.b.tangent))
+        x = _tangent(5.0, randn(5))
+        y = _tangent(4.0, rand(5))
+        z = _tangent(9.0, x.fields.b.tangent + y.fields.b.tangent)
         test_tangent(rng, p, z, x, y)
         test_test_interface(p, x)
 
         # Verify tangent generation works correctly.
-        t = Taped.build_tangent(TestResources.MutableFoo, 5.0, randn(5))
+        t = _tangent(5.0, randn(5))
         @test Taped.is_init(t.fields.a) == true
         @test Taped.is_init(t.fields.b) == true
     end
@@ -205,7 +210,7 @@ end
         z = MutableTangent((a=_wrap_field(9.0), b=T_b()))
         test_tangent(rng, p, z, x, y)
 
-        x_init = mutable_tangent((a=5.0, b=randn(5)))
+        x_init = mutable_tangent(TestResources.MutableFoo, (a=5.0, b=randn(5)))
         @test_throws ErrorException increment!!(x_init, x)
         @test_throws ErrorException increment!!(x, x_init)
 
@@ -250,6 +255,8 @@ end
             y = 3.0
             @test increment_field!!(x, y, :a) == (a=8.0, b=4.0)
             @test increment_field!!(x, y, :b) == (a=5.0, b=7.0)
+            @test increment_field!!(x, y, 1) == (a=8.0, b=4.0)
+            @test increment_field!!(x, y, 2) == (a=5.0, b=7.0)
         end
         @testset "Tangent" begin
             x = tangent((a=5.0, b=4.0))
@@ -280,6 +287,8 @@ end
         x = mutable_tangent(nt)
         @test set_field_to_zero!!(x, :a) == mutable_tangent(nt2)
         @test set_field_to_zero!!(x, :a) === x
+        @test set_field_to_zero!!(x, 1) == mutable_tangent(nt2)
+        @test set_field_to_zero!!(x, 1) === x
     end
 end
 

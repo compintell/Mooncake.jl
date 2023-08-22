@@ -70,7 +70,7 @@ Taped._diff(p::StructFoo, q::StructFoo) = Taped._containerlike_diff(p, q)
 
 mutable struct MutableFoo
     a::Float64
-    b::Vector{Float64}
+    b::AbstractVector
     MutableFoo(a::Float64, b::Vector{Float64}) = new(a, b)
     MutableFoo(a::Float64) = new(a)
 end

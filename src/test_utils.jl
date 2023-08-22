@@ -5,6 +5,20 @@ using Taped: CoDual, NoTangent
 
 using Random, Test
 
+has_equal_data(x::T, y::T) where {T<:String} = x == y
+has_equal_data(x::Type, y::Type) = x == y
+has_equal_data(x::Core.TypeName, y::Core.TypeName) = x == y
+has_equal_data(x::Module, y::Module) = x == y
+function has_equal_data(x::T, y::T) where {T<:Array}
+    size(x) != size(y) && return false
+    return all(map(n -> (isassigned(x, n) == isassigned(y, n)) && (!isassigned(x, n) || has_equal_data(x[n], y[n])), 1:length(x)))
+end
+function has_equal_data(x::T, y::T) where {T}
+    isprimitivetype(T) && return isequal(x, y)
+    return all(map(n -> has_equal_data(getfield(x, n), getfield(y, n)), fieldnames(T)))
+end
+has_equal_data(x::T, y::T) where {T<:Umlaut.Tape} = true
+
 function test_rmad(rng::AbstractRNG, f, x...)
 
     # Run original function on deep-copies of inputs.
@@ -14,7 +28,6 @@ function test_rmad(rng::AbstractRNG, f, x...)
 
     # Use finite differences to estimate vjps
     ẋ = randn_tangent(rng, x)
-    # ẋ = zero_tangent(x)
     ε = 1e-5
     x′ = _add_to_primal(x, _scale(ε, ẋ))
     y′ = f(x′...)
@@ -27,14 +40,12 @@ function test_rmad(rng::AbstractRNG, f, x...)
     y, pb!! = Taped.rrule!!(f_f̄, x_x̄...)
 
     # Verify that inputs / outputs are the same under `f` and its rrule.
-    @test x_correct == map(primal, x_x̄)
-    @test y_correct == primal(y)
+    @test has_equal_data(x_correct, map(primal, x_x̄))
+    @test has_equal_data(y_correct, primal(y))
 
     # Run reverse-pass.
     ȳ_delta = randn_tangent(rng, primal(y))
     x̄_delta = map(Base.Fix1(randn_tangent, rng), x)
-    # ȳ_delta = zero_tangent(primal(y))
-    # x̄_delta = map(zero_tangent, x)
 
     ȳ_init = set_to_zero!!(shadow(y))
     x̄_init = map(set_to_zero!! ∘ shadow, x_x̄)
@@ -43,7 +54,7 @@ function test_rmad(rng::AbstractRNG, f, x...)
     _, x̄... = pb!!(ȳ, shadow(f_f̄), x̄...)
 
     # Check that inputs have been returned to their original value.
-    @test all(map(isequal, x, map(primal, x_x̄)))
+    @test all(map(has_equal_data, x, map(primal, x_x̄)))
 
     # pullbacks increment, so have to compare to the incremented quantity.
     @test _dot(ȳ_delta, ẏ) + _dot(x̄_delta, ẋ_post) ≈ _dot(x̄, ẋ) rtol=1e-3 atol=1e-3
@@ -122,7 +133,9 @@ function test_rrule!!(
     # Check output and incremented shadow types are correct.
     @test y_ȳ isa CoDual
     @test typeof(primal(y_ȳ)) == typeof(x_copy[1](map(_deepcopy, x_copy[2:end])...))
-    !interface_only && @test primal(y_ȳ) == x_copy[1](map(_deepcopy, x_copy[2:end])...)
+    if !interface_only
+        @test has_equal_data(primal(y_ȳ), x_copy[1](map(_deepcopy, x_copy[2:end])...))
+    end
     @test shadow(y_ȳ) isa tangent_type(typeof(primal(y_ȳ)))
     x̄_new = check_stability ? (@inferred pb!!(shadow(y_ȳ), x̄...)) : pb!!(shadow(y_ȳ), x̄...)
     @test all(map((a, b) -> typeof(a) == typeof(b), x̄_new, x̄))
@@ -131,7 +144,7 @@ function test_rrule!!(
     @test all(map((x̄, x̄_new) -> ismutable(x̄) ? x̄ === x̄_new : true, x̄, x̄_new))
 
     # Check that inputs have been returned to their original state.
-    !interface_only && @test all(map(==, x, x_copy))
+    !interface_only && @test all(map(has_equal_data, x, x_copy))
 
     # Check that memory addresses have remained constant.
     new_x_addresses = map(get_address, x)
@@ -149,6 +162,73 @@ function test_taped_rrule!!(rng::AbstractRNG, f, x...; kwargs...)
         rng, f_t, f, x...;
         is_primitive=false, check_conditional_type_stability=false, kwargs...,
     )
+end
+
+generate_args(::typeof(===), x) = [(x, 0.0), (1.0, x)]
+function generate_args(::typeof(Core.ifelse), x)
+    return [(true, x, 0.0), (false, x, 0.0), (true, 0.0, x), (false, 0.0, x)]
+end
+generate_args(::typeof(Core.sizeof), x) = [(x, )]
+generate_args(::typeof(Core.svec), x) = [(x, ), (x, x)]
+function generate_args(::typeof(getfield), x)
+    names = fieldnames(typeof(x))
+    return map(n -> (x, n), vcat(names..., eachindex(names)...))
+end
+generate_args(::typeof(isa), x) = [(x, Float64), (x, Int), (x, typeof(x))]
+function generate_args(::typeof(setfield!), x)
+    names = fieldnames(typeof(x))
+    return map(n -> (x, n, getfield(x, n)), vcat(names..., eachindex(names)...))
+end
+generate_args(::typeof(tuple), x) = [(x, ), (x, x), (x, x, x)]
+generate_args(::typeof(typeassert), x) = [(x, typeof(x))]
+generate_args(::typeof(typeof), x) = [(x, )]
+
+function functions_for_all_types()
+    return [===, Core.ifelse, Core.sizeof, isa, tuple, typeassert, typeof]
+end
+
+functions_for_structs() = vcat(functions_for_all_types(), [getfield])
+
+function functions_for_mutable_structs()
+    return vcat(
+        functions_for_structs(), [setfield!],# modifyfield!, replacefield!, swapfield!]
+    )
+end
+
+"""
+    test_rule_and_type_interactions(rng::AbstractRNG, x)
+
+Check that a collection of standard functions for which we _ought_ to have a working rrule
+for `x` work, and produce the correct answer. For example, the `rrule!!` for `typeof` should
+work correctly on any type, we should have a working rule for `getfield` for any
+struct-type, and we should have a rule for `setfield!` for any mutable struct type.
+
+The purpose of this test is to ensure that, for any given `x`, the full range of primitive
+functions that _ought_ to work on it, do indeed work on it.
+"""
+function test_rule_and_type_interactions(rng::AbstractRNG, x::P) where {P}
+
+    # Generate standard test cases.
+    fs = if ismutabletype(P)
+        functions_for_mutable_structs()
+    elseif isstructtype(P)
+        functions_for_structs()
+    else
+        functions_for_all_types()
+    end
+
+    # Run standardised tests for all functions.
+    @testset "$f" for f in fs
+        arg_sets = generate_args(f, x)
+        @testset for args in arg_sets
+            test_rrule!!(
+                rng, f, args...;
+                interface_only=false,
+                is_primitive=true,
+                check_conditional_type_stability=false,
+            )
+        end
+    end
 end
 
 end

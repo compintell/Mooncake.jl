@@ -306,7 +306,10 @@ end
 `increment!!` the field `f` of `x` by `y`, and return the updated `x`.
 """
 increment_field!!(::NoTangent, ::NoTangent, f) = NoTangent()
-increment_field!!(x::NamedTuple, y, f) = @set x.$f = increment!!(getfield(x, f), y)
+function increment_field!!(x::T, y, f::Integer) where {T<:NamedTuple}
+    return T(ntuple(n -> n == f ? increment!!(x[n], y) : x[n], length(x)))
+end
+increment_field!!(x::NamedTuple, y, f::Symbol) = @set x.$f = increment!!(getfield(x, f), y)
 function increment_field!!(x::Tuple, y, i::Int)
     return ntuple(n -> n == i ? increment!!(x[n], y) : x[n], length(x))
 end
@@ -325,9 +328,11 @@ end
 
 Set the field `f` of `x` to zero -- `f` can be an integer if `x` is a `Tuple`.
 """
-set_field_to_zero!!(x::NamedTuple, f) = @set x.$f = set_to_zero!!(getfield(x, f))
-function set_field_to_zero!!(x::Tuple, i::Int)
-    ntuple(n -> n == i ? set_to_zero!!(x[n]) : x[n], length(x))
+function set_field_to_zero!!(x::NamedTuple, f::Symbol)
+    return @set x.$f = set_to_zero!!(getfield(x, f))
+end
+function set_field_to_zero!!(x::T, i::Int) where {T<:Union{Tuple, NamedTuple}}
+    T(ntuple(n -> n == i ? set_to_zero!!(x[n]) : x[n], length(x)))
 end
 set_field_to_zero!!(x::Tangent, f) = Tangent(set_field_to_zero!!(x.fields, f))
 function set_field_to_zero!!(x::MutableTangent, f)
