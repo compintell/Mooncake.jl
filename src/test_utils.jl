@@ -11,7 +11,11 @@ has_equal_data(x::Core.TypeName, y::Core.TypeName) = x == y
 has_equal_data(x::Module, y::Module) = x == y
 function has_equal_data(x::T, y::T) where {T<:Array}
     size(x) != size(y) && return false
-    return all(map(n -> (isassigned(x, n) == isassigned(y, n)) && (!isassigned(x, n) || has_equal_data(x[n], y[n])), 1:length(x)))
+    equality = map(1:length(x)) do n
+        (isassigned(x, n) != isassigned(y, n)) && return false
+        return (!isassigned(x, n) || has_equal_data(x[n], y[n]))
+    end
+    return all(equality)
 end
 function has_equal_data(x::T, y::T) where {T}
     isprimitivetype(T) && return isequal(x, y)
