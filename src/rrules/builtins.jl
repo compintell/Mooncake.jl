@@ -507,19 +507,30 @@ end
 
 # replacefield!
 
-function _setfield!(value::MutableTangent, name, x)
-    @set value.fields.$name = x
+function _setfield!(value::MutableTangent, name::Symbol, x)
+    fields = value.fields
+    value.fields = @set fields.$name = fieldtype(typeof(fields), name)(x)
     return x
+end
+function _setfield!(value::T, ind::Int, x) where {T<:MutableTangent}
+    value.fields = _setfield!(value.fields, ind, x)
+    return x
+end
+
+function _setfield!(value::T, ind::Int, x) where {T<:NamedTuple}
+    return T(ntuple(n -> n == ind ? fieldtype(T, ind)(x) : value[n], length(value)))
 end
 
 function rrule!!(::CoDual{typeof(setfield!)}, value, name, x)
     _name = primal(name)
-    old_x = isdefined(primal(value), _name) ? getfield(primal(value), _name) : nothing
+    save = isdefined(primal(value), _name)
+    old_x = save ? getfield(primal(value), _name) : nothing
+    old_dx = save ? getfield(shadow(value).fields, _name).tangent : nothing
     function setfield!_pullback(dy, df, dvalue, ::NoTangent, dx)
         new_dx = increment!!(dx, getfield(dvalue.fields, _name).tangent)
-        set_field_to_zero!!(dvalue, _name)
         new_dx = increment!!(new_dx, dy)
         old_x !== nothing && setfield!(primal(value), _name, old_x)
+        old_x !== nothing && _setfield!(shadow(value), _name, old_dx)
         return df, dvalue, NoTangent(), new_dx
     end
     y = CoDual(
