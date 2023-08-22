@@ -6,8 +6,7 @@
 
 # Getting this to work:
 
-This currently depends on un-merged changes to Umlaut.
-Please dev [my fork](https://github.com/willtebbutt/Umlaut.jl) of Umlaut and checkout to the wct/optimised_ir_tracing branch in order to get the tests to run.
+
 
 # Known Limitations:
 
