@@ -23,6 +23,64 @@ function has_equal_data(x::T, y::T) where {T}
 end
 has_equal_data(x::T, y::T) where {T<:Umlaut.Tape} = true
 
+const AddressMap = Dict{Ptr{Nothing}, Ptr{Nothing}}
+
+"""
+    populate_address_map(primal, tangent)
+
+Constructs an empty `AddressMap` and calls `populate_address_map!`.
+"""
+populate_address_map(primal, tangent) = populate_address_map!(AddressMap(), primal, tangent)
+
+"""
+    populate_address_map!(m::AddressMap, primal, tangent)
+
+Fills `m` with pairs mapping from memory addresses in `primal` to corresponding memory
+addresses in `tangent`. If the same memory address appears multiple times in `primal`,
+throws an `AssertionError` if the same address is not mapped to in `tangent` each time.
+"""
+function populate_address_map!(m::AddressMap, primal::P, tangent::T) where {P, T}
+    isprimitivetype(P) && return m
+    if ismutabletype(P)
+        @assert T <: MutableTangent
+        k = pointer_from_objref(primal)
+        v = pointer_from_objref(tangent)
+        haskey(m, k) && (@assert (m[k] == v))
+        m[k] = v
+    end
+    foreach(fieldnames(P)) do n
+        populate_address_map!(m, getfield(primal, n), getfield(tangent.fields, n).tangent)
+    end
+    return m
+end
+
+function populate_address_map!(m::AddressMap, p::P, t) where {P<:Union{Tuple, NamedTuple}}
+    foreach(n -> populate_address_map!(m, getfield(p, n), getfield(t, n)), fieldnames(P))
+    return m
+end
+
+function populate_address_map!(m::AddressMap, p::Array, t::Array)
+    k = pointer_from_objref(p)
+    v = pointer_from_objref(t)
+    haskey(m, k) && (@assert m[k] == v)
+    m[k] = v
+    populate_address_map!.(Ref(m), p, t)
+    return m
+end
+
+populate_address_map!(m::AddressMap, p::Union{Core.TypeName, Type, Symbol, String}, t) = m
+
+"""
+    address_maps_are_consistent(x::AddressMap, y::AddressMap)
+
+`true` if all keys in both `x` and `y` map to the same values. i.e. if any key appears in
+both `x` and `y`, and the corresponding value is not the same in both `x` and `y`, return
+`false`.
+"""
+function address_maps_are_consistent(x::AddressMap, y::AddressMap)
+    return all(map(k -> x[k] == y[k], collect(intersect(keys(x), keys(y)))))
+end
+
 function test_rmad(rng::AbstractRNG, f, x...)
 
     # Run original function on deep-copies of inputs.
@@ -41,7 +99,15 @@ function test_rmad(rng::AbstractRNG, f, x...)
     # Run `rrule!!` on copies of `f` and `x`.
     f_f̄ = CoDual(f, zero_tangent(f))
     x_x̄ = map(x -> CoDual(deepcopy(x), zero_tangent(x)), x)
+    inputs_address_map = populate_address_map(map(primal, x_x̄), map(shadow, x_x̄))
     y, pb!! = Taped.rrule!!(f_f̄, x_x̄...)
+
+    # Query both `x_x̄` and `y`, because `x_x̄` may have been mutated by `f`.
+    outputs_address_map = populate_address_map(
+        (map(primal, x_x̄)..., primal(y)), (map(shadow, x_x̄)..., shadow(y)),
+    )
+
+    @test address_maps_are_consistent(inputs_address_map, outputs_address_map)
 
     # Verify that inputs / outputs are the same under `f` and its rrule.
     @test has_equal_data(x_correct, map(primal, x_x̄))

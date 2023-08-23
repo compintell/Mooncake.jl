@@ -10,7 +10,13 @@ using Core: bitcast
 using Core: Intrinsics
 using Core.Intrinsics: pointerref, pointerset
 using Taped: TestUtils, CoDual, to_reverse_mode_ad, _wrap_field, __intrinsic__
-using .TestUtils: test_rrule!!, test_taped_rrule!!, has_equal_data
+using .TestUtils:
+    test_rrule!!,
+    test_taped_rrule!!,
+    has_equal_data,
+    AddressMap,
+    populate_address_map!,
+    populate_address_map
 
 include("test_resources.jl")
 
