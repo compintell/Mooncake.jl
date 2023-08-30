@@ -172,3 +172,62 @@ function rrule!!(f::CoDual{<:UnrolledFunction}, args...)
 end
 
 tangent_type(::Type{<:Umlaut.Variable}) = NoTangent
+
+function value_and_gradient(tape::Tape, f, x...)
+    f_ur = UnrolledFunction(tape)
+    args = (f_ur, f, x...)
+    dargs = map(zero_tangent, args)
+    y, pb!! = rrule!!(map(CoDual, args, dargs)...)
+    @assert primal(y) isa Float64
+    dargs = pb!!(1.0, dargs...)
+    return y, dargs
+end
+
+function value_and_gradient(f, x...)
+    tape = last(trace(f, x...; ctx=RMC()))
+    return value_and_gradient(tape, f, x...)
+end
+
+function construct_accel_tape(ȳ, f::CoDual, args::CoDual...)
+    tape = primal(f).tape
+
+    wrapped_args = map(const_coinstruction, args)
+    inputs!(tape, wrapped_args...)
+
+    new_tape = Tape(tape.c)
+    # Transform forwards pass, replacing ops with associated rrule calls.
+    for (n, op) in enumerate(tape.ops)
+        new_op = to_reverse_mode_ad(op, new_tape)
+        new_op_val = new_op.val.output[]
+        if tangent_type(typeof(primal(new_op_val))) != typeof(shadow(new_op_val))
+            inputs = map(getindex, new_op.val.inputs)
+            display(inputs)
+            println()
+            display(new_op_val)
+            println()
+            display(which(rrule!!, map(Core.Typeof, inputs)))
+            println()
+            display("expected shadow type $(tangent_type(typeof(primal(new_op_val))))")
+            println()
+            throw(error("bad output types found in practice for op"))
+        end
+        push!(new_tape, new_op)
+    end
+    new_tape.result = unbind(tape.result)
+    y_ref = new_tape[new_tape.result].val.output
+
+    # Run the reverse-pass to ensure that we don't get state wrong.
+    dargs = map(shadow, args)
+    seed_variable!(new_tape, new_tape.result, ȳ)
+    foreach((v, x̄) -> seed_variable!(new_tape, v, x̄), inputs(new_tape), dargs)
+
+    # Push operations onto the tape to run the reverse-pass.
+    for op in reverse(new_tape.ops)
+        pb_op = mkcall(pullback!, Variable(op.id))
+        push!(new_tape, pb_op)
+        Umlaut.exec!(new_tape, pb_op)
+    end
+
+    # Accelerate the forwards-tape.
+    return accelerate(new_tape)
+end

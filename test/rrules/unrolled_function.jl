@@ -1,3 +1,18 @@
+function set_args!(acc_tape, args...)
+    foreach(enumerate(args)) do (n, arg)
+        current_arg = acc_tape.arg_refs[n][].output
+        current_arg.output[] = arg
+    end
+    return nothing
+end
+
+function execute!(tape)
+    for inst in tape.instructions
+        inst()
+    end
+    return Taped.get_return_val(tape)
+end
+
 @testset "unrolled_function" begin
     @testset for (interface_only, f, x...) in vcat(
         TestResources.TEST_FUNCTIONS,
@@ -51,5 +66,18 @@
     )
         @info "$(map(typeof, (f, x...)))"
         test_taped_rrule!!(Xoshiro(123456), f, map(deepcopy, x)...; interface_only)
+    end
+    @testset "acceleration" begin
+        f = TestResources.test_mlp
+        args = (randn(5, 2), randn(7, 5), randn(3, 7))
+        y, tape = Taped.trace(f, args...; ctx=Taped.RMC())
+        f_ur = Taped.UnrolledFunction(tape)
+        x = (f, args...)
+        dx = map(zero_tangent, x)
+
+        fast_tape = Taped.construct_accel_tape(
+            zero_tangent(y), CoDual(f_ur, NoTangent()), map(CoDual, x, dx)...
+        )
+        execute!(fast_tape)
     end
 end
