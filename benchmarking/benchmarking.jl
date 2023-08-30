@@ -73,15 +73,3 @@ function main()
     # display(dW2_rd ./ dW2)
     # println()
 end
-
-
-
-
-bar(x::Float64) = x > 0 ? x : -x
-
-function foo(x)
-    x1 = bar(x)
-    x2 = bar(x1)
-    x3 = bar(x2)
-    return x3
-end
