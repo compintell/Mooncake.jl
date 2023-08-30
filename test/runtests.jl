@@ -1,4 +1,6 @@
 using
+    BenchmarkTools,
+    FunctionWrappers,
     LinearAlgebra,
     Random,
     Taped,
@@ -8,6 +10,7 @@ using
 using Base: unsafe_load, pointer_from_objref
 using Core: bitcast
 using Core.Intrinsics: pointerref, pointerset
+using FunctionWrappers: FunctionWrapper
 using Taped: IntrinsicsWrappers, TestUtils, CoDual, to_reverse_mode_ad, _wrap_field
 using .TestUtils:
     test_rrule!!,
@@ -22,6 +25,7 @@ include("test_resources.jl")
 @testset "Taped.jl" begin
     include("test_utils.jl")
     include("tracing.jl")
+    include("acceleration.jl")
     include("tangents.jl")
     include("reverse_mode_ad.jl")
     @testset "rrules" begin

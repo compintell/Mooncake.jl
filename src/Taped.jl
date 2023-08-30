@@ -2,6 +2,7 @@ module Taped
 
 using
     DiffRules,
+    FunctionWrappers,
     LinearAlgebra,
     Random,
     Setfield,
@@ -13,8 +14,10 @@ using Base:
     IEEEFloat, unsafe_convert, unsafe_pointer_to_objref, pointer_from_objref, arrayref,
     arrayset
 using Core: Intrinsics, bitcast
+using FunctionWrappers: FunctionWrapper
 
 include("tracing.jl")
+include("acceleration.jl")
 include("tangents.jl")
 include("reverse_mode_ad.jl")
 
