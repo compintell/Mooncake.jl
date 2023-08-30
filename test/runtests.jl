@@ -7,9 +7,8 @@ using
 
 using Base: unsafe_load, pointer_from_objref
 using Core: bitcast
-using Core: Intrinsics
 using Core.Intrinsics: pointerref, pointerset
-using Taped: TestUtils, CoDual, to_reverse_mode_ad, _wrap_field, __intrinsic__
+using Taped: IntrinsicsWrappers, TestUtils, CoDual, to_reverse_mode_ad, _wrap_field
 using .TestUtils:
     test_rrule!!,
     test_taped_rrule!!,

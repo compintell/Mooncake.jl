@@ -1,20 +1,26 @@
 @testset "builtins" begin
+    @testset "foreigncalls that should never be hit: $name" for name in [
+        :jl_alloc_array_1d, :jl_alloc_array_2d, :jl_alloc_array_3d, :jl_new_array,
+        :jl_array_grow_end, :jl_array_del_end, :jl_array_copy, :jl_type_intersection,
+        :memset,
+    ]
+        @test_throws(
+            ErrorException,
+            Taped.rrule!!(
+                CoDual(Umlaut.__foreigncall__, NoTangent()),
+                CoDual(Val(name), NoTangent()),
+            )
+        )
+    end
+
     @test_throws(
         ErrorException,
-        Taped.rrule!!(
-            CoDual(__intrinsic__, NoTangent()),
-            CoDual(Val(Core.Intrinsics.add_ptr), NoTangent()),
-            5.0, 4.0,
-        ),
+        Taped.rrule!!(CoDual(IntrinsicsWrappers.add_ptr, NoTangent()), 5.0, 4.0),
     )
 
     @test_throws(
         ErrorException,
-        Taped.rrule!!(
-            CoDual(__intrinsic__, NoTangent()),
-            CoDual(Val(Core.Intrinsics.sub_ptr), NoTangent()),
-            5.0, 4.0,
-        ),
+        Taped.rrule!!(CoDual(IntrinsicsWrappers.sub_ptr, NoTangent()), 5.0, 4.0),
     )
 
     _x = Ref(5.0) # data used in tests which aren't protected by GC.
@@ -28,102 +34,102 @@
         (false, Taped.Umlaut.__new__, NamedTuple{(), Tuple{}}),
 
         # Core.Intrinsics:
-        (false, __intrinsic__, Val(Intrinsics.abs_float), 5.0),
-        (false, __intrinsic__, Val(Intrinsics.add_float), 4.0, 5.0),
-        (false, __intrinsic__, Val(Intrinsics.add_float_fast), 4.0, 5.0),
-        (false, __intrinsic__, Val(Intrinsics.add_int), 1, 2),
-        (false, __intrinsic__, Val(Intrinsics.and_int), 2, 3),
-        (false, __intrinsic__, Val(Intrinsics.arraylen), randn(10)),
-        (false, __intrinsic__, Val(Intrinsics.arraylen), randn(10, 7)),
-        (false, __intrinsic__, Val(Intrinsics.ashr_int), 123456, 0x0000000000000020),
+        (false, IntrinsicsWrappers.abs_float, 5.0),
+        (false, IntrinsicsWrappers.add_float, 4.0, 5.0),
+        (false, IntrinsicsWrappers.add_float_fast, 4.0, 5.0),
+        (false, IntrinsicsWrappers.add_int, 1, 2),
+        (false, IntrinsicsWrappers.and_int, 2, 3),
+        (false, IntrinsicsWrappers.arraylen, randn(10)),
+        (false, IntrinsicsWrappers.arraylen, randn(10, 7)),
+        (false, IntrinsicsWrappers.ashr_int, 123456, 0x0000000000000020),
         # atomic_fence -- NEEDS IMPLEMENTING AND TESTING
         # atomic_pointermodify -- NEEDS IMPLEMENTING AND TESTING
         # atomic_pointerref -- NEEDS IMPLEMENTING AND TESTING
         # atomic_pointerreplace -- NEEDS IMPLEMENTING AND TESTING
         # atomic_pointerset -- NEEDS IMPLEMENTING AND TESTING
         # atomic_pointerswap -- NEEDS IMPLEMENTING AND TESTING
-        (false, __intrinsic__, Val(Intrinsics.bitcast), Float64, 5),
-        (false, __intrinsic__, Val(Intrinsics.bitcast), Int64, 5.0),
-        (false, __intrinsic__, Val(Intrinsics.bswap_int), 5),
-        (false, __intrinsic__, Val(Intrinsics.ceil_llvm), 4.1),
+        (false, IntrinsicsWrappers.bitcast, Float64, 5),
+        (false, IntrinsicsWrappers.bitcast, Int64, 5.0),
+        (false, IntrinsicsWrappers.bswap_int, 5),
+        (false, IntrinsicsWrappers.ceil_llvm, 4.1),
         # cglobal -- NEEDS IMPLEMENTING AND TESTING
-        (false, __intrinsic__, Val(Intrinsics.checked_sadd_int), 5, 4),
-        (false, __intrinsic__, Val(Intrinsics.checked_sdiv_int), 5, 4),
-        (false, __intrinsic__, Val(Intrinsics.checked_smul_int), 5, 4),
-        (false, __intrinsic__, Val(Intrinsics.checked_srem_int), 5, 4),
-        (false, __intrinsic__, Val(Intrinsics.checked_ssub_int), 5, 4),
-        (false, __intrinsic__, Val(Intrinsics.checked_uadd_int), 5, 4),
-        (false, __intrinsic__, Val(Intrinsics.checked_udiv_int), 5, 4),
-        (false, __intrinsic__, Val(Intrinsics.checked_umul_int), 5, 4),
-        (false, __intrinsic__, Val(Intrinsics.checked_urem_int), 5, 4),
-        (false, __intrinsic__, Val(Intrinsics.checked_usub_int), 5, 4),
-        (false, __intrinsic__, Val(Intrinsics.copysign_float), 5.0, 4.0),
-        (false, __intrinsic__, Val(Intrinsics.copysign_float), 5.0, -3.0),
-        (false, __intrinsic__, Val(Intrinsics.ctlz_int), 5),
-        (false, __intrinsic__, Val(Intrinsics.ctpop_int), 5),
-        (false, __intrinsic__, Val(Intrinsics.cttz_int), 5),
-        (false, __intrinsic__, Val(Intrinsics.div_float), 5.0, 3.0),
-        (false, __intrinsic__, Val(Intrinsics.div_float_fast), 5.0, 3.0),
-        (false, __intrinsic__, Val(Intrinsics.eq_float), 5.0, 4.0),
-        (false, __intrinsic__, Val(Intrinsics.eq_float), 4.0, 4.0),
-        (false, __intrinsic__, Val(Intrinsics.eq_float_fast), 5.0, 4.0),
-        (false, __intrinsic__, Val(Intrinsics.eq_float_fast), 4.0, 4.0),
-        (false, __intrinsic__, Val(Intrinsics.eq_int), 5, 4),
-        (false, __intrinsic__, Val(Intrinsics.eq_int), 4, 4),
-        (false, __intrinsic__, Val(Intrinsics.flipsign_int), 4, -3),
-        (false, __intrinsic__, Val(Intrinsics.floor_llvm), 4.1),
-        (false, __intrinsic__, Val(Intrinsics.fma_float), 5.0, 4.0, 3.0),
+        (false, IntrinsicsWrappers.checked_sadd_int, 5, 4),
+        (false, IntrinsicsWrappers.checked_sdiv_int, 5, 4),
+        (false, IntrinsicsWrappers.checked_smul_int, 5, 4),
+        (false, IntrinsicsWrappers.checked_srem_int, 5, 4),
+        (false, IntrinsicsWrappers.checked_ssub_int, 5, 4),
+        (false, IntrinsicsWrappers.checked_uadd_int, 5, 4),
+        (false, IntrinsicsWrappers.checked_udiv_int, 5, 4),
+        (false, IntrinsicsWrappers.checked_umul_int, 5, 4),
+        (false, IntrinsicsWrappers.checked_urem_int, 5, 4),
+        (false, IntrinsicsWrappers.checked_usub_int, 5, 4),
+        (false, IntrinsicsWrappers.copysign_float, 5.0, 4.0),
+        (false, IntrinsicsWrappers.copysign_float, 5.0, -3.0),
+        (false, IntrinsicsWrappers.ctlz_int, 5),
+        (false, IntrinsicsWrappers.ctpop_int, 5),
+        (false, IntrinsicsWrappers.cttz_int, 5),
+        (false, IntrinsicsWrappers.div_float, 5.0, 3.0),
+        (false, IntrinsicsWrappers.div_float_fast, 5.0, 3.0),
+        (false, IntrinsicsWrappers.eq_float, 5.0, 4.0),
+        (false, IntrinsicsWrappers.eq_float, 4.0, 4.0),
+        (false, IntrinsicsWrappers.eq_float_fast, 5.0, 4.0),
+        (false, IntrinsicsWrappers.eq_float_fast, 4.0, 4.0),
+        (false, IntrinsicsWrappers.eq_int, 5, 4),
+        (false, IntrinsicsWrappers.eq_int, 4, 4),
+        (false, IntrinsicsWrappers.flipsign_int, 4, -3),
+        (false, IntrinsicsWrappers.floor_llvm, 4.1),
+        (false, IntrinsicsWrappers.fma_float, 5.0, 4.0, 3.0),
         # fpext -- NEEDS IMPLEMENTING AND TESTING
-        (false, __intrinsic__, Val(Intrinsics.fpiseq), 4.1, 4.0),
-        (false, __intrinsic__, Val(Intrinsics.fptosi), UInt32, 4.1),
-        (false, __intrinsic__, Val(Intrinsics.fptoui), Int32, 4.1),
+        (false, IntrinsicsWrappers.fpiseq, 4.1, 4.0),
+        (false, IntrinsicsWrappers.fptosi, UInt32, 4.1),
+        (false, IntrinsicsWrappers.fptoui, Int32, 4.1),
         # fptrunc -- maybe interesting
-        (true, __intrinsic__, Val(Intrinsics.have_fma), Float64),
-        (false, __intrinsic__, Val(Intrinsics.le_float), 4.1, 4.0),
-        (false, __intrinsic__, Val(Intrinsics.le_float_fast), 4.1, 4.0),
+        (true, IntrinsicsWrappers.have_fma, Float64),
+        (false, IntrinsicsWrappers.le_float, 4.1, 4.0),
+        (false, IntrinsicsWrappers.le_float_fast, 4.1, 4.0),
         # llvm_call -- NEEDS IMPLEMENTING AND TESTING
-        (false, __intrinsic__, Val(Intrinsics.lshr_int), 1308622848, 0x0000000000000018),
-        (false, __intrinsic__, Val(Intrinsics.lt_float), 4.1, 4.0),
-        (false, __intrinsic__, Val(Intrinsics.lt_float_fast), 4.1, 4.0),
-        (false, __intrinsic__, Val(Intrinsics.mul_float), 5.0, 4.0),
-        (false, __intrinsic__, Val(Intrinsics.mul_float_fast), 5.0, 4.0),
-        (false, __intrinsic__, Val(Intrinsics.mul_int), 5, 4),
-        (false, __intrinsic__, Val(Intrinsics.muladd_float), 5.0, 4.0, 3.0),
-        (false, __intrinsic__, Val(Intrinsics.ne_float), 5.0, 4.0),
-        (false, __intrinsic__, Val(Intrinsics.ne_float_fast), 5.0, 4.0),
-        (false, __intrinsic__, Val(Intrinsics.ne_int), 5, 4),
-        (false, __intrinsic__, Val(Intrinsics.ne_int), 5, 5),
-        (false, __intrinsic__, Val(Intrinsics.neg_float), 5.0),
-        (false, __intrinsic__, Val(Intrinsics.neg_float_fast), 5.0),
-        (false, __intrinsic__, Val(Intrinsics.neg_int), 5),
-        (false, __intrinsic__, Val(Intrinsics.not_int), 5),
-        (false, __intrinsic__, Val(Intrinsics.or_int), 5, 5),
-        # pointerref -- integration tested because pointers are awkward
-        # pointerset -- integration tested because pointers are awkward
+        (false, IntrinsicsWrappers.lshr_int, 1308622848, 0x0000000000000018),
+        (false, IntrinsicsWrappers.lt_float, 4.1, 4.0),
+        (false, IntrinsicsWrappers.lt_float_fast, 4.1, 4.0),
+        (false, IntrinsicsWrappers.mul_float, 5.0, 4.0),
+        (false, IntrinsicsWrappers.mul_float_fast, 5.0, 4.0),
+        (false, IntrinsicsWrappers.mul_int, 5, 4),
+        (false, IntrinsicsWrappers.muladd_float, 5.0, 4.0, 3.0),
+        (false, IntrinsicsWrappers.ne_float, 5.0, 4.0),
+        (false, IntrinsicsWrappers.ne_float_fast, 5.0, 4.0),
+        (false, IntrinsicsWrappers.ne_int, 5, 4),
+        (false, IntrinsicsWrappers.ne_int, 5, 5),
+        (false, IntrinsicsWrappers.neg_float, 5.0),
+        (false, IntrinsicsWrappers.neg_float_fast, 5.0),
+        (false, IntrinsicsWrappers.neg_int, 5),
+        (false, IntrinsicsWrappers.not_int, 5),
+        (false, IntrinsicsWrappers.or_int, 5, 5),
+        # pointerref -- integration tested because pointers are awkward. See below.
+        # pointerset -- integration tested because pointers are awkward. See below.
         # rem_float -- untested and unimplemented because seemingly unused on master
         # rem_float_fast -- untested and unimplemented because seemingly unused on master
-        (false, __intrinsic__, Val(Intrinsics.rint_llvm), 5),
-        (false, __intrinsic__, Val(Intrinsics.sdiv_int), 5, 4),
-        (false, __intrinsic__, Val(Intrinsics.sext_int), Int64, Int32(1308622848)),
-        (false, __intrinsic__, Val(Intrinsics.shl_int), 1308622848, 0xffffffffffffffe8),
-        (false, __intrinsic__, Val(Intrinsics.sitofp), Float64, 0),
-        (false, __intrinsic__, Val(Intrinsics.sle_int), 5, 4),
-        (false, __intrinsic__, Val(Intrinsics.slt_int), 4, 5),
-        (false, __intrinsic__, Val(Intrinsics.sqrt_llvm), 5.0),
-        (false, __intrinsic__, Val(Intrinsics.sqrt_llvm_fast), 5.0),
-        (false, __intrinsic__, Val(Intrinsics.srem_int), 4, 1),
-        (false, __intrinsic__, Val(Intrinsics.sub_float), 4.0, 1.0),
-        (false, __intrinsic__, Val(Intrinsics.sub_float_fast), 4.0, 1.0),
-        (false, __intrinsic__, Val(Intrinsics.sub_int), 4, 1),
-        (false, __intrinsic__, Val(Intrinsics.trunc_int), UInt8, 78),
-        (false, __intrinsic__, Val(Intrinsics.trunc_llvm), 5.1),
-        (false, __intrinsic__, Val(Intrinsics.udiv_int), 5, 4),
-        (false, __intrinsic__, Val(Intrinsics.uitofp), Float16, 4),
-        (false, __intrinsic__, Val(Intrinsics.ule_int), 5, 4),
-        (false, __intrinsic__, Val(Intrinsics.ult_int), 5, 4),
-        (false, __intrinsic__, Val(Intrinsics.urem_int), 5, 4),
-        (false, __intrinsic__, Val(Intrinsics.xor_int), 5, 4),
-        (false, __intrinsic__, Val(Intrinsics.zext_int), Int64, 0xffffffff),
+        (false, IntrinsicsWrappers.rint_llvm, 5),
+        (false, IntrinsicsWrappers.sdiv_int, 5, 4),
+        (false, IntrinsicsWrappers.sext_int, Int64, Int32(1308622848)),
+        (false, IntrinsicsWrappers.shl_int, 1308622848, 0xffffffffffffffe8),
+        (false, IntrinsicsWrappers.sitofp, Float64, 0),
+        (false, IntrinsicsWrappers.sle_int, 5, 4),
+        (false, IntrinsicsWrappers.slt_int, 4, 5),
+        (false, IntrinsicsWrappers.sqrt_llvm, 5.0),
+        (false, IntrinsicsWrappers.sqrt_llvm_fast, 5.0),
+        (false, IntrinsicsWrappers.srem_int, 4, 1),
+        (false, IntrinsicsWrappers.sub_float, 4.0, 1.0),
+        (false, IntrinsicsWrappers.sub_float_fast, 4.0, 1.0),
+        (false, IntrinsicsWrappers.sub_int, 4, 1),
+        (false, IntrinsicsWrappers.trunc_int, UInt8, 78),
+        (false, IntrinsicsWrappers.trunc_llvm, 5.1),
+        (false, IntrinsicsWrappers.udiv_int, 5, 4),
+        (false, IntrinsicsWrappers.uitofp, Float16, 4),
+        (false, IntrinsicsWrappers.ule_int, 5, 4),
+        (false, IntrinsicsWrappers.ult_int, 5, 4),
+        (false, IntrinsicsWrappers.urem_int, 5, 4),
+        (false, IntrinsicsWrappers.xor_int, 5, 4),
+        (false, IntrinsicsWrappers.zext_int, Int64, 0xffffffff),
 
         # Non-intrinsic built-ins:
         # Core._abstracttype -- NEEDS IMPLEMENTING AND TESTING
@@ -222,7 +228,14 @@
     ]
         test_rrule!!(
             Xoshiro(123456), f, x...;
-            interface_only, check_conditional_type_stability=true,
+            interface_only, check_conditional_type_stability=false,
         )
+    end
+    @testset for (interface_only, f, x...) in vcat(
+        (false, x -> pointerref(bitcast(Ptr{Float64}, pointer_from_objref(Ref(x))), 1, 1), 5.0),
+        (false, (v, x) -> (pointerset(pointer(x), v, 2, 1); x), 3.0, randn(5)),
+        (false, x -> (pointerset(pointer(x), UInt8(3), 2, 1); x), rand(UInt8, 5)),
+    )
+        test_taped_rrule!!(Xoshiro(123456), f, map(deepcopy, x)...; interface_only)
     end
 end

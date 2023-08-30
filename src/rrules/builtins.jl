@@ -9,62 +9,72 @@
 # As of version 1.9.2 of Julia, there are exactly 139 examples of `Core.Builtin`s.
 #
 
+module IntrinsicsWrappers
 
+import Umlaut: isprimitive
+using Core: Intrinsics
+import ..Taped:
+    rrule!!, CoDual, primal, shadow, zero_tangent, isprimitive, RMC, NoPullback,
+    tangent_type, increment!!
 
 # Note: performance is not considered _at_ _all_ in this implementation.
 function rrule!!(f::CoDual{<:Core.IntrinsicFunction}, args...)
-    y, pb!! = rrule!!(
-        CoDual(__intrinsic__, NoTangent()),
-        CoDual(Val(primal(f)), NoTangent()),
-        args...
-    )
-    function intrinsic_function_pullback!!(dy, df, dargs...)
-        df, _, dargs... = pb!!(dy, NoTangent(), df, dargs...)
-        return df, dargs...
+    return rrule!!(CoDual(translate(Val(primal(f))), shadow(f)), args...)
+end
+
+macro intrinsic(name)
+    expr = quote
+        $name(x...) = Intrinsics.$name(x...)
+        (isprimitive)(::RMC, ::typeof($name), args...) = true
+        translate(::Val{Intrinsics.$name}) = $name
     end
-    return y, intrinsic_function_pullback!!
+    return esc(expr)
 end
 
 macro inactive_intrinsic(name)
-    return esc(:(
-        function rrule!!(::CoDual{typeof(__intrinsic__)}, ::CoDual{Val{$name}}, args...)
-            y = __intrinsic__(Val($name), map(primal, args)...)
+    expr = quote
+        $name(x...) = Intrinsics.$name(x...)
+        (isprimitive)(::RMC, ::typeof($name), args...) = true
+        translate(::Val{Intrinsics.$name}) = $name
+        function rrule!!(::CoDual{typeof($name)}, args...)
+            y = $name(map(primal, args)...)
             return CoDual(y, zero_tangent(y)), NoPullback()
         end
-    ))
+    end
+    return esc(expr)
 end
 
-using .Intrinsics: abs_float
-function rrule!!(::CoDual{typeof(__intrinsic__)}, ::CoDual{Val{abs_float}}, x)
-    abs_float_pullback!!(dy, df, dv, dx) = df, dv, dx + sign(primal(x)) * dy
+@intrinsic abs_float
+function rrule!!(::CoDual{typeof(abs_float)}, x)
+    abs_float_pullback!!(dy, df, dx) = df, dx + sign(primal(x)) * dy
     y = abs_float(primal(x))
     return CoDual(y, zero_tangent(y)), abs_float_pullback!!
 end
 
-using .Intrinsics: add_float
-function rrule!!(::CoDual{typeof(__intrinsic__)}, ::CoDual{Val{add_float}}, a, b)
-    add_float_pb!!(c̄, f̄, v̄, ā, b̄) = f̄, v̄, c̄ + ā, c̄ + b̄
+@intrinsic add_float
+function rrule!!(::CoDual{typeof(add_float)}, a, b)
+    add_float_pb!!(c̄, f̄, ā, b̄) = f̄, c̄ + ā, c̄ + b̄
     c = add_float(primal(a), primal(b))
     return CoDual(c, zero_tangent(c)), add_float_pb!!
 end
 
-using .Intrinsics: add_float_fast
-function rrule!!(::CoDual{typeof(__intrinsic__)}, ::CoDual{Val{add_float_fast}}, a, b)
-    add_float_fast_pb!!(c̄, f̄, v̄, ā, b̄) = f̄, v̄, add_float_fast(c̄, ā), add_float_fast(c̄, b̄)
+@intrinsic add_float_fast
+function rrule!!(::CoDual{typeof(add_float_fast)}, a, b)
+    add_float_fast_pb!!(c̄, f̄, ā, b̄) = f̄, add_float_fast(c̄, ā), add_float_fast(c̄, b̄)
     c = add_float_fast(primal(a), primal(b))
     return CoDual(c, zero_tangent(c)), add_float_fast_pb!!
 end
 
-@inactive_intrinsic Intrinsics.add_int
+@inactive_intrinsic add_int
 
-using .Intrinsics: add_ptr
-function rrule!!(::CoDual{typeof(__intrinsic__)}, ::CoDual{Val{add_ptr}}, a, b)
+@intrinsic add_ptr
+function rrule!!(::CoDual{typeof(add_ptr)}, a, b)
     throw(error("add_ptr intrinsic hit. This should never happen. Please open an issue"))
 end
 
-@inactive_intrinsic Intrinsics.and_int
-@inactive_intrinsic Intrinsics.arraylen
-@inactive_intrinsic Intrinsics.ashr_int
+@inactive_intrinsic and_int
+@inactive_intrinsic arraylen
+@inactive_intrinsic ashr_int
 
 # atomic_fence
 # atomic_pointermodify
@@ -73,8 +83,8 @@ end
 # atomic_pointerset
 # atomic_pointerswap
 
-using .Intrinsics: bitcast
-function rrule!!(::CoDual{typeof(__intrinsic__)}, ::CoDual{Val{bitcast}}, T, x)
+@intrinsic bitcast
+function rrule!!(::CoDual{typeof(bitcast)}, T, x)
     _T = primal(T)
     _x = primal(x)
     v = bitcast(_T, _x)
@@ -86,75 +96,72 @@ function rrule!!(::CoDual{typeof(__intrinsic__)}, ::CoDual{Val{bitcast}}, T, x)
     return CoDual(v, dv), NoPullback()
 end
 
-@inactive_intrinsic Intrinsics.bswap_int
-@inactive_intrinsic Intrinsics.ceil_llvm
+@inactive_intrinsic bswap_int
+@inactive_intrinsic ceil_llvm
 # cglobal
-@inactive_intrinsic Intrinsics.checked_sadd_int
-@inactive_intrinsic Intrinsics.checked_sdiv_int
-@inactive_intrinsic Intrinsics.checked_smul_int
-@inactive_intrinsic Intrinsics.checked_srem_int
-@inactive_intrinsic Intrinsics.checked_ssub_int
-@inactive_intrinsic Intrinsics.checked_uadd_int
-@inactive_intrinsic Intrinsics.checked_udiv_int
-@inactive_intrinsic Intrinsics.checked_umul_int
-@inactive_intrinsic Intrinsics.checked_urem_int
-@inactive_intrinsic Intrinsics.checked_usub_int
+@inactive_intrinsic checked_sadd_int
+@inactive_intrinsic checked_sdiv_int
+@inactive_intrinsic checked_smul_int
+@inactive_intrinsic checked_srem_int
+@inactive_intrinsic checked_ssub_int
+@inactive_intrinsic checked_uadd_int
+@inactive_intrinsic checked_udiv_int
+@inactive_intrinsic checked_umul_int
+@inactive_intrinsic checked_urem_int
+@inactive_intrinsic checked_usub_int
 
-using .Intrinsics: copysign_float
-function rrule!!(::CoDual{typeof(__intrinsic__)}, ::CoDual{Val{copysign_float}}, x, y)
+@intrinsic copysign_float
+function rrule!!(::CoDual{typeof(copysign_float)}, x, y)
     _x = primal(x)
     _y = primal(y)
-    function copysign_float_pullback!!(dz, df, dv, dx, dy)
-        return df, dv, dx + dz * sign(_y), dy
-    end
+    copysign_float_pullback!!(dz, df, dx, dy) = df, dx + dz * sign(_y), dy
     z = copysign_float(_x, _y)
     return CoDual(z, zero_tangent(z)), copysign_float_pullback!!
 end
 
-@inactive_intrinsic Intrinsics.ctlz_int
-@inactive_intrinsic Intrinsics.ctpop_int
-@inactive_intrinsic Intrinsics.cttz_int
+@inactive_intrinsic ctlz_int
+@inactive_intrinsic ctpop_int
+@inactive_intrinsic cttz_int
 
-using .Intrinsics: div_float
-function rrule!!(::CoDual{typeof(__intrinsic__)}, ::CoDual{Val{div_float}}, a, b)
+@intrinsic div_float
+function rrule!!(::CoDual{typeof(div_float)}, a, b)
     _a = primal(a)
     _b = primal(b)
     _y = div_float(_a, _b)
-    function div_float_pullback!!(dy, df, dv, da, db)
+    function div_float_pullback!!(dy, df, da, db)
         da += div_float(dy, _b)
         db -= dy * _a / _b^2
-        return df, dv, da, db
+        return df, da, db
     end
     return CoDual(_y, zero_tangent(_y)), div_float_pullback!!
 end
 
-using .Intrinsics: div_float_fast
-function rrule!!(::CoDual{typeof(__intrinsic__)}, ::CoDual{Val{div_float_fast}}, a, b)
+@intrinsic div_float_fast
+function rrule!!(::CoDual{typeof(div_float_fast)}, a, b)
     _a = primal(a)
     _b = primal(b)
     _y = div_float_fast(_a, _b)
-    function div_float_pullback!!(dy, df, dv, da, db)
+    function div_float_pullback!!(dy, df, da, db)
         da += div_float_fast(dy, _b)
         db -= dy * div_float_fast(_a, _b^2)
-        return df, dv, da, db
+        return df, da, db
     end
     return CoDual(_y, zero_tangent(_y)), div_float_pullback!!
 end
 
-@inactive_intrinsic Intrinsics.eq_float
-@inactive_intrinsic Intrinsics.eq_float_fast
-@inactive_intrinsic Intrinsics.eq_int
-@inactive_intrinsic Intrinsics.flipsign_int
-@inactive_intrinsic Intrinsics.floor_llvm
+@inactive_intrinsic eq_float
+@inactive_intrinsic eq_float_fast
+@inactive_intrinsic eq_int
+@inactive_intrinsic flipsign_int
+@inactive_intrinsic floor_llvm
 
-# fma_float -- actually interesting
-using .Intrinsics: fma_float
-function rrule!!(::CoDual{typeof(__intrinsic__)}, ::CoDual{Val{fma_float}}, x, y, z)
+@intrinsic fma_float
+function rrule!!(::CoDual{typeof(fma_float)}, x, y, z)
     _x = primal(x)
     _y = primal(y)
     _z = primal(z)
-    function fma_float_pullback!!(da, df, dv, dx, dy, dz)
-        return df, dv, fma_float(da, _y, dx), fma_float(da, _x, dy), dz + da
+    function fma_float_pullback!!(da, df, dx, dy, dz)
+        return df, fma_float(da, _y, dx), fma_float(da, _x, dy), dz + da
     end
     a = fma_float(_x, _y, _z)
     return CoDual(a, zero_tangent(a)), fma_float_pullback!!
@@ -162,110 +169,104 @@ end
 
 # fpext -- maybe interesting
 
-@inactive_intrinsic Intrinsics.fpiseq
-@inactive_intrinsic Intrinsics.fptosi
-@inactive_intrinsic Intrinsics.fptoui
+@inactive_intrinsic fpiseq
+@inactive_intrinsic fptosi
+@inactive_intrinsic fptoui
 
 # fptrunc -- maybe interesting
 
-@inactive_intrinsic Intrinsics.have_fma
-@inactive_intrinsic Intrinsics.le_float
-@inactive_intrinsic Intrinsics.le_float_fast
+@inactive_intrinsic have_fma
+@inactive_intrinsic le_float
+@inactive_intrinsic le_float_fast
 
 # llvmcall -- interesting and not implementable at the minute
 
-@inactive_intrinsic Intrinsics.lshr_int
-@inactive_intrinsic Intrinsics.lt_float
-@inactive_intrinsic Intrinsics.lt_float_fast
+@inactive_intrinsic lshr_int
+@inactive_intrinsic lt_float
+@inactive_intrinsic lt_float_fast
 
-using .Intrinsics: mul_float
-function rrule!!(::CoDual{typeof(__intrinsic__)}, ::CoDual{Val{mul_float}}, a, b)
+@intrinsic mul_float
+function rrule!!(::CoDual{typeof(mul_float)}, a, b)
     _a = primal(a)
     _b = primal(b)
-    function mul_float_pb!!(dc, df, dv, da, db)
-        return df, dv, fma_float(dc, _b, da), fma_float(_a, dc, db)
-    end
+    mul_float_pb!!(dc, df, da, db) = df, fma_float(dc, _b, da), fma_float(_a, dc, db)
     c = mul_float(_a, _b)
     return CoDual(c, zero_tangent(c)), mul_float_pb!!
 end
 
-using .Intrinsics: mul_float_fast
-function rrule!!(::CoDual{typeof(__intrinsic__)}, ::CoDual{Val{mul_float_fast}}, a, b)
+@intrinsic mul_float_fast
+function rrule!!(::CoDual{typeof(mul_float_fast)}, a, b)
     _a = primal(a)
     _b = primal(b)
-    function mul_float_pb!!(dc, df, dv, da, db)
-        return df, dv, fma_float(dc, _b, da), fma_float(_a, dc, db)
-    end
+    mul_float_pb!!(dc, df, da, db) = df, fma_float(dc, _b, da), fma_float(_a, dc, db)
     c = mul_float_fast(_a, _b)
     return CoDual(c, zero_tangent(c)), mul_float_pb!!
 end
 
-@inactive_intrinsic Intrinsics.mul_int
+@inactive_intrinsic mul_int
 
-using .Intrinsics: muladd_float
-function rrule!!(::CoDual{typeof(__intrinsic__)}, ::CoDual{Val{muladd_float}}, x, y, z)
+@intrinsic muladd_float
+function rrule!!(::CoDual{typeof(muladd_float)}, x, y, z)
     _x = primal(x)
     _y = primal(y)
     _z = primal(z)
-    function muladd_float_pullback!!(da, df, dv, dx, dy, dz)
-        return df, dv, dx + da * _y, dy + da * _x, dz + da
-    end
+    muladd_float_pullback!!(da, df, dx, dy, dz) = df, dx + da * _y, dy + da * _x, dz + da
     a = muladd_float(_x, _y, _z)
     return CoDual(a, zero_tangent(a)), muladd_float_pullback!!
 end
 
-@inactive_intrinsic Intrinsics.ne_float
-@inactive_intrinsic Intrinsics.ne_float_fast
-@inactive_intrinsic Intrinsics.ne_int
+@inactive_intrinsic ne_float
+@inactive_intrinsic ne_float_fast
+@inactive_intrinsic ne_int
 
-using .Intrinsics: neg_float
-function rrule!!(::CoDual{typeof(__intrinsic__)}, ::CoDual{Val{neg_float}}, x)
+@intrinsic neg_float
+function rrule!!(::CoDual{typeof(neg_float)}, x)
     _x = primal(x)
-    neg_float_pullback!!(dy, df, dv, dx) = df, dv, sub_float(dx, dy)
+    neg_float_pullback!!(dy, df, dx) = df, sub_float(dx, dy)
     y = neg_float(_x)
     return CoDual(y, zero_tangent(y)), neg_float_pullback!!
 end
 
-using .Intrinsics: neg_float_fast
-function rrule!!(::CoDual{typeof(__intrinsic__)}, ::CoDual{Val{neg_float_fast}}, x)
+@intrinsic neg_float_fast
+function rrule!!(::CoDual{typeof(neg_float_fast)}, x)
     _x = primal(x)
-    neg_float_fast_pullback!!(dy, df, dv, dx) = df, dv, sub_float_fast(dx, dy)
+    neg_float_fast_pullback!!(dy, df, dx) = df, sub_float_fast(dx, dy)
     y = neg_float_fast(_x)
     return CoDual(y, zero_tangent(y)), neg_float_fast_pullback!!
 end
 
-@inactive_intrinsic Intrinsics.neg_int
-@inactive_intrinsic Intrinsics.not_int
-@inactive_intrinsic Intrinsics.or_int
+@inactive_intrinsic neg_int
+@inactive_intrinsic not_int
+@inactive_intrinsic or_int
 
-using .Intrinsics: pointerref
-function rrule!!(::CoDual{typeof(__intrinsic__)}, ::CoDual{Val{pointerref}}, x, y, z)
+@intrinsic pointerref
+function rrule!!(::CoDual{typeof(pointerref)}, x, y, z)
     _x = primal(x)
     _y = primal(y)
     _z = primal(z)
     x_s = shadow(x)
     a = CoDual(pointerref(_x, _y, _z), pointerref(x_s, _y, _z))
-    function pointerref_pullback!!(da, df, dv, dx, dy, dz)
+    function pointerref_pullback!!(da, df, dx, dy, dz)
         dx_v = pointerref(dx, _y, _z)
         new_dx_v = increment!!(dx_v, da)
         pointerset(dx, new_dx_v, _y, _z)
-        return df, dv, dx, dy, dz
+        return df, dx, dy, dz
     end
     return a, pointerref_pullback!!
 end
 
-using .Intrinsics: pointerset
-function rrule!!(::CoDual{typeof(__intrinsic__)}, ::CoDual{Val{pointerset}}, p, x, idx, z)
+@intrinsic pointerset
+function rrule!!(::CoDual{typeof(pointerset)}, p, x, idx, z)
     _p = primal(p)
     _idx = primal(idx)
     _z = primal(z)
     old_value = pointerref(_p, _idx, _z)
     old_shadow = pointerref(shadow(p), _idx, _z)
-    function pointerset_pullback!!(_, df, dv, dp, dx, didx, dz)
+    function pointerset_pullback!!(_, df, dp, dx, didx, dz)
         dx_new = increment!!(dx, pointerref(dp, _idx, _z))
         pointerset(_p, old_value, _idx, _z)
         pointerset(dp, old_shadow, _idx, _z)
-        return df, dv, dp, dx_new, didx, dz
+        return df, dp, dx_new, didx, dz
     end
     pointerset(_p, primal(x), _idx, _z)
     pointerset(shadow(p), shadow(x), _idx, _z)
@@ -274,66 +275,68 @@ end
 
 # rem_float -- appears to be unused
 # rem_float_fast -- appears to be unused
-@inactive_intrinsic Intrinsics.rint_llvm
-@inactive_intrinsic Intrinsics.sdiv_int
-@inactive_intrinsic Intrinsics.sext_int
-@inactive_intrinsic Intrinsics.shl_int
-@inactive_intrinsic Intrinsics.sitofp
-@inactive_intrinsic Intrinsics.sle_int
-@inactive_intrinsic Intrinsics.slt_int
+@inactive_intrinsic rint_llvm
+@inactive_intrinsic sdiv_int
+@inactive_intrinsic sext_int
+@inactive_intrinsic shl_int
+@inactive_intrinsic sitofp
+@inactive_intrinsic sle_int
+@inactive_intrinsic slt_int
 
-using .Intrinsics: sqrt_llvm
-function rrule!!(::CoDual{typeof(__intrinsic__)}, ::CoDual{Val{sqrt_llvm}}, x)
+@intrinsic sqrt_llvm
+function rrule!!(::CoDual{typeof(sqrt_llvm)}, x)
     _x = primal(x)
-    llvm_sqrt_pullback!!(dy, df, dv, dx) = df, dv, dx + dy * inv(2 * sqrt(_x))
+    llvm_sqrt_pullback!!(dy, df, dx) = df, dx + dy * inv(2 * sqrt(_x))
     return CoDual(sqrt_llvm(_x), zero(_x)), llvm_sqrt_pullback!!
 end
 
-using .Intrinsics: sqrt_llvm_fast
-function rrule!!(::CoDual{typeof(__intrinsic__)}, ::CoDual{Val{sqrt_llvm_fast}}, x)
+@intrinsic sqrt_llvm_fast
+function rrule!!(::CoDual{typeof(sqrt_llvm_fast)}, x)
     _x = primal(x)
-    llvm_sqrt_pullback!!(dy, df, dv, dx) = df, dv, dx + dy * inv(2 * sqrt(_x))
+    llvm_sqrt_pullback!!(dy, df, dx) = df, dx + dy * inv(2 * sqrt(_x))
     return CoDual(sqrt_llvm_fast(_x), zero(_x)), llvm_sqrt_pullback!!
 end
 
-@inactive_intrinsic Intrinsics.srem_int
+@inactive_intrinsic srem_int
 
-using .Intrinsics: sub_float
-function rrule!!(::CoDual{typeof(__intrinsic__)}, ::CoDual{Val{sub_float}}, a, b)
+@intrinsic sub_float
+function rrule!!(::CoDual{typeof(sub_float)}, a, b)
     _a = primal(a)
     _b = primal(b)
-    sub_float_pullback!!(dc, df, dv, da, db) = df, dv, add_float(da, dc), sub_float(db, dc)
+    sub_float_pullback!!(dc, df, da, db) = df, add_float(da, dc), sub_float(db, dc)
     c = sub_float(_a, _b)
     return CoDual(c, zero_tangent(c)), sub_float_pullback!!
 end
 
-using .Intrinsics: sub_float_fast
-function rrule!!(::CoDual{typeof(__intrinsic__)}, ::CoDual{Val{sub_float_fast}}, a, b)
+@intrinsic sub_float_fast
+function rrule!!(::CoDual{typeof(sub_float_fast)}, a, b)
     _a = primal(a)
     _b = primal(b)
-    function sub_float_fast_pullback!!(dc, df, dv, da, db)
-        return df, dv, add_float_fast(da, dc), sub_float_fast(db, dc)
+    function sub_float_fast_pullback!!(dc, df, da, db)
+        return df, add_float_fast(da, dc), sub_float_fast(db, dc)
     end
     c = sub_float_fast(_a, _b)
     return CoDual(c, zero_tangent(c)), sub_float_fast_pullback!!
 end
 
-@inactive_intrinsic Intrinsics.sub_int
+@inactive_intrinsic sub_int
 
-using .Intrinsics: sub_ptr
-function rrule!!(::CoDual{typeof(__intrinsic__)}, ::CoDual{Val{sub_ptr}}, a, b)
+@intrinsic sub_ptr
+function rrule!!(::CoDual{typeof(sub_ptr)}, a, b)
     throw(error("sub_ptr intrinsic hit. This should never happen. Please open an issue"))
 end
 
-@inactive_intrinsic Intrinsics.trunc_int
-@inactive_intrinsic Intrinsics.trunc_llvm
-@inactive_intrinsic Intrinsics.udiv_int
-@inactive_intrinsic Intrinsics.uitofp
-@inactive_intrinsic Intrinsics.ule_int
-@inactive_intrinsic Intrinsics.ult_int
-@inactive_intrinsic Intrinsics.urem_int
-@inactive_intrinsic Intrinsics.xor_int
-@inactive_intrinsic Intrinsics.zext_int
+@inactive_intrinsic trunc_int
+@inactive_intrinsic trunc_llvm
+@inactive_intrinsic udiv_int
+@inactive_intrinsic uitofp
+@inactive_intrinsic ule_int
+@inactive_intrinsic ult_int
+@inactive_intrinsic urem_int
+@inactive_intrinsic xor_int
+@inactive_intrinsic zext_int
+
+end
 
 function rrule!!(::CoDual{typeof(<:)}, T1, T2)
     return CoDual(<:(primal(T1), primal(T2)), NoTangent()), NoPullback()
