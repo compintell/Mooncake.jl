@@ -222,7 +222,7 @@
     ]
         test_rrule!!(
             Xoshiro(123456), f, x...;
-            interface_only, check_conditional_type_stability=false,
+            interface_only, check_conditional_type_stability=true,
         )
     end
 end
