@@ -8,6 +8,8 @@ test_sin(x) = sin(x)
 
 test_cos_sin(x) = cos(sin(x))
 
+test_isbits_multiple_usage(x::Float64) = Core.Intrinsics.mul_float(x, x)
+
 test_getindex(x::AbstractArray{<:Real}) = x[1]
 
 function test_mutation!(x::AbstractVector{<:Real})
@@ -107,6 +109,7 @@ test_mlp(x, W1, W2) = W2 * relu.(W1 * x)
 const TEST_FUNCTIONS = [
     (false, test_sin, 1.0),
     (false, test_cos_sin, 2.0),
+    (false, test_isbits_multiple_usage, 5.0),
     (false, test_getindex, [1.0, 2.0]),
     (false, test_mutation!, [1.0, 2.0]),
     (false, test_while_loop, 2.0),
