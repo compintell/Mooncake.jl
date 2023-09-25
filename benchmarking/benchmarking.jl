@@ -30,12 +30,14 @@ function main()
 
     args = (x, y, W1, W2)
 
+    rd_dargs = ReverseDiff.gradient(se_loss, args)
+    y, dargs = Taped.value_and_gradient(se_loss, args...)
+
     println("Primal timing")
     display(@benchmark se_loss($args...))
     println()
 
     println("RD No Compilation")
-    rd_dargs = ReverseDiff.gradient(se_loss, args)
     display(@benchmark ReverseDiff.gradient(se_loss, $args))
     println()
 
@@ -63,13 +65,4 @@ function main()
     println("Taped Compiled")
     display(@benchmark execute!($fast_tape))
     println()
-
-    # display(dx_rd ./ dx)
-    # println()
-    # display(dy_rd ./ dy)
-    # println()
-    # display(dW1_rd ./ dW1)
-    # println()
-    # display(dW2_rd ./ dW2)
-    # println()
 end
