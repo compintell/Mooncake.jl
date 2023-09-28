@@ -204,13 +204,6 @@ uninit_tangent(x) = zero_tangent(x)
 uninit_tangent(x::Ptr{P}) where {P} = bitcast(Ptr{tangent_type(P)}, x)
 
 """
-    uninit_codual(x)
-
-See implementation for details, as this function is subject to change.
-"""
-uninit_codual(x) = CoDual(x, uninit_tangent(x))
-
-"""
     randn_tangent(rng::AbstractRNG, x::T) where {T}
 
 Required for testing.
@@ -316,8 +309,6 @@ function set_to_zero!!(x::MutableTangent)
     x.fields = set_to_zero!!(x.fields)
     return x
 end
-
-set_shadow!!(x::CoDual, dx) = CoDual(primal(x), increment!!(set_to_zero!!(shadow(x)), dx))
 
 """
     increment_field!!(x::T, y::V, f) where {T, V}

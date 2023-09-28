@@ -20,6 +20,15 @@ primal(x::CoDual) = x.x
 shadow(x::CoDual) = x.dx
 Base.copy(x::CoDual) = CoDual(copy(primal(x)), copy(shadow(x)))
 
+"""
+    uninit_codual(x)
+
+See implementation for details, as this function is subject to change.
+"""
+uninit_codual(x) = CoDual(x, uninit_tangent(x))
+
+set_shadow!!(x::CoDual, dx) = CoDual(primal(x), increment!!(set_to_zero!!(shadow(x)), dx))
+
 function verify_codual_type(::CoDual{P, T}) where {P, T}
     Tt = tangent_type(P)
     if Tt !== T
