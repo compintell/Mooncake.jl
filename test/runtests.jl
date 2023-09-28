@@ -11,7 +11,15 @@ using Base: unsafe_load, pointer_from_objref
 using Core: bitcast
 using Core.Intrinsics: pointerref, pointerset
 using FunctionWrappers: FunctionWrapper
-using Taped: IntrinsicsWrappers, TestUtils, CoDual, to_reverse_mode_ad, _wrap_field
+
+using Taped:
+    IntrinsicsWrappers,
+    TestUtils,
+    TestResources,
+    CoDual,
+    to_reverse_mode_ad,
+    _wrap_field
+
 using .TestUtils:
     test_rrule!!,
     test_taped_rrule!!,
@@ -20,14 +28,12 @@ using .TestUtils:
     populate_address_map!,
     populate_address_map
 
-include("test_resources.jl")
-
 @testset "Taped.jl" begin
-    include("test_utils.jl")
     include("tracing.jl")
     include("acceleration.jl")
     include("tangents.jl")
     include("reverse_mode_ad.jl")
+    include("test_utils.jl")
     @testset "rrules" begin
         @info "avoiding_non_differentiable_code"
         include(joinpath("rrules", "avoiding_non_differentiable_code.jl"))

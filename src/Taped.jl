@@ -20,6 +20,7 @@ include("tracing.jl")
 include("acceleration.jl")
 include("tangents.jl")
 include("reverse_mode_ad.jl")
+include("test_utils.jl")
 
 include(joinpath("rrules", "avoiding_non_differentiable_code.jl"))
 include(joinpath("rrules", "blas.jl"))
@@ -28,8 +29,6 @@ include(joinpath("rrules", "foreigncall.jl"))
 include(joinpath("rrules", "misc.jl"))
 include(joinpath("rrules", "umlaut_internals_rules.jl"))
 include(joinpath("rrules", "unrolled_function.jl"))
-
-include("test_utils.jl")
 
 export
     primal,
