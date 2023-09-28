@@ -18,7 +18,17 @@ using Taped:
     TestResources,
     CoDual,
     to_reverse_mode_ad,
-    _wrap_field
+    _wrap_field,
+    build_coinstruction,
+    const_coinstruction,
+    input_primals,
+    input_shadows,
+    output_primal,
+    output_shadow,
+    pullback!,
+    seed_output_shadow!,
+    rrule!!,
+    set_shadow!!
 
 using .TestUtils:
     test_rrule!!,

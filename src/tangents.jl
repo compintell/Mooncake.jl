@@ -204,13 +204,6 @@ uninit_tangent(x) = zero_tangent(x)
 uninit_tangent(x::Ptr{P}) where {P} = bitcast(Ptr{tangent_type(P)}, x)
 
 """
-    uninit_codual(x)
-
-See implementation for details, as this function is subject to change.
-"""
-uninit_codual(x) = CoDual(x, uninit_tangent(x))
-
-"""
     randn_tangent(rng::AbstractRNG, x::T) where {T}
 
 Required for testing.
@@ -271,9 +264,9 @@ increment!!(x::T, y::T) where {T<:Tuple} = map(increment!!, x, y)
 increment!!(x::T, y::T) where {T<:NamedTuple} = map(increment!!, x, y)
 function increment!!(x::T, y::T) where {T<:PossiblyUninitTangent}
     is_init(x) && is_init(y) && return T(increment!!(x.tangent, y.tangent))
-    !is_init(x) && !is_init(y) && return x
     is_init(x) && !is_init(y) && error("x is initialised, but y is not")
     !is_init(x) && is_init(y) && error("x is not initialised, but y is")
+    return x
 end
 increment!!(x::T, y::T) where {T<:Tangent} = Tangent(increment!!(x.fields, y.fields))
 function increment!!(x::T, y::T) where {T<:MutableTangent}
@@ -281,6 +274,23 @@ function increment!!(x::T, y::T) where {T<:MutableTangent}
     x.fields = increment!!(x.fields, y.fields)
     return x
 end
+
+"""
+    rebind_tangent(t)
+
+TODO: write a very careful docstring, and properly understand what this operation means.
+At the time of writing, the only place it is required is in `duplicate`.
+Behaviour is very closely related to `increment!!` -- expand on this.
+"""
+rebind_tangent(::NoTangent) = NoTangent()
+rebind_tangent(x::IEEEFloat) = zero(x)
+rebind_tangent(x::Ptr) = x
+rebind_tangent(x::Array) = x
+rebind_tangent(x::Tuple) = map(rebind_tangent, x)
+rebind_tangent(x::NamedTuple) = map(rebind_tangent, x)
+rebind_tangent(x::T) where {T<:__PUT} = is_init(x) ? T(rebind_tangent(x.tangent)) : T()
+rebind_tangent(x::Tangent) = Tangent(map(rebind_tangent, x.fields))
+rebind_tangent(x::MutableTangent) = x
 
 """
     set_to_zero!!(x)

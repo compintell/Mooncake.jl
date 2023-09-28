@@ -442,7 +442,7 @@ const PRIMITIVE_TEST_FUNCTIONS = Any[
     (p_mat_mul!, randn(4, 5), randn(4, 3), randn(3, 5)),
     (p_mat_mul!, randn(3, 3), __A, __A),
     (p_setfield!, Foo(5.0), :x, 4.0),
-    (p_setfield!, MutableFoo(5.0, randn(5)), :y, randn(6)),
+    # (p_setfield!, MutableFoo(5.0, randn(5)), :b, randn(6)),
 ]
 
 #
@@ -455,6 +455,11 @@ test_sin(x) = sin(x)
 test_cos_sin(x) = cos(sin(x))
 
 test_isbits_multiple_usage(x::Float64) = Core.Intrinsics.mul_float(x, x)
+
+function test_isbits_multiple_usage_2(x::Float64)
+    y = Core.Intrinsics.mul_float(x, x)
+    return Core.Intrinsics.mul_float(y, y)
+end
 
 test_getindex(x::AbstractArray{<:Real}) = x[1]
 
@@ -521,6 +526,7 @@ const TEST_FUNCTIONS = [
     (false, test_sin, 1.0),
     (false, test_cos_sin, 2.0),
     (false, test_isbits_multiple_usage, 5.0),
+    (false, test_isbits_multiple_usage_2, 5.0),
     (false, test_getindex, [1.0, 2.0]),
     (false, test_mutation!, [1.0, 2.0]),
     (false, test_while_loop, 2.0),

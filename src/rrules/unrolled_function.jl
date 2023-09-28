@@ -1,16 +1,23 @@
+using Base: RefValue
 
-#
-# High-level -- AD functionality built on top of rules.
-#
-
-struct CoInstruction{Tinputs, Toutput, Tpb}
+struct CoInstruction{Tinputs<:Tuple{Vararg{RefValue}}, Toutput<:RefValue, Tpb}
     inputs::Tinputs
     output::Toutput
     pb::Tpb
 end
 
+const_coinstruction(x::CoDual) = CoInstruction((), Ref(x), nothing)
+
+input_primals(x::CoInstruction) = map(primal ∘ getindex, x.inputs)
 input_shadows(x::CoInstruction) = map(shadow ∘ getindex, x.inputs)
+
+output_primal(x::CoInstruction) = primal(x.output[])
 output_shadow(x::CoInstruction) = shadow(x.output[])
+
+function seed_output_shadow!(x::CoInstruction{T, V}, x̄) where {T, V}
+    x.output[] = set_shadow!!(x.output[], x̄)
+    return nothing
+end
 
 function optimised_rrule!!(args...)
     primals = map(primal, args)
@@ -41,17 +48,19 @@ function (instruction::CoInstruction)(inputs::CoInstruction...)
     return CoInstruction(input_refs, output_ref, pb_ref)
 end
 
+# pullback for "constant" CoInstruction.
+pullback!(::CoInstruction{Tuple{}, <:Ref, Nothing}) = nothing
+
+# pullback for general case CoInstruction.
 function pullback!(instruction::CoInstruction)
     input_shadows = map(shadow ∘ getindex, instruction.inputs)
     output_shadow = shadow(instruction.output[])
     new_input_shadows = instruction.pb[](output_shadow, input_shadows...)
-    foreach(update_shadow!, instruction.inputs, new_input_shadows)
+    foreach(replace_shadow!, instruction.inputs, new_input_shadows)
     return nothing
 end
 
-pullback!(::CoInstruction{Nothing, <:Ref, Nothing}) = nothing
-
-function update_shadow!(x::Ref{<:CoDual{Tx, Tdx}}, new_shadow::Tdx) where {Tx, Tdx}
+function replace_shadow!(x::Ref{<:CoDual{Tx, Tdx}}, new_shadow::Tdx) where {Tx, Tdx}
     x_val = x[]
     x[] = CoDual(primal(x_val), new_shadow)
     return nothing
@@ -69,7 +78,7 @@ function to_reverse_mode_ad(tape::Tape{RMC}, ȳ, inputs::CoInstruction...)
     new_tape.result = unbind(tape.result)
 
     # Seed reverse-pass and create operations to execute it.
-    seed_op = mkcall(seed_return!, new_tape.result, ȳ)
+    seed_op = mkcall(seed_output_shadow!, new_tape.result, ȳ)
     push!(new_tape, seed_op)
 
     Umlaut.exec!(new_tape, seed_op)
@@ -82,7 +91,8 @@ function to_reverse_mode_ad(tape::Tape{RMC}, ȳ, inputs::CoInstruction...)
     return new_tape
 end
 
-const_coinstruction(x::CoDual) = CoInstruction(nothing, Ref(x), nothing)
+is_umlaut_type(x::Union{Variable, Constant, Input}) = true
+is_umlaut_type(x) = false
 
 to_reverse_mode_ad(x::Input, new_tape) = Input(x.val)
 function to_reverse_mode_ad(x::Constant, new_tape)
@@ -97,12 +107,6 @@ function to_reverse_mode_ad(x::Call, new_tape)
     end
     v = build_coinstruction(f, args...)
     return mkcall(v, f, args...; val=v)
-end
-
-function seed_return!(x::CoInstruction{T, V}, x̄) where {T, V}
-    output = x.output[]
-    x.output[] = CoDual(primal(output), x̄)
-    return nothing
 end
 
 struct UnrolledFunction{Ttape}
@@ -124,9 +128,41 @@ function seed_variable!(tape, var, ȳ)
     return nothing
 end
 
-function rrule!!(f::CoDual{<:UnrolledFunction}, args...)
-    tape = primal(f).tape
+function rebinding_pass!(tape)
+    new_tape = tape
+    result = unbind(tape.result)
+    num_ops = length(tape)
+    rebind_ops = Any[]
+    for (i, op) in enumerate(reverse(tape.ops))
+        op_num = num_ops - i + 1
+        if op isa Umlaut.Call
+            f_args = [op.fn, op.args...]
+            new_args = map(enumerate(op.args)) do (n, arg)
+                !(arg isa Variable) && return arg
+                if findfirst(Base.Fix1(===, arg), f_args[1:n]) === nothing
+                    return arg
+                else
+                    new_op = mkcall(rebind, arg; val=tape[arg].val)
+                    push!(rebind_ops, new_op)
+                    return Variable(new_op)
+                end
+            end
+            if !isempty(rebind_ops)
+                push!(rebind_ops, mkcall(op.fn, new_args...; val=op.val))
+                replace!(new_tape, op_num => rebind_ops)
+                empty!(rebind_ops)
+            end
+        end
+    end
+    new_tape.result = result
+    return new_tape
+end
 
+remake(op::Input) = Input(op.id, op.val, op.tape, op.line)
+remake(op::Constant) = Constant(op.id, op.typ, op.val, op.tape, op.line)
+
+function rrule!!(f::CoDual{<:UnrolledFunction}, args...)
+    tape = rebinding_pass!(primal(f).tape)
     wrapped_args = map(const_coinstruction, args)
     inputs!(tape, wrapped_args...)
 

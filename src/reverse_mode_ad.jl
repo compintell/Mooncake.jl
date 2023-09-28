@@ -18,6 +18,16 @@ end
 
 primal(x::CoDual) = x.x
 shadow(x::CoDual) = x.dx
+Base.copy(x::CoDual) = CoDual(copy(primal(x)), copy(shadow(x)))
+
+"""
+    uninit_codual(x)
+
+See implementation for details, as this function is subject to change.
+"""
+uninit_codual(x) = CoDual(x, uninit_tangent(x))
+
+set_shadow!!(x::CoDual, dx) = CoDual(primal(x), increment!!(set_to_zero!!(shadow(x)), dx))
 
 function verify_codual_type(::CoDual{P, T}) where {P, T}
     Tt = tangent_type(P)
@@ -30,14 +40,29 @@ struct NoPullback end
 
 @inline (::NoPullback)(dy, dx...) = dx
 
-function isprimitive(::RMC, args...)
-    return any(might_be_active, map(Core.Typeof , args)) ? false : true
-end
+isprimitive(::RMC, args...) = any(might_be_active, map(Core.Typeof , args)) ? false : true
 isprimitive(::RMC, ::typeof(Umlaut.__new__), T, x...) = true
 isprimitive(::RMC, ::typeof(Umlaut.__foreigncall__), args...) = true
 isprimitive(::RMC, ::typeof(__intrinsic__), args...) = true
 isprimitive(::RMC, ::Core.Builtin, x...) = true
 
+"""
+    rebind(x)
+
+Primal evaluation is equivalent to the identity function. However, the `rrule!!` ensures
+that something sensible happens with the tangent. Not to be used by downstream users.
+Is basically a hack to ensure that double counting doesn't occur.
+
+TODO: improve docstring + explain / understand semantics better.
+"""
+rebind(x) = x
+
+rebind_pb!!(ȳ, f̄, x̄) = f̄, increment!!(x̄, ȳ)
+function rrule!!(::CoDual{typeof(rebind)}, x::CoDual)
+    return CoDual(primal(x), rebind_tangent(shadow(x))), rebind_pb!!
+end
+
+isprimitive(::RMC, ::typeof(rebind), x) = true
 
 #
 # LinearAlgebra

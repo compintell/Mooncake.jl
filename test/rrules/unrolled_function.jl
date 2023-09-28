@@ -14,6 +14,55 @@ function execute!(tape)
 end
 
 @testset "unrolled_function" begin
+    @testset "const_coinstruction" begin
+        inst = const_coinstruction(CoDual(5.0, 4.0))
+        @test isempty(input_primals(inst))
+        @test isempty(input_shadows(inst))
+        @test output_primal(inst) == 5.0
+        @test output_shadow(inst) == 4.0
+    end
+    @testset "build_construction and pullback! $f" for (f, args...) in
+        TestResources.PRIMITIVE_TEST_FUNCTIONS
+
+        # Specify input shadows.
+        rng = Xoshiro(123456)
+        dargs = map(Base.Fix1(randn_tangent, rng), args)
+        original_args = map(deepcopy, args)
+        original_dargs = map(deepcopy, dargs)
+
+        # Construct coinstruction.
+        dual_args = (CoDual(f, NoTangent()), map(CoDual, args, dargs)...)
+        inputs = map(const_coinstruction, dual_args)
+        inst = build_coinstruction(inputs...)
+        @test all(map(==, input_shadows(inst), (NoTangent(), dargs...)))
+
+        # Seed the output shadow and check that seeding has occured.
+        dout = randn_tangent(rng, output_primal(inst))
+        seed_output_shadow!(inst, copy(dout))
+        @test output_shadow(inst) == dout
+
+        # Run the reverse-pass of the coinstruction.
+        pullback!(inst)
+
+        # Run the test case without the co-instruction wrappers.
+        other_dual_args = (
+            CoDual(f, NoTangent()), map(CoDual, original_args, original_dargs)...,
+        )
+        _out, _pb!! = rrule!!(other_dual_args...)
+        _out = set_shadow!!(_out, copy(dout))
+        new_dargs = _pb!!(shadow(_out), NoTangent(), dargs...)
+
+        # Check that the memory has been set up such that the data used with the
+        # coinstruction does _not_ alias the data used with the `rrule!!`.
+        @assert !ismutable(primal(_out)) || primal(_out) !== output_primal(inst)
+        @assert !ismutable(shadow(_out)) || shadow(_out) !== output_shadow(inst)
+
+        # Compare the result of running the coinstruction forwards- and backwards against
+        # manually running the rrule!!. Should yield _exactly_ the same results.
+        @test primal(_out) == output_primal(inst)
+        @test shadow(_out) == output_shadow(inst)
+        @test all(map(==, new_dargs, input_shadows(inst)))
+    end
     @testset for (interface_only, f, x...) in vcat(
         TestResources.TEST_FUNCTIONS,
         [
