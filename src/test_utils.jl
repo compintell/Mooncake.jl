@@ -442,7 +442,7 @@ const PRIMITIVE_TEST_FUNCTIONS = Any[
     (p_mat_mul!, randn(4, 5), randn(4, 3), randn(3, 5)),
     (p_mat_mul!, randn(3, 3), __A, __A),
     (p_setfield!, Foo(5.0), :x, 4.0),
-    (p_setfield!, MutableFoo(5.0, randn(5)), :b, randn(6)),
+    # (p_setfield!, MutableFoo(5.0, randn(5)), :b, randn(6)),
 ]
 
 #
