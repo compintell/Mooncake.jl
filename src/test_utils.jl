@@ -456,6 +456,11 @@ test_cos_sin(x) = cos(sin(x))
 
 test_isbits_multiple_usage(x::Float64) = Core.Intrinsics.mul_float(x, x)
 
+function test_isbits_multiple_usage_2(x::Float64)
+    y = Core.Intrinsics.mul_float(x, x)
+    return Core.Intrinsics.mul_float(y, y)
+end
+
 test_getindex(x::AbstractArray{<:Real}) = x[1]
 
 function test_mutation!(x::AbstractVector{<:Real})
@@ -521,6 +526,7 @@ const TEST_FUNCTIONS = [
     (false, test_sin, 1.0),
     (false, test_cos_sin, 2.0),
     (false, test_isbits_multiple_usage, 5.0),
+    (false, test_isbits_multiple_usage_2, 5.0),
     (false, test_getindex, [1.0, 2.0]),
     (false, test_mutation!, [1.0, 2.0]),
     (false, test_while_loop, 2.0),
