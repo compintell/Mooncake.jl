@@ -310,7 +310,7 @@ module TestResources
 using ..Taped
 using ..Taped: CoDual, Tangent, MutableTangent, NoTangent
 
-using LinearAlgebra, Setfield
+using DiffTests, LinearAlgebra, Random, Setfield
 
 
 #
@@ -577,5 +577,76 @@ function Taped.rrule!!(::Taped.CoDual{typeof(my_setfield!)}, value, name, x)
     )
     return y, setfield!_pullback
 end
+
+# Tests brought in from DiffTests.jl
+const _n = rand()
+const _x = rand(5, 5)
+const _y = rand(26)
+const _A = rand(5, 5)
+const _B = rand(5, 5)
+const _rng = Xoshiro(123456)
+
+const DIFFTESTS_FUNCTIONS = vcat(
+    tuple.(
+        fill(true, length(DiffTests.NUMBER_TO_NUMBER_FUNCS)),
+        DiffTests.NUMBER_TO_NUMBER_FUNCS,
+        rand(_rng, length(DiffTests.NUMBER_TO_NUMBER_FUNCS)),
+    ),
+    tuple.(
+        fill(true, length(DiffTests.NUMBER_TO_ARRAY_FUNCS)),
+        DiffTests.NUMBER_TO_ARRAY_FUNCS,
+        [rand(_rng) for _ in DiffTests.NUMBER_TO_ARRAY_FUNCS],
+    ),
+    tuple.(
+        fill(true, length(DiffTests.INPLACE_NUMBER_TO_ARRAY_FUNCS)),
+        DiffTests.INPLACE_NUMBER_TO_ARRAY_FUNCS,
+        [rand(_rng, 5) for _ in DiffTests.INPLACE_ARRAY_TO_ARRAY_FUNCS],
+        [rand(_rng) for _ in DiffTests.INPLACE_ARRAY_TO_ARRAY_FUNCS],
+    ),
+    tuple.(
+        fill(true, length(DiffTests.VECTOR_TO_NUMBER_FUNCS)),
+        DiffTests.VECTOR_TO_NUMBER_FUNCS,
+        [rand(_rng, 5) for _ in DiffTests.VECTOR_TO_NUMBER_FUNCS],
+    ),
+    tuple.(
+        fill(true, length(DiffTests.MATRIX_TO_NUMBER_FUNCS)),
+        DiffTests.MATRIX_TO_NUMBER_FUNCS,
+        [rand(_rng, 5, 5) for _ in DiffTests.MATRIX_TO_NUMBER_FUNCS],
+    ),
+    tuple.(
+        fill(true, length(DiffTests.BINARY_MATRIX_TO_MATRIX_FUNCS)),
+        DiffTests.BINARY_MATRIX_TO_MATRIX_FUNCS,
+        [rand(_rng, 5, 5) for _ in DiffTests.BINARY_MATRIX_TO_MATRIX_FUNCS],
+        [rand(_rng, 5, 5) for _ in DiffTests.BINARY_MATRIX_TO_MATRIX_FUNCS],
+    ),
+    tuple.(
+        fill(true, length(DiffTests.TERNARY_MATRIX_TO_NUMBER_FUNCS)),
+        DiffTests.TERNARY_MATRIX_TO_NUMBER_FUNCS,
+        [rand(_rng, 5, 5) for _ in DiffTests.TERNARY_MATRIX_TO_NUMBER_FUNCS],
+        [rand(_rng, 5, 5) for _ in DiffTests.TERNARY_MATRIX_TO_NUMBER_FUNCS],
+        [rand(_rng, 5, 5) for _ in DiffTests.TERNARY_MATRIX_TO_NUMBER_FUNCS],
+    ),
+    tuple.(
+        fill(true, length(DiffTests.INPLACE_ARRAY_TO_ARRAY_FUNCS)),
+        DiffTests.INPLACE_ARRAY_TO_ARRAY_FUNCS,
+        [rand(_rng, 26) for _ in DiffTests.INPLACE_ARRAY_TO_ARRAY_FUNCS],
+        [rand(_rng, 26) for _ in DiffTests.INPLACE_ARRAY_TO_ARRAY_FUNCS],
+    ),
+    tuple.(
+        fill(true, length(DiffTests.VECTOR_TO_VECTOR_FUNCS)),
+        DiffTests.VECTOR_TO_VECTOR_FUNCS,
+        [rand(_rng, 26) for _ in DiffTests.VECTOR_TO_VECTOR_FUNCS],
+    ),
+    tuple.(
+        fill(true, length(DiffTests.ARRAY_TO_ARRAY_FUNCS)),
+        DiffTests.ARRAY_TO_ARRAY_FUNCS,
+        [rand(_rng, 26) for _ in DiffTests.ARRAY_TO_ARRAY_FUNCS],
+    ),
+    tuple.(
+        fill(true, length(DiffTests.MATRIX_TO_MATRIX_FUNCS)),
+        DiffTests.MATRIX_TO_MATRIX_FUNCS,
+        [rand(_rng, 5, 5) for _ in DiffTests.MATRIX_TO_MATRIX_FUNCS],
+    ),
+)
 
 end

@@ -112,6 +112,7 @@ end
         )) do (A, B, C)
             (false, mul!, A, B, C, randn(), randn())
         end),
+        TestResources.DIFFTESTS_FUNCTIONS,
     )
         @info "$(map(typeof, (f, x...)))"
         test_taped_rrule!!(Xoshiro(123456), f, map(deepcopy, x)...; interface_only)
