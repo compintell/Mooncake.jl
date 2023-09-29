@@ -27,8 +27,7 @@ rand_inputs(rng, ::typeof(sqrt), _) = (rand(rng) + 1e-3, )
         (f == :rem2pi || f == :ldexp || f == :(^)) && continue
         f = @eval $M.$f
         for _ in 1:10
-            x = rand_inputs(rng, f, arity)
-            test_rrule!!(Xoshiro(123456), f, x...; interface_only=true)
+            test_rrule!!(Xoshiro(123456), f, rand_inputs(rng, f, arity)...)
         end
     end
 end    
