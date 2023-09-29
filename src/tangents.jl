@@ -311,25 +311,43 @@ function set_to_zero!!(x::MutableTangent)
 end
 
 """
+    struct SInt{i} end
+
+Static representation of an `Int` `i`.
+"""
+struct SInt{i} end
+SInt(i::Int) = SInt{i}()
+
+"""
+    struct SSym{f} end
+
+Static representation of a `Symbol` `f`.
+"""
+struct SSym{f} end
+SSym(f::Symbol) = SSym{f}()
+
+"""
     increment_field!!(x::T, y::V, f) where {T, V}
 
 `increment!!` the field `f` of `x` by `y`, and return the updated `x`.
 """
 increment_field!!(::NoTangent, ::NoTangent, f) = NoTangent()
-function increment_field!!(x::T, y, f::Integer) where {T<:NamedTuple}
-    return T(ntuple(n -> n == f ? increment!!(x[n], y) : x[n], length(x)))
-end
-increment_field!!(x::NamedTuple, y, f::Symbol) = @set x.$f = increment!!(getfield(x, f), y)
-function increment_field!!(x::Tuple, y, i::Int)
+function increment_field!!(x::Tuple, y, ::SInt{i}) where {i}
     return ntuple(n -> n == i ? increment!!(x[n], y) : x[n], length(x))
 end
-function increment_field!!(x::Tangent{T}, y, f) where {T}
-    y isa NoTangent && return x
-    return Tangent(increment_field!!(x.fields, fieldtype(T, f)(y), f))
+function increment_field!!(x::T, y, ::SInt{f}) where {T<:NamedTuple, f}
+    return T(ntuple(n -> n == f ? increment!!(x[n], y) : x[n], length(x)))
 end
-function increment_field!!(x::MutableTangent{T}, y, f) where {T}
+function increment_field!!(x::NamedTuple, y, ::SSym{f}) where {f}
+    return @set x.$f = increment!!(getfield(x, f), y)
+end
+function increment_field!!(x::Tangent{T}, y, ::SSym{f}) where {T, f}
     y isa NoTangent && return x
-    setfield!(x, :fields, increment_field!!(x.fields, fieldtype(T, f)(y), f))
+    return Tangent(increment_field!!(x.fields, fieldtype(T, f)(y), SSym{f}()))
+end
+function increment_field!!(x::MutableTangent{T}, y, ::SSym{f}) where {T, f}
+    y isa NoTangent && return x
+    setfield!(x, :fields, increment_field!!(x.fields, fieldtype(T, f)(y), SSym{f}()))
     return x
 end
 

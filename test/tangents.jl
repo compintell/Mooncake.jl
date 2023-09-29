@@ -242,38 +242,39 @@ end
 
     @testset "increment_field!!" begin
         @testset "NoTangent" begin
-            @test increment_field!!(NoTangent(), NoTangent(), :a) == NoTangent()
+            nt = NoTangent()
+            @test @inferred(increment_field!!(nt, nt, SSym(:a))) == nt
         end
         @testset "Tuple" begin
             x = (5.0, 4.0)
             y = 3.0
-            @test increment_field!!(x, y, 1) == (8.0, 4.0)
-            @test increment_field!!(x, y, 2) == (5.0, 7.0)
+            @test @inferred(increment_field!!(x, y, SInt(1))) == (8.0, 4.0)
+            @test @inferred(increment_field!!(x, y, SInt(2))) == (5.0, 7.0)
         end
         @testset "NamedTuple" begin
             x = (a=5.0, b=4.0)
             y = 3.0
-            @test increment_field!!(x, y, :a) == (a=8.0, b=4.0)
-            @test increment_field!!(x, y, :b) == (a=5.0, b=7.0)
-            @test increment_field!!(x, y, 1) == (a=8.0, b=4.0)
-            @test increment_field!!(x, y, 2) == (a=5.0, b=7.0)
+            @test @inferred(increment_field!!(x, y, SSym(:a))) == (a=8.0, b=4.0)
+            @test @inferred(increment_field!!(x, y, SSym(:b))) == (a=5.0, b=7.0)
+            @test @inferred(increment_field!!(x, y, SInt(1))) == (a=8.0, b=4.0)
+            @test @inferred(increment_field!!(x, y, SInt(2))) == (a=5.0, b=7.0)
         end
         @testset "Tangent" begin
             x = tangent((a=5.0, b=4.0))
             y = 3.0
-            @test increment_field!!(x, y, :a) == tangent((a=8.0, b=4.0))
-            @test increment_field!!(x, y, :b) == tangent((a=5.0, b=7.0))
+            @test @inferred(increment_field!!(x, y, SSym(:a))) == tangent((a=8.0, b=4.0))
+            @test @inferred(increment_field!!(x, y, SSym(:b))) == tangent((a=5.0, b=7.0))
         end
         @testset "MutableTangent" begin
             x = mutable_tangent((a=5.0, b=4.0))
             y = 3.0
-            @test increment_field!!(x, y, :a) == mutable_tangent((a=8.0, b=4.0))
-            @test increment_field!!(x, y, :a) === x
+            @test increment_field!!(x, y, SSym(:a)) == mutable_tangent((a=8.0, b=4.0))
+            @test @inferred(increment_field!!(x, y, SSym(:a))) === x
 
             x = mutable_tangent((a=5.0, b=4.0))
             y = 3.0
-            @test increment_field!!(x, y, :b) == mutable_tangent((a=5.0, b=7.0))
-            @test increment_field!!(x, y, :b) === x
+            @test increment_field!!(x, y, SSym(:b)) == mutable_tangent((a=5.0, b=7.0))
+            @test @inferred(increment_field!!(x, y, SSym(:b))) === x
         end
     end
 
