@@ -332,8 +332,9 @@ SSym(f::Symbol) = SSym{f}()
 `increment!!` the field `f` of `x` by `y`, and return the updated `x`.
 """
 increment_field!!(::NoTangent, ::NoTangent, f) = NoTangent()
-function increment_field!!(x::Tuple, y, ::SInt{i}) where {i}
-    return ntuple(n -> n == i ? increment!!(x[n], y) : x[n], length(x))
+@generated function increment_field!!(x::Tuple, y, ::SInt{i}) where {i}
+    exprs = map(n -> n == i ? :(increment!!(x[$n], y)) : :(x[$n]), fieldnames(x))
+    return Expr(:tuple, exprs...)
 end
 function increment_field!!(x::T, y, ::SInt{f}) where {T<:NamedTuple, f}
     return T(ntuple(n -> n == f ? increment!!(x[n], y) : x[n], length(x)))
