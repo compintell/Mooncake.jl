@@ -50,7 +50,7 @@ end
         )
         _out, _pb!! = rrule!!(other_dual_args...)
         _out = set_shadow!!(_out, copy(dout))
-        new_dargs = _pb!!(shadow(_out), NoTangent(), dargs...)
+        new_dargs = _pb!!(shadow(_out), NoTangent(), original_dargs...)
 
         # Check that the memory has been set up such that the data used with the
         # coinstruction does _not_ alias the data used with the `rrule!!`.

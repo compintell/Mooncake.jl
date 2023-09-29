@@ -423,7 +423,6 @@ function Taped.rrule!!(::CoDual{typeof(p_setfield!)}, value, name::CoDual{Symbol
 
         # Restore old values.
         setfield!(primal(value), _name, old_x)
-        # set_field_to_zero!!(shadow(value), _name) # this gives the correct answer, but
         __setfield!(shadow(value), _name, old_dx)
 
         return df, dvalue, dname, dx
