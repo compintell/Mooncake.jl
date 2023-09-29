@@ -308,7 +308,7 @@ end
 module TestResources
 
 using ..Taped
-using ..Taped: CoDual, Tangent, MutableTangent, NoTangent
+using ..Taped: CoDual, Tangent, MutableTangent, NoTangent, PossiblyUninitTangent
 
 using LinearAlgebra, Setfield
 
