@@ -1,5 +1,6 @@
 using
     BenchmarkTools,
+    DiffRules,
     FunctionWrappers,
     LinearAlgebra,
     Random,
@@ -53,6 +54,8 @@ using .TestUtils:
         include(joinpath("rrules", "builtins.jl"))
         @info "foreigncall"
         include(joinpath("rrules", "foreigncall.jl"))
+        @info "low_level_maths"
+        include(joinpath("rrules", "low_level_maths.jl"))
         @info "misc"
         include(joinpath("rrules", "misc.jl"))
         @info "umlaut_internals_rules"
