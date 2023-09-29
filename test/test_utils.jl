@@ -81,4 +81,12 @@
         z̄ = (x̄..., shadow(y_ȳ))
         @test_throws AssertionError populate_address_map(z, z̄)
     end
+    @testset "PRIMITIVE_TEST_FUNCTIONS ($f)" for (f, x...) in
+        TestResources.PRIMITIVE_TEST_FUNCTIONS
+
+        TestUtils.test_rrule!!(
+            Xoshiro(123456), f, x...;
+            interface_only=false, check_conditional_type_stability=false,
+        )
+    end
 end

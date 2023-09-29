@@ -399,8 +399,12 @@ end
 
 p_setfield!(value, name::Symbol, x) = setfield!(value, name, x)
 
+__replace_value(::T, v) where {T<:PossiblyUninitTangent} = T(v)
+
 function __setfield!(value::MutableTangent, name, x)
-    @set value.fields.$name = x
+    fields = value.fields
+    new_fields = @set fields.$name = __replace_value(getfield(fields, name), x)
+    value.fields = new_fields
     return x
 end
 
@@ -420,18 +424,20 @@ function Taped.rrule!!(::CoDual{typeof(p_setfield!)}, value, name::CoDual{Symbol
         # Restore old values.
         setfield!(primal(value), _name, old_x)
         # set_field_to_zero!!(shadow(value), _name) # this gives the correct answer, but
-        # I don't understand why, because I don't _really_ understand what I'm doing
-        # I need a better mental model of what is going on in order to know for certain
-        # whether this rule is implemented incorrectly, or if my tests are checking for
-        # the wrong thing. I'm quite sure that this zeroing-out line can't be correct,
-        # but I'm not entirely sure.
         __setfield!(shadow(value), _name, old_dx)
 
         return df, dvalue, dname, dx
     end
 
-    y = CoDual(setfield!(_value, _name, primal(x)), __setfield!(_dvalue, _name, shadow(x)))
+    y = CoDual(
+        setfield!(_value, _name, primal(x)),
+        __setfield!(_dvalue, _name, shadow(x)),
+    )
     return y, p_setfield!_pb!!
+end
+
+for f in [p_sin, p_mul, p_mat_mul!, p_setfield!]
+    @eval Taped.Umlaut.isprimitive(::Taped.RMC, ::typeof($f), x...) = true
 end
 
 const __A = randn(3, 3)
@@ -442,7 +448,7 @@ const PRIMITIVE_TEST_FUNCTIONS = Any[
     (p_mat_mul!, randn(4, 5), randn(4, 3), randn(3, 5)),
     (p_mat_mul!, randn(3, 3), __A, __A),
     (p_setfield!, Foo(5.0), :x, 4.0),
-    # (p_setfield!, MutableFoo(5.0, randn(5)), :b, randn(6)),
+    (p_setfield!, MutableFoo(5.0, randn(5)), :b, randn(6)),
 ]
 
 #
@@ -553,6 +559,12 @@ function value_dependent_control_flow(x, n)
     end
     return x
 end
+
+#
+# This is a version of setfield! in which there is an issue with the address map.
+# The method of setfield! is incorrectly implemented, so it errors. This is intentional,
+# and is used to ensure that the tests correctly pick up on this mistake.
+#
 
 my_setfield!(args...) = setfield!(args...)
 
