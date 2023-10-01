@@ -282,22 +282,31 @@ end
             x = tangent((a=5.0, b=nt))
             @test @inferred(increment_field!!(x, 3.0, SSym(:a))) == tangent((a=8.0, b=nt))
             @test @inferred(increment_field!!(x, nt, SSym(:b))) == tangent((a=5.0, b=nt))
+            @test @inferred(increment_field!!(x, 3.0, SInt(1))) == tangent((a=8.0, b=nt))
+            @test @inferred(increment_field!!(x, nt, SInt(2))) == tangent((a=5.0, b=nt))
 
             # Slow versions.
             @test increment_field!!(x, 3.0, :a) == tangent((a=8.0, b=nt))
             @test increment_field!!(x, nt, :b) == tangent((a=5.0, b=nt))
+            @test increment_field!!(x, 3.0, 1) == tangent((a=8.0, b=nt))
+            @test increment_field!!(x, nt, 2) == tangent((a=5.0, b=nt))
         end
         @testset "MutableTangent" begin
             nt = NoTangent()
-            x = mutable_tangent((a=5.0, b=nt))
-            @test increment_field!!(x, 3.0, SSym(:a)) == mutable_tangent((a=8.0, b=nt))
-            @test @inferred(increment_field!!(x, 3.0, SSym(:a))) === x
-            @test increment_field!!(x, 3.0, :a) === x
-
-            x = mutable_tangent((a=5.0, b=nt))
-            @test increment_field!!(x, nt, SSym(:b)) == mutable_tangent((a=5.0, b=nt))
-            @test @inferred(increment_field!!(x, nt, SSym(:b))) === x
-            @test increment_field!!(x, nt, :b) === x
+            @testset "$f" for (f, val, comp) in [
+                (SSym(:a), 3.0, mutable_tangent((a=8.0, b=nt))),
+                (:a, 3.0, mutable_tangent((a=8.0, b=nt))),
+                (SSym(:b), nt, mutable_tangent((a=5.0, b=nt))),
+                (:b, nt, mutable_tangent((a=5.0, b=nt))),
+                (SInt(1), 3.0, mutable_tangent((a=8.0, b=nt))),
+                (1, 3.0, mutable_tangent((a=8.0, b=nt))),
+                (SInt(2), nt, mutable_tangent((a=5.0, b=nt))),
+                (2, nt, mutable_tangent((a=5.0, b=nt))),
+            ]
+                x = mutable_tangent((a=5.0, b=nt))
+                @test @inferred(increment_field!!(x, val, f)) == comp
+                @test @inferred(increment_field!!(x, val, f)) === x
+            end
         end
     end
 

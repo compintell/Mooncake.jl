@@ -326,6 +326,8 @@ Static representation of a `Symbol` `f`.
 struct SSym{f} end
 SSym(f::Symbol) = SSym{f}()
 
+const SSymOrInt{F} = Union{SSym{F}, SInt{F}}
+
 """
     increment_field!!(x::T, y::V, f) where {T, V}
 
@@ -341,13 +343,13 @@ end
 function increment_field!!(x::NamedTuple, y, ::SSym{f}) where {f}
     return @set x.$f = increment!!(getfield(x, f), y)
 end
-function increment_field!!(x::Tangent{T}, y, ::SSym{f}) where {T, f}
+function increment_field!!(x::Tangent{T}, y, f::V) where {T, F, V<:SSymOrInt{F}}
     y isa NoTangent && return x
-    return Tangent(increment_field!!(x.fields, fieldtype(T, f)(y), SSym{f}()))
+    return Tangent(increment_field!!(x.fields, fieldtype(T, F)(y), f))
 end
-function increment_field!!(x::MutableTangent{T}, y, ::SSym{f}) where {T, f}
+function increment_field!!(x::MutableTangent{T}, y, f::V) where {T, F, V<:SSymOrInt{F}}
     y isa NoTangent && return x
-    setfield!(x, :fields, increment_field!!(x.fields, fieldtype(T, f)(y), SSym{f}()))
+    setfield!(x, :fields, increment_field!!(x.fields, fieldtype(T, F)(y), f))
     return x
 end
 
