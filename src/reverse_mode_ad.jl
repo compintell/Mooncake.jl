@@ -40,7 +40,9 @@ struct NoPullback end
 
 @inline (::NoPullback)(dy, dx...) = dx
 
-isprimitive(::RMC, args...) = any(might_be_active, map(Core.Typeof , args)) ? false : true
+might_be_active(args) = any(might_be_active ∘ typeof, args)
+
+isprimitive(::RMC, args...) = might_be_active(args) ? false : true
 isprimitive(::RMC, ::typeof(Umlaut.__new__), T, x...) = true
 isprimitive(::RMC, ::typeof(Umlaut.__foreigncall__), args...) = true
 isprimitive(::RMC, ::typeof(__intrinsic__), args...) = true
