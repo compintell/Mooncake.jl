@@ -22,17 +22,17 @@ end
         @test output_shadow(inst) == 4.0
     end
     @testset "might_be_active" begin
-        @test might_be_active(Float64) == true
-        @test might_be_active(Int) == false
-        @test might_be_active(Vector{Float64}) == true
-        @test might_be_active(Vector{Bool}) == false
-        @test might_be_active(Tuple{Bool}) == false
-        @test might_be_active(Tuple{Bool, Bool}) == false
-        @test might_be_active(Tuple{Bool, Float64}) == true
-        @test might_be_active(Tuple{Bool, Vector{Float64}}) == true
-        @test might_be_active(TestResources.Foo) == true
-        @test might_be_active(TestResources.StructFoo) == true
-        @test might_be_active(TestResources.MutableFoo) == true
+        @test might_be_active(Float64)
+        @test !might_be_active(Int)
+        @test might_be_active(Vector{Float64})
+        @test !might_be_active(Vector{Bool})
+        @test !might_be_active(Tuple{Bool})
+        @test !might_be_active(Tuple{Bool, Bool})
+        @test might_be_active(Tuple{Bool, Float64})
+        @test might_be_active(Tuple{Bool, Vector{Float64}})
+        @test might_be_active(TestResources.Foo)
+        @test might_be_active(TestResources.StructFoo)
+        @test might_be_active(TestResources.MutableFoo)
     end
     @testset "build_construction and pullback! $f" for (f, args...) in
         TestResources.PRIMITIVE_TEST_FUNCTIONS
