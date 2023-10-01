@@ -187,9 +187,6 @@ function literal_pass!(tape)
     return tape
 end
 
-remake(op::Input) = Input(op.id, op.val, op.tape, op.line)
-remake(op::Constant) = Constant(op.id, op.typ, op.val, op.tape, op.line)
-
 function rrule!!(f::CoDual{<:UnrolledFunction}, args...)
     tape = primal(f).tape
     tape = literal_pass!(tape)
@@ -216,7 +213,6 @@ function rrule!!(f::CoDual{<:UnrolledFunction}, args...)
         end
         push!(new_tape, new_op)
     end
-    # new_tape.result = unbind(tape.result)
     new_tape.result = Variable(new_tape[Variable(tape.result.id)])
     y_ref = new_tape[new_tape.result].val.output
 
