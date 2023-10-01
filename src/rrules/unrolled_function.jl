@@ -21,7 +21,7 @@ end
 
 function optimised_rrule!!(args::Vararg{Any, N}) where {N}
     primals = map(primal, args)
-    any(might_be_active ∘ typeof, primals) && return rrule!!(args...)
+    might_be_active(primals) && return rrule!!(args...)
     y = primals[1](primals[2:end]...)
     return CoDual(y, uninit_tangent(y)), NoPullback()
 end
@@ -35,7 +35,7 @@ function build_coinstruction(inputs::CoInstruction...)
     return CoInstruction(input_refs, output_ref, pb_ref)
 end
 
-function (instruction::CoInstruction)(inputs::CoInstruction...)
+function (instruction::CoInstruction)(inputs::Vararg{CoInstruction, N}) where {N}
     input_refs = map(x -> x.output, inputs)
     input_values = map(getindex, input_refs)
     foreach(verify_codual_type, input_values)
@@ -56,7 +56,7 @@ function pullback!(instruction::CoInstruction)
     input_shadows = map(shadow ∘ getindex, instruction.inputs)
     output_shadow = shadow(instruction.output[])
     new_input_shadows = instruction.pb[](output_shadow, input_shadows...)
-    foreach(replace_shadow!, instruction.inputs, new_input_shadows)
+    map(replace_shadow!, instruction.inputs, new_input_shadows)
     return nothing
 end
 
@@ -187,6 +187,25 @@ function literal_pass!(tape)
     return tape
 end
 
+"""
+
+"""
+function intrinsic_pass!(tape)
+    rebinding_dict = Dict()
+    for (n, op) in enumerate(tape.ops)
+        !(op isa Call) && continue
+        f = op.fn isa Variable ? op.fn.op.val : op.fn
+        if f isa Core.IntrinsicFunction
+            new_fn = IntrinsicsWrappers.translate(Val(f))
+            new_op = Call(op.id, op.val, new_fn, op.args, op.tape, op.line)
+            tape.ops[n] = new_op
+            rebinding_dict[op.id] = new_op.id
+        end
+    end
+    Umlaut.rebind!(tape, rebinding_dict)
+    return tape
+end
+
 function rrule_pass!(tape, args)
     inputs!(tape, map(const_coinstruction, args)...)
     new_tape = Tape(tape.c)
@@ -214,6 +233,7 @@ end
 function rrule!!(f::CoDual{<:UnrolledFunction}, args...)
     tape = primal(f).tape
     tape = literal_pass!(tape)
+    tape = intrinsic_pass!(tape)
     tape = rebinding_pass!(tape)
     new_tape = rrule_pass!(tape, args)
     y_ref = new_tape[new_tape.result].val.output
@@ -261,6 +281,7 @@ end
 function construct_accel_tape(f::CoDual, args::CoDual...)
     tape = primal(f).tape
     tape = literal_pass!(tape)
+    tape = intrinsic_pass!(tape)
     tape = rebinding_pass!(tape)
     new_tape = rrule_pass!(tape, args)
 
