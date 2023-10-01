@@ -44,7 +44,7 @@ end
 # We _might_ remove these at a later date if they turn out not to be needed.
 #
 
-function rrule!!(::CoDual{typeof(Umlaut.check_variable_length)}, args...)
+function rrule!!(::CoDual{typeof(Umlaut.check_variable_length)}, args::Vararg{Any, N}) where {N}
     v = Umlaut.check_variable_length(map(primal, args)...)
     return CoDual(v, zero_tangent(v)), NoPullback()
 end
