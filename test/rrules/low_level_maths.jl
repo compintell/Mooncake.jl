@@ -19,7 +19,7 @@ rand_inputs(rng, ::typeof(sqrt), _) = (rand(rng) + 1e-3, )
 
 @testset "low_level_maths" begin
     rng = Xoshiro(123456)
-    @testset "$f" for (M, f, arity) in DiffRules.diffrules()
+    @testset "$f" for (M, f, arity) in DiffRules.diffrules(; filter_modules=nothing)
         if !(isdefined(@__MODULE__, M) && isdefined(getfield(@__MODULE__, M), f))
             continue  # Skip rules for methods not defined in the current scope
         end
