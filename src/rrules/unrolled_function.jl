@@ -187,15 +187,9 @@ function literal_pass!(tape)
     return tape
 end
 
-function rrule!!(f::CoDual{<:UnrolledFunction}, args...)
-    tape = primal(f).tape
-    tape = literal_pass!(tape)
-    tape = rebinding_pass!(tape)
-    wrapped_args = map(const_coinstruction, args)
-    inputs!(tape, wrapped_args...)
-
+function rrule_pass!(tape, args)
+    inputs!(tape, map(const_coinstruction, args)...)
     new_tape = Tape(tape.c)
-    # Transform forwards pass, replacing ops with associated rrule calls.
     for op in tape.ops
         new_op = to_reverse_mode_ad(op, new_tape)
         new_op_val = new_op.val.output[]
@@ -214,6 +208,14 @@ function rrule!!(f::CoDual{<:UnrolledFunction}, args...)
         push!(new_tape, new_op)
     end
     new_tape.result = Variable(new_tape[Variable(tape.result.id)])
+    return new_tape
+end
+
+function rrule!!(f::CoDual{<:UnrolledFunction}, args...)
+    tape = primal(f).tape
+    tape = literal_pass!(tape)
+    tape = rebinding_pass!(tape)
+    new_tape = rrule_pass!(tape, args)
     y_ref = new_tape[new_tape.result].val.output
 
     # Run the reverse-pass.
@@ -260,40 +262,20 @@ function construct_accel_tape(f::CoDual, args::CoDual...)
     tape = primal(f).tape
     tape = literal_pass!(tape)
     tape = rebinding_pass!(tape)
-
-    wrapped_args = map(const_coinstruction, args)
-    inputs!(tape, wrapped_args...)
-
-    new_tape = Tape(tape.c)
-
-    # Transform forwards pass, replacing ops with associated rrule calls.
-    for (n, op) in enumerate(tape.ops)
-        new_op = to_reverse_mode_ad(op, new_tape)
-        new_op_val = new_op.val.output[]
-        if tangent_type(typeof(primal(new_op_val))) != typeof(shadow(new_op_val))
-            inputs = map(getindex, new_op.val.inputs)
-            display(inputs)
-            println()
-            display(new_op_val)
-            println()
-            display(which(rrule!!, map(Core.Typeof, inputs)))
-            println()
-            display("expected shadow type $(tangent_type(typeof(primal(new_op_val))))")
-            println()
-            throw(error("bad output types found in practice for op"))
-        end
-        push!(new_tape, new_op)
-    end
-    output_var = Variable(new_tape[Variable(tape.result.id)])
-    new_tape.result = output_var
-    y_ref = new_tape[new_tape.result].val.output
+    new_tape = rrule_pass!(tape, args)
 
     # Insert an additional input for the seed increment.
+    y_ref = new_tape[new_tape.result].val.output
     output_cotangent_input = Input(1, zero_tangent(primal(y_ref[])), new_tape, 0)
     insert!(new_tape, 1, output_cotangent_input)
 
     # Push the seeding operation onto the tape after the forwards pass.
-    push!(new_tape, mkcall(seed_instruction_output!, output_var, Variable(output_cotangent_input)))
+    seed_call = mkcall(
+        seed_instruction_output!,
+        new_tape.result,
+        Variable(output_cotangent_input),
+    )
+    push!(new_tape, seed_call)
 
     # Push operations onto the tape to run the reverse-pass.
     for op in reverse(new_tape.ops[2:end-1])
