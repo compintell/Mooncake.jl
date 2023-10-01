@@ -19,7 +19,7 @@ function seed_output_shadow!(x::CoInstruction{T, V}, x̄) where {T, V}
     return nothing
 end
 
-function optimised_rrule!!(args...)
+function optimised_rrule!!(args::Vararg{Any, N}) where {N}
     primals = map(primal, args)
     any(might_be_active ∘ typeof, primals) && return rrule!!(args...)
     y = primals[1](primals[2:end]...)
@@ -128,9 +128,17 @@ function seed_variable!(tape, var, ȳ)
     return nothing
 end
 
+seed_instruction_output!(inst, ȳ) = seed_ref!(inst.output, ȳ)
+
+function seed_ref!(y_ref, ȳ)
+    dy = shadow(y_ref[])
+    dy_new = increment!!(set_to_zero!!(dy), ȳ)
+    y_ref[] = CoDual(primal(y_ref[]), dy_new)
+    return nothing
+end
+
 function rebinding_pass!(tape)
     new_tape = tape
-    result = unbind(tape.result)
     num_ops = length(tape)
     rebind_ops = Any[]
     for (i, op) in enumerate(reverse(tape.ops))
@@ -154,15 +162,38 @@ function rebinding_pass!(tape)
             end
         end
     end
-    new_tape.result = result
     return new_tape
+end
+
+"""
+    literal_pass!(tape)
+
+Replaces calls to `getfield(x, f)`, where `f` is a literal`, with
+`lgetfield(x, SSym{f}())` or `lgetfield(x, SInt{f}())`, depending on the type of `f`.
+This likely has little effect the first time that a function is differentiated, but should
+make calls type-stable when re-run. This is useful when "compiling" the tape later on.
+"""
+function literal_pass!(tape)
+    rebinding_dict = Dict()
+    for (n, op) in enumerate(tape.ops)
+        if op isa Call && op.fn == getfield && op.args[2] isa Symbol
+            new_args = Any[op.args[1], SSym(op.args[2]), op.args[3:end]...]
+            new_op = Call(op.id, op.val, lgetfield, new_args, op.tape, op.line)
+            tape.ops[n] = new_op
+            rebinding_dict[op.id] = new_op.id
+        end
+    end
+    Umlaut.rebind!(tape, rebinding_dict)
+    return tape
 end
 
 remake(op::Input) = Input(op.id, op.val, op.tape, op.line)
 remake(op::Constant) = Constant(op.id, op.typ, op.val, op.tape, op.line)
 
 function rrule!!(f::CoDual{<:UnrolledFunction}, args...)
-    tape = rebinding_pass!(primal(f).tape)
+    tape = primal(f).tape
+    tape = literal_pass!(tape)
+    tape = rebinding_pass!(tape)
     wrapped_args = map(const_coinstruction, args)
     inputs!(tape, wrapped_args...)
 
@@ -185,7 +216,8 @@ function rrule!!(f::CoDual{<:UnrolledFunction}, args...)
         end
         push!(new_tape, new_op)
     end
-    new_tape.result = unbind(tape.result)
+    # new_tape.result = unbind(tape.result)
+    new_tape.result = Variable(new_tape[Variable(tape.result.id)])
     y_ref = new_tape[new_tape.result].val.output
 
     # Run the reverse-pass.
@@ -224,13 +256,20 @@ function value_and_gradient(f, x...)
     return value_and_gradient(tape, f, x...)
 end
 
-function construct_accel_tape(ȳ, f::CoDual, args::CoDual...)
+struct AcceleratedGradientTape{Ttape}
+    tape::Ttape
+end
+
+function construct_accel_tape(f::CoDual, args::CoDual...)
     tape = primal(f).tape
+    tape = literal_pass!(tape)
+    tape = rebinding_pass!(tape)
 
     wrapped_args = map(const_coinstruction, args)
     inputs!(tape, wrapped_args...)
 
     new_tape = Tape(tape.c)
+
     # Transform forwards pass, replacing ops with associated rrule calls.
     for (n, op) in enumerate(tape.ops)
         new_op = to_reverse_mode_ad(op, new_tape)
@@ -249,21 +288,44 @@ function construct_accel_tape(ȳ, f::CoDual, args::CoDual...)
         end
         push!(new_tape, new_op)
     end
-    new_tape.result = unbind(tape.result)
+    output_var = Variable(new_tape[Variable(tape.result.id)])
+    new_tape.result = output_var
     y_ref = new_tape[new_tape.result].val.output
 
-    # Run the reverse-pass to ensure that we don't get state wrong.
-    dargs = map(shadow, args)
-    seed_variable!(new_tape, new_tape.result, ȳ)
-    foreach((v, x̄) -> seed_variable!(new_tape, v, x̄), inputs(new_tape), dargs)
+    # Insert an additional input for the seed increment.
+    output_cotangent_input = Input(1, zero_tangent(primal(y_ref[])), new_tape, 0)
+    insert!(new_tape, 1, output_cotangent_input)
+
+    # Push the seeding operation onto the tape after the forwards pass.
+    push!(new_tape, mkcall(seed_instruction_output!, output_var, Variable(output_cotangent_input)))
 
     # Push operations onto the tape to run the reverse-pass.
-    for op in reverse(new_tape.ops)
+    for op in reverse(new_tape.ops[2:end-1])
         pb_op = mkcall(pullback!, Variable(op.id))
         push!(new_tape, pb_op)
         Umlaut.exec!(new_tape, pb_op)
     end
 
     # Accelerate the forwards-tape.
-    return accelerate(new_tape)
+    return AcceleratedGradientTape(accelerate(new_tape))
+end
+
+function execute!(t::AcceleratedGradientTape, ȳ, x_x̄::CoDual...)
+
+    # Set up the inputs.
+    fast_tape = t.tape
+    new_args = map(x_x̄, fast_tape.arg_refs[2:end]) do x_x̄, arg_ref
+        arg_val = arg_ref[]
+        arg_val.output[] = x_x̄
+        return arg_val
+    end
+
+    # Run the tape.
+    Taped.execute!(fast_tape, ȳ, new_args...)
+
+    # Extract the results.
+    d_args = map(fast_tape.arg_refs[2:end]) do arg_ref
+        return shadow(arg_ref[].output[])
+    end
+    return NoTangent(), d_args...
 end

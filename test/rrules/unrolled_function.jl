@@ -21,6 +21,19 @@ end
         @test output_primal(inst) == 5.0
         @test output_shadow(inst) == 4.0
     end
+    @testset "might_be_active" begin
+        @test might_be_active(Float64) == true
+        @test might_be_active(Int) == false
+        @test might_be_active(Vector{Float64}) == true
+        @test might_be_active(Vector{Bool}) == false
+        @test might_be_active(Tuple{Bool}) == false
+        @test might_be_active(Tuple{Bool, Bool}) == false
+        @test might_be_active(Tuple{Bool, Float64}) == true
+        @test might_be_active(Tuple{Bool, Vector{Float64}}) == true
+        @test might_be_active(TestResources.Foo) == true
+        @test might_be_active(TestResources.StructFoo) == true
+        @test might_be_active(TestResources.MutableFoo) == true
+    end
     @testset "build_construction and pullback! $f" for (f, args...) in
         TestResources.PRIMITIVE_TEST_FUNCTIONS
 
@@ -114,19 +127,32 @@ end
         end),
     )
         @info "$(map(typeof, (f, x...)))"
-        test_taped_rrule!!(Xoshiro(123456), f, map(deepcopy, x)...; interface_only)
+        test_taped_rrule!!(Xoshiro(123456), f, deepcopy(x)...; interface_only)
     end
-    @testset "acceleration" begin
-        f = TestResources.test_mlp
-        args = (randn(5, 2), randn(7, 5), randn(3, 7))
-        y, tape = Taped.trace(f, args...; ctx=Taped.RMC())
-        f_ur = Taped.UnrolledFunction(tape)
-        x = (f, args...)
-        dx = map(zero_tangent, x)
+    @testset "acceleration $f" for (_, f, args...) in TestResources.TEST_FUNCTIONS
 
-        fast_tape = Taped.construct_accel_tape(
-            zero_tangent(y), CoDual(f_ur, NoTangent()), map(CoDual, x, dx)...
-        )
-        execute!(fast_tape)
+        x = (f, deepcopy(args)...)
+        x_x̄ = map(CoDual, x, map(zero_tangent, x))
+        x_x̄_copy = deepcopy(x_x̄)
+
+        y, tape = Taped.trace(f, deepcopy(args)...; ctx=Taped.RMC())
+        f_ur = Taped.UnrolledFunction(tape)
+
+        ȳ = randn_tangent(Xoshiro(123456), y)
+        ȳ_copy = deepcopy(ȳ)
+
+        # Construct accelerated tape and use to compute gradients.
+        fast_tape = Taped.construct_accel_tape(CoDual(f_ur, NoTangent()), x_x̄...)
+        x̄ = Taped.execute!(fast_tape, ȳ, x_x̄...)
+
+        # Use regular unrolled tape rrule to compute gradients.
+        _, tape = Taped.trace(f, deepcopy(args)...; ctx=Taped.RMC())
+        f_ur = Taped.UnrolledFunction(tape)
+        y_ȳ, pb!! = Taped.rrule!!(CoDual(f_ur, NoTangent()), x_x̄_copy...)
+        new_ȳ = increment!!(set_to_zero!!(shadow(y_ȳ)), ȳ_copy)
+        x̄_std = pb!!(new_ȳ, NoTangent(), map(shadow, x_x̄_copy)...)
+
+        # Check that the result agrees with standard execution.
+        @test all(map(==, x̄, x̄_std))
     end
 end
