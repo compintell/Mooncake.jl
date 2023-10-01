@@ -244,6 +244,7 @@ end
     test_tangent(rng, typeof(<:), NoTangent(), NoTangent(), NoTangent())
 
     @testset "zero_tangent performance" begin
+        Taped.zero_tangent(Main)
         @test @allocated(Taped.zero_tangent(Main)) == 0
     end
 
