@@ -102,6 +102,8 @@ tangent_type(::Type{Union{}}) = NoTangent
 
 tangent_type(::Type{Symbol}) = NoTangent
 
+tangent_type(::Type{Module}) = NoTangent
+
 tangent_type(::Type{P}) where {P<:Union{UInt8, UInt16, UInt32, UInt64, UInt128}} = NoTangent
 
 tangent_type(::Type{P}) where {P<:Union{Int8, Int16, Int32, Int64, Int128}} = NoTangent

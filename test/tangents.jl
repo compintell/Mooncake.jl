@@ -44,6 +44,9 @@ function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P,
     # Check that zero_tangent is deterministic.
     @test z == Taped.zero_tangent(p)
 
+    # Check that zero_tangent infers.
+    @test z == @inferred Taped.zero_tangent(p)
+
     # Verify that the zero tangent is zero via its action.
     zc = deepcopy(z)
     tc = deepcopy(t)
@@ -239,6 +242,10 @@ end
 
     test_tangent(rng, Core.Intrinsics.xor_int, NoTangent(), NoTangent(), NoTangent())
     test_tangent(rng, typeof(<:), NoTangent(), NoTangent(), NoTangent())
+
+    @testset "zero_tangent performance" begin
+        @test @allocated(Taped.zero_tangent(Main)) == 0
+    end
 
     @testset "increment_field!!" begin
         @testset "NoTangent" begin
