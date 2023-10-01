@@ -96,10 +96,6 @@ function test_test_interface(p::P, t::T) where {P, T}
     @test _diff(p, p) == zero_tangent(p)
 end
 
-function naive_increment_field!!(x::Tuple, y, ::SInt{i}) where {i}
-    return ntuple(n -> n == i ? increment!!(x[n], y) : x[n], length(x))
-end
-
 @testset "tangents" begin
     rng = Xoshiro(123456)
     @testset "sin" begin
