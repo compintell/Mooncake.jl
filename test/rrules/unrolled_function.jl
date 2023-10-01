@@ -1,18 +1,3 @@
-function set_args!(acc_tape, args...)
-    foreach(enumerate(args)) do (n, arg)
-        current_arg = acc_tape.arg_refs[n][].output
-        current_arg.output[] = arg
-    end
-    return nothing
-end
-
-function execute!(tape)
-    for inst in tape.instructions
-        inst()
-    end
-    return Taped.get_return_val(tape)
-end
-
 @testset "unrolled_function" begin
     @testset "const_coinstruction" begin
         inst = const_coinstruction(CoDual(5.0, 4.0))
