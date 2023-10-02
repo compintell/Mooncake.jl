@@ -225,7 +225,7 @@ function test_rrule!!(
 end
 
 # Functionality for testing AD via Umlaut.
-function test_taped_rrule!!(rng::AbstractRNG, f, x...; interface_only, kwargs...)
+function test_taped_rrule!!(rng::AbstractRNG, f, x...; interface_only=false, kwargs...)
     _, tape = trace(f, map(_deepcopy, x)...; ctx=Taped.RMC())
     f_t = Taped.UnrolledFunction(tape)
 
