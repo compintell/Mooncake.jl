@@ -225,18 +225,23 @@ function test_rrule!!(
 end
 
 # Functionality for testing AD via Umlaut.
-function test_taped_rrule!!(rng::AbstractRNG, f, x...; kwargs...)
+function test_taped_rrule!!(rng::AbstractRNG, f, x...; interface_only, kwargs...)
     _, tape = trace(f, map(_deepcopy, x)...; ctx=Taped.RMC())
     f_t = Taped.UnrolledFunction(tape)
 
     # Check that the gradient is self-consistent.
     test_rrule!!(
         rng, f_t, f, x...;
-        is_primitive=false, check_conditional_type_stability=false, kwargs...,
+        is_primitive=false,
+        check_conditional_type_stability=false,
+        interface_only,
+        kwargs...,
     )
 
     # Check that f_t remains a faithful representation of the original function.
-    @test has_equal_data(f(deepcopy(x)...), play!(f_t.tape, f, deepcopy(x)...))
+    if !interface_only
+        @test has_equal_data(f(deepcopy(x)...), play!(f_t.tape, f, deepcopy(x)...))
+    end
 end
 
 generate_args(::typeof(===), x) = [(x, 0.0), (1.0, x)]
