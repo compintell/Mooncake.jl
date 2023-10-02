@@ -102,6 +102,8 @@ tangent_type(::Type{Union{}}) = NoTangent
 
 tangent_type(::Type{Symbol}) = NoTangent
 
+tangent_type(::Type{Module}) = NoTangent
+
 tangent_type(::Type{P}) where {P<:Union{UInt8, UInt16, UInt32, UInt64, UInt128}} = NoTangent
 
 tangent_type(::Type{P}) where {P<:Union{Int8, Int16, Int32, Int64, Int128}} = NoTangent
@@ -311,27 +313,57 @@ function set_to_zero!!(x::MutableTangent)
 end
 
 """
+    struct SInt{i} end
+
+Static representation of an `Int` `i`.
+"""
+struct SInt{i} end
+SInt(i::Int) = SInt{i}()
+
+"""
+    struct SSym{f} end
+
+Static representation of a `Symbol` `f`.
+"""
+struct SSym{f} end
+SSym(f::Symbol) = SSym{f}()
+
+const SSymOrInt{F} = Union{SSym{F}, SInt{F}}
+
+"""
     increment_field!!(x::T, y::V, f) where {T, V}
 
 `increment!!` the field `f` of `x` by `y`, and return the updated `x`.
 """
-increment_field!!(::NoTangent, ::NoTangent, f) = NoTangent()
-function increment_field!!(x::T, y, f::Integer) where {T<:NamedTuple}
+@generated function increment_field!!(x::Tuple, y, ::SInt{i}) where {i}
+    exprs = map(n -> n == i ? :(increment!!(x[$n], y)) : :(x[$n]), fieldnames(x))
+    return Expr(:tuple, exprs...)
+end
+function increment_field!!(x::T, y, ::SInt{f}) where {T<:NamedTuple, f}
     return T(ntuple(n -> n == f ? increment!!(x[n], y) : x[n], length(x)))
 end
-increment_field!!(x::NamedTuple, y, f::Symbol) = @set x.$f = increment!!(getfield(x, f), y)
-function increment_field!!(x::Tuple, y, i::Int)
-    return ntuple(n -> n == i ? increment!!(x[n], y) : x[n], length(x))
+function increment_field!!(x::NamedTuple, y, ::SSym{f}) where {f}
+    return @set x.$f = increment!!(getfield(x, f), y)
 end
-function increment_field!!(x::Tangent{T}, y, f) where {T}
+function increment_field!!(x::Tangent{T}, y, f::V) where {T, F, V<:SSymOrInt{F}}
     y isa NoTangent && return x
-    return Tangent(increment_field!!(x.fields, fieldtype(T, f)(y), f))
+    return Tangent(increment_field!!(x.fields, fieldtype(T, F)(y), f))
 end
-function increment_field!!(x::MutableTangent{T}, y, f) where {T}
+function increment_field!!(x::MutableTangent{T}, y, f::V) where {T, F, V<:SSymOrInt{F}}
     y isa NoTangent && return x
-    setfield!(x, :fields, increment_field!!(x.fields, fieldtype(T, f)(y), f))
+    setfield!(x, :fields, increment_field!!(x.fields, fieldtype(T, F)(y), f))
     return x
 end
+
+increment_field!!(x, y, f::Symbol) = increment_field!!(x, y, SSym(f))
+increment_field!!(x, y, n::Int) = increment_field!!(x, y, SInt(n))
+
+# Fallback method for when a tangent type for a struct is decelared to be `NoTangent`.
+for T in [Symbol, Int, SSym, SInt]
+    @eval increment_field!!(::NoTangent, ::NoTangent, f::Union{$T}) = NoTangent()
+end
+
+
 
 """
     set_field_to_zero!!(x, f)
@@ -456,11 +488,22 @@ for _P in [
     @eval _diff(p::P, q::P) where {P<:$_P} = _containerlike_diff(p, q)
 end
 
-function might_be_active(::Type{P}) where {P}
+function _might_be_active(::Type{P}) where {P}
     tangent_type(P) == NoTangent && return false
     Base.issingletontype(P) && return false
     Base.isabstracttype(P) && return true
     isprimitivetype(P) && return true
     return any(might_be_active, fieldtypes(P))
 end
-might_be_active(::Type{<:Array{P}}) where {P} = might_be_active(P)
+_might_be_active(::Type{<:Array{P}}) where {P} = _might_be_active(P)
+
+@generated function might_be_active(::Type{P}) where {P}
+    tangent_type(P) == NoTangent && return :(return false)
+    Base.issingletontype(P) && return :(return false)
+    Base.isabstracttype(P) && return :(return true)
+    isprimitivetype(P) && return :(return true)
+    return :(return $(any(_might_be_active, fieldtypes(P))))
+end
+@generated function might_be_active(::Type{<:Array{P}}) where {P}
+    return :(return $(might_be_active(P)))
+end

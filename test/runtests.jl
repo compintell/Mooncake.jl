@@ -29,7 +29,11 @@ using Taped:
     pullback!,
     seed_output_shadow!,
     rrule!!,
-    set_shadow!!
+    set_shadow!!,
+    SSym,
+    SInt,
+    lgetfield,
+    might_be_active
 
 using .TestUtils:
     test_rrule!!,

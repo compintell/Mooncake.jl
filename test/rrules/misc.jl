@@ -23,7 +23,7 @@
             CoDual(
                 bitcast(Ptr{Float64}, pointer_from_objref(_x)),
                 bitcast(Ptr{Float64}, pointer_from_objref(_dx)),
-            ),    
+            ),
             2,
         ),
 
@@ -48,5 +48,23 @@
             Xoshiro(123456), f, x...;
             interface_only, check_conditional_type_stability=false,
         )
+    end
+
+    @testset "literals" begin
+        rng = Xoshiro(123456)
+        @testset "Tuple" begin
+            x = (5.0, randn(5))
+            @test @inferred(lgetfield(x, SInt(1))) == getfield(x, 1)
+            test_rrule!!(rng, lgetfield, x, SInt(1))
+            @test @inferred(lgetfield(x, SInt(2))) == getfield(x, 2)
+            test_rrule!!(rng, lgetfield, x, SInt(2))
+        end
+        @testset "NamedTuple" begin
+            x = (a=5.0, b=randn(5))
+            @test @inferred(lgetfield(x, SSym(:a))) == getfield(x, :a)
+            test_rrule!!(rng, lgetfield, x, SSym(:a))
+            @test @inferred(lgetfield(x, SSym(:b))) == getfield(x, :b)
+            test_rrule!!(rng, lgetfield, x, SSym(:b))
+        end
     end
 end
