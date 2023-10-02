@@ -225,13 +225,23 @@ function test_rrule!!(
 end
 
 # Functionality for testing AD via Umlaut.
-function test_taped_rrule!!(rng::AbstractRNG, f, x...; kwargs...)
+function test_taped_rrule!!(rng::AbstractRNG, f, x...; interface_only=false, kwargs...)
     _, tape = trace(f, map(_deepcopy, x)...; ctx=Taped.RMC())
     f_t = Taped.UnrolledFunction(tape)
+
+    # Check that the gradient is self-consistent.
     test_rrule!!(
         rng, f_t, f, x...;
-        is_primitive=false, check_conditional_type_stability=false, kwargs...,
+        is_primitive=false,
+        check_conditional_type_stability=false,
+        interface_only,
+        kwargs...,
     )
+
+    # Check that f_t remains a faithful representation of the original function.
+    if !interface_only
+        @test has_equal_data(f(deepcopy(x)...), play!(f_t.tape, f, deepcopy(x)...))
+    end
 end
 
 generate_args(::typeof(===), x) = [(x, 0.0), (1.0, x)]
@@ -466,6 +476,24 @@ function test_isbits_multiple_usage_2(x::Float64)
     return Core.Intrinsics.mul_float(y, y)
 end
 
+function test_isbits_multiple_usage_3(x::Float64)
+    y = sin(x)
+    z = Core.Intrinsics.mul_float(y, y)
+    a = Core.Intrinsics.mul_float(z, z)
+    b = cos(a)
+    return b
+end
+
+function test_isbits_multiple_usage_4(x::Float64)
+    y = x > 0.0 ? cos(x) : sin(x)
+    return Core.Intrinsics.mul_float(y, y)
+end
+
+function test_isbits_multiple_usage_5(x::Float64)
+    y = Core.Intrinsics.mul_float(x, x)
+    return x > 0.0 ? cos(y) : sin(y)
+end
+
 test_getindex(x::AbstractArray{<:Real}) = x[1]
 
 function test_mutation!(x::AbstractVector{<:Real})
@@ -532,6 +560,9 @@ const TEST_FUNCTIONS = [
     (false, test_cos_sin, 2.0),
     (false, test_isbits_multiple_usage, 5.0),
     (false, test_isbits_multiple_usage_2, 5.0),
+    (false, test_isbits_multiple_usage_3, 4.1),
+    (false, test_isbits_multiple_usage_4, 5.0),
+    (false, test_isbits_multiple_usage_5, 4.1),
     (false, test_getindex, [1.0, 2.0]),
     (false, test_mutation!, [1.0, 2.0]),
     (false, test_while_loop, 2.0),

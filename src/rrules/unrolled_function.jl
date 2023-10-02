@@ -138,7 +138,6 @@ function seed_ref!(y_ref, ȳ)
 end
 
 function rebinding_pass!(tape)
-    new_tape = tape
     num_ops = length(tape)
     rebind_ops = Any[]
     for (i, op) in enumerate(reverse(tape.ops))
@@ -157,12 +156,12 @@ function rebinding_pass!(tape)
             end
             if !isempty(rebind_ops)
                 push!(rebind_ops, mkcall(op.fn, new_args...; val=op.val))
-                replace!(new_tape, op_num => rebind_ops)
+                replace!(tape, op_num => rebind_ops)
                 empty!(rebind_ops)
             end
         end
     end
-    return new_tape
+    return tape
 end
 
 """
@@ -235,23 +234,24 @@ function rrule!!(f::CoDual{<:UnrolledFunction}, args...)
     tape = literal_pass!(tape)
     tape = intrinsic_pass!(tape)
     tape = rebinding_pass!(tape)
-    new_tape = rrule_pass!(tape, args)
-    y_ref = new_tape[new_tape.result].val.output
+
+    rev_tape = rrule_pass!(tape, args)
+    y_ref = rev_tape[rev_tape.result].val.output
 
     # Run the reverse-pass.
     function unrolled_function_pb!!(ȳ, ::NoTangent, dargs...)
 
         # Initialise values on the tape.
-        seed_variable!(new_tape, new_tape.result, ȳ)
-        foreach((v, x̄) -> seed_variable!(new_tape, v, x̄), inputs(new_tape), dargs)
+        seed_variable!(rev_tape, rev_tape.result, ȳ)
+        foreach((v, x̄) -> seed_variable!(rev_tape, v, x̄), inputs(rev_tape), dargs)
 
         # Run the tape backwards.
-        for op in reverse(new_tape.ops)
-            pullback!(new_tape[Variable(op.id)].val)
+        for op in reverse(rev_tape.ops)
+            pullback!(rev_tape[Variable(op.id)].val)
         end
 
         # Extract the results from the tape.
-        return NoTangent(), map(v -> shadow(new_tape[v].val.output[]), inputs(new_tape))...
+        return NoTangent(), map(v -> shadow(rev_tape[v].val.output[]), inputs(rev_tape))...
     end
 
     return y_ref[], unrolled_function_pb!!
