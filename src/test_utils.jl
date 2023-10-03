@@ -67,7 +67,7 @@ function populate_address_map!(m::AddressMap, p::Array, t::Array)
     v = pointer_from_objref(t)
     haskey(m, k) && (@assert m[k] == v)
     m[k] = v
-    populate_address_map!.(Ref(m), p, t)
+    foreach(n -> isassigned(p, n) && populate_address_map!(m, p[n], t[n]), eachindex(p))
     return m
 end
 
