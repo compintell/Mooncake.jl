@@ -50,4 +50,13 @@
             interface_only, check_conditional_type_stability=false,
         )
     end
+    @testset "$f, $(typeof(x))" for (interface_only, f, x...) in [
+        (false, reshape, randn(5, 4), (4, 5)),
+        (false, reshape, randn(5, 4), (2, 10)),
+        (false, reshape, randn(5, 4), (10, 2)),
+        (false, reshape, randn(5, 4), (5, 4, 1)),
+        (false, reshape, randn(5, 4), (2, 10, 1)),
+    ]
+        test_taped_rrule!!(Xoshiro(123456), f, deepcopy(x)...; interface_only)
+    end
 end
