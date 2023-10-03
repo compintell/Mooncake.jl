@@ -19,7 +19,10 @@ function has_equal_data(x::T, y::T) where {T<:Array}
 end
 function has_equal_data(x::T, y::T) where {T}
     isprimitivetype(T) && return isequal(x, y)
-    return all(map(n -> has_equal_data(getfield(x, n), getfield(y, n)), fieldnames(T)))
+    return all(map(
+        n -> isdefined(x, n) ? has_equal_data(getfield(x, n), getfield(y, n)) : true,
+        fieldnames(T),
+    ))
 end
 has_equal_data(x::T, y::T) where {T<:Umlaut.Tape} = true
 
@@ -64,7 +67,7 @@ function populate_address_map!(m::AddressMap, p::Array, t::Array)
     v = pointer_from_objref(t)
     haskey(m, k) && (@assert m[k] == v)
     m[k] = v
-    populate_address_map!.(Ref(m), p, t)
+    foreach(n -> isassigned(p, n) && populate_address_map!(m, p[n], t[n]), eachindex(p))
     return m
 end
 
@@ -115,7 +118,7 @@ function test_rmad(rng::AbstractRNG, f, x...)
 
     # Run reverse-pass.
     ȳ_delta = randn_tangent(rng, primal(y))
-    x̄_delta = map(Base.Fix1(randn_tangent, rng), x)
+    x̄_delta = map(Base.Fix1(randn_tangent, rng) ∘ primal, x_x̄)
 
     ȳ_init = set_to_zero!!(shadow(y))
     x̄_init = map(set_to_zero!! ∘ shadow, x_x̄)
@@ -331,17 +334,17 @@ function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P,
     @test Tt == typeof(z)
 
     # Check that zero_tangent is deterministic.
-    @test z == Taped.zero_tangent(p)
+    @test has_equal_data(z, Taped.zero_tangent(p))
 
     # Check that zero_tangent infers.
-    @test z == @inferred Taped.zero_tangent(p)
+    @test has_equal_data(z, @inferred Taped.zero_tangent(p))
 
     # Verify that the zero tangent is zero via its action.
     zc = deepcopy(z)
     tc = deepcopy(t)
-    @test @inferred(increment!!(zc, zc)) == zc
-    @test increment!!(zc, tc) == tc
-    @test increment!!(tc, zc) == tc
+    @test has_equal_data(@inferred(increment!!(zc, zc)), zc)
+    @test has_equal_data(increment!!(zc, tc), tc)
+    @test has_equal_data(increment!!(tc, zc), tc)
 
     if ismutabletype(P)
         @test increment!!(zc, zc) === zc
@@ -351,7 +354,7 @@ function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P,
     end
 
     z_pred = increment!!(x, y)
-    @test z_pred == z_target
+    @test has_equal_data(z_pred, z_target)
     if ismutabletype(P)
         @test z_pred === x
     end
@@ -359,7 +362,7 @@ function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P,
     # If t isn't the zero element, then adding it to itself must change its value.
     if t != z
         if !ismutabletype(P)
-            @test !(increment!!(tc, tc) == tc)
+            @test !has_equal_data(increment!!(tc, tc), tc)
         end
     end
 
@@ -369,7 +372,7 @@ function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P,
     @test increment!!(tc, zc) isa Tt
 
     # Setting to zero equals zero.
-    @test set_to_zero!!(tc) == z
+    @test has_equal_data(set_to_zero!!(tc), z)
     if ismutabletype(P)
         @test set_to_zero!!(tc) === tc
     end
@@ -383,9 +386,9 @@ function test_numerical_testing_interface(p::P, t::T) where {P, T}
     @test _dot(t, zero_tangent(p)) == 0.0
     @test _dot(t, increment!!(deepcopy(t), t)) ≈ 2 * _dot(t, t)
     @test _add_to_primal(p, t) isa P
-    @test _add_to_primal(p, zero_tangent(p)) == p
+    @test has_equal_data(_add_to_primal(p, zero_tangent(p)), p)
     @test _diff(p, p) isa T
-    @test _diff(p, p) == zero_tangent(p)
+    @test has_equal_data(_diff(p, p), zero_tangent(p))
 end
 
 end

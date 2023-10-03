@@ -33,8 +33,32 @@ end
         x = fill(NoTangent(), 5)
         y = fill(NoTangent(), 5)
         z = fill(NoTangent(), 5)
-        # x = rand(Int, 5)
-        # y = rand(Int, 5)
+        test_tangent(rng, p, z, x, y)
+        test_numerical_testing_interface(p, x)
+    end
+
+    @testset "Vector{Vector{Float64}}" begin
+        p = [randn(3) for _ in 1:4]
+        x = [randn(3) for _ in 1:4]
+        y = [randn(3) for _ in 1:4]
+        z = x .+ y
+        test_tangent(rng, p, z, x, y)
+        test_numerical_testing_interface(p, x)
+    end
+
+    @testset "Vector{Vector{Float64}} with undefs" begin
+        p = Vector{Vector{Float64}}(undef, 4)
+        p[1] = randn(3)
+        p[2] = randn(4)
+        x = Vector{Vector{Float64}}(undef, 4)
+        x[1] = randn(3)
+        x[2] = randn(4)
+        y = Vector{Vector{Float64}}(undef, 4)
+        y[1] = randn(3)
+        y[2] = randn(4)
+        z = Vector{Vector{Float64}}(undef, 4)
+        z[1] = x[1] + y[1]
+        z[2] = x[2] + y[2]
         test_tangent(rng, p, z, x, y)
         test_numerical_testing_interface(p, x)
     end

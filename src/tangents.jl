@@ -156,6 +156,40 @@ function tangent_type(P::Type)
     return T{NamedTuple{tangent_field_names, Tuple{tangent_field_types...}}}
 end
 
+function _map_if_assigned!(f::F, y::Array, x::Array{P}) where {F, P}
+    @assert size(y) == size(x)
+    @inbounds for n in eachindex(y)
+        if isbitstype(P) || isassigned(x, n)
+            y[n] = f(x[n])
+        end
+    end
+    return y
+end
+
+function _map_if_assigned!(f::F, y::Array, x1::Array{P}, x2::Array) where {F, P}
+    @assert size(y) == size(x1)
+    @assert size(y) == size(x2)
+    @inbounds for n in eachindex(y)
+        if isbitstype(P) || isassigned(x1, n)
+            y[n] = f(x1[n], x2[n])
+        end
+    end
+    return y
+end
+
+"""
+    _map(f, x...)
+
+Same as `map` but requires all elements of `x` to have equal length.
+The usual function `map` doesn't enforce this for `Array`s.
+"""
+@inline function _map(f::F, x...) where {F}
+    s = length(x[1])
+    @assert all(map(x -> length(x) == s, x))
+    return map(f, x...)
+end
+
+
 """
     zero_tangent(x)
 
@@ -164,10 +198,14 @@ It is an error for the zero element of the tangent space of `x` to be represente
 anything other than that which this function returns.
 """
 zero_tangent(x)
-zero_tangent(::Union{Int8, Int16, Int32, Int64, Int128}) = NoTangent()
-zero_tangent(x::IEEEFloat) = zero(x)
-zero_tangent(x::Array{P, N}) where {P, N} = map(zero_tangent, x)
-zero_tangent(x::Union{Tuple, NamedTuple}) = map(zero_tangent, x)
+@inline zero_tangent(::Union{Int8, Int16, Int32, Int64, Int128}) = NoTangent()
+@inline zero_tangent(x::IEEEFloat) = zero(x)
+@inline function zero_tangent(x::Array{P, N}) where {P, N}
+    y = Array{tangent_type(P), N}(undef, size(x)...)
+    v = _map_if_assigned!(zero_tangent, y, x)
+    return v
+end
+@inline zero_tangent(x::Union{Tuple, NamedTuple}) = map(zero_tangent, x)
 @noinline function zero_tangent(x::P) where {P}
 
     tangent_type(P) == NoTangent && return NoTangent()
@@ -182,7 +220,7 @@ zero_tangent(x::Union{Tuple, NamedTuple}) = map(zero_tangent, x)
     # if field types are concrete.
     tangent_field_names = fieldnames(P)
     tangent_field_types = map(tangent_type, fieldtypes(P))
-    tangent_field_zeros = map(tangent_field_names, tangent_field_types) do field_name, T
+    tangent_field_zeros = _map(tangent_field_names, tangent_field_types) do field_name, T
         if isdefined(x, field_name)
             return PossiblyUninitTangent{T}(zero_tangent(getfield(x, field_name)))
         else
@@ -213,7 +251,10 @@ Generate a randomly-chosen tangent to `x`.
 """
 randn_tangent(::AbstractRNG, ::NoTangent) = NoTangent()
 randn_tangent(rng::AbstractRNG, ::T) where {T<:IEEEFloat} = randn(rng, T)
-randn_tangent(rng::AbstractRNG, x::Array{T}) where {T} = map(x -> randn_tangent(rng, x), x)
+function randn_tangent(rng::AbstractRNG, x::Array{T, N}) where {T, N}
+    dx = Array{tangent_type(T), N}(undef, size(x)...)
+    return _map_if_assigned!(Base.Fix1(randn_tangent, rng), dx, x)
+end
 function randn_tangent(rng::AbstractRNG, x::Union{Tuple, NamedTuple})
     return map(x -> randn_tangent(rng, x), x)
 end
@@ -234,7 +275,7 @@ function randn_tangent(rng::AbstractRNG, x::P) where {P}
     # Assume `P` is a generic struct type, and derive the tangent recursively.
     tangent_field_names = fieldnames(P)
     tangent_field_types = map(tangent_type, fieldtypes(P))
-    tangent_field_vals = map(tangent_field_names, tangent_field_types) do field_name, T
+    tangent_field_vals = _map(tangent_field_names, tangent_field_types) do field_name, T
         if isdefined(x, field_name)
             return PossiblyUninitTangent{T}(randn_tangent(rng, getfield(x, field_name)))
         else
@@ -258,12 +299,12 @@ This must apply recursively if `T` is a composite type whose fields are mutable.
 increment!!(::NoTangent, ::NoTangent) = NoTangent()
 increment!!(x::T, y::T) where {T<:IEEEFloat} = x + y
 increment!!(x::Ptr{T}, y::Ptr{T}) where {T} = x === y ? x : throw(error("eurgh"))
-function increment!!(x::T, y::T) where {T<:Array}
-    x === y || map!(increment!!, x, x, y)
-    return x
+function increment!!(x::T, y::T) where {P, N, T<:Array{P, N}}
+    x === y && return x
+    return _map_if_assigned!(increment!!, x, x, y)
 end
-increment!!(x::T, y::T) where {T<:Tuple} = map(increment!!, x, y)
-increment!!(x::T, y::T) where {T<:NamedTuple} = map(increment!!, x, y)
+increment!!(x::T, y::T) where {T<:Tuple} = _map(increment!!, x, y)
+increment!!(x::T, y::T) where {T<:NamedTuple} = _map(increment!!, x, y)
 function increment!!(x::T, y::T) where {T<:PossiblyUninitTangent}
     is_init(x) && is_init(y) && return T(increment!!(x.tangent, y.tangent))
     is_init(x) && !is_init(y) && error("x is initialised, but y is not")
@@ -302,7 +343,7 @@ Set `x` to its zero element (`x` should be a tangent, so the zero must exist).
 set_to_zero!!(::NoTangent) = NoTangent()
 set_to_zero!!(x::Base.IEEEFloat) = zero(x)
 set_to_zero!!(x::Union{Tuple, NamedTuple}) = map(set_to_zero!!, x)
-set_to_zero!!(x::Array) = map!(set_to_zero!!, x, x)
+set_to_zero!!(x::Array) = _map_if_assigned!(set_to_zero!!, x, x)
 function set_to_zero!!(x::T) where {T<:PossiblyUninitTangent}
     return is_init(x) ? T(set_to_zero!!(x.tangent)) : x
 end
@@ -393,7 +434,10 @@ correspond to a vector field. Not using `*` in order to avoid piracy.
 """
 _scale(::Float64, ::NoTangent) = NoTangent()
 _scale(a::Float64, t::T) where {T<:IEEEFloat} = T(a * t)
-_scale(a::Float64, t::Array) = map(Base.Fix1(_scale, a), t)
+function _scale(a::Float64, t::Array{T, N}) where {T, N}
+    t′ = Array{T, N}(undef, size(t)...)
+    return _map_if_assigned!(Base.Fix1(_scale, a), t′, t)
+end
 _scale(a::Float64, t::Union{Tuple, NamedTuple}) = map(Base.Fix1(_scale, a), t)
 function _scale(a::Float64, t::PossiblyUninitTangent{T}) where {T}
     return if is_init(t)
@@ -415,14 +459,20 @@ Always available because all tangent types correspond to finite-dimensional vect
 """
 _dot(::NoTangent, ::NoTangent) = 0.0
 _dot(t::T, s::T) where {T<:IEEEFloat} = Float64(t * s)
-_dot(t::T, s::T) where {T<:Array} = sum(map(_dot, t, s))
+function _dot(t::T, s::T) where {T<:Array}
+    if isbitstype(T)
+        return sum(_map(_dot, t, s))
+    else
+        return sum(_map(n -> isassigned(t, n) ? _dot(t[n], s[n]) : 0.0, eachindex(t)))
+    end
+end
 _dot(t::T, s::T) where {T<:Union{Tuple, NamedTuple}} = sum(map(_dot, t, s); init=0.0)
 function _dot(t::T, s::T) where {T<:PossiblyUninitTangent}
     is_init(t) && is_init(s) && return _dot(t.tangent, s.tangent)
     return 0.0
 end
 function _dot(t::T, s::T) where {T<:Union{Tangent, MutableTangent}}
-    return sum(map(_dot, t.fields, s.fields); init=0.0)
+    return sum(_map(_dot, t.fields, s.fields); init=0.0)
 end
 
 """
@@ -437,9 +487,12 @@ Adds `t` to `p`, returning a `P`. It must be the case that `tangnet_type(P) == T
 """
 _add_to_primal(x, ::NoTangent) = x
 _add_to_primal(x::T, t::T) where {T<:IEEEFloat} = x + t
-_add_to_primal(x::Array, t::Array) = map(_add_to_primal, x, t)
-_add_to_primal(x::Tuple, t::Tuple) = map(_add_to_primal, x, t)
-_add_to_primal(x::NamedTuple, t::NamedTuple) = map(_add_to_primal, x, t)
+function _add_to_primal(x::Array{P, N}, t::Array{<:Any, N}) where {P, N}
+    x′ = Array{P, N}(undef, size(x)...)
+    return _map_if_assigned!(_add_to_primal, x′, x, t)
+end
+_add_to_primal(x::Tuple, t::Tuple) = _map(_add_to_primal, x, t)
+_add_to_primal(x::NamedTuple, t::NamedTuple) = _map(_add_to_primal, x, t)
 _add_to_primal(x, ::Tangent{NamedTuple{(), Tuple{}}}) = x
 
 function _containerlike_add_to_primal(p::T, t::Union{Tangent, MutableTangent}) where {T}
@@ -470,8 +523,11 @@ function _diff(::P, ::P) where {P}
     error("tangent_type(P) is not NoTangent, and no other method provided")
 end
 _diff(p::P, q::P) where {P<:IEEEFloat} = p - q
-_diff(p::P, q::P) where {P<:Array} = map(_diff, p, q)
-_diff(p::P, q::P) where {P<:Union{Tuple, NamedTuple}} = map(_diff, p, q)
+function _diff(p::P, q::P) where {V, N, P<:Array{V, N}}
+    t = Array{tangent_type(V), N}(undef, size(p))
+    return _map_if_assigned!(_diff, t, p, q)
+end
+_diff(p::P, q::P) where {P<:Union{Tuple, NamedTuple}} = _map(_diff, p, q)
 
 function _containerlike_diff(p::P, q::P) where {P}
     diffed_fields = map(fieldnames(P)) do f
