@@ -1,20 +1,3 @@
-function test_increment!!(z_target::T, x::T, y::T) where {T}
-    function check_aliasing(z::T, x::T) where {T}
-        if ismutabletype(T)
-            return z === x
-        else
-            tmp = map(fieldnames(T)) do f
-                return check_aliasing(getfield(z, f), getfield(x, f))
-            end
-            return all(tmp)
-        end
-    end
-
-    z = Taped.increment!!(x, y)
-    @test check_aliasing(z, x)
-    @test z == z_target
-end
-
 tangent(nt::NamedTuple) = Tangent(map(PossiblyUninitTangent, nt))
 mutable_tangent(nt::NamedTuple) = MutableTangent(map(PossiblyUninitTangent, nt))
 function mutable_tangent(::Type{P}, nt::NamedTuple{names}) where {P, names}
@@ -22,96 +5,19 @@ function mutable_tangent(::Type{P}, nt::NamedTuple{names}) where {P, names}
     return MutableTangent(NamedTuple{names}(v))
 end
 
-function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P, T}
-
-    # Verify that interface `tangent_type` runs.
-    Tt = tangent_type(P)
-    t = randn_tangent(rng, p)
-    z = zero_tangent(p)
-
-    # Check that user-provided tangents have the same type as `tangent_type` expects.
-    @test T == Tt
-
-    # Check that ismutabletype(P) => ismutabletype(T)
-    if ismutabletype(P) && !(Tt == NoTangent)
-        @test ismutabletype(Tt)
-    end
-
-    # Check that tangents are of the correct type.
-    @test Tt == typeof(t)
-    @test Tt == typeof(z)
-
-    # Check that zero_tangent is deterministic.
-    @test has_equal_data(z, Taped.zero_tangent(p))
-
-    # Check that zero_tangent infers.
-    @test has_equal_data(z, @inferred Taped.zero_tangent(p))
-
-    # Verify that the zero tangent is zero via its action.
-    zc = deepcopy(z)
-    tc = deepcopy(t)
-    @test has_equal_data(increment!!(zc, zc), zc)
-    @test has_equal_data(increment!!(zc, tc), tc)
-    @test has_equal_data(increment!!(tc, zc), tc)
-
-    if ismutabletype(P)
-        @test increment!!(zc, zc) === zc
-        @test increment!!(tc, zc) === tc
-        @test increment!!(zc, tc) === zc
-        @test increment!!(tc, tc) === tc
-    end
-
-    z_pred = increment!!(x, y)
-    @test has_equal_data(z_pred, z_target)
-    if ismutabletype(P)
-        @test z_pred === x
-    end
-
-    # If t isn't the zero element, then adding it to itself must change its value.
-    if t != z
-        if !ismutabletype(P)
-            @test !has_equal_data(increment!!(tc, tc), tc)
-        end
-    end
-
-    # Adding things preserves types.
-    @test increment!!(zc, zc) isa Tt
-    @test increment!!(zc, tc) isa Tt
-    @test increment!!(tc, zc) isa Tt
-
-    # Setting to zero equals zero.
-    @test has_equal_data(set_to_zero!!(tc), z)
-    if ismutabletype(P)
-        @test set_to_zero!!(tc) === tc
-    end
-end
-
-function test_test_interface(p::P, t::T) where {P, T}
-    @assert tangent_type(P) == T
-    @test _scale(2.0, t) isa T
-    @test _dot(t, t) isa Float64
-    @test _dot(t, t) >= 0.0
-    @test _dot(t, zero_tangent(p)) == 0.0
-    @test _dot(t, increment!!(deepcopy(t), t)) ≈ 2 * _dot(t, t)
-    @test _add_to_primal(p, t) isa P
-    @test has_equal_data(_add_to_primal(p, zero_tangent(p)), p)
-    @test _diff(p, p) isa T
-    @test has_equal_data(_diff(p, p), zero_tangent(p))
-end
-
 @testset "tangents" begin
     rng = Xoshiro(123456)
     @testset "sin" begin
         t = Tangent((;))
         test_tangent(rng, sin, t, t, t)
-        test_test_interface(sin, t)
+        test_numerical_testing_interface(sin, t)
     end
 
     # NOTE: ADD INTERFACE-ONLY TEST FOR LAZY STRING
 
     @testset "$T" for T in [Float16, Float32, Float64]
         test_tangent(rng, T(10), T(9), T(5), T(4))
-        test_test_interface(T(10), T(9))
+        test_numerical_testing_interface(T(10), T(9))
     end
 
     @testset "Vector{Float64}" begin
@@ -119,7 +25,7 @@ end
         x = randn(5)
         y = randn(5)
         test_tangent(rng, p, x + y, x, y)
-        test_test_interface(p, x)
+        test_numerical_testing_interface(p, x)
     end
 
     @testset "Vector{Int}" begin
@@ -128,7 +34,7 @@ end
         y = fill(NoTangent(), 5)
         z = fill(NoTangent(), 5)
         test_tangent(rng, p, z, x, y)
-        test_test_interface(p, x)
+        test_numerical_testing_interface(p, x)
     end
 
     @testset "Vector{Vector{Float64}}" begin
@@ -137,7 +43,7 @@ end
         y = [randn(3) for _ in 1:4]
         z = x .+ y
         test_tangent(rng, p, z, x, y)
-        test_test_interface(p, x)
+        test_numerical_testing_interface(p, x)
     end
 
     @testset "Vector{Vector{Float64}} with undefs" begin
@@ -154,7 +60,7 @@ end
         z[1] = x[1] + y[1]
         z[2] = x[2] + y[2]
         test_tangent(rng, p, z, x, y)
-        test_test_interface(p, x)
+        test_numerical_testing_interface(p, x)
     end
 
     @testset "Tuple{Float64, Vector{Float64}}" begin
@@ -163,7 +69,7 @@ end
         y = (4.0, randn(5))
         z = (9.0, x[2] + y[2])
         test_tangent(rng, p, z, x, y)
-        test_test_interface(p, x)
+        test_numerical_testing_interface(p, x)
     end
 
     @testset "NamedTuple{(:a, :b), Tuple{Float64, Vector{Float64}}}" begin
@@ -172,7 +78,7 @@ end
         y = (a=4.0, b=rand(5))
         z = (a=9.0, b=x.b + y.b)
         test_tangent(rng, p, z, x, y)
-        test_test_interface(p, x)
+        test_numerical_testing_interface(p, x)
     end
 
     @testset "NamedTuple{(), Tuple{}}" begin
@@ -188,7 +94,7 @@ end
         y = _tangent((a=4.0, b=randn(5)))
         z = _tangent((a=9.0, b=x.fields.b.tangent + y.fields.b.tangent))
         test_tangent(rng, p, z, x, y)
-        test_test_interface(p, x)
+        test_numerical_testing_interface(p, x)
 
         # Verify tangent generation works correctly.
         t = _tangent((a=5.0, b=randn(5)))
@@ -222,7 +128,7 @@ end
         y = _tangent(4.0, rand(5))
         z = _tangent(9.0, x.fields.b.tangent + y.fields.b.tangent)
         test_tangent(rng, p, z, x, y)
-        test_test_interface(p, x)
+        test_numerical_testing_interface(p, x)
 
         # Verify tangent generation works correctly.
         t = _tangent(5.0, randn(5))

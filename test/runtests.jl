@@ -41,7 +41,9 @@ using .TestUtils:
     has_equal_data,
     AddressMap,
     populate_address_map!,
-    populate_address_map
+    populate_address_map,
+    test_tangent,
+    test_numerical_testing_interface
 
 @testset "Taped.jl" begin
     include("tracing.jl")
