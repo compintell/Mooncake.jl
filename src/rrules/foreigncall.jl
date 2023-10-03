@@ -123,6 +123,34 @@ function rrule!!(
     return y, NoPullback()
 end
 
+function rrule!!(
+    ::CoDual{typeof(__foreigncall__)},
+    ::CoDual{Val{:memmov}},
+    ::CoDual{Val{Ptr{Nothing}}},
+    ::CoDual{Tuple{Val{Ptr{Nothing}}, Val{Ptr{Nothing}}, Val{UInt64}}},
+    ::CoDual, # nreq
+    ::CoDual, # calling convention
+    dest::CoDual,
+    src::CoDual,
+    n::CoDual,
+    args...
+)
+    T_in = (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t)
+    y = CoDual(
+        ccall(:memmov, Ptr{Cvoid}, T_in, primal(dest), primal(src), primal(n)),
+        ccall(:memmov, Ptr{Cvoid}, T_in, shadow(dest), shadow(src), primal(n)),
+    )
+    function memmov_pb!!(_, d1, d2, d3, d4, d5, ddest, dsrc, dn, dargs...)
+        
+        return d1, d2, d3, d4, d5, ddest, dsrc, dn, dargs...
+    end
+    return y, memmov_pb!!
+end
+
+# :memmove, Ptr{Cvoid}, (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
+#           dest, src, n * aligned_sizeof(T)
+# ccall(:memmove, Ptr{Cvoid}, (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t), dst, src, n)
+
 for name in [
     :(:jl_alloc_array_1d), :(:jl_alloc_array_2d), :(:jl_alloc_array_3d), :(:jl_new_array),
     :(:jl_array_grow_end), :(:jl_array_del_end), :(:jl_array_copy),
