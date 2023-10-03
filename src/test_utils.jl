@@ -19,7 +19,10 @@ function has_equal_data(x::T, y::T) where {T<:Array}
 end
 function has_equal_data(x::T, y::T) where {T}
     isprimitivetype(T) && return isequal(x, y)
-    return all(map(n -> has_equal_data(getfield(x, n), getfield(y, n)), fieldnames(T)))
+    return all(map(
+        n -> isdefined(x, n) ? has_equal_data(getfield(x, n), getfield(y, n)) : true,
+        fieldnames(T),
+    ))
 end
 has_equal_data(x::T, y::T) where {T<:Umlaut.Tape} = true
 
@@ -64,7 +67,7 @@ function populate_address_map!(m::AddressMap, p::Array, t::Array)
     v = pointer_from_objref(t)
     haskey(m, k) && (@assert m[k] == v)
     m[k] = v
-    populate_address_map!.(Ref(m), p, t)
+    foreach(n -> isassigned(p, n) && populate_address_map!(m, p[n], t[n]), eachindex(p))
     return m
 end
 
@@ -115,7 +118,7 @@ function test_rmad(rng::AbstractRNG, f, x...)
 
     # Run reverse-pass.
     ȳ_delta = randn_tangent(rng, primal(y))
-    x̄_delta = map(Base.Fix1(randn_tangent, rng), x)
+    x̄_delta = map(Base.Fix1(randn_tangent, rng) ∘ primal, x_x̄)
 
     ȳ_init = set_to_zero!!(shadow(y))
     x̄_init = map(set_to_zero!! ∘ shadow, x_x̄)
