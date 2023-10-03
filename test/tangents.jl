@@ -42,17 +42,17 @@ function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P,
     @test Tt == typeof(z)
 
     # Check that zero_tangent is deterministic.
-    @test z == Taped.zero_tangent(p)
+    @test has_equal_data(z, Taped.zero_tangent(p))
 
     # Check that zero_tangent infers.
-    @test z == @inferred Taped.zero_tangent(p)
+    @test has_equal_data(z, @inferred Taped.zero_tangent(p))
 
     # Verify that the zero tangent is zero via its action.
     zc = deepcopy(z)
     tc = deepcopy(t)
-    @test increment!!(zc, zc) == zc
-    @test increment!!(zc, tc) == tc
-    @test increment!!(tc, zc) == tc
+    @test has_equal_data(increment!!(zc, zc), zc)
+    @test has_equal_data(increment!!(zc, tc), tc)
+    @test has_equal_data(increment!!(tc, zc), tc)
 
     if ismutabletype(P)
         @test increment!!(zc, zc) === zc
@@ -62,7 +62,7 @@ function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P,
     end
 
     z_pred = increment!!(x, y)
-    @test z_pred == z_target
+    @test has_equal_data(z_pred, z_target)
     if ismutabletype(P)
         @test z_pred === x
     end
@@ -70,7 +70,7 @@ function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P,
     # If t isn't the zero element, then adding it to itself must change its value.
     if t != z
         if !ismutabletype(P)
-            @test !(increment!!(tc, tc) == tc)
+            @test !has_equal_data(increment!!(tc, tc), tc)
         end
     end
 
@@ -80,7 +80,7 @@ function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P,
     @test increment!!(tc, zc) isa Tt
 
     # Setting to zero equals zero.
-    @test set_to_zero!!(tc) == z
+    @test has_equal_data(set_to_zero!!(tc), z)
     if ismutabletype(P)
         @test set_to_zero!!(tc) === tc
     end
@@ -94,9 +94,9 @@ function test_test_interface(p::P, t::T) where {P, T}
     @test _dot(t, zero_tangent(p)) == 0.0
     @test _dot(t, increment!!(deepcopy(t), t)) ≈ 2 * _dot(t, t)
     @test _add_to_primal(p, t) isa P
-    @test _add_to_primal(p, zero_tangent(p)) == p
+    @test has_equal_data(_add_to_primal(p, zero_tangent(p)), p)
     @test _diff(p, p) isa T
-    @test _diff(p, p) == zero_tangent(p)
+    @test has_equal_data(_diff(p, p), zero_tangent(p))
 end
 
 @testset "tangents" begin
@@ -127,8 +127,32 @@ end
         x = fill(NoTangent(), 5)
         y = fill(NoTangent(), 5)
         z = fill(NoTangent(), 5)
-        # x = rand(Int, 5)
-        # y = rand(Int, 5)
+        test_tangent(rng, p, z, x, y)
+        test_test_interface(p, x)
+    end
+
+    @testset "Vector{Vector{Float64}}" begin
+        p = [randn(3) for _ in 1:4]
+        x = [randn(3) for _ in 1:4]
+        y = [randn(3) for _ in 1:4]
+        z = x .+ y
+        test_tangent(rng, p, z, x, y)
+        test_test_interface(p, x)
+    end
+
+    @testset "Vector{Vector{Float64}} with undefs" begin
+        p = Vector{Vector{Float64}}(undef, 4)
+        p[1] = randn(3)
+        p[2] = randn(4)
+        x = Vector{Vector{Float64}}(undef, 4)
+        x[1] = randn(3)
+        x[2] = randn(4)
+        y = Vector{Vector{Float64}}(undef, 4)
+        y[1] = randn(3)
+        y[2] = randn(4)
+        z = Vector{Vector{Float64}}(undef, 4)
+        z[1] = x[1] + y[1]
+        z[2] = x[2] + y[2]
         test_tangent(rng, p, z, x, y)
         test_test_interface(p, x)
     end
