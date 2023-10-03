@@ -339,7 +339,7 @@ function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P,
     # Verify that the zero tangent is zero via its action.
     zc = deepcopy(z)
     tc = deepcopy(t)
-    @test increment!!(zc, zc) == zc
+    @test @inferred(increment!!(zc, zc)) == zc
     @test increment!!(zc, tc) == tc
     @test increment!!(tc, zc) == tc
 
