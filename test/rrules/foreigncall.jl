@@ -2,7 +2,7 @@
     @testset "foreigncalls that should never be hit: $name" for name in [
         :jl_alloc_array_1d, :jl_alloc_array_2d, :jl_alloc_array_3d, :jl_new_array,
         :jl_array_grow_end, :jl_array_del_end, :jl_array_copy, :jl_type_intersection,
-        :memset, :jl_get_tls_world_age,
+        :memset, :jl_get_tls_world_age, :memmove,
     ]
         @test_throws(
             ErrorException,
@@ -15,6 +15,7 @@
 
     _x = Ref(5.0) # data used in tests which aren't protected by GC.
     _dx = Ref(4.0)
+
     @testset "$f, $(typeof(x))" for (interface_only, f, x...) in [
 
         # Rules to avoid foreigncall nodes:
