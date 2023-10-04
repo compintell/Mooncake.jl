@@ -55,6 +55,8 @@
         (false, Core.Compiler.return_type, sin, Tuple{Float64}),
         (false, Core.Compiler.return_type, Tuple{typeof(sin), Float64}),
         (true, unsafe_copyto!, CoDual(ptr_a, ptr_da), CoDual(ptr_b, ptr_db), 4),
+        (false, unsafe_copyto!, randn(4), 2, randn(3), 1, 2),
+        (false, unsafe_copyto!, [rand(3) for _ in 1:5], 2, [rand(4) for _ in 1:4], 1, 3),
     ]
         test_rrule!!(
             Xoshiro(123456), f, x...;

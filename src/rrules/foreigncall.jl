@@ -106,11 +106,13 @@ function _increment_pointer!(x::Ptr{T}, y::Ptr{T}, N::Integer) where {T}
     return x
 end
 
+# unsafe_copyto! is the only function in Julia that appears to rely on a ccall to `memmove`.
+# Since we can't differentiate `memmove` (due to a lack of type information), it is
+# necessary to work with `unsafe_copyto!` instead.
 isprimitive(::RMC, ::typeof(unsafe_copyto!), args...) = true
 function rrule!!(
     ::CoDual{typeof(unsafe_copyto!)}, dest::CoDual{Ptr{T}}, src::CoDual{Ptr{T}}, n::CoDual
 ) where {T}
-
     _n = primal(n)
 
     # Record values that will be overwritten.
@@ -135,6 +137,44 @@ function rrule!!(
         return df, ddest, dsrc, dn
     end
     return dest, unsafe_copyto!_pb!!
+end
+
+# same structure as the previous method, just without the pointers.
+function rrule!!(
+    ::CoDual{typeof(unsafe_copyto!)},
+    dest::CoDual{<:Array{T}},
+    doffs::CoDual,
+    src::CoDual{<:Array{T}},
+    soffs::CoDual,
+    n::CoDual,
+) where {T}
+    _n = primal(n)
+
+    # Record values that will be overwritten.
+    _doffs = primal(doffs)
+    dest_idx = _doffs:_doffs + _n - 1
+    _soffs = primal(soffs)
+    dest_copy = primal(dest)[dest_idx]
+    ddest_copy = shadow(dest)[dest_idx]
+
+    # Run primal computation.
+    unsafe_copyto!(primal(dest), _doffs, primal(src), _soffs, _n)
+    unsafe_copyto!(shadow(dest), _doffs, shadow(src), _soffs, _n)
+
+    function unsafe_copyto_pb!!(_, df, ddest, ddoffs, dsrc, dsoffs, dn)
+
+        # Increment dsrc.
+        src_idx = _soffs:_soffs + _n - 1
+        dsrc[src_idx] .= increment!!.(view(dsrc, src_idx), view(ddest, dest_idx))
+
+        # Restore initial state.
+        primal(dest)[dest_idx] .= dest_copy
+        shadow(dest)[dest_idx] .= ddest_copy
+
+        return df, ddest, ddoffs, dsrc, dsoffs, dn
+    end
+
+    return dest, unsafe_copyto_pb!!
 end
 
 
