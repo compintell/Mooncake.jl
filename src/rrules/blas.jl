@@ -1,5 +1,44 @@
 blas_name(name::Symbol) = (Symbol(name, "64_"), Symbol(BLAS.libblastrampoline))
 
+function wrap_ptr_as_view(ptr::Ptr{T}, buffer_nrows::Int, nrows::Int, ncols::Int) where {T}
+    return view(unsafe_wrap(Matrix{T}, ptr, (buffer_nrows, ncols)), 1:nrows, :)
+end
+
+for (fname, elty) in ((:cblas_ddot,:Float64), (:cblas_sdot,:Float32))
+    @eval function rrule!!(
+        ::CoDual{typeof(__foreigncall__)},
+        ::CoDual{Val{$(blas_name(fname))}},
+        ::CoDual, # return type
+        ::CoDual, # argument types
+        ::CoDual, # nreq
+        ::CoDual, # calling convention
+        _n::CoDual{BLAS.BlasInt},
+        _DX::CoDual{Ptr{$elty}},
+        _incx::CoDual{BLAS.BlasInt},
+        _DY::CoDual{Ptr{$elty}},
+        _incy::CoDual{BLAS.BlasInt},
+        args...,
+    )
+        # Load in values from pointers.
+        n, incx, incy = map(primal, (_n, _incx, _incy))
+        xinds = 1:incx:incx * n
+        yinds = 1:incy:incy * n
+        DX = view(unsafe_wrap(Vector{$elty}, primal(_DX), n * incx), xinds)
+        DY = view(unsafe_wrap(Vector{$elty}, primal(_DY), n * incy), yinds)
+
+        function ddot_pb!!(dv, d1, d2, d3, d4, d5, d6, dn, dDX, dincx, dDY, dincy, dargs...)
+            _dDX = view(unsafe_wrap(Vector{$elty}, dDX, n * incx), xinds)
+            _dDY = view(unsafe_wrap(Vector{$elty}, dDY, n * incy), yinds)
+            _dDX .+= DY .* dv
+            _dDY .+= DX .* dv
+            return d1, d2, d3, d4, d5, d6, dn, dDX, dincx, dDY, dincy, dargs...
+        end
+
+        # Run primal computation.
+        return CoDual(dot(DX, DY), zero($elty)), ddot_pb!!
+    end
+end
+
 for (fname, elty) in ((:dscal_, :Float64), (:sscal_, :Float32))
     @eval function Taped.rrule!!(
         ::CoDual{typeof(__foreigncall__)},
@@ -54,10 +93,6 @@ function t_char(x::UInt8)
     x == 0x54 && return 'T'
     x == 0x43 && return 'C'
     throw(error("unrecognised char-code $x"))
-end
-
-function wrap_ptr_as_view(ptr::Ptr{T}, buffer_nrows::Int, nrows::Int, ncols::Int) where {T}
-    return view(unsafe_wrap(Matrix{T}, ptr, (buffer_nrows, ncols)), 1:nrows, :)
 end
 
 for (gemm, elty) in (
