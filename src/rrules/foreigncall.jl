@@ -101,11 +101,6 @@ function rrule!!(::CoDual{typeof(Core.Compiler.return_type)}, args...)
     return CoDual(y, zero_tangent(y)), NoPullback()
 end
 
-function _increment_pointer!(x::Ptr{T}, y::Ptr{T}, N::Integer) where {T}
-    increment!!(unsafe_wrap(Vector{T}, x, N), unsafe_wrap(Vector{T}, y, N))
-    return x
-end
-
 # unsafe_copyto! is the only function in Julia that appears to rely on a ccall to `memmove`.
 # Since we can't differentiate `memmove` (due to a lack of type information), it is
 # necessary to work with `unsafe_copyto!` instead.
