@@ -198,16 +198,23 @@ function test_rrule!!(
     # Verify that the function to which the rrule applies is considered a primitive.
     is_primitive && @test Umlaut.isprimitive(Taped.RMC(), x_p...)
 
+    # Run the primal computation, and compute the expected tangent type.
+    y_primal = x_copy[1](map(_deepcopy, x_copy[2:end])...)
+    Ty = Core.Typeof(y_primal)
+    Tȳ = tangent_type(Ty)
+
     # Run the rrule and extract results.
-    y_ȳ, pb!! = check_stability ? (@inferred Taped.rrule!!(x_x̄...)) : Taped.rrule!!(x_x̄...)
+    rrule_ret = check_stability ? (@inferred Taped.rrule!!(x_x̄...)) : Taped.rrule!!(x_x̄...)
+    @test rrule_ret isa Tuple{CoDual{Ty, Tȳ}, Any}
+    y_ȳ, pb!! = rrule_ret
     x = map(primal, x_x̄)
     x̄ = map(shadow, x_x̄)
 
     # Check output and incremented shadow types are correct.
     @test y_ȳ isa CoDual
-    @test typeof(primal(y_ȳ)) == typeof(x_copy[1](map(_deepcopy, x_copy[2:end])...))
+    @test typeof(primal(y_ȳ)) == typeof(y_primal)
     if !interface_only
-        @test has_equal_data(primal(y_ȳ), x_copy[1](map(_deepcopy, x_copy[2:end])...))
+        @test has_equal_data(primal(y_ȳ), y_primal)
     end
     @test shadow(y_ȳ) isa tangent_type(typeof(primal(y_ȳ)))
     x̄_new = check_stability ? (@inferred pb!!(shadow(y_ȳ), x̄...)) : pb!!(shadow(y_ȳ), x̄...)
