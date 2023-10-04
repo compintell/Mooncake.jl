@@ -1,5 +1,6 @@
 using
     BenchmarkTools,
+    DiffRules,
     FunctionWrappers,
     LinearAlgebra,
     Random,
@@ -28,7 +29,11 @@ using Taped:
     pullback!,
     seed_output_shadow!,
     rrule!!,
-    set_shadow!!
+    set_shadow!!,
+    SSym,
+    SInt,
+    lgetfield,
+    might_be_active
 
 using .TestUtils:
     test_rrule!!,
@@ -36,7 +41,9 @@ using .TestUtils:
     has_equal_data,
     AddressMap,
     populate_address_map!,
-    populate_address_map
+    populate_address_map,
+    test_tangent,
+    test_numerical_testing_interface
 
 @testset "Taped.jl" begin
     include("tracing.jl")
@@ -53,6 +60,8 @@ using .TestUtils:
         include(joinpath("rrules", "builtins.jl"))
         @info "foreigncall"
         include(joinpath("rrules", "foreigncall.jl"))
+        @info "low_level_maths"
+        include(joinpath("rrules", "low_level_maths.jl"))
         @info "misc"
         include(joinpath("rrules", "misc.jl"))
         @info "umlaut_internals_rules"

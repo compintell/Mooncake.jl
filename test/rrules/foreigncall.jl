@@ -2,7 +2,7 @@
     @testset "foreigncalls that should never be hit: $name" for name in [
         :jl_alloc_array_1d, :jl_alloc_array_2d, :jl_alloc_array_3d, :jl_new_array,
         :jl_array_grow_end, :jl_array_del_end, :jl_array_copy, :jl_type_intersection,
-        :memset, :jl_get_tls_world_age,
+        :memset, :jl_get_tls_world_age, :memmove,
     ]
         @test_throws(
             ErrorException,
@@ -15,6 +15,7 @@
 
     _x = Ref(5.0) # data used in tests which aren't protected by GC.
     _dx = Ref(4.0)
+
     @testset "$f, $(typeof(x))" for (interface_only, f, x...) in [
 
         # Rules to avoid foreigncall nodes:
@@ -48,5 +49,14 @@
             Xoshiro(123456), f, x...;
             interface_only, check_conditional_type_stability=false,
         )
+    end
+    @testset "$f, $(typeof(x))" for (interface_only, f, x...) in [
+        (false, reshape, randn(5, 4), (4, 5)),
+        (false, reshape, randn(5, 4), (2, 10)),
+        (false, reshape, randn(5, 4), (10, 2)),
+        (false, reshape, randn(5, 4), (5, 4, 1)),
+        (false, reshape, randn(5, 4), (2, 10, 1)),
+    ]
+        test_taped_rrule!!(Xoshiro(123456), f, deepcopy(x)...; interface_only)
     end
 end

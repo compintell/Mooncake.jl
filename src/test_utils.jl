@@ -19,7 +19,10 @@ function has_equal_data(x::T, y::T) where {T<:Array}
 end
 function has_equal_data(x::T, y::T) where {T}
     isprimitivetype(T) && return isequal(x, y)
-    return all(map(n -> has_equal_data(getfield(x, n), getfield(y, n)), fieldnames(T)))
+    return all(map(
+        n -> isdefined(x, n) ? has_equal_data(getfield(x, n), getfield(y, n)) : true,
+        fieldnames(T),
+    ))
 end
 has_equal_data(x::T, y::T) where {T<:Umlaut.Tape} = true
 
@@ -64,7 +67,7 @@ function populate_address_map!(m::AddressMap, p::Array, t::Array)
     v = pointer_from_objref(t)
     haskey(m, k) && (@assert m[k] == v)
     m[k] = v
-    populate_address_map!.(Ref(m), p, t)
+    foreach(n -> isassigned(p, n) && populate_address_map!(m, p[n], t[n]), eachindex(p))
     return m
 end
 
@@ -115,7 +118,7 @@ function test_rmad(rng::AbstractRNG, f, x...)
 
     # Run reverse-pass.
     ȳ_delta = randn_tangent(rng, primal(y))
-    x̄_delta = map(Base.Fix1(randn_tangent, rng), x)
+    x̄_delta = map(Base.Fix1(randn_tangent, rng) ∘ primal, x_x̄)
 
     ȳ_init = set_to_zero!!(shadow(y))
     x̄_init = map(set_to_zero!! ∘ shadow, x_x̄)
@@ -225,13 +228,23 @@ function test_rrule!!(
 end
 
 # Functionality for testing AD via Umlaut.
-function test_taped_rrule!!(rng::AbstractRNG, f, x...; kwargs...)
+function test_taped_rrule!!(rng::AbstractRNG, f, x...; interface_only=false, kwargs...)
     _, tape = trace(f, map(_deepcopy, x)...; ctx=Taped.RMC())
     f_t = Taped.UnrolledFunction(tape)
+
+    # Check that the gradient is self-consistent.
     test_rrule!!(
         rng, f_t, f, x...;
-        is_primitive=false, check_conditional_type_stability=false, kwargs...,
+        is_primitive=false,
+        check_conditional_type_stability=false,
+        interface_only,
+        kwargs...,
     )
+
+    # Check that f_t remains a faithful representation of the original function.
+    if !interface_only
+        @test has_equal_data(f(deepcopy(x)...), play!(f_t.tape, f, deepcopy(x)...))
+    end
 end
 
 generate_args(::typeof(===), x) = [(x, 0.0), (1.0, x)]
@@ -301,6 +314,83 @@ function test_rule_and_type_interactions(rng::AbstractRNG, x::P) where {P}
     end
 end
 
+function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P, T}
+
+    # Verify that interface `tangent_type` runs.
+    Tt = tangent_type(P)
+    t = randn_tangent(rng, p)
+    z = zero_tangent(p)
+
+    # Check that user-provided tangents have the same type as `tangent_type` expects.
+    @test T == Tt
+
+    # Check that ismutabletype(P) => ismutabletype(T)
+    if ismutabletype(P) && !(Tt == NoTangent)
+        @test ismutabletype(Tt)
+    end
+
+    # Check that tangents are of the correct type.
+    @test Tt == typeof(t)
+    @test Tt == typeof(z)
+
+    # Check that zero_tangent is deterministic.
+    @test has_equal_data(z, Taped.zero_tangent(p))
+
+    # Check that zero_tangent infers.
+    @test has_equal_data(z, @inferred Taped.zero_tangent(p))
+
+    # Verify that the zero tangent is zero via its action.
+    zc = deepcopy(z)
+    tc = deepcopy(t)
+    @test has_equal_data(@inferred(increment!!(zc, zc)), zc)
+    @test has_equal_data(increment!!(zc, tc), tc)
+    @test has_equal_data(increment!!(tc, zc), tc)
+
+    if ismutabletype(P)
+        @test increment!!(zc, zc) === zc
+        @test increment!!(tc, zc) === tc
+        @test increment!!(zc, tc) === zc
+        @test increment!!(tc, tc) === tc
+    end
+
+    z_pred = increment!!(x, y)
+    @test has_equal_data(z_pred, z_target)
+    if ismutabletype(P)
+        @test z_pred === x
+    end
+
+    # If t isn't the zero element, then adding it to itself must change its value.
+    if t != z
+        if !ismutabletype(P)
+            @test !has_equal_data(increment!!(tc, tc), tc)
+        end
+    end
+
+    # Adding things preserves types.
+    @test increment!!(zc, zc) isa Tt
+    @test increment!!(zc, tc) isa Tt
+    @test increment!!(tc, zc) isa Tt
+
+    # Setting to zero equals zero.
+    @test has_equal_data(set_to_zero!!(tc), z)
+    if ismutabletype(P)
+        @test set_to_zero!!(tc) === tc
+    end
+end
+
+function test_numerical_testing_interface(p::P, t::T) where {P, T}
+    @assert tangent_type(P) == T
+    @test _scale(2.0, t) isa T
+    @test _dot(t, t) isa Float64
+    @test _dot(t, t) >= 0.0
+    @test _dot(t, zero_tangent(p)) == 0.0
+    @test _dot(t, increment!!(deepcopy(t), t)) ≈ 2 * _dot(t, t)
+    @test _add_to_primal(p, t) isa P
+    @test has_equal_data(_add_to_primal(p, zero_tangent(p)), p)
+    @test _diff(p, p) isa T
+    @test has_equal_data(_diff(p, p), zero_tangent(p))
+end
+
 end
 
 
@@ -308,7 +398,7 @@ end
 module TestResources
 
 using ..Taped
-using ..Taped: CoDual, Tangent, MutableTangent, NoTangent
+using ..Taped: CoDual, Tangent, MutableTangent, NoTangent, PossiblyUninitTangent
 
 using DiffTests, LinearAlgebra, Random, Setfield
 
@@ -399,8 +489,12 @@ end
 
 p_setfield!(value, name::Symbol, x) = setfield!(value, name, x)
 
+__replace_value(::T, v) where {T<:PossiblyUninitTangent} = T(v)
+
 function __setfield!(value::MutableTangent, name, x)
-    @set value.fields.$name = x
+    fields = value.fields
+    new_fields = @set fields.$name = __replace_value(getfield(fields, name), x)
+    value.fields = new_fields
     return x
 end
 
@@ -419,19 +513,20 @@ function Taped.rrule!!(::CoDual{typeof(p_setfield!)}, value, name::CoDual{Symbol
 
         # Restore old values.
         setfield!(primal(value), _name, old_x)
-        # set_field_to_zero!!(shadow(value), _name) # this gives the correct answer, but
-        # I don't understand why, because I don't _really_ understand what I'm doing
-        # I need a better mental model of what is going on in order to know for certain
-        # whether this rule is implemented incorrectly, or if my tests are checking for
-        # the wrong thing. I'm quite sure that this zeroing-out line can't be correct,
-        # but I'm not entirely sure.
         __setfield!(shadow(value), _name, old_dx)
 
         return df, dvalue, dname, dx
     end
 
-    y = CoDual(setfield!(_value, _name, primal(x)), __setfield!(_dvalue, _name, shadow(x)))
+    y = CoDual(
+        setfield!(_value, _name, primal(x)),
+        __setfield!(_dvalue, _name, shadow(x)),
+    )
     return y, p_setfield!_pb!!
+end
+
+for f in [p_sin, p_mul, p_mat_mul!, p_setfield!]
+    @eval Taped.Umlaut.isprimitive(::Taped.RMC, ::typeof($f), x...) = true
 end
 
 const __A = randn(3, 3)
@@ -442,7 +537,7 @@ const PRIMITIVE_TEST_FUNCTIONS = Any[
     (p_mat_mul!, randn(4, 5), randn(4, 3), randn(3, 5)),
     (p_mat_mul!, randn(3, 3), __A, __A),
     (p_setfield!, Foo(5.0), :x, 4.0),
-    # (p_setfield!, MutableFoo(5.0, randn(5)), :b, randn(6)),
+    (p_setfield!, MutableFoo(5.0, randn(5)), :b, randn(6)),
 ]
 
 #
@@ -459,6 +554,24 @@ test_isbits_multiple_usage(x::Float64) = Core.Intrinsics.mul_float(x, x)
 function test_isbits_multiple_usage_2(x::Float64)
     y = Core.Intrinsics.mul_float(x, x)
     return Core.Intrinsics.mul_float(y, y)
+end
+
+function test_isbits_multiple_usage_3(x::Float64)
+    y = sin(x)
+    z = Core.Intrinsics.mul_float(y, y)
+    a = Core.Intrinsics.mul_float(z, z)
+    b = cos(a)
+    return b
+end
+
+function test_isbits_multiple_usage_4(x::Float64)
+    y = x > 0.0 ? cos(x) : sin(x)
+    return Core.Intrinsics.mul_float(y, y)
+end
+
+function test_isbits_multiple_usage_5(x::Float64)
+    y = Core.Intrinsics.mul_float(x, x)
+    return x > 0.0 ? cos(y) : sin(y)
 end
 
 test_getindex(x::AbstractArray{<:Real}) = x[1]
@@ -527,6 +640,9 @@ const TEST_FUNCTIONS = [
     (false, test_cos_sin, 2.0),
     (false, test_isbits_multiple_usage, 5.0),
     (false, test_isbits_multiple_usage_2, 5.0),
+    (false, test_isbits_multiple_usage_3, 4.1),
+    (false, test_isbits_multiple_usage_4, 5.0),
+    (false, test_isbits_multiple_usage_5, 4.1),
     (false, test_getindex, [1.0, 2.0]),
     (false, test_mutation!, [1.0, 2.0]),
     (false, test_while_loop, 2.0),
@@ -553,6 +669,12 @@ function value_dependent_control_flow(x, n)
     end
     return x
 end
+
+#
+# This is a version of setfield! in which there is an issue with the address map.
+# The method of setfield! is incorrectly implemented, so it errors. This is intentional,
+# and is used to ensure that the tests correctly pick up on this mistake.
+#
 
 my_setfield!(args...) = setfield!(args...)
 

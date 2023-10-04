@@ -123,10 +123,30 @@ function rrule!!(
     return y, NoPullback()
 end
 
+function rrule!!(
+    ::CoDual{typeof(__foreigncall__)},
+    ::CoDual{Val{:jl_reshape_array}},
+    ::CoDual{Val{Array{P, M}}},
+    ::CoDual{Tuple{Val{Any}, Val{Any}, Val{Any}}},
+    ::CoDual, # nreq
+    ::CoDual, # calling convention
+    x::CoDual{Type{Array{P, M}}},
+    a::CoDual{Array{P, N}, Array{T, N}},
+    dims::CoDual,
+) where {P, T, M, N}
+    d = primal(dims)
+    y = CoDual(
+        ccall(:jl_reshape_array, Array{P, M}, (Any, Any, Any), Array{P, M}, primal(a), d),
+        ccall(:jl_reshape_array, Array{T, M}, (Any, Any, Any), Array{T, M}, shadow(a), d),
+    )
+    return y, NoPullback()
+end
+
 for name in [
     :(:jl_alloc_array_1d), :(:jl_alloc_array_2d), :(:jl_alloc_array_3d), :(:jl_new_array),
     :(:jl_array_grow_end), :(:jl_array_del_end), :(:jl_array_copy),
     :(:jl_type_intersection), :(:memset), :(:jl_get_tls_world_age),
+    :(:memmove),
 ]
     @eval function rrule!!(::CoDual{typeof(__foreigncall__)}, ::CoDual{Val{$name}}, args...)
         nm = $name
@@ -134,7 +154,10 @@ for name in [
             "AD has hit a :($nm) ccall. This should not happen. " *
             "Please open an issue with a minimal working example in order to reproduce. ",
             "This is true unless you have intentionally written a ccall to :$(nm), ",
-            "in which case you must write a :foreigncall rule."
+            "in which case you must write a :foreigncall rule. It may not be possible ",
+            "to implement a :foreigncall rule if too much type information has been lost ",
+            "in which case your only recourse is to write a rule for whichever Julia ",
+            "function calls this one (and retains enough type information).",
         ))
     end
 end
