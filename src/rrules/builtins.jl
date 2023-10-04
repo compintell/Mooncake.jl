@@ -400,14 +400,15 @@ function rrule!!(
 ) where {V, TdA <: Array{V}}
     _inbounds = primal(inbounds)
     _inds = map(primal, inds)
-    old_A_v = arrayref(_inbounds, primal(A), _inds...)
-    old_A_v_t = arrayref(_inbounds, shadow(A), _inds...)
+    to_save = isassigned(primal(A), _inds...)
+    old_A_v = to_save ? arrayref(_inbounds, primal(A), _inds...) : nothing
+    old_A_v_t = to_save ? arrayref(_inbounds, shadow(A), _inds...) : nothing
     arrayset(_inbounds, primal(A), primal(v), _inds...)
     arrayset(_inbounds, shadow(A), shadow(v), _inds...)
     function setindex_pullback!!(dA::TdA, df, dinbounds, dA2::TdA, dv, dinds::NoTangent...)
         dv_new = increment!!(dv, arrayref(_inbounds, dA, _inds...))
-        arrayset(_inbounds, primal(A), old_A_v, _inds...)
-        arrayset(_inbounds, dA, old_A_v_t, _inds...)
+        to_save && arrayset(_inbounds, primal(A), old_A_v, _inds...)
+        to_save && arrayset(_inbounds, dA, old_A_v_t, _inds...)
         return df, dinbounds, dA, dv_new, dinds...
     end
     return A, setindex_pullback!!
