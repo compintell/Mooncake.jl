@@ -101,6 +101,42 @@ function rrule!!(::CoDual{typeof(Core.Compiler.return_type)}, args...)
     return CoDual(y, zero_tangent(y)), NoPullback()
 end
 
+function _increment_pointer!(x::Ptr{T}, y::Ptr{T}, N::Integer) where {T}
+    increment!!(unsafe_wrap(Vector{T}, x, N), unsafe_wrap(Vector{T}, y, N))
+    return x
+end
+
+isprimitive(::RMC, ::typeof(unsafe_copyto!), args...) = true
+function rrule!!(
+    ::CoDual{typeof(unsafe_copyto!)}, dest::CoDual{Ptr{T}}, src::CoDual{Ptr{T}}, n::CoDual
+) where {T}
+
+    _n = primal(n)
+
+    # Record values that will be overwritten.
+    dest_copy = Vector{T}(undef, _n)
+    ddest_copy = Vector{T}(undef, _n)
+    unsafe_copyto!(pointer(dest_copy), primal(dest), _n)
+    unsafe_copyto!(pointer(ddest_copy), shadow(dest), _n)
+
+    # Run primal computation.
+    unsafe_copyto!(primal(dest), primal(src), _n)
+    unsafe_copyto!(shadow(dest), shadow(src), _n)
+
+    function unsafe_copyto!_pb!!(_, df, ddest, dsrc, dn)
+
+        # Increment dsrc.
+        dsrc = _increment_pointer!(dsrc, ddest, _n)
+
+        # Restore initial state.
+        unsafe_copyto!(primal(dest), pointer(dest_copy), _n)
+        unsafe_copyto!(shadow(dest), pointer(ddest_copy), _n)
+
+        return df, ddest, dsrc, dn
+    end
+    return dest, unsafe_copyto!_pb!!
+end
+
 
 
 #
