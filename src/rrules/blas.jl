@@ -119,16 +119,16 @@ for (gemv, elty) in ((:dgemv_, :Float64), (:sgemm_, :Float32))
         ::CoDual,
         ::CoDual,
         _tA::CoDual{Ptr{UInt8}},
-        _M::CoDual{Ptr{Int}},
-        _N::CoDual{Ptr{Int}},
+        _M::CoDual{Ptr{BLAS.BlasInt}},
+        _N::CoDual{Ptr{BLAS.BlasInt}},
         _alpha::CoDual{Ptr{$elty}},
         _A::CoDual{Ptr{$elty}},
-        _lda::CoDual{Ptr{Int}},
+        _lda::CoDual{Ptr{BLAS.BlasInt}},
         _x::CoDual{Ptr{$elty}},
-        _incx::CoDual{Ptr{Int}},
+        _incx::CoDual{Ptr{BLAS.BlasInt}},
         _beta::CoDual{Ptr{$elty}},
         _y::CoDual{Ptr{$elty}},
-        _incy::CoDual{Ptr{Int}},
+        _incy::CoDual{Ptr{BLAS.BlasInt}},
         args...
     )
         # Load in data.
@@ -186,11 +186,11 @@ for (trmv, elty) in ((:dtrmv_, :Float64), (:strmv_, :Float32))
         _uplo::CoDual{Ptr{UInt8}},
         _trans::CoDual{Ptr{UInt8}},
         _diag::CoDual{Ptr{UInt8}},
-        _N::CoDual{Ptr{Int}},
+        _N::CoDual{Ptr{BLAS.BlasInt}},
         _A::CoDual{Ptr{$elty}},
-        _lda::CoDual{Ptr{Int}},
+        _lda::CoDual{Ptr{BLAS.BlasInt}},
         _x::CoDual{Ptr{$elty}},
-        _incx::CoDual{Ptr{Int}},
+        _incx::CoDual{Ptr{BLAS.BlasInt}},
         args...
     )
         # Load in data.
@@ -240,17 +240,17 @@ for (gemm, elty) in ((:dgemm_, :Float64), (:sgemm_, :Float32))
         ::CoDual, # calling convention
         tA::CoDual{Ptr{UInt8}},
         tB::CoDual{Ptr{UInt8}},
-        m::CoDual{Ptr{Int}},
-        n::CoDual{Ptr{Int}},
-        ka::CoDual{Ptr{Int}},
+        m::CoDual{Ptr{BLAS.BlasInt}},
+        n::CoDual{Ptr{BLAS.BlasInt}},
+        ka::CoDual{Ptr{BLAS.BlasInt}},
         alpha::CoDual{Ptr{$elty}},
         A::CoDual{Ptr{$elty}},
-        LDA::CoDual{Ptr{Int}},
+        LDA::CoDual{Ptr{BLAS.BlasInt}},
         B::CoDual{Ptr{$elty}},
-        LDB::CoDual{Ptr{Int}},
+        LDB::CoDual{Ptr{BLAS.BlasInt}},
         beta::CoDual{Ptr{$elty}},
         C::CoDual{Ptr{$elty}},
-        LDC::CoDual{Ptr{Int}},
+        LDC::CoDual{Ptr{BLAS.BlasInt}},
         args...,
     )
         _tA = t_char(unsafe_load(primal(tA)))
@@ -298,5 +298,69 @@ for (gemm, elty) in ((:dgemm_, :Float64), (:sgemm_, :Float32))
                 dtA, dtB, dm, dn, dka, dalpha, dA, dLDA, dB, dLDB, dbeta, dC, dLDC, dargs...
         end
         return CoDual(Cvoid(), zero_tangent(Cvoid())), gemm!_pullback!!
+    end
+end
+
+for (trmm, elty) in ((:dtrmm_, :Float64), (:strmm_, :Float32))
+    @eval function rrule!!(
+        ::CoDual{typeof(__foreigncall__)},
+        ::CoDual{Val{$(blas_name(trmm))}},
+        ::CoDual,
+        ::CoDual, # arg types
+        ::CoDual, # nreq
+        ::CoDual, # calling convention
+        _side::CoDual{Ptr{UInt8}},
+        _uplo::CoDual{Ptr{UInt8}},
+        _trans::CoDual{Ptr{UInt8}},
+        _diag::CoDual{Ptr{UInt8}},
+        _M::CoDual{Ptr{BLAS.BlasInt}},
+        _N::CoDual{Ptr{BLAS.BlasInt}},
+        _alpha::CoDual{Ptr{$elty}},
+        _A::CoDual{Ptr{$elty}},
+        _lda::CoDual{Ptr{BLAS.BlasInt}},
+        _B::CoDual{Ptr{$elty}},
+        _ldb::CoDual{Ptr{BLAS.BlasInt}},
+        args...,
+    )
+        # Load in data and store B for the reverse-pass.
+        side, ul, tA, diag = map(Char ∘ unsafe_load ∘ primal, (_side, _uplo, _trans, _diag))
+        M, N, lda, ldb = map(unsafe_load ∘ primal, (_M, _N, _lda, _ldb))
+        alpha = unsafe_load(primal(_alpha))
+        R = side == 'L' ? M : N
+        A = wrap_ptr_as_view(primal(_A), lda, R, R)
+        B = wrap_ptr_as_view(primal(_B), ldb, M, N)
+        B_copy = copy(B)
+
+        # Run primal.
+        BLAS.trmm!(side, ul, tA, diag, alpha, A, B)
+
+        function trmm!_pullback!!(
+            _, d1, d2, d3, d4, d5, d6,
+            dside, duplo, dtrans, ddiag, dM, dN, dalpha, _dA, dlda, _dB, dlbd, dargs...,
+        )
+            # Convert pointers to views.
+            dA = wrap_ptr_as_view(_dA, lda, R, R)
+            dB = wrap_ptr_as_view(_dB, ldb, M, N)
+
+            # Increment alpha tangent.
+            unsafe_store!(dalpha, unsafe_load(dalpha) + dot(dB, B) / alpha)
+
+            # Restore initial state.
+            B .= B_copy
+
+            # Increment cotangents.
+            if side == 'L'
+                dA .+= tri!(tA == 'N' ? dB * B' : B * dB', ul, diag)
+            else
+                dA .+= tri!(tA == 'N' ? B'dB : dB'B, ul, diag)
+            end
+
+            # Compute dB tangent.
+            BLAS.trmm!(side, ul, tA == 'N' ? 'N' : 'T', diag, alpha, A, dB)
+
+            return d1, d2, d3, d4, d5, d6,
+                dside, duplo, dtrans, ddiag, dM, dN, dalpha, _dA, dlda, _dB, dlbd, dargs...
+        end
+        return CoDual(Cvoid(), zero_tangent(Cvoid())), trmm!_pullback!!
     end
 end
