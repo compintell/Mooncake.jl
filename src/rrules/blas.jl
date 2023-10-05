@@ -173,7 +173,9 @@ for (gemv, elty) in ((:dgemv_, :Float64), (:sgemm_, :Float32))
     end
 end
 
-tri!(A, u, d) = u == 'L' ? tril!(A, d == 'U' ? -1 : 0) : triu!(A, d == 'U' ? 1 : 0)
+function tri!(A, u::Char, d::Char)
+    return u == 'L' ? tril!(A, d == 'U' ? -1 : 0) : triu!(A, d == 'U' ? 1 : 0)
+end
 
 for (trmv, elty) in ((:dtrmv_, :Float64), (:strmv_, :Float32))
     @eval function rrule!!(
@@ -343,7 +345,7 @@ for (trmm, elty) in ((:dtrmm_, :Float64), (:strmm_, :Float32))
             dB = wrap_ptr_as_view(_dB, ldb, M, N)
 
             # Increment alpha tangent.
-            unsafe_store!(dalpha, unsafe_load(dalpha) + dot(dB, B) / alpha)
+            alpha != 0 && unsafe_store!(dalpha, unsafe_load(dalpha) + dot(dB, B) / alpha)
 
             # Restore initial state.
             B .= B_copy

@@ -2,14 +2,32 @@ using LinearAlgebra.LAPACK: getrf!
 
 @testset "lapack" begin
     getrf_wrapper!(x, check) = getrf!(x; check)
-    @testset for (interface_only, f, x...) in [
-        (false, getrf_wrapper!, randn(5, 5), false),
-        (false, getrf_wrapper!, randn(5, 5), true),
-        (false, getrf_wrapper!, view(randn(10, 10), 1:5, 1:5), false),
-        (false, getrf_wrapper!, view(randn(10, 10), 1:5, 1:5), true),
-        (false, getrf_wrapper!, view(randn(10, 10), 2:7, 3:8), false),
-        (false, getrf_wrapper!, view(randn(10, 10), 3:8, 2:7), true),
-    ]
+    @testset for (interface_only, f, x...) in vcat(
+
+        # getrf!
+        [
+            (false, getrf_wrapper!, randn(5, 5), false),
+            (false, getrf_wrapper!, randn(5, 5), true),
+            (false, getrf_wrapper!, view(randn(10, 10), 1:5, 1:5), false),
+            (false, getrf_wrapper!, view(randn(10, 10), 1:5, 1:5), true),
+            (false, getrf_wrapper!, view(randn(10, 10), 2:7, 3:8), false),
+            (false, getrf_wrapper!, view(randn(10, 10), 3:8, 2:7), true),
+        ],
+
+        # trtrs
+        vec(reduce(
+            vcat,
+            map(product(
+                ['U', 'L'], ['N', 'T', 'C'], ['N', 'U'], [1, 3], [1, 2])
+            ) do (ul, tA, diag, N, Nrhs)
+                As = [randn(N, N) + 10I, view(randn(15, 15) + 10I, 2:N+1, 2:N+1)]
+                Bs = [randn(N, Nrhs), view(randn(15, 15), 4:N+3, 3:N+2)]
+                return map(product(As, Bs)) do (A, B)
+                    (false, LAPACK.trtrs!, ul, tA, diag, A, B)
+                end
+            end,
+        )),
+    )
         test_taped_rrule!!(Xoshiro(123456), f, map(deepcopy, x)...; interface_only)
     end
 end

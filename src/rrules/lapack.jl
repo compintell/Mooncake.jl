@@ -61,3 +61,74 @@ for (fname, elty) in ((:dgetrf_, :Float64), (:sgetrf_, :Float32))
         return CoDual(Cvoid(), zero_tangent(Cvoid())), getrf_pb!!
     end
 end
+
+for (fname, elty) in ((:dtrtrs_, :Float64), (:strtrs_, :Float32))
+    TInt = :(Ptr{BLAS.BlasInt})
+    @eval function rrule!!(
+        ::CoDual{typeof(__foreigncall__)},
+        ::CoDual{Val{$(blas_name(fname))}},
+        ::CoDual, # return type
+        ::CoDual, # argument types
+        ::CoDual, # nreq
+        ::CoDual, # calling convention
+        _ul::CoDual{Ptr{UInt8}},
+        _tA::CoDual{Ptr{UInt8}},
+        _diag::CoDual{Ptr{UInt8}},
+        _N::CoDual{Ptr{BLAS.BlasInt}},
+        _Nrhs::CoDual{Ptr{BLAS.BlasInt}},
+        _A::CoDual{Ptr{$elty}},
+        _lda::CoDual{Ptr{BLAS.BlasInt}},
+        _B::CoDual{Ptr{$elty}},
+        _ldb::CoDual{Ptr{BLAS.BlasInt}},
+        _info::CoDual{Ptr{BLAS.BlasInt}},
+        args...,
+    )
+        # Load in data.
+        ul_p, tA_p, diag_p = map(primal, (_ul, _tA, _diag))
+        N_p, Nrhs_p, lda_p, ldb_p, info_p = map(primal, (_N, _Nrhs, _lda, _ldb, _info))
+        ul, tA, diag, N, Nrhs, lda, ldb, info = map(
+            unsafe_load, (ul_p, tA_p, diag_p, N_p, Nrhs_p, lda_p, ldb_p, info_p),
+        )
+
+        A = wrap_ptr_as_view(primal(_A), lda, N, N)
+        B = wrap_ptr_as_view(primal(_B), ldb, N, Nrhs)
+        B_copy = copy(B)
+
+        # Run the primal.
+        ccall(
+            $(blas_name(fname)),
+            Cvoid,
+            (
+                Ptr{UInt8}, Ptr{UInt8}, Ptr{UInt8}, Ptr{BlasInt}, Ptr{BlasInt},
+                Ptr{$elty}, Ptr{BlasInt}, Ptr{$elty}, Ptr{BlasInt}, Ptr{BlasInt},
+                Clong, Clong, Clong,
+            ),
+            ul_p, tA_p, diag_p, N_p, Nrhs_p, primal(_A), lda_p, primal(_B),ldb_p, info_p,
+            1, 1, 1,
+        )
+
+        function trtrs_pb!!(
+            _, d1, d2, d3, d4, d5, d6,
+            dul, dtA, ddiag, dN, dNrhs, _dA, dlda, _dB, dldb, dINFO, dargs...
+        )
+            # Compute cotangent of B.
+            dB = wrap_ptr_as_view(_dB, ldb, N, Nrhs)
+            LAPACK.trtrs!(Char(ul), Char(tA) == 'N' ? 'T' : 'N', Char(diag), A, dB)
+
+            # Compute cotangent of A.
+            dA = wrap_ptr_as_view(_dA, lda, N, N)
+            if Char(tA) == 'N'
+                dA .-= tri!(dB * B', Char(ul), Char(diag))
+            else
+                dA .-= tri!(B * dB', Char(ul), Char(diag))
+            end
+
+            # Restore initial state.
+            B .= B_copy
+
+            return d1, d2, d3, d4, d5, d6,
+                dul, dtA, ddiag, dN, dNrhs, _dA, dlda, _dB, dldb, dINFO, dargs...
+        end
+        return CoDual(Cvoid(), zero_tangent(Cvoid())), trtrs_pb!!
+    end
+end
