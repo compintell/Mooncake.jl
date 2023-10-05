@@ -1,5 +1,9 @@
 blas_name(name::Symbol) = (Symbol(name, "64_"), Symbol(BLAS.libblastrampoline))
 
+function wrap_ptr_as_view(ptr::Ptr{T}, N::Int, inc::Int) where {T}
+    return view(unsafe_wrap(Vector{T}, ptr, N * inc), 1:inc:N*inc)
+end
+
 function wrap_ptr_as_view(ptr::Ptr{T}, buffer_nrows::Int, nrows::Int, ncols::Int) where {T}
     return view(unsafe_wrap(Matrix{T}, ptr, (buffer_nrows, ncols)), 1:nrows, :)
 end
@@ -166,6 +170,57 @@ for (gemv, elty) in ((:dgemv_, :Float64), (:sgemm_, :Float32))
                 _dy, dincy, dargs...
         end
         return uninit_codual(Cvoid()), gemv_pb!!
+    end
+end
+
+tri!(A, u, d) = u == 'L' ? tril!(A, d == 'U' ? -1 : 0) : triu!(A, d == 'U' ? 1 : 0)
+
+for (trmv, elty) in ((:dtrmv_, :Float64), (:strmv_, :Float32))
+    @eval function rrule!!(
+        ::CoDual{typeof(Umlaut.__foreigncall__)},
+        ::CoDual{Val{$(blas_name(trmv))}},
+        ::CoDual,
+        ::CoDual,
+        ::CoDual,
+        ::CoDual,
+        _uplo::CoDual{Ptr{UInt8}},
+        _trans::CoDual{Ptr{UInt8}},
+        _diag::CoDual{Ptr{UInt8}},
+        _N::CoDual{Ptr{Int}},
+        _A::CoDual{Ptr{$elty}},
+        _lda::CoDual{Ptr{Int}},
+        _x::CoDual{Ptr{$elty}},
+        _incx::CoDual{Ptr{Int}},
+        args...
+    )
+        # Load in data.
+        uplo, trans, diag = map(Char ∘ unsafe_load ∘ primal, (_uplo, _trans, _diag))
+        N, lda, incx = map(unsafe_load ∘ primal, (_N, _lda, _incx))
+        A = wrap_ptr_as_view(primal(_A), lda, N, N)
+        x = wrap_ptr_as_view(primal(_x), N, incx)
+        x_copy = copy(x)
+
+        # Run primal computation.
+        BLAS.trmv!(uplo, trans, diag, A, x)
+
+        function trmv_pb!!(
+            _, d1, d2, d3, d4, d5, d6, du, dt, ddiag, dN, _dA, dlda, _dx, dincx, dargs...
+        )
+            # Load up the tangents.
+            dA = wrap_ptr_as_view(_dA, lda, N, N)
+            dx = wrap_ptr_as_view(_dx, N, incx)
+
+            # Restore the original value of x.
+            x .= x_copy
+
+            # Increment the tangents.
+            dA .+= tri!(trans == 'N' ? dx * x' : x * dx', uplo, diag)
+            BLAS.trmv!(uplo, trans == 'N' ? 'T' : 'N', diag, A, dx)
+
+            return d1, d2, d3, d4, d5, d6, du, dt, ddiag, dN, _dA, dlda, _dx, dincx,
+                dargs...
+        end
+        return uninit_codual(Cvoid()), trmv_pb!!
     end
 end
 
