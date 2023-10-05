@@ -4,6 +4,25 @@ function wrap_ptr_as_view(ptr::Ptr{T}, buffer_nrows::Int, nrows::Int, ncols::Int
     return view(unsafe_wrap(Matrix{T}, ptr, (buffer_nrows, ncols)), 1:nrows, :)
 end
 
+function _trans(flag, mat)
+    flag === 'T' && return transpose(mat)
+    flag === 'C' && return adjoint(mat)
+    flag === 'N' && return mat
+    throw(error("Unrecognised flag $flag"))
+end
+
+function t_char(x::UInt8)
+    x == 0x4e && return 'N'
+    x == 0x54 && return 'T'
+    x == 0x43 && return 'C'
+    throw(error("unrecognised char-code $x"))
+end
+
+
+#
+# LEVEL 1
+#
+
 for (fname, elty) in ((:cblas_ddot,:Float64), (:cblas_sdot,:Float32))
     @eval function rrule!!(
         ::CoDual{typeof(__foreigncall__)},
@@ -81,24 +100,82 @@ for (fname, elty) in ((:dscal_, :Float64), (:sscal_, :Float32))
     end
 end
 
-function _trans(flag, mat)
-    flag === 'T' && return transpose(mat)
-    flag === 'C' && return adjoint(mat)
-    flag === 'N' && return mat
-    throw(error("Unrecognised flag $flag"))
+
+
+#
+# LEVEL 2
+#
+
+for (gemv, elty) in ((:dgemv_, :Float64), (:sgemm_, :Float32))
+    @eval function rrule!!(
+        ::CoDual{typeof(Umlaut.__foreigncall__)},
+        ::CoDual{Val{$(blas_name(gemv))}},
+        ::CoDual,
+        ::CoDual,
+        ::CoDual,
+        ::CoDual,
+        _tA::CoDual{Ptr{UInt8}},
+        _M::CoDual{Ptr{Int}},
+        _N::CoDual{Ptr{Int}},
+        _alpha::CoDual{Ptr{$elty}},
+        _A::CoDual{Ptr{$elty}},
+        _lda::CoDual{Ptr{Int}},
+        _x::CoDual{Ptr{$elty}},
+        _incx::CoDual{Ptr{Int}},
+        _beta::CoDual{Ptr{$elty}},
+        _y::CoDual{Ptr{$elty}},
+        _incy::CoDual{Ptr{Int}},
+        args...
+    )
+        # Load in data.
+        tA = t_char(unsafe_load(primal(_tA)))
+        M, N, lda, incx, incy = map(unsafe_load ∘ primal, (_M, _N, _lda, _incx, _incy))
+        alpha = unsafe_load(primal(_alpha))
+        beta = unsafe_load(primal(_beta))
+
+        # Run primal.
+        A = wrap_ptr_as_view(primal(_A), lda, M, N)
+        Nx = tA == 'N' ? N : M
+        Ny = tA == 'N' ? M : N
+        x = view(unsafe_wrap(Vector{$elty}, primal(_x), incx * Nx), 1:incx:incx * Nx)
+        y = view(unsafe_wrap(Vector{$elty}, primal(_y), incy * Ny), 1:incy:incy * Ny)
+        y_copy = copy(y)
+
+        BLAS.gemv!(tA, alpha, A, x, beta, y)
+
+        function gemv_pb!!(
+            _, d1, d2, d3, d4, d5, d6,
+            dt, dM, dN, dalpha, _dA, dlda, _dx, dincx, dbeta, _dy, dincy, dargs...
+        )
+            # Load up the tangents.
+            dA = wrap_ptr_as_view(_dA, lda, M, N)
+            dx = view(unsafe_wrap(Vector{$elty}, _dx, incx * Nx), 1:incx:incx * Nx)
+            dy = view(unsafe_wrap(Vector{$elty}, _dy, incy * Ny), 1:incy:incy * Ny)
+
+            # Increment the tangents.
+            unsafe_store!(dalpha, unsafe_load(dalpha) + dot(dy, _trans(tA, A), x))
+            dA .+= _trans(tA, alpha * dy * x')
+            dx .+= alpha * _trans(tA, A)'dy
+            unsafe_store!(dbeta, unsafe_load(dbeta) + dot(y_copy, dy))
+            dy .*= beta
+
+            # Restore the original value of `y`.
+            y .= y_copy
+
+            return d1, d2, d3, d4, d5, d6, dt, dM, dN, dalpha, _dA, dlda, _dx, dincx, dbeta,
+                _dy, dincy, dargs...
+        end
+        return uninit_codual(Cvoid()), gemv_pb!!
+    end
 end
 
-function t_char(x::UInt8)
-    x == 0x4e && return 'N'
-    x == 0x54 && return 'T'
-    x == 0x43 && return 'C'
-    throw(error("unrecognised char-code $x"))
-end
 
-for (gemm, elty) in (
-    (:dgemm_, :Float64),
-    (:sgemm_, :Float32),
-)
+
+#
+# LEVEL 3
+#
+
+for (gemm, elty) in ((:dgemm_, :Float64), (:sgemm_, :Float32))
     @eval function rrule!!(
         ::CoDual{typeof(__foreigncall__)},
         ::CoDual{Val{$(blas_name(gemm))}},

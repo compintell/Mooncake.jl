@@ -1,6 +1,10 @@
 @testset "blas" begin
     aliased_gemm! = (tA, tB, a, b, A, C) -> BLAS.gemm!(tA, tB, a, A, A, b, C)
     @testset for (interface_only, f, x...) in vcat(
+
+        #
+        # BLAS LEVEL 1
+        #
         [
             (false, BLAS.dot, 3, randn(5), 1, randn(4), 1),
             (false, BLAS.dot, 3, randn(6), 2, randn(4), 1),
@@ -8,6 +12,33 @@
             (false, BLAS.dot, 3, randn(12), 3, randn(9), 2),
             (false, BLAS.scal!, 10, 2.4, randn(30), 2),
         ],
+
+        #
+        # BLAS LEVEL 2
+        #
+
+        # gemv!
+        reduce(
+            vcat,
+            map(Iterators.product(['N', 'T', 'C'], [1, 3], [1, 2])) do (tA, M, N)
+                t = tA == 'N'
+                As = [
+                    t ? randn(M, N) : randn(N, M),
+                    view(randn(15, 15), t ? (3:M+2) : (2:N+1), t ? (2:N+1) : (3:M+2)),
+                ]
+                xs = [randn(N), view(randn(15), 3:N+2), view(randn(30), 1:2:2N)]
+                ys = [randn(M), view(randn(15), 2:M+1), view(randn(30), 2:2:2M)]
+                return map(Iterators.product(As, xs, ys)) do (A, x, y)
+                    (false, BLAS.gemv!, tA, randn(), A, x, randn(), y)
+                end
+            end,
+        ),
+
+        #
+        # BLAS LEVEL 3
+        #
+
+        # gemm!
         vec(map(Iterators.product(['N', 'T', 'C'], ['N', 'T', 'C'])) do (tA, tB)
             A = tA == 'N' ? randn(3, 4) : randn(4, 3)
             B = tB == 'N' ? randn(4, 5) : randn(5, 4)
