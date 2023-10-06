@@ -9,6 +9,7 @@ using
     Umlaut
 
 using Base: unsafe_load, pointer_from_objref
+using Base.Iterators: product
 using Core: bitcast
 using Core.Intrinsics: pointerref, pointerset
 using FunctionWrappers: FunctionWrapper
@@ -60,6 +61,8 @@ using .TestUtils:
         include(joinpath("rrules", "builtins.jl"))
         @info "foreigncall"
         include(joinpath("rrules", "foreigncall.jl"))
+        @info "lapack"
+        include(joinpath("rrules", "lapack.jl"))
         @info "low_level_maths"
         include(joinpath("rrules", "low_level_maths.jl"))
         @info "misc"
