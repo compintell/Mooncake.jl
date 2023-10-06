@@ -2,6 +2,7 @@ using
     BenchmarkTools,
     DiffRules,
     FunctionWrappers,
+    JET,
     LinearAlgebra,
     Random,
     Taped,
@@ -33,7 +34,8 @@ using Taped:
     SSym,
     SInt,
     lgetfield,
-    might_be_active
+    might_be_active,
+    rebind
 
 using .TestUtils:
     test_rrule!!,

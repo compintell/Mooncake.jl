@@ -14,9 +14,7 @@
         end),
     )
         test_taped_rrule!!(
-            Xoshiro(123456), f, map(deepcopy, x)...;
-            interface_only,
-            check_conditional_type_stability=false,
+            Xoshiro(123456), f, map(deepcopy, x)...; interface_only, perf_flag=:none
         )
     end
 end

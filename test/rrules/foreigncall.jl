@@ -58,10 +58,7 @@
         (false, unsafe_copyto!, randn(4), 2, randn(3), 1, 2),
         (false, unsafe_copyto!, [rand(3) for _ in 1:5], 2, [rand(4) for _ in 1:4], 1, 3),
     ]
-        test_rrule!!(
-            Xoshiro(123456), f, x...;
-            interface_only, check_conditional_type_stability=false,
-        )
+        test_rrule!!(Xoshiro(123456), f, x...; interface_only, perf_flag=:none)
     end
     @testset "$f, $(typeof(x))" for (interface_only, f, x...) in [
         (false, reshape, randn(5, 4), (4, 5)),
@@ -73,6 +70,7 @@
         (false, unsafe_copyto_tester, randn(5), randn(6), 4),
         (false, unsafe_copyto_tester, [randn(3) for _ in 1:5], [randn(4) for _ in 1:6], 4),
     ]
-        test_taped_rrule!!(Xoshiro(123456), f, deepcopy(x)...; interface_only)
+        rng = Xoshiro(123456)
+        test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only, perf_flag=:none)
     end
 end

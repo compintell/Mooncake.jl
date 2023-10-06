@@ -2,9 +2,10 @@
 
     _x = Ref(5.0) # data used in tests which aren't protected by GC.
     _dx = Ref(4.0)
-    @testset "$f, $(typeof(x))" for (interface_only, f, x...) in [
+    @testset "$f, $(typeof(x))" for (perf_flag, interface_only, f, x...) in [
         # Rules to avoid pointer type conversions.
         (
+            :stability,
             true,
             +,
             CoDual(
@@ -14,6 +15,8 @@
             2,
         ),
     ]
-        test_rrule!!(Xoshiro(123456), f, x...; interface_only)
+        test_rrule!!(
+            Xoshiro(123456), f, x...; interface_only, perf_flag
+        )
     end
 end

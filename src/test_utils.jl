@@ -1,7 +1,7 @@
 module TestUtils
 
-using Taped, Umlaut
-using Taped: CoDual, NoTangent
+using JET, Taped, Umlaut
+using Taped: CoDual, NoTangent, rrule!!
 
 using Random, Test
 
@@ -84,44 +84,51 @@ function address_maps_are_consistent(x::AddressMap, y::AddressMap)
     return all(map(k -> x[k] == y[k], collect(intersect(keys(x), keys(y)))))
 end
 
-function test_rmad(rng::AbstractRNG, f, x...)
+# Assumes that the interface has been tested, and we can simply check for numerical issues.
+function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...)
+    @nospecialize rng f_f̄ x_x̄
+
+    x_x̄ = map(_deepcopy, x_x̄) # defensive copy
 
     # Run original function on deep-copies of inputs.
-    x_correct = deepcopy(x)
-    f_correct = f
-    y_correct = f_correct(x_correct...)
+    f = primal(f_f̄)
+    x = map(primal, x_x̄)
+    x̄ = map(shadow, x_x̄)
+
+    # Run primal, and ensure that we still have access to mutated inputs afterwards.
+    x_primal = _deepcopy(x)
+    y_primal = f(x_primal...)
 
     # Use finite differences to estimate vjps
     ẋ = randn_tangent(rng, x)
     ε = 1e-5
     x′ = _add_to_primal(x, _scale(ε, ẋ))
     y′ = f(x′...)
-    ẏ = _scale(1 / ε, _diff(y′, y_correct))
-    ẋ_post = _scale(1 / ε, _diff(x′, x_correct))
+    ẏ = _scale(1 / ε, _diff(y′, y_primal))
+    ẋ_post = _scale(1 / ε, _diff(x′, x_primal))
 
     # Run `rrule!!` on copies of `f` and `x`.
-    f_f̄ = CoDual(f, zero_tangent(f))
-    x_x̄ = map(x -> CoDual(deepcopy(x), zero_tangent(x)), x)
-    inputs_address_map = populate_address_map(map(primal, x_x̄), map(shadow, x_x̄))
-    y, pb!! = Taped.rrule!!(f_f̄, x_x̄...)
+    x_x̄_rule = map(x -> CoDual(_deepcopy(x), zero_tangent(x)), x)
+    inputs_address_map = populate_address_map(map(primal, x_x̄_rule), map(shadow, x_x̄_rule))
+    y_ȳ_rule, pb!! = rrule!!(f_f̄, x_x̄_rule...)
+
+    # Verify that inputs / outputs are the same under `f` and its rrule.
+    @test has_equal_data(x_primal, map(primal, x_x̄_rule))
+    @test has_equal_data(y_primal, primal(y_ȳ_rule))
 
     # Query both `x_x̄` and `y`, because `x_x̄` may have been mutated by `f`.
     outputs_address_map = populate_address_map(
-        (map(primal, x_x̄)..., primal(y)), (map(shadow, x_x̄)..., shadow(y)),
+        (map(primal, x_x̄_rule)..., primal(y_ȳ_rule)),
+        (map(shadow, x_x̄_rule)..., shadow(y_ȳ_rule)),
     )
-
     @test address_maps_are_consistent(inputs_address_map, outputs_address_map)
 
-    # Verify that inputs / outputs are the same under `f` and its rrule.
-    @test has_equal_data(x_correct, map(primal, x_x̄))
-    @test has_equal_data(y_correct, primal(y))
-
     # Run reverse-pass.
-    ȳ_delta = randn_tangent(rng, primal(y))
-    x̄_delta = map(Base.Fix1(randn_tangent, rng) ∘ primal, x_x̄)
+    ȳ_delta = randn_tangent(rng, primal(y_ȳ_rule))
+    x̄_delta = map(Base.Fix1(randn_tangent, rng) ∘ primal, x_x̄_rule)
 
-    ȳ_init = set_to_zero!!(shadow(y))
-    x̄_init = map(set_to_zero!! ∘ shadow, x_x̄)
+    ȳ_init = set_to_zero!!(shadow(y_ȳ_rule))
+    x̄_init = map(set_to_zero!! ∘ shadow, x_x̄_rule)
     ȳ = increment!!(ȳ_init, ȳ_delta)
     x̄ = map(increment!!, x̄_init, x̄_delta)
     _, x̄... = pb!!(ȳ, shadow(f_f̄), x̄...)
@@ -133,109 +140,149 @@ function test_rmad(rng::AbstractRNG, f, x...)
     @test _dot(ȳ_delta, ẏ) + _dot(x̄_delta, ẋ_post) ≈ _dot(x̄, ẋ) rtol=1e-3 atol=1e-3
 end
 
-test_alias(x::Vector{Float64}) = x
-
-function rrule!!(::CoDual{typeof(test_alias)}, x::CoDual)
-    function test_alias_pullback!!(ȳ::Vector{Float64}, ::NoTangent, x̄::Vector{Float64})
-        @assert ȳ === x̄
-        return NoTangent(), ȳ
-    end
-    return x, test_alias_pullback!!
-end
 get_address(x) = ismutable(x) ? pointer_from_objref(x) : nothing
-
-apply(f, x...) = f(x...)
-
-function is_inferred(f::F, x...) where {F}
-    static_type = only(Base.return_types(f, map(Core.Typeof, x)))
-    dynamic_type = Core.Typeof(f(map(deepcopy, x)...))
-    return static_type == dynamic_type
-end
-
-function conditional_stability(check_stability::Bool, f::F, x...) where {F}
-    return check_stability ? (@inferred f(x...)) : f(x...)
-end
 
 _deepcopy(x) = deepcopy(x)
 _deepcopy(x::Module) = x
 
-function test_rrule!!(
-    rng::AbstractRNG, x...;
-    interface_only=false,
-    is_primitive=true,
-    check_conditional_type_stability=true,
-)
-    # Set up problem.
-    x_copy = (x[1], map(x -> _deepcopy(x isa CoDual ? primal(x) : x), x[2:end])...)
-    x_addresses = map(get_address, x)
-    x_x̄ = map(x -> x isa CoDual ? x : CoDual(x, randn_tangent(rng, x)), x)
+rrule_output_type(::Type{Ty}) where {Ty} = Tuple{CoDual{Ty, tangent_type(Ty)}, Any}
 
-    # Check that input types are valid.
-    for x_x̄ in x_x̄
-        @test typeof(shadow(x_x̄)) == tangent_type(typeof(primal(x_x̄)))
-    end
+# Central definition of _typeof in case I need to specalise it for particular types.
+_typeof(x::T) where {T} = Core.Typeof(x)
 
-    # Attempt to run primal programme. If the primal programme throws, display the original
-    # exception and throw an additional exception which points this out.
-    # Record whether or not it is type-stable.
-    x_p = map(primal, x_x̄)
-    x_p = (x_p[1], map(_deepcopy, x_p[2:end])...)
-    check_stability = false
-    if check_conditional_type_stability
-        primal_is_type_stable = try
-            is_inferred(apply, x_p...)
-        catch e
-            display(e)
-            println()
-            throw(ArgumentError("Primal evaluation does not work."))
-        end
+function test_rrule_interface(f_f̄, x_x̄...; is_primitive)
+    @nospecialize f_f̄ x_x̄
 
-        # If the primal is type stable, and the user has requested that type-stability tests
-        # be turned on, we check for type-stability when running the rrule!! and pullback.
-        check_stability = check_conditional_type_stability && primal_is_type_stable
-    end
-
-    # Verify that the function to which the rrule applies is considered a primitive.
-    is_primitive && @test Umlaut.isprimitive(Taped.RMC(), x_p...)
-
-    # Run the primal computation, and compute the expected tangent type.
-    y_primal = x_copy[1](map(_deepcopy, x_copy[2:end])...)
-    Ty = Core.Typeof(y_primal)
-    Tȳ = tangent_type(Ty)
-
-    # Run the rrule and extract results.
-    rrule_ret = check_stability ? (@inferred Taped.rrule!!(x_x̄...)) : Taped.rrule!!(x_x̄...)
-    @test rrule_ret isa Tuple{CoDual{Ty, Tȳ}, Any}
-    y_ȳ, pb!! = rrule_ret
+    # Pull out primals and run primal computation.
+    f = primal(f_f̄)
+    f̄ = shadow(f_f̄)
+    x_x̄ = map(_deepcopy, x_x̄)
     x = map(primal, x_x̄)
     x̄ = map(shadow, x_x̄)
 
-    # Check output and incremented shadow types are correct.
-    @test y_ȳ isa CoDual
-    @test typeof(primal(y_ȳ)) == typeof(y_primal)
-    if !interface_only
-        @test has_equal_data(primal(y_ȳ), y_primal)
+    # Verify that the function to which the rrule applies is considered a primitive.
+    # It is not clear that this really belongs here to be frank.
+    is_primitive && @test Umlaut.isprimitive(Taped.RMC(), f, deepcopy(x)...)
+
+    # Run the primal programme. Bail out early if this doesn't work.
+    y = try
+        f(deepcopy(x)...)
+    catch e
+        display(e)
+        println()
+        throw(ArgumentError("Primal evaluation does not work."))
     end
-    @test shadow(y_ȳ) isa tangent_type(typeof(primal(y_ȳ)))
-    x̄_new = check_stability ? (@inferred pb!!(shadow(y_ȳ), x̄...)) : pb!!(shadow(y_ȳ), x̄...)
-    @test all(map((a, b) -> typeof(a) == typeof(b), x̄_new, x̄))
 
-    # Check aliasing.
-    @test all(map((x̄, x̄_new) -> ismutable(x̄) ? x̄ === x̄_new : true, x̄, x̄_new))
+    # Check that input types are valid.
+    @test _typeof(shadow(f_f̄)) == tangent_type(_typeof(primal(f_f̄)))
+    for x_x̄ in x_x̄
+        @test _typeof(shadow(x_x̄)) == tangent_type(_typeof(primal(x_x̄)))
+    end
 
-    # Check that inputs have been returned to their original state.
-    !interface_only && @test all(map(has_equal_data, x, x_copy))
+    # Run the rrule, check it has output a thing of the correct type, and extract results.
+    # Throw a meaningful exception if the rrule doesn't run at all.
+    x_addresses = map(get_address, x)
+    rrule_ret = try
+        rrule!!(f_f̄, x_x̄...)
+    catch e
+        display(e)
+        println()
+        throw(ArgumentError(
+            "rrule!! for $(_typeof(f_f̄)) with argument types $(_typeof(x_x̄)) does not run."
+        ))
+    end
+    @test rrule_ret isa rrule_output_type(_typeof(y))
+    y_ȳ, pb!! = rrule_ret
 
-    # Check that memory addresses have remained constant.
+    # Run the reverse-pass. Throw a meaningful exception if it doesn't run at all.
+    f̄_new, x̄_new... = try
+        pb!!(shadow(y_ȳ), f̄, x̄...)
+    catch e
+        display(e)
+        println()
+        throw(ArgumentError(
+            "pullback for $(_typeof(f_f̄)) with argument types $(_typeof(x_x̄)) does not run."
+        ))
+    end
+
+    # Check that memory addresses have remained constant under pb!!.
     new_x_addresses = map(get_address, x)
     @test all(map(==, x_addresses, new_x_addresses))
 
-    # Check that the answers are numerically correct.
-    !interface_only && test_rmad(rng, x...)
+    # Check the tangent types output by the reverse-pass, and that memory addresses of
+    # mutable objects have remained constant.
+    @test _typeof(f̄_new) == _typeof(f̄)
+    @test all(map((a, b) -> _typeof(a) == _typeof(b), x̄_new, x̄))
+    @test all(map((x̄, x̄_new) -> ismutable(x̄) ? x̄ === x̄_new : true, x̄, x̄_new))
+end
+
+function test_rrule_performance(performance_checks_flag::Symbol, f_f̄, x_x̄...)
+    @nospecialize f_f̄ x_x̄
+
+    # Verify that a valid performance flag has been passed.
+    valid_flags = (:none, :stability)
+    if !in(performance_checks_flag, valid_flags)
+        throw(ArgumentError(
+            "performance_checks=$performance_checks_flag. Must be one of $valid_flags"
+        ))
+    end
+    performance_checks_flag == :none && return nothing
+
+    if performance_checks_flag == :stability
+
+        # Test primal stability.
+        JET.test_opt(primal(f_f̄), map(_typeof ∘ primal, x_x̄))
+
+        # Test forwards-pass stability.
+        JET.test_opt(rrule!!, (typeof(f_f̄), map(_typeof, x_x̄)...))
+
+        # Test reverse-pass stability.
+        y_ȳ, pb!! = rrule!!(f_f̄, _deepcopy(x_x̄)...)
+        JET.test_opt(
+            pb!!,
+            (_typeof(shadow(y_ȳ)), _typeof(shadow(f_f̄)), map(_typeof ∘ shadow, x_x̄)...),
+        )
+    end
+end
+
+"""
+    test_rrule!!(
+        rng::AbstractRNG, x...;
+        interface_only=false, is_primitive=true, perf_flag::Symbol,
+    )
+
+Run standardised tests on the `rrule!!` for `x`.
+The first element of `x` should be the primal function to test, and each other element a
+positional argument.
+In most cases, elements of `x` can just be the primal values, and `randn_tangent` can be
+relied upon to generate an appropriate tangent to test. Some notable exceptions exist
+though, in partcular `Ptr`s. In this case, the argument for which `randn_tangent` cannot be
+readily defined should be a `CoDual` containing the primal, and a _manually_ constructed
+shadow field.
+"""
+function test_rrule!!(
+    rng::AbstractRNG, x...;
+    interface_only=false, is_primitive=true, perf_flag::Symbol,
+)
+    @nospecialize rng x
+
+    # Generate random tangents for anything that is not already a CoDual.
+    x_x̄ = map(x -> x isa CoDual ? x : CoDual(x, randn_tangent(rng, x)), x)
+
+    # Test that the interface is basically satisfied (checks types / memory addresses).
+    test_rrule_interface(x_x̄...; is_primitive)
+
+    # Test that answers are numerically correct / consistent.
+    interface_only || test_rrule_numerical_correctness(rng, x_x̄...)
+
+    # Test the performance of the rule.
+    test_rrule_performance(perf_flag, x_x̄...)
 end
 
 # Functionality for testing AD via Umlaut.
 function test_taped_rrule!!(rng::AbstractRNG, f, x...; interface_only=false, kwargs...)
+    @nospecialize rng f x
+
     _, tape = trace(f, map(_deepcopy, x)...; ctx=Taped.RMC())
     f_t = Taped.UnrolledFunction(tape)
 
@@ -243,7 +290,7 @@ function test_taped_rrule!!(rng::AbstractRNG, f, x...; interface_only=false, kwa
     test_rrule!!(
         rng, f_t, f, x...;
         is_primitive=false,
-        check_conditional_type_stability=false,
+        perf_flag=:none,
         interface_only,
         kwargs...,
     )
@@ -253,6 +300,12 @@ function test_taped_rrule!!(rng::AbstractRNG, f, x...; interface_only=false, kwa
         @test has_equal_data(f(deepcopy(x)...), play!(f_t.tape, f, deepcopy(x)...))
     end
 end
+
+
+
+#
+# Test that some basic operations work on a given type.
+#
 
 generate_args(::typeof(===), x) = [(x, 0.0), (1.0, x)]
 function generate_args(::typeof(Core.ifelse), x)
@@ -297,6 +350,7 @@ The purpose of this test is to ensure that, for any given `x`, the full range of
 functions that _ought_ to work on it, do indeed work on it.
 """
 function test_rule_and_type_interactions(rng::AbstractRNG, x::P) where {P}
+    @nospecialize rng x
 
     # Generate standard test cases.
     fs = if ismutabletype(P)
@@ -315,11 +369,17 @@ function test_rule_and_type_interactions(rng::AbstractRNG, x::P) where {P}
                 rng, f, args...;
                 interface_only=false,
                 is_primitive=true,
-                check_conditional_type_stability=false,
+                perf_flag=:none,
             )
         end
     end
 end
+
+
+
+#
+# Tests for tangents
+#
 
 function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P, T}
 
@@ -539,12 +599,12 @@ end
 const __A = randn(3, 3)
 
 const PRIMITIVE_TEST_FUNCTIONS = Any[
-    (p_sin, 5.0),
-    (p_mul, 5.0, 4.0),
-    (p_mat_mul!, randn(4, 5), randn(4, 3), randn(3, 5)),
-    (p_mat_mul!, randn(3, 3), __A, __A),
-    (p_setfield!, Foo(5.0), :x, 4.0),
-    (p_setfield!, MutableFoo(5.0, randn(5)), :b, randn(6)),
+    (:stability, p_sin, 5.0),
+    (:none, p_mat_mul!, randn(4, 5), randn(4, 3), randn(3, 5)),
+    (:none, p_mul, 5.0, 4.0),
+    (:none, p_mat_mul!, randn(3, 3), __A, __A),
+    (:none, p_setfield!, Foo(5.0), :x, 4.0),
+    (:none, p_setfield!, MutableFoo(5.0, randn(5)), :b, randn(6)),
 ]
 
 #
@@ -642,7 +702,7 @@ relu(x) = max(x, zero(x))
 
 test_mlp(x, W1, W2) = W2 * relu.(W1 * x)
 
-const TEST_FUNCTIONS = [
+const TEST_FUNCTIONS = Any[
     (false, test_sin, 1.0),
     (false, test_cos_sin, 2.0),
     (false, test_isbits_multiple_usage, 5.0),

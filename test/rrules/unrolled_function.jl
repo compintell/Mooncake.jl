@@ -19,7 +19,7 @@
         @test might_be_active(TestResources.StructFoo)
         @test might_be_active(TestResources.MutableFoo)
     end
-    @testset "build_construction and pullback! $f" for (f, args...) in
+    @testset "build_construction and pullback! $f" for (perf_flag, f, args...) in
         TestResources.PRIMITIVE_TEST_FUNCTIONS
 
         # Specify input shadows.
@@ -115,7 +115,7 @@
         end),
     )
         @info "$(map(typeof, (f, x...)))"
-        test_taped_rrule!!(Xoshiro(123456), f, deepcopy(x)...; interface_only)
+        test_taped_rrule!!(Xoshiro(123456), f, deepcopy(x)...; interface_only, perf_flag=:none)
     end
     @testset "acceleration $f" for (_, f, args...) in TestResources.TEST_FUNCTIONS
 
