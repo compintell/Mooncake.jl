@@ -27,6 +27,18 @@ using LinearAlgebra.LAPACK: getrf!
                 end
             end,
         )),
+
+        # getrs
+        vec(reduce(
+            vcat,
+            map(product(['U', 'L'], [1, 3], [1, 2])) do (ul, N, Nrhs)
+                As = getrf!.([randn(N, N) + 10I, view(randn(15, 15) + 10I, 2:N+1, 2:N+1)])
+                Bs = [randn(N, Nrhs), view(randn(15, 15), 4:N+3, 3:N+2)]
+                return map(product(As, Bs)) do (A, B)
+                    (false, LAPACK.trtrs!, ul, tA, diag, A, B)
+                end
+            end,
+        )),
     )
         test_taped_rrule!!(Xoshiro(123456), f, map(deepcopy, x)...; interface_only)
     end

@@ -132,3 +132,68 @@ for (fname, elty) in ((:dtrtrs_, :Float64), (:strtrs_, :Float32))
         return CoDual(Cvoid(), zero_tangent(Cvoid())), trtrs_pb!!
     end
 end
+
+for (fname, elty) in ((:dgetrs_, :Float64), (:sgetrs_, :Float32))
+    TInt = :(Ptr{BLAS.BlasInt})
+    @eval function rrule!!(
+        ::CoDual{typeof(__foreigncall__)},
+        ::CoDual{Val{$(blas_name(fname))}},
+        ::CoDual, # return type
+        ::CoDual, # argument types
+        ::CoDual, # nreq
+        ::CoDual, # calling convention
+        _tA::CoDual{Ptr{UInt8}}
+        _N::CoDual{Ptr{BlasInt}},
+        _Nrhs::CoDual{Ptr{BlasInt}},
+        _A::CoDual{Ptr{$elty}},
+        _lda::CoDual{Ptr{BlasInt}},
+        _ipiv::CoDual{Ptr{BlasInt}},
+        _B::CoDual{Ptr{$elty}},
+        _ldb::CoDual{Ptr{BlasInt}},
+        _info::CoDual{Ptr{BlasInt}},
+        args...,
+    )
+
+
+        function getrs_pb!!(
+            _, d1, d2, d3, d4, d5, d6,
+            dtA, dN, dNrhs, _dA, dlda, _ipiv, _dB, dldb, dINFO, dargs...
+        )
+
+            return d1, d2, d3, d4, d5, d6,
+                dul, dtA, ddiag, dN, dNrhs, _dA, dlda, _dB, dldb, dINFO, dargs...
+        end
+        return CoDual(Cvoid(), zero_tangent(Cvoid())), getrs_pb!!
+    end
+end
+
+# for (fname, elty) in ((:dgetri_, :Float64), (:sgetri_, :Float32))
+#     TInt = :(Ptr{BLAS.BlasInt})
+#     @eval function rrule!!(
+#         ::CoDual{typeof(__foreigncall__)},
+#         ::CoDual{Val{$(blas_name(fname))}},
+#         ::CoDual, # return type
+#         ::CoDual, # argument types
+#         ::CoDual, # nreq
+#         ::CoDual, # calling convention
+#         _N::CoDual{Ptr{BlasInt}},
+#         _A::CoDual{Ptr{$elty}},
+#         _lda::CoDual{Ptr{BlasInt}},
+#         _ipiv::CoDual{Ptr{BlasInt}},
+#         _work::CoDual{Ptr{$elty}},
+#         _lwork::CoDual{Ptr{BlasInt}},
+#         _info::CoDual{Ptr{BlasInt}},
+#         args...,
+#     )
+
+#         function getri_pb!!(
+#             _, d1, d2, d3, d4, d5, d6,
+#             dul, dtA, ddiag, dN, dNrhs, _dA, dlda, _dB, dldb, dINFO, dargs...
+#         )
+
+#             return d1, d2, d3, d4, d5, d6,
+#                 dul, dtA, ddiag, dN, dNrhs, _dA, dlda, _dB, dldb, dINFO, dargs...
+#         end
+#         return CoDual(Cvoid(), zero_tangent(Cvoid())), getri_pb!!
+#     end
+# end
