@@ -63,6 +63,7 @@ for (fname, elty) in ((:dgetrf_, :Float64), (:sgetrf_, :Float32))
 end
 
 for (fname, elty) in ((:dtrtrs_, :Float64), (:strtrs_, :Float32))
+
     TInt = :(Ptr{BLAS.BlasInt})
     @eval function rrule!!(
         ::CoDual{typeof(__foreigncall__)},
@@ -142,7 +143,7 @@ for (fname, elty) in ((:dgetrs_, :Float64), (:sgetrs_, :Float32))
         ::CoDual, # argument types
         ::CoDual, # nreq
         ::CoDual, # calling convention
-        _tA::CoDual{Ptr{UInt8}}
+        _tA::CoDual{Ptr{UInt8}},
         _N::CoDual{Ptr{BlasInt}},
         _Nrhs::CoDual{Ptr{BlasInt}},
         _A::CoDual{Ptr{$elty}},
@@ -153,15 +154,83 @@ for (fname, elty) in ((:dgetrs_, :Float64), (:sgetrs_, :Float32))
         _info::CoDual{Ptr{BlasInt}},
         args...,
     )
+        # Load in values.
+        tA = Char(unsafe_load(primal(_tA)))
+        N, Nrhs, lda, ldb, info = map(unsafe_load ∘ primal, (_N, _Nrhs, _lda, _ldb, _info))
+        ipiv = unsafe_wrap(Vector{BlasInt}, primal(_ipiv), N)
+        A = wrap_ptr_as_view(primal(_A), lda, N, N)
+        B = wrap_ptr_as_view(primal(_B), ldb, N, Nrhs)
+        B0 = copy(B)
 
+        # Pivot B.
+        p = LinearAlgebra.ipiv2perm(ipiv, N)
+
+        if tA == 'N'
+            # Apply permutation matrix.
+            B .= B[p, :]
+
+            # Run inv(L) * B and write result to B.
+            LAPACK.trtrs!('L', 'N', 'U', A, B)
+            B1 = copy(B) # record intermediate state for use in pullback.
+
+            # Run inv(U) * B and write result to B.
+            LAPACK.trtrs!('U', 'N', 'N', A, B)
+            B2 = B
+        else
+            # Run inv(U)^T * B and write result to B.
+            LAPACK.trtrs!('U', 'T', 'N', A, B)
+            B1 = copy(B) # record intermediate state for use in pullback.
+
+            # Run inv(L)^T * B and write result to B.
+            LAPACK.trtrs!('L', 'T', 'U', A, B)
+            B2 = B
+
+            # Apply permutation matrix.
+            B2 .= B2[invperm(p), :]
+        end
+
+        # We need to write to `info`.
+        unsafe_store!(primal(_info), 0)
 
         function getrs_pb!!(
             _, d1, d2, d3, d4, d5, d6,
             dtA, dN, dNrhs, _dA, dlda, _ipiv, _dB, dldb, dINFO, dargs...
         )
+            dA = wrap_ptr_as_view(_dA, lda, N, N)
+            dB = wrap_ptr_as_view(_dB, ldb, N, Nrhs)
+
+            if tA == 'N'
+
+                # Run pullback for inv(U) * B.
+                LAPACK.trtrs!('U', 'T', 'N', A, dB)
+                dA .-= tri!(dB * B2', 'U', 'N')
+
+                # Run pullback for inv(L) * B.
+                LAPACK.trtrs!('L', 'T', 'U', A, dB)
+                dA .-= tri!(dB * B1', 'L', 'U')
+
+                # Undo permutation.
+                dB .= dB[invperm(p), :]
+            else
+
+                # Undo permutation.
+                dB .= dB[p, :]
+                B2 .= B2[p, :]
+
+                # Run pullback for inv(L^T) * B.
+                LAPACK.trtrs!('L', 'N', 'U', A, dB)
+                dA .-= tri!(B2 * dB', 'L', 'U')
+
+                # Run pullback for inv(U^T) * B.
+                LAPACK.trtrs!('U', 'N', 'N', A, dB)
+                dA .-= tri!(B1 * dB', 'U', 'N')
+            end
+
+            # Restore initial state.
+            B .= B0
 
             return d1, d2, d3, d4, d5, d6,
-                dul, dtA, ddiag, dN, dNrhs, _dA, dlda, _dB, dldb, dINFO, dargs...
+                dtA, dN, dNrhs, _dA, dlda, _ipiv, _dB, dldb, dINFO, dargs...
         end
         return CoDual(Cvoid(), zero_tangent(Cvoid())), getrs_pb!!
     end

@@ -31,11 +31,14 @@ using LinearAlgebra.LAPACK: getrf!
         # getrs
         vec(reduce(
             vcat,
-            map(product(['U', 'L'], [1, 3], [1, 2])) do (ul, N, Nrhs)
-                As = getrf!.([randn(N, N) + 10I, view(randn(15, 15) + 10I, 2:N+1, 2:N+1)])
-                Bs = [randn(N, Nrhs), view(randn(15, 15), 4:N+3, 3:N+2)]
-                return map(product(As, Bs)) do (A, B)
-                    (false, LAPACK.trtrs!, ul, tA, diag, A, B)
+            map(product(['N', 'T'], [1, 9], [1, 2])) do (trans, N, Nrhs)
+                As = getrf!.([
+                    randn(N, N) + I,
+                    view(randn(15, 15) + I, 2:N+1, 2:N+1),
+                ])
+                Bs = [randn(N, Nrhs), view(randn(15, 15), 4:N+3, 3:Nrhs+2)]
+                return map(product(As, Bs)) do ((A, ipiv), B)
+                    (false, getrs_wrapper, trans, A, ipiv, B)
                 end
             end,
         )),
