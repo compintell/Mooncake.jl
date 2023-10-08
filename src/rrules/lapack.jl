@@ -135,7 +135,6 @@ for (fname, elty) in ((:dtrtrs_, :Float64), (:strtrs_, :Float32))
 end
 
 for (fname, elty) in ((:dgetrs_, :Float64), (:sgetrs_, :Float32))
-    TInt = :(Ptr{BLAS.BlasInt})
     @eval function rrule!!(
         ::CoDual{typeof(__foreigncall__)},
         ::CoDual{Val{$(blas_name(fname))}},
@@ -236,33 +235,62 @@ for (fname, elty) in ((:dgetrs_, :Float64), (:sgetrs_, :Float32))
     end
 end
 
-# for (fname, elty) in ((:dgetri_, :Float64), (:sgetri_, :Float32))
-#     TInt = :(Ptr{BLAS.BlasInt})
-#     @eval function rrule!!(
-#         ::CoDual{typeof(__foreigncall__)},
-#         ::CoDual{Val{$(blas_name(fname))}},
-#         ::CoDual, # return type
-#         ::CoDual, # argument types
-#         ::CoDual, # nreq
-#         ::CoDual, # calling convention
-#         _N::CoDual{Ptr{BlasInt}},
-#         _A::CoDual{Ptr{$elty}},
-#         _lda::CoDual{Ptr{BlasInt}},
-#         _ipiv::CoDual{Ptr{BlasInt}},
-#         _work::CoDual{Ptr{$elty}},
-#         _lwork::CoDual{Ptr{BlasInt}},
-#         _info::CoDual{Ptr{BlasInt}},
-#         args...,
-#     )
+for (fname, elty) in ((:dgetri_, :Float64), (:sgetri_, :Float32))
+    @eval function rrule!!(
+        ::CoDual{typeof(__foreigncall__)},
+        ::CoDual{Val{$(blas_name(fname))}},
+        ::CoDual, # return type
+        ::CoDual, # argument types
+        ::CoDual, # nreq
+        ::CoDual, # calling convention
+        _N::CoDual{Ptr{BlasInt}},
+        _A::CoDual{Ptr{$elty}},
+        _lda::CoDual{Ptr{BlasInt}},
+        _ipiv::CoDual{Ptr{BlasInt}},
+        _work::CoDual{Ptr{$elty}},
+        _lwork::CoDual{Ptr{BlasInt}},
+        _info::CoDual{Ptr{BlasInt}},
+        args...,
+    )
+        # Pull out data.
+        N_p, lda_p, lwork_p, info_p = map(primal, (_N, _lda, _lwork, _info))
+        N, lda, lwork, info = map(unsafe_load, (N_p, lda_p, lwork_p, info_p))
+        A_p = primal(_A)
+        A = wrap_ptr_as_view(A_p, lda, N, N)
+        A_copy = copy(A)
 
-#         function getri_pb!!(
-#             _, d1, d2, d3, d4, d5, d6,
-#             dul, dtA, ddiag, dN, dNrhs, _dA, dlda, _dB, dldb, dINFO, dargs...
-#         )
+        # Run forwards-pass.
+        ccall(
+            $(blas_name(fname)), Cvoid,
+            (
+                Ptr{BlasInt}, Ptr{$elty}, Ptr{BlasInt}, Ptr{BlasInt}, Ptr{$elty},
+                Ptr{BlasInt}, Ptr{BlasInt},
+            ),
+            N_p, A_p, lda_p, primal(_ipiv), primal(_work), lwork_p, info_p,
+        )
 
-#             return d1, d2, d3, d4, d5, d6,
-#                 dul, dtA, ddiag, dN, dNrhs, _dA, dlda, _dB, dldb, dINFO, dargs...
-#         end
-#         return CoDual(Cvoid(), zero_tangent(Cvoid())), getri_pb!!
-#     end
-# end
+        p = LinearAlgebra.ipiv2perm(unsafe_wrap(Array, primal(_ipiv), N), N)
+
+        function getri_pb!!(
+            _, d1, d2, d3, d4, d5, d6, dN, _dA, dlda, dipiv, dwork, dlwork, dinfo, dargs...
+        )
+            if lwork != -1
+                dA = wrap_ptr_as_view(_dA, lda, N, N)
+                A .= A[:, p]
+                dA .= dA[:, p]
+
+                # Cotangent w.r.t. L.
+                dL = -(A' * dA) / UnitLowerTriangular(A_copy)'
+                dU = -(UpperTriangular(A_copy)' \ (dA * A'))
+                dA .= tri!(dL, 'L', 'U') .+ tri!(dU, 'U', 'N')
+
+                # Restore initial state.
+                A .= A_copy
+            end
+
+            return d1, d2, d3, d4, d5, d6,
+                dN, _dA, dlda, dipiv, dwork, dlwork, dinfo, dargs...
+        end
+        return CoDual(Cvoid(), zero_tangent(Cvoid())), getri_pb!!
+    end
+end

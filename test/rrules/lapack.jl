@@ -1,4 +1,4 @@
-using LinearAlgebra.LAPACK: getrf!
+using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!
 
 @testset "lapack" begin
     getrf_wrapper!(x, check) = getrf!(x; check)
@@ -23,7 +23,7 @@ using LinearAlgebra.LAPACK: getrf!
                 As = [randn(N, N) + 10I, view(randn(15, 15) + 10I, 2:N+1, 2:N+1)]
                 Bs = [randn(N, Nrhs), view(randn(15, 15), 4:N+3, 3:N+2)]
                 return map(product(As, Bs)) do (A, B)
-                    (false, LAPACK.trtrs!, ul, tA, diag, A, B)
+                    (false, trtrs!, ul, tA, diag, A, B)
                 end
             end,
         )),
@@ -38,7 +38,19 @@ using LinearAlgebra.LAPACK: getrf!
                 ])
                 Bs = [randn(N, Nrhs), view(randn(15, 15), 4:N+3, 3:Nrhs+2)]
                 return map(product(As, Bs)) do ((A, ipiv), B)
-                    (false, getrs_wrapper, trans, A, ipiv, B)
+                    (false, getrs!, trans, A, ipiv, B)
+                end
+            end,
+        )),
+
+        # getri
+        vec(reduce(
+            vcat,
+            map([9]) do N
+                As = getrf!.([randn(N, N) + I, view(randn(15, 15) + I, 2:N+1, 2:N+1)])
+                As = getrf!.([randn(N, N) + I])
+                return map(As) do (A, ipiv)
+                    (false, getri!, A, ipiv)
                 end
             end,
         )),
