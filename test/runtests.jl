@@ -49,7 +49,6 @@ using .TestUtils:
     test_numerical_testing_interface
 
 const test_group = get(ENV, "TEST_GROUP", "basic")
-@show test_group
 
 @testset "Taped.jl" begin
     if test_group == "basic"
