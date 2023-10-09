@@ -749,8 +749,8 @@ const DIFFTESTS_FUNCTIONS = vcat(
     tuple.(
         fill(false, length(DiffTests.BINARY_MATRIX_TO_MATRIX_FUNCS)),
         DiffTests.BINARY_MATRIX_TO_MATRIX_FUNCS,
-        [rand(_rng, 5, 5) .+ 1e-1 for _ in DiffTests.BINARY_MATRIX_TO_MATRIX_FUNCS],
-        [rand(_rng, 5, 5) .+ 1e-1 for _ in DiffTests.BINARY_MATRIX_TO_MATRIX_FUNCS],
+        [rand(_rng, 5, 5) .+ 1e-1 + I for _ in DiffTests.BINARY_MATRIX_TO_MATRIX_FUNCS],
+        [rand(_rng, 5, 5) .+ 1e-1 + I for _ in DiffTests.BINARY_MATRIX_TO_MATRIX_FUNCS],
     ),
     tuple.(
         fill(false, length(DiffTests.TERNARY_MATRIX_TO_NUMBER_FUNCS)),
