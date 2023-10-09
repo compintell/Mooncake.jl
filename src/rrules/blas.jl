@@ -345,20 +345,20 @@ for (trmm, elty) in ((:dtrmm_, :Float64), (:strmm_, :Float32))
             dB = wrap_ptr_as_view(_dB, ldb, M, N)
 
             # Increment alpha tangent.
-            alpha != 0 && unsafe_store!(dalpha, unsafe_load(dalpha) + dot(dB, B) / alpha)
+            alpha != 0 && unsafe_store!(dalpha, unsafe_load(dalpha) + tr(dB'B) / alpha)
 
             # Restore initial state.
             B .= B_copy
 
             # Increment cotangents.
             if side == 'L'
-                dA .+= tri!(tA == 'N' ? dB * B' : B * dB', ul, diag)
+                dA .+= alpha .* tri!(tA == 'N' ? dB * B' : B * dB', ul, diag)
             else
-                dA .+= tri!(tA == 'N' ? B'dB : dB'B, ul, diag)
+                dA .+= alpha .* tri!(tA == 'N' ? B'dB : dB'B, ul, diag)
             end
 
             # Compute dB tangent.
-            BLAS.trmm!(side, ul, tA == 'N' ? 'N' : 'T', diag, alpha, A, dB)
+            BLAS.trmm!(side, ul, tA == 'N' ? 'T' : 'N', diag, alpha, A, dB)
 
             return d1, d2, d3, d4, d5, d6,
                 dside, duplo, dtrans, ddiag, dM, dN, dalpha, _dA, dlda, _dB, dlbd, dargs...

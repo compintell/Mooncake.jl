@@ -74,7 +74,7 @@
                 Bs = [randn(M, N), view(randn(15, 15), 2:M+1, 5:N+4)]
                 return map(product(As, Bs)) do (A, B)
                     alpha = randn()
-                    (true, BLAS.trmm!, side, ul, tA, dA, alpha, A, B)
+                    (false, BLAS.trmm!, side, ul, tA, dA, alpha, A, B)
                 end
             end,
         ))
