@@ -1,5 +1,67 @@
 blas_name(name::Symbol) = (Symbol(name, "64_"), Symbol(BLAS.libblastrampoline))
 
+function wrap_ptr_as_view(ptr::Ptr{T}, N::Int, inc::Int) where {T}
+    return view(unsafe_wrap(Vector{T}, ptr, N * inc), 1:inc:N*inc)
+end
+
+function wrap_ptr_as_view(ptr::Ptr{T}, buffer_nrows::Int, nrows::Int, ncols::Int) where {T}
+    return view(unsafe_wrap(Matrix{T}, ptr, (buffer_nrows, ncols)), 1:nrows, :)
+end
+
+function _trans(flag, mat)
+    flag === 'T' && return transpose(mat)
+    flag === 'C' && return adjoint(mat)
+    flag === 'N' && return mat
+    throw(error("Unrecognised flag $flag"))
+end
+
+function t_char(x::UInt8)
+    x == 0x4e && return 'N'
+    x == 0x54 && return 'T'
+    x == 0x43 && return 'C'
+    throw(error("unrecognised char-code $x"))
+end
+
+
+#
+# LEVEL 1
+#
+
+for (fname, elty) in ((:cblas_ddot,:Float64), (:cblas_sdot,:Float32))
+    @eval function rrule!!(
+        ::CoDual{typeof(__foreigncall__)},
+        ::CoDual{Val{$(blas_name(fname))}},
+        ::CoDual, # return type
+        ::CoDual, # argument types
+        ::CoDual, # nreq
+        ::CoDual, # calling convention
+        _n::CoDual{BLAS.BlasInt},
+        _DX::CoDual{Ptr{$elty}},
+        _incx::CoDual{BLAS.BlasInt},
+        _DY::CoDual{Ptr{$elty}},
+        _incy::CoDual{BLAS.BlasInt},
+        args...,
+    )
+        # Load in values from pointers.
+        n, incx, incy = map(primal, (_n, _incx, _incy))
+        xinds = 1:incx:incx * n
+        yinds = 1:incy:incy * n
+        DX = view(unsafe_wrap(Vector{$elty}, primal(_DX), n * incx), xinds)
+        DY = view(unsafe_wrap(Vector{$elty}, primal(_DY), n * incy), yinds)
+
+        function ddot_pb!!(dv, d1, d2, d3, d4, d5, d6, dn, dDX, dincx, dDY, dincy, dargs...)
+            _dDX = view(unsafe_wrap(Vector{$elty}, dDX, n * incx), xinds)
+            _dDY = view(unsafe_wrap(Vector{$elty}, dDY, n * incy), yinds)
+            _dDX .+= DY .* dv
+            _dDY .+= DX .* dv
+            return d1, d2, d3, d4, d5, d6, dn, dDX, dincx, dDY, dincy, dargs...
+        end
+
+        # Run primal computation.
+        return CoDual(dot(DX, DY), zero($elty)), ddot_pb!!
+    end
+end
+
 for (fname, elty) in ((:dscal_, :Float64), (:sscal_, :Float32))
     @eval function Taped.rrule!!(
         ::CoDual{typeof(__foreigncall__)},
@@ -42,28 +104,135 @@ for (fname, elty) in ((:dscal_, :Float64), (:sscal_, :Float32))
     end
 end
 
-function _trans(flag, mat)
-    flag === 'T' && return transpose(mat)
-    flag === 'C' && return adjoint(mat)
-    flag === 'N' && return mat
-    throw(error("Unrecognised flag $flag"))
+
+
+#
+# LEVEL 2
+#
+
+for (gemv, elty) in ((:dgemv_, :Float64), (:sgemm_, :Float32))
+    @eval function rrule!!(
+        ::CoDual{typeof(Umlaut.__foreigncall__)},
+        ::CoDual{Val{$(blas_name(gemv))}},
+        ::CoDual,
+        ::CoDual,
+        ::CoDual,
+        ::CoDual,
+        _tA::CoDual{Ptr{UInt8}},
+        _M::CoDual{Ptr{BLAS.BlasInt}},
+        _N::CoDual{Ptr{BLAS.BlasInt}},
+        _alpha::CoDual{Ptr{$elty}},
+        _A::CoDual{Ptr{$elty}},
+        _lda::CoDual{Ptr{BLAS.BlasInt}},
+        _x::CoDual{Ptr{$elty}},
+        _incx::CoDual{Ptr{BLAS.BlasInt}},
+        _beta::CoDual{Ptr{$elty}},
+        _y::CoDual{Ptr{$elty}},
+        _incy::CoDual{Ptr{BLAS.BlasInt}},
+        args...
+    )
+        # Load in data.
+        tA = t_char(unsafe_load(primal(_tA)))
+        M, N, lda, incx, incy = map(unsafe_load ∘ primal, (_M, _N, _lda, _incx, _incy))
+        alpha = unsafe_load(primal(_alpha))
+        beta = unsafe_load(primal(_beta))
+
+        # Run primal.
+        A = wrap_ptr_as_view(primal(_A), lda, M, N)
+        Nx = tA == 'N' ? N : M
+        Ny = tA == 'N' ? M : N
+        x = view(unsafe_wrap(Vector{$elty}, primal(_x), incx * Nx), 1:incx:incx * Nx)
+        y = view(unsafe_wrap(Vector{$elty}, primal(_y), incy * Ny), 1:incy:incy * Ny)
+        y_copy = copy(y)
+
+        BLAS.gemv!(tA, alpha, A, x, beta, y)
+
+        function gemv_pb!!(
+            _, d1, d2, d3, d4, d5, d6,
+            dt, dM, dN, dalpha, _dA, dlda, _dx, dincx, dbeta, _dy, dincy, dargs...
+        )
+            # Load up the tangents.
+            dA = wrap_ptr_as_view(_dA, lda, M, N)
+            dx = view(unsafe_wrap(Vector{$elty}, _dx, incx * Nx), 1:incx:incx * Nx)
+            dy = view(unsafe_wrap(Vector{$elty}, _dy, incy * Ny), 1:incy:incy * Ny)
+
+            # Increment the tangents.
+            unsafe_store!(dalpha, unsafe_load(dalpha) + dot(dy, _trans(tA, A), x))
+            dA .+= _trans(tA, alpha * dy * x')
+            dx .+= alpha * _trans(tA, A)'dy
+            unsafe_store!(dbeta, unsafe_load(dbeta) + dot(y_copy, dy))
+            dy .*= beta
+
+            # Restore the original value of `y`.
+            y .= y_copy
+
+            return d1, d2, d3, d4, d5, d6, dt, dM, dN, dalpha, _dA, dlda, _dx, dincx, dbeta,
+                _dy, dincy, dargs...
+        end
+        return uninit_codual(Cvoid()), gemv_pb!!
+    end
 end
 
-function t_char(x::UInt8)
-    x == 0x4e && return 'N'
-    x == 0x54 && return 'T'
-    x == 0x43 && return 'C'
-    throw(error("unrecognised char-code $x"))
+function tri!(A, u::Char, d::Char)
+    return u == 'L' ? tril!(A, d == 'U' ? -1 : 0) : triu!(A, d == 'U' ? 1 : 0)
 end
 
-function wrap_ptr_as_view(ptr::Ptr{T}, buffer_nrows::Int, nrows::Int, ncols::Int) where {T}
-    return view(unsafe_wrap(Matrix{T}, ptr, (buffer_nrows, ncols)), 1:nrows, :)
+for (trmv, elty) in ((:dtrmv_, :Float64), (:strmv_, :Float32))
+    @eval function rrule!!(
+        ::CoDual{typeof(Umlaut.__foreigncall__)},
+        ::CoDual{Val{$(blas_name(trmv))}},
+        ::CoDual,
+        ::CoDual,
+        ::CoDual,
+        ::CoDual,
+        _uplo::CoDual{Ptr{UInt8}},
+        _trans::CoDual{Ptr{UInt8}},
+        _diag::CoDual{Ptr{UInt8}},
+        _N::CoDual{Ptr{BLAS.BlasInt}},
+        _A::CoDual{Ptr{$elty}},
+        _lda::CoDual{Ptr{BLAS.BlasInt}},
+        _x::CoDual{Ptr{$elty}},
+        _incx::CoDual{Ptr{BLAS.BlasInt}},
+        args...
+    )
+        # Load in data.
+        uplo, trans, diag = map(Char ∘ unsafe_load ∘ primal, (_uplo, _trans, _diag))
+        N, lda, incx = map(unsafe_load ∘ primal, (_N, _lda, _incx))
+        A = wrap_ptr_as_view(primal(_A), lda, N, N)
+        x = wrap_ptr_as_view(primal(_x), N, incx)
+        x_copy = copy(x)
+
+        # Run primal computation.
+        BLAS.trmv!(uplo, trans, diag, A, x)
+
+        function trmv_pb!!(
+            _, d1, d2, d3, d4, d5, d6, du, dt, ddiag, dN, _dA, dlda, _dx, dincx, dargs...
+        )
+            # Load up the tangents.
+            dA = wrap_ptr_as_view(_dA, lda, N, N)
+            dx = wrap_ptr_as_view(_dx, N, incx)
+
+            # Restore the original value of x.
+            x .= x_copy
+
+            # Increment the tangents.
+            dA .+= tri!(trans == 'N' ? dx * x' : x * dx', uplo, diag)
+            BLAS.trmv!(uplo, trans == 'N' ? 'T' : 'N', diag, A, dx)
+
+            return d1, d2, d3, d4, d5, d6, du, dt, ddiag, dN, _dA, dlda, _dx, dincx,
+                dargs...
+        end
+        return uninit_codual(Cvoid()), trmv_pb!!
+    end
 end
 
-for (gemm, elty) in (
-    (:dgemm_, :Float64),
-    (:sgemm_, :Float32),
-)
+
+
+#
+# LEVEL 3
+#
+
+for (gemm, elty) in ((:dgemm_, :Float64), (:sgemm_, :Float32))
     @eval function rrule!!(
         ::CoDual{typeof(__foreigncall__)},
         ::CoDual{Val{$(blas_name(gemm))}},
@@ -73,17 +242,17 @@ for (gemm, elty) in (
         ::CoDual, # calling convention
         tA::CoDual{Ptr{UInt8}},
         tB::CoDual{Ptr{UInt8}},
-        m::CoDual{Ptr{Int}},
-        n::CoDual{Ptr{Int}},
-        ka::CoDual{Ptr{Int}},
+        m::CoDual{Ptr{BLAS.BlasInt}},
+        n::CoDual{Ptr{BLAS.BlasInt}},
+        ka::CoDual{Ptr{BLAS.BlasInt}},
         alpha::CoDual{Ptr{$elty}},
         A::CoDual{Ptr{$elty}},
-        LDA::CoDual{Ptr{Int}},
+        LDA::CoDual{Ptr{BLAS.BlasInt}},
         B::CoDual{Ptr{$elty}},
-        LDB::CoDual{Ptr{Int}},
+        LDB::CoDual{Ptr{BLAS.BlasInt}},
         beta::CoDual{Ptr{$elty}},
         C::CoDual{Ptr{$elty}},
-        LDC::CoDual{Ptr{Int}},
+        LDC::CoDual{Ptr{BLAS.BlasInt}},
         args...,
     )
         _tA = t_char(unsafe_load(primal(tA)))
@@ -131,5 +300,69 @@ for (gemm, elty) in (
                 dtA, dtB, dm, dn, dka, dalpha, dA, dLDA, dB, dLDB, dbeta, dC, dLDC, dargs...
         end
         return CoDual(Cvoid(), zero_tangent(Cvoid())), gemm!_pullback!!
+    end
+end
+
+for (trmm, elty) in ((:dtrmm_, :Float64), (:strmm_, :Float32))
+    @eval function rrule!!(
+        ::CoDual{typeof(__foreigncall__)},
+        ::CoDual{Val{$(blas_name(trmm))}},
+        ::CoDual,
+        ::CoDual, # arg types
+        ::CoDual, # nreq
+        ::CoDual, # calling convention
+        _side::CoDual{Ptr{UInt8}},
+        _uplo::CoDual{Ptr{UInt8}},
+        _trans::CoDual{Ptr{UInt8}},
+        _diag::CoDual{Ptr{UInt8}},
+        _M::CoDual{Ptr{BLAS.BlasInt}},
+        _N::CoDual{Ptr{BLAS.BlasInt}},
+        _alpha::CoDual{Ptr{$elty}},
+        _A::CoDual{Ptr{$elty}},
+        _lda::CoDual{Ptr{BLAS.BlasInt}},
+        _B::CoDual{Ptr{$elty}},
+        _ldb::CoDual{Ptr{BLAS.BlasInt}},
+        args...,
+    )
+        # Load in data and store B for the reverse-pass.
+        side, ul, tA, diag = map(Char ∘ unsafe_load ∘ primal, (_side, _uplo, _trans, _diag))
+        M, N, lda, ldb = map(unsafe_load ∘ primal, (_M, _N, _lda, _ldb))
+        alpha = unsafe_load(primal(_alpha))
+        R = side == 'L' ? M : N
+        A = wrap_ptr_as_view(primal(_A), lda, R, R)
+        B = wrap_ptr_as_view(primal(_B), ldb, M, N)
+        B_copy = copy(B)
+
+        # Run primal.
+        BLAS.trmm!(side, ul, tA, diag, alpha, A, B)
+
+        function trmm!_pullback!!(
+            _, d1, d2, d3, d4, d5, d6,
+            dside, duplo, dtrans, ddiag, dM, dN, dalpha, _dA, dlda, _dB, dlbd, dargs...,
+        )
+            # Convert pointers to views.
+            dA = wrap_ptr_as_view(_dA, lda, R, R)
+            dB = wrap_ptr_as_view(_dB, ldb, M, N)
+
+            # Increment alpha tangent.
+            alpha != 0 && unsafe_store!(dalpha, unsafe_load(dalpha) + tr(dB'B) / alpha)
+
+            # Restore initial state.
+            B .= B_copy
+
+            # Increment cotangents.
+            if side == 'L'
+                dA .+= alpha .* tri!(tA == 'N' ? dB * B' : B * dB', ul, diag)
+            else
+                dA .+= alpha .* tri!(tA == 'N' ? B'dB : dB'B, ul, diag)
+            end
+
+            # Compute dB tangent.
+            BLAS.trmm!(side, ul, tA == 'N' ? 'T' : 'N', diag, alpha, A, dB)
+
+            return d1, d2, d3, d4, d5, d6,
+                dside, duplo, dtrans, ddiag, dM, dN, dalpha, _dA, dlda, _dB, dlbd, dargs...
+        end
+        return CoDual(Cvoid(), zero_tangent(Cvoid())), trmm!_pullback!!
     end
 end
