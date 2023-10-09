@@ -31,6 +31,22 @@ for name in [
     end
 end
 
+"""
+    lgetfield(x, f::Union{SSym, SInt})
+
+An implementation of `getfield` in which the the field `f` is specified statically via an
+`SSym` or `SInt`. This enables the implementation to be type-stable even when it is not
+possible to constant-propagate `f`. Moreover, it enable the pullback to also be type-stable.
+
+It will always be the case that
+```julia
+getfield(x, :f) === lgetfield(x, SSym(:f))
+getfield(x, 2) === lgetfield(x, SInt(2))
+```
+
+This approach is identical to the one taken by `Zygote.jl` to circumvent the same problem.
+`Zygote.jl` calls the function `literal_getfield`, while we call it `lgetfield`.
+"""
 lgetfield(x, ::SSym{f}) where {f} = getfield(x, f)
 
 lgetfield(x::Tuple, ::SInt{i}) where {i} = getfield(x, i)
