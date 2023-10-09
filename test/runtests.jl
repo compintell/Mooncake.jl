@@ -48,6 +48,12 @@ using .TestUtils:
     test_tangent,
     test_numerical_testing_interface
 
+# The integration tests take ages to run, so we split them up. CI sets up two jobs -- the
+# "basic" group runs test that, when passed, _ought_ to imply correctness of the entire
+# scheme. The "extended" group runs a large battery of tests that should pick up on anything
+# that has been missed in the "basic" group. As a rule, if the "basic" group passes, but the
+# "extended" group fails, there are clearly new tests that need to be added to the "basic"
+# group.
 const test_group = get(ENV, "TEST_GROUP", "basic")
 
 @testset "Taped.jl" begin
