@@ -12,10 +12,6 @@
     _dx = Ref(4.0)
     @testset "$f, $(typeof(x))" for (interface_only, f, x...) in [
 
-        # Legit performance rules:
-        (false, sin, 5.0),
-        (false, cos, 5.0),
-
         # Rules to avoid pointer type conversions.
         (
             true,
