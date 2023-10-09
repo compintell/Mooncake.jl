@@ -3,6 +3,11 @@
 # Rules to handle / avoid foreigncall nodes
 #
 
+isprimitive(::RMC, ::typeof(objectid), @nospecialize(x)) = true
+function rrule!!(::CoDual{typeof(objectid)}, @nospecialize(x))
+    return CoDual(objectid(primal(x)), NoTangent()), NoPullback()
+end
+
 isprimitive(::RMC, ::typeof(Base.allocatedinline), ::Type) = true
 function rrule!!(::CoDual{typeof(Base.allocatedinline)}, T::CoDual{<:Type})
     return CoDual(Base.allocatedinline(primal(T)), NoTangent()), NoPullback()
@@ -220,9 +225,8 @@ end
 
 for name in [
     :(:jl_alloc_array_1d), :(:jl_alloc_array_2d), :(:jl_alloc_array_3d), :(:jl_new_array),
-    :(:jl_array_grow_end), :(:jl_array_del_end), :(:jl_array_copy),
-    :(:jl_type_intersection), :(:memset), :(:jl_get_tls_world_age),
-    :(:memmove),
+    :(:jl_array_grow_end), :(:jl_array_del_end), :(:jl_array_copy), :(:jl_object_id),
+    :(:jl_type_intersection), :(:memset), :(:jl_get_tls_world_age), :(:memmove),
 ]
     @eval function rrule!!(::CoDual{typeof(__foreigncall__)}, ::CoDual{Val{$name}}, args...)
         nm = $name

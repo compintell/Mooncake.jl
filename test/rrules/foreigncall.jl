@@ -2,7 +2,7 @@
     @testset "foreigncalls that should never be hit: $name" for name in [
         :jl_alloc_array_1d, :jl_alloc_array_2d, :jl_alloc_array_3d, :jl_new_array,
         :jl_array_grow_end, :jl_array_del_end, :jl_array_copy, :jl_type_intersection,
-        :memset, :jl_get_tls_world_age, :memmove,
+        :memset, :jl_get_tls_world_age, :memmove, :jl_object_id,
     ]
         @test_throws(
             ErrorException,
@@ -57,6 +57,8 @@
         (true, unsafe_copyto!, CoDual(ptr_a, ptr_da), CoDual(ptr_b, ptr_db), 4),
         (false, unsafe_copyto!, randn(4), 2, randn(3), 1, 2),
         (false, unsafe_copyto!, [rand(3) for _ in 1:5], 2, [rand(4) for _ in 1:4], 1, 3),
+        (false, objectid, 5.0),
+        (true, objectid, randn(5)),
     ]
         test_rrule!!(
             Xoshiro(123456), f, x...;
