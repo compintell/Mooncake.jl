@@ -3,19 +3,24 @@ function rrule!!(::CoDual{typeof(verify)}, args...)
     return CoDual(v, zero_tangent(v)), NoPullback()
 end
 
-function rrule!!(::CoDual{typeof(Umlaut.__new__)}, xs...)
-    y = Umlaut.__new__(map(primal, xs)...)
-    P = primal(xs[1])
-    dy = build_tangent(P, map(shadow, xs[2:end])...)
-    function __new__pullback(dy, d__new__, df, dxs...)
-        new_dxs = map((x, y) -> increment!!(x, _value(y)), dxs, dy.fields)
-        return d__new__, df, new_dxs...
+function __new__pullback(dy, d__new__, df, dxs::Vararg{Any, N}) where {N}
+    new_dxs = map((x, y) -> increment!!(x, _value(y)), dxs, values(dy.fields))
+    return d__new__, df, new_dxs...
+end
+function __new__pullback(dy::NamedTuple, d__new__, df, dxs::Vararg{Any, N}) where {N}
+    new_dxs = map((x, y) -> increment!!(x, _value(y)), dxs, dy)
+    return d__new__, df, new_dxs...
+end
+
+@generated function rrule!!(
+    ::CoDual{typeof(Umlaut.__new__)}, ::CoDual{Type{P}}, xs::Vararg{Any, N}
+) where {P, N}
+    return quote
+        x_ps = map(primal, xs)
+        y = $(Expr(:new, P, map(n -> :(x_ps[$n]), 1:N)...))
+        dy = build_tangent(P, map(shadow, xs)...)
+        return CoDual(y, dy), __new__pullback
     end
-    function __new__pullback(dy::NamedTuple, d__new__, df, dxs...)
-        new_dxs = map((x, y) -> increment!!(x, _value(y)), dxs, dy)
-        return d__new__, df, new_dxs...
-    end
-    return CoDual(y, dy), __new__pullback
 end
 
 #

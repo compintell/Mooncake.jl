@@ -38,6 +38,8 @@ using Taped:
     might_be_active,
     rebind
 
+using Taped.Umlaut: __new__
+
 using .TestUtils:
     test_rrule!!,
     test_taped_rrule!!,
