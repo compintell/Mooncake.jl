@@ -26,12 +26,13 @@
         return x
     end
 
-    @testset "$f, $(typeof(x))" for (interface_only, f, x...) in [
+    # Test the rules which wrap foreign calls in order to prevent them from ever being hit.
+    @testset "$f, $(typeof(x))" for (interface_only, perf_flag, f, x...) in [
 
         # Rules to avoid foreigncall nodes:
-        (false, Base.allocatedinline, Float64),
-        (false, Base.allocatedinline, Vector{Float64}),
-        # (true, pointer_from_objref, _x),
+        (false, :stability, Base.allocatedinline, Float64),
+        (false, :stability, Base.allocatedinline, Vector{Float64}),
+        # (true, :none, pointer_from_objref, _x),
         # (
         #     true,
         #     unsafe_pointer_to_objref,
@@ -40,27 +41,27 @@
         #         bitcast(Ptr{tangent_type(Nothing)}, pointer_from_objref(_dx)),
         #     ),
         # ),
-        (true, Array{Float64, 1}, undef, 5),
-        (true, Array{Float64, 2}, undef, 5, 4),
-        (true, Array{Float64, 3}, undef, 5, 4, 3),
-        (true, Array{Float64, 4}, undef, 5, 4, 3, 2),
-        (true, Array{Float64, 5}, undef, 5, 4, 3, 2, 1),
-        (true, Array{Float64, 4}, undef, (2, 3, 4, 5)),
-        (true, Array{Float64, 5}, undef, (2, 3, 4, 5, 6)),
-        (true, Base._growend!, randn(5), 3),
-        (false, copy, randn(5, 4)),
-        (false, typeintersect, Float64, Int),
-        (false, fill!, rand(Int8, 5), Int8(2)),
-        (false, fill!, rand(UInt8, 5), UInt8(2)),
-        (false, Core.Compiler.return_type, sin, Tuple{Float64}),
-        (false, Core.Compiler.return_type, Tuple{typeof(sin), Float64}),
-        (true, unsafe_copyto!, CoDual(ptr_a, ptr_da), CoDual(ptr_b, ptr_db), 4),
-        (false, unsafe_copyto!, randn(4), 2, randn(3), 1, 2),
-        (false, unsafe_copyto!, [rand(3) for _ in 1:5], 2, [rand(4) for _ in 1:4], 1, 3),
-        (false, objectid, 5.0),
-        (true, objectid, randn(5)),
+        (true, :stability, Array{Float64, 1}, undef, 5),
+        (true, :stability, Array{Float64, 2}, undef, 5, 4),
+        (true, :stability, Array{Float64, 3}, undef, 5, 4, 3),
+        (true, :stability, Array{Float64, 4}, undef, 5, 4, 3, 2),
+        (true, :stability, Array{Float64, 5}, undef, 5, 4, 3, 2, 1),
+        (true, :stability, Array{Float64, 4}, undef, (2, 3, 4, 5)),
+        (true, :stability, Array{Float64, 5}, undef, (2, 3, 4, 5, 6)),
+        (true, :stability, Base._growend!, randn(5), 3),
+        (false, :stability, copy, randn(5, 4)),
+        (false, :stability, typeintersect, Float64, Int),
+        (false, :stability, fill!, rand(Int8, 5), Int8(2)),
+        (false, :stability, fill!, rand(UInt8, 5), UInt8(2)),
+        (false, :none, Core.Compiler.return_type, sin, Tuple{Float64}),
+        (false, :none, Core.Compiler.return_type, Tuple{typeof(sin), Float64}),
+        (true, :stability, unsafe_copyto!, CoDual(ptr_a, ptr_da), CoDual(ptr_b, ptr_db), 4),
+        (false, :stability, unsafe_copyto!, randn(4), 2, randn(3), 1, 2),
+        (false, :stability, unsafe_copyto!, [rand(3) for _ in 1:5], 2, [rand(4) for _ in 1:4], 1, 3),
+        (false, :stability, objectid, 5.0),
+        (true, :stability, objectid, randn(5)),
     ]
-        test_rrule!!(Xoshiro(123456), f, x...; interface_only, perf_flag=:none)
+        test_rrule!!(Xoshiro(123456), f, x...; interface_only, perf_flag)
     end
     @testset "$f, $(typeof(x))" for (interface_only, f, x...) in [
         (false, reshape, randn(5, 4), (4, 5)),
