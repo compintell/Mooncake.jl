@@ -15,6 +15,7 @@ using Base:
     arrayset
 using Core: Intrinsics, bitcast
 using FunctionWrappers: FunctionWrapper
+using LinearAlgebra.BLAS: @blasfunc, BlasInt
 
 include("tracing.jl")
 include("acceleration.jl")
@@ -26,6 +27,7 @@ include(joinpath("rrules", "avoiding_non_differentiable_code.jl"))
 include(joinpath("rrules", "blas.jl"))
 include(joinpath("rrules", "builtins.jl"))
 include(joinpath("rrules", "foreigncall.jl"))
+include(joinpath("rrules", "lapack.jl"))
 include(joinpath("rrules", "low_level_maths.jl"))
 include(joinpath("rrules", "misc.jl"))
 include(joinpath("rrules", "umlaut_internals_rules.jl"))

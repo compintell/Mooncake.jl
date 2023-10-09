@@ -25,6 +25,15 @@
 
     _x = Ref(5.0) # data used in tests which aren't protected by GC.
     _dx = Ref(4.0)
+
+    _a = Vector{Vector{Float64}}(undef, 3)
+    _a[1] = randn(4)
+
+    function arrayset_tester(x)
+        x_vec = Vector{typeof(x)}(undef, 3)
+        x_vec[1] = x
+        return x_vec
+    end
     @testset "$f, $(typeof(x))" for (interface_only, f, x...) in [
 
         # IR-node workarounds:
@@ -177,6 +186,8 @@
         (false, Base.arrayset, false, randn(5, 4), 3.0, 1, 3),
         (false, Base.arrayset, true, randn(5), 4.0, 3),
         (false, Base.arrayset, true, randn(5, 4), 3.0, 1, 3),
+        (false, Base.arrayset, false, [randn(3) for _ in 1:5], randn(4), 1),
+        (false, Base.arrayset, false, _a, randn(4), 1), # _a is not fully initialised
         (false, applicable, sin, Float64),
         (false, applicable, sin, Type),
         (false, applicable, +, Type, Float64),
@@ -235,6 +246,7 @@
         (false, x -> pointerref(bitcast(Ptr{Float64}, pointer_from_objref(Ref(x))), 1, 1), 5.0),
         (false, (v, x) -> (pointerset(pointer(x), v, 2, 1); x), 3.0, randn(5)),
         (false, x -> (pointerset(pointer(x), UInt8(3), 2, 1); x), rand(UInt8, 5)),
+        (false, arrayset_tester, randn(4)),
     )
         test_taped_rrule!!(Xoshiro(123456), f, map(deepcopy, x)...; interface_only)
     end
