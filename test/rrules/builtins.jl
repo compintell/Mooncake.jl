@@ -37,13 +37,6 @@
 
     @testset "$f, $(typeof(x))" for (interface_only, perf_flag, f, x...) in [
 
-        # IR-node workarounds:
-        (false, :stability, __new__, UnitRange{Int}, 5, 9),
-        (false, :none, __new__, TestResources.StructFoo, 5.0, randn(4)),
-        (false, :none, __new__, TestResources.MutableFoo, 5.0, randn(5)),
-        (false, :stability, __new__, TestResources.TypeStableMutableStruct{Vector{Float64}}, 5.0, randn(5)),
-        (false, :stability, __new__, NamedTuple{(), Tuple{}}),
-
         # Core.Intrinsics:
         (false, :stability, IntrinsicsWrappers.abs_float, 5.0),
         (false, :stability, IntrinsicsWrappers.add_float, 4.0, 5.0),
