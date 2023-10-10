@@ -1,5 +1,3 @@
-using Taped.TestResources: StructFoo, MutableFoo, TypeStableMutableStruct
-
 @testset "tangents" begin
 
     # Each tuple is of the form (primal, t1, t2, increment!!(t1, t2)).
@@ -49,39 +47,39 @@ using Taped.TestResources: StructFoo, MutableFoo, TypeStableMutableStruct
             ((;), (;), (;), (;)),
             (
                 TypeStableMutableStruct{Float64}(5.0, 3.0),
-                Taped.build_tangent(TypeStableMutableStruct{Float64}, 5.0, 4.0),
-                Taped.build_tangent(TypeStableMutableStruct{Float64}, 3.0, 3.0),
-                Taped.build_tangent(TypeStableMutableStruct{Float64}, 8.0, 7.0),
+                build_tangent(TypeStableMutableStruct{Float64}, 5.0, 4.0),
+                build_tangent(TypeStableMutableStruct{Float64}, 3.0, 3.0),
+                build_tangent(TypeStableMutableStruct{Float64}, 8.0, 7.0),
             ),
             ( # complete init
                 StructFoo(6.0, [1.0, 2.0]),
-                Taped.build_tangent(StructFoo, 5.0, [3.0, 4.0]),
-                Taped.build_tangent(StructFoo, 3.0, [2.0, 1.0]),
-                Taped.build_tangent(StructFoo, 8.0, [5.0, 5.0]),
+                build_tangent(StructFoo, 5.0, [3.0, 4.0]),
+                build_tangent(StructFoo, 3.0, [2.0, 1.0]),
+                build_tangent(StructFoo, 8.0, [5.0, 5.0]),
             ),
             ( # partial init
                 StructFoo(6.0),
-                Taped.build_tangent(StructFoo, 5.0),
-                Taped.build_tangent(StructFoo, 4.0),
-                Taped.build_tangent(StructFoo, 9.0),
+                build_tangent(StructFoo, 5.0),
+                build_tangent(StructFoo, 4.0),
+                build_tangent(StructFoo, 9.0),
             ),
             ( # complete init
                 MutableFoo(6.0, [1.0, 2.0]),
-                Taped.build_tangent(MutableFoo, 5.0, [3.0, 4.0]),
-                Taped.build_tangent(MutableFoo, 3.0, [2.0, 1.0]),
-                Taped.build_tangent(MutableFoo, 8.0, [5.0, 5.0]),
+                build_tangent(MutableFoo, 5.0, [3.0, 4.0]),
+                build_tangent(MutableFoo, 3.0, [2.0, 1.0]),
+                build_tangent(MutableFoo, 8.0, [5.0, 5.0]),
             ),
             ( # partial init
-                TestResources.MutableFoo(6.0),
-                Taped.build_tangent(MutableFoo, 5.0),
-                Taped.build_tangent(MutableFoo, 4.0),
-                Taped.build_tangent(MutableFoo, 9.0),
+                MutableFoo(6.0),
+                build_tangent(MutableFoo, 5.0),
+                build_tangent(MutableFoo, 4.0),
+                build_tangent(MutableFoo, 9.0),
             ),
             (
                 UnitRange{Int}(5, 7),
-                Taped.build_tangent(UnitRange{Int}, NoTangent(), NoTangent()),
-                Taped.build_tangent(UnitRange{Int}, NoTangent(), NoTangent()),
-                Taped.build_tangent(UnitRange{Int}, NoTangent(), NoTangent()),
+                build_tangent(UnitRange{Int}, NoTangent(), NoTangent()),
+                build_tangent(UnitRange{Int}, NoTangent(), NoTangent()),
+                build_tangent(UnitRange{Int}, NoTangent(), NoTangent()),
             ),
         ],
         [
@@ -94,6 +92,9 @@ using Taped.TestResources: StructFoo, MutableFoo, TypeStableMutableStruct
         test_tangent(rng, p, z, x, y)
         test_numerical_testing_interface(p, x)
     end
+
+    tangent(nt::NamedTuple) = Tangent(map(PossiblyUninitTangent, nt))
+    mutable_tangent(nt::NamedTuple) = MutableTangent(map(PossiblyUninitTangent, nt))
 
     @testset "increment_field!!" begin
         @testset "NoTangent" begin
@@ -162,17 +163,21 @@ using Taped.TestResources: StructFoo, MutableFoo, TypeStableMutableStruct
     end
 
     @testset "set_field_to_zero!!" begin
-        nt = (a=5.0, b=4.0)
-        nt2 = (a=0.0, b=4.0)
-        @test set_field_to_zero!!(nt, :a) == nt2
+        nt1 = (a=5.0, b=[4.0])
+        t1 = build_tangent(StructFoo, nt1...)
+        mt1 = build_tangent(MutableFoo, nt1...)
+        nt2 = (a=0.0, b=[4.0])
+        t2 = build_tangent(StructFoo, nt2...)
+        mt2 = build_tangent(MutableFoo, nt2...)
+        @test set_field_to_zero!!(nt1, :a) == nt2
         @test set_field_to_zero!!((5.0, 4.0), 2) == (5.0, 0.0)
-        @test set_field_to_zero!!(tangent(nt), :a) == tangent(nt2)
+        @test set_field_to_zero!!(t2, :a) == t2
 
-        x = mutable_tangent(nt)
-        @test set_field_to_zero!!(x, :a) == mutable_tangent(nt2)
-        @test set_field_to_zero!!(x, :a) === x
-        @test set_field_to_zero!!(x, 1) == mutable_tangent(nt2)
-        @test set_field_to_zero!!(x, 1) === x
+        x = build_tangent(MutableFoo, nt1...)
+        @test set_field_to_zero!!(mt1, :a) == mt2
+        @test set_field_to_zero!!(mt1, :a) === mt1
+        @test set_field_to_zero!!(mt1, 1) == mt2
+        @test set_field_to_zero!!(mt1, 1) === mt1
     end
 end
 
