@@ -467,7 +467,9 @@ function _dot(t::T, s::T) where {T<:Array}
     if isbitstype(T)
         return sum(_map(_dot, t, s))
     else
-        return sum(_map(n -> isassigned(t, n) ? _dot(t[n], s[n]) : 0.0, eachindex(t)))
+        return sum(_map(eachindex(t)) do n
+            (isassigned(t, n) && isassigned(s, n)) ? _dot(t[n], s[n]) : 0.0
+        end)
     end
 end
 _dot(t::T, s::T) where {T<:Union{Tuple, NamedTuple}} = sum(map(_dot, t, s); init=0.0)

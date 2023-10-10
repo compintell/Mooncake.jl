@@ -166,7 +166,25 @@
         (false, :stability, Base.arrayset, true, randn(5), 4.0, 3),
         (false, :stability, Base.arrayset, true, randn(5, 4), 3.0, 1, 3),
         (false, :stability, Base.arrayset, false, [randn(3) for _ in 1:5], randn(4), 1),
-        (false, :stability, Base.arrayset, false, _a, randn(4), 1), # _a is not fully initialised
+        # (false, :stability, Base.arrayset, false, _a, randn(4), 1), # _a is not fully initialised
+        (
+            false,
+            :stability,
+            Base.arrayset,
+            false,
+            setindex!(Vector{Vector{Float64}}(undef, 3), randn(3), 1),
+            randn(4),
+            1,
+        ),
+        (
+            false,
+            :stability,
+            Base.arrayset,
+            false,
+            setindex!(Vector{Vector{Float64}}(undef, 3), randn(3), 2),
+            randn(4),
+            1,
+        ),
         (false, :stability, applicable, sin, Float64),
         (false, :stability, applicable, sin, Type),
         (false, :stability, applicable, +, Type, Float64),
