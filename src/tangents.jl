@@ -556,7 +556,7 @@ end
     Base.issingletontype(P) && return :(return false)
     Base.isabstracttype(P) && return :(return true)
     isprimitivetype(P) && return :(return true)
-    return :(return $(any(_might_be_active, fieldtypes(P))))
+    return :(return $(any(might_be_active, fieldtypes(P))))
 end
 @generated function might_be_active(::Type{<:Array{P}}) where {P}
     return :(return $(might_be_active(P)))
