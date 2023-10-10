@@ -35,7 +35,6 @@
         ),
         (false, :stability, __new__, NamedTuple{(), Tuple{}}),
 
-
         # Umlaut internals -- getindex occassionally gets pushed onto the tape.
         (false, :none, getindex, (5.0, 5.0), 2),
         (false, :none, getindex, (randn(5), 2), 1),
@@ -46,7 +45,6 @@
         (false, :none, eltype, transpose(randn(4, 5))),
         (false, :none, Base.promote_op, transpose, Float64),
         (true, :none, String, lazy"hello world"),
-
     ]
         test_rrule!!(Xoshiro(123456), f, x...; interface_only, perf_flag)
     end
