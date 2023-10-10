@@ -61,7 +61,7 @@
         @test shadow(_out) == output_shadow(inst)
         @test all(map(==, new_dargs, input_shadows(inst)))
     end
-    @testset for (interface_only, f, x...) in TestResources.TEST_FUNCTIONS
+    @testset "$f, $typeof(x)" for (interface_only, f, x...) in TestResources.TEST_FUNCTIONS
         @info "$(map(typeof, (f, x...)))"
         test_taped_rrule!!(
             Xoshiro(123456), f, deepcopy(x)...; interface_only, perf_flag=:none
