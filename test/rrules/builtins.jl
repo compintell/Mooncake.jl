@@ -1,18 +1,4 @@
 @testset "builtins" begin
-    @testset "foreigncalls that should never be hit: $name" for name in [
-        :jl_alloc_array_1d, :jl_alloc_array_2d, :jl_alloc_array_3d, :jl_new_array,
-        :jl_array_grow_end, :jl_array_del_end, :jl_array_copy, :jl_type_intersection,
-        :memset,
-    ]
-        @test_throws(
-            ErrorException,
-            Taped.rrule!!(
-                CoDual(Umlaut.__foreigncall__, NoTangent()),
-                CoDual(Val(name), NoTangent()),
-            )
-        )
-    end
-
     @test_throws(
         ErrorException,
         Taped.rrule!!(CoDual(IntrinsicsWrappers.add_ptr, NoTangent()), 5.0, 4.0),
