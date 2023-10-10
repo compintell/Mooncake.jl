@@ -26,6 +26,7 @@ jobs:
         test_group:
           - 'basic'
           - 'extended'
+          - 'diff_tests'
     steps:
       - uses: actions/checkout@v2
       - uses: julia-actions/setup-julia@v1

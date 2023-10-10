@@ -50,11 +50,9 @@
         )) do (A, B, C)
             (false, mul!, A, B, C, randn(), randn())
         end),
-        TestResources.DIFFTESTS_FUNCTIONS[1:66], # SKIPPING SPARSE_LDIV
-        TestResources.DIFFTESTS_FUNCTIONS[68:89], # SKIPPING SPARSE_LDIV
-        TestResources.DIFFTESTS_FUNCTIONS[91:end], # SKIPPING SPARSE_LDIV
     )
         @info "$(map(typeof, (f, x...)))"
-        test_taped_rrule!!(Xoshiro(123456), f, deepcopy(x)...; interface_only, perf_flag=:none)
+        rng = Xoshiro(123456)
+        test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only, perf_flag=:none)
     end
 end
