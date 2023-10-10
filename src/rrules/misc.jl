@@ -23,6 +23,7 @@ for name in [
     :(Base.datatype_pointerfree),
     :(Base.datatype_alignment),
     :(Base.datatype_fielddesc_type),
+    :(LinearAlgebra.chkstride1),
 ]
     @eval isprimitive(::RMC, ::Core.Typeof($name), args...) = true
     @eval function rrule!!(::CoDual{Core.Typeof($name)}, args::CoDual...)
@@ -60,3 +61,8 @@ function rrule!!(
 end
 
 Umlaut.isprimitive(::RMC, ::typeof(lgetfield), args...) = true
+
+isprimitive(::RMC, ::Type, ::TypeVar, ::Type) = true
+function rrule!!(x::CoDual{<:Type}, y::CoDual{<:TypeVar}, z::CoDual{<:Type})
+    return CoDual(primal(x)(primal(y), primal(z)), NoTangent()), NoPullback()
+end

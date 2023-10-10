@@ -39,6 +39,8 @@
         (false, isbitstype, Float64),
         (false, sizeof, Float64),
         (false, promote_type, Float64, Float64),
+        (false, LinearAlgebra.chkstride1, randn(3, 3)),
+        (false, LinearAlgebra.chkstride1, randn(3, 3), randn(2, 2)),
     ]
         test_rrule!!(Xoshiro(123456), f, x...; interface_only, perf_flag=:stability)
     end
