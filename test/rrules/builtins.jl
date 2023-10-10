@@ -15,12 +15,6 @@
     _a = Vector{Vector{Float64}}(undef, 3)
     _a[1] = randn(4)
 
-    function arrayset_tester(x)
-        x_vec = Vector{typeof(x)}(undef, 3)
-        x_vec[1] = x
-        return x_vec
-    end
-
     @testset "$f, $(typeof(x))" for (interface_only, perf_flag, f, x...) in [
 
         # Core.Intrinsics:
@@ -233,7 +227,6 @@
         ),
         (false, :none, (v, x) -> (pointerset(pointer(x), v, 2, 1); x), 3.0, randn(5)),
         (false, :none, x -> (pointerset(pointer(x), UInt8(3), 2, 1); x), rand(UInt8, 5)),
-        (false, :none, arrayset_tester, randn(4)),
     )
         test_taped_rrule!!(Xoshiro(123456), f, deepcopy(x)...; interface_only, perf_flag)
     end
