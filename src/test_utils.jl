@@ -514,6 +514,8 @@ Base.:(==)(a::MutableFoo, b::MutableFoo) = equal_field(a, b, :a) && equal_field(
 mutable struct TypeStableMutableStruct{T}
     a::Float64
     b::T
+    TypeStableMutableStruct{T}(a::Float64) where {T} = new{T}(a)
+    TypeStableMutableStruct{T}(a::Float64, b::T) where {T} = new{T}(a, b)
 end
 
 function Base.:(==)(a::TypeStableMutableStruct, b::TypeStableMutableStruct)

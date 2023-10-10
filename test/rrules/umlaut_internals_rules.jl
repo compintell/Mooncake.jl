@@ -22,9 +22,16 @@
             false,
             :stability,
             __new__,
-            TestResources.TypeStableMutableStruct{Vector{Float64}},
+            TypeStableMutableStruct{Vector{Float64}},
             5.0,
             randn(5),
+        ),
+        (
+            false,
+            :stability,
+            __new__,
+            TypeStableMutableStruct{Vector{Float64}},
+            5.0,
         ),
         (false, :stability, __new__, NamedTuple{(), Tuple{}}),
 
