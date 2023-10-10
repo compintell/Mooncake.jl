@@ -1,12 +1,15 @@
 function rrule!!(::CoDual{typeof(verify)}, args...)
-    v = verify(map(primal, args)...)
-    return CoDual(v, zero_tangent(v)), NoPullback()
+    return CoDual(verify(map(primal, args)...), zero_tangent(v)), NoPullback()
 end
 
-function __new__pullback(dy, d__new__, df, dxs::Vararg{Any, N}) where {N}
-    new_dxs = map((x, y) -> increment!!(x, _value(y)), dxs, values(dy.fields))
-    return d__new__, df, new_dxs...
+@generated function __new__pullback(dy, d__new__, df, dxs::Vararg{Any, N}) where {N}
+    inc_exprs = map(n -> :(increment!!(dxs[$n], _value(fs[$n]))), 1:N)
+    return quote
+        fs = dy.fields
+        return $(Expr(:tuple, :d__new__, :df, inc_exprs...))
+    end
 end
+
 function __new__pullback(dy::NamedTuple, d__new__, df, dxs::Vararg{Any, N}) where {N}
     new_dxs = map((x, y) -> increment!!(x, _value(y)), dxs, dy)
     return d__new__, df, new_dxs...
