@@ -1,3 +1,7 @@
+# The approach taken to "accelerating" the tape in this code is precisely the same one taken
+# by ReverseDiff.jl, albeit the approach taken here is not AD-specific -- it can be applied
+# to any Umlaut.jl tape.
+
 struct ConstArg{T}
     x::T
 end
