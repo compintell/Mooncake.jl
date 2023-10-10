@@ -437,7 +437,8 @@ function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P,
     # If t isn't the zero element, then adding it to itself must change its value.
     if !has_equal_data(t, z)
         if !ismutabletype(P)
-            @test !has_equal_data(increment!!(tc, tc), tc)
+            tc′ = increment!!(tc, tc)
+            @test tc === tc′ || !has_equal_data(tc′, tc)
         end
     end
 

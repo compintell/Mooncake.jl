@@ -545,7 +545,7 @@ end
 
 for _P in [
     UnitRange, Transpose, Adjoint, SubArray, Base.RefValue, LazyString, Diagonal, Xoshiro,
-    StepRange, UpperTriangular, LowerTriangular,
+    StepRange, UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular,
 ]
     @eval _add_to_primal(p::$_P, t) = _containerlike_add_to_primal(p, t)
     @eval _diff(p::P, q::P) where {P<:$_P} = _containerlike_diff(p, q)

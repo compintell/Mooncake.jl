@@ -82,6 +82,19 @@
                 build_tangent(UnitRange{Int}, NoTangent(), NoTangent()),
             ),
         ],
+        map([
+            LowerTriangular{Float64, Matrix{Float64}},
+            UpperTriangular{Float64, Matrix{Float64}},
+            UnitLowerTriangular{Float64, Matrix{Float64}},
+            UnitUpperTriangular{Float64, Matrix{Float64}},
+        ]) do T
+            return (
+                T(randn(2, 2)),
+                build_tangent(T, [1.0 2.0; 3.0 4.0]),
+                build_tangent(T, [2.0 1.0; 5.0 4.0]),
+                build_tangent(T, [3.0 3.0; 8.0 8.0]),
+            )
+        end,
         [
             (p, NoTangent(), NoTangent(), NoTangent()) for p in
                 [Array, Float64, Union{Float64, Float32}, Union, UnionAll,

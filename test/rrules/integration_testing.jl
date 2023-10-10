@@ -29,9 +29,16 @@
         map(n -> (false, map, sin, randn(n)), 1:7),
         map(n -> (false, x -> sin.(x), (randn(n)..., )), 1:7),
         map(n -> (false, x -> sin.(x), randn(n)), 1:7),
-        vec(map(Iterators.product( # These all work fine, but take a long time to run.
-            [randn(3, 5), transpose(randn(5, 3)), adjoint(randn(5, 3))],
-            [
+        vec(map(Iterators.product(
+            Any[
+                randn(3, 5),
+                transpose(randn(5, 3)),
+                adjoint(randn(5, 3)),
+                view(randn(5, 5), 1:3, 1:5),
+                transpose(view(randn(5, 5), 1:5, 1:3)),
+                adjoint(view(randn(5, 5), 1:5, 1:3)),
+            ],
+            Any[
                 randn(3, 4),
                 transpose(randn(4, 3)),
                 adjoint(randn(4, 3)),
@@ -39,7 +46,7 @@
                 transpose(view(randn(5, 5), 1:4, 1:3)),
                 adjoint(view(randn(5, 5), 1:4, 1:3)),
             ],
-            [
+            Any[
                 randn(4, 5),
                 transpose(randn(5, 4)),
                 adjoint(randn(5, 4)),
@@ -48,6 +55,31 @@
                 adjoint(view(randn(5, 5), 1:5, 1:4)),
             ],
         )) do (A, B, C)
+            (false, mul!, A, B, C, randn(), randn())
+        end),
+        vec(map(product(
+            Any[
+                LowerTriangular(randn(3, 3)),
+                UpperTriangular(randn(3, 3)),
+                UnitLowerTriangular(randn(3, 3)),
+                UnitUpperTriangular(randn(3, 3)),
+                LowerTriangular(view(randn(5, 5), 2:4, 2:4)),
+                UpperTriangular(view(randn(5, 5), 2:4, 2:4)),
+                UnitLowerTriangular(view(randn(5, 5), 2:4, 2:4)),
+                UnitUpperTriangular(view(randn(5, 5), 2:4, 2:4)),
+            ],
+            Any[
+                LowerTriangular(randn(3, 3)),
+                UpperTriangular(randn(3, 3)),
+                UnitLowerTriangular(randn(3, 3)),
+                UnitUpperTriangular(randn(3, 3)),
+                LowerTriangular(view(randn(5, 5), 2:4, 2:4)),
+                UpperTriangular(view(randn(5, 5), 2:4, 2:4)),
+                UnitLowerTriangular(view(randn(5, 5), 2:4, 2:4)),
+                UnitUpperTriangular(view(randn(5, 5), 2:4, 2:4)),
+            ],
+        )) do (B, C)
+            A = randn(3, 3)
             (false, mul!, A, B, C, randn(), randn())
         end),
     )
