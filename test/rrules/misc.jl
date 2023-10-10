@@ -12,10 +12,6 @@
     _dx = Ref(4.0)
     @testset "$f, $(typeof(x))" for (interface_only, f, x...) in [
 
-        # Legit performance rules:
-        (false, sin, 5.0),
-        (false, cos, 5.0),
-
         # Rules to avoid pointer type conversions.
         (
             true,
@@ -43,11 +39,10 @@
         (false, isbitstype, Float64),
         (false, sizeof, Float64),
         (false, promote_type, Float64, Float64),
+        (false, LinearAlgebra.chkstride1, randn(3, 3)),
+        (false, LinearAlgebra.chkstride1, randn(3, 3), randn(2, 2)),
     ]
-        test_rrule!!(
-            Xoshiro(123456), f, x...;
-            interface_only, check_conditional_type_stability=false,
-        )
+        test_rrule!!(Xoshiro(123456), f, x...; interface_only, perf_flag=:stability)
     end
 
     @testset "literals" begin
@@ -55,16 +50,16 @@
         @testset "Tuple" begin
             x = (5.0, randn(5))
             @test @inferred(lgetfield(x, SInt(1))) == getfield(x, 1)
-            test_rrule!!(rng, lgetfield, x, SInt(1))
+            test_rrule!!(rng, lgetfield, x, SInt(1); perf_flag=:stability)
             @test @inferred(lgetfield(x, SInt(2))) == getfield(x, 2)
-            test_rrule!!(rng, lgetfield, x, SInt(2))
+            test_rrule!!(rng, lgetfield, x, SInt(2); perf_flag=:stability)
         end
         @testset "NamedTuple" begin
             x = (a=5.0, b=randn(5))
             @test @inferred(lgetfield(x, SSym(:a))) == getfield(x, :a)
-            test_rrule!!(rng, lgetfield, x, SSym(:a))
+            test_rrule!!(rng, lgetfield, x, SSym(:a); perf_flag=:stability)
             @test @inferred(lgetfield(x, SSym(:b))) == getfield(x, :b)
-            test_rrule!!(rng, lgetfield, x, SSym(:b))
+            test_rrule!!(rng, lgetfield, x, SSym(:b); perf_flag=:stability)
         end
     end
 end

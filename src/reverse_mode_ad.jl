@@ -65,16 +65,3 @@ function rrule!!(::CoDual{typeof(rebind)}, x::CoDual)
 end
 
 isprimitive(::RMC, ::typeof(rebind), x) = true
-
-#
-# LinearAlgebra
-#
-
-function rrule!!(::CoDual{typeof(LinearAlgebra.chkstride1)}, args...)
-    return CoDual(LinearAlgebra.chkstride1(args...), NoTangent()), NoPullback()
-end
-
-isprimitive(::RMC, ::Type, ::TypeVar, ::Type) = true
-function rrule!!(x::CoDual{<:Type}, y::CoDual{<:TypeVar}, z::CoDual{<:Type})
-    return CoDual(primal(x)(primal(y), primal(z)), NoTangent()), NoPullback()
-end

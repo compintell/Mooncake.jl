@@ -25,8 +25,16 @@
             view(randn(3, 3), 1:2, 1:1),
             Xoshiro(123456),
             Ref(5.0),
-            TestResources.StructFoo(5.0, randn(5)),
-            TestResources.MutableFoo(5.0, randn(5)),
+            StructFoo(5.0, randn(5)),
+            MutableFoo(5.0, randn(5)),
+            TypeStableMutableStruct{Vector{Float64}}(5.0, randn(5)),
+            StructFoo(5.0),
+            MutableFoo(5.0),
+            TypeStableMutableStruct{Vector{Float64}}(5.0),
+            LowerTriangular(randn(3, 3)),
+            UpperTriangular(randn(3, 3)),
+            UnitLowerTriangular(randn(3, 3)),
+            UnitUpperTriangular(randn(2, 2)),
         ]
     )
         TestUtils.test_rule_and_type_interactions(Xoshiro(123456), x)

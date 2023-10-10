@@ -104,6 +104,8 @@ tangent_type(::Type{Symbol}) = NoTangent
 
 tangent_type(::Type{Module}) = NoTangent
 
+tangent_type(::Type{Nothing}) = NoTangent
+
 tangent_type(::Type{P}) where {P<:Union{UInt8, UInt16, UInt32, UInt64, UInt128}} = NoTangent
 
 tangent_type(::Type{P}) where {P<:Union{Int8, Int16, Int32, Int64, Int128}} = NoTangent
@@ -448,6 +450,8 @@ function _scale(a::Float64, t::PossiblyUninitTangent{T}) where {T}
 end
 _scale(a::Float64, t::T) where {T<:Union{Tangent, MutableTangent}} = T(_scale(a, t.fields))
 
+struct FieldUndefined end
+
 """
     _dot(t::T, s::T)::Float64 where {T}
 
@@ -463,7 +467,9 @@ function _dot(t::T, s::T) where {T<:Array}
     if isbitstype(T)
         return sum(_map(_dot, t, s))
     else
-        return sum(_map(n -> isassigned(t, n) ? _dot(t[n], s[n]) : 0.0, eachindex(t)))
+        return sum(_map(eachindex(t)) do n
+            (isassigned(t, n) && isassigned(s, n)) ? _dot(t[n], s[n]) : 0.0
+        end)
     end
 end
 _dot(t::T, s::T) where {T<:Union{Tuple, NamedTuple}} = sum(map(_dot, t, s); init=0.0)
@@ -483,7 +489,7 @@ _Not_ currently defined by default.
 `_containerlike_add_to_primal` is potentially what you want to target when implementing for
 a particular primal-tangent pair.
 
-Adds `t` to `p`, returning a `P`. It must be the case that `tangnet_type(P) == T`.
+Adds `t` to `p`, returning a `P`. It must be the case that `tangent_type(P) == T`.
 """
 _add_to_primal(x, ::NoTangent) = x
 _add_to_primal(x::T, t::T) where {T<:IEEEFloat} = x + t
@@ -499,10 +505,10 @@ function _containerlike_add_to_primal(p::T, t::Union{Tangent, MutableTangent}) w
     tmp = map(fieldnames(T)) do f
         tf = getfield(t.fields, f)
         isdefined(p, f) && is_init(tf) && return _add_to_primal(getfield(p, f), tf.tangent) 
-        isdefined(p, f) && return getfield(p, f)
+        !isdefined(p, f) && !is_init(tf) && return FieldUndefined()
         throw(error("unable to handle undefined-ness"))
     end
-    return T(tmp...)
+    return T(filter(!=(FieldUndefined()), tmp)...)
 end
 
 """
@@ -532,34 +538,27 @@ _diff(p::P, q::P) where {P<:Union{Tuple, NamedTuple}} = _map(_diff, p, q)
 function _containerlike_diff(p::P, q::P) where {P}
     diffed_fields = map(fieldnames(P)) do f
         isdefined(p, f) && isdefined(q, f) && return _diff(getfield(p, f), getfield(q, f))
+        !isdefined(p, f) && !isdefined(q, f) && return nothing
         throw(error("Unhandleable undefinedness"))
     end
+    diffed_fields = filter(!=(nothing), diffed_fields)
     return build_tangent(P, diffed_fields...)
 end
 
 for _P in [
     UnitRange, Transpose, Adjoint, SubArray, Base.RefValue, LazyString, Diagonal, Xoshiro,
-    StepRange, UpperTriangular, LowerTriangular,
+    StepRange, UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular,
 ]
     @eval _add_to_primal(p::$_P, t) = _containerlike_add_to_primal(p, t)
     @eval _diff(p::P, q::P) where {P<:$_P} = _containerlike_diff(p, q)
 end
-
-function _might_be_active(::Type{P}) where {P}
-    tangent_type(P) == NoTangent && return false
-    Base.issingletontype(P) && return false
-    Base.isabstracttype(P) && return true
-    isprimitivetype(P) && return true
-    return any(might_be_active, fieldtypes(P))
-end
-_might_be_active(::Type{<:Array{P}}) where {P} = _might_be_active(P)
 
 @generated function might_be_active(::Type{P}) where {P}
     tangent_type(P) == NoTangent && return :(return false)
     Base.issingletontype(P) && return :(return false)
     Base.isabstracttype(P) && return :(return true)
     isprimitivetype(P) && return :(return true)
-    return :(return $(any(_might_be_active, fieldtypes(P))))
+    return :(return $(any(might_be_active, fieldtypes(P))))
 end
 @generated function might_be_active(::Type{<:Array{P}}) where {P}
     return :(return $(might_be_active(P)))

@@ -8,6 +8,6 @@
         TestResources.StructFoo(5.0, randn(5)),
         TestResources.MutableFoo(5.0, randn(5)),
     ]
-        test_rrule!!(Xoshiro(123456), Taped.rebind, x; interface_only=false)
+        test_rrule!!(Xoshiro(123456), rebind, x; interface_only=false, perf_flag=:none)
     end
 end

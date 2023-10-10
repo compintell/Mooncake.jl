@@ -28,12 +28,4 @@ end
     x = 5.0
     b_result = (@benchmark Taped.execute!($tape, $x))
     @test allocs(b_result) == 0
-
-    # _, tape = Umlaut.trace(foo, 5.0; ctx=Taped.RMC())
-    # r_tape = Taped.to_reverse_mode_ad(tape)
-    # x = Shadow(5.0, Ref(0.0), nothing)
-    # play!(r_tape, foo, x)
-    # acc_r_tape = Taped.accelerate(r_tape)
-    # b_result = (@benchmark Taped.execute!($acc_r_tape, foo, $x))
-    # @test allocs(b_result) == 3
 end

@@ -20,6 +20,7 @@ end
 function Umlaut.handle_gotoifnot_node!(
     t::Tracer{<:TapedContext}, cf::Core.GotoIfNot, frame::Frame
 )
+    @nospecialize t cf frame
     return if cf.cond isa Umlaut.Argument || cf.cond isa Umlaut.SSAValue
         # resolve tape var
         c = frame.ir2tape[cf.cond]
@@ -65,6 +66,7 @@ unbind(v) = v
 Trace call defined by variables in v_fargs.
 """
 function Umlaut.trace!(t::Tracer{<:TapedContext}, v_fargs)
+    @nospecialize t v_fargs
     v_fargs = Umlaut.unsplat!(t, v_fargs)
     # note: we need to extract IR before vararg grouping, which may change
     # v_fargs, thus invalidating method search

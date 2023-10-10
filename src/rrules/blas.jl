@@ -15,12 +15,6 @@ function _trans(flag, mat)
     throw(error("Unrecognised flag $flag"))
 end
 
-function t_char(x::UInt8)
-    x == 0x4e && return 'N'
-    x == 0x54 && return 'T'
-    x == 0x43 && return 'C'
-    throw(error("unrecognised char-code $x"))
-end
 
 
 #
@@ -132,7 +126,7 @@ for (gemv, elty) in ((:dgemv_, :Float64), (:sgemm_, :Float32))
         args...
     )
         # Load in data.
-        tA = t_char(unsafe_load(primal(_tA)))
+        tA = Char(unsafe_load(primal(_tA)))
         M, N, lda, incx, incy = map(unsafe_load ∘ primal, (_M, _N, _lda, _incx, _incy))
         alpha = unsafe_load(primal(_alpha))
         beta = unsafe_load(primal(_beta))
@@ -255,8 +249,8 @@ for (gemm, elty) in ((:dgemm_, :Float64), (:sgemm_, :Float32))
         LDC::CoDual{Ptr{BLAS.BlasInt}},
         args...,
     )
-        _tA = t_char(unsafe_load(primal(tA)))
-        _tB = t_char(unsafe_load(primal(tB)))
+        _tA = Char(unsafe_load(primal(tA)))
+        _tB = Char(unsafe_load(primal(tB)))
         _m = unsafe_load(primal(m))
         _n = unsafe_load(primal(n))
         _ka = unsafe_load(primal(ka))

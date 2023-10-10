@@ -1,182 +1,113 @@
-tangent(nt::NamedTuple) = Tangent(map(PossiblyUninitTangent, nt))
-mutable_tangent(nt::NamedTuple) = MutableTangent(map(PossiblyUninitTangent, nt))
-function mutable_tangent(::Type{P}, nt::NamedTuple{names}) where {P, names}
-    v = map((P, x) -> PossiblyUninitTangent{tangent_type(P)}(x), fieldtypes(P), nt)
-    return MutableTangent(NamedTuple{names}(v))
-end
-
 @testset "tangents" begin
-    rng = Xoshiro(123456)
-    @testset "sin" begin
-        t = Tangent((;))
-        test_tangent(rng, sin, t, t, t)
-        test_numerical_testing_interface(sin, t)
-    end
 
-    # NOTE: ADD INTERFACE-ONLY TEST FOR LAZY STRING
-
-    @testset "$T" for T in [Float16, Float32, Float64]
-        test_tangent(rng, T(10), T(9), T(5), T(4))
-        test_numerical_testing_interface(T(10), T(9))
-    end
-
-    @testset "Vector{Float64}" begin
-        p = randn(5)
-        x = randn(5)
-        y = randn(5)
-        test_tangent(rng, p, x + y, x, y)
-        test_numerical_testing_interface(p, x)
-    end
-
-    @testset "Vector{Int}" begin
-        p = rand(Int, 5)
-        x = fill(NoTangent(), 5)
-        y = fill(NoTangent(), 5)
-        z = fill(NoTangent(), 5)
+    # Each tuple is of the form (primal, t1, t2, increment!!(t1, t2)).
+    @testset "$(typeof(p))" for (p, x, y, z) in vcat(
+        [
+            (sin, Tangent((;)), Tangent((;)), Tangent((;))),
+            map(Float16, (5.0, 4.0, 3.1, 7.1)),
+            (5f0, 4f0, 3f0, 7f0),
+            (5.1, 4.0, 3.0, 7.0),
+            ([3.0, 2.0], [1.0, 2.0], [2.0, 3.0], [3.0, 5.0]),
+            (
+                [1, 2],
+                [NoTangent(), NoTangent()],
+                [NoTangent(), NoTangent()],
+                [NoTangent(), NoTangent()],
+            ),
+            (
+                [[1.0], [1.0, 2.0]],
+                [[2.0], [2.0, 3.0]],
+                [[3.0], [4.0, 5.0]],
+                [[5.0], [6.0, 8.0]],
+            ),
+            (
+                setindex!(Vector{Vector{Float64}}(undef, 2), [1.0], 1),
+                setindex!(Vector{Vector{Float64}}(undef, 2), [2.0], 1),
+                setindex!(Vector{Vector{Float64}}(undef, 2), [3.0], 1),
+                setindex!(Vector{Vector{Float64}}(undef, 2), [5.0], 1),
+            ),
+            (
+                setindex!(Vector{Vector{Float64}}(undef, 2), [1.0], 2),
+                setindex!(Vector{Vector{Float64}}(undef, 2), [2.0], 2),
+                setindex!(Vector{Vector{Float64}}(undef, 2), [3.0], 2),
+                setindex!(Vector{Vector{Float64}}(undef, 2), [5.0], 2),
+            ),
+            (
+                (6.0, [1.0, 2.0]),
+                (5.0, [3.0, 4.0]),
+                (4.0, [4.0, 3.0]),
+                (9.0, [7.0, 7.0]),
+            ),
+            (
+                (a=6.0, b=[1.0, 2.0]),
+                (a=5.0, b=[3.0, 4.0]),
+                (a=4.0, b=[4.0, 3.0]),
+                (a=9.0, b=[7.0, 7.0]),
+            ),
+            ((;), (;), (;), (;)),
+            (
+                TypeStableMutableStruct{Float64}(5.0, 3.0),
+                build_tangent(TypeStableMutableStruct{Float64}, 5.0, 4.0),
+                build_tangent(TypeStableMutableStruct{Float64}, 3.0, 3.0),
+                build_tangent(TypeStableMutableStruct{Float64}, 8.0, 7.0),
+            ),
+            ( # complete init
+                StructFoo(6.0, [1.0, 2.0]),
+                build_tangent(StructFoo, 5.0, [3.0, 4.0]),
+                build_tangent(StructFoo, 3.0, [2.0, 1.0]),
+                build_tangent(StructFoo, 8.0, [5.0, 5.0]),
+            ),
+            ( # partial init
+                StructFoo(6.0),
+                build_tangent(StructFoo, 5.0),
+                build_tangent(StructFoo, 4.0),
+                build_tangent(StructFoo, 9.0),
+            ),
+            ( # complete init
+                MutableFoo(6.0, [1.0, 2.0]),
+                build_tangent(MutableFoo, 5.0, [3.0, 4.0]),
+                build_tangent(MutableFoo, 3.0, [2.0, 1.0]),
+                build_tangent(MutableFoo, 8.0, [5.0, 5.0]),
+            ),
+            ( # partial init
+                MutableFoo(6.0),
+                build_tangent(MutableFoo, 5.0),
+                build_tangent(MutableFoo, 4.0),
+                build_tangent(MutableFoo, 9.0),
+            ),
+            (
+                UnitRange{Int}(5, 7),
+                build_tangent(UnitRange{Int}, NoTangent(), NoTangent()),
+                build_tangent(UnitRange{Int}, NoTangent(), NoTangent()),
+                build_tangent(UnitRange{Int}, NoTangent(), NoTangent()),
+            ),
+        ],
+        map([
+            LowerTriangular{Float64, Matrix{Float64}},
+            UpperTriangular{Float64, Matrix{Float64}},
+            UnitLowerTriangular{Float64, Matrix{Float64}},
+            UnitUpperTriangular{Float64, Matrix{Float64}},
+        ]) do T
+            return (
+                T(randn(2, 2)),
+                build_tangent(T, [1.0 2.0; 3.0 4.0]),
+                build_tangent(T, [2.0 1.0; 5.0 4.0]),
+                build_tangent(T, [3.0 3.0; 8.0 8.0]),
+            )
+        end,
+        [
+            (p, NoTangent(), NoTangent(), NoTangent()) for p in
+                [Array, Float64, Union{Float64, Float32}, Union, UnionAll,
+                Core.Intrinsics.xor_int, typeof(<:)]
+        ],
+    )
+        rng = Xoshiro(123456)
         test_tangent(rng, p, z, x, y)
         test_numerical_testing_interface(p, x)
     end
 
-    @testset "Vector{Vector{Float64}}" begin
-        p = [randn(3) for _ in 1:4]
-        x = [randn(3) for _ in 1:4]
-        y = [randn(3) for _ in 1:4]
-        z = x .+ y
-        test_tangent(rng, p, z, x, y)
-        test_numerical_testing_interface(p, x)
-    end
-
-    @testset "Vector{Vector{Float64}} with undefs" begin
-        p = Vector{Vector{Float64}}(undef, 4)
-        p[1] = randn(3)
-        p[2] = randn(4)
-        x = Vector{Vector{Float64}}(undef, 4)
-        x[1] = randn(3)
-        x[2] = randn(4)
-        y = Vector{Vector{Float64}}(undef, 4)
-        y[1] = randn(3)
-        y[2] = randn(4)
-        z = Vector{Vector{Float64}}(undef, 4)
-        z[1] = x[1] + y[1]
-        z[2] = x[2] + y[2]
-        test_tangent(rng, p, z, x, y)
-        test_numerical_testing_interface(p, x)
-    end
-
-    @testset "Tuple{Float64, Vector{Float64}}" begin
-        p = (6.0, randn(5))
-        x = (5.0, randn(5))
-        y = (4.0, randn(5))
-        z = (9.0, x[2] + y[2])
-        test_tangent(rng, p, z, x, y)
-        test_numerical_testing_interface(p, x)
-    end
-
-    @testset "NamedTuple{(:a, :b), Tuple{Float64, Vector{Float64}}}" begin
-        p = (a=6.0, b=randn(5))
-        x = (a=5.0, b=randn(5))
-        y = (a=4.0, b=rand(5))
-        z = (a=9.0, b=x.b + y.b)
-        test_tangent(rng, p, z, x, y)
-        test_numerical_testing_interface(p, x)
-    end
-
-    @testset "NamedTuple{(), Tuple{}}" begin
-        p = (;)
-        x = (;)
-        test_tangent(rng, p, x, x, x)
-    end
-
-    @testset "StructFoo (full init)" begin
-        p = TestResources.StructFoo(6.0, randn(5))
-        _tangent = nt -> Taped.build_tangent(typeof(p), nt...)
-        x = _tangent((a=5.0, b=randn(5)))
-        y = _tangent((a=4.0, b=randn(5)))
-        z = _tangent((a=9.0, b=x.fields.b.tangent + y.fields.b.tangent))
-        test_tangent(rng, p, z, x, y)
-        test_numerical_testing_interface(p, x)
-
-        # Verify tangent generation works correctly.
-        t = _tangent((a=5.0, b=randn(5)))
-        @test Taped.is_init(t.fields.a) == true
-        @test Taped.is_init(t.fields.b) == true
-    end
-
-    T_b = PossiblyUninitTangent{Any}
-    @testset "StructFoo (partial init)" begin
-        p = TestResources.StructFoo(6.0)
-        _tangent = nt -> Taped.build_tangent(typeof(p), nt...)
-        x = _tangent((a=5.0,))
-        y = _tangent((a=4.0,))
-        z = _tangent((a=9.0,))
-        test_tangent(rng, p, z, x, y)
-
-        x_init = _tangent((a=5.0, b=randn(5)))
-        @test_throws ErrorException increment!!(x_init, x)
-        @test_throws ErrorException increment!!(x, x_init)
-
-        # Verify tangent generation works correctly.
-        t = Taped.build_tangent(TestResources.StructFoo, 5.0)
-        @test Taped.is_init(t.fields.a) == true
-        @test Taped.is_init(t.fields.b) == false
-    end
-
-    @testset "MutableFoo (full init)" begin
-        _tangent = (args...) -> Taped.build_tangent(TestResources.MutableFoo, args...)
-        p = TestResources.MutableFoo(6.0, randn(5))
-        x = _tangent(5.0, randn(5))
-        y = _tangent(4.0, rand(5))
-        z = _tangent(9.0, x.fields.b.tangent + y.fields.b.tangent)
-        test_tangent(rng, p, z, x, y)
-        test_numerical_testing_interface(p, x)
-
-        # Verify tangent generation works correctly.
-        t = _tangent(5.0, randn(5))
-        @test Taped.is_init(t.fields.a) == true
-        @test Taped.is_init(t.fields.b) == true
-    end
-
-    @testset "MutableFoo (partial init)" begin
-        p = TestResources.MutableFoo(6.0)
-        x = MutableTangent((a=_wrap_field(5.0), b=T_b()))
-        y = MutableTangent((a=_wrap_field(4.0), b=T_b()))
-        z = MutableTangent((a=_wrap_field(9.0), b=T_b()))
-        test_tangent(rng, p, z, x, y)
-
-        x_init = mutable_tangent(TestResources.MutableFoo, (a=5.0, b=randn(5)))
-        @test_throws ErrorException increment!!(x_init, x)
-        @test_throws ErrorException increment!!(x, x_init)
-
-        # Verify tangent generation works correctly.
-        t = Taped.build_tangent(TestResources.MutableFoo, 5.0)
-        @test Taped.is_init(t.fields.a) == true
-        @test Taped.is_init(t.fields.b) == false
-    end
-
-    @testset "UnitRange{Int}" begin
-        p = UnitRange{Int}(5, 7)
-        x = Taped.build_tangent(typeof(p), NoTangent(), NoTangent())
-        test_tangent(rng, p, x, x, x)
-
-        # Verify tangent generation works correctly.
-        t = Taped.build_tangent(UnitRange{Int}, NoTangent(), NoTangent())
-        @test Taped.is_init(t.fields.start) == true
-        @test Taped.is_init(t.fields.stop) == true
-    end
-
-    @testset "types" begin
-        @testset "$T" for T in [Array, Float64, Union{Float64, Float32}, Union, UnionAll]
-            test_tangent(rng, T, NoTangent(), NoTangent(), NoTangent())
-        end
-    end
-
-    test_tangent(rng, Core.Intrinsics.xor_int, NoTangent(), NoTangent(), NoTangent())
-    test_tangent(rng, typeof(<:), NoTangent(), NoTangent(), NoTangent())
-
-    @testset "zero_tangent performance" begin
-        Taped.zero_tangent(Main)
-        @test @allocated(Taped.zero_tangent(Main)) == 0
-    end
+    tangent(nt::NamedTuple) = Tangent(map(PossiblyUninitTangent, nt))
+    mutable_tangent(nt::NamedTuple) = MutableTangent(map(PossiblyUninitTangent, nt))
 
     @testset "increment_field!!" begin
         @testset "NoTangent" begin
@@ -245,17 +176,21 @@ end
     end
 
     @testset "set_field_to_zero!!" begin
-        nt = (a=5.0, b=4.0)
-        nt2 = (a=0.0, b=4.0)
-        @test set_field_to_zero!!(nt, :a) == nt2
+        nt1 = (a=5.0, b=[4.0])
+        t1 = build_tangent(StructFoo, nt1...)
+        mt1 = build_tangent(MutableFoo, nt1...)
+        nt2 = (a=0.0, b=[4.0])
+        t2 = build_tangent(StructFoo, nt2...)
+        mt2 = build_tangent(MutableFoo, nt2...)
+        @test set_field_to_zero!!(nt1, :a) == nt2
         @test set_field_to_zero!!((5.0, 4.0), 2) == (5.0, 0.0)
-        @test set_field_to_zero!!(tangent(nt), :a) == tangent(nt2)
+        @test set_field_to_zero!!(t2, :a) == t2
 
-        x = mutable_tangent(nt)
-        @test set_field_to_zero!!(x, :a) == mutable_tangent(nt2)
-        @test set_field_to_zero!!(x, :a) === x
-        @test set_field_to_zero!!(x, 1) == mutable_tangent(nt2)
-        @test set_field_to_zero!!(x, 1) === x
+        x = build_tangent(MutableFoo, nt1...)
+        @test set_field_to_zero!!(mt1, :a) == mt2
+        @test set_field_to_zero!!(mt1, :a) === mt1
+        @test set_field_to_zero!!(mt1, 1) == mt2
+        @test set_field_to_zero!!(mt1, 1) === mt1
     end
 end
 
