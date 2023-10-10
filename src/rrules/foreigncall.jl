@@ -3,29 +3,9 @@
 # Rules to handle / avoid foreigncall nodes
 #
 
-isprimitive(::RMC, ::typeof(objectid), @nospecialize(x)) = true
-function rrule!!(::CoDual{typeof(objectid)}, @nospecialize(x))
-    return CoDual(objectid(primal(x)), NoTangent()), NoPullback()
-end
-
 isprimitive(::RMC, ::typeof(Base.allocatedinline), ::Type) = true
 function rrule!!(::CoDual{typeof(Base.allocatedinline)}, T::CoDual{<:Type})
     return CoDual(Base.allocatedinline(primal(T)), NoTangent()), NoPullback()
-end
-
-isprimitive(::RMC, ::typeof(pointer_from_objref), x) = true
-function rrule!!(::CoDual{typeof(pointer_from_objref)}, x)
-    y = CoDual(
-        pointer_from_objref(primal(x)),
-        bitcast(Ptr{tangent_type(Nothing)}, pointer_from_objref(shadow(x))),
-    )
-    return y, NoPullback()
-end
-
-isprimitive(::RMC, ::typeof(Base.unsafe_pointer_to_objref), x::Ptr) = true
-function rrule!!(::CoDual{typeof(Base.unsafe_pointer_to_objref)}, x::CoDual{<:Ptr})
-    y = CoDual(unsafe_pointer_to_objref(primal(x)), unsafe_pointer_to_objref(shadow(x)))
-    return y, NoPullback()
 end
 
 function isprimitive(
@@ -54,33 +34,11 @@ function rrule!!(
     return x, NoPullback()
 end
 
-isprimitive(::RMC, ::typeof(Base._growend!), a::Vector, delta::Integer) = true
-function rrule!!(
-    ::CoDual{typeof(Base._growend!)}, a::CoDual{<:Vector}, delta::CoDual{<:Integer},
-)
-    _d = primal(delta)
-    _a = primal(a)
-    Base._growend!(_a, _d)
-    Base._growend!(shadow(a), _d)
-    function _growend!_pullback!!(dy, df, da, ddelta)
-        Base._deleteend!(_a, _d)
-        Base._deleteend!(da, _d)
-        return df, da, ddelta
-    end
-    return CoDual(nothing, zero_tangent(nothing)), _growend!_pullback!!
-end
-
 isprimitive(::RMC, ::typeof(copy), ::Array) = true
 function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Array})
     y = CoDual(copy(primal(a)), copy(shadow(a)))
     copy_pullback!!(dy, df, dx) = df, increment!!(dx, dy)
     return y, copy_pullback!!
-end
-
-isprimitive(::RMC, ::typeof(typeintersect), a, b) = true
-function rrule!!(::CoDual{typeof(typeintersect)}, @nospecialize(a), @nospecialize(b))
-    y = typeintersect(primal(a), primal(b))
-    return CoDual(y, zero_tangent(y)), NoPullback()
 end
 
 isprimitive(::RMC, ::typeof(fill!), ::Union{Array{UInt8}, Array{Int8}}, x::Integer) = true
@@ -98,15 +56,40 @@ function rrule!!(
     return a, fill!_pullback!!
 end
 
+isprimitive(::RMC, ::typeof(Base._growend!), a::Vector, delta::Integer) = true
+function rrule!!(
+    ::CoDual{typeof(Base._growend!)}, a::CoDual{<:Vector}, delta::CoDual{<:Integer},
+)
+    _d = primal(delta)
+    _a = primal(a)
+    Base._growend!(_a, _d)
+    Base._growend!(shadow(a), _d)
+    function _growend!_pullback!!(dy, df, da, ddelta)
+        Base._deleteend!(_a, _d)
+        Base._deleteend!(da, _d)
+        return df, da, ddelta
+    end
+    return CoDual(nothing, zero_tangent(nothing)), _growend!_pullback!!
+end
+
+isprimitive(::RMC, ::typeof(objectid), @nospecialize(x)) = true
+function rrule!!(::CoDual{typeof(objectid)}, @nospecialize(x))
+    return CoDual(objectid(primal(x)), NoTangent()), NoPullback()
+end
+
+isprimitive(::RMC, ::typeof(pointer_from_objref), x) = true
+function rrule!!(::CoDual{typeof(pointer_from_objref)}, x)
+    y = CoDual(
+        pointer_from_objref(primal(x)),
+        bitcast(Ptr{tangent_type(Nothing)}, pointer_from_objref(shadow(x))),
+    )
+    return y, NoPullback()
+end
+
 isprimitive(::RMC, ::typeof(Core.Compiler.return_type), args...) = true
 function rrule!!(::CoDual{typeof(Core.Compiler.return_type)}, args...)
     y = Core.Compiler.return_type(map(primal, args)...)
     return CoDual(y, zero_tangent(y)), NoPullback()
-end
-
-function _increment_pointer!(x::Ptr{T}, y::Ptr{T}, N::Integer) where {T}
-    increment!!(unsafe_wrap(Vector{T}, x, N), unsafe_wrap(Vector{T}, y, N))
-    return x
 end
 
 # unsafe_copyto! is the only function in Julia that appears to rely on a ccall to `memmove`.
@@ -178,6 +161,23 @@ function rrule!!(
     end
 
     return dest, unsafe_copyto_pb!!
+end
+
+isprimitive(::RMC, ::typeof(Base.unsafe_pointer_to_objref), x::Ptr) = true
+function rrule!!(::CoDual{typeof(Base.unsafe_pointer_to_objref)}, x::CoDual{<:Ptr})
+    y = CoDual(unsafe_pointer_to_objref(primal(x)), unsafe_pointer_to_objref(shadow(x)))
+    return y, NoPullback()
+end
+
+isprimitive(::RMC, ::typeof(typeintersect), a, b) = true
+function rrule!!(::CoDual{typeof(typeintersect)}, @nospecialize(a), @nospecialize(b))
+    y = typeintersect(primal(a), primal(b))
+    return CoDual(y, zero_tangent(y)), NoPullback()
+end
+
+function _increment_pointer!(x::Ptr{T}, y::Ptr{T}, N::Integer) where {T}
+    increment!!(unsafe_wrap(Vector{T}, x, N), unsafe_wrap(Vector{T}, y, N))
+    return x
 end
 
 

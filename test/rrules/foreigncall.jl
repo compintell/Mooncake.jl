@@ -1,18 +1,4 @@
 @testset "foreigncall" begin
-    @testset "foreigncalls that should never be hit: $name" for name in [
-        :jl_alloc_array_1d, :jl_alloc_array_2d, :jl_alloc_array_3d, :jl_new_array,
-        :jl_array_grow_end, :jl_array_del_end, :jl_array_copy, :jl_type_intersection,
-        :memset, :jl_get_tls_world_age, :memmove, :jl_object_id,
-    ]
-        @test_throws(
-            ErrorException,
-            Taped.rrule!!(
-                CoDual(Umlaut.__foreigncall__, NoTangent()),
-                CoDual(Val(name), NoTangent()),
-            )
-        )
-    end
-
     _x = Ref(5.0) # data used in tests which aren't protected by GC.
     _dx = randn_tangent(Xoshiro(123456), _x)
 
@@ -32,6 +18,19 @@
         # Rules to avoid foreigncall nodes:
         (false, :stability, Base.allocatedinline, Float64),
         (false, :stability, Base.allocatedinline, Vector{Float64}),
+        (true, :stability, Array{Float64, 1}, undef, 5),
+        (true, :stability, Array{Float64, 2}, undef, 5, 4),
+        (true, :stability, Array{Float64, 3}, undef, 5, 4, 3),
+        (true, :stability, Array{Float64, 4}, undef, 5, 4, 3, 2),
+        (true, :stability, Array{Float64, 5}, undef, 5, 4, 3, 2, 1),
+        (true, :stability, Array{Float64, 4}, undef, (2, 3, 4, 5)),
+        (true, :stability, Array{Float64, 5}, undef, (2, 3, 4, 5, 6)),
+        (true, :stability, Base._growend!, randn(5), 3),
+        (false, :stability, copy, randn(5, 4)),
+        (false, :stability, fill!, rand(Int8, 5), Int8(2)),
+        (false, :stability, fill!, rand(UInt8, 5), UInt8(2)),
+        (false, :stability, objectid, 5.0),
+        (true, :stability, objectid, randn(5)),
         (true, :stability, pointer_from_objref, _x),
         (
             true,
@@ -42,28 +41,15 @@
                 bitcast(Ptr{tangent_type(Nothing)}, pointer_from_objref(_dx)),
             ),
         ),
-        (true, :stability, Array{Float64, 1}, undef, 5),
-        (true, :stability, Array{Float64, 2}, undef, 5, 4),
-        (true, :stability, Array{Float64, 3}, undef, 5, 4, 3),
-        (true, :stability, Array{Float64, 4}, undef, 5, 4, 3, 2),
-        (true, :stability, Array{Float64, 5}, undef, 5, 4, 3, 2, 1),
-        (true, :stability, Array{Float64, 4}, undef, (2, 3, 4, 5)),
-        (true, :stability, Array{Float64, 5}, undef, (2, 3, 4, 5, 6)),
-        (true, :stability, Base._growend!, randn(5), 3),
-        (false, :stability, copy, randn(5, 4)),
-        (false, :stability, typeintersect, Float64, Int),
-        (false, :stability, fill!, rand(Int8, 5), Int8(2)),
-        (false, :stability, fill!, rand(UInt8, 5), UInt8(2)),
         (false, :none, Core.Compiler.return_type, sin, Tuple{Float64}),
         (false, :none, Core.Compiler.return_type, Tuple{typeof(sin), Float64}),
+        (false, :stability, typeintersect, Float64, Int),
         (true, :stability, unsafe_copyto!, CoDual(ptr_a, ptr_da), CoDual(ptr_b, ptr_db), 4),
         (false, :stability, unsafe_copyto!, randn(4), 2, randn(3), 1, 2),
         (
             false, :stability,
             unsafe_copyto!, [rand(3) for _ in 1:5], 2, [rand(4) for _ in 1:4], 1, 3,
         ),
-        (false, :stability, objectid, 5.0),
-        (true, :stability, objectid, randn(5)),
     ]
         test_rrule!!(Xoshiro(123456), f, x...; interface_only, perf_flag)
     end
@@ -81,4 +67,18 @@
         rng = Xoshiro(123456)
         test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only, perf_flag=:none)
     end
+    @testset "foreigncalls that should never be hit: $name" for name in [
+        :jl_alloc_array_1d, :jl_alloc_array_2d, :jl_alloc_array_3d, :jl_new_array,
+        :jl_array_grow_end, :jl_array_del_end, :jl_array_copy, :jl_type_intersection,
+        :memset, :jl_get_tls_world_age, :memmove, :jl_object_id,
+    ]
+        @test_throws(
+            ErrorException,
+            Taped.rrule!!(
+                CoDual(Umlaut.__foreigncall__, NoTangent()),
+                CoDual(Val(name), NoTangent()),
+            )
+        )
+    end
+
 end
