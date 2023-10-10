@@ -1,9 +1,7 @@
 module TestUtils
 
-using JET, Taped, Umlaut
-using Taped: CoDual, NoTangent, rrule!!
-
-using Random, Test
+using JET, Random, Taped, Test, Umlaut
+using Taped: CoDual, NoTangent, rrule!!, is_init
 
 has_equal_data(x::T, y::T) where {T<:String} = x == y
 has_equal_data(x::Type, y::Type) = x == y
@@ -52,7 +50,14 @@ function populate_address_map!(m::AddressMap, primal::P, tangent::T) where {P, T
         m[k] = v
     end
     foreach(fieldnames(P)) do n
-        populate_address_map!(m, getfield(primal, n), getfield(tangent.fields, n).tangent)
+        t_field = getfield(tangent.fields, n)
+        if isdefined(primal, n) && is_init(t_field)
+            populate_address_map!(m, getfield(primal, n), t_field.tangent)
+        elseif isdefined(primal, n) && !is_init(t_field)
+            throw(error("unhandled defined-ness"))
+        elseif !isdefined(primal, n) && is_init(t_field)
+            throw(error("unhandled defined-ness"))
+        end
     end
     return m
 end
@@ -430,7 +435,7 @@ function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P,
     end
 
     # If t isn't the zero element, then adding it to itself must change its value.
-    if t != z
+    if !has_equal_data(t, z)
         if !ismutabletype(P)
             @test !has_equal_data(increment!!(tc, tc), tc)
         end
@@ -519,7 +524,6 @@ for T in [Foo, StructFoo, MutableFoo, TypeStableMutableStruct]
     @eval Taped._add_to_primal(p::$T, t) = Taped._containerlike_add_to_primal(p, t)
     @eval Taped._diff(p::$T, q::$T) = Taped._containerlike_diff(p, q)
 end
-
 
 
 
@@ -617,6 +621,7 @@ const PRIMITIVE_TEST_FUNCTIONS = Any[
     (:none, p_mat_mul!, randn(3, 3), __A, __A),
     (:none, p_setfield!, Foo(5.0), :x, 4.0),
     (:none, p_setfield!, MutableFoo(5.0, randn(5)), :b, randn(6)),
+    (:none, p_setfield!, MutableFoo(5.0), :a, 5.0),
 ]
 
 #
