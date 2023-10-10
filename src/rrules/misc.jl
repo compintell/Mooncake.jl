@@ -51,7 +51,9 @@ lgetfield(x, ::SSym{f}) where {f} = getfield(x, f)
 
 lgetfield(x::Tuple, ::SInt{i}) where {i} = getfield(x, i)
 
-function rrule!!(::CoDual{typeof(lgetfield)}, x::CoDual, ::CoDual{T}) where {f, T<:Union{SSym{f}, SInt{f}}}
+function rrule!!(
+    ::CoDual{typeof(lgetfield)}, x::CoDual, ::CoDual{T}
+) where {f, T<:Union{SSym{f}, SInt{f}}}
     lgetfield_pb!!(dy, df, dx, dsym) = df, increment_field!!(dx, dy, T()), dsym
     y = CoDual(getfield(primal(x), f), _get_shadow_field(primal(x), shadow(x), f))
     return y, lgetfield_pb!!
