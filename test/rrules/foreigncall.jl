@@ -14,7 +14,7 @@
     end
 
     _x = Ref(5.0) # data used in tests which aren't protected by GC.
-    _dx = Ref(4.0)
+    _dx = randn_tangent(Xoshiro(123456), _x)
 
     _a, _da = randn(5), randn(5)
     _b, _db = randn(4), randn(4)
@@ -32,15 +32,16 @@
         # Rules to avoid foreigncall nodes:
         (false, :stability, Base.allocatedinline, Float64),
         (false, :stability, Base.allocatedinline, Vector{Float64}),
-        # (true, :none, pointer_from_objref, _x),
-        # (
-        #     true,
-        #     unsafe_pointer_to_objref,
-        #     CoDual(
-        #         pointer_from_objref(_x),
-        #         bitcast(Ptr{tangent_type(Nothing)}, pointer_from_objref(_dx)),
-        #     ),
-        # ),
+        (true, :stability, pointer_from_objref, _x),
+        (
+            true,
+            :none, # primal is unstable
+            unsafe_pointer_to_objref,
+            CoDual(
+                pointer_from_objref(_x),
+                bitcast(Ptr{tangent_type(Nothing)}, pointer_from_objref(_dx)),
+            ),
+        ),
         (true, :stability, Array{Float64, 1}, undef, 5),
         (true, :stability, Array{Float64, 2}, undef, 5, 4),
         (true, :stability, Array{Float64, 3}, undef, 5, 4, 3),
@@ -57,7 +58,10 @@
         (false, :none, Core.Compiler.return_type, Tuple{typeof(sin), Float64}),
         (true, :stability, unsafe_copyto!, CoDual(ptr_a, ptr_da), CoDual(ptr_b, ptr_db), 4),
         (false, :stability, unsafe_copyto!, randn(4), 2, randn(3), 1, 2),
-        (false, :stability, unsafe_copyto!, [rand(3) for _ in 1:5], 2, [rand(4) for _ in 1:4], 1, 3),
+        (
+            false, :stability,
+            unsafe_copyto!, [rand(3) for _ in 1:5], 2, [rand(4) for _ in 1:4], 1, 3,
+        ),
         (false, :stability, objectid, 5.0),
         (true, :stability, objectid, randn(5)),
     ]
@@ -72,6 +76,7 @@
         (false, unsafe_copyto_tester, randn(5), randn(3), 2),
         (false, unsafe_copyto_tester, randn(5), randn(6), 4),
         (false, unsafe_copyto_tester, [randn(3) for _ in 1:5], [randn(4) for _ in 1:6], 4),
+        (false, x -> unsafe_pointer_to_objref(pointer_from_objref(x)), _x),
     ]
         rng = Xoshiro(123456)
         test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only, perf_flag=:none)

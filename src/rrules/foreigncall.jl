@@ -24,10 +24,8 @@ end
 
 isprimitive(::RMC, ::typeof(Base.unsafe_pointer_to_objref), x::Ptr) = true
 function rrule!!(::CoDual{typeof(Base.unsafe_pointer_to_objref)}, x::CoDual{<:Ptr})
-    dx_ref = unsafe_pointer_to_objref(shadow(x))
-    _y = unsafe_pointer_to_objref(primal(x))
-    dy = build_tangent(typeof(_y), dx_ref.x)
-    return CoDual(_y, dy), NoPullback()
+    y = CoDual(unsafe_pointer_to_objref(primal(x)), unsafe_pointer_to_objref(shadow(x)))
+    return y, NoPullback()
 end
 
 function isprimitive(
