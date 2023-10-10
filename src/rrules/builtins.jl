@@ -336,7 +336,7 @@ end
 @inactive_intrinsic xor_int
 @inactive_intrinsic zext_int
 
-end
+end # IntrinsicsWrappers
 
 function rrule!!(::CoDual{typeof(<:)}, T1, T2)
     return CoDual(<:(primal(T1), primal(T2)), NoTangent()), NoPullback()
