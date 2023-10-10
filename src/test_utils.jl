@@ -322,12 +322,12 @@ end
 generate_args(::typeof(Core.sizeof), x) = [(x, )]
 generate_args(::typeof(Core.svec), x) = [(x, ), (x, x)]
 function generate_args(::typeof(getfield), x)
-    names = fieldnames(typeof(x))
+    names = filter(f -> isdefined(x, f), fieldnames(typeof(x)))
     return map(n -> (x, n), vcat(names..., eachindex(names)...))
 end
 generate_args(::typeof(isa), x) = [(x, Float64), (x, Int), (x, typeof(x))]
 function generate_args(::typeof(setfield!), x)
-    names = fieldnames(typeof(x))
+    names = filter(f -> isdefined(x, f), fieldnames(typeof(x)))
     return map(n -> (x, n, getfield(x, n)), vcat(names..., eachindex(names)...))
 end
 generate_args(::typeof(tuple), x) = [(x, ), (x, x), (x, x, x)]
