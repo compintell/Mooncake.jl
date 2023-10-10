@@ -15,8 +15,6 @@
             2,
         ),
     ]
-        test_rrule!!(
-            Xoshiro(123456), f, x...; interface_only, perf_flag
-        )
+        test_rrule!!(Xoshiro(123456), f, x...; interface_only, perf_flag)
     end
 end
