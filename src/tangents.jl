@@ -406,25 +406,6 @@ for T in [Symbol, Int, SSym, SInt]
     @eval increment_field!!(::NoTangent, ::NoTangent, f::Union{$T}) = NoTangent()
 end
 
-
-
-"""
-    set_field_to_zero!!(x, f)
-
-Set the field `f` of `x` to zero -- `f` can be an integer if `x` is a `Tuple`.
-"""
-function set_field_to_zero!!(x::NamedTuple, f::Symbol)
-    return @set x.$f = set_to_zero!!(getfield(x, f))
-end
-function set_field_to_zero!!(x::T, i::Int) where {T<:Union{Tuple, NamedTuple}}
-    T(ntuple(n -> n == i ? set_to_zero!!(x[n]) : x[n], length(x)))
-end
-set_field_to_zero!!(x::Tangent, f) = Tangent(set_field_to_zero!!(x.fields, f))
-function set_field_to_zero!!(x::MutableTangent, f)
-    x.fields = set_field_to_zero!!(x.fields, f)
-    return x
-end
-
 """
     _scale(a::Float64, t::T) where {T}
 

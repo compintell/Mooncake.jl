@@ -2,9 +2,9 @@
     @testset "const_coinstruction" begin
         inst = const_coinstruction(CoDual(5.0, 4.0))
         @test isempty(input_primals(inst))
-        @test isempty(input_shadows(inst))
+        @test isempty(input_tangents(inst))
         @test output_primal(inst) == 5.0
-        @test output_shadow(inst) == 4.0
+        @test output_tangent(inst) == 4.0
     end
     @testset "might_be_active" begin
         @test might_be_active(Float64)
@@ -22,7 +22,7 @@
     @testset "build_construction and pullback! $f" for (perf_flag, f, args...) in
         TestResources.PRIMITIVE_TEST_FUNCTIONS
 
-        # Specify input shadows.
+        # Specify input tangents.
         rng = Xoshiro(123456)
         dargs = map(Base.Fix1(randn_tangent, rng), args)
         original_args = map(deepcopy, args)
@@ -32,12 +32,12 @@
         dual_args = (CoDual(f, NoTangent()), map(CoDual, args, dargs)...)
         inputs = map(const_coinstruction, dual_args)
         inst = build_coinstruction(inputs...)
-        @test all(map(==, input_shadows(inst), (NoTangent(), dargs...)))
+        @test all(map(==, input_tangents(inst), (NoTangent(), dargs...)))
 
-        # Seed the output shadow and check that seeding has occured.
+        # Seed the output tangent and check that seeding has occured.
         dout = randn_tangent(rng, output_primal(inst))
-        seed_output_shadow!(inst, copy(dout))
-        @test output_shadow(inst) == dout
+        seed_output_tangent!(inst, copy(dout))
+        @test output_tangent(inst) == dout
 
         # Run the reverse-pass of the coinstruction.
         pullback!(inst)
@@ -47,19 +47,19 @@
             CoDual(f, NoTangent()), map(CoDual, original_args, original_dargs)...,
         )
         _out, _pb!! = rrule!!(other_dual_args...)
-        _out = set_shadow!!(_out, copy(dout))
-        new_dargs = _pb!!(shadow(_out), NoTangent(), original_dargs...)
+        _out = set_tangent!!(_out, copy(dout))
+        new_dargs = _pb!!(tangent(_out), NoTangent(), original_dargs...)
 
         # Check that the memory has been set up such that the data used with the
         # coinstruction does _not_ alias the data used with the `rrule!!`.
         @assert !ismutable(primal(_out)) || primal(_out) !== output_primal(inst)
-        @assert !ismutable(shadow(_out)) || shadow(_out) !== output_shadow(inst)
+        @assert !ismutable(tangent(_out)) || tangent(_out) !== output_tangent(inst)
 
         # Compare the result of running the coinstruction forwards- and backwards against
         # manually running the rrule!!. Should yield _exactly_ the same results.
         @test primal(_out) == output_primal(inst)
-        @test shadow(_out) == output_shadow(inst)
-        @test all(map(==, new_dargs, input_shadows(inst)))
+        @test tangent(_out) == output_tangent(inst)
+        @test all(map(==, new_dargs, input_tangents(inst)))
     end
     @testset "$f, $typeof(x)" for (interface_only, f, x...) in TestResources.TEST_FUNCTIONS
         @info "$(map(typeof, (f, x...)))"
@@ -87,8 +87,8 @@
         _, tape = Taped.trace(f, deepcopy(args)...; ctx=Taped.RMC())
         f_ur = Taped.UnrolledFunction(tape)
         y_ȳ, pb!! = Taped.rrule!!(CoDual(f_ur, NoTangent()), x_x̄_copy...)
-        new_ȳ = increment!!(set_to_zero!!(shadow(y_ȳ)), ȳ_copy)
-        x̄_std = pb!!(new_ȳ, NoTangent(), map(shadow, x_x̄_copy)...)
+        new_ȳ = increment!!(set_to_zero!!(tangent(y_ȳ)), ȳ_copy)
+        x̄_std = pb!!(new_ȳ, NoTangent(), map(tangent, x_x̄_copy)...)
 
         # Check that the result agrees with standard execution.
         @test all(map(==, x̄, x̄_std))

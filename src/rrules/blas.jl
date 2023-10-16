@@ -75,7 +75,7 @@ for (fname, elty) in ((:dscal_, :Float64), (:sscal_, :Float32))
         _incx = unsafe_load(primal(incx))
         _DA = unsafe_load(primal(DA))
         _DX = unsafe_wrap(Vector{$elty}, primal(DX), _n * _incx)
-        _DX_s = unsafe_wrap(Vector{$elty}, shadow(DX), _n * _incx)
+        _DX_s = unsafe_wrap(Vector{$elty}, tangent(DX), _n * _incx)
 
         inds = 1:_incx:(_incx * _n)
         DX_copy = _DX[inds]

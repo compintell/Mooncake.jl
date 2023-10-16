@@ -1,7 +1,7 @@
 module TestUtils
 
 using JET, Random, Taped, Test, Umlaut
-using Taped: CoDual, NoTangent, rrule!!, is_init
+using Taped: CoDual, NoTangent, rrule!!, is_init, zero_codual
 
 has_equal_data(x::T, y::T) where {T<:String} = x == y
 has_equal_data(x::Type, y::Type) = x == y
@@ -98,7 +98,7 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...)
     # Run original function on deep-copies of inputs.
     f = primal(f_f̄)
     x = map(primal, x_x̄)
-    x̄ = map(shadow, x_x̄)
+    x̄ = map(tangent, x_x̄)
 
     # Run primal, and ensure that we still have access to mutated inputs afterwards.
     x_primal = _deepcopy(x)
@@ -112,9 +112,10 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...)
     ẏ = _scale(1 / ε, _diff(y′, y_primal))
     ẋ_post = _scale(1 / ε, _diff(x′, x_primal))
 
-    # Run `rrule!!` on copies of `f` and `x`.
+    # Run `rrule!!` on copies of `f` and `x`. We use randomly generated tangents so that we
+    # can later verify that non-zero values do not get propagated by the rule.
     x_x̄_rule = map(x -> CoDual(_deepcopy(x), zero_tangent(x)), x)
-    inputs_address_map = populate_address_map(map(primal, x_x̄_rule), map(shadow, x_x̄_rule))
+    inputs_address_map = populate_address_map(map(primal, x_x̄_rule), map(tangent, x_x̄_rule))
     y_ȳ_rule, pb!! = rrule!!(f_f̄, x_x̄_rule...)
 
     # Verify that inputs / outputs are the same under `f` and its rrule.
@@ -124,7 +125,7 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...)
     # Query both `x_x̄` and `y`, because `x_x̄` may have been mutated by `f`.
     outputs_address_map = populate_address_map(
         (map(primal, x_x̄_rule)..., primal(y_ȳ_rule)),
-        (map(shadow, x_x̄_rule)..., shadow(y_ȳ_rule)),
+        (map(tangent, x_x̄_rule)..., tangent(y_ȳ_rule)),
     )
     @test address_maps_are_consistent(inputs_address_map, outputs_address_map)
 
@@ -132,11 +133,11 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...)
     ȳ_delta = randn_tangent(rng, primal(y_ȳ_rule))
     x̄_delta = map(Base.Fix1(randn_tangent, rng) ∘ primal, x_x̄_rule)
 
-    ȳ_init = set_to_zero!!(shadow(y_ȳ_rule))
-    x̄_init = map(set_to_zero!! ∘ shadow, x_x̄_rule)
+    ȳ_init = set_to_zero!!(tangent(y_ȳ_rule))
+    x̄_init = map(set_to_zero!! ∘ tangent, x_x̄_rule)
     ȳ = increment!!(ȳ_init, ȳ_delta)
     x̄ = map(increment!!, x̄_init, x̄_delta)
-    _, x̄... = pb!!(ȳ, shadow(f_f̄), x̄...)
+    _, x̄... = pb!!(ȳ, tangent(f_f̄), x̄...)
 
     # Check that inputs have been returned to their original value.
     @test all(map(has_equal_data, x, map(primal, x_x̄)))
@@ -160,10 +161,10 @@ function test_rrule_interface(f_f̄, x_x̄...; is_primitive)
 
     # Pull out primals and run primal computation.
     f = primal(f_f̄)
-    f̄ = shadow(f_f̄)
+    f̄ = tangent(f_f̄)
     x_x̄ = map(_deepcopy, x_x̄)
     x = map(primal, x_x̄)
-    x̄ = map(shadow, x_x̄)
+    x̄ = map(tangent, x_x̄)
 
     # Verify that the function to which the rrule applies is considered a primitive.
     # It is not clear that this really belongs here to be frank.
@@ -179,9 +180,9 @@ function test_rrule_interface(f_f̄, x_x̄...; is_primitive)
     end
 
     # Check that input types are valid.
-    @test _typeof(shadow(f_f̄)) == tangent_type(_typeof(primal(f_f̄)))
+    @test _typeof(tangent(f_f̄)) == tangent_type(_typeof(primal(f_f̄)))
     for x_x̄ in x_x̄
-        @test _typeof(shadow(x_x̄)) == tangent_type(_typeof(primal(x_x̄)))
+        @test _typeof(tangent(x_x̄)) == tangent_type(_typeof(primal(x_x̄)))
     end
 
     # Run the rrule, check it has output a thing of the correct type, and extract results.
@@ -201,7 +202,7 @@ function test_rrule_interface(f_f̄, x_x̄...; is_primitive)
 
     # Run the reverse-pass. Throw a meaningful exception if it doesn't run at all.
     f̄_new, x̄_new... = try
-        pb!!(shadow(y_ȳ), f̄, x̄...)
+        pb!!(tangent(y_ȳ), f̄, x̄...)
     catch e
         display(e)
         println()
@@ -245,7 +246,7 @@ function test_rrule_performance(performance_checks_flag::Symbol, f_f̄, x_x̄...
         y_ȳ, pb!! = rrule!!(f_f̄, _deepcopy(x_x̄)...)
         JET.test_opt(
             pb!!,
-            (_typeof(shadow(y_ȳ)), _typeof(shadow(f_f̄)), map(_typeof ∘ shadow, x_x̄)...),
+            (_typeof(tangent(y_ȳ)), _typeof(tangent(f_f̄)), map(_typeof ∘ tangent, x_x̄)...),
         )
     end
 end
@@ -263,7 +264,7 @@ In most cases, elements of `x` can just be the primal values, and `randn_tangent
 relied upon to generate an appropriate tangent to test. Some notable exceptions exist
 though, in partcular `Ptr`s. In this case, the argument for which `randn_tangent` cannot be
 readily defined should be a `CoDual` containing the primal, and a _manually_ constructed
-shadow field.
+tangent field.
 """
 function test_rrule!!(
     rng::AbstractRNG, x...;
@@ -272,7 +273,8 @@ function test_rrule!!(
     @nospecialize rng x
 
     # Generate random tangents for anything that is not already a CoDual.
-    x_x̄ = map(x -> x isa CoDual ? x : CoDual(x, randn_tangent(rng, x)), x)
+    # x_x̄ = map(x -> x isa CoDual ? x : CoDual(x, randn_tangent(rng, x)), x)
+    x_x̄ = map(x -> x isa CoDual ? x : zero_codual(x), x)
 
     # Test that the interface is basically satisfied (checks types / memory addresses).
     test_rrule_interface(x_x̄...; is_primitive)
@@ -291,16 +293,12 @@ function test_taped_rrule!!(rng::AbstractRNG, f, x...; interface_only=false, kwa
     # Try to run the primal, just to make sure that we're not calling it on bad inputs.
     f(_deepcopy(x)...)
 
-    _, tape = trace(f, map(_deepcopy, x)...; ctx=Taped.RMC())
-    f_t = Taped.UnrolledFunction(tape)
+    # Construct the tape.
+    f_t = Taped.UnrolledFunction(last(trace(f, map(_deepcopy, x)...; ctx=Taped.RMC())))
 
     # Check that the gradient is self-consistent.
     test_rrule!!(
-        rng, f_t, f, x...;
-        is_primitive=false,
-        perf_flag=:none,
-        interface_only,
-        kwargs...,
+        rng, f_t, f, x...; is_primitive=false, perf_flag=:none, interface_only, kwargs...
     )
 
     # Check that f_t remains a faithful representation of the original function.
@@ -565,11 +563,11 @@ function Taped.rrule!!(
         Ā .+= C̄ * primal(B)'
         B̄ .+= primal(A)' * C̄
         primal(C) .= primal(C_old)
-        shadow(C) .= shadow(C_old)
+        tangent(C) .= tangent(C_old)
         return df, C̄, Ā, B̄
     end
     mul!(primal(C), primal(A), primal(B))
-    shadow(C) .= 0
+    tangent(C) .= 0
     return C, p_mat_mul_pb!!
 end
 
@@ -587,7 +585,7 @@ end
 function Taped.rrule!!(::CoDual{typeof(p_setfield!)}, value, name::CoDual{Symbol}, x)
     _name = primal(name)
     _value = primal(value)
-    _dvalue = shadow(value)
+    _dvalue = tangent(value)
     old_x = getfield(_value, _name)
     old_dx = getfield(_dvalue.fields, _name).tangent
 
@@ -599,14 +597,14 @@ function Taped.rrule!!(::CoDual{typeof(p_setfield!)}, value, name::CoDual{Symbol
 
         # Restore old values.
         setfield!(primal(value), _name, old_x)
-        __setfield!(shadow(value), _name, old_dx)
+        __setfield!(tangent(value), _name, old_dx)
 
         return df, dvalue, dname, dx
     end
 
     y = CoDual(
         setfield!(_value, _name, primal(x)),
-        __setfield!(_dvalue, _name, shadow(x)),
+        __setfield!(_dvalue, _name, tangent(x)),
     )
     return y, p_setfield!_pb!!
 end
@@ -775,14 +773,13 @@ function Taped.rrule!!(::Taped.CoDual{typeof(my_setfield!)}, value, name, x)
     old_x = isdefined(primal(value), _name) ? getfield(primal(value), _name) : nothing
     function setfield!_pullback(dy, df, dvalue, ::NoTangent, dx)
         new_dx = increment!!(dx, getfield(dvalue.fields, _name).tangent)
-        set_field_to_zero!!(dvalue, _name)
         new_dx = increment!!(new_dx, dy)
         old_x !== nothing && setfield!(primal(value), _name, old_x)
         return df, dvalue, NoTangent(), new_dx
     end
     y = Taped.CoDual(
         setfield!(primal(value), _name, primal(x)),
-        _setfield!(shadow(value), _name, shadow(x)),
+        _setfield!(tangent(value), _name, tangent(x)),
     )
     return y, setfield!_pullback
 end

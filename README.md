@@ -13,5 +13,5 @@ Docs incoming soon.
 # Known Limitations:
 
 - If a (mutable) data structure `x` contains a circular reference, it will not be possible to construct a `zero_tangent` / `random_tangent` `MutableTangent` to it -- an infinite recursion will occur. It should be possible, however, to differentiate through its construction. If you find this to be a problem in practice, please open an issue.
-- `zero_tangent` and `random_tangent` do not work for pointers, because we don't know how large a chunk of memory a given pointer points to, so cannot allocate a corresponding chunk of shadow memory. Your best bet when testing `rrule!!`s for things involving pointers is currently to do integration testing. See the tests for blas functionality for examples.
+- `zero_tangent` and `random_tangent` do not work for pointers, because we don't know how large a chunk of memory a given pointer points to, so cannot allocate a corresponding chunk of tangent memory. Your best bet when testing `rrule!!`s for things involving pointers is currently to do integration testing. See the tests for blas functionality for examples.
 - If you pass active data through a global variable, AD will fail. Furthermore / worse still, the failures will probably be silent.
