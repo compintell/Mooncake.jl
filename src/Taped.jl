@@ -44,7 +44,6 @@ export
     MutableTangent,
     PossiblyUninitTangent,
     set_to_zero!!,
-    set_field_to_zero!!,
     tangent_type,
     zero_tangent,
     _scale,
