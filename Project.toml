@@ -18,6 +18,7 @@ Umlaut = "92992a2b-8ce5-4a9c-bb9d-58be9a7dc841"
 BenchmarkTools = "1"
 DiffRules = "1"
 DiffTests = "0.1"
+Distributions = "0.25"
 FunctionWrappers = "1"
 JET = "0.8"
 Setfield = "1"
@@ -27,7 +28,8 @@ julia = "1"
 [extras]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 DiffTests = "de460e47-3fe3-5279-bb4a-814414816d5d"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["BenchmarkTools", "DiffTests", "Test"]
+test = ["BenchmarkTools", "DiffTests", "Distributions", "Test"]

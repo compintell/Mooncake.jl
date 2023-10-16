@@ -1,6 +1,7 @@
 using
     BenchmarkTools,
     DiffRules,
+    Distributions,
     FunctionWrappers,
     JET,
     LinearAlgebra,
@@ -97,6 +98,8 @@ const test_group = get(ENV, "TEST_GROUP", "basic")
         include(joinpath("rrules", "integration_testing.jl"))
     elseif test_group == "diff_tests"
         include(joinpath("rrules", "diff_tests.jl"))
+    elseif test_group == "distributions"
+        include(joinpath("rrules", "distributions.jl"))
     else
         throw(error("test_group=$(test_group) is not recognised"))
     end
