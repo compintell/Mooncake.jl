@@ -1,7 +1,7 @@
 module TestUtils
 
 using JET, Random, Taped, Test, Umlaut
-using Taped: CoDual, NoTangent, rrule!!, is_init
+using Taped: CoDual, NoTangent, rrule!!, is_init, zero_codual
 
 has_equal_data(x::T, y::T) where {T<:String} = x == y
 has_equal_data(x::Type, y::Type) = x == y
@@ -120,6 +120,9 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...)
     # Verify that inputs / outputs are the same under `f` and its rrule.
     @test has_equal_data(x_primal, map(primal, x_x̄_rule))
     @test has_equal_data(y_primal, primal(y_ȳ_rule))
+
+    # Verify that the output tangents are zero-ed.
+    @test has_equal_data(shadow(y_ȳ_rule), zero_tangent(y_primal))
 
     # Query both `x_x̄` and `y`, because `x_x̄` may have been mutated by `f`.
     outputs_address_map = populate_address_map(
@@ -272,7 +275,8 @@ function test_rrule!!(
     @nospecialize rng x
 
     # Generate random tangents for anything that is not already a CoDual.
-    x_x̄ = map(x -> x isa CoDual ? x : CoDual(x, randn_tangent(rng, x)), x)
+    # x_x̄ = map(x -> x isa CoDual ? x : CoDual(x, randn_tangent(rng, x)), x)
+    x_x̄ = map(x -> x isa CoDual ? x : zero_codual(x), x)
 
     # Test that the interface is basically satisfied (checks types / memory addresses).
     test_rrule_interface(x_x̄...; is_primitive)
@@ -291,16 +295,12 @@ function test_taped_rrule!!(rng::AbstractRNG, f, x...; interface_only=false, kwa
     # Try to run the primal, just to make sure that we're not calling it on bad inputs.
     f(_deepcopy(x)...)
 
-    _, tape = trace(f, map(_deepcopy, x)...; ctx=Taped.RMC())
-    f_t = Taped.UnrolledFunction(tape)
+    # Construct the tape.
+    f_t = Taped.UnrolledFunction(last(trace(f, map(_deepcopy, x)...; ctx=Taped.RMC())))
 
     # Check that the gradient is self-consistent.
     test_rrule!!(
-        rng, f_t, f, x...;
-        is_primitive=false,
-        perf_flag=:none,
-        interface_only,
-        kwargs...,
+        rng, f_t, f, x...; is_primitive=false, perf_flag=:none, interface_only, kwargs...
     )
 
     # Check that f_t remains a faithful representation of the original function.
@@ -775,7 +775,6 @@ function Taped.rrule!!(::Taped.CoDual{typeof(my_setfield!)}, value, name, x)
     old_x = isdefined(primal(value), _name) ? getfield(primal(value), _name) : nothing
     function setfield!_pullback(dy, df, dvalue, ::NoTangent, dx)
         new_dx = increment!!(dx, getfield(dvalue.fields, _name).tangent)
-        set_field_to_zero!!(dvalue, _name)
         new_dx = increment!!(new_dx, dy)
         old_x !== nothing && setfield!(primal(value), _name, old_x)
         return df, dvalue, NoTangent(), new_dx

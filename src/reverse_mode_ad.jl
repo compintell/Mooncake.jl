@@ -21,6 +21,13 @@ shadow(x::CoDual) = x.dx
 Base.copy(x::CoDual) = CoDual(copy(primal(x)), copy(shadow(x)))
 
 """
+    zero_codual(x)
+
+Equivalent to `CoDual(x, zero_tangent(x))`.
+"""
+zero_codual(x) = CoDual(x, zero_tangent(x))
+
+"""
     uninit_codual(x)
 
 See implementation for details, as this function is subject to change.
