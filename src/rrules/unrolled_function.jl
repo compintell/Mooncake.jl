@@ -9,13 +9,13 @@ end
 const_coinstruction(x::CoDual) = CoInstruction((), Ref(x), nothing)
 
 input_primals(x::CoInstruction) = map(primal ∘ getindex, x.inputs)
-input_shadows(x::CoInstruction) = map(shadow ∘ getindex, x.inputs)
+input_tangents(x::CoInstruction) = map(tangent ∘ getindex, x.inputs)
 
 output_primal(x::CoInstruction) = primal(x.output[])
-output_shadow(x::CoInstruction) = shadow(x.output[])
+output_tangent(x::CoInstruction) = tangent(x.output[])
 
-function seed_output_shadow!(x::CoInstruction{T, V}, x̄) where {T, V}
-    x.output[] = set_shadow!!(x.output[], x̄)
+function seed_output_tangent!(x::CoInstruction{T, V}, x̄) where {T, V}
+    x.output[] = set_tangent!!(x.output[], x̄)
     return nothing
 end
 
@@ -53,16 +53,16 @@ pullback!(::CoInstruction{Tuple{}, <:Ref, Nothing}) = nothing
 
 # pullback for general case CoInstruction.
 function pullback!(instruction::CoInstruction)
-    input_shadows = map(shadow ∘ getindex, instruction.inputs)
-    output_shadow = shadow(instruction.output[])
-    new_input_shadows = instruction.pb[](output_shadow, input_shadows...)
-    map(replace_shadow!, instruction.inputs, new_input_shadows)
+    input_tangents = map(tangent ∘ getindex, instruction.inputs)
+    output_tangent = tangent(instruction.output[])
+    new_input_tangents = instruction.pb[](output_tangent, input_tangents...)
+    map(replace_tangent!, instruction.inputs, new_input_tangents)
     return nothing
 end
 
-function replace_shadow!(x::Ref{<:CoDual{Tx, Tdx}}, new_shadow::Tdx) where {Tx, Tdx}
+function replace_tangent!(x::Ref{<:CoDual{Tx, Tdx}}, new_tangent::Tdx) where {Tx, Tdx}
     x_val = x[]
-    x[] = CoDual(primal(x_val), new_shadow)
+    x[] = CoDual(primal(x_val), new_tangent)
     return nothing
 end
 
@@ -78,7 +78,7 @@ function to_reverse_mode_ad(tape::Tape{RMC}, ȳ, inputs::CoInstruction...)
     new_tape.result = unbind(tape.result)
 
     # Seed reverse-pass and create operations to execute it.
-    seed_op = mkcall(seed_output_shadow!, new_tape.result, ȳ)
+    seed_op = mkcall(seed_output_tangent!, new_tape.result, ȳ)
     push!(new_tape, seed_op)
 
     Umlaut.exec!(new_tape, seed_op)
@@ -122,7 +122,7 @@ zero_tangent(::UnrolledFunction) = NoTangent()
 
 function seed_variable!(tape, var, ȳ)
     y_ref = tape[var].val.output
-    dy = shadow(y_ref[])
+    dy = tangent(y_ref[])
     dy_new = increment!!(dy, ȳ)
     y_ref[] = CoDual(primal(y_ref[]), dy_new)
     return nothing
@@ -131,7 +131,7 @@ end
 seed_instruction_output!(inst, ȳ) = seed_ref!(inst.output, ȳ)
 
 function seed_ref!(y_ref, ȳ)
-    dy = shadow(y_ref[])
+    dy = tangent(y_ref[])
     dy_new = increment!!(set_to_zero!!(dy), ȳ)
     y_ref[] = CoDual(primal(y_ref[]), dy_new)
     return nothing
@@ -211,7 +211,7 @@ function rrule_pass!(tape, args)
     for op in tape.ops
         new_op = to_reverse_mode_ad(op, new_tape)
         new_op_val = new_op.val.output[]
-        if tangent_type(typeof(primal(new_op_val))) != typeof(shadow(new_op_val))
+        if tangent_type(typeof(primal(new_op_val))) != typeof(tangent(new_op_val))
             inputs = map(getindex, new_op.val.inputs)
             display(inputs)
             println()
@@ -219,7 +219,7 @@ function rrule_pass!(tape, args)
             println()
             display(which(rrule!!, map(Core.Typeof, inputs)))
             println()
-            display("expected shadow type $(tangent_type(typeof(primal(new_op_val))))")
+            display("expected tangent type $(tangent_type(typeof(primal(new_op_val))))")
             println()
             throw(error("bad output types found in practice for op"))
         end
@@ -251,7 +251,7 @@ function rrule!!(f::CoDual{<:UnrolledFunction}, args...)
         end
 
         # Extract the results from the tape.
-        return NoTangent(), map(v -> shadow(rev_tape[v].val.output[]), inputs(rev_tape))...
+        return NoTangent(), map(v -> tangent(rev_tape[v].val.output[]), inputs(rev_tape))...
     end
 
     return y_ref[], unrolled_function_pb!!
@@ -324,7 +324,7 @@ function execute!(t::AcceleratedGradientTape, ȳ, x_x̄::CoDual...)
 
     # Extract the results.
     d_args = map(fast_tape.arg_refs[2:end]) do arg_ref
-        return shadow(arg_ref[].output[])
+        return tangent(arg_ref[].output[])
     end
     return NoTangent(), d_args...
 end

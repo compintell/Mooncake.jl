@@ -174,24 +174,6 @@
             end
         end
     end
-
-    @testset "set_field_to_zero!!" begin
-        nt1 = (a=5.0, b=[4.0])
-        t1 = build_tangent(StructFoo, nt1...)
-        mt1 = build_tangent(MutableFoo, nt1...)
-        nt2 = (a=0.0, b=[4.0])
-        t2 = build_tangent(StructFoo, nt2...)
-        mt2 = build_tangent(MutableFoo, nt2...)
-        @test set_field_to_zero!!(nt1, :a) == nt2
-        @test set_field_to_zero!!((5.0, 4.0), 2) == (5.0, 0.0)
-        @test set_field_to_zero!!(t2, :a) == t2
-
-        x = build_tangent(MutableFoo, nt1...)
-        @test set_field_to_zero!!(mt1, :a) == mt2
-        @test set_field_to_zero!!(mt1, :a) === mt1
-        @test set_field_to_zero!!(mt1, 1) == mt2
-        @test set_field_to_zero!!(mt1, 1) === mt1
-    end
 end
 
 

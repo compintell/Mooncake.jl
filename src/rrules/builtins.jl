@@ -14,12 +14,12 @@ module IntrinsicsWrappers
 import Umlaut: isprimitive
 using Core: Intrinsics
 import ..Taped:
-    rrule!!, CoDual, primal, shadow, zero_tangent, isprimitive, RMC, NoPullback,
+    rrule!!, CoDual, primal, tangent, zero_tangent, isprimitive, RMC, NoPullback,
     tangent_type, increment!!
 
 # Note: performance is not considered _at_ _all_ in this implementation.
 function rrule!!(f::CoDual{<:Core.IntrinsicFunction}, args...)
-    return rrule!!(CoDual(translate(Val(primal(f))), shadow(f)), args...)
+    return rrule!!(CoDual(translate(Val(primal(f))), tangent(f)), args...)
 end
 
 macro intrinsic(name)
@@ -89,7 +89,7 @@ function rrule!!(::CoDual{typeof(bitcast)}, T, x)
     _x = primal(x)
     v = bitcast(_T, _x)
     if _T <: Ptr && _x isa Ptr
-        dv = bitcast(Ptr{tangent_type(eltype(_T))}, shadow(x))
+        dv = bitcast(Ptr{tangent_type(eltype(_T))}, tangent(x))
     else
         dv = zero_tangent(v)
     end
@@ -244,7 +244,7 @@ function rrule!!(::CoDual{typeof(pointerref)}, x, y, z)
     _x = primal(x)
     _y = primal(y)
     _z = primal(z)
-    x_s = shadow(x)
+    x_s = tangent(x)
     a = CoDual(pointerref(_x, _y, _z), pointerref(x_s, _y, _z))
     function pointerref_pullback!!(da, df, dx, dy, dz)
         dx_v = pointerref(dx, _y, _z)
@@ -261,15 +261,15 @@ function rrule!!(::CoDual{typeof(pointerset)}, p, x, idx, z)
     _idx = primal(idx)
     _z = primal(z)
     old_value = pointerref(_p, _idx, _z)
-    old_shadow = pointerref(shadow(p), _idx, _z)
+    old_tangent = pointerref(tangent(p), _idx, _z)
     function pointerset_pullback!!(_, df, dp, dx, didx, dz)
         dx_new = increment!!(dx, pointerref(dp, _idx, _z))
         pointerset(_p, old_value, _idx, _z)
-        pointerset(dp, old_shadow, _idx, _z)
+        pointerset(dp, old_tangent, _idx, _z)
         return df, dp, dx_new, didx, dz
     end
     pointerset(_p, primal(x), _idx, _z)
-    pointerset(shadow(p), shadow(x), _idx, _z)
+    pointerset(tangent(p), tangent(x), _idx, _z)
     return p, pointerset_pullback!!
 end
 
@@ -387,7 +387,7 @@ function rrule!!(
         return df, dinbounds, dx, dinds...
     end
     _y = arrayref(_inbounds, primal(x), _inds...)
-    dy = arrayref(_inbounds, shadow(x), _inds...)
+    dy = arrayref(_inbounds, tangent(x), _inds...)
     return CoDual(_y, dy), arrayref_pullback!!
 end
 
@@ -402,9 +402,9 @@ function rrule!!(
     _inds = map(primal, inds)
     to_save = isassigned(primal(A), _inds...)
     old_A_v = to_save ? arrayref(_inbounds, primal(A), _inds...) : nothing
-    old_A_v_t = to_save ? arrayref(_inbounds, shadow(A), _inds...) : nothing
+    old_A_v_t = to_save ? arrayref(_inbounds, tangent(A), _inds...) : nothing
     arrayset(_inbounds, primal(A), primal(v), _inds...)
-    arrayset(_inbounds, shadow(A), shadow(v), _inds...)
+    arrayset(_inbounds, tangent(A), tangent(v), _inds...)
     function setindex_pullback!!(dA::TdA, df, dinbounds, dA2::TdA, dv, dinds::NoTangent...)
         dv_new = increment!!(dv, arrayref(_inbounds, dA, _inds...))
         to_save && arrayset(_inbounds, primal(A), old_A_v, _inds...)
@@ -459,7 +459,7 @@ function rrule!!(::CoDual{typeof(getfield)}, value::CoDual, name::CoDual)
     end
     y = CoDual(
         getfield(primal(value), _name),
-        _get_shadow_field(primal(value), shadow(value), _name),
+        _get_tangent_field(primal(value), tangent(value), _name),
     )
     return y, getfield_pullback
 end
@@ -474,16 +474,16 @@ function rrule!!(::CoDual{typeof(getfield)}, value::CoDual, name::CoDual, order:
     _order = _order isa Expr ? true : _order
     y = CoDual(
         getfield(primal(value), _name, _order),
-        _get_shadow_field(primal(value), shadow(value), _name, _order),
+        _get_tangent_field(primal(value), tangent(value), _name, _order),
     )
     return y, getfield_pullback
 end
 
-_get_shadow_field(_, shadow, f...) = getfield(shadow, f...)
-function _get_shadow_field(_, shadow::Union{Tangent, MutableTangent}, f...)
-    return _value(getfield(shadow.fields, f...))
+_get_tangent_field(_, tangent, f...) = getfield(tangent, f...)
+function _get_tangent_field(_, tangent::Union{Tangent, MutableTangent}, f...)
+    return _value(getfield(tangent.fields, f...))
 end
-_get_shadow_field(primal, shadow::NoTangent, f...) = uninit_tangent(getfield(primal, f...))
+_get_tangent_field(primal, ::NoTangent, f...) = uninit_tangent(getfield(primal, f...))
 
 _increment_field!!(x, y, f) = increment_field!!(x, y, f)
 _increment_field!!(x::NoTangent, y, f) = x
@@ -529,17 +529,17 @@ function rrule!!(::CoDual{typeof(setfield!)}, value, name, x)
     _name = primal(name)
     save = isdefined(primal(value), _name)
     old_x = save ? getfield(primal(value), _name) : nothing
-    old_dx = save ? getfield(shadow(value).fields, _name).tangent : nothing
+    old_dx = save ? getfield(tangent(value).fields, _name).tangent : nothing
     function setfield!_pullback(dy, df, dvalue, ::NoTangent, dx)
         new_dx = increment!!(dx, getfield(dvalue.fields, _name).tangent)
         new_dx = increment!!(new_dx, dy)
         old_x !== nothing && setfield!(primal(value), _name, old_x)
-        old_x !== nothing && _setfield!(shadow(value), _name, old_dx)
+        old_x !== nothing && _setfield!(tangent(value), _name, old_dx)
         return df, dvalue, NoTangent(), new_dx
     end
     y = CoDual(
         setfield!(primal(value), _name, primal(x)),
-        _setfield!(shadow(value), _name, shadow(x)),
+        _setfield!(tangent(value), _name, tangent(x)),
     )
     return y, setfield!_pullback
 end
@@ -548,7 +548,7 @@ end
 # throw
 
 function rrule!!(::CoDual{typeof(tuple)}, args...)
-    y = CoDual(tuple(map(primal, args)...), tuple(map(shadow, args)...))
+    y = CoDual(tuple(map(primal, args)...), tuple(map(tangent, args)...))
     tuple_pullback(dy, ::NoTangent, dargs...) = NoTangent(), map(increment!!, dargs, dy)...
     return y, tuple_pullback
 end
@@ -557,7 +557,7 @@ function rrule!!(::CoDual{typeof(typeassert)}, x, type)
     function typeassert_pullback(dy, ::NoTangent, dx, ::NoTangent)
         return NoTangent(), increment!!(dx, dy), NoTangent()
     end
-    return CoDual(typeassert(primal(x), primal(type)), shadow(x)), typeassert_pullback
+    return CoDual(typeassert(primal(x), primal(type)), tangent(x)), typeassert_pullback
 end
 
 rrule!!(::CoDual{typeof(typeof)}, x) = CoDual(typeof(primal(x)), NoTangent()), NoPullback()

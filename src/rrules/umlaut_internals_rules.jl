@@ -21,7 +21,7 @@ end
     return quote
         x_ps = map(primal, xs)
         y = $(Expr(:new, P, map(n -> :(x_ps[$n]), 1:N)...))
-        dy = build_tangent(P, map(shadow, xs)...)
+        dy = build_tangent(P, map(tangent, xs)...)
         return CoDual(y, dy), __new__pullback
     end
 end
@@ -66,5 +66,5 @@ function rrule!!(::CoDual{typeof(getindex)}, x::CoDual{<:Tuple}, i::CoDual{Int})
         dx = ntuple(n -> n == primal(i) ? increment!!(dx[n], dy) : dx[n], length(dx))
         return df, dx, NoTangent()
     end
-    return CoDual(primal(x)[primal(i)], shadow(x)[primal(i)]), getindex_pullback!!
+    return CoDual(primal(x)[primal(i)], tangent(x)[primal(i)]), getindex_pullback!!
 end

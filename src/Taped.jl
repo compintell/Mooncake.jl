@@ -35,7 +35,7 @@ include(joinpath("rrules", "unrolled_function.jl"))
 
 export
     primal,
-    shadow,
+    tangent,
     randn_tangent,
     increment!!,
     increment_field!!,
@@ -44,7 +44,6 @@ export
     MutableTangent,
     PossiblyUninitTangent,
     set_to_zero!!,
-    set_field_to_zero!!,
     tangent_type,
     zero_tangent,
     _scale,
