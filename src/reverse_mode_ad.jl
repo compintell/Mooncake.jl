@@ -17,8 +17,8 @@ function CoDual(x::Type{P}, dx::NoTangent) where {P}
 end
 
 primal(x::CoDual) = x.x
-shadow(x::CoDual) = x.dx
-Base.copy(x::CoDual) = CoDual(copy(primal(x)), copy(shadow(x)))
+tangent(x::CoDual) = x.dx
+Base.copy(x::CoDual) = CoDual(copy(primal(x)), copy(tangent(x)))
 
 """
     zero_codual(x)
@@ -34,7 +34,7 @@ See implementation for details, as this function is subject to change.
 """
 uninit_codual(x) = CoDual(x, uninit_tangent(x))
 
-set_shadow!!(x::CoDual, dx) = CoDual(primal(x), increment!!(set_to_zero!!(shadow(x)), dx))
+set_tangent!!(x::CoDual, dx) = CoDual(primal(x), increment!!(set_to_zero!!(tangent(x)), dx))
 
 function verify_codual_type(::CoDual{P, T}) where {P, T}
     Tt = tangent_type(P)
@@ -68,7 +68,7 @@ rebind(x) = x
 
 rebind_pb!!(ȳ, f̄, x̄) = f̄, increment!!(x̄, ȳ)
 function rrule!!(::CoDual{typeof(rebind)}, x::CoDual)
-    return CoDual(primal(x), rebind_tangent(shadow(x))), rebind_pb!!
+    return CoDual(primal(x), rebind_tangent(tangent(x))), rebind_pb!!
 end
 
 isprimitive(::RMC, ::typeof(rebind), x) = true

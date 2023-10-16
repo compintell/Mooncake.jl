@@ -78,7 +78,7 @@
         x_x̄ = map(CoDual, x, x̄)
         y_ȳ, _ = Taped.rrule!!(f_f̄, x_x̄...)
         z = (x..., primal(y_ȳ))
-        z̄ = (x̄..., shadow(y_ȳ))
+        z̄ = (x̄..., tangent(y_ȳ))
         @test_throws AssertionError populate_address_map(z, z̄)
     end
     @testset "PRIMITIVE_TEST_FUNCTIONS ($f)" for (perf_flag, f, x...) in

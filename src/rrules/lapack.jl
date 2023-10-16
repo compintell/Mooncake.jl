@@ -21,7 +21,7 @@ for (fname, elty) in ((:dgetrf_, :Float64), (:sgetrf_, :Float32))
         N_val = unsafe_load(N)
         LDA_val = unsafe_load(LDA)
         data_len = LDA_val * N_val
-        A, dA = primal(_A), shadow(_A)
+        A, dA = primal(_A), tangent(_A)
 
         @assert M_val === N_val
 
@@ -35,7 +35,7 @@ for (fname, elty) in ((:dgetrf_, :Float64), (:sgetrf_, :Float32))
             M, N, A, LDA, IPIV, INFO,    
         )
 
-        # Zero out the shadow.
+        # Zero out the tangent.
         foreach(n -> unsafe_store!(dA, zero($elty), n), 1:data_len)
 
         function getrf_pb!!(

@@ -35,7 +35,7 @@ include(joinpath("rrules", "unrolled_function.jl"))
 
 export
     primal,
-    shadow,
+    tangent,
     randn_tangent,
     increment!!,
     increment_field!!,

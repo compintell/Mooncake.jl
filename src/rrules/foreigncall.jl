@@ -36,7 +36,7 @@ end
 
 isprimitive(::RMC, ::typeof(copy), ::Array) = true
 function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Array})
-    y = CoDual(copy(primal(a)), copy(shadow(a)))
+    y = CoDual(copy(primal(a)), copy(tangent(a)))
     copy_pullback!!(dy, df, dx) = df, increment!!(dx, dy)
     return y, copy_pullback!!
 end
@@ -63,7 +63,7 @@ function rrule!!(
     _d = primal(delta)
     _a = primal(a)
     Base._growend!(_a, _d)
-    Base._growend!(shadow(a), _d)
+    Base._growend!(tangent(a), _d)
     function _growend!_pullback!!(dy, df, da, ddelta)
         Base._deleteend!(_a, _d)
         Base._deleteend!(da, _d)
@@ -81,7 +81,7 @@ isprimitive(::RMC, ::typeof(pointer_from_objref), x) = true
 function rrule!!(::CoDual{typeof(pointer_from_objref)}, x)
     y = CoDual(
         pointer_from_objref(primal(x)),
-        bitcast(Ptr{tangent_type(Nothing)}, pointer_from_objref(shadow(x))),
+        bitcast(Ptr{tangent_type(Nothing)}, pointer_from_objref(tangent(x))),
     )
     return y, NoPullback()
 end
@@ -105,11 +105,11 @@ function rrule!!(
     dest_copy = Vector{T}(undef, _n)
     ddest_copy = Vector{T}(undef, _n)
     unsafe_copyto!(pointer(dest_copy), primal(dest), _n)
-    unsafe_copyto!(pointer(ddest_copy), shadow(dest), _n)
+    unsafe_copyto!(pointer(ddest_copy), tangent(dest), _n)
 
     # Run primal computation.
     unsafe_copyto!(primal(dest), primal(src), _n)
-    unsafe_copyto!(shadow(dest), shadow(src), _n)
+    unsafe_copyto!(tangent(dest), tangent(src), _n)
 
     function unsafe_copyto!_pb!!(_, df, ddest, dsrc, dn)
 
@@ -118,7 +118,7 @@ function rrule!!(
 
         # Restore initial state.
         unsafe_copyto!(primal(dest), pointer(dest_copy), _n)
-        unsafe_copyto!(shadow(dest), pointer(ddest_copy), _n)
+        unsafe_copyto!(tangent(dest), pointer(ddest_copy), _n)
 
         return df, ddest, dsrc, dn
     end
@@ -141,11 +141,11 @@ function rrule!!(
     dest_idx = _doffs:_doffs + _n - 1
     _soffs = primal(soffs)
     dest_copy = primal(dest)[dest_idx]
-    ddest_copy = shadow(dest)[dest_idx]
+    ddest_copy = tangent(dest)[dest_idx]
 
     # Run primal computation.
     unsafe_copyto!(primal(dest), _doffs, primal(src), _soffs, _n)
-    unsafe_copyto!(shadow(dest), _doffs, shadow(src), _soffs, _n)
+    unsafe_copyto!(tangent(dest), _doffs, tangent(src), _soffs, _n)
 
     function unsafe_copyto_pb!!(_, df, ddest, ddoffs, dsrc, dsoffs, dn)
 
@@ -155,7 +155,7 @@ function rrule!!(
 
         # Restore initial state.
         primal(dest)[dest_idx] .= dest_copy
-        shadow(dest)[dest_idx] .= ddest_copy
+        tangent(dest)[dest_idx] .= ddest_copy
 
         return df, ddest, ddoffs, dsrc, dsoffs, dn
     end
@@ -165,7 +165,7 @@ end
 
 isprimitive(::RMC, ::typeof(Base.unsafe_pointer_to_objref), x::Ptr) = true
 function rrule!!(::CoDual{typeof(Base.unsafe_pointer_to_objref)}, x::CoDual{<:Ptr})
-    y = CoDual(unsafe_pointer_to_objref(primal(x)), unsafe_pointer_to_objref(shadow(x)))
+    y = CoDual(unsafe_pointer_to_objref(primal(x)), unsafe_pointer_to_objref(tangent(x)))
     return y, NoPullback()
 end
 
@@ -197,7 +197,7 @@ function rrule!!(
 ) where {T, V}
     y = CoDual(
         ccall(:jl_array_ptr, Ptr{T}, (Any, ), primal(a)),
-        ccall(:jl_array_ptr, Ptr{V}, (Any, ), shadow(a)),
+        ccall(:jl_array_ptr, Ptr{V}, (Any, ), tangent(a)),
     )
     return y, NoPullback()
 end
@@ -216,7 +216,7 @@ function rrule!!(
     d = primal(dims)
     y = CoDual(
         ccall(:jl_reshape_array, Array{P, M}, (Any, Any, Any), Array{P, M}, primal(a), d),
-        ccall(:jl_reshape_array, Array{T, M}, (Any, Any, Any), Array{T, M}, shadow(a), d),
+        ccall(:jl_reshape_array, Array{T, M}, (Any, Any, Any), Array{T, M}, tangent(a), d),
     )
     return y, NoPullback()
 end
