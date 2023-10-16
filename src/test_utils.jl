@@ -112,7 +112,8 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...)
     ẏ = _scale(1 / ε, _diff(y′, y_primal))
     ẋ_post = _scale(1 / ε, _diff(x′, x_primal))
 
-    # Run `rrule!!` on copies of `f` and `x`.
+    # Run `rrule!!` on copies of `f` and `x`. We use randomly generated tangents so that we
+    # can later verify that non-zero values do not get propagated by the rule.
     x_x̄_rule = map(x -> CoDual(_deepcopy(x), zero_tangent(x)), x)
     inputs_address_map = populate_address_map(map(primal, x_x̄_rule), map(shadow, x_x̄_rule))
     y_ȳ_rule, pb!! = rrule!!(f_f̄, x_x̄_rule...)
@@ -120,9 +121,6 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...)
     # Verify that inputs / outputs are the same under `f` and its rrule.
     @test has_equal_data(x_primal, map(primal, x_x̄_rule))
     @test has_equal_data(y_primal, primal(y_ȳ_rule))
-
-    # Verify that the output tangents are zero-ed.
-    @test has_equal_data(shadow(y_ȳ_rule), zero_tangent(y_primal))
 
     # Query both `x_x̄` and `y`, because `x_x̄` may have been mutated by `f`.
     outputs_address_map = populate_address_map(
