@@ -6,17 +6,22 @@ for T in [
     LogitNormal, LogNormal, LogUniform, NoncentralBeta, NoncentralChisq, NoncentralF,
     NoncentralT, Normal, NormalInverseGaussian, Pareto, PGeneralizedGaussian, Rayleigh,
     Rician, Semicircle, SkewedExponentialPower, SkewNormal, SymTriangularDist, TDist,
-    TriangularDist, Triweight, Uniform, VonMises, Weibull,
+    TriangularDist, Triweight, Uniform, VonMises, Weibull, MvNormal, Distributions.Zeros,
+    Distributions.ScalMat, Distributions.PDiagMat, PDMat, Cholesky, MvNormalCanon,
+    MvLogitNormal, MvLogNormal, Product,
 ]
     @eval Taped._add_to_primal(p::$T, t) = Taped._containerlike_add_to_primal(p, t)
     @eval Taped._diff(p::$T, q::$T) = Taped._containerlike_diff(p, q)
 end
 
+_sym(A) = A'A
+_pdmat(A) = PDMat(_sym(A))
+
 @testset "distributions" begin
     @testset "$(typeof(d))" for (interface_only, d, x) in [
 
         #
-        # Univariate.
+        # Univariate
         #
 
         (false, Arcsine(), 0.5),
@@ -81,8 +86,6 @@ end
         (false, Gumbel(-0.5, 1.1), -0.1),
         (false, Gumbel(0.3, 0.1), 0.3),
 
-        # (false, InverseGamma(1.1, 1.1), 0.5), doesn't support default ctor
-
         (false, InverseGaussian(0.1, 0.5), 1.1),
         (false, InverseGaussian(0.2, 1.1), 3.2),
         (false, InverseGaussian(0.1, 1.2), 0.5),
@@ -141,8 +144,6 @@ end
         (false, Normal(0.0, 1.5), -0.1),
         (false, Normal(-0.1, 0.9), -0.3),
 
-        # (false, NormalCanon(0.1, 1.0), 0.5) no default constructor.
-
         # (false, NormalInverseGaussian(0.0, 1.0, 0.2, 0.1), 0.1), foreigncall hit
 
         (false, Pareto(1.0, 1.0), 3.5),
@@ -168,7 +169,7 @@ end
         # (false, SkewNormal(0.0, 1.0, -1.0), 0.1), foreigncall hit
 
         (false, SymTriangularDist(0.0, 1.0), 0.5),
-        (false, SymTriangularDist(-0.5, 2.1), -2.5),
+        (false, SymTriangularDist(-0.5, 2.1), -2.0),
         (false, SymTriangularDist(1.7, 0.3), 1.75),
 
         (false, TDist(1.1), 99.1),
@@ -176,7 +177,7 @@ end
         (false, TDist(2.1), -89.5),
 
         (false, TriangularDist(0.0, 1.5, 0.5), 0.45),
-        (false, TriangularDist(0.1, 1.4, 0.45), 0.11),
+        (false, TriangularDist(0.1, 1.4, 0.45), 0.12),
         (false, TriangularDist(0.0, 1.5, 0.5), 0.2),
 
         (false, Triweight(1.0, 1.0), 1.0),
@@ -194,9 +195,49 @@ end
         (false, Weibull(0.5, 1.0), 0.45),
         (false, Weibull(0.3, 1.1), 0.66),
         (false, Weibull(0.75, 1.3), 0.99),
+
+        #
+        # Multivariate
+        #
+
+        (false, MvNormal(1, 1.5), [-0.3]),
+        (false, MvNormal(2, 0.5), [0.2, -0.3]),
+        (false, MvNormal([1.0]), [-0.1]),
+        (false, MvNormal([1.0, 0.9]), [-0.1, -0.7]),
+        (false, MvNormal([0.0], 0.9), [0.1]),
+        (false, MvNormal([0.0, 0.1], 0.9), [0.1, -0.05]),
+        (false, MvNormal(Diagonal([0.1])), [0.1]),
+        (false, MvNormal(Diagonal([0.1, 0.2])), [0.1, 0.15]),
+        (false, MvNormal([0.1, -0.3], Diagonal(Fill(0.9, 2))), [0.1, -0.1]),
+        (false, MvNormal([0.1, -0.1], 0.4I), [-0.1, 0.15]),
+        (false, MvNormal([0.2, 0.3], Hermitian(Diagonal([0.5, 0.4]))), [-0.1, 0.05]),
+        (false, MvNormal([0.2, 0.3], Symmetric(Diagonal([0.5, 0.4]))), [-0.1, 0.05]),
+        (false, MvNormal([0.2, 0.3], Diagonal([0.5, 0.4])), [-0.1, 0.05]),
+        (false, MvNormal([-0.15], _pdmat([1.1]')), [-0.05]),
+        (false, MvNormal([0.2, -0.15], _pdmat([1.0 0.9; 0.7 1.1])), [0.05, -0.05]),
+        (false, MvNormal([0.2, -0.3], [0.5, 0.6]), [0.4, -0.3]),
+
+        (false, MvNormalCanon([0.1, -0.1], _pdmat([0.5 0.4; 0.45 1.0])), [0.2, -0.25]),
+
+        # control flow
+        # (false, MvLogitNormal([0.4, 0.6], _pdmat([0.9 0.4; 0.5 1.1])), [0.2, 0.3, 0.5]),
+
+        (false, MvLogNormal(MvNormal([0.2, -0.1], _pdmat([1.0 0.9; 0.7 1.1]))), [0.5, 0.1]),
+
+        (false, Product([Normal()]), [0.3]),
+        (false, Product([Normal(), Uniform()]), [-0.4, 0.3]),
     ]
         @info "$(map(typeof, (d, x)))"
         rng = Xoshiro(123456)
-        test_taped_rrule!!(rng, logpdf, d, deepcopy(x)...; interface_only, perf_flag=:none)
+        test_taped_rrule!!(rng, logpdf, d, deepcopy(x); interface_only, perf_flag=:none)
+    end
+    @testset "$name" for (name, f, x) in [
+        ("InverseGamma", (a, b, x) -> logpdf(InverseGamma(a, b), x), (1.5, 1.4, 0.4)),
+        ("NormalCanon", (m, s, x) -> logpdf(NormalCanon(m, s), x), (0.1, 1.0, -0.5)),
+        # ("Dirichlet", (a, x) -> logpdf(Dirichlet(a), [x, 1-x]), ([1.0, 1.1], 0.6)), control flow
+    ]
+        @info "$name"
+        rng = Xoshiro(123456)
+        test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only=false, perf_flag=:none)
     end
 end
