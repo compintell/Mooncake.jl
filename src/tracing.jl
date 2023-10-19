@@ -116,6 +116,9 @@ function Umlaut.trace!(t::Tracer{<:TapedContext}, v_fargs)
             end
             pop!(t.stack)
             return v
+        elseif Meta.isexpr(cf, :enter)
+            prev_bi = bi
+            bi += 1
         else
             error("Panic! Don't know how to handle control flow expression $cf")
         end

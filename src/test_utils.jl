@@ -742,7 +742,7 @@ const TEST_FUNCTIONS = Any[
     (false, (A, C) -> test_naive_mat_mul!(C, A, A), randn(2, 2), randn(2, 2)),
     (false, sum, randn(3)),
     (false, test_diagonal_to_matrix, Diagonal(randn(3))),
-    (false, ldiv!, randn(2, 2), Diagonal(randn(2)), randn(2, 2)),
+    (false, ldiv!, randn(2, 2), Diagonal(rand(2) .+ 1), randn(2, 2)),
     (false, kron!, randn(4, 4), Diagonal(randn(2)), randn(2, 2)),
     (false, test_mlp, randn(5, 2), randn(7, 5), randn(3, 7)),
 ]

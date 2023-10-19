@@ -33,8 +33,8 @@ using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!
             vcat,
             map(product(['N', 'T'], [1, 9], [1, 2])) do (trans, N, Nrhs)
                 As = getrf!.([
-                    randn(N, N) + I,
-                    view(randn(15, 15) + I, 2:N+1, 2:N+1),
+                    randn(N, N) + 5I,
+                    view(randn(15, 15) + 5I, 2:N+1, 2:N+1),
                 ])
                 Bs = [randn(N, Nrhs), view(randn(15, 15), 4:N+3, 3:Nrhs+2)]
                 return map(product(As, Bs)) do ((A, ipiv), B)
@@ -47,8 +47,8 @@ using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!
         vec(reduce(
             vcat,
             map([9]) do N
-                As = getrf!.([randn(N, N) + I, view(randn(15, 15) + I, 2:N+1, 2:N+1)])
-                As = getrf!.([randn(N, N) + I])
+                As = getrf!.([randn(N, N) + 5I, view(randn(15, 15) + I, 2:N+1, 2:N+1)])
+                As = getrf!.([randn(N, N) + 5I])
                 return map(As) do (A, ipiv)
                     (false, getri!, A, ipiv)
                 end
