@@ -24,7 +24,7 @@ FunctionWrappers = "1"
 JET = "0.8"
 PDMats = "0.11"
 Setfield = "1"
-Umlaut = "0.5"
+Umlaut = "0.5.7"
 julia = "1"
 
 [extras]
