@@ -27,19 +27,25 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
         (false, Arcsine(), 0.5),
         (false, Arcsine(-0.3, 0.9), 0.5),
         (false, Arcsine(0.5, 1.1), 1.0),
-        # (false, Beta(), 0.5), control flow
-        # (false, Beta(), 0.9), control flow
-        # (false, Beta(1.5, 1.5), 0.5), control flow
-        # (false, BetaPrime(), 0.5), control flow
+        (false, Beta(1.1, 1.1), 0.5),
+        (false, Beta(1.1, 1.5), 0.9),
+        (false, Beta(1.6, 1.5), 0.5),
+        (false, BetaPrime(1.1, 1.1), 0.5),
+        (false, BetaPrime(1.1, 1.6), 0.5),
+        (false, BetaPrime(1.6, 1.3), 0.9),
         (false, Biweight(1.0, 2.0), 0.5),
         (false, Biweight(-0.5, 2.5), -0.45),
-        (false, Biweight(0.0, 1.0), 0.3),
+        (false, Biweight(0.0, 1.0), 0.3),   
         (false, Cauchy(), -0.5),
         (false, Cauchy(1.0), 0.99),
         (false, Cauchy(1.0, 0.1), 1.01),
-        # (false, Chernoff(), 0.5), control flow
-        # (false, Chi(2), 0.5), control flow
-        # (false, Chisq(2), 0.5), control flow
+        # (false, Chernoff(), 0.5), takes forever
+        (false, Chi(2.5), 0.5),
+        (false, Chi(5.5), 1.1),
+        (false, Chi(0.1), 0.7),
+        (false, Chisq(2.5), 0.5),
+        (false, Chisq(5.5), 1.1),
+        (false, Chisq(0.1), 0.7),
         (false, Cosine(0.0, 1.0), 0.5),
         (false, Cosine(-0.5, 2.0), -0.1),
         (false, Cosine(0.4, 0.5), 0.0),
@@ -52,7 +58,9 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
         (false, Exponential(), 0.1),
         (false, Exponential(0.5), 0.9),
         (false, Exponential(1.4), 0.05),
-        # (false, FDist(2, 3), 0.5), control flow
+        (false, FDist(2.1, 3.5), 0.7),
+        (false, FDist(1.4, 5.4), 3.5),
+        (false, FDist(5.5, 3.3), 7.2),
         (false, Frechet(), 0.1),
         (false, Frechet(), 1.1),
         (false, Frechet(1.5, 2.4), 0.1),
@@ -101,31 +109,33 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
         (false, LogUniform(0.1, 0.9), 0.75),
         (false, LogUniform(0.15, 7.8), 7.1),
         (false, LogUniform(2.0, 3.0), 2.1),
-        # (false, NoncentralBeta(1.1, 1.1, 1.2), 0.8), foreigncall hit
-        # (false, NoncentralChisq(2, 3.0), 10.0), foreigncall hit
-        # (false, NoncentralF(2, 3, 1.1), 4.1), foreigncall hit
-        # (false, NoncentralT(1.3, 1.1), 0.1), foreigncall hit
+        # (false, NoncentralBeta(1.1, 1.1, 1.2), 0.8), # foreigncall (Rmath.dnbeta)
+        # (false, NoncentralChisq(2, 3.0), 10.0), # foreigncall (Rmath.dnchisq)
+        # (false, NoncentralF(2, 3, 1.1), 4.1), # foreigncall (Rmath.dnf)
+        # (false, NoncentralT(1.3, 1.1), 0.1), # foreigncall (Rmath.dnt)
         (false, Normal(), 0.1),
         (false, Normal(0.0, 1.0), 1.0),
         (false, Normal(0.5, 1.0), 0.05),
         (false, Normal(0.0, 1.5), -0.1),
         (false, Normal(-0.1, 0.9), -0.3),
-        # (false, NormalInverseGaussian(0.0, 1.0, 0.2, 0.1), 0.1), foreigncall hit
+        # (false, NormalInverseGaussian(0.0, 1.0, 0.2, 0.1), 0.1), # foreigncall -- https://github.com/JuliaMath/SpecialFunctions.jl/blob/be1fa06fee58ec019a28fb0cd2b847ca83a5af9a/src/bessel.jl#L265
         (false, Pareto(1.0, 1.0), 3.5),
         (false, Pareto(1.1, 0.9), 3.1),
         (false, Pareto(1.0, 1.0), 1.4),
-        # (false, PGeneralizedGaussian(0.2), 5.0), control flow
+        (false, PGeneralizedGaussian(0.2), 5.0),
+        (false, PGeneralizedGaussian(0.5, 1.0, 0.3), 5.0),
+        (false, PGeneralizedGaussian(-0.1, 11.1, 6.5), -0.3),
         (false, Rayleigh(0.5), 0.6),
         (false, Rayleigh(0.9), 1.1),
         (false, Rayleigh(0.55), 0.63),
-        # (false, Rician(0.5, 1.0), 2.1), foreigncall hit
+        # (false, Rician(0.5, 1.0), 2.1), # foreigncall (Rmath.dnchisq)
         (false, Semicircle(1.0), 0.9),
         (false, Semicircle(5.1), 5.05),
         (false, Semicircle(0.5), -0.1),
         (false, SkewedExponentialPower(0.1, 1.0, 0.97, 0.7), -2.0),
         (false, SkewedExponentialPower(0.15, 1.0, 0.97, 0.7), -2.0),
         (false, SkewedExponentialPower(0.1, 1.1, 0.99, 0.7), 0.5),
-        # (false, SkewNormal(0.0, 1.0, -1.0), 0.1), foreigncall hit
+        # (false, SkewNormal(0.0, 1.0, -1.0), 0.1), # foreigncall (SpecialFunctions erfc) -- should look at using existing ChainRules to support this via an extension or something
         (false, SymTriangularDist(0.0, 1.0), 0.5),
         (false, SymTriangularDist(-0.5, 2.1), -2.0),
         (false, SymTriangularDist(1.7, 0.3), 1.75),
@@ -169,7 +179,7 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
         (false, MvNormal([0.2, -0.15], _pdmat([1.0 0.9; 0.7 1.1])), [0.05, -0.05]),
         (false, MvNormal([0.2, -0.3], [0.5, 0.6]), [0.4, -0.3]),
         (false, MvNormalCanon([0.1, -0.1], _pdmat([0.5 0.4; 0.45 1.0])), [0.2, -0.25]),
-        # (false, MvLogitNormal([0.4, 0.6], _pdmat([0.9 0.4; 0.5 1.1])), [0.2, 0.3, 0.5]), control flow
+        # (false, MvLogitNormal([0.4, 0.6], _pdmat([0.9 0.4; 0.5 1.1])), [0.25, 0.25, 0.5]), various problems
         (false, MvLogNormal(MvNormal([0.2, -0.1], _pdmat([1.0 0.9; 0.7 1.1]))), [0.5, 0.1]),
         (false, Product([Normal()]), [0.3]),
         (false, Product([Normal(), Uniform()]), [-0.4, 0.3]),
