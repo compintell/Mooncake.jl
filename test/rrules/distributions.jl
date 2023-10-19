@@ -35,7 +35,7 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
         (false, BetaPrime(1.6, 1.3), 0.9),
         (false, Biweight(1.0, 2.0), 0.5),
         (false, Biweight(-0.5, 2.5), -0.45),
-        (false, Biweight(0.0, 1.0), 0.3),   
+        (false, Biweight(0.0, 1.0), 0.3),
         (false, Cauchy(), -0.5),
         (false, Cauchy(1.0), 0.99),
         (false, Cauchy(1.0, 0.1), 1.01),
@@ -241,7 +241,7 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
         # ("Dirichlet", (a, x) -> logpdf(Dirichlet(a), [x, 1-x]), ([1.0, 1.1], 0.6)), control flow
         (
             "reshape",
-            x -> logpdf(reshape(Product([Normal(), Uniform()]), 1, 2), x),
+            x -> logpdf(reshape(product_distribution([Normal(), Uniform()]), 1, 2), x),
             ([2.1 0.7],),
         ),
         (
