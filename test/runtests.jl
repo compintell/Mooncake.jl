@@ -8,6 +8,8 @@ using
     LinearAlgebra,
     PDMats,
     Random,
+    SpecialFunctions,
+    StableRNGs,
     Taped,
     Test,
     Umlaut
@@ -102,6 +104,8 @@ const test_group = get(ENV, "TEST_GROUP", "basic")
         include(joinpath("rrules", "diff_tests.jl"))
     elseif test_group == "distributions"
         include(joinpath("rrules", "distributions.jl"))
+    elseif test_group == "special_functions"
+        include(joinpath("rrules", "special_functions.jl"))
     else
         throw(error("test_group=$(test_group) is not recognised"))
     end

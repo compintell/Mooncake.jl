@@ -49,6 +49,8 @@ export
     _scale,
     _add_to_primal,
     _diff,
-    _dot
+    _dot,
+    zero_codual,
+    rrule!!
 
 end
