@@ -28,6 +28,7 @@ jobs:
           - 'extended'
           - 'diff_tests'
           - 'distributions'
+          - 'special_functions'
     steps:
       - uses: actions/checkout@v2
       - uses: julia-actions/setup-julia@v1
