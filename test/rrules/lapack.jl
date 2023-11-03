@@ -61,10 +61,7 @@ using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!, potrf!
             map([1, 3, 9]) do N
                 X = randn(N, N)
                 A = X * X' + I
-                As = [A]
-                return map(As) do (A)
-                    (false, potrf!, 'L', A)
-                end
+                return [(false, potrf!, 'L', A), (false, potrf!, 'U', A)]
             end,
         )),
     )

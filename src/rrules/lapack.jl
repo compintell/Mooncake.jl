@@ -315,7 +315,6 @@ for (fname, elty) in ((:dpotrf_, :Float64), (:spotrf_, :Float32))
         # Pull out the data.
         uplo_p, N_p, A_p, lda_p, info_p = map(primal, (_uplo, _N, _A, _lda, _info))
         uplo, lda, N = map(unsafe_load, (uplo_p, lda_p, N_p))
-        @assert Char(uplo) == 'L'
 
         # Make a copy of the initial state for later restoration.
         A = wrap_ptr_as_view(A_p, lda, N, N)
@@ -335,10 +334,17 @@ for (fname, elty) in ((:dpotrf_, :Float64), (:spotrf_, :Float32))
             dA2 = dA
 
             # Compute cotangents.
-            E = LowerTriangular(2 * ones(N, N)) - Diagonal(ones(N))
-            L = LowerTriangular(A)
-            B = L' \ (E' .* (dA2'L)) / L
-            dA .= 0.5 * __sym(B) .* E .+ triu!(dA2, 1)
+            if Char(uplo) == 'L'
+                E = LowerTriangular(2 * ones(N, N)) - Diagonal(ones(N))
+                L = LowerTriangular(A)
+                B = L' \ (E' .* (dA2'L)) / L
+                dA .= 0.5 * __sym(B) .* E .+ triu!(dA2, 1)
+            else
+                E = UpperTriangular(2 * ones(N, N) - Diagonal(ones(N)))
+                U = UpperTriangular(A)
+                B = U \ ((U * dA2') .* E') / U'
+                dA .= 0.5 * __sym(B) .* E .+ tril!(dA2, -1)
+            end
 
             # Restore initial state.
             A .= A_copy
