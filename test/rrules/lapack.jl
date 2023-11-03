@@ -1,4 +1,4 @@
-using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!, potrf!
+using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!, potrf!, potrs!
 
 @testset "lapack" begin
     getrf_wrapper!(x, check) = getrf!(x; check)
@@ -62,6 +62,20 @@ using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!, potrf!
                 X = randn(N, N)
                 A = X * X' + I
                 return [(false, potrf!, 'L', A), (false, potrf!, 'U', A)]
+            end,
+        )),
+
+        # potrs
+        vec(reduce(
+            vcat,
+            map(product([1, 3, 9], [1, 2])) do (N, Nrhs)
+                X = randn(N, N)
+                A = X * X' + I
+                B = randn(N, Nrhs)
+                return [
+                    (false, potrs!, 'L', potrf!('L', copy(A))[1], copy(B)),
+                    (false, potrs!, 'U', potrf!('U', copy(A))[1], copy(B)),
+                ]
             end,
         )),
     )

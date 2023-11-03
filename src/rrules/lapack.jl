@@ -354,3 +354,68 @@ for (fname, elty) in ((:dpotrf_, :Float64), (:spotrf_, :Float32))
         return CoDual(Cvoid(), zero_tangent(Cvoid())), potrf_pb!!
     end
 end
+
+for (fname, elty) in ((:dpotrs_, :Float64), (:spotrs_, :Float32))
+    @eval function rrule!!(
+        ::CoDual{typeof(__foreigncall__)},
+        ::CoDual{Val{$(blas_name(fname))}},
+        ::CoDual, # return type
+        ::CoDual, # argument types
+        ::CoDual, # nreq
+        ::CoDual, # calling convention
+        _uplo::CoDual{Ptr{UInt8}},
+        _N::CoDual{Ptr{BlasInt}},
+        _Nrhs::CoDual{Ptr{BlasInt}},
+        _A::CoDual{Ptr{$elty}},
+        _lda::CoDual{Ptr{BlasInt}},
+        _B::CoDual{Ptr{$elty}},
+        _ldb::CoDual{Ptr{BlasInt}},
+        _info::CoDual{Ptr{BlasInt}},
+        args...,
+    )
+        # Pull out the data.
+        uplo_p, N_p, Nrhs_p, A_p, lda_p, B_p, ldb_p, info_p = map(
+            primal, (_uplo, _N, _Nrhs, _A, _lda, _B, _ldb, _info)
+        )
+        uplo, lda, N, ldb, Nrhs = map(unsafe_load, (uplo_p, lda_p, N_p, ldb_p, Nrhs_p))
+
+        # Make a copy of the initial state for later restoration.
+        A = wrap_ptr_as_view(A_p, lda, N, N)
+        B = wrap_ptr_as_view(B_p, ldb, N, Nrhs)
+        B_copy = copy(B)
+
+        # Run forwards-pass.
+        ccall(
+            $(blas_name(fname)), Cvoid,
+            (
+                Ptr{UInt8}, Ptr{BlasInt}, Ptr{BlasInt}, Ptr{$elty},
+                Ptr{BlasInt}, Ptr{$elty}, Ptr{BlasInt}, Ptr{BlasInt},
+            ),
+            uplo_p, N_p, Nrhs_p, A_p, lda_p, B_p, ldb_p, info_p,
+        )
+
+        function potrs_pb!!(
+            _, d1, d2, d3, d4, d5, d6, duplo, dN, dNrhs, _dA, dlda, _dB, dldb, dinfo, dargs...
+        )
+            dA = wrap_ptr_as_view(_dA, lda, N, N)
+            dB = wrap_ptr_as_view(_dB, ldb, N, Nrhs)
+
+            # Compute cotangents.
+            if Char(uplo) == 'L'
+                tmp = __sym(B_copy * dB') / LowerTriangular(A)'
+                dA .-= 2 .* tril!(LinearAlgebra.LAPACK.potrs!('L', A, tmp))
+                LinearAlgebra.LAPACK.potrs!('L', A, dB)
+            else
+                tmp = UpperTriangular(A)' \ __sym(B_copy * dB')
+                dA .-= 2 .* triu!((tmp / UpperTriangular(A)) / UpperTriangular(A)')
+                LinearAlgebra.LAPACK.potrs!('U', A, dB)
+            end
+
+            # Restore initial state.
+            B .= B_copy
+
+            return d1, d2, d3, d4, d5, d6, duplo, dN, dNrhs, _dA, dlda, _dB, dldb, dinfo, dargs...
+        end
+        return CoDual(Cvoid(), zero_tangent(Cvoid())), potrs_pb!!
+    end
+end
