@@ -9,6 +9,7 @@ for T in [
     TriangularDist, Triweight, Uniform, VonMises, Weibull, MvNormal, Distributions.Zeros,
     Distributions.ScalMat, Distributions.PDiagMat, PDMat, Cholesky, MvNormalCanon,
     MvLogitNormal, MvLogNormal, Product, MatrixBeta, Wishart, MatrixFDist, LKJ,
+    Symmetric, MatrixNormal, InverseWishart, MatrixTDist,
 ]
     @eval Taped._add_to_primal(p::$T, t) = Taped._containerlike_add_to_primal(p, t)
     @eval Taped._diff(p::$T, q::$T) = Taped._containerlike_diff(p, q)
@@ -181,7 +182,6 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
         (false, MvNormal([0.2, -0.15], _pdmat([1.0 0.9; 0.7 1.1])), [0.05, -0.05]),
         (false, MvNormal([0.2, -0.3], [0.5, 0.6]), [0.4, -0.3]),
         (false, MvNormalCanon([0.1, -0.1], _pdmat([0.5 0.4; 0.45 1.0])), [0.2, -0.25]),
-        # (false, MvLogitNormal([0.4, 0.6], _pdmat([0.9 0.4; 0.5 1.1])), [0.25, 0.25, 0.5]), various problems
         (false, MvLogNormal(MvNormal([0.2, -0.1], _pdmat([1.0 0.9; 0.7 1.1]))), [0.5, 0.1]),
         (false, Product([Normal()]), [0.3]),
         (false, Product([Normal(), Uniform()]), [-0.4, 0.3]),
@@ -190,26 +190,26 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
         # Matrix-variate
         #
 
-        # (
-        #     false,
-        #     MatrixNormal(randn(2, 3), _pdmat(randn(2, 2)), _pdmat(randn(3, 3))),
-        #     randn(2, 3),
-        # ), hit a foreigncall (dpotrs -- cholesky solve)
-        # (
-        #     false,
-        #     Wishart(5, _pdmat(randn(3, 3))),
-        #     collect(_pdmat(randn(3, 3))),
-        # ), hit a foreigncall (dpotrf -- compute cholesky)
-        # (
-        #     false,
-        #     InverseWishart(5, _pdmat(randn(3, 3))),
-        #     collect(_pdmat(randn(3, 3))),
-        # ), hit a foreigncall (dpotrf -- compute cholesky)
-        # (
-        #     false,
-        #     MatrixTDist(3.1, randn(2, 3), _pdmat(randn(2, 2)), _pdmat(randn(3, 3))),
-        #     randn(2, 3),
-        # ), hit a foreigncall (dpotrs -- cholesky solve)
+        (
+            false,
+            MatrixNormal(randn(2, 3), _pdmat(randn(2, 2)), _pdmat(randn(3, 3))),
+            randn(2, 3),
+        ),
+        (
+            false,
+            Wishart(5, _pdmat(randn(3, 3))),
+            Symmetric(collect(_pdmat(randn(3, 3)))),
+        ),
+        (
+            false,
+            InverseWishart(5, _pdmat(randn(3, 3))),
+            Symmetric(collect(_pdmat(randn(3, 3)))),
+        ),
+        (
+            false,
+            MatrixTDist(3.1, randn(2, 3), _pdmat(randn(2, 2)), _pdmat(randn(3, 3))),
+            randn(2, 3),
+        ),
         (
             false,
             MatrixBeta(5, 6.0, 7.0),
@@ -229,6 +229,11 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
     @testset "$name" for (name, f, x) in [
         ("InverseGamma", (a, b, x) -> logpdf(InverseGamma(a, b), x), (1.5, 1.4, 0.4)),
         ("NormalCanon", (m, s, x) -> logpdf(NormalCanon(m, s), x), (0.1, 1.0, -0.5)),
+        (
+            "MvLogitNormal",
+            (m, S, x) -> logpdf(MvLogitNormal(m, S), vcat(x, 1 - sum(x))),
+            ([0.4, 0.6], Symmetric(_pdmat([0.9 0.4; 0.5 1.1])), [0.27, 0.24]),
+        ),
         (
             "truncated Beta",
             (a, b, α, β, x) -> logpdf(truncated(Beta(α, β), a, b), x),
