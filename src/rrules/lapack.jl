@@ -295,10 +295,6 @@ for (fname, elty) in ((:dgetri_, :Float64), (:sgetri_, :Float32))
     end
 end
 
-# ccall((@blasfunc($potrf), libblastrampoline), Cvoid,
-# (Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}, Clong),
-# uplo, size(A,1), A, lda, info, 1)
-
 __sym(X) = 0.5 * (X + X')
 
 for (fname, elty) in ((:dpotrf_, :Float64), (:spotrf_, :Float32))
@@ -336,13 +332,13 @@ for (fname, elty) in ((:dpotrf_, :Float64), (:spotrf_, :Float32))
             _, d1, d2, d3, d4, d5, d6, duplo, dN, _dA, dlda, dinfo, dargs...
         )
             dA = wrap_ptr_as_view(_dA, lda, N, N)
-            dA2 = copy(dA)
+            dA2 = dA
 
             # Compute cotangents.
             E = LowerTriangular(2 * ones(N, N)) - Diagonal(ones(N))
-            L = LowerTriangular(collect(A))
+            L = LowerTriangular(A)
             B = L' \ (E' .* (dA2'L)) / L
-            dA .= 0.5 * __sym(B) .* E + triu(dA2, 1)
+            dA .= 0.5 * __sym(B) .* E .+ triu!(dA2, 1)
 
             # Restore initial state.
             A .= A_copy
