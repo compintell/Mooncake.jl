@@ -26,6 +26,10 @@
         (true, :stability, Array{Float64, 4}, undef, (2, 3, 4, 5)),
         (true, :stability, Array{Float64, 5}, undef, (2, 3, 4, 5, 6)),
         (true, :stability, Base._growend!, randn(5), 3),
+        (false, :stability, Base._deleteend!, randn(5), 2),
+        (false, :stability, Base._deleteend!, randn(5), 5),
+        (false, :stability, Base._deleteend!, randn(5), 0),
+        (false, :stability, sizehint!, randn(5), 10),
         (false, :stability, copy, randn(5, 4)),
         (false, :stability, fill!, rand(Int8, 5), Int8(2)),
         (false, :stability, fill!, rand(UInt8, 5), UInt8(2)),
@@ -63,6 +67,7 @@
         (false, unsafe_copyto_tester, randn(5), randn(6), 4),
         (false, unsafe_copyto_tester, [randn(3) for _ in 1:5], [randn(4) for _ in 1:6], 4),
         (false, x -> unsafe_pointer_to_objref(pointer_from_objref(x)), _x),
+        (false, isassigned, randn(5), 4),
     ]
         rng = Xoshiro(123456)
         test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only, perf_flag=:none)
@@ -70,7 +75,7 @@
     @testset "foreigncalls that should never be hit: $name" for name in [
         :jl_alloc_array_1d, :jl_alloc_array_2d, :jl_alloc_array_3d, :jl_new_array,
         :jl_array_grow_end, :jl_array_del_end, :jl_array_copy, :jl_type_intersection,
-        :memset, :jl_get_tls_world_age, :memmove, :jl_object_id,
+        :memset, :jl_get_tls_world_age, :memmove, :jl_object_id, :jl_array_sizehint,
     ]
         @test_throws(
             ErrorException,

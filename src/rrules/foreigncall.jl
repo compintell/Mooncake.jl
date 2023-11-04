@@ -72,6 +72,42 @@ function rrule!!(
     return CoDual(nothing, zero_tangent(nothing)), _growend!_pullback!!
 end
 
+isprimitive(::RMC, ::typeof(Base._deleteend!), ::Vector, ::Integer) = true
+function rrule!!(
+    ::CoDual{typeof(Base._deleteend!)}, _a::CoDual{<:Vector}, _delta::CoDual{<:Integer}
+)
+    # Extract data.
+    a = primal(_a)
+    delta = primal(_delta)
+
+    # Store the section to be cut for later.
+    primal_tail = a[end-delta+1:end]
+    tangent_tail = tangent(_a)[end-delta+1:end]
+
+    # Cut the end off the primal and tangent.
+    Base._deleteend!(a, delta)
+    Base._deleteend!(tangent(_a), delta)
+
+    function _deleteend!_pb!!(_, df, da, ddelta)
+
+        Base._growend!(a, delta)
+        a[end-delta+1:end] .= primal_tail
+
+        Base._growend!(da, delta)
+        da[end-delta+1:end] .= tangent_tail
+
+        return df, da, ddelta
+    end
+    return zero_codual(nothing), _deleteend!_pb!!
+end
+
+isprimitive(::RMC, ::typeof(sizehint!), ::Vector, ::Integer) = true
+function rrule!!(::CoDual{typeof(sizehint!)}, x::CoDual{<:Vector}, sz::CoDual{<:Integer})
+    sizehint!(primal(x), primal(sz))
+    sizehint!(tangent(x), primal(sz))
+    return x, NoPullback()
+end
+
 isprimitive(::RMC, ::typeof(objectid), @nospecialize(x)) = true
 function rrule!!(::CoDual{typeof(objectid)}, @nospecialize(x))
     return CoDual(objectid(primal(x)), NoTangent()), NoPullback()
@@ -95,7 +131,9 @@ end
 # unsafe_copyto! is the only function in Julia that appears to rely on a ccall to `memmove`.
 # Since we can't differentiate `memmove` (due to a lack of type information), it is
 # necessary to work with `unsafe_copyto!` instead.
-isprimitive(::RMC, ::typeof(unsafe_copyto!), args...) = true
+function isprimitive(::RMC, ::typeof(unsafe_copyto!), ::Ptr{T}, ::Ptr{T}, ::Any) where {T}
+    return true
+end
 function rrule!!(
     ::CoDual{typeof(unsafe_copyto!)}, dest::CoDual{Ptr{T}}, src::CoDual{Ptr{T}}, n::CoDual
 ) where {T}
@@ -126,6 +164,11 @@ function rrule!!(
 end
 
 # same structure as the previous method, just without the pointers.
+function isprimitive(
+    ::RMC, ::typeof(unsafe_copyto!), ::Array{T}, ::Any, ::Array{T}, ::Any, ::Any
+) where {T}
+    return true
+end
 function rrule!!(
     ::CoDual{typeof(unsafe_copyto!)},
     dest::CoDual{<:Array{T}},
@@ -221,10 +264,26 @@ function rrule!!(
     return y, NoPullback()
 end
 
+function rrule!!(
+    ::CoDual{typeof(__foreigncall__)},
+    ::CoDual{Val{:jl_array_isassigned}},
+    ::CoDual, # return type is Int32
+    ::CoDual, # arg types are (Any, UInt64)
+    ::CoDual, # nreq
+    ::CoDual, # calling convention
+    a::CoDual{<:Array},
+    ii::CoDual{UInt},
+    args...,
+)
+    y = ccall(:jl_array_isassigned, Cint, (Any, UInt), primal(a), primal(ii))
+    return zero_codual(y), NoPullback()
+end
+
 for name in [
     :(:jl_alloc_array_1d), :(:jl_alloc_array_2d), :(:jl_alloc_array_3d), :(:jl_new_array),
     :(:jl_array_grow_end), :(:jl_array_del_end), :(:jl_array_copy), :(:jl_object_id),
     :(:jl_type_intersection), :(:memset), :(:jl_get_tls_world_age), :(:memmove),
+    :(:jl_array_sizehint),
 ]
     @eval function rrule!!(::CoDual{typeof(__foreigncall__)}, ::CoDual{Val{$name}}, args...)
         nm = $name
