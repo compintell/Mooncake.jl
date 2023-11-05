@@ -15,7 +15,7 @@ using Base:
     arrayset
 using Core: Intrinsics, bitcast
 using FunctionWrappers: FunctionWrapper
-using LinearAlgebra.BLAS: @blasfunc, BlasInt
+using LinearAlgebra.BLAS: @blasfunc, BlasInt, trsm!
 
 include("tracing.jl")
 include("acceleration.jl")

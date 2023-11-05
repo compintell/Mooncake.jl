@@ -140,7 +140,7 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...)
     _, x̄... = pb!!(ȳ, tangent(f_f̄), x̄...)
 
     # Check that inputs have been returned to their original value.
-    @test all(map(has_equal_data, x, map(primal, x_x̄)))
+    @test all(map(has_equal_data, x, map(primal, x_x̄_rule)))
 
     # pullbacks increment, so have to compare to the incremented quantity.
     @test _dot(ȳ_delta, ẏ) + _dot(x̄_delta, ẋ_post) ≈ _dot(x̄, ẋ) rtol=1e-3 atol=1e-3

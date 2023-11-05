@@ -56,20 +56,79 @@ function rrule!!(
     return a, fill!_pullback!!
 end
 
-isprimitive(::RMC, ::typeof(Base._growend!), a::Vector, delta::Integer) = true
+isprimitive(::RMC, ::typeof(Base._growbeg!), ::Vector, ::Integer) = true
 function rrule!!(
-    ::CoDual{typeof(Base._growend!)}, a::CoDual{<:Vector}, delta::CoDual{<:Integer},
-)
-    _d = primal(delta)
-    _a = primal(a)
-    Base._growend!(_a, _d)
-    Base._growend!(tangent(a), _d)
-    function _growend!_pullback!!(dy, df, da, ddelta)
-        Base._deleteend!(_a, _d)
-        Base._deleteend!(da, _d)
+    ::CoDual{typeof(Base._growbeg!)}, _a::CoDual{<:Vector{T}}, _delta::CoDual{<:Integer},
+) where {T}
+    d = primal(_delta)
+    a = primal(_a)
+    Base._growbeg!(a, d)
+    Base._growbeg!(tangent(_a), d)
+    function _growbeg!_pb!!(_, df, da, ddelta)
+        Base._deletebeg!(a, d)
+        Base._deletebeg!(da, d)
         return df, da, ddelta
     end
-    return CoDual(nothing, zero_tangent(nothing)), _growend!_pullback!!
+    return zero_codual(nothing), _growbeg!_pb!!
+end
+
+isprimitive(::RMC, ::typeof(Base._growend!), ::Vector, ::Integer) = true
+function rrule!!(
+    ::CoDual{typeof(Base._growend!)}, _a::CoDual{<:Vector}, _delta::CoDual{<:Integer},
+)
+    d = primal(_delta)
+    a = primal(_a)
+    Base._growend!(a, d)
+    Base._growend!(tangent(_a), d)
+    function _growend!_pullback!!(dy, df, da, ddelta)
+        Base._deleteend!(a, d)
+        Base._deleteend!(da, d)
+        return df, da, ddelta
+    end
+    return zero_codual(nothing), _growend!_pullback!!
+end
+
+isprimitive(::RMC, ::typeof(Base._growat!), ::Vector, ::Integer, ::Integer) = true
+function rrule!!(
+    ::CoDual{typeof(Base._growat!)},
+    _a::CoDual{<:Vector},
+    _i::CoDual{<:Integer},
+    _delta::CoDual{<:Integer},
+)
+    # Extract data.
+    a, i, delta = map(primal, (_a, _i, _delta))
+
+    # Run the primal.
+    Base._growat!(a, i, delta)
+    Base._growat!(tangent(_a), i, delta)
+
+    function _growat!_pb!!(_, df, da, di, ddelta)
+        deleteat!(a, i:i+delta-1)
+        deleteat!(da, i:i+delta-1)
+        return df, da, di, ddelta
+    end
+    return zero_codual(nothing), _growat!_pb!!
+end
+
+isprimitive(::RMC, ::typeof(Base._deletebeg!), ::Vector, ::Integer) = true
+function rrule!!(
+    ::CoDual{typeof(Base._deletebeg!)}, _a::CoDual{<:Vector}, _delta::CoDual{<:Integer},
+)
+    delta = primal(_delta)
+    a = primal(_a)
+
+    a_beg = a[1:delta]
+    da_beg = tangent(_a)[1:delta]
+
+    Base._deletebeg!(a, delta)
+    Base._deletebeg!(tangent(_a), delta)
+
+    function _deletebeg!_pb!!(_, df, da, ddelta)
+        splice!(a, 1:0, a_beg)
+        splice!(da, 1:0, da_beg)
+        return df, da, ddelta
+    end
+    return zero_codual(nothing), _deletebeg!_pb!!
 end
 
 isprimitive(::RMC, ::typeof(Base._deleteend!), ::Vector, ::Integer) = true
@@ -99,6 +158,33 @@ function rrule!!(
         return df, da, ddelta
     end
     return zero_codual(nothing), _deleteend!_pb!!
+end
+
+isprimitive(::RMC, ::typeof(Base._deleteat!), ::Vector, ::Integer, ::Integer) = true
+function rrule!!(
+    ::CoDual{typeof(Base._deleteat!)},
+    _a::CoDual{<:Vector},
+    _i::CoDual{<:Integer},
+    _delta::CoDual{<:Integer},
+)
+    # Extract data.
+    a, i, delta = map(primal, (_a, _i, _delta))
+
+    # Store the cut section for later.
+    primal_mem = a[i:i+delta-1]
+    tangent_mem = tangent(_a)[i:i+delta-1]
+
+    # Run the primal.
+    Base._deleteat!(a, i, delta)
+    Base._deleteat!(tangent(_a), i, delta)
+
+    function _deleteat!_pb!!(_, df, da, di, ddelta)
+        splice!(a, i:i-1, primal_mem)
+        splice!(da, i:i-1, tangent_mem)
+        return df, da, di, ddelta
+    end
+
+    return zero_codual(nothing), _deleteat!_pb!!
 end
 
 isprimitive(::RMC, ::typeof(sizehint!), ::Vector, ::Integer) = true
@@ -283,7 +369,8 @@ for name in [
     :(:jl_alloc_array_1d), :(:jl_alloc_array_2d), :(:jl_alloc_array_3d), :(:jl_new_array),
     :(:jl_array_grow_end), :(:jl_array_del_end), :(:jl_array_copy), :(:jl_object_id),
     :(:jl_type_intersection), :(:memset), :(:jl_get_tls_world_age), :(:memmove),
-    :(:jl_array_sizehint),
+    :(:jl_array_sizehint), :(:jl_array_del_at), :(:jl_array_grow_at), :(:jl_array_del_beg),
+    :(:jl_array_grow_beg),
 ]
     @eval function rrule!!(::CoDual{typeof(__foreigncall__)}, ::CoDual{Val{$name}}, args...)
         nm = $name
