@@ -1,3 +1,29 @@
+# Fallback rule for foreigncall which gives an interpretable error message.
+struct MissingForeigncallRuleError <: Exception
+    msg::String
+end
+
+Base.showerror(io::IO, err::MissingForeigncallRuleError) = print(io, err.msg)
+
+# Fallback foreigncall rrule. This is a sufficiently common special case, that it's worth
+# creating an informative error message, so that users have some chance of knowing why
+# they're not able to differentiate a piece of code.
+function rrule!!(::CoDual{typeof(__foreigncall__)}, args...)
+    throw(MissingForeigncallRuleError(
+        "No rrule!! available for foreigncall with primal argument types " *
+        "$(typeof(map(primal, args))). " *
+        "This problem has most likely arisen because there is a ccall somewhere in the " *
+        "function you are trying to differentiate, for which an rrule!! has not been " *
+        "explicitly written." *
+        "You have three options: write an rrule!! for this foreigncall, write an rrule!! " *
+        "for a Julia function that calls this foreigncall, or re-write your code to " *
+        "avoid this foreigncall entirely. " *
+        "If you believe that this error has arisen for some other reason than the above, " *
+        "or the above does not help you to workaround this problem, please open an issue."
+    ))
+end
+
+
 
 #
 # Rules to handle / avoid foreigncall nodes
