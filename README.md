@@ -18,7 +18,7 @@ It should be thought of as being similar to ChainRules' `rrule` and Zygote's `_p
 It has, perhaps unsurprisingly, wound up looking quite similar to the rule system in Enzyme.
 
 We view Enzyme as the most comparable system to ours, because it also supports mutation.
-The core difference between our two packages is that Enzyme targets LLVM, and its backbone is written in C++.
+The core difference between our two packages is that Enzyme targets LLVM, and its backbone is therefore written in C++.
 Conversely, as stated above, Taped is written entirely in Julia.
 These two approaches entail different tradeoffs.
 
