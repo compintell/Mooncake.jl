@@ -6,7 +6,7 @@
 
 # Project Goals
 
-The goal of the `Taped.jl` project is to produce a reverse-mode AD package, written entirely in Julia, which improves over both ReverseDiff.jl and Zygote.jl along several axes:
+The goal of the `Taped.jl` project is to produce a reverse-mode AD package, written entirely in Julia, which improves over both ReverseDiff.jl and Zygote.jl in several ways:
 1. performance,
 1. correctness / scope of testing,
 1. coverage of language features.
