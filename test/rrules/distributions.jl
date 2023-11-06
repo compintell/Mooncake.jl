@@ -249,7 +249,7 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
             (a, b, α, β, x) -> logpdf(truncated(Uniform(α, β), a, b), x),
             (0.1, 0.9, -0.1, 1.1, 0.4),
         ),
-        # ("Dirichlet", (a, x) -> logpdf(Dirichlet(a), [x, 1-x]), ([1.0, 1.1], 0.6)), control flow
+        ("Dirichlet", (a, x) -> logpdf(Dirichlet(a), [x, 1-x]), ([1.5, 1.1], 0.6)),
         (
             "reshape",
             x -> logpdf(reshape(product_distribution([Normal(), Uniform()]), 1, 2), x),
