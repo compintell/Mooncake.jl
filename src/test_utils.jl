@@ -3,26 +3,28 @@ module TestUtils
 using JET, Random, Taped, Test, Umlaut
 using Taped: CoDual, NoTangent, rrule!!, is_init, zero_codual
 
-has_equal_data(x::T, y::T) where {T<:String} = x == y
-has_equal_data(x::Type, y::Type) = x == y
-has_equal_data(x::Core.TypeName, y::Core.TypeName) = x == y
-has_equal_data(x::Module, y::Module) = x == y
-function has_equal_data(x::T, y::T) where {T<:Array}
+has_equal_data(x::T, y::T; equal_undefs=true) where {T<:String} = x == y
+has_equal_data(x::Type, y::Type; equal_undefs=true) = x == y
+has_equal_data(x::Core.TypeName, y::Core.TypeName; equal_undefs=true) = x == y
+has_equal_data(x::Module, y::Module; equal_undefs=true) = x == y
+function has_equal_data(x::T, y::T; equal_undefs=true) where {T<:Array}
     size(x) != size(y) && return false
     equality = map(1:length(x)) do n
-        (isassigned(x, n) != isassigned(y, n)) && return false
+        (isassigned(x, n) != isassigned(y, n)) && return !equal_undefs
         return (!isassigned(x, n) || has_equal_data(x[n], y[n]))
     end
     return all(equality)
 end
-function has_equal_data(x::T, y::T) where {T}
+function has_equal_data(x::T, y::T; equal_undefs=true) where {T}
     isprimitivetype(T) && return isequal(x, y)
     return all(map(
         n -> isdefined(x, n) ? has_equal_data(getfield(x, n), getfield(y, n)) : true,
         fieldnames(T),
     ))
 end
-has_equal_data(x::T, y::T) where {T<:Umlaut.Tape} = true
+has_equal_data(x::T, y::T; equal_undefs=true) where {T<:Umlaut.Tape} = true
+
+has_equal_data_up_to_undefs(x::T, y::T) where {T} = has_equal_data(x, y; equal_undefs=false)
 
 const AddressMap = Dict{Ptr{Nothing}, Ptr{Nothing}}
 
@@ -140,7 +142,7 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...)
     _, x̄... = pb!!(ȳ, tangent(f_f̄), x̄...)
 
     # Check that inputs have been returned to their original value.
-    @test all(map(has_equal_data, x, map(primal, x_x̄_rule)))
+    @test all(map(has_equal_data_up_to_undefs, x, map(primal, x_x̄_rule)))
 
     # pullbacks increment, so have to compare to the incremented quantity.
     @test _dot(ȳ_delta, ẏ) + _dot(x̄_delta, ẋ_post) ≈ _dot(x̄, ẋ) rtol=1e-3 atol=1e-3
