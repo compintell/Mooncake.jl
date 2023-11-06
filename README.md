@@ -11,11 +11,16 @@ The goal of the `Taped.jl` project is to produce a reverse-mode AD package, writ
 1. correctness / scope of testing,
 1. coverage of language features.
 
-The most notable feature that we improve on over ReverseDiff and Zygote / ChainRules is support for mutation (writing to arrays, modifying fields of `mutable struct`s, etc), which is arguably the core limitation of these two packages.
+The most notable feature that we improve on over ReverseDiff and Zygote / ChainRules is support for mutation (writing to arrays, modifying fields of `mutable struct`s, etc), which is arguably the core limitation of these two packages, and has been the elephant-in-the-room of reverse-mode AD in Julia for years.
 
 Our system is based around a single function `rrule!!`.
 It should be thought of as being similar to ChainRules' `rrule` and Zygote's `_pullback`, but with additional features / requirements which make it suitable for being applied to functions which (potentially) modify their arguments.
 It has, perhaps unsurprisingly, wound up looking quite similar to the rule system in Enzyme.
+
+We view Enzyme as the most comparable system to ours, because it also supports mutation.
+The core difference between our two packages is that Enzyme targets LLVM, and its backbone is written in C++.
+Conversely, as stated above, Taped is written entirely in Julia.
+These two approaches entail different tradeoffs.
 
 # Project Name
 
