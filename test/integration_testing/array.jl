@@ -463,9 +463,9 @@
             (false, sizeof, randn(sr(2), 5)),
             (false, sort, randn(sr(3), 3)),
             (false, sort!, randn(sr(4), 3)),
-            # (false, sortperm, randn(sr(0), 3)), # unclear why not working
-            # (false, sortperm!, [1, 2, 3], randn(sr(1), 3)), # unclear why not working
-            # (false, x -> sortslices(x; dims=1), randn(sr(2), 2, 3)), # unclear why not working
+            (false, sortperm, randn(sr(0), 3)),
+            (false, sortperm!, [1, 2, 3], randn(sr(1), 3)),
+            (false, x -> sortslices(x; dims=1), randn(sr(2), 2, 3)),
             (false, splice!, randn(sr(5), 5), 1:2),
             (false, splice!, randn(sr(6), 5), 1:0),
             (false, splice!, randn(sr(7), 5), 1:5),

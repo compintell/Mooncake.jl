@@ -69,6 +69,8 @@ using .TestResources:
 # group.
 const test_group = get(ENV, "TEST_GROUP", "basic")
 
+sr(n::Int) = StableRNG(n)
+
 @testset "Taped.jl" begin
     if test_group == "basic"
         include("tracing.jl")

@@ -66,6 +66,10 @@ function build_tangent(::Type{P}, fields...) where {P}
     return tangent_type(P)(NamedTuple{fieldnames(P)}(tangent_values))
 end
 
+function build_tangent(::Type{P}, fields...) where {P<:Union{Tuple, NamedTuple}}
+    return tangent_type(P)(fields)
+end
+
 _value(v::PossiblyUninitTangent) = v.tangent
 _value(v) = v
 

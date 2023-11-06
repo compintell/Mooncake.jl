@@ -10,7 +10,9 @@ end
     end
 end
 
-function __new__pullback(dy::NamedTuple, d__new__, df, dxs::Vararg{Any, N}) where {N}
+function __new__pullback(
+    dy::Union{Tuple, NamedTuple}, d__new__, df, dxs::Vararg{Any, N}
+) where {N}
     new_dxs = map((x, y) -> increment!!(x, _value(y)), dxs, dy)
     return d__new__, df, new_dxs...
 end

@@ -24,6 +24,7 @@
             (false, Array{Vector{Float64}, 3}, undef, (2, 3, 4)),
             (false, Xoshiro, 123456),
             (false, push!, randn(5), 3.0),
+            (false, x -> (a=x, b=x), 5.0),
         ],
         map(n -> (false, map, sin, (randn(n)..., )), 1:7),
         map(n -> (false, map, sin, randn(n)), 1:7),
