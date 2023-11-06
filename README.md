@@ -36,12 +36,13 @@ The project plan is to broadly proceed in three phases:
 1. performance optimisation
 1. maintenance
 
+You should take this with a pinch of salt, as it seems highly likely that we will have to revisit some design choices when optimising performance -- we do not, however, anticipate requiring major re-writes to the design as part of performance optimisation.
 We aim to reach the maintenance phase of the project before 01/06/2024.
 
 At the time of writing (06/11/2023), we are mostly through the first phase.
 Correctness testing is proceeding well, and we are ironing out known issues.
-Notably, our broad experience at present is that at we continue to increase the amount of Julia code on which the package is run, things are failing for known, predictable, straightforwardly-fixable reasons, rather than unanticipating problems.
+Notably, our broad experience at present is that at we continue to increase the amount of Julia code on which the package is tested, things are failing for known, predictable, straightforwardly-fixable reasons, (largely missing rrules for `ccall`s) rather than unanticipating problems.
 
 Please note that, since we have yet to enter phase 2 of the project, we have spent _no_ time whatsoever optimising for performance.
 We strongly believe that there is nothing in principle preventing us from achieving excellent performance.
-However, currently, you should expect to experience _amazingly_ poor runtime performance.
+However, currently, you should expect to experience _amazingly_ poor performance.
