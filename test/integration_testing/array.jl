@@ -500,6 +500,7 @@
         ]
     )
         rng = StableRNG(123456)
+        @info map(typeof, (f, x...))
         test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only, perf_flag=:none)
     end
 end
