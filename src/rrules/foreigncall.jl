@@ -1,3 +1,29 @@
+# Fallback rule for foreigncall which gives an interpretable error message.
+struct MissingForeigncallRuleError <: Exception
+    msg::String
+end
+
+Base.showerror(io::IO, err::MissingForeigncallRuleError) = print(io, err.msg)
+
+# Fallback foreigncall rrule. This is a sufficiently common special case, that it's worth
+# creating an informative error message, so that users have some chance of knowing why
+# they're not able to differentiate a piece of code.
+function rrule!!(::CoDual{typeof(__foreigncall__)}, args...)
+    throw(MissingForeigncallRuleError(
+        "No rrule!! available for foreigncall with primal argument types " *
+        "$(typeof(map(primal, args))). " *
+        "This problem has most likely arisen because there is a ccall somewhere in the " *
+        "function you are trying to differentiate, for which an rrule!! has not been " *
+        "explicitly written." *
+        "You have three options: write an rrule!! for this foreigncall, write an rrule!! " *
+        "for a Julia function that calls this foreigncall, or re-write your code to " *
+        "avoid this foreigncall entirely. " *
+        "If you believe that this error has arisen for some other reason than the above, " *
+        "or the above does not help you to workaround this problem, please open an issue."
+    ))
+end
+
+
 
 #
 # Rules to handle / avoid foreigncall nodes
@@ -56,20 +82,142 @@ function rrule!!(
     return a, fill!_pullback!!
 end
 
-isprimitive(::RMC, ::typeof(Base._growend!), a::Vector, delta::Integer) = true
+isprimitive(::RMC, ::typeof(Base._growbeg!), ::Vector, ::Integer) = true
 function rrule!!(
-    ::CoDual{typeof(Base._growend!)}, a::CoDual{<:Vector}, delta::CoDual{<:Integer},
-)
-    _d = primal(delta)
-    _a = primal(a)
-    Base._growend!(_a, _d)
-    Base._growend!(tangent(a), _d)
-    function _growend!_pullback!!(dy, df, da, ddelta)
-        Base._deleteend!(_a, _d)
-        Base._deleteend!(da, _d)
+    ::CoDual{typeof(Base._growbeg!)}, _a::CoDual{<:Vector{T}}, _delta::CoDual{<:Integer},
+) where {T}
+    d = primal(_delta)
+    a = primal(_a)
+    Base._growbeg!(a, d)
+    Base._growbeg!(tangent(_a), d)
+    function _growbeg!_pb!!(_, df, da, ddelta)
+        Base._deletebeg!(a, d)
+        Base._deletebeg!(da, d)
         return df, da, ddelta
     end
-    return CoDual(nothing, zero_tangent(nothing)), _growend!_pullback!!
+    return zero_codual(nothing), _growbeg!_pb!!
+end
+
+isprimitive(::RMC, ::typeof(Base._growend!), ::Vector, ::Integer) = true
+function rrule!!(
+    ::CoDual{typeof(Base._growend!)}, _a::CoDual{<:Vector}, _delta::CoDual{<:Integer},
+)
+    d = primal(_delta)
+    a = primal(_a)
+    Base._growend!(a, d)
+    Base._growend!(tangent(_a), d)
+    function _growend!_pullback!!(dy, df, da, ddelta)
+        Base._deleteend!(a, d)
+        Base._deleteend!(da, d)
+        return df, da, ddelta
+    end
+    return zero_codual(nothing), _growend!_pullback!!
+end
+
+isprimitive(::RMC, ::typeof(Base._growat!), ::Vector, ::Integer, ::Integer) = true
+function rrule!!(
+    ::CoDual{typeof(Base._growat!)},
+    _a::CoDual{<:Vector},
+    _i::CoDual{<:Integer},
+    _delta::CoDual{<:Integer},
+)
+    # Extract data.
+    a, i, delta = map(primal, (_a, _i, _delta))
+
+    # Run the primal.
+    Base._growat!(a, i, delta)
+    Base._growat!(tangent(_a), i, delta)
+
+    function _growat!_pb!!(_, df, da, di, ddelta)
+        deleteat!(a, i:i+delta-1)
+        deleteat!(da, i:i+delta-1)
+        return df, da, di, ddelta
+    end
+    return zero_codual(nothing), _growat!_pb!!
+end
+
+isprimitive(::RMC, ::typeof(Base._deletebeg!), ::Vector, ::Integer) = true
+function rrule!!(
+    ::CoDual{typeof(Base._deletebeg!)}, _a::CoDual{<:Vector}, _delta::CoDual{<:Integer},
+)
+    delta = primal(_delta)
+    a = primal(_a)
+
+    a_beg = a[1:delta]
+    da_beg = tangent(_a)[1:delta]
+
+    Base._deletebeg!(a, delta)
+    Base._deletebeg!(tangent(_a), delta)
+
+    function _deletebeg!_pb!!(_, df, da, ddelta)
+        splice!(a, 1:0, a_beg)
+        splice!(da, 1:0, da_beg)
+        return df, da, ddelta
+    end
+    return zero_codual(nothing), _deletebeg!_pb!!
+end
+
+isprimitive(::RMC, ::typeof(Base._deleteend!), ::Vector, ::Integer) = true
+function rrule!!(
+    ::CoDual{typeof(Base._deleteend!)}, _a::CoDual{<:Vector}, _delta::CoDual{<:Integer}
+)
+    # Extract data.
+    a = primal(_a)
+    delta = primal(_delta)
+
+    # Store the section to be cut for later.
+    primal_tail = a[end-delta+1:end]
+    tangent_tail = tangent(_a)[end-delta+1:end]
+
+    # Cut the end off the primal and tangent.
+    Base._deleteend!(a, delta)
+    Base._deleteend!(tangent(_a), delta)
+
+    function _deleteend!_pb!!(_, df, da, ddelta)
+
+        Base._growend!(a, delta)
+        a[end-delta+1:end] .= primal_tail
+
+        Base._growend!(da, delta)
+        da[end-delta+1:end] .= tangent_tail
+
+        return df, da, ddelta
+    end
+    return zero_codual(nothing), _deleteend!_pb!!
+end
+
+isprimitive(::RMC, ::typeof(Base._deleteat!), ::Vector, ::Integer, ::Integer) = true
+function rrule!!(
+    ::CoDual{typeof(Base._deleteat!)},
+    _a::CoDual{<:Vector},
+    _i::CoDual{<:Integer},
+    _delta::CoDual{<:Integer},
+)
+    # Extract data.
+    a, i, delta = map(primal, (_a, _i, _delta))
+
+    # Store the cut section for later.
+    primal_mem = a[i:i+delta-1]
+    tangent_mem = tangent(_a)[i:i+delta-1]
+
+    # Run the primal.
+    Base._deleteat!(a, i, delta)
+    Base._deleteat!(tangent(_a), i, delta)
+
+    function _deleteat!_pb!!(_, df, da, di, ddelta)
+        splice!(a, i:i-1, primal_mem)
+        splice!(da, i:i-1, tangent_mem)
+        return df, da, di, ddelta
+    end
+
+    return zero_codual(nothing), _deleteat!_pb!!
+end
+
+isprimitive(::RMC, ::typeof(sizehint!), ::Vector, ::Integer) = true
+function rrule!!(::CoDual{typeof(sizehint!)}, x::CoDual{<:Vector}, sz::CoDual{<:Integer})
+    sizehint!(primal(x), primal(sz))
+    sizehint!(tangent(x), primal(sz))
+    return x, NoPullback()
 end
 
 isprimitive(::RMC, ::typeof(objectid), @nospecialize(x)) = true
@@ -95,7 +243,9 @@ end
 # unsafe_copyto! is the only function in Julia that appears to rely on a ccall to `memmove`.
 # Since we can't differentiate `memmove` (due to a lack of type information), it is
 # necessary to work with `unsafe_copyto!` instead.
-isprimitive(::RMC, ::typeof(unsafe_copyto!), args...) = true
+function isprimitive(::RMC, ::typeof(unsafe_copyto!), ::Ptr{T}, ::Ptr{T}, ::Any) where {T}
+    return true
+end
 function rrule!!(
     ::CoDual{typeof(unsafe_copyto!)}, dest::CoDual{Ptr{T}}, src::CoDual{Ptr{T}}, n::CoDual
 ) where {T}
@@ -126,6 +276,11 @@ function rrule!!(
 end
 
 # same structure as the previous method, just without the pointers.
+function isprimitive(
+    ::RMC, ::typeof(unsafe_copyto!), ::Array{T}, ::Any, ::Array{T}, ::Any, ::Any
+) where {T}
+    return true
+end
 function rrule!!(
     ::CoDual{typeof(unsafe_copyto!)},
     dest::CoDual{<:Array{T}},
@@ -221,10 +376,27 @@ function rrule!!(
     return y, NoPullback()
 end
 
+function rrule!!(
+    ::CoDual{typeof(__foreigncall__)},
+    ::CoDual{Val{:jl_array_isassigned}},
+    ::CoDual, # return type is Int32
+    ::CoDual, # arg types are (Any, UInt64)
+    ::CoDual, # nreq
+    ::CoDual, # calling convention
+    a::CoDual{<:Array},
+    ii::CoDual{UInt},
+    args...,
+)
+    y = ccall(:jl_array_isassigned, Cint, (Any, UInt), primal(a), primal(ii))
+    return zero_codual(y), NoPullback()
+end
+
 for name in [
     :(:jl_alloc_array_1d), :(:jl_alloc_array_2d), :(:jl_alloc_array_3d), :(:jl_new_array),
     :(:jl_array_grow_end), :(:jl_array_del_end), :(:jl_array_copy), :(:jl_object_id),
     :(:jl_type_intersection), :(:memset), :(:jl_get_tls_world_age), :(:memmove),
+    :(:jl_array_sizehint), :(:jl_array_del_at), :(:jl_array_grow_at), :(:jl_array_del_beg),
+    :(:jl_array_grow_beg),
 ]
     @eval function rrule!!(::CoDual{typeof(__foreigncall__)}, ::CoDual{Val{$name}}, args...)
         nm = $name

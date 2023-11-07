@@ -15,6 +15,10 @@ function _trans(flag, mat)
     throw(error("Unrecognised flag $flag"))
 end
 
+function tri!(A, u::Char, d::Char)
+    return u == 'L' ? tril!(A, d == 'U' ? -1 : 0) : triu!(A, d == 'U' ? 1 : 0)
+end
+
 
 
 #
@@ -94,7 +98,7 @@ for (fname, elty) in ((:dscal_, :Float64), (:sscal_, :Float32))
 
             return a, b, c, d, e, f, dn, dDA, dDX, dincx, dargs...
         end
-        return CoDual(Cvoid(), zero_tangent(Cvoid())), dscal_pullback!!
+        return zero_codual(Cvoid()), dscal_pullback!!
     end
 end
 
@@ -163,12 +167,8 @@ for (gemv, elty) in ((:dgemv_, :Float64), (:sgemm_, :Float32))
             return d1, d2, d3, d4, d5, d6, dt, dM, dN, dalpha, _dA, dlda, _dx, dincx, dbeta,
                 _dy, dincy, dargs...
         end
-        return uninit_codual(Cvoid()), gemv_pb!!
+        return zero_codual(Cvoid()), gemv_pb!!
     end
-end
-
-function tri!(A, u::Char, d::Char)
-    return u == 'L' ? tril!(A, d == 'U' ? -1 : 0) : triu!(A, d == 'U' ? 1 : 0)
 end
 
 for (trmv, elty) in ((:dtrmv_, :Float64), (:strmv_, :Float32))
@@ -216,7 +216,7 @@ for (trmv, elty) in ((:dtrmv_, :Float64), (:strmv_, :Float32))
             return d1, d2, d3, d4, d5, d6, du, dt, ddiag, dN, _dA, dlda, _dx, dincx,
                 dargs...
         end
-        return uninit_codual(Cvoid()), trmv_pb!!
+        return zero_codual(Cvoid()), trmv_pb!!
     end
 end
 
@@ -293,7 +293,7 @@ for (gemm, elty) in ((:dgemm_, :Float64), (:sgemm_, :Float32))
             return df, dname, dRT, dAT, dnreq, dconvention,
                 dtA, dtB, dm, dn, dka, dalpha, dA, dLDA, dB, dLDB, dbeta, dC, dLDC, dargs...
         end
-        return CoDual(Cvoid(), zero_tangent(Cvoid())), gemm!_pullback!!
+        return zero_codual(Cvoid()), gemm!_pullback!!
     end
 end
 
@@ -357,6 +357,87 @@ for (trmm, elty) in ((:dtrmm_, :Float64), (:strmm_, :Float32))
             return d1, d2, d3, d4, d5, d6,
                 dside, duplo, dtrans, ddiag, dM, dN, dalpha, _dA, dlda, _dB, dlbd, dargs...
         end
-        return CoDual(Cvoid(), zero_tangent(Cvoid())), trmm!_pullback!!
+
+        return zero_codual(Cvoid()), trmm!_pullback!!
+    end
+end
+
+for (trsm, elty) in ((:dtrsm_, :Float64), (:strsm_, :Float32))
+    @eval function rrule!!(
+        ::CoDual{typeof(__foreigncall__)},
+        ::CoDual{Val{$(blas_name(trsm))}},
+        ::CoDual,
+        ::CoDual, # arg types
+        ::CoDual, # nreq
+        ::CoDual, # calling convention
+        _side::CoDual{Ptr{UInt8}},
+        _uplo::CoDual{Ptr{UInt8}},
+        _trans::CoDual{Ptr{UInt8}},
+        _diag::CoDual{Ptr{UInt8}},
+        _M::CoDual{Ptr{BLAS.BlasInt}},
+        _N::CoDual{Ptr{BLAS.BlasInt}},
+        _alpha::CoDual{Ptr{$elty}},
+        _A::CoDual{Ptr{$elty}},
+        _lda::CoDual{Ptr{BLAS.BlasInt}},
+        _B::CoDual{Ptr{$elty}},
+        _ldb::CoDual{Ptr{BLAS.BlasInt}},
+        args...,
+    )
+        side = Char(unsafe_load(primal(_side)))
+        uplo = Char(unsafe_load(primal(_uplo)))
+        trans = Char(unsafe_load(primal(_trans)))
+        diag = Char(unsafe_load(primal(_diag)))
+        M = unsafe_load(primal(_M))
+        N = unsafe_load(primal(_N))
+        R = side == 'L' ? M : N
+        alpha = unsafe_load(primal(_alpha))
+        lda = unsafe_load(primal(_lda))
+        ldb = unsafe_load(primal(_ldb))
+        A = wrap_ptr_as_view(primal(_A), lda, R, R)
+        B = wrap_ptr_as_view(primal(_B), ldb, M, N)
+        B_copy = copy(B)
+
+        trsm!(side, uplo, trans, diag, alpha, A, B)
+
+        function trsm_pb!!(
+            _, d1, d2, d3, d4, d5, d6,
+            dside, duplo, dtrans, ddiag, dM, dN, dalpha, _dA, dlda, _dB, dlbd, dargs...,
+        )
+            # Convert pointers to views.
+            dA = wrap_ptr_as_view(_dA, lda, R, R)
+            dB = wrap_ptr_as_view(_dB, ldb, M, N)
+
+            # Increment alpha tangent.
+            alpha != 0 && unsafe_store!(dalpha, unsafe_load(dalpha) + tr(dB'B) / alpha)
+
+            # Increment cotangents.
+            if side == 'L'
+                if trans == 'N'
+                    tmp = trsm!('L', uplo, 'T', diag, -one($elty), A, dB * B')
+                    dA .+= tri!(tmp, uplo, diag)
+                else
+                    tmp = trsm!('R', uplo, 'T', diag, -one($elty), A, B * dB')
+                    dA .+= tri!(tmp, uplo, diag)
+                end
+            else
+                if trans == 'N'
+                    tmp = trsm!('R', uplo, 'T', diag, -one($elty), A, B'dB)
+                    dA .+= tri!(tmp, uplo, diag)
+                else
+                    tmp = trsm!('L', uplo, 'T', diag, -one($elty), A, dB'B)
+                    dA .+= tri!(tmp, uplo, diag)
+                end
+            end
+
+            # Restore initial state.
+            B .= B_copy
+
+            # Compute dB tangent.
+            BLAS.trsm!(side, uplo, trans == 'N' ? 'T' : 'N', diag, alpha, A, dB)
+
+            return d1, d2, d3, d4, d5, d6,
+                dside, duplo, dtrans, ddiag, dM, dN, dalpha, _dA, dlda, _dB, dlbd, dargs...
+        end
+        return zero_codual(Cvoid()), trsm_pb!!
     end
 end

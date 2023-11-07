@@ -34,6 +34,15 @@
             5.0,
         ),
         (false, :stability, __new__, NamedTuple{(), Tuple{}}),
+        (
+            false,
+            :stability,
+            __new__,
+            NamedTuple{(:a, :b), Tuple{Float64, Float64}},
+            5.0,
+            4.0,
+        ),
+        (false, :stability, __new__, Tuple{Float64, Float64}, 5.0, 4.0),
 
         # Umlaut internals -- getindex occassionally gets pushed onto the tape.
         (false, :none, getindex, (5.0, 5.0), 2),

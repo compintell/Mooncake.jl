@@ -192,35 +192,42 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
 
         (
             false,
-            MatrixNormal(randn(2, 3), _pdmat(randn(2, 2)), _pdmat(randn(3, 3))),
-            randn(2, 3),
+            MatrixNormal(
+                randn(sr(0), 2, 3), _pdmat(randn(sr(1), 2, 2)), _pdmat(randn(sr(2), 3, 3))
+            ),
+            randn(sr(4), 2, 3),
         ),
         (
             false,
-            Wishart(5, _pdmat(randn(3, 3))),
-            Symmetric(collect(_pdmat(randn(3, 3)))),
+            Wishart(5, _pdmat(randn(sr(5), 3, 3))),
+            Symmetric(collect(_pdmat(randn(sr(6), 3, 3)))),
         ),
         (
             false,
-            InverseWishart(5, _pdmat(randn(3, 3))),
-            Symmetric(collect(_pdmat(randn(3, 3)))),
+            InverseWishart(5, _pdmat(randn(sr(7), 3, 3))),
+            Symmetric(collect(_pdmat(randn(sr(8), 3, 3)))),
         ),
         (
             false,
-            MatrixTDist(3.1, randn(2, 3), _pdmat(randn(2, 2)), _pdmat(randn(3, 3))),
-            randn(2, 3),
+            MatrixTDist(
+                3.1,
+                randn(sr(9), 2, 3),
+                _pdmat(randn(sr(0), 2, 2)),
+                _pdmat(randn(sr(1), 3, 3)),
+            ),
+            randn(sr(2), 2, 3),
         ),
         (
             false,
             MatrixBeta(5, 6.0, 7.0),
-            rand(StableRNG(123456), MatrixBeta(5, 6.0, 6.0)),
+            rand(sr(123456), MatrixBeta(5, 6.0, 6.0)),
         ),
         (
             false,
-            MatrixFDist(6.0, 7.0, _pdmat(randn(StableRNG(1234), 5, 5))),
-            rand(StableRNG(13), MatrixFDist(6.0, 7.0, _pdmat(randn(StableRNG(11), 5, 5)))),
+            MatrixFDist(6.0, 7.0, _pdmat(randn(sr(1234), 5, 5))),
+            rand(sr(13), MatrixFDist(6.0, 7.0, _pdmat(randn(StableRNG(11), 5, 5)))),
         ),
-        (false, LKJ(5, 1.1), rand(StableRNG(123456), LKJ(5, 1.1))),
+        (false, LKJ(5, 1.1), rand(sr(123456), LKJ(5, 1.1))),
     ]
         @info "$(map(typeof, (d, x)))"
         rng = StableRNG(123456)
@@ -249,7 +256,7 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
             (a, b, α, β, x) -> logpdf(truncated(Uniform(α, β), a, b), x),
             (0.1, 0.9, -0.1, 1.1, 0.4),
         ),
-        # ("Dirichlet", (a, x) -> logpdf(Dirichlet(a), [x, 1-x]), ([1.0, 1.1], 0.6)), control flow
+        ("Dirichlet", (a, x) -> logpdf(Dirichlet(a), [x, 1-x]), ([1.5, 1.1], 0.6)),
         (
             "reshape",
             x -> logpdf(reshape(product_distribution([Normal(), Uniform()]), 1, 2), x),

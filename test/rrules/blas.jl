@@ -77,7 +77,24 @@
                     (false, BLAS.trmm!, side, ul, tA, dA, alpha, A, B)
                 end
             end,
-        ))
+        )),
+
+        # trmm!
+        vec(reduce(
+            vcat,
+            map(
+                product(['L', 'R'], ['U', 'L'], t_flags, ['N', 'U'], [1, 3], [1, 2]),
+            ) do (side, ul, tA, dA, M, N)
+                t = tA == 'N'
+                R = side == 'L' ? M : N
+                As = [randn(R, R) + 5I, view(randn(15, 15), 3:R+2, 4:R+3) + 5I]
+                Bs = [randn(M, N), view(randn(15, 15), 2:M+1, 5:N+4)]
+                return map(product(As, Bs)) do (A, B)
+                    alpha = randn()
+                    (false, BLAS.trsm!, side, ul, tA, dA, alpha, A, B)
+                end
+            end,
+        )),
     )
         test_taped_rrule!!(
             Xoshiro(123456), f, map(deepcopy, x)...; interface_only, perf_flag=:none
