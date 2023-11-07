@@ -4,7 +4,7 @@
 [![Code Style: Blue](https://img.shields.io/badge/code%20style-blue-4495d1.svg)](https://github.com/invenia/BlueStyle)
 [![ColPrac: Contributor's Guide on Collaborative Practices for Community Packages](https://img.shields.io/badge/ColPrac-Contributor's%20Guide-blueviolet)](https://github.com/SciML/ColPrac)
 
-The goal of the `Taped.jl` project is to produce an reverse-mode AD package which is written entirely in Julia, and improves over both `ReverseDiff.jl` and `Zygote.jl` in several ways.
+The goal of the `Taped.jl` project is to produce a reverse-mode AD package which is written entirely in Julia, and improves over both `ReverseDiff.jl` and `Zygote.jl` in several ways.
 
 # How it works
 
