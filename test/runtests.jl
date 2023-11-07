@@ -100,16 +100,17 @@ sr(n::Int) = StableRNG(n)
             @info "unrolled_function"
             include(joinpath("rrules", "unrolled_function.jl"))
         end
-    elseif test_group == "extended"
-        include(joinpath("rrules", "integration_testing.jl"))
-    elseif test_group == "diff_tests"
-        include(joinpath("rrules", "diff_tests.jl"))
-    elseif test_group == "distributions"
-        include(joinpath("rrules", "distributions.jl"))
-    elseif test_group == "special_functions"
-        include(joinpath("rrules", "special_functions.jl"))
+    elseif test_group == "integration_testing/misc"
+        include(joinpath("integration_testing/", "misc.jl"))
+        include(joinpath("integration_testing", "battery_tests.jl"))
+    elseif test_group == "integration_testing/diff_tests"
+        include(joinpath("integration_testing", "diff_tests.jl"))
+    elseif test_group == "integration_testing/distributions"
+        include(joinpath("integration_testing", "distributions.jl"))
+    elseif test_group == "integration_testing/special_functions"
+        include(joinpath("integration_testing", "special_functions.jl"))
     elseif test_group == "integration_testing/array"
-        include(joinpath("integration_testing/array.jl"))
+        include(joinpath("integration_testing", "array.jl"))
     else
         throw(error("test_group=$(test_group) is not recognised"))
     end
