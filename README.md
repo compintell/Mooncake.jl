@@ -17,7 +17,7 @@ For a given function and arguments, it is roughly speaking the case that either
 2. no hand-written method of `rrule!!` is applicable.
 
 In the first case, we run the `rrule!!`.
-In the second, create an `rrule!!` by "doing AD" -- we decompose the function into a composition of functions which _do_ have hand-written `rrule!!`s.
+In the second, we create an `rrule!!` automatically by "doing AD" -- we decompose the function into a composition of functions which _do_ have hand-written `rrule!!`s.
 In general, the goal is to write as few hand-written `rrule!!`s as is necessary, and to "do AD" for the vast majority of functions.
 
 
