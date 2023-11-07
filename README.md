@@ -65,9 +65,9 @@ These two approaches entail different tradeoffs.
 
 # Project Name
 
-The package is called `Taped.jl` because we're currently using a traditional tape-based AD system.
+The package is called `Taped.jl` because it currently uses a traditional tape-based AD system.
 That is, at present, we implement `rrule!!` for an arbitrary function by tracing the function's execution onto a tape -- an operation winds up on the tape if there is a method of `rrule!!` which applies to it.
-However, the work is broader in scope than tape-based AD though, so this name is somewhat misleading.
+However, the work is broader in scope than tape-based AD, so this name is somewhat misleading.
 Please do _not_ assume from the name that we just care about traditional "Wengert list" tape-based AD.
 
 # Project Status
