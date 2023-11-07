@@ -9,7 +9,7 @@ The goal of the `Taped.jl` project is to produce a reverse-mode AD package which
 # How it works
 
 `Taped.jl` is based around a single function `rrule!!`, which computes vector-Jacobian products.
-It is similar to ChainRules' `rrule` and Zygote's `_pullback`, but supports functions which mutate (modify) their arguments, in addition to those that do not.
+It is similar to ChainRules' `rrule` and Zygote's `_pullback`, but supports functions which mutate (modify) their arguments, in addition to those that do not, and immediately increment (co)tangents.
 It has, perhaps unsurprisingly, wound up looking quite similar to the rule system in Enzyme.
 
 For a given function and arguments, it is roughly speaking the case that either
@@ -54,6 +54,8 @@ Consequently, whether or not the overall AD system has good performance is large
 
 At present (11/2023), we do _not_ do this in a performant way, but this will change.
 See [Project Status](#project-status) below for more info.
+
+Additionally, the strategy of immediately incrementing (co)tangents resolves long-standing performance issues associated with indexing arrays.
 
 ### Written entirely in Julia
 
