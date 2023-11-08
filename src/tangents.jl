@@ -531,17 +531,6 @@ function _containerlike_diff(p::P, q::P) where {P}
     return build_tangent(P, diffed_fields...)
 end
 
-# for _P in [
-#     UnitRange, Transpose, Adjoint, SubArray, Base.RefValue, LazyString, Diagonal, Xoshiro,
-#     StepRange, UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular,
-#     Base.OneTo, Complex, CartesianIndices, CartesianIndex, LinearIndices,
-#     Base.Pairs, Base.Slice, Rational, UniformScaling, PermutedDimsArray, SymTridiagonal,
-#     Symmetric, Bidiagonal,
-# ]
-#     @eval _add_to_primal(p::$_P, t) = _containerlike_add_to_primal(p, t)
-#     @eval _diff(p::P, q::P) where {P<:$_P} = _containerlike_diff(p, q)
-# end
-
 @generated function might_be_active(::Type{P}) where {P}
     tangent_type(P) == NoTangent && return :(return false)
     Base.issingletontype(P) && return :(return false)
