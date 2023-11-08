@@ -497,7 +497,7 @@ function _add_to_primal(p::P, t::T) where {P, T<:Union{Tangent, MutableTangent}}
         !isdefined(p, f) && !is_init(tf) && return FieldUndefined()
         throw(error("unable to handle undefined-ness"))
     end
-    return T(filter(!=(FieldUndefined()), tmp)...)
+    return P(filter(!=(FieldUndefined()), tmp)...)
 end
 
 """
