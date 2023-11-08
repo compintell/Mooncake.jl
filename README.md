@@ -32,6 +32,9 @@ Its primary benefit is the ability to differentiate through the truly vast quant
 Thus you should equate `rrule!!`s support for mutation with good support for existing code.
 Conversely you should equate `Zygote.jl`'s / `ReverseDiff.jl`'s patchy support for mutation with patchy support for existing code.
 
+`rrule!!`s impose no constraints on the types which can be operated on, in the same way that `ChainRules`' `rrule` and `Zygote`'s `_pullback`.
+Consequently, there is nothing to prevent `Taped.jl` from operating on any type, for example, structured arrays, GPU arrays, and complicated `struct`s / `mutable struct`s.
+
 
 ### Correctness and Testing
 
