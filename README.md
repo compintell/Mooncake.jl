@@ -63,7 +63,7 @@ Additionally, the strategy of immediately incrementing (co)tangents resolves lon
 ### Written entirely in Julia
 
 `Taped.jl` is written entirely in Julia.
-While `Enzyme.jl` is quite comparable to `Taped.jl` in that it also supports mutation, it differs greatly in that it targets LLVM, and its backbone is therefore written in C++.
+This sits in contrast to `Enzyme.jl`, which targets LLVM and is primarily written in C++.
 These two approaches entail different tradeoffs.
 
 # Project Name
