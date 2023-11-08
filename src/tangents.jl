@@ -486,32 +486,33 @@ _add_to_primal(x::Tuple, t::Tuple) = _map(_add_to_primal, x, t)
 _add_to_primal(x::NamedTuple, t::NamedTuple) = _map(_add_to_primal, x, t)
 _add_to_primal(x, ::Tangent{NamedTuple{(), Tuple{}}}) = x
 
-function _containerlike_add_to_primal(p::T, t::Union{Tangent, MutableTangent}) where {T}
-    tmp = map(fieldnames(T)) do f
+function _add_to_primal(p::P, t::T) where {P, T<:Union{Tangent, MutableTangent}}
+    Tt = tangent_type(P)
+    if Tt != typeof(t)
+        throw(ArgumentError("p of type $P has tangent_type $Tt, but t is of type $T"))
+    end
+    tmp = map(fieldnames(P)) do f
         tf = getfield(t.fields, f)
         isdefined(p, f) && is_init(tf) && return _add_to_primal(getfield(p, f), tf.tangent) 
         !isdefined(p, f) && !is_init(tf) && return FieldUndefined()
         throw(error("unable to handle undefined-ness"))
     end
-    return T(filter(!=(FieldUndefined()), tmp)...)
+    return P(filter(!=(FieldUndefined()), tmp)...)
 end
 
 """
     _diff(p::P, q::P) where {P}
 
 Required for testing.
-_Not_ currently defined by default.
-`_containerlike_diff` is potentially what you want to target when implementing for
-a particular primal-tangent pair.
 
 Computes the difference between `p` and `q`, which _must_ be of the same type, `P`.
 Returns a tangent of type `tangent_type(P)`.
 """
-function _diff(::P, ::P) where {P}
+function _diff(p::P, q::P) where {P}
     tangent_type(P) === NoTangent && return NoTangent()
     T = Tangent{NamedTuple{(), Tuple{}}}
     tangent_type(P) === T && return T((;))
-    error("tangent_type(P) is not NoTangent, and no other method provided")
+    return _containerlike_diff(p, q)
 end
 _diff(p::P, q::P) where {P<:IEEEFloat} = p - q
 function _diff(p::P, q::P) where {V, N, P<:Array{V, N}}
@@ -528,17 +529,6 @@ function _containerlike_diff(p::P, q::P) where {P}
     end
     diffed_fields = filter(!=(nothing), diffed_fields)
     return build_tangent(P, diffed_fields...)
-end
-
-for _P in [
-    UnitRange, Transpose, Adjoint, SubArray, Base.RefValue, LazyString, Diagonal, Xoshiro,
-    StepRange, UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular,
-    Base.OneTo, Complex, CartesianIndices, CartesianIndex, LinearIndices,
-    Base.Pairs, Base.Slice, Rational, UniformScaling, PermutedDimsArray, SymTridiagonal,
-    Symmetric, Bidiagonal,
-]
-    @eval _add_to_primal(p::$_P, t) = _containerlike_add_to_primal(p, t)
-    @eval _diff(p::P, q::P) where {P<:$_P} = _containerlike_diff(p, q)
 end
 
 @generated function might_be_active(::Type{P}) where {P}

@@ -1,20 +1,3 @@
-# Functionality to make testing straightforward.
-for T in [
-    Arcsine, Beta, BetaPrime, Biweight, Cauchy, Chi, Chisq, Chernoff, Cosine, Epanechnikov,
-    Erlang, Exponential, FDist, Frechet, Gamma, GeneralizedExtremeValue, GeneralizedPareto,
-    Gumbel, InverseGaussian, JohnsonSU, Kumaraswamy, Laplace, Levy, Lindley, Logistic,
-    LogitNormal, LogNormal, LogUniform, NoncentralBeta, NoncentralChisq, NoncentralF,
-    NoncentralT, Normal, NormalInverseGaussian, Pareto, PGeneralizedGaussian, Rayleigh,
-    Rician, Semicircle, SkewedExponentialPower, SkewNormal, SymTriangularDist, TDist,
-    TriangularDist, Triweight, Uniform, VonMises, Weibull, MvNormal, Distributions.Zeros,
-    Distributions.ScalMat, Distributions.PDiagMat, PDMat, Cholesky, MvNormalCanon,
-    MvLogitNormal, MvLogNormal, Product, MatrixBeta, Wishart, MatrixFDist, LKJ,
-    Symmetric, MatrixNormal, InverseWishart, MatrixTDist,
-]
-    @eval Taped._add_to_primal(p::$T, t) = Taped._containerlike_add_to_primal(p, t)
-    @eval Taped._diff(p::$T, q::$T) = Taped._containerlike_diff(p, q)
-end
-
 _sym(A) = A'A
 _pdmat(A) = PDMat(_sym(A) + 5I)
 
