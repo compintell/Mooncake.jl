@@ -523,10 +523,10 @@ function Base.:(==)(a::TypeStableMutableStruct, b::TypeStableMutableStruct)
     return equal_field(a, b, :a) && equal_field(a, b, :b)
 end
 
-for T in [Foo, StructFoo, MutableFoo, TypeStableMutableStruct]
-    @eval Taped._add_to_primal(p::$T, t) = Taped._containerlike_add_to_primal(p, t)
-    @eval Taped._diff(p::$T, q::$T) = Taped._containerlike_diff(p, q)
-end
+# for T in [Foo, StructFoo, MutableFoo, TypeStableMutableStruct]
+#     @eval Taped._add_to_primal(p::$T, t) = Taped._containerlike_add_to_primal(p, t)
+#     @eval Taped._diff(p::$T, q::$T) = Taped._containerlike_diff(p, q)
+# end
 
 
 
