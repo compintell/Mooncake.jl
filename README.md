@@ -29,7 +29,7 @@ Below the four central objectives of this project are outlined.
 
 The need for first-class support for mutation has been well understood in the Julia AD community for a number of years now.
 Its primary benefit is the ability to differentiate through the truly vast quantity of mutating code on which users depend in `Base` / `Core`, the standard libraries, and packages in the general registry -- empowering users to AD through code which _they_ write in a mutating way is often of secondary importance.
-Thus you should equate `rrule!!`s support for mutation with support for existing code.
+Thus you should equate `rrule!!`s support for mutation with good support for existing code.
 Conversely you should equate `Zygote.jl`'s / `ReverseDiff.jl`'s patchy support for mutation with patchy support for existing code.
 
 
