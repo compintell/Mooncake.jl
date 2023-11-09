@@ -245,6 +245,10 @@
         ),
         (false, :none, (v, x) -> (pointerset(pointer(x), v, 2, 1); x), 3.0, randn(5)),
         (false, :none, x -> (pointerset(pointer(x), UInt8(3), 2, 1); x), rand(UInt8, 5)),
+        (false, :none, getindex, randn(5), [1, 1]),
+        (false, :none, getindex, randn(5), [1, 2, 2]),
+        (false, :none, setindex!, randn(5), [4.0, 5.0], [1, 1]),
+        (false, :none, setindex!, randn(5), [4.0, 5.0, 6.0], [1, 2, 2]),
     )
         test_taped_rrule!!(Xoshiro(123456), f, deepcopy(x)...; interface_only, perf_flag)
     end
