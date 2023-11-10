@@ -23,7 +23,7 @@ In general, the goal is to write as few hand-written `rrule!!`s as is necessary,
 
 # Project Goals
 
-Below the four central objectives of this project are outlined.
+Below the four central objectives of this project are outlined, and the approaches that we take to achieve them.
 
 ### Coverage of more of the Language
 
