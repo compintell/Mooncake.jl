@@ -58,15 +58,3 @@ function rrule!!(::CoDual{typeof(Umlaut.check_variable_length)}, args::Vararg{An
     v = Umlaut.check_variable_length(map(primal, args)...)
     return CoDual(v, zero_tangent(v)), NoPullback()
 end
-
-# Umlaut occassionally pushes `getindex` onto the tape.
-# Easiest just to handle it like this.
-# Might remove at a later date when `Umlaut.primitivize` works properly.
-isprimitive(::RMC, ::typeof(getindex), ::Tuple, ::Int) = true
-function rrule!!(::CoDual{typeof(getindex)}, x::CoDual{<:Tuple}, i::CoDual{Int})
-    function getindex_pullback!!(dy, df, dx, ::NoTangent)
-        dx = ntuple(n -> n == primal(i) ? increment!!(dx[n], dy) : dx[n], length(dx))
-        return df, dx, NoTangent()
-    end
-    return CoDual(primal(x)[primal(i)], tangent(x)[primal(i)]), getindex_pullback!!
-end
