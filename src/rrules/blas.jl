@@ -297,6 +297,32 @@ for (gemm, elty) in ((:dgemm_, :Float64), (:sgemm_, :Float32))
     end
 end
 
+for (symm, elty) in ((:dsymm_, :Float64), (:ssymm_, :Float32))
+    @eval function rrule!!(
+        ::CoDual{typeof(__foreigncall__)},
+        ::CoDual{Val{$(blas_name(symm))}},
+        ::CoDual,
+        ::CoDual, # arg types
+        ::CoDual, # nreq
+        ::CoDual, # calling convention
+        _side::CoDual{Ptr{UInt8}},
+        _uplo::CoDual{Ptr{UInt8}},
+        _M::CoDual{Ptr{BlasInt}},
+        _N::CoDual{Ptr{BlasInt}},
+        _alpha::CoDual{Ptr{$elty}},
+        _A::CoDual{Ptr{$elty}},
+        _lda::CoDual{Ptr{BLAS.BlasInt}},
+        _B::CoDual{Ptr{$elty}},
+        _ldb::CoDual{Ptr{BLAS.BlasInt}},
+        _beta::CoDual{Ptr{$elty}},
+        _C::CoDual{Ptr{$elty}},
+        _ldc::CoDual{Ptr{BLAS.BlasInt}},
+        args...,
+    )
+
+    end
+end
+
 for (trmm, elty) in ((:dtrmm_, :Float64), (:strmm_, :Float32))
     @eval function rrule!!(
         ::CoDual{typeof(__foreigncall__)},
