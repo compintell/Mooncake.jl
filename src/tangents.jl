@@ -142,7 +142,7 @@ end
 
 tangent_type(::Type{NamedTuple{N, T}}) where {N, T<:Tuple} = NamedTuple{N, tangent_type(T)}
 
-function tangent_type(P::Type)
+function tangent_type(::Type{P}) where {P}
 
     # This method can only handle struct types. Tell user to implement tangent type
     # directly for primitive types.

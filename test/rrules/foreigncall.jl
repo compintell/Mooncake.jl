@@ -62,6 +62,12 @@
             false, :stability,
             unsafe_copyto!, [rand(3) for _ in 1:5], 2, [rand(4) for _ in 1:4], 1, 3,
         ),
+        (false, :stability, deepcopy, 5.0),
+        (false, :stability, deepcopy, randn(5)),
+        (false, :none, deepcopy, MutableFoo(5.0, randn(5))),
+        (false, :none, deepcopy, StructFoo(5.0, randn(5))),
+        (false, :stability, deepcopy, (5.0, randn(5))),
+        (false, :stability, deepcopy, (a=5.0, b=randn(5))),
     ]
         test_rrule!!(Xoshiro(123456), f, x...; interface_only, perf_flag)
     end

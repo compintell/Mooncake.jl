@@ -109,6 +109,8 @@ sr(n::Int) = StableRNG(n)
         include(joinpath("integration_testing", "special_functions.jl"))
     elseif test_group == "integration_testing/array"
         include(joinpath("integration_testing", "array.jl"))
+    elseif test_group == "integration_testing/turing"
+        include(joinpath("integration_testing", "turing.jl"))
     else
         throw(error("test_group=$(test_group) is not recognised"))
     end

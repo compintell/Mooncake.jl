@@ -39,7 +39,7 @@ function Umlaut.handle_gotoifnot_node!(
     else
         exc = AssertionError(
             "Expected goto condition to be of type Argument, " *
-            "SSAValue or Bool, but got $(cf.cond). \n\nFull IR: \n\n$(ir)\n"
+            "SSAValue or Bool, but got $(cf.cond). \n\nFull IR: \n\n$(frame)\n"
         )
         throw(exc)
     end
