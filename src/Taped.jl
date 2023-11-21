@@ -8,12 +8,12 @@ using
     Setfield,
     Umlaut
 
-import Umlaut: isprimitive, Frame, Tracer, __foreigncall__
+import Umlaut: isprimitive, Frame, Tracer, __foreigncall__, __to_tuple__
 
 using Base:
     IEEEFloat, unsafe_convert, unsafe_pointer_to_objref, pointer_from_objref, arrayref,
     arrayset
-using Core: Intrinsics, bitcast
+using Core: Intrinsics, bitcast, SimpleVector, svec
 using FunctionWrappers: FunctionWrapper
 using LinearAlgebra.BLAS: @blasfunc, BlasInt, trsm!
 
