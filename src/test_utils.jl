@@ -482,6 +482,9 @@ function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P,
     if ismutabletype(P)
         @test set_to_zero!!(tc) === tc
     end
+
+    # Check that we can get an address map.
+    populate_address_map(p, x)
 end
 
 function test_numerical_testing_interface(p::P, t::T) where {P, T}

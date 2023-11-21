@@ -391,6 +391,24 @@ function rrule!!(
     return zero_codual(y), NoPullback()
 end
 
+isprimitive(::RMC, ::typeof(deepcopy), ::Any) = true
+function rrule!!(::CoDual{typeof(deepcopy)}, x::CoDual)
+    deepcopy_pb!!(dy, df, dx) = df, increment!!(dx, dy)
+    return deepcopy(x), deepcopy_pb!!
+end
+
+function unexepcted_foreigncall_error(name)
+    throw(error(
+        "AD has hit a :($name) ccall. This should not happen. " *
+        "Please open an issue with a minimal working example in order to reproduce. ",
+        "This is true unless you have intentionally written a ccall to :$(name), ",
+        "in which case you must write a :foreigncall rule. It may not be possible ",
+        "to implement a :foreigncall rule if too much type information has been lost ",
+        "in which case your only recourse is to write a rule for whichever Julia ",
+        "function calls this one (and retains enough type information).",
+    ))
+end
+
 for name in [
     :(:jl_alloc_array_1d), :(:jl_alloc_array_2d), :(:jl_alloc_array_3d), :(:jl_new_array),
     :(:jl_array_grow_end), :(:jl_array_del_end), :(:jl_array_copy), :(:jl_object_id),
@@ -399,15 +417,6 @@ for name in [
     :(:jl_array_grow_beg),
 ]
     @eval function rrule!!(::CoDual{typeof(__foreigncall__)}, ::CoDual{Val{$name}}, args...)
-        nm = $name
-        throw(error(
-            "AD has hit a :($nm) ccall. This should not happen. " *
-            "Please open an issue with a minimal working example in order to reproduce. ",
-            "This is true unless you have intentionally written a ccall to :$(nm), ",
-            "in which case you must write a :foreigncall rule. It may not be possible ",
-            "to implement a :foreigncall rule if too much type information has been lost ",
-            "in which case your only recourse is to write a rule for whichever Julia ",
-            "function calls this one (and retains enough type information).",
-        ))
+        unexepcted_foreigncall_error($name)
     end
 end
