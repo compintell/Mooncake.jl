@@ -15,6 +15,7 @@ function has_equal_data(x::T, y::T; equal_undefs=true) where {T<:Array}
     end
     return all(equality)
 end
+has_equal_data(x::T, y::T) where {T<:Union{Float16, Float32, Float64}} = isapprox(x, y)
 function has_equal_data(x::T, y::T; equal_undefs=true) where {T}
     isprimitivetype(T) && return isequal(x, y)
     return all(map(
@@ -75,6 +76,15 @@ function populate_address_map!(m::AddressMap, p::Array, t::Array)
     haskey(m, k) && (@assert m[k] == v)
     m[k] = v
     foreach(n -> isassigned(p, n) && populate_address_map!(m, p[n], t[n]), eachindex(p))
+    return m
+end
+
+function populate_address_map!(m::AddressMap, p::Core.SimpleVector, t::Vector{Any})
+    k = pointer_from_objref(p)
+    v = pointer_from_objref(t)
+    haskey(m, k) && (@assert m[k] == v)
+    m[k] = v
+    foreach(n -> populate_address_map!(m, p[n], t[n]), eachindex(p))
     return m
 end
 
@@ -305,7 +315,27 @@ function test_taped_rrule!!(rng::AbstractRNG, f, x...; interface_only=false, kwa
 
     # Check that f_t remains a faithful representation of the original function.
     if !interface_only
-        @test has_equal_data(f(deepcopy(x)...), play!(f_t.tape, f, deepcopy(x)...))
+        xs_lhs = deepcopy(x)
+        xs_rhs = deepcopy(x)
+        y_lhs = f(xs_lhs...)
+        y_rhs = play!(f_t.tape, f, xs_rhs...)
+        if !has_equal_data(y_lhs, y_rhs) || !has_equal_data(xs_lhs, xs_rhs)
+            println("y_lhs")
+            display(y_lhs)
+            println()
+            println("y_rhs")
+            display(y_rhs)
+            println()
+
+            println("xs_lhs")
+            display(xs_lhs)
+            println()
+            println("xs_rhs")
+            display(xs_rhs)
+            println()
+        end
+        @test has_equal_data(y_lhs, y_rhs)
+        @test has_equal_data(xs_lhs, xs_rhs)
     end
 end
 

@@ -59,14 +59,27 @@ function rrule!!(::CoDual{typeof(Umlaut.check_variable_length)}, args::Vararg{An
     return CoDual(v, zero_tangent(v)), NoPullback()
 end
 
-# Umlaut occassionally pushes `getindex` onto the tape.
-# Easiest just to handle it like this.
-# Might remove at a later date when `Umlaut.primitivize` works properly.
-isprimitive(::RMC, ::typeof(getindex), ::Tuple, ::Int) = true
-function rrule!!(::CoDual{typeof(getindex)}, x::CoDual{<:Tuple}, i::CoDual{Int})
-    function getindex_pullback!!(dy, df, dx, ::NoTangent)
-        dx = ntuple(n -> n == primal(i) ? increment!!(dx[n], dy) : dx[n], length(dx))
-        return df, dx, NoTangent()
+# This is the thing that Umlaut uses in order to splat. Must be a primitive.
+isprimitive(::RMC, ::typeof(__to_tuple__), x) = true
+function rrule!!(::CoDual{typeof(__to_tuple__)}, x::CoDual{<:Tuple})
+    __to_tuple_pb!!(dy, df, dx) = df, increment!!(dx, dy)
+    return x, __to_tuple_pb!!
+end
+function rrule!!(::CoDual{typeof(__to_tuple__)}, x::CoDual{<:NamedTuple{A}}) where {A}
+    __to_tuple_named_tuple_pb!!(dy, df, dx) = df, increment!!(dx, NamedTuple{A}(dy))
+    return CoDual(Tuple(primal(x)), Tuple(tangent(x))), __to_tuple_named_tuple_pb!!
+end
+function rrule!!(::CoDual{typeof(__to_tuple__)}, x::CoDual{<:Vector, <:Vector{T}}) where {T}
+    __to_tuple_vec_pb!!(dy, df, dx) = df, increment!!(dx, T[a for a in dy])
+    return CoDual(__to_tuple__(primal(x)), __to_tuple__(tangent(x))), __to_tuple_vec_pb!!
+end
+function rrule!!(::CoDual{typeof(__to_tuple__)}, x::CoDual{Int})
+    return zero_codual((primal(x), )), NoPullback()
+end
+function rrule!!(::CoDual{typeof(__to_tuple__)}, x::CoDual{Core.SimpleVector})
+    function __to_tuple_svec_pb!!(dy, df, dx)
+        return df, increment!!(dx, Any[a for a in dy])
     end
-    return CoDual(primal(x)[primal(i)], tangent(x)[primal(i)]), getindex_pullback!!
+    y = CoDual(__to_tuple__(primal(x)), __to_tuple__(tangent(x)))
+    return y, __to_tuple_svec_pb!!
 end

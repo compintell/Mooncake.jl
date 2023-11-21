@@ -1,3 +1,9 @@
+multiarg_fn(x) = only(x)
+multiarg_fn(x, y) = only(x) + only(y)
+multiarg_fn(x, y, z) = only(x) + only(y) + only(z)
+
+vararg_fn(x) = multiarg_fn(x...)
+
 @testset "umlaut_internals_rules" begin
 
     @testset "misc utility" begin
@@ -10,7 +16,7 @@
 
     _x = Ref(5.0) # data used in tests which aren't protected by GC.
     _dx = Ref(4.0)
-    @testset "$f, $(typeof(x))" for (interface_only, perf_flag, f, x...) in [
+    @testset "$f, $(typeof(x))" for (interface_only, perf_flag, f, x...) in Any[
 
         # IR-node workarounds:
         (false, :stability, __new__, UnitRange{Int}, 5, 9),
@@ -44,10 +50,12 @@
         ),
         (false, :stability, __new__, Tuple{Float64, Float64}, 5.0, 4.0),
 
-        # Umlaut internals -- getindex occassionally gets pushed onto the tape.
-        (false, :none, getindex, (5.0, 5.0), 2),
-        (false, :none, getindex, (randn(5), 2), 1),
-        (false, :none, getindex, (2, randn(5)), 1),
+        # Splatting primitives:
+        (false, :stability, __to_tuple__, (5.0, 4)),
+        (false, :stability, __to_tuple__, (a=5.0, b=4)),
+        (false, :stability, __to_tuple__, 5),
+        (false, :none, __to_tuple__, svec(5.0)),
+        (false, :none, __to_tuple__, [5.0, 4.0]),
 
         # Umlaut limitations:
         (false, :none, eltype, randn(5)),
@@ -56,5 +64,15 @@
         (true, :none, String, lazy"hello world"),
     ]
         test_rrule!!(Xoshiro(123456), f, x...; interface_only, perf_flag)
+    end
+    @testset for (interface_only, f, x...) in Any[
+        (false, x -> multiarg_fn(x...), 1),
+        (false, x -> multiarg_fn(x...), [1.0, 2.0]),
+        (false, x -> multiarg_fn(x...), [5.0, 4]),
+        (false, x -> multiarg_fn(x...), (5.0, 4)),
+        (false, x -> multiarg_fn(x...), (a=5.0, b=4)),
+        (false, x -> multiarg_fn(x...), svec(5.0, 4.0)),
+    ]
+        test_taped_rrule!!(Xoshiro(123456), f, map(deepcopy, x)...; interface_only)
     end
 end
