@@ -110,6 +110,8 @@ tangent_type(::Type{Module}) = NoTangent
 
 tangent_type(::Type{Nothing}) = NoTangent
 
+tangent_type(::Type{SimpleVector}) = Vector{Any}
+
 tangent_type(::Type{P}) where {P<:Union{UInt8, UInt16, UInt32, UInt64, UInt128}} = NoTangent
 
 tangent_type(::Type{P}) where {P<:Union{Int8, Int16, Int32, Int64, Int128}} = NoTangent
@@ -206,6 +208,11 @@ anything other than that which this function returns.
 zero_tangent(x)
 @inline zero_tangent(::Union{Int8, Int16, Int32, Int64, Int128}) = NoTangent()
 @inline zero_tangent(x::IEEEFloat) = zero(x)
+function zero_tangent(x::SimpleVector)
+    return map!(Vector{Any}(undef, length(x)), eachindex(x)) do n
+        return zero_tangent(x[n])
+    end
+end
 @inline function zero_tangent(x::Array{P, N}) where {P, N}
     y = Array{tangent_type(P), N}(undef, size(x)...)
     v = _map_if_assigned!(zero_tangent, y, x)
@@ -260,6 +267,11 @@ randn_tangent(rng::AbstractRNG, ::T) where {T<:IEEEFloat} = randn(rng, T)
 function randn_tangent(rng::AbstractRNG, x::Array{T, N}) where {T, N}
     dx = Array{tangent_type(T), N}(undef, size(x)...)
     return _map_if_assigned!(Base.Fix1(randn_tangent, rng), dx, x)
+end
+function randn_tangent(rng::AbstractRNG, x::SimpleVector)
+    return map!(Vector{Any}(undef, length(x)), eachindex(x)) do n
+        return randn_tangent(rng, x[n])
+    end
 end
 function randn_tangent(rng::AbstractRNG, x::Union{Tuple, NamedTuple})
     return map(x -> randn_tangent(rng, x), x)
@@ -482,6 +494,9 @@ function _add_to_primal(x::Array{P, N}, t::Array{<:Any, N}) where {P, N}
     x′ = Array{P, N}(undef, size(x)...)
     return _map_if_assigned!(_add_to_primal, x′, x, t)
 end
+function _add_to_primal(x::SimpleVector, t::Vector{Any})
+    return svec(map(n -> _add_to_primal(x[n], t[n]), eachindex(x))...)
+end
 _add_to_primal(x::Tuple, t::Tuple) = _map(_add_to_primal, x, t)
 _add_to_primal(x::NamedTuple, t::NamedTuple) = _map(_add_to_primal, x, t)
 _add_to_primal(x, ::Tangent{NamedTuple{(), Tuple{}}}) = x
@@ -519,6 +534,9 @@ function _diff(p::P, q::P) where {V, N, P<:Array{V, N}}
     t = Array{tangent_type(V), N}(undef, size(p))
     return _map_if_assigned!(_diff, t, p, q)
 end
+function _diff(p::P, q::P) where {P<:SimpleVector}
+    return Any[_diff(a, b) for (a, b) in zip(p, q)]
+end
 _diff(p::P, q::P) where {P<:Union{Tuple, NamedTuple}} = _map(_diff, p, q)
 
 function _containerlike_diff(p::P, q::P) where {P}
@@ -541,3 +559,4 @@ end
 @generated function might_be_active(::Type{<:Array{P}}) where {P}
     return :(return $(might_be_active(P)))
 end
+might_be_active(::Type{SimpleVector}) = true

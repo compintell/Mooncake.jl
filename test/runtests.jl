@@ -16,7 +16,7 @@ using
 
 using Base: unsafe_load, pointer_from_objref
 using Base.Iterators: product
-using Core: bitcast
+using Core: bitcast, svec
 using Core.Intrinsics: pointerref, pointerset
 using FunctionWrappers: FunctionWrapper
 
@@ -44,7 +44,7 @@ using Taped:
     rebind,
     build_tangent
 
-using Taped.Umlaut: __new__
+using Taped.Umlaut: __new__, __to_tuple__
 
 using .TestUtils:
     test_rrule!!,

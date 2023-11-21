@@ -1,8 +1,8 @@
-__multiarg_fn(x) = x
-__multiarg_fn(x, y) = x + y
-__multiarg_fn(x, y, z) = x + y + z
+multiarg_fn(x) = only(x)
+multiarg_fn(x, y) = only(x) + only(y)
+multiarg_fn(x, y, z) = only(x) + only(y) + only(z)
 
-foo(x) = __multiarg_fn(x...)
+vararg_fn(x) = multiarg_fn(x...)
 
 @testset "umlaut_internals_rules" begin
 
@@ -16,7 +16,7 @@ foo(x) = __multiarg_fn(x...)
 
     _x = Ref(5.0) # data used in tests which aren't protected by GC.
     _dx = Ref(4.0)
-    @testset "$f, $(typeof(x))" for (interface_only, perf_flag, f, x...) in [
+    @testset "$f, $(typeof(x))" for (interface_only, perf_flag, f, x...) in Any[
 
         # IR-node workarounds:
         (false, :stability, __new__, UnitRange{Int}, 5, 9),
@@ -50,6 +50,13 @@ foo(x) = __multiarg_fn(x...)
         ),
         (false, :stability, __new__, Tuple{Float64, Float64}, 5.0, 4.0),
 
+        # Splatting primitives:
+        (false, :stability, __to_tuple__, (5.0, 4)),
+        (false, :stability, __to_tuple__, (a=5.0, b=4)),
+        (false, :stability, __to_tuple__, 5),
+        (false, :none, __to_tuple__, svec(5.0)),
+        (false, :none, __to_tuple__, [5.0, 4.0]),
+
         # Umlaut limitations:
         (false, :none, eltype, randn(5)),
         (false, :none, eltype, transpose(randn(4, 5))),
@@ -58,13 +65,14 @@ foo(x) = __multiarg_fn(x...)
     ]
         test_rrule!!(Xoshiro(123456), f, x...; interface_only, perf_flag)
     end
-
-    @testset "$f, $typeof(x)" for (interface_only, f, x...) in [
-        # Test splatting
-        (false, foo, (5.0, )),
-        (false, foo, (5.0, 4.0)),
-        (false, foo, (5.0, 4.0, 3.0)),
+    @testset for (interface_only, f, x...) in Any[
+        (false, x -> multiarg_fn(x...), 1),
+        (false, x -> multiarg_fn(x...), [1.0, 2.0]),
+        (false, x -> multiarg_fn(x...), [5.0, 4]),
+        (false, x -> multiarg_fn(x...), (5.0, 4)),
+        (false, x -> multiarg_fn(x...), (a=5.0, b=4)),
+        (false, x -> multiarg_fn(x...), svec(5.0, 4.0)),
     ]
-        test_taped_rrule!!(sr(123456), f, x...; interface_only, perf_flag=:none)
+        test_taped_rrule!!(Xoshiro(123456), f, map(deepcopy, x)...; interface_only)
     end
 end
