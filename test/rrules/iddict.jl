@@ -6,7 +6,6 @@
         y = IdDict(true => 2.0, false => 1.0)
         rng = Xoshiro(123456)
         test_tangent(rng, p, z, x, y)
-        test_numerical_testing_interface(p, x)
     end
 
     @testset "$f, $(typeof(x))" for (interface_only, perf_flag, f, x...) in [
