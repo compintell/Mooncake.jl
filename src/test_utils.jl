@@ -15,7 +15,10 @@ function has_equal_data(x::T, y::T; equal_undefs=true) where {T<:Array}
     end
     return all(equality)
 end
-has_equal_data(x::T, y::T) where {T<:Union{Float16, Float32, Float64}} = isapprox(x, y)
+has_equal_data(x::Float64, y::Float64; equal_undefs=true) = isapprox(x, y)
+function has_equal_data(x::T, y::T; equal_undefs=true) where {T<:Core.SimpleVector}
+    return all(map((a, b) -> has_equal_data(a, b; equal_undefs), x, y))
+end
 function has_equal_data(x::T, y::T; equal_undefs=true) where {T}
     isprimitivetype(T) && return isequal(x, y)
     return all(map(
@@ -413,13 +416,26 @@ function test_rule_and_type_interactions(rng::AbstractRNG, x::P) where {P}
     end
 end
 
+"""
+    test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P, T}
 
+Verify that primal `p` with tangents `z_target`, `x`, and `y`, satisfies the tangent
+interface. If these tests pass, then it should be possible to write `rrule!!`s for primals
+of type `P`, and to test them using `test_rrule!!`.
 
-#
-# Tests for tangents
-#
-
+As always, there are limits to the errors that these tests can identify -- they form
+necessary but not sufficient conditions for the correctness of your code.
+"""
 function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P, T}
+    @nospecialize rng p z_target x y
+
+    # This basic functionality must run in order to be able to check everything else.
+    @test tangent_type(P) isa Type
+    @test tangent_type(P) == T
+    @test zero_tangent(p) isa T
+    @test randn_tangent(rng, p) isa T
+    test_equality_comparison(p)
+    test_equality_comparison(x)
 
     # Verify that interface `tangent_type` runs.
     Tt = tangent_type(P)
@@ -483,21 +499,37 @@ function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P,
         @test set_to_zero!!(tc) === tc
     end
 
-    # Check that we can get an address map.
-    populate_address_map(p, x)
-end
+    z = zero_tangent(p)
+    r = randn_tangent(rng, p)
 
-function test_numerical_testing_interface(p::P, t::T) where {P, T}
-    @assert tangent_type(P) == T
-    @test _scale(2.0, t) isa T
+    # Verify that operations required for finite difference testing to run, and produce the
+    # correct output type.
+    @test _add_to_primal(p, t) isa P
+    @test _diff(p, p) isa T
     @test _dot(t, t) isa Float64
+    @test _scale(11.0, t) isa T
+    @test populate_address_map(p, t) isa AddressMap
+
+    # Run some basic numerical sanity checks on the output the functions required for finite
+    # difference testing. These are necessary but insufficient conditions.
+    @test has_equal_data(_add_to_primal(p, z), p)
+    if !has_equal_data(z, r)
+        @test !has_equal_data(_add_to_primal(p, r), p)
+    end
+    @test has_equal_data(_diff(p, p), zero_tangent(p))
     @test _dot(t, t) >= 0.0
     @test _dot(t, zero_tangent(p)) == 0.0
     @test _dot(t, increment!!(deepcopy(t), t)) ≈ 2 * _dot(t, t)
-    @test _add_to_primal(p, t) isa P
-    @test has_equal_data(_add_to_primal(p, zero_tangent(p)), p)
-    @test _diff(p, p) isa T
-    @test has_equal_data(_diff(p, p), zero_tangent(p))
+    @test has_equal_data(_scale(1.0, t), t)
+    @test has_equal_data(_scale(2.0, t), increment!!(deepcopy(t), t))
+end
+
+function test_equality_comparison(x)
+    @nospecialize x
+    @test has_equal_data(x, x) isa Bool
+    @test has_equal_data_up_to_undefs(x, x) isa Bool
+    @test has_equal_data(x, x)
+    @test has_equal_data_up_to_undefs(x, x)
 end
 
 end

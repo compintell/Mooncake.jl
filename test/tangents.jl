@@ -104,7 +104,6 @@
     )
         rng = Xoshiro(123456)
         test_tangent(rng, p, z, x, y)
-        test_numerical_testing_interface(p, x)
     end
 
     tangent(nt::NamedTuple) = Tangent(map(PossiblyUninitTangent, nt))

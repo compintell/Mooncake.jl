@@ -53,8 +53,7 @@ using .TestUtils:
     AddressMap,
     populate_address_map!,
     populate_address_map,
-    test_tangent,
-    test_numerical_testing_interface
+    test_tangent
 
 using .TestResources:
     TypeStableMutableStruct,
