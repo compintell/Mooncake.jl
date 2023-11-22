@@ -8,8 +8,9 @@ The goal of the `Taped.jl` project is to produce a reverse-mode AD package which
 
 # How it works
 
-`Taped.jl` is based around a single function `rrule!!`, which computes vector-Jacobian products.
-It is similar to ChainRules' `rrule` and Zygote's `_pullback`, but supports functions which mutate (modify) their arguments, in addition to those that do not, and immediately increments (co)tangents.
+`Taped.jl` is based around a single function `rrule!!`, which computes vector-Jacobian products (VJPs).
+These VJPs can, for example, be used to compute gradients.
+`rrule!!` is similar to ChainRules' `rrule` and Zygote's `_pullback`, but supports functions which mutate (modify) their arguments, in addition to those that do not, and immediately increments (co)tangents.
 It has, perhaps unsurprisingly, wound up looking quite similar to the rule system in Enzyme.
 
 For a given function and arguments, it is roughly speaking the case that either
@@ -32,8 +33,8 @@ Its primary benefit is the ability to differentiate through the truly vast quant
 Thus you should equate `rrule!!`s support for mutation with good support for existing code.
 Conversely you should equate `Zygote.jl`'s / `ReverseDiff.jl`'s patchy support for mutation with patchy support for existing code.
 
-`rrule!!`s impose no constraints on the types which can be operated on, in the same way that `ChainRules`' `rrule` and `Zygote`'s `_pullback`.
-Consequently, there is nothing to prevent `Taped.jl` from operating on any type, for example, structured arrays, GPU arrays, and complicated `struct`s / `mutable struct`s.
+`rrule!!`s impose no constraints on the types which can be operated on, as with `ChainRules`' `rrule` and `Zygote`'s `_pullback`.
+Consequently, there is in principle nothing to prevent `Taped.jl` from operating on any type, for example, structured arrays, GPU arrays, and complicated `struct`s / `mutable struct`s.
 
 
 ### Correctness and Testing
