@@ -30,10 +30,10 @@ Below the four central objectives of this project are outlined, and the approach
 
 The need for first-class support for mutation has been well understood in the Julia AD community for a number of years now.
 Its primary benefit is the ability to differentiate through the truly vast quantity of mutating code on which users depend in `Base` / `Core`, the standard libraries, and packages in the general registry -- empowering users to AD through code which _they_ write in a mutating way is often of secondary importance.
-Thus you should equate `rrule!!`s support for mutation with good support for existing code.
-Conversely you should equate `Zygote.jl`'s / `ReverseDiff.jl`'s patchy support for mutation with patchy support for existing code.
+Thus you should equate `rrule!!`'s support for mutation with good support for existing code.
+Conversely, you should equate `Zygote.jl`'s / `ReverseDiff.jl`'s patchy support for mutation with patchy support for existing code.
 
-`rrule!!`s impose no constraints on the types which can be operated on, as with `ChainRules`' `rrule` and `Zygote`'s `_pullback`.
+`rrule!!`s impose no constraints on the types which can be operated on, as with `ChainRules`'s `rrule` and `Zygote`'s `_pullback`.
 Consequently, there is in principle nothing to prevent `Taped.jl` from operating on any type, for example, structured arrays, GPU arrays, and complicated `struct`s / `mutable struct`s.
 
 
