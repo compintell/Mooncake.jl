@@ -96,8 +96,6 @@
             end,
         )),
     )
-        test_taped_rrule!!(
-            Xoshiro(123456), f, map(deepcopy, x)...; interface_only, perf_flag=:none
-        )
+        test_taped_rrule!!(sr(123), f, map(deepcopy, x)...; interface_only, perf_flag=:none)
     end
 end

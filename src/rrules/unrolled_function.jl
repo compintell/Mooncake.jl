@@ -120,6 +120,8 @@ zero_tangent(::UnrolledFunction) = NoTangent()
 
 (f::UnrolledFunction)(args...) = play!(f.tape, args...)
 
+Base.show(io::IO, x::UnrolledFunction) = show(io, UnrolledFunction)
+
 function seed_variable!(tape, var, ȳ)
     y_ref = tape[var].val.output
     dy = tangent(y_ref[])
@@ -327,4 +329,36 @@ function execute!(t::AcceleratedGradientTape, ȳ, x_x̄::CoDual...)
         return tangent(arg_ref[].output[])
     end
     return NoTangent(), d_args...
+end
+
+
+
+#
+# Recursive tape unrolling
+#
+
+struct AllPrimitiveContext <: TapedContext end
+const APC = AllPrimitiveContext
+
+# All things are primitives.
+isprimitive(::APC, x...) = true
+isprimitive(::APC, ::typeof(Umlaut.__new__), T, x...) = true
+isprimitive(::APC, ::typeof(Umlaut.__foreigncall__), args...) = true
+isprimitive(::APC, ::typeof(__intrinsic__), args...) = true
+isprimitive(::APC, ::Core.Builtin, x...) = true
+
+function trace_recursive_tape!!(f, args...)
+    val, tape = Umlaut.trace(f, args...; ctx=APC())
+    return val, UnrolledFunction(tape)
+end
+
+function Umlaut.record_primitive!(tape::Tape{APC}, v_fargs...)
+    line = get(tape.meta, :line, nothing)
+    fargs = Any[v isa Variable ? v.op.val : v for v in v_fargs]
+    if isprimitive(RMC(), fargs...)
+        push!(tape, mkcall(v_fargs...; line=line))
+    else
+        val, uf = trace_recursive_tape!!(fargs...)
+        push!(tape, mkcall(uf, v_fargs...; line, val))
+    end
 end

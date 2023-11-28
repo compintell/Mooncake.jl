@@ -63,7 +63,7 @@ vararg_fn(x) = multiarg_fn(x...)
         (false, :none, Base.promote_op, transpose, Float64),
         (true, :none, String, lazy"hello world"),
     ]
-        test_rrule!!(Xoshiro(123456), f, x...; interface_only, perf_flag)
+        test_rrule!!(sr(123), f, x...; interface_only, perf_flag)
     end
     @testset for (interface_only, f, x...) in Any[
         (false, x -> multiarg_fn(x...), 1),
@@ -73,6 +73,6 @@ vararg_fn(x) = multiarg_fn(x...)
         (false, x -> multiarg_fn(x...), (a=5.0, b=4)),
         (false, x -> multiarg_fn(x...), svec(5.0, 4.0)),
     ]
-        test_taped_rrule!!(Xoshiro(123456), f, map(deepcopy, x)...; interface_only)
+        test_taped_rrule!!(sr(123), f, map(deepcopy, x)...; interface_only)
     end
 end
