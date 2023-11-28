@@ -64,7 +64,10 @@
     @testset "$f, $typeof(x)" for (interface_only, f, x...) in TestResources.TEST_FUNCTIONS
         @info "$(map(typeof, (f, x...)))"
         test_taped_rrule!!(
-            Xoshiro(123456), f, deepcopy(x)...; interface_only, perf_flag=:none
+            sr(123456), f, deepcopy(x)...; interface_only, perf_flag=:none, recursive=false
+        )
+        test_taped_rrule!!(
+            sr(123), f, deepcopy(x)...; interface_only, perf_flag=:none, recursive=true
         )
     end
     @testset "acceleration $f" for (_, f, args...) in TestResources.TEST_FUNCTIONS

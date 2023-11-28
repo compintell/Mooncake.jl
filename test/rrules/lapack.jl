@@ -79,6 +79,6 @@ using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!, potrf!, potrs!
             end,
         )),
     )
-        test_taped_rrule!!(Xoshiro(123456), f, map(deepcopy, x)...; interface_only)
+        test_taped_rrule!!(sr(123), f, map(deepcopy, x)...; interface_only)
     end
 end

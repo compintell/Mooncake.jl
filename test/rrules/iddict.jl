@@ -4,8 +4,7 @@
         z = IdDict(true => 3.0, false => 2.0)
         x = IdDict(true => 1.0, false => 1.0)
         y = IdDict(true => 2.0, false => 1.0)
-        rng = Xoshiro(123456)
-        test_tangent(rng, p, z, x, y)
+        test_tangent(sr(123456), p, z, x, y)
     end
 
     @testset "$f, $(typeof(x))" for (interface_only, perf_flag, f, x...) in [
@@ -16,6 +15,6 @@
         (false, :none, get, IdDict(true => 5.0), false, 2.0),
         (false, :none, getindex, IdDict(true => 5.0, false => 4.0), true),
     ]
-        test_rrule!!(Xoshiro(123456), f, x...; interface_only, perf_flag)
+        test_rrule!!(sr(123456), f, x...; interface_only, perf_flag)
     end
 end

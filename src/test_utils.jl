@@ -302,14 +302,20 @@ function test_rrule!!(
 end
 
 # Functionality for testing AD via Umlaut.
-function test_taped_rrule!!(rng::AbstractRNG, f, x...; interface_only=false, kwargs...)
+function test_taped_rrule!!(
+    rng::AbstractRNG, f, x...; interface_only=false, recursive=true, kwargs...
+)
     @nospecialize rng f x
 
     # Try to run the primal, just to make sure that we're not calling it on bad inputs.
     f(_deepcopy(x)...)
 
     # Construct the tape.
-    f_t = Taped.UnrolledFunction(last(trace(f, map(_deepcopy, x)...; ctx=Taped.RMC())))
+    if recursive
+        f_t = last(Taped.trace_recursive_tape!!(f, map(_deepcopy, x)...))
+    else
+        f_t = Taped.UnrolledFunction(last(trace(f, map(_deepcopy, x)...; ctx=Taped.RMC())))
+    end
 
     # Check that the gradient is self-consistent.
     test_rrule!!(

@@ -18,7 +18,6 @@ rand_inputs(rng, ::typeof(acos), _) = (2 * 0.9 * rand(rng) - 0.9, )
 rand_inputs(rng, ::typeof(sqrt), _) = (rand(rng) + 1e-3, )
 
 @testset "low_level_maths" begin
-    rng = Xoshiro(123456)
     @testset "$f" for (M, f, arity) in DiffRules.diffrules(; filter_modules=nothing)
         if !(isdefined(@__MODULE__, M) && isdefined(getfield(@__MODULE__, M), f)) ||
             M == :SpecialFunctions
@@ -27,7 +26,7 @@ rand_inputs(rng, ::typeof(sqrt), _) = (rand(rng) + 1e-3, )
         arity > 2 && continue
         (f == :rem2pi || f == :ldexp || f == :(^)) && continue
         f = @eval $M.$f
-        rng = Xoshiro(123456)
+        rng = sr(123456)
         for _ in 1:10
             test_rrule!!(rng, f, rand_inputs(rng, f, arity)...; perf_flag=:stability)
         end

@@ -234,7 +234,7 @@
         (false, :stability, typeof, 5.0),
         (false, :stability, typeof, randn(5)),
     ]
-        test_rrule!!(Xoshiro(123456), f, x...; interface_only, perf_flag)
+        test_rrule!!(sr(123456), f, x...; interface_only, perf_flag)
     end
     @testset for (interface_only, perf_flag, f, x...) in vcat(
         (
@@ -250,6 +250,6 @@
         (false, :none, setindex!, randn(5), [4.0, 5.0], [1, 1]),
         (false, :none, setindex!, randn(5), [4.0, 5.0, 6.0], [1, 2, 2]),
     )
-        test_taped_rrule!!(Xoshiro(123456), f, deepcopy(x)...; interface_only, perf_flag)
+        test_taped_rrule!!(sr(123), f, deepcopy(x)...; interface_only, perf_flag)
     end
 end

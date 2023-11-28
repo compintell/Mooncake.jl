@@ -69,7 +69,7 @@
         (false, :stability, deepcopy, (5.0, randn(5))),
         (false, :stability, deepcopy, (a=5.0, b=randn(5))),
     ]
-        test_rrule!!(Xoshiro(123456), f, x...; interface_only, perf_flag)
+        test_rrule!!(sr(123456), f, x...; interface_only, perf_flag)
     end
     @testset "$f, $(typeof(x))" for (interface_only, f, x...) in [
         (false, reshape, randn(5, 4), (4, 5)),
@@ -84,8 +84,7 @@
         (false, isassigned, randn(5), 4),
         (false, x -> (Base._growbeg!(x, 2); x[1:2] .= 2.0), randn(5)),
     ]
-        rng = Xoshiro(123456)
-        test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only, perf_flag=:none)
+        test_taped_rrule!!(sr(123456), f, deepcopy(x)...; interface_only, perf_flag=:none)
     end
     @testset "foreigncalls that should never be hit: $name" for name in [
         :jl_alloc_array_1d, :jl_alloc_array_2d, :jl_alloc_array_3d, :jl_new_array,
