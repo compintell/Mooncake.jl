@@ -109,8 +109,8 @@ function to_reverse_mode_ad(x::Call, new_tape)
     return mkcall(v, f, args...; val=v)
 end
 
-struct UnrolledFunction{Ttape}
-    tape::Ttape
+struct UnrolledFunction
+    tape::Tape
 end
 
 
