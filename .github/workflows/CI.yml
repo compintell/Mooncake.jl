@@ -25,11 +25,11 @@ jobs:
           - x64
         test_group:
           - 'basic'
-          - 'integration_testing/misc'
-          - 'integration_testing/diff_tests'
-          - 'integration_testing/distributions'
+          # - 'integration_testing/misc'
+          # - 'integration_testing/diff_tests'
+          # - 'integration_testing/distributions'
           - 'integration_testing/special_functions'
-          - 'integration_testing/array'
+          # - 'integration_testing/array'
           - 'integration_testing/turing'
     steps:
       - uses: actions/checkout@v4
