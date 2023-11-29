@@ -29,7 +29,7 @@ jobs:
     steps:
       - name: Set start time
         id: start-time
-        run: echo "::set-output name=start_time::$(date +%s)"
+        run: echo "start_time=$(date +%s)" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v1
         with:
@@ -42,15 +42,12 @@ jobs:
           # TEST_GROUP: ${{ matrix.test_group }}
       - name: Set end time
         id: end-time
-        run: echo "::set-output name=end_time::$(date +%s)"
+        run: echo "end_time=$(date +%s)" >> "$GITHUB_ENV"
       - name: Calculate elapsed time
         id: elapsed-time
-        run: |
-          start_time = steps.start-time.outputs.start_time
-          end_time = steps.end-time.outputs.end_time
-          echo "::set-output name=elapsed_time::$((end_time - start_time))"
+        run: echo "elapsed_time=$((end_time - start_time))" >> "$GITHUB_ENV"
       - name: Log elapsed time
-        run: echo "Job took ${{ steps.elapsed-time.outputs.elapsed_time }} seconds"
+        run: echo "Job took $elapsed_time seconds"
   perf:
     name: "Performance Analysis"
     needs: tests
