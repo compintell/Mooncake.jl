@@ -39,7 +39,7 @@ jobs:
   perf:
     name: "Performance Analysis"
     needs: [
-      'integration_testing/special_functions'
+      integration_testing/special_functions
     ]
     runs-on: ubuntu-latest
     steps:
