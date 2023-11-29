@@ -27,9 +27,6 @@ jobs:
           # - 'integration_testing/array'
           # - 'integration_testing/turing'
     steps:
-      - name: Set start time
-        id: start-time
-        run: echo "start_time=$(date +%s)" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v1
         with:
@@ -37,9 +34,12 @@ jobs:
           arch: x64
       - uses: julia-actions/cache@v1
       - uses: julia-actions/julia-buildpkg@v1
+      - name: Set start time
+        id: start-time
+        run: echo "start_time=$(date +%s)" >> "$GITHUB_ENV"
       # - uses: julia-actions/julia-runtest@v1
-        # env:
-          # TEST_GROUP: ${{ matrix.test_group }}
+      #   env:
+      #     TEST_GROUP: ${{ matrix.test_group }}
       - name: Set end time
         id: end-time
         run: echo "end_time=$(date +%s)" >> "$GITHUB_ENV"
@@ -53,4 +53,4 @@ jobs:
     needs: tests
     runs-on: ubuntu-latest
     steps:
-      - run: echo 'The tests have passed'
+      - run: echo "Job took $elapsed_time seconds"
