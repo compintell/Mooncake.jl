@@ -12,17 +12,11 @@ concurrency:
   cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
 jobs:
   test:
-    name: Julia ${{ matrix.version }} - ${{ matrix.test_group }} - ${{ github.event_name }}
-    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.test_group }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        version:
-          - '1.9'
-        os:
-          - ubuntu-latest
-        arch:
-          - x64
         test_group:
           # - 'basic'
           # - 'integration_testing/misc'
@@ -35,8 +29,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v1
         with:
-          version: ${{ matrix.version }}
-          arch: ${{ matrix.arch }}
+          version: 1.9
+          arch: x64
       - uses: julia-actions/cache@v1
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
@@ -44,6 +38,9 @@ jobs:
           TEST_GROUP: ${{ matrix.test_group }}
   perf:
     name: "Performance Analysis"
+    needs: [
+      'integration_testing/special_functions'
+    ]
     runs-on: ubuntu-latest
     steps:
       - run: echo 'The triggering workflow passed'
