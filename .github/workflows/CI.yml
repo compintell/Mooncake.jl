@@ -27,7 +27,9 @@ jobs:
           # - 'integration_testing/array'
           # - 'integration_testing/turing'
     steps:
-      - run: start_time=$(date +"%s")
+      - name: Set start time
+        id: start-time
+        run: echo "::set-output name=start_time::$(date +%s)"
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v1
         with:
@@ -38,10 +40,14 @@ jobs:
       - uses: julia-actions/julia-runtest@v1
         env:
           TEST_GROUP: ${{ matrix.test_group }}
-      - run: |
-          end_time=$(date +"%s")
-          elapsed_time=$((end_time - start_time))
-          echo "Elapsed time: $elapsed_time seconds"
+      - name: Set end time
+        id: end-time
+        run: echo "::set-output name=end_time::$(date +%s)"
+      - name: Calculate elapsed time
+        id: elapsed-time
+        run: echo "::set-output name=elapsed_time::$((end-time.start_time))"
+      - name: Log elapsed time
+        run: echo "Job took ${{ steps.elapsed-time.outputs.elapsed_time }} seconds"
   perf:
     name: "Performance Analysis"
     needs: tests
