@@ -353,6 +353,11 @@ function trace_recursive_tape!!(f, args...)
     return val, UnrolledFunction(tape)
 end
 
+function Umlaut.trace_call!(t::Umlaut.Tracer{APC}, v_fargs...)
+    @nospecialize t v_fargs
+    return Umlaut.record_primitive!(t.tape, v_fargs...)
+end
+
 function Umlaut.record_primitive!(tape::Tape{APC}, v_fargs...)
     @nospecialize tape v_fargs
     line = get(tape.meta, :line, nothing)
