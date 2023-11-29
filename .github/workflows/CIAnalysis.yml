@@ -1,11 +1,8 @@
 name: CIAnalysis
-
 on:
   workflow_run:
-    workflows=[CI]
-    types:
-      - completed
-
+    workflows: [CI]
+    types: [completed]
 jobs:
   on-success:
     runs-on: ubuntu-latest
