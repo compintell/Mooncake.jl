@@ -42,3 +42,8 @@ jobs:
       - uses: julia-actions/julia-runtest@v1
         env:
           TEST_GROUP: ${{ matrix.test_group }}
+  perf:
+    name: "Performance Analysis"
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo 'The triggering workflow passed'
