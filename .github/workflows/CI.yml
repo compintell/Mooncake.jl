@@ -11,7 +11,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
 jobs:
-  test:
+  tests:
     name: test-${{ matrix.test_group }}
     runs-on: ubuntu-latest
     strategy:
@@ -39,7 +39,7 @@ jobs:
           TEST_GROUP: ${{ matrix.test_group }}
   perf:
     name: "Performance Analysis"
-    needs: test
+    needs: tests
     runs-on: ubuntu-latest
     steps:
       - run: echo 'The triggering workflow passed'
