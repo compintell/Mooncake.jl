@@ -348,11 +348,13 @@ isprimitive(::APC, ::typeof(__intrinsic__), args...) = true
 isprimitive(::APC, ::Core.Builtin, x...) = true
 
 function trace_recursive_tape!!(f, args...)
+    @nospecialize f args
     val, tape = Umlaut.trace(f, args...; ctx=APC())
     return val, UnrolledFunction(tape)
 end
 
 function Umlaut.record_primitive!(tape::Tape{APC}, v_fargs...)
+    @nospecialize tape v_fargs
     line = get(tape.meta, :line, nothing)
     fargs = Any[v isa Variable ? v.op.val : v for v in v_fargs]
     if isprimitive(RMC(), fargs...)
