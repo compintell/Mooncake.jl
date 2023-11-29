@@ -38,7 +38,7 @@ jobs:
           TEST_GROUP: ${{ matrix.test_group }}
   perf:
     name: "Performance Analysis"
-    needs: test-${{ matrix.test_group }}
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - run: echo 'The triggering workflow passed'
