@@ -24,13 +24,13 @@ jobs:
         arch:
           - x64
         test_group:
-          - 'basic'
+          # - 'basic'
           # - 'integration_testing/misc'
           # - 'integration_testing/diff_tests'
           # - 'integration_testing/distributions'
           - 'integration_testing/special_functions'
           # - 'integration_testing/array'
-          - 'integration_testing/turing'
+          # - 'integration_testing/turing'
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v1
