@@ -23,6 +23,7 @@ jobs:
           # - 'integration_testing/diff_tests'
           # - 'integration_testing/distributions'
           - 'integration_testing/special_functions'
+          - 'foo'
           # - 'integration_testing/array'
           # - 'integration_testing/turing'
     steps:

@@ -110,6 +110,8 @@ sr(n::Int) = StableRNG(n)
         include(joinpath("integration_testing", "array.jl"))
     elseif test_group == "integration_testing/turing"
         include(joinpath("integration_testing", "turing.jl"))
+    elseif test_group == "foo"
+        @test 1 == 1
     else
         throw(error("test_group=$(test_group) is not recognised"))
     end
