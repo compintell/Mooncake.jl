@@ -27,6 +27,7 @@ jobs:
           # - 'integration_testing/array'
           # - 'integration_testing/turing'
     steps:
+      - run: start_time=$(date +"%s")
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v1
         with:
@@ -37,9 +38,13 @@ jobs:
       - uses: julia-actions/julia-runtest@v1
         env:
           TEST_GROUP: ${{ matrix.test_group }}
+      - run: |
+        end_time=$(date +"%s")
+        elapsed=$((end_time - start_time))
+        echo $elapsed
   perf:
     name: "Performance Analysis"
     needs: tests
     runs-on: ubuntu-latest
     steps:
-      - run: echo 'The triggering workflow passed'
+      - run: echo 'The tests have passed'
