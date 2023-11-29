@@ -40,8 +40,8 @@ jobs:
           TEST_GROUP: ${{ matrix.test_group }}
       - run: |
           end_time=$(date +"%s")
-          elapsed=$((end_time - start_time))
-          echo $elapsed
+          elapsed_time=$((end_time - start_time))
+          echo "Elapsed time: $elapsed_time seconds"
   perf:
     name: "Performance Analysis"
     needs: tests
