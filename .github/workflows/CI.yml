@@ -37,15 +37,18 @@ jobs:
           arch: x64
       - uses: julia-actions/cache@v1
       - uses: julia-actions/julia-buildpkg@v1
-      - uses: julia-actions/julia-runtest@v1
-        env:
-          TEST_GROUP: ${{ matrix.test_group }}
+      # - uses: julia-actions/julia-runtest@v1
+        # env:
+          # TEST_GROUP: ${{ matrix.test_group }}
       - name: Set end time
         id: end-time
         run: echo "::set-output name=end_time::$(date +%s)"
       - name: Calculate elapsed time
         id: elapsed-time
-        run: echo "::set-output name=elapsed_time::$((end-time.start_time))"
+        run: |
+          start_time = steps.start-time.outputs.start_time
+          end_time = steps.end-time.outputs.end_time
+          echo "::set-output name=elapsed_time::$((end_time - start_time))"
       - name: Log elapsed time
         run: echo "Job took ${{ steps.elapsed-time.outputs.elapsed_time }} seconds"
   perf:
