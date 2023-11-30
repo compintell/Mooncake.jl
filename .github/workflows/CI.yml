@@ -28,60 +28,71 @@ jobs:
           # - 'integration_testing/turing'
     steps:
       - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@v1
+      # - uses: julia-actions/setup-julia@v1
+      #   with:
+      #     version: 1.9
+      #     arch: x64
+      # - uses: julia-actions/cache@v1
+      # - uses: julia-actions/julia-buildpkg@v1
+      # - uses: julia-actions/julia-runtest@v1
+      #   env:
+      #     TEST_GROUP: ${{ matrix.test_group }}
+      #     TARGET_DIR: perf_results
+      - run: |
+        touch perf_results/${{ matrix.test-group }}
+      - uses: actions/upload-artifact@v3
         with:
-          version: 1.9
-          arch: x64
-      - uses: julia-actions/cache@v1
-      - uses: julia-actions/julia-buildpkg@v1
-      - uses: julia-actions/julia-runtest@v1
-        env:
-          TEST_GROUP: ${{ matrix.test_group }}
-          TARGET_DIR: perf_results
+          name: perf-results
+          path: perf_results
   perf:
     name: "Performance Analysis"
     needs: tests
     runs-on: ubuntu-latest
     steps:
-
-      # Pulls down results from Wandb, and generates a plot from them.
-      - name: Visualise Results
-        run: |
-          display(readdir("perf_results"))
-          println()
-          # using Pkg
-          # Pkg.activate(; temp=true)
-          # Pkg.add(["DataFrames", "PythonCall", "Plots", "Wandb"])
-          # using DataFrames, PythonCall, Plots, Wandb
-          # api = Wandb.wandb.Api()
-          # run = api.run("willtebbutt/my-awesome-project/extensible-run-id")
-          # df = DataFrame(map(x -> pyconvert(Dict, x), run.history()))
-          # savefig(plot(randn(10)), "perf.png")
-        env:
-          GKSwstype: "100" # run GK (plots backend) in headless mode
-          WANDB_API_KEY: ${{secrets.WANDB_TOKEN}}
-        shell: julia --color=yes {0}
-
-      # Stores benchmarking plots as an artifact.
-      - name: Upload artifact
-        uses: actions/upload-artifact@v3
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v3
         with:
-          name: benchmarking-results
-          path: perf.png
+          name: perf-results
+      - name: Display structure of downloaded files
+        run: ls -R
+      # # Pulls down results from Wandb, and generates a plot from them.
+      # - name: Visualise Results
+      #   run: |
+      #     display(readdir("perf_results"))
+      #     println()
+      #     # using Pkg
+      #     # Pkg.activate(; temp=true)
+      #     # Pkg.add(["DataFrames", "PythonCall", "Plots", "Wandb"])
+      #     # using DataFrames, PythonCall, Plots, Wandb
+      #     # api = Wandb.wandb.Api()
+      #     # run = api.run("willtebbutt/my-awesome-project/extensible-run-id")
+      #     # df = DataFrame(map(x -> pyconvert(Dict, x), run.history()))
+      #     # savefig(plot(randn(10)), "perf.png")
+      #   env:
+      #     GKSwstype: "100" # run GK (plots backend) in headless mode
+      #     WANDB_API_KEY: ${{secrets.WANDB_TOKEN}}
+      #   shell: julia --color=yes {0}
 
-      # Comments on the PR which triggered this action with a link to the results.
-      - name: Comment on PR
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const prNumber = context.payload.pull_request.number;
-            const runId = process.env.GITHUB_RUN_ID;
-            const commentBody = 'Benchmarking complete. Results can be found in artifact ' +
-              '[here](https://github.com/withbayes/Taped.jl/actions/runs/' + runId + ').';
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: prNumber,
-              body: commentBody,
-            });
+      # # Stores benchmarking plots as an artifact.
+      # - name: Upload artifact
+      #   uses: actions/upload-artifact@v3
+      #   with:
+      #     name: benchmarking-results
+      #     path: perf.png
+
+      # # Comments on the PR which triggered this action with a link to the results.
+      # - name: Comment on PR
+      #   uses: actions/github-script@v7
+      #   with:
+      #     github-token: ${{ secrets.GITHUB_TOKEN }}
+      #     script: |
+      #       const prNumber = context.payload.pull_request.number;
+      #       const runId = process.env.GITHUB_RUN_ID;
+      #       const commentBody = 'Benchmarking complete. Results can be found in artifact ' +
+      #         '[here](https://github.com/withbayes/Taped.jl/actions/runs/' + runId + ').';
+      #       await github.rest.issues.createComment({
+      #         owner: context.repo.owner,
+      #         repo: context.repo.repo,
+      #         issue_number: prNumber,
+      #         body: commentBody,
+      #       });
