@@ -48,6 +48,9 @@ jobs:
         run: echo "elapsed_time=$((end_time - start_time))" >> "$GITHUB_ENV"
       - name: Log elapsed time
         run: echo "Job took $elapsed_time seconds"
+      - name: Julia Shell Run
+        run: println("Hello World")
+        shell: julia
   perf:
     name: "Performance Analysis"
     needs: tests
