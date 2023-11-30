@@ -13,7 +13,7 @@ concurrency:
 jobs:
   setup:
     steps:
-      run: mkdir perf_results
+      - run: mkdir perf_results
   tests:
     needs: setup
     name: test-${{ matrix.test_group }}
