@@ -75,7 +75,7 @@ jobs:
         env:
           WANDB_API_KEY: ${{secrets.WANDB_TOKEN}}
         shell: julia --color=yes {0}
-        prefx: xvfb-run
+        prefix: xvfb-run
       - name: Archive performance graph
         uses: actions/upload-artifact@v3
         with:
