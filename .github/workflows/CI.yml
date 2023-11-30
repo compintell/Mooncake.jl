@@ -48,13 +48,12 @@ jobs:
         run: echo "elapsed_time=$((end_time - start_time))" >> "$GITHUB_ENV"
       - name: Log elapsed time
         run: echo "Job took $elapsed_time seconds"
-      - name: Log Results
-        run: |
-          using Pkg
-          Pkg.activate(; temp=true)
-          Pkg.add(["DataFrames", "PythonCall", "Plots", "Wandb"])
-
-        shell: julia --color=yes {0}
+      # - name: Log Results
+      #   run: |
+      #     using Pkg
+      #     Pkg.activate(; temp=true)
+      #     Pkg.add(["DataFrames", "PythonCall", "Plots", "Wandb"])
+      #   shell: julia --color=yes {0}
   perf:
     name: "Performance Analysis"
     needs: tests
@@ -72,5 +71,5 @@ jobs:
           df = DataFrame(map(x -> pyconvert(Dict, x), run.hisory()))
           savefig(plot(df.acc), "foo.png")
         env:
-          WANDB_API_KEY=${{secrets.WANDB_TOKEN}}
+          WANDB_API_KEY: ${{secrets.WANDB_TOKEN}}
         shell: julia --color=yes {0}
