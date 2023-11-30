@@ -60,29 +60,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: echo "Job took $elapsed_time seconds"
-      # - name: Visualise Results
-      #   run: |
-      #     using Pkg
-      #     Pkg.activate(; temp=true)
-      #     # Pkg.add(["DataFrames", "PythonCall", "Plots", "Wandb"])
-      #     Pkg.add("Plots")
-      #     using Plots
-      #     # using DataFrames, PythonCall, Plots, Wandb
-      #     # api = Wandb.wandb.Api()
-      #     # run = api.run("willtebbutt/my-awesome-project/extensible-run-id")
-      #     # df = DataFrame(map(x -> pyconvert(Dict, x), run.history()))
-      #     savefig(plot(randn(10)), "foo.png")
-      #   env:
-      #     WANDB_API_KEY: ${{secrets.WANDB_TOKEN}}
-      #     GKSwstype: "100" # run GK (plots backend) in headless mode
-      #   shell: julia --color=yes {0}
+      - name: Visualise Results
+        run: |
+          using Pkg
+          Pkg.activate(; temp=true)
+          # Pkg.add(["DataFrames", "PythonCall", "Plots", "Wandb"])
+          using DataFrames, PythonCall, Plots, Wandb
+          api = Wandb.wandb.Api()
+          run = api.run("willtebbutt/my-awesome-project/extensible-run-id")
+          df = DataFrame(map(x -> pyconvert(Dict, x), run.history()))
+          savefig(plot(randn(10)), "perf.png")
+        env:
+          WANDB_API_KEY: ${{secrets.WANDB_TOKEN}}
+          GKSwstype: "100" # run GK (plots backend) in headless mode
+        shell: julia --color=yes {0}
       - name: Comment on PR
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const prNumber = context.payload.pull_request.number;
-            const commentBody = 'Hello, this is a comment from a GitHub Action!';
+            const commentBody = 'Benchmarking complete. Results can be found in artifacts.';
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
