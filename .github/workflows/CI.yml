@@ -74,6 +74,11 @@ jobs:
           WANDB_API_KEY: ${{secrets.WANDB_TOKEN}}
           GKSwstype: "100" # run GK (plots backend) in headless mode
         shell: julia --color=yes {0}
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: benchmarking-results
+          path: perf.png
       - name: Comment on PR
         uses: actions/github-script@v7
         with:
