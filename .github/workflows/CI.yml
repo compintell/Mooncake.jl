@@ -39,7 +39,7 @@ jobs:
       #     TEST_GROUP: ${{ matrix.test_group }}
       #     TARGET_DIR: perf_results
       - run: |
-        touch perf_results/${{ matrix.test-group }}
+        touch perf_results/${{ matrix.test_group }}
       - uses: actions/upload-artifact@v3
         with:
           name: perf-results
