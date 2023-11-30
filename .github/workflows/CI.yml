@@ -48,8 +48,12 @@ jobs:
         run: echo "elapsed_time=$((end_time - start_time))" >> "$GITHUB_ENV"
       - name: Log elapsed time
         run: echo "Job took $elapsed_time seconds"
-      - name: Julia Shell Run
-        run: println("Hello World")
+      - name: Log Results
+        run: |
+          using Pkg
+          Pkg.activate(; temp=true)
+          Pkg.add(["DataFrames", "PythonCall", "Plots", "Wandb"])
+
         shell: julia --color=yes {0}
   perf:
     name: "Performance Analysis"
@@ -57,3 +61,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: echo "Job took $elapsed_time seconds"
+      - name: Visualise Results
+        run: |
+          using Pkg
+          Pkg.activate(; temp=true)
+          Pkg.add(["DataFrames", "PythonCall", "Plots", "Wandb"])
+          using DataFrames, PythonCall, Plots, Wandb
+          api = Wandb.wandb.Api()
+          run = api.run("willtebbutt/my-awesome-project/extensible-run-id")
+          df = DataFrame(map(x -> pyconvert(Dict, x), run.hisory()))
+          savefig(plot(df.acc), "foo.png")
+        env:
+          WANDB_API_KEY=${{secrets.WANDB_TOKEN}}
+        shell: julia --color=yes {0}
