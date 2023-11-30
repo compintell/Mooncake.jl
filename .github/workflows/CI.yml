@@ -39,7 +39,7 @@ jobs:
       #     TEST_GROUP: ${{ matrix.test_group }}
       #     TARGET_DIR: perf_results
       - run: |
-        touch perf_results/${{ matrix.test_group }}
+          touch perf_results/${{ matrix.test_group }}
       - uses: actions/upload-artifact@v3
         with:
           name: perf-results
@@ -54,7 +54,7 @@ jobs:
         with:
           name: perf-results
       - name: Display structure of downloaded files
-          run: ls -R
+        run: ls -R
       # # Pulls down results from Wandb, and generates a plot from them.
       # - name: Visualise Results
       #   run: |
