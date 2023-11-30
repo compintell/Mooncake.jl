@@ -56,7 +56,7 @@ jobs:
   #     #   shell: julia --color=yes {0}
   perf:
     name: "Performance Analysis"
-    needs: tests
+    # needs: tests
     runs-on: ubuntu-latest
     steps:
       - run: echo "Job took $elapsed_time seconds"
