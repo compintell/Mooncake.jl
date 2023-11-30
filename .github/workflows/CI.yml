@@ -54,7 +54,9 @@ jobs:
           Pkg.activate(; temp=true)
           Pkg.add("Wandb")
           using Wandb
-          lg = WandbLogger(; project = "taped-benchmarking", name="runtime", id="runtime")
+          lg = WandbLogger(
+              project = "taped-benchmarking", name="runtime", id="runtime", resume=true,
+          )
           Wandb.log(lg, Dict("runtime" => 1.5, "test_group" => ENV["TEST_GROUP"]))
           close(lg)
         shell: julia --color=yes {0}
