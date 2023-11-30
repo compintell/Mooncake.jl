@@ -59,6 +59,8 @@ jobs:
     # needs: tests
     runs-on: ubuntu-latest
     steps:
+
+      # Pulls down results from Wandb, and generates a plot from them.
       - name: Visualise Results
         run: |
           using Pkg
@@ -73,11 +75,15 @@ jobs:
           WANDB_API_KEY: ${{secrets.WANDB_TOKEN}}
           GKSwstype: "100" # run GK (plots backend) in headless mode
         shell: julia --color=yes {0}
+
+      # Stores benchmarking plots as an artifact.
       - name: Upload artifact
         uses: actions/upload-artifact@v3
         with:
           name: benchmarking-results
           path: perf.png
+
+      # Comments on the PR which triggered this action with a link to the results.
       - name: Comment on PR
         uses: actions/github-script@v7
         with:
@@ -85,7 +91,7 @@ jobs:
           script: |
             const prNumber = context.payload.pull_request.number;
             const runId = process.env.GITHUB_RUN_ID;
-            const commentBody = 'Benchmarking complete. Results can be found in artifact' +
+            const commentBody = 'Benchmarking complete. Results can be found in artifact ' +
               '[here](https://github.com/withbayes/Taped.jl/actions/runs/' + runId + ').';
             await github.rest.issues.createComment({
               owner: context.repo.owner,
