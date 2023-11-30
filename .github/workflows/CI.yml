@@ -84,7 +84,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const prNumber = context.payload.pull_request.number;
-            const run_id = ${{ github.run_id }}
+            const run_id = ${{ github.run_id }};
             const commentBody = '
               Benchmarking complete. Results can be found in artifact
               [here](https://github.com/withbayes/Taped.jl/actions/runs/${run_id}).
