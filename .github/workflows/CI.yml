@@ -53,6 +53,7 @@ jobs:
           using Pkg
           Pkg.activate(; temp=true)
           Pkg.add("Wandb")
+          using Wandb
           lg = WandbLogger(; project = "taped-benchmarking", name="runtime", id="runtime")
           Wandb.log(lg, Dict("runtime" => 1.5, "test_group" => ENV["TEST_GROUP"]))
           close(lg)
