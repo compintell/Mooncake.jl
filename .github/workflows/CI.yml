@@ -34,35 +34,10 @@ jobs:
           arch: x64
       - uses: julia-actions/cache@v1
       - uses: julia-actions/julia-buildpkg@v1
-      - name: Set start time
-        id: start-time
-        run: echo "start_time=$(date +%s)" >> "$GITHUB_ENV"
-      # - uses: julia-actions/julia-runtest@v1
-      #   env:
-      #     TEST_GROUP: ${{ matrix.test_group }}
-      - name: Set end time
-        id: end-time
-        run: echo "end_time=$(date +%s)" >> "$GITHUB_ENV"
-      - name: Calculate elapsed time
-        id: elapsed-time
-        run: echo "elapsed_time=$((end_time - start_time))" >> "$GITHUB_ENV"
-      - name: Log elapsed time
-        run: echo "Job took $elapsed_time seconds"
-      - name: Log Results
-        run: |
-          using Pkg
-          Pkg.activate(; temp=true)
-          Pkg.add("Wandb")
-          using Wandb
-          lg = WandbLogger(
-              project = "taped-benchmarking", name="runtime", id="runtime", resume=true,
-          )
-          Wandb.log(lg, Dict("runtime" => 1.5, "test_group" => ENV["TEST_GROUP"]))
-          close(lg)
-        shell: julia --color=yes {0}
+      - uses: julia-actions/julia-runtest@v1
         env:
           TEST_GROUP: ${{ matrix.test_group }}
-          WANDB_API_KEY: ${{secrets.WANDB_TOKEN}}
+          TARGET_DIR: perf_results
   perf:
     name: "Performance Analysis"
     needs: tests
@@ -72,14 +47,16 @@ jobs:
       # Pulls down results from Wandb, and generates a plot from them.
       - name: Visualise Results
         run: |
-          using Pkg
-          Pkg.activate(; temp=true)
-          Pkg.add(["DataFrames", "PythonCall", "Plots", "Wandb"])
-          using DataFrames, PythonCall, Plots, Wandb
-          api = Wandb.wandb.Api()
-          run = api.run("willtebbutt/my-awesome-project/extensible-run-id")
-          df = DataFrame(map(x -> pyconvert(Dict, x), run.history()))
-          savefig(plot(randn(10)), "perf.png")
+          display(readdir("perf_results"))
+          println()
+          # using Pkg
+          # Pkg.activate(; temp=true)
+          # Pkg.add(["DataFrames", "PythonCall", "Plots", "Wandb"])
+          # using DataFrames, PythonCall, Plots, Wandb
+          # api = Wandb.wandb.Api()
+          # run = api.run("willtebbutt/my-awesome-project/extensible-run-id")
+          # df = DataFrame(map(x -> pyconvert(Dict, x), run.history()))
+          # savefig(plot(randn(10)), "perf.png")
         env:
           GKSwstype: "100" # run GK (plots backend) in headless mode
           WANDB_API_KEY: ${{secrets.WANDB_TOKEN}}

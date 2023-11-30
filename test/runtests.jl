@@ -67,9 +67,11 @@ using .TestResources:
 # "extended" group fails, there are clearly new tests that need to be added to the "basic"
 # group.
 const test_group = get(ENV, "TEST_GROUP", "basic")
+const perf_dir = get(ENV, "PERF_DIR", "")
 
 sr(n::Int) = StableRNG(n)
 
+const start_time = time()
 @testset "Taped.jl" begin
     if test_group == "basic"
         include("tracing.jl")
@@ -115,4 +117,11 @@ sr(n::Int) = StableRNG(n)
     else
         throw(error("test_group=$(test_group) is not recognised"))
     end
+end
+const end_time = time()
+
+if perf_dir != ""
+    f = open(joinpath(perf_dir, test_group * ".csv"))
+    write(f, string(end_time - start_time))
+    close(f)
 end
