@@ -74,8 +74,8 @@ jobs:
           savefig(plot(randn(10)), "foo.png")
         env:
           WANDB_API_KEY: ${{secrets.WANDB_TOKEN}}
+          GKSwstype: "100"
         shell: julia --color=yes {0}
-        prefix: xvfb-run
       - name: Archive performance graph
         uses: actions/upload-artifact@v3
         with:
