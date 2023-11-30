@@ -77,14 +77,14 @@ jobs:
       #     GKSwstype: "100" # run GK (plots backend) in headless mode
       #   shell: julia --color=yes {0}
       - name: Comment on PR
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const prNumber = context.payload.pull_request.number;
             const commentBody = 'Hello, this is a comment from a GitHub Action!';
 
-            await github.issues.createComment({
+            await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: prNumber,
