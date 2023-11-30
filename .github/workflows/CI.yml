@@ -74,10 +74,10 @@ jobs:
           savefig(plot(randn(10)), "foo.png")
         env:
           WANDB_API_KEY: ${{secrets.WANDB_TOKEN}}
-          GKSwstype: "100"
+          GKSwstype: "100" # run GK (plots backend) in headless mode
         shell: julia --color=yes {0}
       - name: Archive performance graph
         uses: actions/upload-artifact@v3
         with:
           name: perf-data
-          path: output/foo.png
+          path: foo.png
