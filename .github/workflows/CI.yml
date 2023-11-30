@@ -64,7 +64,8 @@ jobs:
         run: |
           using Pkg
           Pkg.activate(; temp=true)
-          Pkg.add(["DataFrames", "PythonCall", "Plots", "Wandb"])
+          # Pkg.add(["DataFrames", "PythonCall", "Plots", "Wandb"])
+          Pkg.add("Plots")
           using Plots
           # using DataFrames, PythonCall, Plots, Wandb
           # api = Wandb.wandb.Api()
@@ -74,6 +75,7 @@ jobs:
         env:
           WANDB_API_KEY: ${{secrets.WANDB_TOKEN}}
         shell: julia --color=yes {0}
+        prefx: xvfb-run
       - name: Archive performance graph
         uses: actions/upload-artifact@v3
         with:
