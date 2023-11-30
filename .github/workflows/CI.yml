@@ -11,7 +11,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
 jobs:
+  setup:
+    steps:
+      run: mkdir perf_results
   tests:
+    needs: setup
     name: test-${{ matrix.test_group }}
     runs-on: ubuntu-latest
     strategy:
