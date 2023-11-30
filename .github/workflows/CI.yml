@@ -64,7 +64,7 @@ jobs:
         run: |
           using Pkg
           Pkg.activate(; temp=true)
-          # Pkg.add(["DataFrames", "PythonCall", "Plots", "Wandb"])
+          Pkg.add(["DataFrames", "PythonCall", "Plots", "Wandb"])
           using DataFrames, PythonCall, Plots, Wandb
           api = Wandb.wandb.Api()
           run = api.run("willtebbutt/my-awesome-project/extensible-run-id")
