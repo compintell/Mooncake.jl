@@ -85,7 +85,8 @@ jobs:
           script: |
             const prNumber = context.payload.pull_request.number;
             let runId = process.env.GITHUB_RUN_ID;
-            const commentBody = `Benchmarking complete. Results can be found in artifact [here](https://github.com/withbayes/Taped.jl/actions/runs/${runID}).`;
+            const commentBody = 'Benchmarking complete. Results can be found in artifact' +
+              '[here](https://github.com/withbayes/Taped.jl/actions/runs/' + runID + ').';
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
