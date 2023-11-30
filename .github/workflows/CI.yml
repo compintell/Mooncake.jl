@@ -11,49 +11,54 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
 jobs:
-  # tests:
-  #   name: test-${{ matrix.test_group }}
-  #   runs-on: ubuntu-latest
-  #   strategy:
-  #     fail-fast: false
-  #     matrix:
-  #       test_group:
-  #         # - 'basic'
-  #         # - 'integration_testing/misc'
-  #         # - 'integration_testing/diff_tests'
-  #         # - 'integration_testing/distributions'
-  #         - 'integration_testing/special_functions'
-  #         - 'foo'
-  #         # - 'integration_testing/array'
-  #         # - 'integration_testing/turing'
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: julia-actions/setup-julia@v1
-  #       with:
-  #         version: 1.9
-  #         arch: x64
-  #     - uses: julia-actions/cache@v1
-  #     - uses: julia-actions/julia-buildpkg@v1
-  #     - name: Set start time
-  #       id: start-time
-  #       run: echo "start_time=$(date +%s)" >> "$GITHUB_ENV"
-  #     # - uses: julia-actions/julia-runtest@v1
-  #     #   env:
-  #     #     TEST_GROUP: ${{ matrix.test_group }}
-  #     - name: Set end time
-  #       id: end-time
-  #       run: echo "end_time=$(date +%s)" >> "$GITHUB_ENV"
-  #     - name: Calculate elapsed time
-  #       id: elapsed-time
-  #       run: echo "elapsed_time=$((end_time - start_time))" >> "$GITHUB_ENV"
-  #     - name: Log elapsed time
-  #       run: echo "Job took $elapsed_time seconds"
-  #     # - name: Log Results
-  #     #   run: |
-  #     #     using Pkg
-  #     #     Pkg.activate(; temp=true)
-  #     #     Pkg.add(["DataFrames", "PythonCall", "Plots", "Wandb"])
-  #     #   shell: julia --color=yes {0}
+  tests:
+    name: test-${{ matrix.test_group }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        test_group:
+          # - 'basic'
+          # - 'integration_testing/misc'
+          # - 'integration_testing/diff_tests'
+          # - 'integration_testing/distributions'
+          - 'integration_testing/special_functions'
+          - 'foo'
+          # - 'integration_testing/array'
+          # - 'integration_testing/turing'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v1
+        with:
+          version: 1.9
+          arch: x64
+      - uses: julia-actions/cache@v1
+      - uses: julia-actions/julia-buildpkg@v1
+      - name: Set start time
+        id: start-time
+        run: echo "start_time=$(date +%s)" >> "$GITHUB_ENV"
+      # - uses: julia-actions/julia-runtest@v1
+      #   env:
+      #     TEST_GROUP: ${{ matrix.test_group }}
+      - name: Set end time
+        id: end-time
+        run: echo "end_time=$(date +%s)" >> "$GITHUB_ENV"
+      - name: Calculate elapsed time
+        id: elapsed-time
+        run: echo "elapsed_time=$((end_time - start_time))" >> "$GITHUB_ENV"
+      - name: Log elapsed time
+        run: echo "Job took $elapsed_time seconds"
+      - name: Log Results
+        run: |
+          using Pkg
+          Pkg.activate(; temp=true)
+          Pkg.add("Wandb")
+          lg = WandbLogger(; project = "taped-benchmarking", name="runtime", id="runtime")
+          Wandb.log(lg, Dict("runtime" => 1.5, "test_group" => ENV["TEST_GROUP"]))
+          close(lg)
+        shell: julia --color=yes {0}
+        env:
+          TEST_GROUP: ${{ matrix.test_group }}
   perf:
     name: "Performance Analysis"
     # needs: tests
