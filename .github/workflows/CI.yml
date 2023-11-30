@@ -60,6 +60,7 @@ jobs:
         shell: julia --color=yes {0}
         env:
           TEST_GROUP: ${{ matrix.test_group }}
+          WANDB_API_KEY: ${{secrets.WANDB_TOKEN}}
   perf:
     name: "Performance Analysis"
     # needs: tests
@@ -78,8 +79,8 @@ jobs:
           df = DataFrame(map(x -> pyconvert(Dict, x), run.history()))
           savefig(plot(randn(10)), "perf.png")
         env:
-          WANDB_API_KEY: ${{secrets.WANDB_TOKEN}}
           GKSwstype: "100" # run GK (plots backend) in headless mode
+          WANDB_API_KEY: ${{secrets.WANDB_TOKEN}}
         shell: julia --color=yes {0}
 
       # Stores benchmarking plots as an artifact.
