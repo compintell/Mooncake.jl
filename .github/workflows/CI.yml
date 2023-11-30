@@ -65,11 +65,17 @@ jobs:
           using Pkg
           Pkg.activate(; temp=true)
           Pkg.add(["DataFrames", "PythonCall", "Plots", "Wandb"])
-          using DataFrames, PythonCall, Plots, Wandb
-          api = Wandb.wandb.Api()
-          run = api.run("willtebbutt/my-awesome-project/extensible-run-id")
-          df = DataFrame(map(x -> pyconvert(Dict, x), run.hisory()))
-          savefig(plot(df.acc), "foo.png")
+          using Plots
+          # using DataFrames, PythonCall, Plots, Wandb
+          # api = Wandb.wandb.Api()
+          # run = api.run("willtebbutt/my-awesome-project/extensible-run-id")
+          # df = DataFrame(map(x -> pyconvert(Dict, x), run.history()))
+          savefig(plot(randn(10)), "foo.png")
         env:
           WANDB_API_KEY: ${{secrets.WANDB_TOKEN}}
         shell: julia --color=yes {0}
+      - name: Archive performance graph
+        uses: actions/upload-artifact@v3
+        with:
+          name: perf-data
+          path: output/foo.png
