@@ -84,10 +84,10 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const prNumber = context.payload.pull_request.number;
-            const run_id = ${{ github.run_id }};
+            const runId = process.env.GITHUB_RUN_ID;;
             const commentBody = '
               Benchmarking complete. Results can be found in artifact
-              [here](https://github.com/withbayes/Taped.jl/actions/runs/${run_id}).
+              [here](https://github.com/withbayes/Taped.jl/actions/runs/${runId}).
             ';
 
             await github.rest.issues.createComment({
