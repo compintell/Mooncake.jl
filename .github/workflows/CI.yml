@@ -54,7 +54,7 @@ jobs:
         with:
           name: perf-results
       - name: Display structure of downloaded files
-        run: ls -R
+          run: ls -R
       # # Pulls down results from Wandb, and generates a plot from them.
       # - name: Visualise Results
       #   run: |
