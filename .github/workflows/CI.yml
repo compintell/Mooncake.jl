@@ -50,7 +50,7 @@ jobs:
         run: echo "Job took $elapsed_time seconds"
       - name: Julia Shell Run
         run: println("Hello World")
-        shell: julia
+        shell: julia --color=yes {0}
   perf:
     name: "Performance Analysis"
     needs: tests
