@@ -40,7 +40,7 @@ jobs:
     name: "Performance (${{ matrix.perf_group }})"
     runs-on: ubuntu-latest
     strategy:
-      false-fast: false
+      fail-fast: false
       matrix:
         - 'hand_written'
     steps:
