@@ -236,8 +236,7 @@ end
 
 isprimitive(::RMC, ::typeof(Core.Compiler.return_type), args...) = true
 function rrule!!(::CoDual{typeof(Core.Compiler.return_type)}, args...)
-    y = Core.Compiler.return_type(map(primal, args)...)
-    return CoDual(y, zero_tangent(y)), NoPullback()
+    return zero_codual(Core.Compiler.return_type(map(primal, args)...)), NoPullback()
 end
 
 # unsafe_copyto! is the only function in Julia that appears to rely on a ccall to `memmove`.
@@ -419,4 +418,79 @@ for name in [
     @eval function rrule!!(::CoDual{typeof(__foreigncall__)}, ::CoDual{Val{$name}}, args...)
         unexepcted_foreigncall_error($name)
     end
+end
+
+
+function generate_hand_written_rrule!!_test_cases(::Val{:foreigncall})
+    _x = Ref(5.0)
+    _dx = randn_tangent(Xoshiro(123456), _x)
+
+    _a, _da = randn(5), randn(5)
+    _b, _db = randn(4), randn(4)
+    ptr_a, ptr_da = pointer(_a), pointer(_da)
+    ptr_b, ptr_db = pointer(_b), pointer(_db)
+
+    test_cases = Any[
+        (false, :stability, nothing, Base.allocatedinline, Float64),
+        (false, :stability, nothing, Base.allocatedinline, Vector{Float64}),
+        (true, :stability, nothing, Array{Float64, 1}, undef, 5),
+        (true, :stability, nothing, Array{Float64, 2}, undef, 5, 4),
+        (true, :stability, nothing, Array{Float64, 3}, undef, 5, 4, 3),
+        (true, :stability, nothing, Array{Float64, 4}, undef, 5, 4, 3, 2),
+        (true, :stability, nothing, Array{Float64, 5}, undef, 5, 4, 3, 2, 1),
+        (true, :stability, nothing, Array{Float64, 4}, undef, (2, 3, 4, 5)),
+        (true, :stability, nothing, Array{Float64, 5}, undef, (2, 3, 4, 5, 6)),
+        (true, :stability, nothing, Base._growbeg!, randn(5), 3),
+        (true, :stability, nothing, Base._growend!, randn(5), 3),
+        (true, :stability, nothing, Base._growat!, randn(5), 2, 2),
+        (false, :stability, nothing, Base._deletebeg!, randn(5), 0),
+        (false, :stability, nothing, Base._deletebeg!, randn(5), 2),
+        (false, :stability, nothing, Base._deletebeg!, randn(5), 5),
+        (false, :stability, nothing, Base._deleteend!, randn(5), 2),
+        (false, :stability, nothing, Base._deleteend!, randn(5), 5),
+        (false, :stability, nothing, Base._deleteend!, randn(5), 0),
+        (false, :stability, nothing, Base._deleteat!, randn(5), 2, 2),
+        (false, :stability, nothing, Base._deleteat!, randn(5), 1, 5),
+        (false, :stability, nothing, Base._deleteat!, randn(5), 5, 1),
+        (false, :stability, nothing, sizehint!, randn(5), 10),
+        (false, :stability, nothing, copy, randn(5, 4)),
+        (false, :stability, nothing, fill!, rand(Int8, 5), Int8(2)),
+        (false, :stability, nothing, fill!, rand(UInt8, 5), UInt8(2)),
+        (false, :stability, nothing, objectid, 5.0),
+        (true, :stability, nothing, objectid, randn(5)),
+        (true, :stability, nothing, pointer_from_objref, _x),
+        (
+            true,
+            :none, # primal is unstable
+            (lb=0.1, ub=10),
+            unsafe_pointer_to_objref,
+            CoDual(
+                pointer_from_objref(_x),
+                bitcast(Ptr{tangent_type(Nothing)}, pointer_from_objref(_dx)),
+            ),
+        ),
+        (false, :none, nothing, Core.Compiler.return_type, sin, Tuple{Float64}),
+        (
+            false, :none, (lb=0.1, ub=50.0),
+            Core.Compiler.return_type, Tuple{typeof(sin), Float64},
+        ),
+        (false, :stability, nothing, typeintersect, Float64, Int),
+        (
+            true, :stability, nothing,
+            unsafe_copyto!, CoDual(ptr_a, ptr_da), CoDual(ptr_b, ptr_db), 4,
+        ),
+        (false, :stability, nothing, unsafe_copyto!, randn(4), 2, randn(3), 1, 2),
+        (
+            false, :stability, nothing,
+            unsafe_copyto!, [rand(3) for _ in 1:5], 2, [rand(4) for _ in 1:4], 1, 3,
+        ),
+        (false, :stability, nothing, deepcopy, 5.0),
+        (false, :stability, nothing, deepcopy, randn(5)),
+        (false, :none, nothing, deepcopy, TestResources.MutableFoo(5.0, randn(5))),
+        (false, :none, nothing, deepcopy, TestResources.StructFoo(5.0, randn(5))),
+        (false, :stability, nothing, deepcopy, (5.0, randn(5))),
+        (false, :stability, nothing, deepcopy, (a=5.0, b=randn(5))),
+    ]
+    memory = Any[_x, _dx, _a, _da, _b, _db]
+    return test_cases, memory
 end

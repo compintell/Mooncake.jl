@@ -127,3 +127,16 @@ for name in [
         unexepcted_foreigncall_error($name)
     end
 end
+
+function generate_hand_written_rrule!!_test_cases(::Val{:iddict})
+    test_cases = Any[
+        (false, :stability, nothing, Base.rehash!, IdDict(true => 5.0, false => 4.0), 10),
+        (false, :none, nothing, setindex!, IdDict(true => 5.0, false => 4.0), 3.0, false),
+        (false, :none, nothing, setindex!, IdDict(true => 5.0), 3.0, false),
+        (false, :none, nothing, get, IdDict(true => 5.0, false => 4.0), false, 2.0),
+        (false, :none, nothing, get, IdDict(true => 5.0), false, 2.0),
+        (false, :none, nothing, getindex, IdDict(true => 5.0, false => 4.0), true),
+    ]
+    memory = Any[]
+    return test_cases, memory
+end
