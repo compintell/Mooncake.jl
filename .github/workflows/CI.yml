@@ -42,7 +42,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        - 'hand_written'
+        perf_group:
+          - 'hand_written'
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v1
