@@ -66,3 +66,46 @@ isprimitive(::RMC, ::Type, ::TypeVar, ::Type) = true
 function rrule!!(x::CoDual{<:Type}, y::CoDual{<:TypeVar}, z::CoDual{<:Type})
     return CoDual(primal(x)(primal(y), primal(z)), NoTangent()), NoPullback()
 end
+
+function generate_hand_written_rrule!!_test_cases(::Val{:misc})
+
+    # Data which needs to not be GC'd.
+    _x = Ref(5.0)
+    _dx = Ref(4.0)
+    memory = Any[_x, _dx]
+
+    test_cases = Any[
+        # Rules to avoid pointer type conversions.
+        (
+            true,
+            :stability,
+            nothing,
+            +,
+            CoDual(
+                bitcast(Ptr{Float64}, pointer_from_objref(_x)),
+                bitcast(Ptr{Float64}, pointer_from_objref(_dx)),
+            ),
+            2,
+        ),
+
+        # Lack of activity-analysis rules:
+        (false, :stability, nothing, Base.elsize, randn(5, 4)),
+        (false, :stability, nothing, Base.elsize, view(randn(5, 4), 1:2, 1:2)),
+        (false, :stability, nothing, Core.Compiler.sizeof_nothrow, Float64),
+        (false, :stability, nothing, Base.datatype_haspadding, Float64),
+
+        # Performance-rules that would ideally be completely removed.
+        (false, :stability, nothing, size, randn(5, 4)),
+        (false, :stability, nothing, LinearAlgebra.lapack_size, 'N', randn(5, 4)),
+        (false, :stability, nothing, Base.require_one_based_indexing, randn(2, 3), randn(2, 1)),
+        (false, :stability, nothing, in, 5.0, randn(4)),
+        (false, :stability, nothing, iszero, 5.0),
+        (false, :stability, nothing, isempty, randn(5)),
+        (false, :stability, nothing, isbitstype, Float64),
+        (false, :stability, nothing, sizeof, Float64),
+        (false, :stability, nothing, promote_type, Float64, Float64),
+        (false, :stability, nothing, LinearAlgebra.chkstride1, randn(3, 3)),
+        (false, :stability, nothing, LinearAlgebra.chkstride1, randn(3, 3), randn(2, 2)),
+    ]
+    return test_cases, memory
+end

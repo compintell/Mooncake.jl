@@ -6,15 +6,5 @@
         y = IdDict(true => 2.0, false => 1.0)
         test_tangent(sr(123456), p, z, x, y)
     end
-
-    @testset "$f, $(typeof(x))" for (interface_only, perf_flag, f, x...) in [
-        (false, :stability, Base.rehash!, IdDict(true => 5.0, false => 4.0), 10),
-        (false, :none, setindex!, IdDict(true => 5.0, false => 4.0), 3.0, false),
-        (false, :none, setindex!, IdDict(true => 5.0), 3.0, false),
-        (false, :none, get, IdDict(true => 5.0, false => 4.0), false, 2.0),
-        (false, :none, get, IdDict(true => 5.0), false, 2.0),
-        (false, :none, getindex, IdDict(true => 5.0, false => 4.0), true),
-    ]
-        test_rrule!!(sr(123456), f, x...; interface_only, perf_flag)
-    end
+    TestUtils.run_hand_written_rrule!!_test_cases(StableRNG, Val(:iddict))
 end

@@ -362,3 +362,5 @@ function Umlaut.record_primitive!(tape::Tape{APC}, v_fargs...)
         push!(tape, mkcall(uf, v_fargs...; line, val))
     end
 end
+
+generate_hand_written_rrule!!_test_cases(::Val{:unrolled_function}) = Any[], Any[]

@@ -42,9 +42,15 @@ function benchmark_rrules!!(rng::AbstractRNG)
     # Benchmark the performance of all benchmarks.
     test_case_data = [
         generate_hand_written_rrule!!_test_cases(Val(:avoiding_non_differentiable_code)),
+        generate_hand_written_rrule!!_test_cases(Val(:blas)),
         generate_hand_written_rrule!!_test_cases(Val(:builtins)),
         generate_hand_written_rrule!!_test_cases(Val(:foreigncall)),
         generate_hand_written_rrule!!_test_cases(Val(:iddict)),
+        generate_hand_written_rrule!!_test_cases(Val(:lapack)),
+        generate_hand_written_rrule!!_test_cases(Val(:low_level_maths)),
+        generate_hand_written_rrule!!_test_cases(Val(:misc)),
+        generate_hand_written_rrule!!_test_cases(Val(:umlaut_internals_rules)),
+        generate_hand_written_rrule!!_test_cases(Val(:unrolled_function)),
     ]
     test_cases = reduce(vcat, map(first, test_case_data))
     memory = map(last, test_case_data)
