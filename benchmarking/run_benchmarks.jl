@@ -54,7 +54,7 @@ function benchmark_rrules!!(rng::AbstractRNG)
             args = (x[4:end]..., )
             @info "$n / $(length(test_cases))", args
             suite = generate_rrule!!_benchmarks(rng, args)
-            return (x, BenchmarkTools.run(suite; verbose=true, seconds=1))
+            return (x, BenchmarkTools.run(suite; verbose=true, seconds=3))
         end
     end
 
