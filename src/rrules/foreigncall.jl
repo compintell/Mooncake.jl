@@ -471,7 +471,7 @@ function generate_hand_written_rrule!!_test_cases(::Val{:foreigncall})
         ),
         (false, :none, nothing, Core.Compiler.return_type, sin, Tuple{Float64}),
         (
-            false, :none, (lb=0.1, ub=50.0),
+            false, :none, (lb=0.1, ub=100.0),
             Core.Compiler.return_type, Tuple{typeof(sin), Float64},
         ),
         (false, :stability, nothing, typeintersect, Float64, Int),
