@@ -10,11 +10,11 @@ end
     end
 end
 
-function __new__pullback(
-    dy::Union{Tuple, NamedTuple}, d__new__, df, dxs::Vararg{Any, N}
-) where {N}
-    new_dxs = map((x, y) -> increment!!(x, _value(y)), dxs, dy)
-    return d__new__, df, new_dxs...
+@generated function __new__pullback(dy::Union{Tuple, NamedTuple}, d__new__, df, dxs::Vararg{Any, N}) where {N}
+    inc_exprs = map(n -> :(increment!!(dxs[$n], _value(dy[$n]))), 1:N)
+    return quote
+        return $(Expr(:tuple, :d__new__, :df, inc_exprs...))
+    end
 end
 
 @generated function rrule!!(
