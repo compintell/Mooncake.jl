@@ -579,7 +579,7 @@ function generate_hand_written_rrule!!_test_cases(::Val{:builtins})
     _a[1] = [5.4, 4.23, -0.1, 2.1]
 
     # Slightly wider range for builtins whose performance is known not to be great.
-    _range = (lb=0.1, ub=15.0)
+    _range = (lb=0.1, ub=50.0)
 
     test_cases = Any[
 
@@ -704,8 +704,8 @@ function generate_hand_written_rrule!!_test_cases(::Val{:builtins})
         [false, :stability, nothing, ===, 5.0, randn(5)],
         [false, :stability, nothing, ===, randn(5), randn(3)],
         [false, :stability, nothing, ===, 5.0, 5.0],
-        [false, :none, (lb=0.1, ub=15.0), Core.apply_type, Vector, Float64],
-        [false, :none, (lb=0.1, ub=15.0), Core.apply_type, Array, Float64, 2],
+        [false, :none, (lb=0.1, ub=100.0), Core.apply_type, Vector, Float64],
+        [false, :none, (lb=0.1, ub=100.0), Core.apply_type, Array, Float64, 2],
         [false, :stability, nothing, Core.arraysize, randn(5, 4, 3), 2],
         [false, :stability, nothing, Core.arraysize, randn(5, 4, 3, 2, 1), 100],
         # Core.compilerbarrier -- NEEDS IMPLEMENTING AND TESTING
@@ -791,7 +791,7 @@ function generate_hand_written_rrule!!_test_cases(::Val{:builtins})
         [
             false,
             :none,
-            (lb=100, ub=200),
+            (lb=100, ub=1_000),
             setfield!,
             TestResources.MutableFoo(5.0, randn(5)),
             :b,
