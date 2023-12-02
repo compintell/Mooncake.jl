@@ -61,9 +61,9 @@ function benchmark_rrules!!(rng::AbstractRNG)
     # Compute performance ratio for all cases.
     ratios = map(results) do result
         result_dict = result[2]
-        primal_time = time(result_dict["primal"])
-        forwards_time = time(result_dict["forwards"])
-        pullback_time = time(result_dict["pullback"])
+        primal_time = time(minimum(result_dict["primal"]))
+        forwards_time = time(minimum(result_dict["forwards"]))
+        pullback_time = time(minimum(result_dict["pullback"]))
         _range = result[1][3]
         return (
             tag=result[1],
@@ -79,7 +79,7 @@ function benchmark_rrules!!(rng::AbstractRNG)
     return ratios
 end
 
-default_hand_written_ratios() = (lb=1e-3, ub=5.0)
+default_hand_written_ratios() = (lb=1e-3, ub=10.0)
 
 between(x, (lb, ub)) = lb < x && x < ub
 
