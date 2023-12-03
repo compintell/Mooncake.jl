@@ -10,15 +10,15 @@ end
     end
 end
 
-function __new__pullback(
-    dy::Union{Tuple, NamedTuple}, d__new__, df, dxs::Vararg{Any, N}
-) where {N}
-    new_dxs = map((x, y) -> increment!!(x, _value(y)), dxs, dy)
-    return d__new__, df, new_dxs...
+@generated function __new__pullback(dy::Union{Tuple, NamedTuple}, d__new__, df, dxs::Vararg{Any, N}) where {N}
+    inc_exprs = map(n -> :(increment!!(dxs[$n], _value(dy[$n]))), 1:N)
+    return quote
+        return $(Expr(:tuple, :d__new__, :df, inc_exprs...))
+    end
 end
 
 @generated function rrule!!(
-    ::CoDual{typeof(Umlaut.__new__)}, ::CoDual{Type{P}}, xs::Vararg{Any, N}
+    ::CoDual{typeof(__new__)}, ::CoDual{Type{P}}, xs::Vararg{Any, N}
 ) where {P, N}
     return quote
         x_ps = map(primal, xs)
@@ -82,4 +82,57 @@ function rrule!!(::CoDual{typeof(__to_tuple__)}, x::CoDual{Core.SimpleVector})
     end
     y = CoDual(__to_tuple__(primal(x)), __to_tuple__(tangent(x)))
     return y, __to_tuple_svec_pb!!
+end
+
+function generate_hand_written_rrule!!_test_cases(::Val{:umlaut_internals_rules})
+    test_cases = Any[
+        (false, :stability, nothing, __new__, UnitRange{Int}, 5, 9),
+        (false, :none, nothing, __new__, TestResources.StructFoo, 5.0, randn(4)),
+        (false, :none, nothing, __new__, TestResources.MutableFoo, 5.0, randn(5)),
+        (false, :none, nothing, __new__, TestResources.StructFoo, 5.0),
+        (false, :none, nothing, __new__, TestResources.MutableFoo, 5.0),
+        (
+            false,
+            :stability,
+            nothing,
+            __new__,
+            TestResources.TypeStableMutableStruct{Vector{Float64}},
+            5.0,
+            randn(5),
+        ),
+        (
+            false,
+            :stability,
+            nothing,
+            __new__,
+            TestResources.TypeStableMutableStruct{Vector{Float64}},
+            5.0,
+        ),
+        (false, :stability, nothing, __new__, NamedTuple{(), Tuple{}}),
+        (
+            false,
+            :stability,
+            nothing,
+            __new__,
+            NamedTuple{(:a, :b), Tuple{Float64, Float64}},
+            5.0,
+            4.0,
+        ),
+        (false, :stability, nothing, __new__, Tuple{Float64, Float64}, 5.0, 4.0),
+
+        # Splatting primitives:
+        (false, :stability, nothing, __to_tuple__, (5.0, 4)),
+        (false, :stability, nothing, __to_tuple__, (a=5.0, b=4)),
+        (false, :stability, nothing, __to_tuple__, 5),
+        (false, :none, nothing, __to_tuple__, svec(5.0)),
+        (false, :none, nothing, __to_tuple__, [5.0, 4.0]),
+
+        # Umlaut limitations:
+        (false, :none, nothing, eltype, randn(5)),
+        (false, :none, nothing, eltype, transpose(randn(4, 5))),
+        (false, :none, nothing, Base.promote_op, transpose, Float64),
+        (true, :none, nothing, String, lazy"hello world"),
+    ]
+    memory = Any[]
+    return test_cases, memory
 end

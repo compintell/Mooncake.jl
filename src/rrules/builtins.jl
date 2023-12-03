@@ -394,21 +394,30 @@ end
 function rrule!!(
     ::CoDual{typeof(Core.arrayset)},
     inbounds::CoDual{Bool},
-    A::CoDual{<:Array, TdA},
+    A::CoDual{<:Array{P}, TdA},
     v::CoDual,
     inds::CoDual{Int}...,
-) where {V, TdA <: Array{V}}
+) where {P, V, TdA <: Array{V}}
     _inbounds = primal(inbounds)
     _inds = map(primal, inds)
+
     to_save = isassigned(primal(A), _inds...)
-    old_A_v = to_save ? arrayref(_inbounds, primal(A), _inds...) : nothing
-    old_A_v_t = to_save ? arrayref(_inbounds, tangent(A), _inds...) : nothing
+    old_A = Ref{Tuple{P, V}}()
+    if to_save
+        old_A[] = (
+            arrayref(_inbounds, primal(A), _inds...),
+            arrayref(_inbounds, tangent(A), _inds...),
+        )
+    end
+
     arrayset(_inbounds, primal(A), primal(v), _inds...)
     arrayset(_inbounds, tangent(A), tangent(v), _inds...)
     function setindex_pullback!!(dA::TdA, df, dinbounds, dA2::TdA, dv, dinds::NoTangent...)
         dv_new = increment!!(dv, arrayref(_inbounds, dA, _inds...))
-        to_save && arrayset(_inbounds, primal(A), old_A_v, _inds...)
-        to_save && arrayset(_inbounds, dA, old_A_v_t, _inds...)
+        if to_save
+            arrayset(_inbounds, primal(A), old_A[][1], _inds...)
+            arrayset(_inbounds, dA, old_A[][2], _inds...)
+        end
         return df, dinbounds, dA, dv_new, dinds...
     end
     return A, setindex_pullback!!
@@ -561,3 +570,254 @@ function rrule!!(::CoDual{typeof(typeassert)}, x, type)
 end
 
 rrule!!(::CoDual{typeof(typeof)}, x) = CoDual(typeof(primal(x)), NoTangent()), NoPullback()
+
+function generate_hand_written_rrule!!_test_cases(::Val{:builtins})
+
+    _x = Ref(5.0) # data used in tests which aren't protected by GC.
+    _dx = Ref(4.0)
+    _a = Vector{Vector{Float64}}(undef, 3)
+    _a[1] = [5.4, 4.23, -0.1, 2.1]
+
+    # Slightly wider range for builtins whose performance is known not to be great.
+    _range = (lb=0.1, ub=50.0)
+
+    test_cases = Any[
+
+        # Core.Intrinsics:
+        [false, :stability, nothing, IntrinsicsWrappers.abs_float, 5.0],
+        [false, :stability, nothing, IntrinsicsWrappers.add_float, 4.0, 5.0],
+        [false, :stability, nothing, IntrinsicsWrappers.add_float_fast, 4.0, 5.0],
+        [false, :stability, nothing, IntrinsicsWrappers.add_int, 1, 2],
+        [false, :stability, nothing, IntrinsicsWrappers.and_int, 2, 3],
+        [false, :stability, nothing, IntrinsicsWrappers.arraylen, randn(10)],
+        [false, :stability, nothing, IntrinsicsWrappers.arraylen, randn(10, 7)],
+        [false, :stability, nothing, IntrinsicsWrappers.ashr_int, 123456, 0x0000000000000020],
+        # atomic_fence -- NEEDS IMPLEMENTING AND TESTING
+        # atomic_pointermodify -- NEEDS IMPLEMENTING AND TESTING
+        # atomic_pointerref -- NEEDS IMPLEMENTING AND TESTING
+        # atomic_pointerreplace -- NEEDS IMPLEMENTING AND TESTING
+        # atomic_pointerset -- NEEDS IMPLEMENTING AND TESTING
+        # atomic_pointerswap -- NEEDS IMPLEMENTING AND TESTING
+        [false, :stability, nothing, IntrinsicsWrappers.bitcast, Float64, 5],
+        [false, :stability, nothing, IntrinsicsWrappers.bitcast, Int64, 5.0],
+        [false, :stability, nothing, IntrinsicsWrappers.bswap_int, 5],
+        [false, :stability, nothing, IntrinsicsWrappers.ceil_llvm, 4.1],
+        # cglobal -- NEEDS IMPLEMENTING AND TESTING
+        [false, :stability, nothing, IntrinsicsWrappers.checked_sadd_int, 5, 4],
+        [false, :stability, nothing, IntrinsicsWrappers.checked_sdiv_int, 5, 4],
+        [false, :stability, nothing, IntrinsicsWrappers.checked_smul_int, 5, 4],
+        [false, :stability, nothing, IntrinsicsWrappers.checked_srem_int, 5, 4],
+        [false, :stability, nothing, IntrinsicsWrappers.checked_ssub_int, 5, 4],
+        [false, :stability, nothing, IntrinsicsWrappers.checked_uadd_int, 5, 4],
+        [false, :stability, nothing, IntrinsicsWrappers.checked_udiv_int, 5, 4],
+        [false, :stability, nothing, IntrinsicsWrappers.checked_umul_int, 5, 4],
+        [false, :stability, nothing, IntrinsicsWrappers.checked_urem_int, 5, 4],
+        [false, :stability, nothing, IntrinsicsWrappers.checked_usub_int, 5, 4],
+        [false, :stability, nothing, IntrinsicsWrappers.copysign_float, 5.0, 4.0],
+        [false, :stability, nothing, IntrinsicsWrappers.copysign_float, 5.0, -3.0],
+        [false, :stability, nothing, IntrinsicsWrappers.ctlz_int, 5],
+        [false, :stability, nothing, IntrinsicsWrappers.ctpop_int, 5],
+        [false, :stability, nothing, IntrinsicsWrappers.cttz_int, 5],
+        [false, :stability, nothing, IntrinsicsWrappers.div_float, 5.0, 3.0],
+        [false, :stability, nothing, IntrinsicsWrappers.div_float_fast, 5.0, 3.0],
+        [false, :stability, nothing, IntrinsicsWrappers.eq_float, 5.0, 4.0],
+        [false, :stability, nothing, IntrinsicsWrappers.eq_float, 4.0, 4.0],
+        [false, :stability, nothing, IntrinsicsWrappers.eq_float_fast, 5.0, 4.0],
+        [false, :stability, nothing, IntrinsicsWrappers.eq_float_fast, 4.0, 4.0],
+        [false, :stability, nothing, IntrinsicsWrappers.eq_int, 5, 4],
+        [false, :stability, nothing, IntrinsicsWrappers.eq_int, 4, 4],
+        [false, :stability, nothing, IntrinsicsWrappers.flipsign_int, 4, -3],
+        [false, :stability, nothing, IntrinsicsWrappers.floor_llvm, 4.1],
+        [false, :stability, nothing, IntrinsicsWrappers.fma_float, 5.0, 4.0, 3.0],
+        # fpext -- NEEDS IMPLEMENTING AND TESTING
+        [false, :stability, nothing, IntrinsicsWrappers.fpiseq, 4.1, 4.0],
+        [false, :stability, nothing, IntrinsicsWrappers.fptosi, UInt32, 4.1],
+        [false, :stability, nothing, IntrinsicsWrappers.fptoui, Int32, 4.1],
+        # fptrunc -- maybe interesting
+        [true, :stability, nothing, IntrinsicsWrappers.have_fma, Float64],
+        [false, :stability, nothing, IntrinsicsWrappers.le_float, 4.1, 4.0],
+        [false, :stability, nothing, IntrinsicsWrappers.le_float_fast, 4.1, 4.0],
+        # llvm_call -- NEEDS IMPLEMENTING AND TESTING
+        [false, :stability, nothing, IntrinsicsWrappers.lshr_int, 1308622848, 0x0000000000000018],
+        [false, :stability, nothing, IntrinsicsWrappers.lt_float, 4.1, 4.0],
+        [false, :stability, nothing, IntrinsicsWrappers.lt_float_fast, 4.1, 4.0],
+        [false, :stability, nothing, IntrinsicsWrappers.mul_float, 5.0, 4.0],
+        [false, :stability, nothing, IntrinsicsWrappers.mul_float_fast, 5.0, 4.0],
+        [false, :stability, nothing, IntrinsicsWrappers.mul_int, 5, 4],
+        [false, :stability, nothing, IntrinsicsWrappers.muladd_float, 5.0, 4.0, 3.0],
+        [false, :stability, nothing, IntrinsicsWrappers.ne_float, 5.0, 4.0],
+        [false, :stability, nothing, IntrinsicsWrappers.ne_float_fast, 5.0, 4.0],
+        [false, :stability, nothing, IntrinsicsWrappers.ne_int, 5, 4],
+        [false, :stability, nothing, IntrinsicsWrappers.ne_int, 5, 5],
+        [false, :stability, nothing, IntrinsicsWrappers.neg_float, 5.0],
+        [false, :stability, nothing, IntrinsicsWrappers.neg_float_fast, 5.0],
+        [false, :stability, nothing, IntrinsicsWrappers.neg_int, 5],
+        [false, :stability, nothing, IntrinsicsWrappers.not_int, 5],
+        [false, :stability, nothing, IntrinsicsWrappers.or_int, 5, 5],
+        # pointerref -- integration tested because pointers are awkward. See below.
+        # pointerset -- integration tested because pointers are awkward. See below.
+        # rem_float -- untested and unimplemented because seemingly unused on master
+        # rem_float_fast -- untested and unimplemented because seemingly unused on master
+        [false, :stability, nothing, IntrinsicsWrappers.rint_llvm, 5],
+        [false, :stability, nothing, IntrinsicsWrappers.sdiv_int, 5, 4],
+        [false, :stability, nothing, IntrinsicsWrappers.sext_int, Int64, Int32(1308622848)],
+        [false, :stability, nothing, IntrinsicsWrappers.shl_int, 1308622848, 0xffffffffffffffe8],
+        [false, :stability, nothing, IntrinsicsWrappers.sitofp, Float64, 0],
+        [false, :stability, nothing, IntrinsicsWrappers.sle_int, 5, 4],
+        [false, :stability, nothing, IntrinsicsWrappers.slt_int, 4, 5],
+        [false, :stability, nothing, IntrinsicsWrappers.sqrt_llvm, 5.0],
+        [false, :stability, nothing, IntrinsicsWrappers.sqrt_llvm_fast, 5.0],
+        [false, :stability, nothing, IntrinsicsWrappers.srem_int, 4, 1],
+        [false, :stability, nothing, IntrinsicsWrappers.sub_float, 4.0, 1.0],
+        [false, :stability, nothing, IntrinsicsWrappers.sub_float_fast, 4.0, 1.0],
+        [false, :stability, nothing, IntrinsicsWrappers.sub_int, 4, 1],
+        [false, :stability, nothing, IntrinsicsWrappers.trunc_int, UInt8, 78],
+        [false, :stability, nothing, IntrinsicsWrappers.trunc_llvm, 5.1],
+        [false, :stability, nothing, IntrinsicsWrappers.udiv_int, 5, 4],
+        [false, :stability, nothing, IntrinsicsWrappers.uitofp, Float16, 4],
+        [false, :stability, nothing, IntrinsicsWrappers.ule_int, 5, 4],
+        [false, :stability, nothing, IntrinsicsWrappers.ult_int, 5, 4],
+        [false, :stability, nothing, IntrinsicsWrappers.urem_int, 5, 4],
+        [false, :stability, nothing, IntrinsicsWrappers.xor_int, 5, 4],
+        [false, :stability, nothing, IntrinsicsWrappers.zext_int, Int64, 0xffffffff],
+
+        # Non-intrinsic built-ins:
+        # Core._abstracttype -- NEEDS IMPLEMENTING AND TESTING
+        # Core._apply_iterate -- NEEDS IMPLEMENTING AND TESTING
+        # Core._apply_pure -- NEEDS IMPLEMENTING AND TESTING
+        # Core._call_in_world -- NEEDS IMPLEMENTING AND TESTING
+        # Core._call_in_world_total -- NEEDS IMPLEMENTING AND TESTING
+        # Core._call_latest -- NEEDS IMPLEMENTING AND TESTING
+        # Core._compute_sparams -- NEEDS IMPLEMENTING AND TESTING
+        # Core._equiv_typedef -- NEEDS IMPLEMENTING AND TESTING
+        # Core._expr -- NEEDS IMPLEMENTING AND TESTING
+        # Core._primitivetype -- NEEDS IMPLEMENTING AND TESTING
+        # Core._setsuper! -- NEEDS IMPLEMENTING AND TESTING
+        # Core._structtype -- NEEDS IMPLEMENTING AND TESTING
+        # Core._svec_ref -- NEEDS IMPLEMENTING AND TESTING
+        # Core._typebody! -- NEEDS IMPLEMENTING AND TESTING
+        [true, :stability, nothing, Core._typevar, :T, Union{}, Any],
+        [false, :stability, nothing, <:, Float64, Int],
+        [false, :stability, nothing, <:, Any, Float64],
+        [false, :stability, nothing, <:, Float64, Any],
+        [false, :stability, nothing, ===, 5.0, 4.0],
+        [false, :stability, nothing, ===, 5.0, randn(5)],
+        [false, :stability, nothing, ===, randn(5), randn(3)],
+        [false, :stability, nothing, ===, 5.0, 5.0],
+        [false, :none, (lb=0.1, ub=100.0), Core.apply_type, Vector, Float64],
+        [false, :none, (lb=0.1, ub=100.0), Core.apply_type, Array, Float64, 2],
+        [false, :stability, nothing, Core.arraysize, randn(5, 4, 3), 2],
+        [false, :stability, nothing, Core.arraysize, randn(5, 4, 3, 2, 1), 100],
+        # Core.compilerbarrier -- NEEDS IMPLEMENTING AND TESTING
+        # Core.const_arrayref -- NEEDS IMPLEMENTING AND TESTING
+        # Core.donotdelete -- NEEDS IMPLEMENTING AND TESTING
+        # Core.finalizer -- NEEDS IMPLEMENTING AND TESTING
+        # Core.get_binding_type -- NEEDS IMPLEMENTING AND TESTING
+        [false, :none, nothing, Core.ifelse, true, randn(5), 1],
+        [false, :none, nothing, Core.ifelse, false, randn(5), 2],
+        [false, :stability, nothing, Core.ifelse, false, 1.0, 2.0],
+        [false, :stability, nothing, Core.ifelse, true, 1.0, 2.0],
+        [false, :stability, nothing, Core.ifelse, false, randn(5), randn(3)],
+        [false, :stability, nothing, Core.ifelse, true, randn(5), randn(3)],
+        # Core.set_binding_type! -- NEEDS IMPLEMENTING AND TESTING
+        [false, :stability, nothing, Core.sizeof, Float64],
+        [false, :stability, nothing, Core.sizeof, randn(5)],
+        # Core.svec -- NEEDS IMPLEMENTING AND TESTING
+        [false, :stability, nothing, Base.arrayref, true, randn(5), 1],
+        [false, :stability, nothing, Base.arrayref, false, randn(4), 1],
+        [false, :stability, nothing, Base.arrayref, true, randn(5, 4), 1, 1],
+        [false, :stability, nothing, Base.arrayref, false, randn(5, 4), 5, 4],
+        [false, :stability, nothing, Base.arrayset, false, randn(5), 4.0, 3],
+        [false, :stability, nothing, Base.arrayset, false, randn(5, 4), 3.0, 1, 3],
+        [false, :stability, nothing, Base.arrayset, true, randn(5), 4.0, 3],
+        [false, :stability, nothing, Base.arrayset, true, randn(5, 4), 3.0, 1, 3],
+        [false, :stability, nothing, Base.arrayset, false, [randn(3) for _ in 1:5], randn(4), 1],
+        # [false, :stability, Base.arrayset, false, _a, randn(4), 1], # _a is not fully initialised
+        [
+            false,
+            :stability,
+            nothing,
+            Base.arrayset,
+            false,
+            setindex!(Vector{Vector{Float64}}(undef, 3), randn(3), 1),
+            randn(4),
+            1,
+        ],
+        [
+            false,
+            :stability,
+            nothing,
+            Base.arrayset,
+            false,
+            setindex!(Vector{Vector{Float64}}(undef, 3), randn(3), 2),
+            randn(4),
+            1,
+        ],
+        [false, :stability, nothing, applicable, sin, Float64],
+        [false, :stability, nothing, applicable, sin, Type],
+        [false, :stability, nothing, applicable, +, Type, Float64],
+        [false, :stability, nothing, applicable, +, Float64, Float64],
+        [false, :stability, nothing, fieldtype, TestResources.StructFoo, :a],
+        [false, :stability, nothing, fieldtype, TestResources.StructFoo, :b],
+        [false, :stability, nothing, fieldtype, TestResources.MutableFoo, :a],
+        [false, :stability, nothing, fieldtype, TestResources.MutableFoo, :b],
+        [true, :none, _range, getfield, TestResources.StructFoo(5.0), :a],
+        [false, :none, _range, getfield, TestResources.StructFoo(5.0, randn(5)), :a],
+        [false, :none, _range, getfield, TestResources.StructFoo(5.0, randn(5)), :b],
+        [true, :none, _range, getfield, TestResources.StructFoo(5.0), 1],
+        [false, :none, _range, getfield, TestResources.StructFoo(5.0, randn(5)), 1],
+        [false, :none, _range, getfield, TestResources.StructFoo(5.0, randn(5)), 2],
+        [true, :none, _range, getfield, TestResources.MutableFoo(5.0), :a],
+        [false, :none, _range, getfield, TestResources.MutableFoo(5.0, randn(5)), :b],
+        [false, :none, _range, getfield, UnitRange{Int}(5:9), :start],
+        [false, :none, _range, getfield, UnitRange{Int}(5:9), :stop],
+        [false, :none, _range, getfield, (5.0, ), 1, false],
+        [false, :none, _range, getfield, UInt8, :name],
+        [false, :none, _range, getfield, UInt8, :super],
+        [true, :none, _range, getfield, UInt8, :layout],
+        [false, :none, _range, getfield, UInt8, :hash],
+        [false, :none, _range, getfield, UInt8, :flags],
+        # getglobal requires compositional testing, because you can't deepcopy a module
+        # invoke -- NEEDS IMPLEMENTING AND TESTING
+        [false, :stability, nothing, isa, 5.0, Float64],
+        [false, :stability, nothing, isa, 1, Float64],
+        [false, :stability, nothing, isdefined, TestResources.MutableFoo(5.0, randn(5)), :sim],
+        [false, :stability, nothing, isdefined, TestResources.MutableFoo(5.0, randn(5)), :a],
+        # modifyfield! -- NEEDS IMPLEMENTING AND TESTING
+        [false, :stability, nothing, nfields, TestResources.MutableFoo],
+        [false, :stability, nothing, nfields, TestResources.StructFoo],
+        # replacefield! -- NEEDS IMPLEMENTING AND TESTING
+        [false, :none, _range, setfield!, TestResources.MutableFoo(5.0, randn(5)), :a, 4.0],
+        [
+            false,
+            :none,
+            (lb=100, ub=1_000),
+            setfield!,
+            TestResources.MutableFoo(5.0, randn(5)),
+            :b,
+            randn(5),
+        ],
+        [false, :none, _range, setfield!, TestResources.MutableFoo(5.0, randn(5)), 1, 4.0],
+        [
+            false,
+            :none,
+            _range,
+            setfield!,
+            TestResources.MutableFoo(5.0, randn(5)),
+            2,
+            randn(5),
+        ],
+        # swapfield! -- NEEDS IMPLEMENTING AND TESTING
+        # throw -- NEEDS IMPLEMENTING AND TESTING
+        [false, :stability, nothing, tuple, 5.0, 4.0],
+        [false, :stability, nothing, tuple, randn(5), 5.0],
+        [false, :stability, nothing, tuple, randn(5), randn(4)],
+        [false, :stability, nothing, tuple, 5.0, randn(1)],
+        [false, :stability, nothing, typeassert, 5.0, Float64],
+        [false, :stability, nothing, typeassert, randn(5), Vector{Float64}],
+        [false, :stability, nothing, typeof, 5.0],
+        [false, :stability, nothing, typeof, randn(5)],
+    ]
+    memory = Any[_x, _dx, _a]
+    return test_cases, memory
+end

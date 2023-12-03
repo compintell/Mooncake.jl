@@ -13,16 +13,10 @@ concurrency:
 jobs:
   test:
     name: Julia ${{ matrix.version }} - ${{ matrix.test_group }} - ${{ github.event_name }}
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        version:
-          - '1.9'
-        os:
-          - ubuntu-latest
-        arch:
-          - x64
         test_group:
           - 'basic'
           - 'integration_testing/misc'
@@ -32,13 +26,31 @@ jobs:
           - 'integration_testing/array'
           - 'integration_testing/turing'
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v1
         with:
-          version: ${{ matrix.version }}
-          arch: ${{ matrix.arch }}
+          version: '1'
+          arch: x64
       - uses: julia-actions/cache@v1
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
         env:
           TEST_GROUP: ${{ matrix.test_group }}
+  perf:
+    name: "Performance (${{ matrix.perf_group }})"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        perf_group:
+          - 'hand_written'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v1
+        with:
+          version: '1'
+          arch: x64
+      - uses: julia-actions/cache@v1
+      - uses: julia-actions/julia-buildpkg@v1
+      - run: julia --project=benchmarking --eval 'include("benchmarking/run_benchmarks.jl")'
+        shell: bash

@@ -419,3 +419,5 @@ for (fname, elty) in ((:dpotrs_, :Float64), (:spotrs_, :Float32))
         return CoDual(Cvoid(), zero_tangent(Cvoid())), potrs_pb!!
     end
 end
+
+generate_hand_written_rrule!!_test_cases(::Val{:lapack}) = Any[], Any[]

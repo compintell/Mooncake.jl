@@ -538,6 +538,13 @@ function test_equality_comparison(x)
     @test has_equal_data_up_to_undefs(x, x)
 end
 
+function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)
+    test_cases, memory = Taped.generate_hand_written_rrule!!_test_cases(v)
+    @testset "$f, $(typeof(x))" for (interface_only, perf_flag, _, f, x...) in test_cases
+        test_rrule!!(rng_ctor(123), f, x...; interface_only, perf_flag)
+    end
+end
+
 end
 
 

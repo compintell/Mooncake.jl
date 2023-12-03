@@ -34,6 +34,13 @@ See implementation for details, as this function is subject to change.
 """
 uninit_codual(x) = CoDual(x, uninit_tangent(x))
 
+"""
+    randn_codual(rng::AbstractRNG, x)
+
+Equivalent to `CoDual(x, randn_tangent(rng, x))`.
+"""
+randn_codual(rng::AbstractRNG, x) = CoDual(x, randn_tangent(rng, x))
+
 set_tangent!!(x::CoDual, dx) = CoDual(primal(x), increment!!(set_to_zero!!(tangent(x)), dx))
 
 function verify_codual_type(::CoDual{P, T}) where {P, T}

@@ -441,3 +441,5 @@ for (trsm, elty) in ((:dtrsm_, :Float64), (:strsm_, :Float32))
         return zero_codual(Cvoid()), trsm_pb!!
     end
 end
+
+generate_hand_written_rrule!!_test_cases(::Val{:blas}) = Any[], Any[]

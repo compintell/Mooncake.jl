@@ -5,3 +5,24 @@ isprimitive(::RMC, ::typeof(Base.:(+)), x::Ptr, y::Integer) = true
 function rrule!!(::CoDual{typeof(Base.:(+))}, x::CoDual{<:Ptr}, y::CoDual{<:Integer})
     return CoDual(primal(x) + primal(y), tangent(x) + primal(y)), NoPullback()
 end
+
+function generate_hand_written_rrule!!_test_cases(::Val{:avoiding_non_differentiable_code})
+    _x = Ref(5.0)
+    _dx = Ref(4.0)
+    test_cases = Any[
+        # Rules to avoid pointer type conversions.
+        (
+            true,
+            :stability,
+            nothing,
+            +,
+            CoDual(
+                bitcast(Ptr{Float64}, pointer_from_objref(_x)),
+                bitcast(Ptr{Float64}, pointer_from_objref(_dx)),
+            ),
+            2,
+        ),
+    ]
+    memory = Any[_x, _dx]
+    return test_cases, memory
+end
