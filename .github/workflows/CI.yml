@@ -29,8 +29,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v1
         with:
-          version: '1.9'
-          arch: ubuntu-latest
+          version: '1'
+          arch: x64
       - uses: julia-actions/cache@v1
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
