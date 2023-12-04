@@ -92,8 +92,8 @@ sr(n::Int) = StableRNG(n)
             include(joinpath("rrules", "misc.jl"))
             @info "umlaut_internals_rules"
             include(joinpath("rrules", "umlaut_internals_rules.jl"))
-            # @info "unrolled_function"
-            # include(joinpath("rrules", "unrolled_function.jl"))
+            @info "unrolled_function"
+            include(joinpath("rrules", "unrolled_function.jl"))
         end
     elseif test_group == "integration_testing/misc"
         include(joinpath("integration_testing/", "misc.jl"))
