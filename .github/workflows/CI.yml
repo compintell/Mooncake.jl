@@ -5,6 +5,8 @@ on:
       - main
     tags: ['*']
   pull_request:
+  schedule:
+    - cron:  '28 0 * * *'
 concurrency:
   # Skip intermediate builds: always.
   # Cancel intermediate builds: only if it is a pull request build.
@@ -14,6 +16,7 @@ jobs:
   test:
     name: ${{ matrix.test_group }}
     runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
     strategy:
       fail-fast: false
       matrix:
