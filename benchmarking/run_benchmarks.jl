@@ -81,7 +81,7 @@ function benchmark_hand_written_rrules!!(rng_ctor)
     end
 
     # Compute performance ratio for all cases.
-    return combine_results.(results, _range, Ref(default_hand_written_ratios()))
+    return combine_results.(results, ranges, Ref(default_hand_written_ratios()))
 end
 
 default_derived_ratios() = (lb=100, ub=100_000)
