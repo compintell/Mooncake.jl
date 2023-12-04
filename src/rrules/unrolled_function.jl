@@ -101,9 +101,9 @@ end
 function to_reverse_mode_ad(x::Call, new_tape)
     f = x.fn isa Variable ? new_tape[x.fn].val : x.fn
     f = f isa CoInstruction ? f : const_coinstruction(CoDual(f, uninit_tangent(f)))
-    raw_args = map(x -> x isa Variable ? new_tape[x].val : x, x.args)
-    args = map(raw_args) do x
-        x isa CoInstruction ? x : const_coinstruction(CoDual(x, uninit_tangent(x)))
+    args = map(x.args) do x
+        x2 = x isa Variable ? new_tape[x].val : x
+        return x2 isa CoInstruction ? x2 : const_coinstruction(uninit_codual(x2))
     end
     v = build_coinstruction(f, args...)
     return mkcall(v, f, args...; val=v)
@@ -347,8 +347,8 @@ isprimitive(::APC, ::typeof(Umlaut.__foreigncall__), x...) = true
 isprimitive(::APC, ::typeof(__intrinsic__), args...) = true
 isprimitive(::APC, ::Core.Builtin, x...) = true
 
-function trace_recursive_tape!!(f, args...)
-    val, tape = Umlaut.trace(f, args...; ctx=APC())
+function trace_recursive_tape!!(fargs...)
+    val, tape = Umlaut.trace(fargs...; ctx=APC())
     return val, UnrolledFunction(tape)
 end
 
