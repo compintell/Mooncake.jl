@@ -365,4 +365,4 @@ function Umlaut.record_primitive!(tape::Tape{APC}, v_fargs...)
     end
 end
 
-generate_hand_written_rrule!!_test_cases(::Val{:unrolled_function}) = Any[], Any[]
+generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:unrolled_function}) = Any[], Any[]

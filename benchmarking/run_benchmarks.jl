@@ -40,20 +40,20 @@ end
 function benchmark_rrules!!(rng::AbstractRNG)
 
     # Benchmark the performance of all benchmarks.
-    test_case_data = [
-        generate_hand_written_rrule!!_test_cases(
-            StableRNG, Val(:avoiding_non_differentiable_code)
-        ),
-        generate_hand_written_rrule!!_test_cases(StableRNG, Val(:blas)),
-        generate_hand_written_rrule!!_test_cases(StableRNG, Val(:builtins)),
-        generate_hand_written_rrule!!_test_cases(StableRNG, Val(:foreigncall)),
-        generate_hand_written_rrule!!_test_cases(StableRNG, Val(:iddict)),
-        generate_hand_written_rrule!!_test_cases(StableRNG, Val(:lapack)),
-        generate_hand_written_rrule!!_test_cases(StableRNG, Val(:low_level_maths)),
-        generate_hand_written_rrule!!_test_cases(StableRNG, Val(:misc)),
-        generate_hand_written_rrule!!_test_cases(StableRNG, Val(:umlaut_internals_rules)),
-        generate_hand_written_rrule!!_test_cases(StableRNG, Val(:unrolled_function)),
-    ]
+    test_case_data = map([
+        :avoiding_non_differentiable_code,
+        :blas,
+        :builtins,
+        :foreigncall,
+        :iddict,
+        :lapack,
+        :low_level_maths,
+        :misc,
+        :umlaut_internals_rules,
+        :unrolled_function
+    ]) do s
+        generate_hand_written_rrule!!_test_cases(Xoshiro, Val(s))
+    end
     test_cases = reduce(vcat, map(first, test_case_data))
     memory = map(last, test_case_data)
 
