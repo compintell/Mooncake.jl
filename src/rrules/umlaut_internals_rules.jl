@@ -139,18 +139,20 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:umlaut_intern
     return test_cases, memory
 end
 
+__multiarg_fn(x) = only(x)
+__multiarg_fn(x, y) = only(x) + only(y)
+__multiarg_fn(x, y, z) = only(x) + only(y) + only(z)
+
 function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:umlaut_internals_rules})
-    multiarg_fn(x) = only(x)
-    multiarg_fn(x, y) = only(x) + only(y)
-    multiarg_fn(x, y, z) = only(x) + only(y) + only(z)
+
 
     test_cases = Any[
-        [false, nothing, x -> multiarg_fn(x...), 1],
-        [false, nothing, x -> multiarg_fn(x...), [1.0, 2.0]],
-        [false, nothing, x -> multiarg_fn(x...), [5.0, 4]],
-        [false, nothing, x -> multiarg_fn(x...), (5.0, 4)],
-        [false, nothing, x -> multiarg_fn(x...), (a=5.0, b=4)],
-        [false, nothing, x -> multiarg_fn(x...), svec(5.0, 4.0)],
+        [false, nothing, x -> __multiarg_fn(x...), 1],
+        [false, nothing, x -> __multiarg_fn(x...), [1.0, 2.0]],
+        [false, nothing, x -> __multiarg_fn(x...), [5.0, 4]],
+        [false, nothing, x -> __multiarg_fn(x...), (5.0, 4)],
+        [false, nothing, x -> __multiarg_fn(x...), (a=5.0, b=4)],
+        [false, nothing, x -> __multiarg_fn(x...), svec(5.0, 4.0)],
     ]
     memory = Any[]
     return test_cases, memory
