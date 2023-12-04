@@ -6,7 +6,9 @@ function rrule!!(::CoDual{typeof(Base.:(+))}, x::CoDual{<:Ptr}, y::CoDual{<:Inte
     return CoDual(primal(x) + primal(y), tangent(x) + primal(y)), NoPullback()
 end
 
-function generate_hand_written_rrule!!_test_cases(::Val{:avoiding_non_differentiable_code})
+function generate_hand_written_rrule!!_test_cases(
+    rng_ctor, ::Val{:avoiding_non_differentiable_code}
+)
     _x = Ref(5.0)
     _dx = Ref(4.0)
     test_cases = Any[
@@ -25,4 +27,10 @@ function generate_hand_written_rrule!!_test_cases(::Val{:avoiding_non_differenti
     ]
     memory = Any[_x, _dx]
     return test_cases, memory
+end
+
+function generate_derived_rrule!!_test_cases(
+    rng_ctor, ::Val{:avoiding_non_differentiable_code},
+)
+    return Any[], Any[]
 end

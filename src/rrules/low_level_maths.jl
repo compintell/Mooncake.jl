@@ -48,7 +48,7 @@ rand_inputs(rng, ::typeof(acosd), _) = (2 * 0.9 * rand(rng) - 0.9, )
 rand_inputs(rng, ::typeof(acos), _) = (2 * 0.9 * rand(rng) - 0.9, )
 rand_inputs(rng, ::typeof(sqrt), _) = (rand(rng) + 1e-3, )
 
-function generate_hand_written_rrule!!_test_cases(::Val{:low_level_maths})
+function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:low_level_maths})
     rng = Xoshiro(123)
     test_cases = Any[]
     foreach(DiffRules.diffrules(; filter_modules=nothing)) do (M, f, arity)
@@ -64,3 +64,5 @@ function generate_hand_written_rrule!!_test_cases(::Val{:low_level_maths})
     memory = Any[]
     return test_cases, memory
 end
+
+generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:low_level_maths}) = Any[], Any[]

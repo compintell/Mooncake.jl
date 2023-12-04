@@ -5,6 +5,8 @@ on:
       - main
     tags: ['*']
   pull_request:
+  schedule:
+    - cron:  '28 0,6,12,18 * * *'
 concurrency:
   # Skip intermediate builds: always.
   # Cancel intermediate builds: only if it is a pull request build.
@@ -12,8 +14,9 @@ concurrency:
   cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
 jobs:
   test:
-    name: Julia ${{ matrix.version }} - ${{ matrix.test_group }} - ${{ github.event_name }}
+    name: ${{ matrix.test_group }}
     runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
     strategy:
       fail-fast: false
       matrix:
@@ -44,6 +47,7 @@ jobs:
       matrix:
         perf_group:
           - 'hand_written'
+          - 'derived'
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v1
@@ -53,4 +57,6 @@ jobs:
       - uses: julia-actions/cache@v1
       - uses: julia-actions/julia-buildpkg@v1
       - run: julia --project=benchmarking --eval 'include("benchmarking/run_benchmarks.jl")'
+        env:
+          PERF_GROUP: ${{ matrix.perf_group }}
         shell: bash

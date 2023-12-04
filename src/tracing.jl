@@ -102,8 +102,6 @@ function Umlaut.trace!(t::Tracer{<:TapedContext}, v_fargs)
             # global STATE = t, cf, ir
             isdefined(cf, :val) || error("Reached unreachable")
             res = cf.val
-            f, args... = Umlaut.var_values(v_fargs)
-            # line = "return value from $f$(map(Core.Typeof, args))"
             line = ""
             v = if res isa Umlaut.SSAValue || res isa Umlaut.Argument
                 val = frame.ir2tape[res]

@@ -420,4 +420,90 @@ for (fname, elty) in ((:dpotrs_, :Float64), (:spotrs_, :Float32))
     end
 end
 
-generate_hand_written_rrule!!_test_cases(::Val{:lapack}) = Any[], Any[]
+generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:lapack}) = Any[], Any[]
+
+function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
+    getrf_wrapper!(x, check) = getrf!(x; check)
+    test_cases = vcat(
+
+        # getrf!
+        [
+            Any[false, nothing, getrf_wrapper!, randn(5, 5), false],
+            Any[false, nothing, getrf_wrapper!, randn(5, 5), true],
+            Any[false, nothing, getrf_wrapper!, view(randn(10, 10), 1:5, 1:5), false],
+            Any[false, nothing, getrf_wrapper!, view(randn(10, 10), 1:5, 1:5), true],
+            Any[false, nothing, getrf_wrapper!, view(randn(10, 10), 2:7, 3:8), false],
+            Any[false, nothing, getrf_wrapper!, view(randn(10, 10), 3:8, 2:7), true],
+        ],
+
+        # trtrs
+        vec(reduce(
+            vcat,
+            map(product(
+                ['U', 'L'], ['N', 'T', 'C'], ['N', 'U'], [1, 3], [1, 2])
+            ) do (ul, tA, diag, N, Nrhs)
+                As = [randn(N, N) + 10I, view(randn(15, 15) + 10I, 2:N+1, 2:N+1)]
+                Bs = [randn(N, Nrhs), view(randn(15, 15), 4:N+3, 3:N+2)]
+                return map(product(As, Bs)) do (A, B)
+                    Any[false, nothing, trtrs!, ul, tA, diag, A, B]
+                end
+            end,
+        )),
+
+        # getrs
+        vec(reduce(
+            vcat,
+            map(product(['N', 'T'], [1, 9], [1, 2])) do (trans, N, Nrhs)
+                As = getrf!.([
+                    randn(N, N) + 5I,
+                    view(randn(15, 15) + 5I, 2:N+1, 2:N+1),
+                ])
+                Bs = [randn(N, Nrhs), view(randn(15, 15), 4:N+3, 3:Nrhs+2)]
+                return map(product(As, Bs)) do ((A, ipiv), B)
+                    Any[false, nothing, getrs!, trans, A, ipiv, B]
+                end
+            end,
+        )),
+
+        # getri
+        vec(reduce(
+            vcat,
+            map([1, 9]) do N
+                As = getrf!.([randn(N, N) + 5I, view(randn(15, 15) + I, 2:N+1, 2:N+1)])
+                As = getrf!.([randn(N, N) + 5I])
+                return map(As) do (A, ipiv)
+                    Any[false, nothing, getri!, A, ipiv]
+                end
+            end,
+        )),
+
+        # potrf
+        vec(reduce(
+            vcat,
+            map([1, 3, 9]) do N
+                X = randn(N, N)
+                A = X * X' + I
+                return [
+                    Any[false, nothing, potrf!, 'L', A],
+                    Any[false, nothing, potrf!, 'U', A],
+                ]
+            end,
+        )),
+
+        # potrs
+        vec(reduce(
+            vcat,
+            map(product([1, 3, 9], [1, 2])) do (N, Nrhs)
+                X = randn(N, N)
+                A = X * X' + I
+                B = randn(N, Nrhs)
+                return [
+                    Any[false, nothing, potrs!, 'L', potrf!('L', copy(A))[1], copy(B)],
+                    Any[false, nothing, potrs!, 'U', potrf!('U', copy(A))[1], copy(B)],
+                ]
+            end,
+        )),
+    )
+    memory = Any[]
+    return test_cases, memory
+end

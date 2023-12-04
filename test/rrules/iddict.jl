@@ -6,5 +6,5 @@
         y = IdDict(true => 2.0, false => 1.0)
         test_tangent(sr(123456), p, z, x, y)
     end
-    TestUtils.run_hand_written_rrule!!_test_cases(StableRNG, Val(:iddict))
+    TestUtils.run_rrule!!_test_cases(StableRNG, Val(:iddict))
 end

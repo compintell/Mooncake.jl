@@ -421,7 +421,7 @@ for name in [
 end
 
 
-function generate_hand_written_rrule!!_test_cases(::Val{:foreigncall})
+function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:foreigncall})
     _x = Ref(5.0)
     _dx = randn_tangent(Xoshiro(123456), _x)
 
@@ -492,5 +492,38 @@ function generate_hand_written_rrule!!_test_cases(::Val{:foreigncall})
         (false, :stability, nothing, deepcopy, (a=5.0, b=randn(5))),
     ]
     memory = Any[_x, _dx, _a, _da, _b, _db]
+    return test_cases, memory
+end
+
+function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:foreigncall})
+
+    _x = Ref(5.0)
+
+    function unsafe_copyto_tester(x::Vector{T}, y::Vector{T}, n::Int) where {T}
+        GC.@preserve x y unsafe_copyto!(pointer(x), pointer(y), n)
+        return x
+    end
+
+    test_cases = [
+        Any[false, nothing, reshape, randn(5, 4), (4, 5)],
+        Any[false, nothing, reshape, randn(5, 4), (2, 10)],
+        Any[false, nothing, reshape, randn(5, 4), (10, 2)],
+        Any[false, nothing, reshape, randn(5, 4), (5, 4, 1)],
+        Any[false, nothing, reshape, randn(5, 4), (2, 10, 1)],
+        Any[false, nothing, unsafe_copyto_tester, randn(5), randn(3), 2],
+        Any[false, nothing, unsafe_copyto_tester, randn(5), randn(6), 4],
+        [
+            false,
+            nothing,
+            unsafe_copyto_tester,
+            [randn(3) for _ in 1:5],
+            [randn(4) for _ in 1:6],
+            4,
+        ],
+        Any[false, nothing, x -> unsafe_pointer_to_objref(pointer_from_objref(x)), _x],
+        Any[false, nothing, isassigned, randn(5), 4],
+        Any[false, nothing, x -> (Base._growbeg!(x, 2); x[1:2] .= 2.0), randn(5)],
+    ]
+    memory = Any[_x]
     return test_cases, memory
 end

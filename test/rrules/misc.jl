@@ -8,7 +8,7 @@
         @test Taped.wrap_ptr_as_view(p, 4, 2, 3) == x[1:2, 1:3]
     end
 
-    TestUtils.run_hand_written_rrule!!_test_cases(StableRNG, Val(:misc))
+    TestUtils.run_rrule!!_test_cases(StableRNG, Val(:misc))
 
     @testset "literals" begin
         rng = Xoshiro(123456)

@@ -281,10 +281,7 @@ though, in partcular `Ptr`s. In this case, the argument for which `randn_tangent
 readily defined should be a `CoDual` containing the primal, and a _manually_ constructed
 tangent field.
 """
-function test_rrule!!(
-    rng::AbstractRNG, x...;
-    interface_only=false, is_primitive=true, perf_flag::Symbol,
-)
+function test_rrule!!(rng, x...; interface_only=false, is_primitive=true, perf_flag::Symbol)
     @nospecialize rng x
 
     # Generate random tangents for anything that is not already a CoDual.
@@ -302,9 +299,7 @@ function test_rrule!!(
 end
 
 # Functionality for testing AD via Umlaut.
-function test_taped_rrule!!(
-    rng::AbstractRNG, f, x...; interface_only=false, recursive=true, kwargs...
-)
+function test_taped_rrule!!(rng, f, x...; interface_only=false, recursive=true, kwargs...)
     @nospecialize rng f x
 
     # Try to run the primal, just to make sure that we're not calling it on bad inputs.
@@ -324,11 +319,17 @@ function test_taped_rrule!!(
 
     # Check that f_t remains a faithful representation of the original function.
     if !interface_only
+
         xs_lhs = deepcopy(x)
         xs_rhs = deepcopy(x)
         y_lhs = f(xs_lhs...)
         y_rhs = play!(f_t.tape, f, xs_rhs...)
         if !has_equal_data(y_lhs, y_rhs) || !has_equal_data(xs_lhs, xs_rhs)
+
+            println("f")
+            display(f)
+            println()
+
             println("y_lhs")
             display(y_lhs)
             println()
@@ -539,10 +540,22 @@ function test_equality_comparison(x)
 end
 
 function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)
-    test_cases, memory = Taped.generate_hand_written_rrule!!_test_cases(v)
-    @testset "$f, $(typeof(x))" for (interface_only, perf_flag, _, f, x...) in test_cases
+    test_cases, memory = Taped.generate_hand_written_rrule!!_test_cases(rng_ctor, v)
+    GC.@preserve memory @testset "$f, $(typeof(x))" for (interface_only, perf_flag, _, f, x...) in test_cases
         test_rrule!!(rng_ctor(123), f, x...; interface_only, perf_flag)
     end
+end
+
+function run_derived_rrule!!_test_cases(rng_ctor, v::Val)
+    test_cases, memory = Taped.generate_derived_rrule!!_test_cases(rng_ctor, v)
+    GC.@preserve memory @testset "$f, $(typeof(x))" for (interface_only, _, f, x...) in test_cases
+        test_taped_rrule!!(rng_ctor(123), f, x...; interface_only)
+    end
+end
+
+function run_rrule!!_test_cases(rng_ctor, v::Val)
+    run_hand_written_rrule!!_test_cases(rng_ctor, v)
+    run_derived_rrule!!_test_cases(rng_ctor, v)
 end
 
 end
@@ -795,32 +808,54 @@ relu(x) = max(x, zero(x))
 
 test_mlp(x, W1, W2) = W2 * relu.(W1 * x)
 
-const TEST_FUNCTIONS = Any[
-    (false, test_sin, 1.0),
-    (false, test_cos_sin, 2.0),
-    (false, test_isbits_multiple_usage, 5.0),
-    (false, test_isbits_multiple_usage_2, 5.0),
-    (false, test_isbits_multiple_usage_3, 4.1),
-    (false, test_isbits_multiple_usage_4, 5.0),
-    (false, test_isbits_multiple_usage_5, 4.1),
-    (false, test_getindex, [1.0, 2.0]),
-    (false, test_mutation!, [1.0, 2.0]),
-    (false, test_while_loop, 2.0),
-    (false, test_for_loop, 3.0),
-    (false, test_mutable_struct_basic, 5.0),
-    (false, test_mutable_struct_basic_sin, 5.0),
-    (false, test_mutable_struct_setfield, 4.0),
-    (false, test_mutable_struct, 5.0),
-    (false, test_struct_partial_init, 3.5),
-    (false, test_mutable_partial_init, 3.3),
-    (false, test_naive_mat_mul!, randn(2, 1), randn(2, 1), randn(1, 1)),
-    (false, (A, C) -> test_naive_mat_mul!(C, A, A), randn(2, 2), randn(2, 2)),
-    (false, sum, randn(3)),
-    (false, test_diagonal_to_matrix, Diagonal(randn(3))),
-    (false, ldiv!, randn(2, 2), Diagonal(rand(2) .+ 1), randn(2, 2)),
-    (false, kron!, randn(4, 4), Diagonal(randn(2)), randn(2, 2)),
-    (false, test_mlp, randn(5, 2), randn(7, 5), randn(3, 7)),
-]
+function generate_test_functions()
+    return Any[
+        (false, (lb=100, ub=10_000), test_sin, 1.0),
+        (false, (lb=100, ub=10_000), test_cos_sin, 2.0),
+        (false, (lb=1_000, ub=20_000), test_isbits_multiple_usage, 5.0),
+        (false, (lb=1_000, ub=50_000), test_isbits_multiple_usage_2, 5.0),
+        (false, (lb=1_000, ub=20_000), test_isbits_multiple_usage_3, 4.1),
+        (false, (lb=1_000, ub=100_000), test_isbits_multiple_usage_4, 5.0),
+        (false, (lb=1_000, ub=100_000), test_isbits_multiple_usage_5, 4.1),
+        (false, (lb=1_000, ub=20_000), test_getindex, [1.0, 2.0]),
+        (false, (lb=1_000, ub=50_000), test_mutation!, [1.0, 2.0]),
+        (false, (lb=1_000, ub=25_000), test_while_loop, 2.0),
+        (false, (lb=1_000, ub=100_000), test_for_loop, 3.0),
+        (false, (lb=1_000, ub=50_000), test_mutable_struct_basic, 5.0),
+        (false, (lb=1_000, ub=20_000), test_mutable_struct_basic_sin, 5.0),
+        (false, (lb=1_000, ub=100_000), test_mutable_struct_setfield, 4.0),
+        (false, (lb=1_000, ub=25_000), test_mutable_struct, 5.0),
+        (false, (lb=1_000, ub=50_000), test_struct_partial_init, 3.5),
+        (false, (lb=1_000, ub=50_000), test_mutable_partial_init, 3.3),
+        (
+            false,
+            (lb=100_000, ub=10_000_000),
+            test_naive_mat_mul!, randn(2, 1), randn(2, 1), randn(1, 1),
+        ),
+        (
+            false,
+            (lb=10_000, ub=5_000_000),
+            (A, C) -> test_naive_mat_mul!(C, A, A), randn(2, 2), randn(2, 2),
+        ),
+        (false, (lb=10_000, ub=50_000_000), sum, randn(3)),
+        (false, (lb=10_000, ub=50_000_000), test_diagonal_to_matrix, Diagonal(randn(3))),
+        (
+            false,
+            (lb=10_000, ub=50_000_000),
+            ldiv!, randn(2, 2), Diagonal(rand(2) .+ 1), randn(2, 2),
+        ),
+        (
+            false,
+            (lb=10_000, ub=50_000_000),
+            kron!, randn(4, 4), Diagonal(randn(2)), randn(2, 2),
+        ),
+        (
+            false,
+            (lb=100_000, ub=100_000_000),
+            test_mlp, randn(5, 2), randn(7, 5), randn(3, 7),
+        ),
+    ]
+end
 
 function value_dependent_control_flow(x, n)
     while n > 0

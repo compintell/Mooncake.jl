@@ -10,7 +10,9 @@ end
     end
 end
 
-@generated function __new__pullback(dy::Union{Tuple, NamedTuple}, d__new__, df, dxs::Vararg{Any, N}) where {N}
+@generated function __new__pullback(
+    dy::Union{Tuple, NamedTuple}, d__new__, df, dxs::Vararg{Any, N}
+) where {N}
     inc_exprs = map(n -> :(increment!!(dxs[$n], _value(dy[$n]))), 1:N)
     return quote
         return $(Expr(:tuple, :d__new__, :df, inc_exprs...))
@@ -84,7 +86,7 @@ function rrule!!(::CoDual{typeof(__to_tuple__)}, x::CoDual{Core.SimpleVector})
     return y, __to_tuple_svec_pb!!
 end
 
-function generate_hand_written_rrule!!_test_cases(::Val{:umlaut_internals_rules})
+function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:umlaut_internals_rules})
     test_cases = Any[
         (false, :stability, nothing, __new__, UnitRange{Int}, 5, 9),
         (false, :none, nothing, __new__, TestResources.StructFoo, 5.0, randn(4)),
@@ -132,6 +134,25 @@ function generate_hand_written_rrule!!_test_cases(::Val{:umlaut_internals_rules}
         (false, :none, nothing, eltype, transpose(randn(4, 5))),
         (false, :none, nothing, Base.promote_op, transpose, Float64),
         (true, :none, nothing, String, lazy"hello world"),
+    ]
+    memory = Any[]
+    return test_cases, memory
+end
+
+__multiarg_fn(x) = only(x)
+__multiarg_fn(x, y) = only(x) + only(y)
+__multiarg_fn(x, y, z) = only(x) + only(y) + only(z)
+
+function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:umlaut_internals_rules})
+
+
+    test_cases = Any[
+        [false, nothing, x -> __multiarg_fn(x...), 1],
+        [false, nothing, x -> __multiarg_fn(x...), [1.0, 2.0]],
+        [false, nothing, x -> __multiarg_fn(x...), [5.0, 4]],
+        [false, nothing, x -> __multiarg_fn(x...), (5.0, 4)],
+        [false, nothing, x -> __multiarg_fn(x...), (a=5.0, b=4)],
+        [false, nothing, x -> __multiarg_fn(x...), svec(5.0, 4.0)],
     ]
     memory = Any[]
     return test_cases, memory
