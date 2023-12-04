@@ -366,5 +366,5 @@ end
 generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:unrolled_function}) = Any[], Any[]
 
 function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:unrolled_function})
-    return TestResources.TEST_FUNCTIONS, Any[]
+    return TestResources.generate_test_functions(), Any[]
 end

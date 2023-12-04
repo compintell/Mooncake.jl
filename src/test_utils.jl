@@ -808,32 +808,54 @@ relu(x) = max(x, zero(x))
 
 test_mlp(x, W1, W2) = W2 * relu.(W1 * x)
 
-const TEST_FUNCTIONS = Any[
-    (false, nothing, test_sin, 1.0),
-    (false, nothing, test_cos_sin, 2.0),
-    (false, nothing, test_isbits_multiple_usage, 5.0),
-    (false, nothing, test_isbits_multiple_usage_2, 5.0),
-    (false, nothing, test_isbits_multiple_usage_3, 4.1),
-    (false, nothing, test_isbits_multiple_usage_4, 5.0),
-    (false, nothing, test_isbits_multiple_usage_5, 4.1),
-    (false, nothing, test_getindex, [1.0, 2.0]),
-    (false, nothing, test_mutation!, [1.0, 2.0]),
-    (false, nothing, test_while_loop, 2.0),
-    (false, nothing, test_for_loop, 3.0),
-    (false, nothing, test_mutable_struct_basic, 5.0),
-    (false, nothing, test_mutable_struct_basic_sin, 5.0),
-    (false, nothing, test_mutable_struct_setfield, 4.0),
-    (false, nothing, test_mutable_struct, 5.0),
-    (false, nothing, test_struct_partial_init, 3.5),
-    (false, nothing, test_mutable_partial_init, 3.3),
-    (false, nothing, test_naive_mat_mul!, randn(2, 1), randn(2, 1), randn(1, 1)),
-    (false, nothing, (A, C) -> test_naive_mat_mul!(C, A, A), randn(2, 2), randn(2, 2)),
-    (false, nothing, sum, randn(3)),
-    (false, nothing, test_diagonal_to_matrix, Diagonal(randn(3))),
-    (false, nothing, ldiv!, randn(2, 2), Diagonal(rand(2) .+ 1), randn(2, 2)),
-    (false, nothing, kron!, randn(4, 4), Diagonal(randn(2)), randn(2, 2)),
-    (false, nothing, test_mlp, randn(5, 2), randn(7, 5), randn(3, 7)),
-]
+function generate_test_functions()
+    return Any[
+        (false, (lb=100, ub=10_000), test_sin, 1.0),
+        (false, (lb=100, ub=10_000), test_cos_sin, 2.0),
+        (false, (lb=1_000, ub=20_000), test_isbits_multiple_usage, 5.0),
+        (false, (lb=1_000, ub=20_000), test_isbits_multiple_usage_2, 5.0),
+        (false, (lb=1_000, ub=20_000), test_isbits_multiple_usage_3, 4.1),
+        (false, (lb=1_000, ub=25_000), test_isbits_multiple_usage_4, 5.0),
+        (false, (lb=1_000, ub=25_000), test_isbits_multiple_usage_5, 4.1),
+        (false, (lb=1_000, ub=20_000), test_getindex, [1.0, 2.0]),
+        (false, (lb=1_000, ub=50_000), test_mutation!, [1.0, 2.0]),
+        (false, (lb=1_000, ub=25_000), test_while_loop, 2.0),
+        (false, (lb=1_000, ub=50_000), test_for_loop, 3.0),
+        (false, (lb=1_000, ub=20_000), test_mutable_struct_basic, 5.0),
+        (false, (lb=1_000, ub=20_000), test_mutable_struct_basic_sin, 5.0),
+        (false, (lb=1_000, ub=50_000), test_mutable_struct_setfield, 4.0),
+        (false, (lb=1_000, ub=25_000), test_mutable_struct, 5.0),
+        (false, (lb=1_000, ub=25_000), test_struct_partial_init, 3.5),
+        (false, (lb=1_000, ub=25_000), test_mutable_partial_init, 3.3),
+        (
+            false,
+            (lb=100_000, ub=10_000_000),
+            test_naive_mat_mul!, randn(2, 1), randn(2, 1), randn(1, 1),
+        ),
+        (
+            false,
+            (lb=10_000, ub=5_000_000),
+            (A, C) -> test_naive_mat_mul!(C, A, A), randn(2, 2), randn(2, 2),
+        ),
+        (false, (lb=10_000, ub=5_000_000), sum, randn(3)),
+        (false, (lb=10_000, ub=5_000_000), test_diagonal_to_matrix, Diagonal(randn(3))),
+        (
+            false,
+            (lb=10_000, ub=5_000_000),
+            ldiv!, randn(2, 2), Diagonal(rand(2) .+ 1), randn(2, 2),
+        ),
+        (
+            false,
+            (lb=10_000, ub=5_000_000),
+            kron!, randn(4, 4), Diagonal(randn(2)), randn(2, 2),
+        ),
+        (
+            false,
+            (lb=100_000, ub=100_000_000),
+            test_mlp, randn(5, 2), randn(7, 5), randn(3, 7),
+        ),
+    ]
+end
 
 function value_dependent_control_flow(x, n)
     while n > 0
