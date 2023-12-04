@@ -67,7 +67,7 @@ function rrule!!(x::CoDual{<:Type}, y::CoDual{<:TypeVar}, z::CoDual{<:Type})
     return CoDual(primal(x)(primal(y), primal(z)), NoTangent()), NoPullback()
 end
 
-function generate_hand_written_rrule!!_test_cases(::Val{:misc})
+function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
 
     # Data which needs to not be GC'd.
     _x = Ref(5.0)
@@ -109,3 +109,5 @@ function generate_hand_written_rrule!!_test_cases(::Val{:misc})
     ]
     return test_cases, memory
 end
+
+generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:misc}) = Any[], Any[]

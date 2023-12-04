@@ -281,10 +281,7 @@ though, in partcular `Ptr`s. In this case, the argument for which `randn_tangent
 readily defined should be a `CoDual` containing the primal, and a _manually_ constructed
 tangent field.
 """
-function test_rrule!!(
-    rng::AbstractRNG, x...;
-    interface_only=false, is_primitive=true, perf_flag::Symbol,
-)
+function test_rrule!!(rng, x...; interface_only=false, is_primitive=true, perf_flag::Symbol)
     @nospecialize rng x
 
     # Generate random tangents for anything that is not already a CoDual.
@@ -302,9 +299,7 @@ function test_rrule!!(
 end
 
 # Functionality for testing AD via Umlaut.
-function test_taped_rrule!!(
-    rng::AbstractRNG, f, x...; interface_only=false, recursive=true, kwargs...
-)
+function test_taped_rrule!!(rng, f, x...; interface_only=false, recursive=true, kwargs...)
     @nospecialize rng f x
 
     # Try to run the primal, just to make sure that we're not calling it on bad inputs.
@@ -324,11 +319,17 @@ function test_taped_rrule!!(
 
     # Check that f_t remains a faithful representation of the original function.
     if !interface_only
+
         xs_lhs = deepcopy(x)
         xs_rhs = deepcopy(x)
         y_lhs = f(xs_lhs...)
         y_rhs = play!(f_t.tape, f, xs_rhs...)
         if !has_equal_data(y_lhs, y_rhs) || !has_equal_data(xs_lhs, xs_rhs)
+
+            println("f")
+            display(f)
+            println()
+
             println("y_lhs")
             display(y_lhs)
             println()
@@ -539,10 +540,22 @@ function test_equality_comparison(x)
 end
 
 function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)
-    test_cases, memory = Taped.generate_hand_written_rrule!!_test_cases(v)
-    @testset "$f, $(typeof(x))" for (interface_only, perf_flag, _, f, x...) in test_cases
+    test_cases, memory = Taped.generate_hand_written_rrule!!_test_cases(rng_ctor, v)
+    GC.@preserve memory @testset "$f, $(typeof(x))" for (interface_only, perf_flag, _, f, x...) in test_cases
         test_rrule!!(rng_ctor(123), f, x...; interface_only, perf_flag)
     end
+end
+
+function run_derived_rrule!!_test_cases(rng_ctor, v::Val)
+    test_cases, memory = Taped.generate_derived_rrule!!_test_cases(rng_ctor, v)
+    GC.@preserve memory @testset "$f, $(typeof(x))" for (interface_only, _, f, x...) in test_cases
+        test_taped_rrule!!(rng_ctor(123), f, x...; interface_only)
+    end
+end
+
+function run_rrule!!_test_cases(rng_ctor, v::Val)
+    run_hand_written_rrule!!_test_cases(rng_ctor, v)
+    run_derived_rrule!!_test_cases(rng_ctor, v)
 end
 
 end

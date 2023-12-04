@@ -128,7 +128,7 @@ for name in [
     end
 end
 
-function generate_hand_written_rrule!!_test_cases(::Val{:iddict})
+function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:iddict})
     test_cases = Any[
         (false, :stability, nothing, Base.rehash!, IdDict(true => 5.0, false => 4.0), 10),
         (false, :none, nothing, setindex!, IdDict(true => 5.0, false => 4.0), 3.0, false),
@@ -140,3 +140,5 @@ function generate_hand_written_rrule!!_test_cases(::Val{:iddict})
     memory = Any[]
     return test_cases, memory
 end
+
+generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:iddict}) = Any[], Any[]

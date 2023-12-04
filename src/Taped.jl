@@ -13,9 +13,12 @@ import Umlaut: isprimitive, Frame, Tracer, __foreigncall__, __to_tuple__, __new_
 using Base:
     IEEEFloat, unsafe_convert, unsafe_pointer_to_objref, pointer_from_objref, arrayref,
     arrayset
+using Base.Iterators: product
 using Core: Intrinsics, bitcast, SimpleVector, svec
+using Core.Intrinsics: pointerref, pointerset
 using FunctionWrappers: FunctionWrapper
 using LinearAlgebra.BLAS: @blasfunc, BlasInt, trsm!
+using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!, potrf!, potrs!
 
 include("tracing.jl")
 include("acceleration.jl")
