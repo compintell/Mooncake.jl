@@ -132,7 +132,7 @@ function flag_concerning_performance(ratios)
     end
 end
 
-const perf_group = GET(ENV, "PERF_GROUP", nothing)
+const perf_group = get(ENV, "PERF_GROUP", nothing)
 
 if perf_group == "hand_written"
     flag_concerning_performance(benchmark_hand_written_rrules!!(Xoshiro))
