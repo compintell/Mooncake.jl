@@ -58,7 +58,8 @@ using .TestUtils:
 using .TestResources:
     TypeStableMutableStruct,
     StructFoo,
-    MutableFoo
+    MutableFoo,
+    TEST_FUNCTIONS
 
 # The integration tests take ages to run, so we split them up. CI sets up two jobs -- the
 # "basic" group runs test that, when passed, _ought_ to imply correctness of the entire

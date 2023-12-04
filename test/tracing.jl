@@ -1,5 +1,5 @@
 @testset "tracing" begin
-    @testset for (interface_only, f, x...) in TestResources.TEST_FUNCTIONS
+    @testset for (interface_only, _, f, x...) in TestResources.TEST_FUNCTIONS
         val, tape = trace(f, x...; ctx=Taped.RMC())
         @test val ≈ f(x...)
         @test play!(tape, f, x...) ≈ f(x...)

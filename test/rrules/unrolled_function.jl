@@ -61,16 +61,14 @@
         @test tangent(_out) == output_tangent(inst)
         @test all(map(==, new_dargs, input_tangents(inst)))
     end
-    @testset "$f, $typeof(x)" for (interface_only, f, x...) in TestResources.TEST_FUNCTIONS
+    @testset "$f, $typeof(x)" for (interface_only, _, f, x...) in TEST_FUNCTIONS
         @info "$(map(typeof, (f, x...)))"
         test_taped_rrule!!(
             sr(123456), f, deepcopy(x)...; interface_only, perf_flag=:none, recursive=false
         )
-        test_taped_rrule!!(
-            sr(123), f, deepcopy(x)...; interface_only, perf_flag=:none, recursive=true
-        )
     end
-    @testset "acceleration $f" for (_, f, args...) in TestResources.TEST_FUNCTIONS
+    TestUtils.run_rrule!!_test_cases(StableRNG, Val(:unrolled_function))
+    @testset "acceleration $f" for (_, _, f, args...) in TEST_FUNCTIONS
 
         x = (f, deepcopy(args)...)
         x_x̄ = map(CoDual, x, map(zero_tangent, x))

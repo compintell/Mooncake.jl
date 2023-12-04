@@ -364,3 +364,7 @@ function Umlaut.record_primitive!(tape::Tape{APC}, v_fargs...)
 end
 
 generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:unrolled_function}) = Any[], Any[]
+
+function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:unrolled_function})
+    return TestResources.TEST_FUNCTIONS, Any[]
+end
