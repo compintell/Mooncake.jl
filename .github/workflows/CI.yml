@@ -6,7 +6,7 @@ on:
     tags: ['*']
   pull_request:
   schedule:
-    - cron:  '28 0 * * *'
+    - cron:  '28 0,6,12,18 * * *'
 concurrency:
   # Skip intermediate builds: always.
   # Cancel intermediate builds: only if it is a pull request build.
