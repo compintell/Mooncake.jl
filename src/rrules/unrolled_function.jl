@@ -341,20 +341,18 @@ struct AllPrimitiveContext <: TapedContext end
 const APC = AllPrimitiveContext
 
 # All things are primitives.
-isprimitive(::APC, @nospecialize(x...)) = true
-isprimitive(::APC, ::typeof(Umlaut.__new__), @nospecialize(T), @nospecialize(x...)) = true
-isprimitive(::APC, ::typeof(Umlaut.__foreigncall__), @nospecialize(x...)) = true
-isprimitive(::APC, ::typeof(__intrinsic__), @nospecialize(args...)) = true
-isprimitive(::APC, ::Core.Builtin, @nospecialize(x...)) = true
+isprimitive(::APC, x...) = true
+isprimitive(::APC, ::typeof(Umlaut.__new__), T, x...) = true
+isprimitive(::APC, ::typeof(Umlaut.__foreigncall__), x...) = true
+isprimitive(::APC, ::typeof(__intrinsic__), args...) = true
+isprimitive(::APC, ::Core.Builtin, x...) = true
 
 function trace_recursive_tape!!(f, args...)
-    @nospecialize f, args
     val, tape = Umlaut.trace(f, args...; ctx=APC())
     return val, UnrolledFunction(tape)
 end
 
 function Umlaut.record_primitive!(tape::Tape{APC}, v_fargs...)
-    @nospecialize tape, v_fargs
     line = get(tape.meta, :line, nothing)
     fargs = Any[v isa Variable ? v.op.val : v for v in v_fargs]
     if isprimitive(RMC(), fargs...)
