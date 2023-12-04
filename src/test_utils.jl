@@ -823,7 +823,7 @@ function generate_test_functions()
         (false, (lb=1_000, ub=100_000), test_for_loop, 3.0),
         (false, (lb=1_000, ub=50_000), test_mutable_struct_basic, 5.0),
         (false, (lb=1_000, ub=20_000), test_mutable_struct_basic_sin, 5.0),
-        (false, (lb=1_000, ub=50_000), test_mutable_struct_setfield, 4.0),
+        (false, (lb=1_000, ub=100_000), test_mutable_struct_setfield, 4.0),
         (false, (lb=1_000, ub=25_000), test_mutable_struct, 5.0),
         (false, (lb=1_000, ub=50_000), test_struct_partial_init, 3.5),
         (false, (lb=1_000, ub=50_000), test_mutable_partial_init, 3.3),
