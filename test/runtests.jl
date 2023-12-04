@@ -15,6 +15,7 @@ using
     Umlaut
 
 using Base: unsafe_load, pointer_from_objref
+using Base.Iterators: product
 using Core: bitcast, svec
 using FunctionWrappers: FunctionWrapper
 
