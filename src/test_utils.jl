@@ -830,7 +830,8 @@ function generate_test_functions()
         (
             false,
             (lb=100_000, ub=10_000_000),
-            test_naive_mat_mul!, randn(2, 1), randn(2, 1), randn(1, 1),
+            # test_naive_mat_mul!, randn(2, 1), randn(2, 1), randn(1, 1),
+            test_naive_mat_mul!, randn(10, 5), randn(10, 3), randn(3, 5),
         ),
         (
             false,
