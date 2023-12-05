@@ -22,6 +22,7 @@ using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!, potrf!, potrs!
 
 include("tracing.jl")
 include("acceleration.jl")
+include("interpreted_function.jl")
 include("tangents.jl")
 include("reverse_mode_ad.jl")
 include("test_utils.jl")
