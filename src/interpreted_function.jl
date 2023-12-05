@@ -116,9 +116,10 @@ struct PhiNodeInst{Tedges<:Tuple, Tvalues<:Tuple, Tval_slot<:SlotRef}
 end
 
 function (inst::PhiNodeInst{A, B, C})(prev_block::Int, current_block::Int) where {A, B, C}
+    vals = map(extract_arg, inst.values) # extract all for type stability
     for n in eachindex(inst.edges)
         if inst.edges[n] == prev_block
-            inst.val_slot[] = extract_arg(inst.values[n])
+            inst.val_slot[] = vals[n]
         end
     end
     return 0
