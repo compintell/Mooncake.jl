@@ -501,6 +501,9 @@
     )
         rng = StableRNG(123456)
         @info map(typeof, (f, x...))
+        # sig = Tuple{typeof(f), map(typeof, x)...}
+        # in_f = Taped.InterpretedFunction(sig)
+        # @test in_f(x...) == f(x...)
         test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only, perf_flag=:none)
     end
 end

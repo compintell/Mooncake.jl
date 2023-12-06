@@ -5,7 +5,7 @@ mutable struct SlotRef{T}
 end
 
 @inline Base.getindex(x::SlotRef) = x.x
-@noinline function Base.setindex!(x::SlotRef, val)
+@inline function Base.setindex!(x::SlotRef, val)
     setfield!(x, :x, val)
     return x.x
 end
@@ -19,6 +19,34 @@ struct InterpretedFunction{sig, Treturn_slot<:SlotRef, Targ_slots, Tslots}
     slots::Tslots
     instructions::Vector{Core.OpaqueClosure{Tuple{Int, Int}, Int}}
     bb_starts::Vector{Int}
+end
+
+mutable struct LazyInterpretedFunction{sig, Treturn_slot, Targ_slots, Tslots}
+    f::InterpretedFunction{sig, Treturn_slot, Targ_slots, Tslots}
+    LazyInterpretedFunction{sig, A, B, C}() where {sig, A, B, C} = new{sig, A, B, C}()
+end
+
+function LazyInterpretedFunction(sig::Type{<:Tuple})
+    ir, Treturn = Base.code_ircode_by_type(sig)[1]
+
+    # Construct return slot.
+    return_slot = SlotRef{Treturn}()
+    Treturn_slot = SlotRef{_robust_typeof(return_slot)}
+
+    # Construct argument reference references.
+    arg_slots = map(T -> SlotRef{_get_type(T)}(), (ir.argtypes..., ))
+    Targ_slots = Core.Typeof(arg_slots)
+
+    # Extract slot types.
+    slots = map(T -> SlotRef{_get_type(T)}(), tuple(ir.stmts.type...))
+    Tslots = Core.Typeof(slots)
+
+    return LazyInterpretedFunction{sig, Treturn_slot, Targ_slots, Tslots}()
+end
+
+function (f::LazyInterpretedFunction{sig})(args...) where {sig}
+    !isdefined(f, :f) && setfield!(f, :f, InterpretedFunction(sig))
+    return f.f(args...)
 end
 
 struct DelayedInterpretedFunction{F}
@@ -115,7 +143,7 @@ struct PhiNodeInst{Tedges<:Tuple, Tvalues<:Tuple, Tval_slot<:SlotRef}
     val_slot::Tval_slot
 end
 
-function (inst::PhiNodeInst{A, B, C})(prev_block::Int, current_block::Int) where {A, B, C}
+function (inst::PhiNodeInst)(prev_block::Int, ::Int)
     vals = map(extract_arg, inst.values) # extract all for type stability
     for n in eachindex(inst.edges)
         if inst.edges[n] == prev_block
@@ -159,7 +187,7 @@ is_primitive(::Type{Tuple{typeof(cos), Float64}}) = true
 is_primitive(::Type{<:Tuple{Core.Builtin, Vararg{Any, N}}}) where {N} = true
 
 _robust_typeof(x::T) where {T} = T
-@noinline _robust_typeof(::Type{T}) where {T} = Type{T}
+_robust_typeof(::Type{T}) where {T} = Type{T}
 _robust_typeof(x::SlotRef{T}) where {T} = T
 
 _other_robust_typeof(x::T) where {T} = T
@@ -183,28 +211,43 @@ _get_input(x::Core.SSAValue, slots, arg_slots) = slots[x.id]
 _get_input(x::Core.Argument, slots, arg_slots) = arg_slots[x.n]
 _get_input(x, _, _) = x
 
-function _make_oc(inst)
+function _make_opaque_closure(inst, sig)
     new_ir = get_ir(inst)
-    # display(inst)
-    # display(new_ir)
-    # println()
     empty!(new_ir.argtypes)
     push!(new_ir.argtypes, Core.Typeof(inst))
     push!(new_ir.argtypes, Int)
     push!(new_ir.argtypes, Int)
-    return Core.OpaqueClosure(new_ir, inst)::Core.OpaqueClosure{Tuple{Int, Int}, Int}
+    oc = Core.OpaqueClosure(new_ir, inst)
+    if !(oc isa Core.OpaqueClosure{Tuple{Int, Int}, Int})
+        display(sig)
+        display(inst)
+        display(new_ir)
+        println()
+    end
+    return oc::Core.OpaqueClosure{Tuple{Int, Int}, Int}
 end
 
-function get_tuple_type(x::Tuple)
-    return Tuple{map(_other_robust_typeof, x)...}
+get_tuple_type(x::Tuple) = Tuple{map(_other_robust_typeof, x)...}
+
+function rewrite_special_cases(st::Expr)
+    ex = Meta.isexpr(st, :(=)) ? st.args[2] : st
+    if Meta.isexpr(ex, :boundscheck)
+        ex = true
+    end
+    if ex isa Expr
+        ex.args = [Meta.isexpr(arg, :boundscheck) ? true : arg for arg in ex.args]
+    end
+    return Meta.isexpr(st, :(=)) ? Expr(:(=), st.args[1], ex) : ex
+end
+rewrite_special_cases(st) = st
+function rewrite_special_cases(st::Core.GotoIfNot)
+    return Core.GotoIfNot(rewrite_special_cases(st.cond), st.dest)
 end
 
 function InterpretedFunction(sig::Type{<:Tuple})
 
-    # Grab code associated to this function. If there's no code (e.g. because it's a
-    # builtin, or an intrinsic) then throw an informative error message.
+    # Grab code associated to this function.
     ir, Treturn = Base.code_ircode_by_type(sig)[1]
-    ir isa Method && throw(error("No ir for $sig."))
 
     # Construct return slot.
     return_slot = SlotRef{Treturn}()
@@ -215,13 +258,13 @@ function InterpretedFunction(sig::Type{<:Tuple})
     Targ_slots = Core.Typeof(arg_slots)
 
     # Extract slot types.
-    slot_types = tuple(ir.stmts.type...)
-    slots = map(T -> SlotRef{_get_type(T)}(), slot_types)
+    slots = map(T -> SlotRef{_get_type(T)}(), tuple(ir.stmts.type...))
     Tslots = Core.Typeof(slots)
 
     # Construct instructions (we should ideally do this recursively, but can't yet).
     instructions = map(eachindex(slots)) do n
         ir_inst = ir.stmts.inst[n]
+        ir_inst = rewrite_special_cases(ir_inst)
 
         is_invoke = Meta.isexpr(ir_inst, :invoke)
         inst = if is_invoke || Meta.isexpr(ir_inst, :call)
@@ -245,7 +288,7 @@ function InterpretedFunction(sig::Type{<:Tuple})
             fn_sig = Tuple{typeof(fn), map(_robust_typeof, arg_refs)...}
             if !is_primitive(fn_sig)
                 if isconcretetype(fn_sig)
-                    fn = InterpretedFunction(fn_sig)
+                    fn = LazyInterpretedFunction(fn_sig)
                 else
                     fn = DelayedInterpretedFunction(fn)
                 end
@@ -281,21 +324,21 @@ function InterpretedFunction(sig::Type{<:Tuple})
         elseif ir_inst isa Core.PiNode
             input_ref = _get_input(ir_inst.val, slots, arg_slots)
             PiNodeInst(input_ref, slots[n])
+        elseif ir_inst isa GlobalRef
+            ConstLikeInst(_get_globalref(ir_inst), slots[n])
         else
-            ConstLikeInst(_get_input(ir_inst, slots, arg_slots), slots[n])
-            # println("IR in which error is found:")
-            # display(sig)
-            # display(ir)
-            # println()
-            # throw(error("unhandled instruction $ir_inst")) 
+            println("IR in which error is found:")
+            display(sig)
+            display(ir)
+            println()
+            throw(error("unhandled instruction $ir_inst, with type $(typeof(ir_inst))")) 
         end
-        return _make_oc(inst)
+        return _make_opaque_closure(inst, sig)
     end
 
-    # Extract the starting location of each basic block from the CFG.
-    bb_starts = vcat(1, ir.cfg.index)
+    # Extract the starting location of each basic block from the CFG and build IF.
     return InterpretedFunction{sig, Treturn_slot, Targ_slots, Tslots}(
-        return_slot, arg_slots, slots, instructions, bb_starts,
+        return_slot, arg_slots, slots, instructions, vcat(1, ir.cfg.index)
     )
 end
 
@@ -328,9 +371,6 @@ end
     )
 end
 
-@noinline my_add(a, b) = a + b
-Taped.is_primitive(::Type{Tuple{typeof(my_add), Float64, Float64}}) = true
-
 @noinline function foo(x)
     y = sin(x)
     z = cos(y)
@@ -342,7 +382,7 @@ function bar(x, y)
     x2 = cos(y)
     x3 = foo(x2)
     x4 = foo(x3)
-    x5 = my_add(x2, x4)
+    x5 = x2 + x4
     return x5
 end
 
@@ -372,6 +412,13 @@ function pi_node_tester(y::Ref{Any})
     return isa(x, Int) ? sin(x) : cos(x)
 end
 
+function avoid_throwing_path_tester(x)
+    if x < 0
+        Base.throw_boundserror(1:5, 6)
+    end
+    return sin(x)
+end
+
 # Performance notes:
 # 1. as ever, intrinsics require real care.
 # 2. passing only pointers, and loading / storing, seems to solve performance problems.
@@ -381,3 +428,5 @@ end
 #   dynamic type in order to do dispatch in the general case. This just means deferring the
 #   construction of `InterpretedFunction`s until runtime in the case that the line is not
 #   type stable. Simply use `isconcretetype` to check.
+# 5. Need special handling for throw -- it doesn't play nicely with my closures.
+#   Alterntaively, I could construct the OpaqueClosures lazily.

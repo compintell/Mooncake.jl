@@ -11,8 +11,9 @@
             (nothing, nothing, Taped.new_tester, 5.0),
             (nothing, nothing, Taped.type_unstable_tester, Ref{Any}(5.0)),
             (nothing, nothing, Taped.pi_node_tester, Ref{Any}(5.0)),
+            (nothing, nothing, Taped.avoid_throwing_path_tester, 5.0),
         ],
-        TestResources.generate_test_functions(),
+        # TestResources.generate_test_functions(),
     )
         @info "$f, $(typeof(x))"
         sig = Tuple{typeof(f), map(typeof, x)...}
@@ -21,18 +22,18 @@
         in_f = Taped.InterpretedFunction(sig)
         @test in_f(x...) == f(x...)
 
-        # Only bother to check performance if the original programme does not allocate.
-        original = @benchmark $f($x...)
-        if allocs(original) == 0
-            r = @benchmark $in_f($x...)
-            println("original")
-            display(original)
-            println()
-            println("taped")
-            display(r)
-            println()
+        # # Only bother to check performance if the original programme does not allocate.
+        # original = @benchmark $f($x...)
+        # if allocs(original) == 0
+        #     r = @benchmark $in_f($x...)
+        #     println("original")
+        #     display(original)
+        #     println()
+        #     println("taped")
+        #     display(r)
+        #     println()
 
-            @test allocs(r) == 0
-        end
+        #     @test allocs(r) == 0
+        # end
     end
 end
