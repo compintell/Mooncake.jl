@@ -15,6 +15,7 @@ using Base:
     arrayset
 using Base.Iterators: product
 using Core: Intrinsics, bitcast, SimpleVector, svec
+using Core.Compiler: IRCode
 using Core.Intrinsics: pointerref, pointerset
 using FunctionWrappers: FunctionWrapper
 using LinearAlgebra.BLAS: @blasfunc, BlasInt, trsm!

@@ -8,12 +8,14 @@
             (nothing, nothing, Taped.const_tester, ),
             (nothing, nothing, Taped.intrinsic_tester, 5.0),
             (nothing, nothing, Taped.goto_tester, 5.0),
-            (nothing, nothing, Taped.new_tester, 5.0),
+            (nothing, nothing, Taped.new_tester, 5.0, :hello),
+            (nothing, nothing, Taped.new_2_tester, 4.0),
             (nothing, nothing, Taped.type_unstable_tester, Ref{Any}(5.0)),
             (nothing, nothing, Taped.pi_node_tester, Ref{Any}(5.0)),
             (nothing, nothing, Taped.avoid_throwing_path_tester, 5.0),
+            (nothing, nothing, Taped.foreigncall_tester, 5.0),
         ],
-        # TestResources.generate_test_functions(),
+        TestResources.generate_test_functions(),
     )
         @info "$f, $(typeof(x))"
         sig = Tuple{typeof(f), map(typeof, x)...}
@@ -21,6 +23,7 @@
         # println()
         in_f = Taped.InterpretedFunction(sig)
         @test in_f(x...) == f(x...)
+        @test in_f(x...) == f(x...) # run twice to check for non-determinism.
 
         # # Only bother to check performance if the original programme does not allocate.
         # original = @benchmark $f($x...)
