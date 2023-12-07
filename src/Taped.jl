@@ -1,8 +1,10 @@
 module Taped
 
 using
+    BenchmarkTools,
     DiffRules,
     FunctionWrappers,
+    InteractiveUtils,
     LinearAlgebra,
     Random,
     Setfield,
@@ -13,6 +15,7 @@ import Umlaut: isprimitive, Frame, Tracer, __foreigncall__, __to_tuple__, __new_
 using Base:
     IEEEFloat, unsafe_convert, unsafe_pointer_to_objref, pointer_from_objref, arrayref,
     arrayset
+using Base.Experimental: @opaque
 using Base.Iterators: product
 using Core: Intrinsics, bitcast, SimpleVector, svec
 using Core.Compiler: IRCode
@@ -23,10 +26,11 @@ using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!, potrf!, potrs!
 
 include("tracing.jl")
 include("acceleration.jl")
-include("interpreted_function.jl")
 include("tangents.jl")
 include("reverse_mode_ad.jl")
 include("test_utils.jl")
+
+include("interpreted_function.jl")
 
 include(joinpath("rrules", "avoiding_non_differentiable_code.jl"))
 include(joinpath("rrules", "blas.jl"))

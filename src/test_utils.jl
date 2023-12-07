@@ -268,8 +268,7 @@ end
 
 """
     test_rrule!!(
-        rng::AbstractRNG, x...;
-        interface_only=false, is_primitive=true, perf_flag::Symbol,
+        rng::AbstractRNG, x...; interface_only=false, is_primitive=true, perf_flag::Symbol
     )
 
 Run standardised tests on the `rrule!!` for `x`.

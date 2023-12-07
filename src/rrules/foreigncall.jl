@@ -418,6 +418,9 @@ for name in [
     @eval function rrule!!(::CoDual{typeof(__foreigncall__)}, ::CoDual{Val{$name}}, args...)
         unexepcted_foreigncall_error($name)
     end
+    @eval function rrule!!(::CoDual{typeof(_foreigncall_)}, ::CoDual{Val{$name}}, args...)
+        unexepcted_foreigncall_error($name)
+    end
 end
 
 
