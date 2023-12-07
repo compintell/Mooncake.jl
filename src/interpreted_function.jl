@@ -8,8 +8,8 @@ mutable struct SlotRef{T}
     SlotRef(x::T) where {T} = new{T}(x)
 end
 
-Base.getindex(x::SlotRef) = x.x
-function Base.setindex!(x::SlotRef, val)
+@inline Base.getindex(x::SlotRef) = getfield(x, :x)
+@inline function Base.setindex!(x::SlotRef, val)
     setfield!(x, :x, val)
     return x.x
 end
@@ -22,7 +22,11 @@ extract_codual(x::T) where {T} = uninit_codual(x)
 
 Base.isassigned(x::SlotRef) = isdefined(x, :x)
 
-Base.eltype(x::SlotRef{T}) where {T} = T
+Base.eltype(::SlotRef{T}) where {T} = T
+
+const IFInstruction = Core.OpaqueClosure{Tuple{Int, Int}, Int}
+const FwdsIFInstruction = IFInstruction
+const BwdsIFInstruction = Core.OpaqueClosure{Tuple{Int}, Int}
 
 #
 # Core.ReturnNode
@@ -44,9 +48,21 @@ function build_instruction(ir_inst::ReturnNode, ::Int, arg_slots, slots, return_
     return ReturnInst(return_slot, _get_input(ir_inst.val, slots, arg_slots))
 end
 
+# function run_profiler(__rrule!!, df, dx)
+#     foreach(1:10_000_000) do n
+#         out, pb!! = __rrule!!(df, dx...)
+#         pb!!(tangent(out), tangent(df), map(tangent, dx)...)
+#     end
+# end
+
+function to_benchmark(__rrule!!, df, dx)
+    out, pb!! = __rrule!!(df, dx...)
+    pb!!(tangent(out), tangent(df), map(tangent, dx)...)
+end
+
 function build_coinstructions(ir_inst::ReturnNode, n::Int, arg_slots, slots, return_slot)
 
-    slot_to_return = _get_input(ir_inst.val, slots, arg_slots)
+    _slot_to_return = _get_input(ir_inst.val, slots, arg_slots)
 
     function __barrier(slot_to_return)
         # Construct operation to run the forwards-pass.
@@ -54,7 +70,7 @@ function build_coinstructions(ir_inst::ReturnNode, n::Int, arg_slots, slots, ret
             return_slot[] = extract_codual(slot_to_return)
             return -1
         end
-        if !(run_fwds_pass isa OC{Tuple{Int, Int}, Int})
+        if !(run_fwds_pass isa FwdsIFInstruction)
             display(Base.code_typed(run_fwds_pass, Tuple{Int, Int})[1][1])
             println()
         end
@@ -63,23 +79,25 @@ function build_coinstructions(ir_inst::ReturnNode, n::Int, arg_slots, slots, ret
         # println()
 
         # Construct operation to run the reverse-pass.
-        run_rvs_pass = @opaque function ()
-            if slot_to_return isa SlotRef
+        run_rvs_pass = if slot_to_return isa SlotRef
+            @opaque  function (j::Int)
                 slot_to_return[] = return_slot[]
+                return j
             end
-            return nothing
+        else
+            @opaque (j::Int) -> j
         end
-        if !(run_rvs_pass isa OC{Tuple{}, Nothing})
+        if !(run_rvs_pass isa BwdsIFInstruction)
             display(Base.code_typed(run_fwds_pass, Tuple{Int, Int}; optimize=true)[1][1])
             println()
         end
-        # println("ReturnNode run_fwds_pass")
+        # println("ReturnNode run_rvs_pass")
         # display(@benchmark $run_rvs_pass())
         # println()
         return run_fwds_pass, run_rvs_pass
     end
 
-    return __barrier(slot_to_return)
+    return __barrier(_slot_to_return)
 end
 
 #
@@ -104,14 +122,12 @@ function build_coinstructions(ir_inst::GotoNode, n::Int, arg_slots, slots, retur
     dest = ir_inst.label
 
     # Construct operation to run the forwards-pass.
-    run_fwds_pass::OC{Tuple{Int, Int}, Int} = @opaque function (a::Int, b::Int)
+    run_fwds_pass::FwdsIFInstruction = @opaque function (a::Int, b::Int)
         return dest
     end
 
     # Construct operation to run the reverse-pass.
-    run_rvs_pass::OC{Tuple{}, Nothing} = @opaque function ()
-        return nothing
-    end
+    run_rvs_pass::BwdsIFInstruction = @opaque (j::Int) -> j
 
     return run_fwds_pass, run_rvs_pass
 end
@@ -142,14 +158,12 @@ function build_coinstructions(ir_inst::GotoIfNot, n::Int, arg_slots, slots, retu
     dest = ir_inst.dest
 
     # Construct operation to run the forwards-pass.
-    run_fwds_pass::OC{Tuple{Int, Int}, Int} = @opaque function (a::Int, current_block::Int)
+    run_fwds_pass::FwdsIFInstruction = @opaque function (a::Int, current_block::Int)
         return primal(extract_codual(cond_slot)) ? current_block + 1 : dest
     end
 
     # Construct operation to run the reverse-pass.
-    run_rvs_pass::OC{Tuple{}, Nothing} = @opaque function ()
-        return nothing
-    end
+    run_rvs_pass::BwdsIFInstruction = @opaque (j::Int) -> j
 
     return run_fwds_pass, run_rvs_pass
 end
@@ -209,7 +223,7 @@ function build_coinstructions(ir_inst::Core.PhiNode, n::Int, arg_slots, slots, r
     prev_block_stack = Vector{Int}(undef, 0)
 
     # Construct operation to run the forwards-pass.
-    run_fwds_pass::OC{Tuple{Int, Int}, Int} = @opaque function (prev_block::Int, b::Int)
+    run_fwds_pass::FwdsIFInstruction = @opaque function (prev_block::Int, b::Int)
         push!(prev_block_stack, prev_block)
         for n in eachindex(edges)
             if edges[n] == prev_block
@@ -223,7 +237,7 @@ function build_coinstructions(ir_inst::Core.PhiNode, n::Int, arg_slots, slots, r
     end
 
     # Construct operation to run the reverse-pass.
-    run_rvs_pass::OC{Tuple{}, Nothing} = @opaque function ()
+    run_rvs_pass::BwdsIFInstruction = @opaque function (j::Int)
         prev_block = pop!(prev_block_stack)
         for n in eachindex(edges)
             if edges[n] == prev_block
@@ -235,7 +249,7 @@ function build_coinstructions(ir_inst::Core.PhiNode, n::Int, arg_slots, slots, r
                 end
             end
         end
-        return nothing
+        return j
     end
 
     return run_fwds_pass, run_rvs_pass
@@ -435,13 +449,14 @@ function build_coinstructions(ir_inst::Expr, n::Int, arg_slots, slots, return_sl
         else
             pb_stack = Vector{Any}(undef, 0)
         end
+        sizehint!(pb_stack, 100)
         old_vals = Vector{eltype(codual_val_ref)}(undef, 0)
-
+        sizehint!(old_vals, 100)
 
 
         function __barrier(fn, codual_val_ref, __rrule!!, old_vals, pb_stack)
-            # Construct operation to run the forwards-pass.
-            run_fwds_pass = @opaque function (a::Int, b::Int)
+
+            @noinline function ___fwds_pass(codual_val_ref, old_vals, fn, pb_stack)
                 if isassigned(codual_val_ref)
                     push!(old_vals, codual_val_ref[])
                 end
@@ -450,7 +465,12 @@ function build_coinstructions(ir_inst::Expr, n::Int, arg_slots, slots, return_sl
                 push!(pb_stack, pb!!)
                 return 0
             end
-            if !(run_fwds_pass isa OC{Tuple{Int, Int}, Int})
+
+            # Construct operation to run the forwards-pass.
+            run_fwds_pass = @opaque function (a::Int, b::Int)
+                ___fwds_pass(codual_val_ref, old_vals, fn, pb_stack)
+            end
+            if !(run_fwds_pass isa FwdsIFInstruction)
                 @warn "Unable to compiled forwards pass -- running to generate the error."
                 @show run_fwds_pass(5, 4)
             end
@@ -459,7 +479,7 @@ function build_coinstructions(ir_inst::Expr, n::Int, arg_slots, slots, return_sl
             # println()
 
             # Construct operation to run the reverse-pass.
-            run_rvs_pass = @opaque function ()
+            run_rvs_pass = @opaque function (j::Int)
                 dout = tangent(codual_val_ref[])
                 dargs = map(tangent, map(extract_codual, codual_arg_refs))
                 _, new_dargs... = pop!(pb_stack)(dout, tangent(fn), dargs...)
@@ -467,11 +487,11 @@ function build_coinstructions(ir_inst::Expr, n::Int, arg_slots, slots, return_sl
                 if !isempty(old_vals)
                     codual_val_ref[] = pop!(old_vals) # restore old state.
                 end
-                return nothing
+                return j
             end
-            if !(run_rvs_pass isa OC{Tuple{}, Nothing})
+            if !(run_rvs_pass isa BwdsIFInstruction)
                 @warn "Unable to compiled reverse pass -- running to generate the error."
-                @show run_reverse_pass(5, 4)
+                @show run_reverse_pass(5)
             end
             # println("CallInst run_rvs_pass")
             # display(@benchmark $run_fwds_pass(0, 0))
@@ -537,8 +557,6 @@ _get_input(x::GlobalRef, slots, arg_slots) = _get_globalref(x)
 _get_input(x::Core.SSAValue, slots, arg_slots) = slots[x.id]
 _get_input(x::Core.Argument, slots, arg_slots) = arg_slots[x.n]
 _get_input(x, _, _) = x
-
-const IFInstruction = Core.OpaqueClosure{Tuple{Int, Int}, Int}
 
 function _make_opaque_closure(inst, sig, n)
     oc = @opaque Tuple{Int, Int} (p, q) -> inst(p, q)
@@ -776,8 +794,7 @@ end
 tangent_type(::Type{<:InterpretedFunction}) = NoTangent
 
 
-const FwdsIFInstruction = IFInstruction
-const BwdsIFInstruction = Core.OpaqueClosure{Tuple{}, Nothing}
+
 
 # Should really just use the signature for this to be honest. This makes quite a lot of
 # sense -- it's entirely possible that I'm willing to assert that I know something about the
@@ -793,26 +810,26 @@ function build_rrule!!(f_in::InterpretedFunction{sig}) where {sig}
     fwds_instructions = Vector{FwdsIFInstruction}(undef, length(f_in.instructions))
     bwds_instructions = Vector{BwdsIFInstruction}(undef, length(f_in.instructions))
 
+    n_stack = Vector{Int}(undef, 1)
+    sizehint!(n_stack, 100)
+
     # Construct rrule!! using pre-allcoated memory.
-    function f_in_rrule!!(in_f::CoDual, args::CoDual...)
-        @nospecialize in_f, args
+    function f_in_rrule!!(in_f::CoDual, args::Vararg{CoDual, N}) where {N}
         load_args!(arg_slots, args)
+        in_f_primal = primal(in_f)
         prev_block = 0
         next_block = 0
         current_block = 1
         n = 1
-        n_stack = Vector{Int}(undef, 1)
+        j = 1
         n_stack[1] = n
-        instructions = primal(in_f).instructions
+        instructions = in_f_primal.instructions
         while next_block != -1
-            # @show prev_block, next_block, current_block, n
             if !isassigned(instructions, n) 
-                instructions[n] = build_instruction(primal(in_f), n)
+                instructions[n] = build_instruction(in_f_primal, n)
             end
             if !isassigned(fwds_instructions, n)
-                ir = primal(in_f).ir
-                ir_inst = rewrite_special_cases(ir, ir.stmts.inst[n])
-                fwds, bwds = build_coinstructions(ir_inst, n, arg_slots, slots, return_slot)
+                fwds, bwds = generate_instructions(in_f, arg_slots, slots, return_slot, n)
                 fwds_instructions[n] = fwds
                 bwds_instructions[n] = bwds
             end
@@ -820,48 +837,69 @@ function build_rrule!!(f_in::InterpretedFunction{sig}) where {sig}
             if next_block == 0
                 n += 1
             elseif next_block > 0
-                n = primal(in_f).bb_starts[next_block]
+                n = in_f_primal.bb_starts[next_block]
                 prev_block = current_block
                 current_block = next_block
                 next_block = 0
             end
-            push!(n_stack, n)
+            j += 1
+            if length(n_stack) >= j
+                n_stack[j] = n
+            else
+                push!(n_stack, n)
+            end
         end
 
-        function interpreted_function_pb!!(dout, ::NoTangent, dargs...)
-
-            replace_tangent!(return_slot, dout)
-
-            # Run the instructions in reverse. Present assumes linear instruction ordering.
-            while !isempty(n_stack)
-                j = pop!(n_stack)
-                bwds_instructions[j]()
-            end
-
-            # Increment and return.
-            new_dargs = map(dargs, arg_slots[2:end]) do darg, arg_slot
-                return increment!!(darg, tangent(arg_slot[]))
-            end
-            return NoTangent(), new_dargs...
-        end
+        interpreted_function_pb!! = InterpretedFunctionPb(
+            j, bwds_instructions, return_slot, n_stack, arg_slots
+        )
         return return_slot[], interpreted_function_pb!!
     end
     return f_in_rrule!!
+end
+
+struct InterpretedFunctionPb{Treturn_slot, Targ_slots, Tbwds_f}
+    j::Int
+    bwds_instructions::Tbwds_f
+    return_slot::Treturn_slot
+    n_stack::Vector{Int}
+    arg_slots::Targ_slots
+end
+
+function (if_pb!!::InterpretedFunctionPb)(dout, ::NoTangent, dargs::Vararg{Any, N}) where {N}
+    bwds_instructions = if_pb!!.bwds_instructions
+    return_slot = if_pb!!.return_slot
+    n_stack = if_pb!!.n_stack
+    arg_slots = if_pb!!.arg_slots
+
+    replace_tangent!(return_slot, dout)
+
+    # Run the instructions in reverse. Present assumes linear instruction ordering.
+    for i in reverse(1:if_pb!!.j)
+        inst = bwds_instructions[n_stack[i]]
+        inst(i)
+    end
+
+    # Increment and return.
+    new_dargs = map(dargs, arg_slots[2:end]) do darg, arg_slot
+        return increment!!(darg, tangent(arg_slot[]))
+    end
+    return NoTangent(), new_dargs...
+end
+
+
+const __Tinst = Tuple{FwdsIFInstruction, BwdsIFInstruction}
+
+@noinline function generate_instructions(in_f, arg_slots, slots, return_slot, n)::__Tinst
+    ir = primal(in_f).ir
+    ir_inst = rewrite_special_cases(ir, ir.stmts.inst[n])
+    return build_coinstructions(ir_inst, n, arg_slots, slots, return_slot)
 end
 
 # Slow implementation, but useful for testing correctness.
 function rrule!!(f_in::CoDual{<:InterpretedFunction}, args::CoDual...)
     return build_rrule!!(primal(f_in))(f_in, args...)
 end
-
-
-
-
-
-
-
-
-
 
 #
 # Test cases
