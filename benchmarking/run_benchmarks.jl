@@ -63,6 +63,7 @@ function benchmark_hand_written_rrules!!(rng_ctor)
         :lapack,
         :low_level_maths,
         :misc,
+        :new,
         :umlaut_internals_rules,
         :unrolled_function
     ]) do s
@@ -101,6 +102,7 @@ function benchmark_derived_rrules!!(rng_ctor)
         # :lapack,
         # :low_level_maths,
         # :misc,
+        # :new,
         # :umlaut_internals_rules,
         :unrolled_function
     ]) do s

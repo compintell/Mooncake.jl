@@ -40,6 +40,7 @@ include(joinpath("rrules", "iddict.jl"))
 include(joinpath("rrules", "lapack.jl"))
 include(joinpath("rrules", "low_level_maths.jl"))
 include(joinpath("rrules", "misc.jl"))
+include(joinpath("rrules", "new.jl"))
 include(joinpath("rrules", "umlaut_internals_rules.jl"))
 include(joinpath("rrules", "unrolled_function.jl"))
 

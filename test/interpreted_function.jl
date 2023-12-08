@@ -1,7 +1,3 @@
-
-
-# REFACTOR NEW IMPLEMENTATION TO AVOID HAVING AN EXTRA SPECIAL CASE -- IT SHOULD BE
-# POSSIBLE TO DO IT IN A WAY THAT IS PERFORMANT NOW THAT I UNDERSTAND WHAT IS GOING ON! 
 @testset "interpreted_function" begin
     # nothings inserted for consistency with generate_test_functions.
     @testset "$f" for (a, b, f, x...) in vcat(
@@ -12,12 +8,12 @@
             (nothing, nothing, Taped.const_tester, ),
             (nothing, nothing, Taped.intrinsic_tester, 5.0),
             (nothing, nothing, Taped.goto_tester, 5.0),
-            # (nothing, nothing, Taped.new_tester, 5.0, :hello),
-            # (nothing, nothing, Taped.new_2_tester, 4.0),
+            (nothing, nothing, Taped.new_tester, 5.0, :hello),
+            (nothing, nothing, Taped.new_2_tester, 4.0),
             # (nothing, nothing, Taped.type_unstable_tester, Ref{Any}(5.0)),
             # (nothing, nothing, Taped.pi_node_tester, Ref{Any}(5.0)),
-            # (nothing, nothing, Taped.avoid_throwing_path_tester, 5.0),
-            # (nothing, nothing, Taped.foreigncall_tester, 5.0),
+            (nothing, nothing, Taped.avoid_throwing_path_tester, 5.0),
+            (nothing, nothing, Taped.foreigncall_tester, 5.0),
         ],
         # TestResources.generate_test_functions(),
     )
@@ -35,6 +31,7 @@
             perf_flag=:none, interface_only=false, is_primitive=false,
         )
 
+        # rng = Xoshiro(123456)
         # test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only=false, perf_flag=:none)
 
         # # Only bother to check performance if the original programme does not allocate.
