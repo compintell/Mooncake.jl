@@ -23,14 +23,13 @@
     )
         @info "$f, $(typeof(x))"
         sig = Tuple{typeof(f), map(typeof, x)...}
-
-        # display(Base.code_ircode_by_type(sig)[1][1])
-        # println()
         in_f = Taped.InterpretedFunction(sig)
+
+        # Check primal.
         @test in_f(x...) == f(x...)
         @test in_f(x...) == f(x...) # run twice to check for non-determinism.
 
-        rng = Xoshiro(123456)
+        # Check gradient.
         TestUtils.test_rrule!!(
             Xoshiro(123456), in_f, x...;
             perf_flag=:none, interface_only=false, is_primitive=false,
