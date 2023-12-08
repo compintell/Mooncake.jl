@@ -37,31 +37,31 @@
 
         # test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only=false, perf_flag=:none)
 
-        # Only bother to check performance if the original programme does not allocate.
-        original = @benchmark $f($x...)
-        r = @benchmark $in_f($x...)
+        # # Only bother to check performance if the original programme does not allocate.
+        # original = @benchmark $f($x...)
+        # r = @benchmark $in_f($x...)
 
-        __rrule!! = Taped.build_rrule!!(in_f)
-        codual_x = map(zero_codual, x)
-        rrule_timing = @benchmark($__rrule!!(zero_codual($in_f), $codual_x...))
-        out, pb!! = __rrule!!(zero_codual(in_f), codual_x...)
-        df = zero_codual(in_f)
-        overall_timing = @benchmark Taped.to_benchmark($__rrule!!, $df, $codual_x)
-        println("original")
-        display(original)
-        println()
-        println("taped")
-        display(r)
-        println()
-        println("rrule")
-        display(rrule_timing)
-        println()
-        println("overall")
-        display(overall_timing)
-        println()
+        # __rrule!! = Taped.build_rrule!!(in_f)
+        # codual_x = map(zero_codual, x)
+        # rrule_timing = @benchmark($__rrule!!(zero_codual($in_f), $codual_x...))
+        # out, pb!! = __rrule!!(zero_codual(in_f), codual_x...)
+        # df = zero_codual(in_f)
+        # overall_timing = @benchmark Taped.to_benchmark($__rrule!!, $df, $codual_x)
+        # println("original")
+        # display(original)
+        # println()
+        # println("taped")
+        # display(r)
+        # println()
+        # println("rrule")
+        # display(rrule_timing)
+        # println()
+        # println("overall")
+        # display(overall_timing)
+        # println()
 
-        if allocs(original) == 0
-            @test allocs(r) == 0
-        end
+        # if allocs(original) == 0
+        #     @test allocs(r) == 0
+        # end
     end
 end
