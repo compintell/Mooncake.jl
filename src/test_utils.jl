@@ -1,7 +1,7 @@
 module TestUtils
 
 using JET, Random, Taped, Test, Umlaut
-using Taped: CoDual, NoTangent, rrule!!, is_init, zero_codual
+using Taped: CoDual, NoTangent, rrule!!, is_init, zero_codual, DefaultCtx
 
 has_equal_data(x::T, y::T; equal_undefs=true) where {T<:String} = x == y
 has_equal_data(x::Type, y::Type; equal_undefs=true) = x == y
@@ -171,7 +171,7 @@ rrule_output_type(::Type{Ty}) where {Ty} = Tuple{CoDual{Ty, tangent_type(Ty)}, A
 # Central definition of _typeof in case I need to specalise it for particular types.
 _typeof(x::T) where {T} = Core.Typeof(x)
 
-function test_rrule_interface(f_f̄, x_x̄...; is_primitive)
+function test_rrule_interface(f_f̄, x_x̄...; is_primitive, ctx)
     @nospecialize f_f̄ x_x̄
 
     # Pull out primals and run primal computation.
@@ -184,6 +184,9 @@ function test_rrule_interface(f_f̄, x_x̄...; is_primitive)
     # Verify that the function to which the rrule applies is considered a primitive.
     # It is not clear that this really belongs here to be frank.
     is_primitive && @test Umlaut.isprimitive(Taped.RMC(), f, deepcopy(x)...)
+    if is_primitive
+        @test Taped.is_primitive(ctx, Tuple{Core.Typeof(f), map(Core.Typeof, x)...})
+    end
 
     # Run the primal programme. Bail out early if this doesn't work.
     y = try
@@ -268,7 +271,11 @@ end
 
 """
     test_rrule!!(
-        rng::AbstractRNG, x...; interface_only=false, is_primitive=true, perf_flag::Symbol
+        rng::AbstractRNG, x...;
+        interface_only=false,
+        is_primitive=true,
+        perf_flag::Symbol,
+        ctx=DefaultCtx(),
     )
 
 Run standardised tests on the `rrule!!` for `x`.
@@ -280,7 +287,9 @@ though, in partcular `Ptr`s. In this case, the argument for which `randn_tangent
 readily defined should be a `CoDual` containing the primal, and a _manually_ constructed
 tangent field.
 """
-function test_rrule!!(rng, x...; interface_only=false, is_primitive=true, perf_flag::Symbol)
+function test_rrule!!(
+    rng, x...; interface_only=false, is_primitive=true, perf_flag::Symbol, ctx=DefaultCtx()
+)
     @nospecialize rng x
 
     # Generate random tangents for anything that is not already a CoDual.
@@ -288,7 +297,7 @@ function test_rrule!!(rng, x...; interface_only=false, is_primitive=true, perf_f
     x_x̄ = map(x -> x isa CoDual ? x : zero_codual(x), x)
 
     # Test that the interface is basically satisfied (checks types / memory addresses).
-    test_rrule_interface(x_x̄...; is_primitive)
+    test_rrule_interface(x_x̄...; is_primitive, ctx)
 
     # Test that answers are numerically correct / consistent.
     interface_only || test_rrule_numerical_correctness(rng, x_x̄...)
