@@ -19,6 +19,7 @@ end
     end
 end
 
+@is_primitive MinimalCtx Tuple{typeof(__new__), Type, Vararg}
 @generated function rrule!!(
     ::CoDual{typeof(__new__)}, ::CoDual{Type{P}}, xs::Vararg{Any, N}
 ) where {P, N}
@@ -36,16 +37,19 @@ end
 #
 
 isprimitive(::RMC, ::typeof(eltype), x) = true
+@is_primitive MinimalCtx Tuple{typeof(eltype), Any}
 function rrule!!(::CoDual{typeof(eltype)}, x)
     return CoDual(eltype(primal(x)), NoTangent()), NoPullback()
 end
 
 isprimitive(::RMC, ::typeof(Base.promote_op), x, S::Type...) = true
+@is_primitive MinimalCtx Tuple{typeof(Base.promote_op), Any, Vararg{Type}}
 function rrule!!(::CoDual{typeof(Base.promote_op)}, args...)
     return CoDual(Base.promote_op(map(primal, args)...), NoTangent()), NoPullback()
 end
 
 isprimitive(::RMC, ::Core.Typeof(String), args...) = true
+@is_primitive MinimalCtx Tuple{Type{String}, Vararg}
 function rrule!!(::CoDual{Core.Typeof(String)}, args::CoDual...)
     s = String(map(primal, args)...)
     return CoDual(s, zero_tangent(s)), NoPullback()
@@ -63,6 +67,7 @@ end
 
 # This is the thing that Umlaut uses in order to splat. Must be a primitive.
 isprimitive(::RMC, ::typeof(__to_tuple__), x) = true
+@is_primitive MinimalCtx Tuple{typeof(__to_tuple__), Any}
 function rrule!!(::CoDual{typeof(__to_tuple__)}, x::CoDual{<:Tuple})
     __to_tuple_pb!!(dy, df, dx) = df, increment!!(dx, dy)
     return x, __to_tuple_pb!!

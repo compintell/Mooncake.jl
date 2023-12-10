@@ -26,6 +26,7 @@ for name in [
     :(LinearAlgebra.chkstride1),
 ]
     @eval isprimitive(::RMC, ::Core.Typeof($name), args...) = true
+    @eval @is_primitive MinimalCtx Tuple{typeof($name), Vararg}
     @eval function rrule!!(::CoDual{Core.Typeof($name)}, args::CoDual...)
         v = $name(map(primal, args)...)
         return CoDual(v, zero_tangent(v)), NoPullback()
@@ -52,6 +53,7 @@ lgetfield(x, ::SSym{f}) where {f} = getfield(x, f)
 
 lgetfield(x::Tuple, ::SInt{i}) where {i} = getfield(x, i)
 
+@is_primitive MinimalCtx Tuple{typeof(lgetfield), Any, Any}
 function rrule!!(
     ::CoDual{typeof(lgetfield)}, x::CoDual, ::CoDual{T}
 ) where {f, T<:Union{SSym{f}, SInt{f}}}
@@ -63,6 +65,7 @@ end
 Umlaut.isprimitive(::RMC, ::typeof(lgetfield), args...) = true
 
 isprimitive(::RMC, ::Type, ::TypeVar, ::Type) = true
+@is_primitive MinimalCtx Tuple{Type, TypeVar, Type}
 function rrule!!(x::CoDual{<:Type}, y::CoDual{<:TypeVar}, z::CoDual{<:Type})
     return CoDual(primal(x)(primal(y), primal(z)), NoTangent()), NoPullback()
 end

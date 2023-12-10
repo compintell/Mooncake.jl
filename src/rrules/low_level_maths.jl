@@ -10,6 +10,7 @@ for (M, f, arity) in DiffRules.diffrules(; filter_modules=nothing)
         pb_name = Symbol("$(M).$(f)_pb!!")
         @eval begin
             Umlaut.isprimitive(::RMC, ::typeof($M.$f), ::Float64) = true
+            @is_primitive MinimalCtx Tuple{typeof($M.$f), Float64}
             function rrule!!(::CoDual{typeof($M.$f)}, x::CoDual{Float64})
                 x = primal(x)
                 $pb_name(ȳ, f̄, x̄) = f̄, x̄ + ȳ * $dx
@@ -21,6 +22,7 @@ for (M, f, arity) in DiffRules.diffrules(; filter_modules=nothing)
         pb_name = Symbol("$(M).$(f)_pb!!")
         @eval begin
             Umlaut.isprimitive(::RMC, ::typeof($M.$f), ::Float64, ::Float64) = true
+            @is_primitive MinimalCtx Tuple{typeof($M.$f), Float64, Float64}
             function rrule!!(::CoDual{typeof($M.$f)}, a::CoDual{Float64}, b::CoDual{Float64})
                 a = primal(a)
                 b = primal(b)

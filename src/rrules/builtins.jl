@@ -13,9 +13,12 @@ module IntrinsicsWrappers
 
 import Umlaut: isprimitive
 using Core: Intrinsics
+using Taped
 import ..Taped:
     rrule!!, CoDual, primal, tangent, zero_tangent, isprimitive, RMC, NoPullback,
-    tangent_type, increment!!, is_primitive
+    tangent_type, increment!!, @is_primitive, MinimalCtx
+
+@is_primitive MinimalCtx Tuple{Core.Builtin, Vararg}
 
 # Note: performance is not considered _at_ _all_ in this implementation.
 function rrule!!(f::CoDual{<:Core.IntrinsicFunction}, args...)
@@ -25,7 +28,7 @@ end
 macro intrinsic(name)
     expr = quote
         $name(x...) = Intrinsics.$name(x...)
-        (is_primitive)(::Type{<:Tuple{typeof($name), Vararg{Any, N}}}) where {N} = true
+        (is_primitive)(::MinimalCtx, ::Type{<:Tuple{typeof($name), Vararg}}) = true
         (isprimitive)(::RMC, ::typeof($name), args...) = true
         translate(::Val{Intrinsics.$name}) = $name
     end
@@ -35,7 +38,7 @@ end
 macro inactive_intrinsic(name)
     expr = quote
         $name(x...) = Intrinsics.$name(x...)
-        (is_primitive)(::Type{<:Tuple{typeof($name), Vararg{Any, N}}}) where {N} = true
+        (is_primitive)(::MinimalCtx, ::Type{<:Tuple{typeof($name), Vararg}}) = true
         (isprimitive)(::RMC, ::typeof($name), args...) = true
         translate(::Val{Intrinsics.$name}) = $name
         function rrule!!(::CoDual{typeof($name)}, args...)

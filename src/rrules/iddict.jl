@@ -50,6 +50,7 @@ end
 # standard built-in functionality on `IdDict`s.
 
 isprimitive(::RMC, ::typeof(Base.rehash!), ::IdDict, ::Any) = true
+@is_primitive MinimalCtx Tuple{typeof(Base.rehash!), IdDict, Any}
 function rrule!!(::CoDual{typeof(Base.rehash!)}, d::CoDual{<:IdDict}, newsz::CoDual)
     Base.rehash!(primal(d), primal(newsz))
     Base.rehash!(tangent(d), primal(newsz))
@@ -57,6 +58,7 @@ function rrule!!(::CoDual{typeof(Base.rehash!)}, d::CoDual{<:IdDict}, newsz::CoD
 end
 
 isprimitive(::RMC, ::typeof(setindex!), ::IdDict, ::Any, ::Any) = true
+@is_primitive MinimalCtx Tuple{typeof(setindex!), IdDict, Any, Any}
 function rrule!!(::CoDual{typeof(setindex!)}, d::CoDual{IdDict{K,V}}, val, key) where {K, V}
 
     k = primal(key)
@@ -89,6 +91,7 @@ function rrule!!(::CoDual{typeof(setindex!)}, d::CoDual{IdDict{K,V}}, val, key) 
 end
 
 isprimitive(::RMC, ::typeof(get), ::IdDict, ::Any, ::Any) = true
+@is_primitive MinimalCtx Tuple{typeof(get), IdDict, Any, Any}
 function rrule!!(
     ::CoDual{typeof(get)}, d::CoDual{IdDict{K, V}}, key::CoDual, default::CoDual
 ) where {K, V}
@@ -108,6 +111,7 @@ function rrule!!(
 end
 
 isprimitive(::RMC, ::typeof(getindex), ::IdDict, ::Any) = true
+@is_primitive MinimalCtx Tuple{typeof(getindex), IdDict, Any}
 function rrule!!(
     ::CoDual{typeof(getindex)}, d::CoDual{IdDict{K, V}}, key::CoDual
 ) where {K, V}

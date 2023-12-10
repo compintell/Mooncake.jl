@@ -9,10 +9,11 @@
     ]
         @test_throws(
             ErrorException,
-            Taped.rrule!!(
-                CoDual(Umlaut.__foreigncall__, NoTangent()),
-                CoDual(Val(name), NoTangent()),
-            )
+            Taped.rrule!!(zero_codual(Umlaut.__foreigncall__), zero_codual(Val(name))),
+        )
+        @test_throws(
+            ErrorException,
+            Taped.rrule!!(zero_codual(Taped._foreigncall_), zero_codual(Val(name))),
         )
     end
 end

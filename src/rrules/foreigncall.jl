@@ -8,7 +8,7 @@ Base.showerror(io::IO, err::MissingForeigncallRuleError) = print(io, err.msg)
 # Fallback foreigncall rrule. This is a sufficiently common special case, that it's worth
 # creating an informative error message, so that users have some chance of knowing why
 # they're not able to differentiate a piece of code.
-function rrule!!(::CoDual{typeof(__foreigncall__)}, args...)
+function rrule!!(::CoDual{<:Tforeigncall}, args...)
     throw(MissingForeigncallRuleError(
         "No rrule!! available for foreigncall with primal argument types " *
         "$(typeof(map(primal, args))). " *
@@ -23,13 +23,48 @@ function rrule!!(::CoDual{typeof(__foreigncall__)}, args...)
     ))
 end
 
+"""
+    function _foreigncall_(
+        ::Val{name}, ::Val{RT}, AT::Tuple, ::Val{nreq}, ::Val{calling_convention}, x...
+    ) where {name, RT, nreq, calling_convention}
 
+:foreigncall nodes get translated into calls to this function.
+For example,
+```julia
+Expr(:foreigncall, :foo, Tout, (A, B), nreq, :ccall, args...)
+```
+becomes
+```julia
+_foreigncall_(Val(:foo), Val(Tout), (Val(A), Val(B)), Val(nreq), Val(:ccall), args...)
+```
+Please consult the Julia documentation for more information on how foreigncall nodes work,
+and consult this package's tests for examples.
+
+Credit: Umlaut.jl has the original implementation of this function. This is largely copied
+over from there.
+"""
+@generated function _foreigncall_(
+    ::Val{name}, ::Val{RT}, AT::Tuple, ::Val{nreq}, ::Val{calling_convention}, x...
+) where {name, RT, nreq, calling_convention}
+    return Expr(
+        :foreigncall,
+        QuoteNode(name),
+        :($(RT)),
+        Expr(:call, :(Core.svec), map(_get_arg_type, AT.parameters)...),
+        :($nreq),
+        QuoteNode(calling_convention),
+        map(n -> :(x[$n]), 1:length(x))...,
+    )
+end
+
+@is_primitive MinimalCtx Tuple{typeof(_foreigncall_), Vararg}
 
 #
 # Rules to handle / avoid foreigncall nodes
 #
 
 isprimitive(::RMC, ::typeof(Base.allocatedinline), ::Type) = true
+@is_primitive MinimalCtx Tuple{typeof(Base.allocatedinline), Type}
 function rrule!!(::CoDual{typeof(Base.allocatedinline)}, T::CoDual{<:Type})
     return CoDual(Base.allocatedinline(primal(T)), NoTangent()), NoPullback()
 end
@@ -39,6 +74,7 @@ function isprimitive(
 ) where {T,N}
     return true
 end
+@is_primitive MinimalCtx Tuple{Type{<:Array}, typeof(undef), Vararg}
 function rrule!!(
     ::CoDual{Type{Array{T, N}}}, ::CoDual{typeof(undef)}, m::Vararg{CoDual{Int}, N}
 ) where {T, N}
@@ -52,6 +88,7 @@ function isprimitive(
 ) where {T, N}
     return true
 end
+@is_primitive MinimalCtx Tuple{Type{<:Array}, typeof(undef), NTuple}
 function rrule!!(
     ::CoDual{Type{Array{T, N}}}, ::CoDual{typeof(undef)}, m::CoDual{NTuple{N, Int}},
 ) where {T, N}
@@ -61,6 +98,7 @@ function rrule!!(
 end
 
 isprimitive(::RMC, ::typeof(copy), ::Array) = true
+@is_primitive MinimalCtx Tuple{typeof(copy), Array}
 function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Array})
     y = CoDual(copy(primal(a)), copy(tangent(a)))
     copy_pullback!!(dy, df, dx) = df, increment!!(dx, dy)
@@ -68,6 +106,7 @@ function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Array})
 end
 
 isprimitive(::RMC, ::typeof(fill!), ::Union{Array{UInt8}, Array{Int8}}, x::Integer) = true
+@is_primitive MinimalCtx Tuple{typeof(fill!), Array{<:Union{UInt8, Int8}}, Integer}
 function rrule!!(
     ::CoDual{typeof(fill!)},
     a::CoDual{<:Union{Array{UInt8}, Array{Int8}}, <:Array{NoTangent}},
@@ -83,6 +122,7 @@ function rrule!!(
 end
 
 isprimitive(::RMC, ::typeof(Base._growbeg!), ::Vector, ::Integer) = true
+@is_primitive MinimalCtx Tuple{typeof(Base._growbeg!), Vector, Integer}
 function rrule!!(
     ::CoDual{typeof(Base._growbeg!)}, _a::CoDual{<:Vector{T}}, _delta::CoDual{<:Integer},
 ) where {T}
@@ -99,6 +139,7 @@ function rrule!!(
 end
 
 isprimitive(::RMC, ::typeof(Base._growend!), ::Vector, ::Integer) = true
+@is_primitive MinimalCtx Tuple{typeof(Base._growend!), Vector, Integer}
 function rrule!!(
     ::CoDual{typeof(Base._growend!)}, _a::CoDual{<:Vector}, _delta::CoDual{<:Integer},
 )
@@ -115,6 +156,7 @@ function rrule!!(
 end
 
 isprimitive(::RMC, ::typeof(Base._growat!), ::Vector, ::Integer, ::Integer) = true
+@is_primitive MinimalCtx Tuple{typeof(Base._growat!), Vector, Integer, Integer}
 function rrule!!(
     ::CoDual{typeof(Base._growat!)},
     _a::CoDual{<:Vector},
@@ -137,6 +179,7 @@ function rrule!!(
 end
 
 isprimitive(::RMC, ::typeof(Base._deletebeg!), ::Vector, ::Integer) = true
+@is_primitive MinimalCtx Tuple{typeof(Base._deletebeg!), Vector, Integer}
 function rrule!!(
     ::CoDual{typeof(Base._deletebeg!)}, _a::CoDual{<:Vector}, _delta::CoDual{<:Integer},
 )
@@ -158,6 +201,7 @@ function rrule!!(
 end
 
 isprimitive(::RMC, ::typeof(Base._deleteend!), ::Vector, ::Integer) = true
+@is_primitive MinimalCtx Tuple{typeof(Base._deleteend!), Vector, Integer}
 function rrule!!(
     ::CoDual{typeof(Base._deleteend!)}, _a::CoDual{<:Vector}, _delta::CoDual{<:Integer}
 )
@@ -187,6 +231,7 @@ function rrule!!(
 end
 
 isprimitive(::RMC, ::typeof(Base._deleteat!), ::Vector, ::Integer, ::Integer) = true
+@is_primitive MinimalCtx Tuple{typeof(Base._deleteat!), Vector, Integer, Integer}
 function rrule!!(
     ::CoDual{typeof(Base._deleteat!)},
     _a::CoDual{<:Vector},
@@ -214,6 +259,7 @@ function rrule!!(
 end
 
 isprimitive(::RMC, ::typeof(sizehint!), ::Vector, ::Integer) = true
+@is_primitive MinimalCtx Tuple{typeof(sizehint!), Vector, Integer}
 function rrule!!(::CoDual{typeof(sizehint!)}, x::CoDual{<:Vector}, sz::CoDual{<:Integer})
     sizehint!(primal(x), primal(sz))
     sizehint!(tangent(x), primal(sz))
@@ -221,11 +267,13 @@ function rrule!!(::CoDual{typeof(sizehint!)}, x::CoDual{<:Vector}, sz::CoDual{<:
 end
 
 isprimitive(::RMC, ::typeof(objectid), @nospecialize(x)) = true
+@is_primitive MinimalCtx Tuple{typeof(objectid), Any}
 function rrule!!(::CoDual{typeof(objectid)}, @nospecialize(x))
     return CoDual(objectid(primal(x)), NoTangent()), NoPullback()
 end
 
 isprimitive(::RMC, ::typeof(pointer_from_objref), x) = true
+@is_primitive MinimalCtx Tuple{typeof(pointer_from_objref), Any}
 function rrule!!(::CoDual{typeof(pointer_from_objref)}, x)
     y = CoDual(
         pointer_from_objref(primal(x)),
@@ -234,7 +282,8 @@ function rrule!!(::CoDual{typeof(pointer_from_objref)}, x)
     return y, NoPullback()
 end
 
-isprimitive(::RMC, ::typeof(Core.Compiler.return_type), args...) = true
+isprimitive(::RMC, ::typeof(CC.return_type), args...) = true
+@is_primitive MinimalCtx Tuple{typeof(CC.return_type), Vararg}
 function rrule!!(::CoDual{typeof(Core.Compiler.return_type)}, args...)
     return zero_codual(Core.Compiler.return_type(map(primal, args)...)), NoPullback()
 end
@@ -245,6 +294,7 @@ end
 function isprimitive(::RMC, ::typeof(unsafe_copyto!), ::Ptr{T}, ::Ptr{T}, ::Any) where {T}
     return true
 end
+@is_primitive MinimalCtx Tuple{typeof(unsafe_copyto!), Ptr{T}, Ptr{T}, Any} where {T}
 function rrule!!(
     ::CoDual{typeof(unsafe_copyto!)}, dest::CoDual{Ptr{T}}, src::CoDual{Ptr{T}}, n::CoDual
 ) where {T}
@@ -280,6 +330,7 @@ function isprimitive(
 ) where {T}
     return true
 end
+@is_primitive MinimalCtx Tuple{typeof(unsafe_copyto!), Array{T}, Any, Array{T}, Any, Any} where {T}
 function rrule!!(
     ::CoDual{typeof(unsafe_copyto!)},
     dest::CoDual{<:Array{T}},
@@ -318,12 +369,14 @@ function rrule!!(
 end
 
 isprimitive(::RMC, ::typeof(Base.unsafe_pointer_to_objref), x::Ptr) = true
+@is_primitive MinimalCtx Tuple{typeof(Base.unsafe_pointer_to_objref), Ptr}
 function rrule!!(::CoDual{typeof(Base.unsafe_pointer_to_objref)}, x::CoDual{<:Ptr})
     y = CoDual(unsafe_pointer_to_objref(primal(x)), unsafe_pointer_to_objref(tangent(x)))
     return y, NoPullback()
 end
 
 isprimitive(::RMC, ::typeof(typeintersect), a, b) = true
+@is_primitive MinimalCtx Tuple{typeof(typeintersect), Any, Any}
 function rrule!!(::CoDual{typeof(typeintersect)}, @nospecialize(a), @nospecialize(b))
     y = typeintersect(primal(a), primal(b))
     return CoDual(y, zero_tangent(y)), NoPullback()
@@ -341,7 +394,7 @@ end
 #
 
 function rrule!!(
-    ::CoDual{typeof(__foreigncall__)},
+    ::CoDual{<:Tforeigncall},
     ::CoDual{Val{:jl_array_ptr}},
     ::CoDual{Val{Ptr{T}}},
     ::CoDual{Tuple{Val{Any}}},
@@ -357,7 +410,7 @@ function rrule!!(
 end
 
 function rrule!!(
-    ::CoDual{typeof(__foreigncall__)},
+    ::CoDual{<:Tforeigncall},
     ::CoDual{Val{:jl_reshape_array}},
     ::CoDual{Val{Array{P, M}}},
     ::CoDual{Tuple{Val{Any}, Val{Any}, Val{Any}}},
@@ -376,7 +429,7 @@ function rrule!!(
 end
 
 function rrule!!(
-    ::CoDual{typeof(__foreigncall__)},
+    ::CoDual{<:Tforeigncall},
     ::CoDual{Val{:jl_array_isassigned}},
     ::CoDual, # return type is Int32
     ::CoDual, # arg types are (Any, UInt64)
@@ -391,6 +444,7 @@ function rrule!!(
 end
 
 isprimitive(::RMC, ::typeof(deepcopy), ::Any) = true
+@is_primitive MinimalCtx Tuple{typeof(deepcopy), Any}
 function rrule!!(::CoDual{typeof(deepcopy)}, x::CoDual)
     deepcopy_pb!!(dy, df, dx) = df, increment!!(dx, dy)
     return deepcopy(x), deepcopy_pb!!
@@ -415,10 +469,7 @@ for name in [
     :(:jl_array_sizehint), :(:jl_array_del_at), :(:jl_array_grow_at), :(:jl_array_del_beg),
     :(:jl_array_grow_beg),
 ]
-    @eval function rrule!!(::CoDual{typeof(__foreigncall__)}, ::CoDual{Val{$name}}, args...)
-        unexepcted_foreigncall_error($name)
-    end
-    @eval function rrule!!(::CoDual{typeof(_foreigncall_)}, ::CoDual{Val{$name}}, args...)
+    @eval function rrule!!(::CoDual{<:Tforeigncall}, ::CoDual{Val{$name}}, args...)
         unexepcted_foreigncall_error($name)
     end
 end
