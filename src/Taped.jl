@@ -1,5 +1,7 @@
 module Taped
 
+const CC = Core.Compiler
+
 using
     BenchmarkTools,
     DiffRules,
@@ -24,13 +26,16 @@ using FunctionWrappers: FunctionWrapper
 using LinearAlgebra.BLAS: @blasfunc, BlasInt, trsm!
 using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!, potrf!, potrs!
 
+# Needs to be defined before various other things.
+function _foreigncall_ end
+const Tforeigncall = Union{typeof(_foreigncall_), typeof(__foreigncall__)}
+
 include("tracing.jl")
 include("acceleration.jl")
 include("tangents.jl")
 include("reverse_mode_ad.jl")
-include("test_utils.jl")
-
 include("interpreted_function.jl")
+include("test_utils.jl")
 
 include(joinpath("rrules", "avoiding_non_differentiable_code.jl"))
 include(joinpath("rrules", "blas.jl"))

@@ -9,6 +9,9 @@
 # As of version 1.9.2 of Julia, there are exactly 139 examples of `Core.Builtin`s.
 #
 
+
+@is_primitive MinimalCtx Tuple{Core.Builtin, Vararg}
+
 module IntrinsicsWrappers
 
 import Umlaut: isprimitive
@@ -16,9 +19,7 @@ using Core: Intrinsics
 using Taped
 import ..Taped:
     rrule!!, CoDual, primal, tangent, zero_tangent, isprimitive, RMC, NoPullback,
-    tangent_type, increment!!, @is_primitive, MinimalCtx
-
-@is_primitive MinimalCtx Tuple{Core.Builtin, Vararg}
+    tangent_type, increment!!, @is_primitive, MinimalCtx, is_primitive
 
 # Note: performance is not considered _at_ _all_ in this implementation.
 function rrule!!(f::CoDual{<:Core.IntrinsicFunction}, args...)

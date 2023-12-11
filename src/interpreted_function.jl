@@ -1,3 +1,104 @@
+"""
+    struct MinimalCtx end
+
+Functions should only be primitives in this context if not making them so would cause AD to
+fail. In particular, do not add primitives to this context if you are writing them for
+performance only.
+"""
+struct MinimalCtx end
+
+is_primitive(::MinimalCtx, ::Any) = false
+
+"""
+    @is_primitive context_type signature
+
+Creates a method of `is_primitive` which always returns `true` for the context_type and
+`signature` provided. For example
+```julia
+@is_primitive MinimalCtx Tuple{typeof(foo), Float64}
+```
+is equivalent to
+```julia
+is_primitive(::MinimalCtx, ::Type{<:Tuple{typeof(foo), Float64}}) = true
+```
+
+You should implemented more complicated method of `is_primitive` in the usual way.
+"""
+macro is_primitive(Tctx, sig)
+    return esc(:(Taped.is_primitive(::$Tctx, ::Type{<:$sig}) = true))
+end
+
+@is_primitive MinimalCtx Tuple{Any}
+@is_primitive MinimalCtx Tuple{typeof(rebind), Any}
+
+"""
+    struct DefaultCtx end
+
+Context for all usually used AD primitives. Anything which is a primitive in a MinimalCtx is
+a primitive in the DefaultCtx automatically. If you are adding a rule for the sake of
+performance, it should be a primitive in the DefaultCtx, but not the MinimalCtx.
+"""
+struct DefaultCtx end
+
+is_primitive(::DefaultCtx, sig) = is_primitive(MinimalCtx(), sig)
+
+# Largely copied from Enzyme.
+struct TapedInterpreter{C} <: CC.AbstractInterpreter
+    parent::CC.NativeInterpreter
+    ctx::C
+end
+
+TapedInterpreter(ctx::C) where {C} = TapedInterpreter{C}(CC.NativeInterpreter(), ctx)
+
+const TInterp = TapedInterpreter
+
+CC.InferenceParams(interp::TInterp) = CC.InferenceParams(interp.parent)
+CC.OptimizationParams(interp::TInterp) = CC.OptimizationParams(interp.parent)
+CC.get_world_counter(interp::TInterp) = CC.get_world_counter(interp.parent)
+CC.get_inference_cache(interp::TInterp) = CC.get_inference_cache(interp.parent)
+CC.code_cache(interp::TInterp) = CC.code_cache(interp.parent)
+
+# No need to do any locking since we're not putting our results into the runtime cache
+function CC.lock_mi_inference(interp::TInterp, mi::CC.MethodInstance)
+    return CC.lock_mi_inference(interp.parent, mi)
+end
+function CC.unlock_mi_inference(interp::TInterp, mi::CC.MethodInstance)
+    return CC.unlock_mi_inference(interp.parent, mi)
+end
+
+function CC.add_remark!(interp::TInterp, sv::CC.InferenceState, msg)
+    return CC.add_remark!(interp.parent, sv, msg)
+end
+
+CC.may_optimize(interp::TInterp) = CC.may_optimize(interp.parent)
+CC.may_compress(interp::TInterp) = CC.may_compress(interp.parent)
+CC.may_discard_trees(interp::TInterp) = CC.may_discard_trees(interp.parent)
+CC.verbose_stmt_info(interp::TInterp) = CC.verbose_stmt_info(interp.parent)
+CC.method_table(interp::TInterp, sv::CC.InferenceState) = CC.method_table(interp.parent, sv)
+
+static_isprimitive(ctx, x::Type{<:Tuple}) = false
+
+_type(x) = x
+_type(x::CC.Const) = Core.Typeof(x.val)
+_type(x::CC.PartialStruct) = x.typ
+
+function CC.inlining_policy(
+    interp::TInterp,
+    @nospecialize(src),
+    @nospecialize(info::CC.CallInfo),
+    stmt_flag::UInt8,
+    mi::CC.MethodInstance,
+    argtypes::Vector{Any},
+)
+    # Do not inline away primitives.
+    argtype_tuple = Tuple{map(_type, argtypes)...}
+    is_primitive(interp.ctx, argtype_tuple) && return nothing
+
+    # If not a primitive, AD doesn't care about it. Use the usual inlining strategy.
+    return CC.inlining_policy(interp.parent, src, info, stmt_flag, mi, argtypes)
+end
+
+
 #
 # Special Ref type to avoid confusion between existing ref types.
 #
@@ -27,6 +128,7 @@ Base.eltype(::SlotRef{T}) where {T} = T
 const IFInstruction = Core.OpaqueClosure{Tuple{Int, Int}, Int}
 const FwdsIFInstruction = IFInstruction
 const BwdsIFInstruction = Core.OpaqueClosure{Tuple{Int}, Int}
+const ArgLoadInstruction = Core.OpaqueClosure{Tuple{Int}, Int}
 
 #
 # Core.ReturnNode
@@ -44,8 +146,8 @@ function (inst::ReturnInst)(::Int, ::Int)
     return -1
 end
 
-function build_instruction(ir_inst::ReturnNode, ::Int, arg_slots, slots, return_slot)
-    return ReturnInst(return_slot, _get_input(ir_inst.val, slots, arg_slots))
+function build_instruction(ctx, ir_inst::ReturnNode, ::Int, arg_info, slots, return_slot, _)
+    return ReturnInst(return_slot, _get_input(ir_inst.val, slots, arg_info))
 end
 
 # function run_profiler(__rrule!!, df, dx)
@@ -60,18 +162,20 @@ function to_benchmark(__rrule!!, df, dx)
     pb!!(tangent(out), tangent(df), map(tangent, dx)...)
 end
 
-function build_coinstructions(ir_inst::ReturnNode, n::Int, arg_slots, slots, return_slot)
+function build_coinstructions(
+    _, ir_inst::ReturnNode, n::Int, arg_info, slots, return_slot, ::Bool
+)
 
-    _slot_to_return = _get_input(ir_inst.val, slots, arg_slots)
+    _slot_to_return = _get_input(ir_inst.val, slots, arg_info)
 
-    function __barrier(slot_to_return)
+    function __barrier(return_slot::A, slot_to_return::B) where {A, B}
         # Construct operation to run the forwards-pass.
         run_fwds_pass = @opaque function (a::Int, b::Int)
             return_slot[] = extract_codual(slot_to_return)
             return -1
         end
         if !(run_fwds_pass isa FwdsIFInstruction)
-            display(Base.code_typed(run_fwds_pass, Tuple{Int, Int})[1][1])
+            display(CC.code_typed_opaque_closure(run_fwds_pass)[1][1])
             println()
         end
         # println("ReturnNode run_fwds_pass")
@@ -81,14 +185,14 @@ function build_coinstructions(ir_inst::ReturnNode, n::Int, arg_slots, slots, ret
         # Construct operation to run the reverse-pass.
         run_rvs_pass = if slot_to_return isa SlotRef
             @opaque  function (j::Int)
-                slot_to_return[] = return_slot[]
+                setfield!(slot_to_return, :x, getfield(return_slot, :x))
                 return j
             end
         else
             @opaque (j::Int) -> j
         end
         if !(run_rvs_pass isa BwdsIFInstruction)
-            display(Base.code_typed(run_fwds_pass, Tuple{Int, Int}; optimize=true)[1][1])
+            display(CC.code_typed_opaque_closure(run_fwds_pass)[1][1])
             println()
         end
         # println("ReturnNode run_rvs_pass")
@@ -97,7 +201,7 @@ function build_coinstructions(ir_inst::ReturnNode, n::Int, arg_slots, slots, ret
         return run_fwds_pass, run_rvs_pass
     end
 
-    return __barrier(_slot_to_return)
+    return __barrier(return_slot, _slot_to_return)
 end
 
 #
@@ -112,11 +216,11 @@ end
 
 (inst::GotoInst)(::Int, ::Int) = inst.n
 
-function build_instruction(ir_inst::GotoNode, n::Int, arg_slots, slots, return_slot)
+function build_instruction(_, ir_inst::GotoNode, n::Int, arg_info, slots, return_slot, _)
     return GotoInst(ir_inst.label)
 end
 
-function build_coinstructions(ir_inst::GotoNode, n::Int, arg_slots, slots, return_slot)
+function build_coinstructions(_, ir_inst::GotoNode, n::Int, arg_info, slots, return_slot, _)
 
     # Extract relevant values.
     dest = ir_inst.label
@@ -141,20 +245,22 @@ using Core: GotoIfNot
 struct GotoIfNotInst{Tcond}
     cond::Tcond
     dest::Int
+    node::GotoIfNot
+    line::Int
 end
 
 function (inst::GotoIfNotInst)(::Int, current_block::Int)
     return extract_arg(inst.cond[]) ? current_block + 1 : inst.dest
 end
 
-function build_instruction(ir_inst::GotoIfNot, n::Int, arg_slots, slots, return_slot)
-    return GotoIfNotInst(_get_input(ir_inst.cond, slots, arg_slots), ir_inst.dest)
+function build_instruction(_, node::GotoIfNot, n::Int, arg_info, slots, _, _)
+    return GotoIfNotInst(_get_input(node.cond, slots, arg_info), node.dest, node, n)
 end
 
-function build_coinstructions(ir_inst::GotoIfNot, n::Int, arg_slots, slots, return_slot)
+function build_coinstructions(_, ir_inst::GotoIfNot, n::Int, arg_info, slots, _, _)
 
     # Extract relevant values.
-    cond_slot = _get_input(ir_inst.cond, slots, arg_slots)
+    cond_slot = _get_input(ir_inst.cond, slots, arg_info)
     dest = ir_inst.dest
 
     # Construct operation to run the forwards-pass.
@@ -172,50 +278,63 @@ end
 # Core.PhiNode
 #
 
+using Core: PhiNode
+
 # We can always safely assume that all `values` elements are SlotRefs.
 struct PhiNodeInst{Tedges<:Tuple, Tvalues<:Tuple, Tval_slot<:SlotRef}
     edges::Tedges
     values::Tvalues
     val_slot::Tval_slot
+    node::PhiNode
+    line::Int
+    is_blk_end::Bool
 end
 
-function (inst::PhiNodeInst)(prev_block::Int, ::Int)
+function (inst::PhiNodeInst)(prev_block::Int, current_block::Int)
+    # display(("phi", inst.line, inst.node, inst.edges, inst.values, prev_block))
+    found_a_match = false
     for n in eachindex(inst.edges)
         if inst.edges[n] == prev_block
+            found_a_match = true
             inst.val_slot[] = extract_arg(inst.values[n])
         end
     end
-    return 0
+    # if !found_a_match
+    #     throw(error("Not found a match"))
+    # end
+    return inst.is_blk_end ? current_block + 1 : 0
 end
 
 struct UndefinedReference end
 
-function build_instruction(ir_inst::Core.PhiNode, n::Int, arg_slots, slots, return_slot)
+function build_instruction(_, ir_inst::PhiNode, n::Int, arg_info, slots, _, is_blk_end)
     edges = map(Int, (ir_inst.edges..., ))
     values_vec = map(eachindex(ir_inst.values)) do j
         if isassigned(ir_inst.values, j)
-            return _get_input(ir_inst.values[j], slots, arg_slots)
+            return _get_input(ir_inst.values[j], slots, arg_info)
         else
             return UndefinedReference()
         end
     end
     values = map(x -> x isa SlotRef ? x : SlotRef(x), (values_vec..., ))
     val_slot = slots[n]
-    return PhiNodeInst(edges, values, val_slot)
+    return PhiNodeInst(edges, values, val_slot, ir_inst, n, is_blk_end)
 end
 
-function build_coinstructions(ir_inst::Core.PhiNode, n::Int, arg_slots, slots, return_slot)
+function build_coinstructions(
+    _, ir_inst::Core.PhiNode, n::Int, arg_info, slots, _, is_blk_end::Bool
+)
 
     # Extract relevant values.
     edges = map(Int, (ir_inst.edges..., ))
     values_vec = map(eachindex(ir_inst.values)) do j
         if isassigned(ir_inst.values, j)
-            return _get_input(ir_inst.values[j], slots, arg_slots)
+            return _get_input(ir_inst.values[j], slots, arg_info)
         else
             return UndefinedReference()
         end
     end
-    values = map(x -> x isa SlotRef ? x : SlotRef(x), (values_vec..., ))
+    values = map(x -> x isa SlotRef ? x : SlotRef(zero_codual(x)), (values_vec..., ))
     val_slot = slots[n]
 
     # Create a value slot stack.
@@ -223,17 +342,17 @@ function build_coinstructions(ir_inst::Core.PhiNode, n::Int, arg_slots, slots, r
     prev_block_stack = Vector{Int}(undef, 0)
 
     # Construct operation to run the forwards-pass.
-    run_fwds_pass::FwdsIFInstruction = @opaque function (prev_block::Int, b::Int)
-        push!(prev_block_stack, prev_block)
+    run_fwds_pass::FwdsIFInstruction = @opaque function (prev_blk::Int, current_blk::Int)
+        push!(prev_block_stack, prev_blk)
         for n in eachindex(edges)
-            if edges[n] == prev_block
+            if edges[n] == prev_blk
                 if isassigned(val_slot)
                     push!(value_slot_stack, val_slot[])
                 end
                 val_slot[] = extract_arg(values[n])
             end
         end
-        return 0
+        return is_blk_end ? current_blk + 1 : 0
     end
 
     # Construct operation to run the reverse-pass.
@@ -262,15 +381,16 @@ end
 struct PiNodeInst{Tinput_ref<:SlotRef, Tval_ref<:SlotRef}
     input_ref::Tinput_ref
     val_ref::Tval_ref
+    is_blk_end::Bool
 end
 
-function (inst::PiNodeInst)(::Int, ::Int)
+function (inst::PiNodeInst)(::Int, current_block::Int)
     inst.val_ref[] = inst.input_ref[]
-    return 0
+    return inst.is_blk_end ? current_block + 1 : 0
 end
 
-function build_instruction(ir_inst::Core.PiNode, n::Int, arg_slots, slots, return_slot)
-    return PiNodeInst(_get_input(ir_inst.val, slots, arg_slots), slots[n])
+function build_instruction(_, node::Core.PiNode, n::Int, arg_info, slots, _, is_blk_end)
+    return PiNodeInst(_get_input(node.val, slots, arg_info), slots[n], is_blk_end)
 end
 
 #
@@ -281,7 +401,13 @@ struct NothingInst end
 
 (inst::NothingInst)(::Int, current_block::Int) = current_block + 1
 
-build_instruction(ir_inst::Nothing, n::Int, ::Any, ::Any, ::Any) = NothingInst()
+build_instruction(_, ::Nothing, n::Int, ::Any, ::Any, ::Any, ::Any) = NothingInst()
+
+function build_coinstructions(_, ::Nothing, ::Int, ::Any, ::Any, ::Any, ::Any)
+    run_fwds_pass = @opaque (a::Int, current_block::Int) -> current_block + 1
+    run_rvs_pass = @opaque (j::Int) -> j
+    return run_fwds_pass, run_rvs_pass
+end
 
 #
 # GlobalRef
@@ -290,15 +416,28 @@ build_instruction(ir_inst::Nothing, n::Int, ::Any, ::Any, ::Any) = NothingInst()
 struct GlobalRefInst{Tc, Tval_ref}
     c::Tc
     val_ref::Tval_ref
+    is_blk_end::Bool
 end
 
-function (inst::GlobalRefInst)(::Int, ::Int)
+function (inst::GlobalRefInst)(::Int, current_block::Int)
     inst.val_ref[] = inst.c
-    return 0
+    return inst.is_blk_end ? current_block + 1 : 0
 end
 
-function build_instruction(ir_inst::GlobalRef, n::Int, arg_slots, slots, return_slot)
-    return GlobalRefInst(_get_globalref(ir_inst), slots[n])
+function build_instruction(_, node::GlobalRef, n::Int, arg_info, slots, _, is_blk_end)
+    return GlobalRefInst(_get_globalref(node), slots[n], is_blk_end)
+end
+
+function build_coinstructions(_, node::GlobalRef, n::Int, ::Any, slots, ::Any, is_blk_end)
+    function __barrier(c::A, val_ref::B) where {A, B}
+        run_fwds_pass = @opaque function (a::Int, current_blk::Int)
+            val_ref[] = c
+            return is_blk_end ? current_blk + 1 : 0
+        end
+        run_rvs_pass = @opaque (j::Int) -> j
+        return run_fwds_pass, run_rvs_pass
+    end
+    return __barrier(uninit_codual(_get_globalref(node)), slots[n])
 end
 
 #
@@ -309,12 +448,16 @@ struct CallInst{Tf, Targs, Tval_ref<:SlotRef}
     f::Tf
     args::Targs
     val_ref::Tval_ref
+    ir::Expr
+    line::Int
+    is_blk_end::Bool
 end
 
-function (inst::CallInst{sig, A})(::Int, ::Int) where {sig, A}
+function (inst::CallInst{sig, A})(::Int, current_block::Int) where {sig, A}
+    # display(("call", inst.line, inst.ir, inst.args))
     args = map(extract_arg, inst.args)
     inst.val_ref[] = inst.f(args...)
-    return 0
+    return inst.is_blk_end ? current_block + 1 : 0
 end
 
 function replace_tangent!(x::SlotRef{<:CoDual{Tx, Tdx}}, new_tangent::Tdx) where {Tx, Tdx}
@@ -323,30 +466,14 @@ function replace_tangent!(x::SlotRef{<:CoDual{Tx, Tdx}}, new_tangent::Tdx) where
     return nothing
 end
 
+function replace_tangent!(x::SlotRef{<:CoDual}, new_tangent)
+    x_val = x[]
+    x[] = CoDual(primal(x_val), new_tangent)
+    return nothing
+end
+
 # Handles the case where `x` is a constant, rather than a slot.
 replace_tangent!(x, new_tangent) = nothing
-
-struct NewInst{T, Targs, Tval_ref<:SlotRef}
-    args::Targs
-    val_ref::Tval_ref
-    function NewInst{Tf}(args::Targs, val_ref::Tval_ref) where {Tf, Targs, Tval_ref}
-        return new{Tf, Targs, Tval_ref}(args, val_ref)
-    end
-end
-
-@generated function (inst::NewInst{T, Targs})(::Int, ::Int) where {T, Targs}
-    nargs = length(Targs.parameters)
-    return Expr(
-        :block,
-        :(args = inst.args),
-        Expr(
-            :(=),
-            :(inst.val_ref[]),
-            Expr(:new, T, map(n -> :(extract_arg(args[$n])), 1:nargs)...),
-        ),
-        :(return 0),
-    )
-end
 
 struct SkippedExpressionInst
     s::Symbol
@@ -354,19 +481,23 @@ end
 
 (::SkippedExpressionInst)(::Int, ::Int) = 0
 
-function build_instruction(ir_inst::Expr, n::Int, arg_slots, slots, return_slot)
+function build_instruction(ctx, ir_inst::Expr, n::Int, arg_info, slots, _, is_block_end)
     is_invoke = Meta.isexpr(ir_inst, :invoke)
     if is_invoke || Meta.isexpr(ir_inst, :call)
 
         # Extract args refs.
         __args = is_invoke ? ir_inst.args[3:end] : ir_inst.args[2:end]
-        arg_refs = map(arg -> _get_input(arg, slots, arg_slots), (__args..., ))
+        arg_refs = map(arg -> _get_input(arg, slots, arg_info), (__args..., ))
 
         # Extract val ref.
         val_ref = slots[n]
 
         # Extract function.
         fn = is_invoke ? ir_inst.args[2] : ir_inst.args[1]
+
+        if fn isa Core.SSAValue
+            fn = _get_input(fn, slots, arg_info)[]
+        end
         if fn isa GlobalRef
             fn = getglobal(fn.mod, fn.name)
         end
@@ -375,22 +506,19 @@ function build_instruction(ir_inst::Expr, n::Int, arg_slots, slots, return_slot)
         end
 
         fn_sig = Tuple{Core.Typeof(fn), map(_robust_typeof, arg_refs)...}
-        if !is_primitive(fn_sig)
-            if length(Base.code_ircode_by_type(fn_sig)) == 1
-                fn = InterpretedFunction(fn_sig)
+        if !is_primitive(ctx, fn_sig)
+            interp = TapedInterpreter(ctx)
+            if length(Base.code_ircode_by_type(fn_sig; interp)) == 1
+                fn = InterpretedFunction(ctx, fn_sig)
             else
-                fn = DelayedInterpretedFunction{Core.Typeof(fn)}(fn)
+                fn = DelayedInterpretedFunction{Core.Typeof(ctx), Core.Typeof(fn)}(ctx, fn)
             end
         end
-        return CallInst(fn, arg_refs, val_ref)
-    elseif Meta.isexpr(ir_inst, :new)
-        __args = (ir_inst.args[2:end]..., )
-        arg_refs = map(arg -> _get_input(arg, slots, arg_slots), __args)
-        val_ref = slots[n]
-        return NewInst{_deref(ir_inst.args[1])}(arg_refs, val_ref)
+        new_inst = CallInst(fn, arg_refs, val_ref, ir_inst, n, is_block_end)
+        return new_inst
     elseif ir_inst isa Expr && ir_inst.head in [
-        :code_coverage_effect, :gc_preserve_begin, :gc_preserve_end, :loopinfo,
-        :leave, :pop_exception,
+        :code_coverage_effect, :gc_preserve_begin, :gc_preserve_end, :loopinfo, :leave,
+        :pop_exception,
     ]
         return SkippedExpressionInst(ir_inst.head)
     else
@@ -400,20 +528,22 @@ end
 
 const OC = Core.OpaqueClosure
 
-# Slots should all contain coduals.
-function build_coinstructions(ir_inst::Expr, n::Int, arg_slots, slots, return_slot)
+function build_coinstructions(ctx, ir_inst::Expr, n::Int, arg_info, slots, _, is_blk_end)
     is_invoke = Meta.isexpr(ir_inst, :invoke)
     if is_invoke || Meta.isexpr(ir_inst, :call)
 
         # Extract args refs.
         __args = is_invoke ? ir_inst.args[3:end] : ir_inst.args[2:end]
-        codual_arg_refs = map(arg -> _get_input(arg, slots, arg_slots), (__args..., ))
+        codual_arg_refs = map(arg -> _get_input(arg, slots, arg_info), (__args..., ))
 
         # Extract val ref.
         codual_val_ref = slots[n]
 
         # Extract function.
         fn = is_invoke ? ir_inst.args[2] : ir_inst.args[1]
+        if fn isa Core.SSAValue
+            fn = primal(_get_input(fn, slots, arg_info)[])
+        end
         if fn isa GlobalRef
             fn = getglobal(fn.mod, fn.name)
         end
@@ -421,18 +551,25 @@ function build_coinstructions(ir_inst::Expr, n::Int, arg_slots, slots, return_sl
             fn = IntrinsicsWrappers.translate(Val(fn))
         end
 
+        # Check whether any arguments are duplicated. If they are, we must replace the
+        # function with a call to dedup.
+
         fn_sig = Tuple{
             Core.Typeof(fn),
             map(_robust_typeof ∘ primal ∘ extract_codual, codual_arg_refs)...,
         }
         __rrule!! = rrule!!
-        if !is_primitive(fn_sig)
-            if length(Base.code_ircode_by_type(fn_sig)) == 1
-                fn = InterpretedFunction(fn_sig)
+        if !is_primitive(ctx, fn_sig)
+            interp = TapedInterpreter(ctx)
+            num_methods = length(Base.code_ircode_by_type(fn_sig; interp))
+            if num_methods == 1
+                fn = InterpretedFunction(ctx, fn_sig)
                 __rrule!! = build_rrule!!(fn)
+            elseif num_methods == 0
+                throw(error("No methods found for fn_sig=$fn_sig"))
             else
                 throw(error("can't handle delays yet"))
-                fn = DelayedInterpretedFunction{Core.Typeof(fn)}(fn)
+                fn = DelayedInterpretedFunction{Core.Typeof(ctx), Core.Typeof(fn)}(ctx, fn)
             end
         end
 
@@ -444,7 +581,7 @@ function build_coinstructions(ir_inst::Expr, n::Int, arg_slots, slots, return_sl
             Core.Typeof(fn), map(_robust_typeof ∘ extract_codual, codual_arg_refs)...
         }
         T_pb!! = only(Base.return_types(__rrule!!, codual_sig))
-        if T_pb!! <: Tuple
+        if T_pb!! <: Tuple && T_pb!! !== Union{}
             pb_stack = Vector{T_pb!!.parameters[2]}(undef, 0)
         else
             pb_stack = Vector{Any}(undef, 0)
@@ -454,21 +591,23 @@ function build_coinstructions(ir_inst::Expr, n::Int, arg_slots, slots, return_sl
         sizehint!(old_vals, 100)
 
 
-        function __barrier(fn, codual_val_ref, __rrule!!, old_vals, pb_stack)
+        function __barrier(fn, codual_val_ref, __rrule!!, old_vals, pb_stack, is_blk_end)
 
-            @noinline function ___fwds_pass(codual_val_ref, old_vals, fn, pb_stack)
+            @noinline function ___fwds_pass(
+                codual_val_ref, old_vals, fn, pb_stack, current_blk
+            )
                 if isassigned(codual_val_ref)
                     push!(old_vals, codual_val_ref[])
                 end
                 out, pb!! = __rrule!!(fn, map(extract_codual, codual_arg_refs)...)
                 codual_val_ref[] = out
                 push!(pb_stack, pb!!)
-                return 0
+                return is_blk_end ? current_blk + 1 : 0
             end
 
             # Construct operation to run the forwards-pass.
-            run_fwds_pass = @opaque function (a::Int, b::Int)
-                ___fwds_pass(codual_val_ref, old_vals, fn, pb_stack)
+            run_fwds_pass = @opaque function (a::Int, current_blk::Int)
+                ___fwds_pass(codual_val_ref, old_vals, fn, pb_stack, current_blk)
             end
             if !(run_fwds_pass isa FwdsIFInstruction)
                 @warn "Unable to compiled forwards pass -- running to generate the error."
@@ -499,19 +638,14 @@ function build_coinstructions(ir_inst::Expr, n::Int, arg_slots, slots, return_sl
 
             return run_fwds_pass, run_rvs_pass
         end
-        return __barrier(fn, codual_val_ref, __rrule!!, old_vals, pb_stack)
-    elseif Meta.isexpr(ir_inst, :new)
-        throw(error(":new expressions not yet handled in AD."))
-        __args = (ir_inst.args[2:end]..., )
-        arg_refs = map(arg -> _get_input(arg, slots, arg_slots), __args)
-        val_ref = slots[n]
-        return NewInst{_deref(ir_inst.args[1])}(arg_refs, val_ref)
+        return __barrier(fn, codual_val_ref, __rrule!!, old_vals, pb_stack, is_blk_end)
     elseif ir_inst isa Expr && ir_inst.head in [
         :code_coverage_effect, :gc_preserve_begin, :gc_preserve_end, :loopinfo,
         :leave, :pop_exception,
     ]
-        throw(error("Skipped exceptions not yet handled in AD."))
-        return SkippedExpressionInst(ir_inst.head)
+        run_fwds_pass = @opaque (a::Int, b::Int) -> 0
+        run_rvs_pass = @opaque (j::Int) -> j
+        return run_fwds_pass, run_rvs_pass
     else
         throw(error("Unrecognised expression $ir_inst"))
     end
@@ -528,10 +662,7 @@ end
 # Code execution
 #
 
-is_primitive(::Type) = false
-is_primitive(::Type{Tuple{typeof(sin), Float64}}) = true
-is_primitive(::Type{Tuple{typeof(cos), Float64}}) = true
-is_primitive(::Type{<:Tuple{Core.Builtin, Vararg{Any, N}}}) where {N} = true
+
 
 _robust_typeof(x::T) where {T} = T
 _robust_typeof(::Type{T}) where {T} = Type{T}
@@ -545,17 +676,15 @@ _get_type(x::Core.PartialStruct) = x.typ
 _get_type(x::Core.Const) = _robust_typeof(x.val)
 _get_type(T) = T
 
-get_ir(inst) = Base.code_ircode_by_type(Tuple{Core.Typeof(inst), Int, Int})[1][1]
-
 _get_globalref(x::GlobalRef) = getglobal(x.mod, x.name)
 
 _deref(x::GlobalRef) = _get_globalref(x)
 _deref(::Type{T}) where {T} = T
 
-_get_input(x::QuoteNode, slots, arg_slots) = x.value
-_get_input(x::GlobalRef, slots, arg_slots) = _get_globalref(x)
-_get_input(x::Core.SSAValue, slots, arg_slots) = slots[x.id]
-_get_input(x::Core.Argument, slots, arg_slots) = arg_slots[x.n]
+_get_input(x::QuoteNode, _, _) = x.value
+_get_input(x::GlobalRef, _, _) = _get_globalref(x)
+_get_input(x::Core.SSAValue, slots, _) = slots[x.id]
+_get_input(x::Core.Argument, _, arg_info) = arg_info.arg_slots[x.n]
 _get_input(x, _, _) = x
 
 function _make_opaque_closure(inst, sig, n)
@@ -568,12 +697,13 @@ function _make_opaque_closure(inst, sig, n)
         println("inst:")
         display(inst)
         println()
-        println("IRCode from inst (source of failure) has argtypes:")
-        display(new_ir.argtypes)
-        println()
-        println("and IR")
-        display(new_ir)
-        println()
+        @show oc(5, 4)
+        # println("IRCode from inst (source of failure) has argtypes:")
+        # display(new_ir.argtypes)
+        # println()
+        # println("and IR")
+        # display(inst.ir)
+        # println()
     end
     return oc::IFInstruction
 end
@@ -581,42 +711,6 @@ end
 get_tuple_type(x::Tuple) = Tuple{map(_other_robust_typeof, x)...}
 
 _get_arg_type(::Type{Val{T}}) where {T} = T
-
-"""
-    function _foreigncall_(
-        ::Val{name}, ::Val{RT}, AT::Tuple, ::Val{nreq}, ::Val{calling_convention}, x...
-    ) where {name, RT, nreq, calling_convention}
-
-:foreigncall nodes get translated into calls to this function.
-For example,
-```julia
-Expr(:foreigncall, :foo, Tout, (A, B), nreq, :ccall, args...)
-```
-becomes
-```julia
-_foreigncall_(Val(:foo), Val(Tout), (Val(A), Val(B)), Val(nreq), Val(:ccall), args...)
-```
-Please consult the Julia documentation for more information on how foreigncall nodes work,
-and consult this package's tests for examples.
-
-Credit: Umlaut.jl has the original implementation of this function. This is largely copied
-over from there.
-"""
-@generated function _foreigncall_(
-    ::Val{name}, ::Val{RT}, AT::Tuple, ::Val{nreq}, ::Val{calling_convention}, x...
-) where {name, RT, nreq, calling_convention}
-    return Expr(
-        :foreigncall,
-        QuoteNode(name),
-        :($(RT)),
-        Expr(:call, :(Core.svec), map(_get_arg_type, AT.parameters)...),
-        :($nreq),
-        QuoteNode(calling_convention),
-        map(n -> :(x[$n]), 1:length(x))...,
-    )
-end
-
-is_primitive(::Type{<:Tuple{typeof(_foreigncall_), Vararg{Any, N}}} where {N}) = true
 
 # Copied from Umlaut.jl.
 extract_foreigncall_name(x::Symbol) = Val(x)
@@ -668,7 +762,7 @@ _extract(x::Symbol) = x
 _extract(x::QuoteNode) = x.value
 
 function rewrite_special_cases(ir::IRCode, st::Expr)
-    st = Core.Compiler.copy(st)
+    st = CC.copy(st)
     ex = Meta.isexpr(st, :(=)) ? st.args[2] : st
     if Meta.isexpr(ex, :boundscheck)
         ex = true
@@ -689,6 +783,17 @@ function rewrite_special_cases(ir::IRCode, st::Expr)
         ex.head = :call
         ex.args = Any[_foreigncall_, name, RT, AT, nreq, calling_convention, x...]
     end
+    if Meta.isexpr(ex, :new)
+        ex.head = :call
+        T = if ex.args[1] isa GlobalRef
+            _get_globalref(ex.args[1])
+        elseif ex.args[1] isa Type
+            ex.args[1]
+        else
+            throw(error("type is $(ex.args[1]), of type $(Core.Typeof(ex.args[1]))"))
+        end
+        ex.args = Any[New{T}(), ex.args[2:end]...]
+    end
     return Meta.isexpr(st, :(=)) ? Expr(:(=), st.args[1], ex) : ex
 end
 rewrite_special_cases(::IRCode, st) = st
@@ -696,47 +801,111 @@ function rewrite_special_cases(ir::IRCode, st::GotoIfNot)
     return GotoIfNot(rewrite_special_cases(ir, st.cond), st.dest)
 end
 
-struct InterpretedFunction{sig<:Tuple, Treturn, Targ_slots<:Tuple}
-    return_slot::SlotRef{Treturn}
+#
+# Loading arguments into slots.
+#
+
+struct ArgInfo{Targ_slots<:Tuple, is_vararg}
     arg_slots::Targ_slots
+end
+
+function arginfo_from_argtypes(::Type{T}, is_vararg::Bool) where {T<:Tuple}
+    Targ_slots = Tuple{map(t -> SlotRef{t}, T.parameters)...}
+    return ArgInfo{Targ_slots, is_vararg}((map(t -> SlotRef{t}(), T.parameters)..., ))
+end
+
+function load_args!(ai::ArgInfo{T, is_vararg}, args::Tuple) where {T, is_vararg}
+
+    # There is a difference between the varargs that we recieve, and the varargs of the
+    # original function. This section sorts that out.
+    # For example if the original function is `f(x...)`, then the `argtypes` field of its
+    # `IRCode` when calling e.g. `f(5.0)` will be `Tuple{typeof(f), Tuple{Float64}}`, where
+    # the second tuple contains the vararg.
+    # However, the `argtypes` field of the corresponding `InterpretedFunction` will
+    # be `Tuple{<:InterpretedFunction, Tuple{typeof(f), Float64}}`.
+    # Therefore, the `args` field of this function will be a `Tuple{typeof(f), Float64}`.
+    # We must therefore transform it into a `Tuple` of type
+    # `Tuple{typeof(f), Tuple{Float64}}` before attempting to load it into `ai.arg_slots`.
+    if is_vararg
+        num_args = length(ai.arg_slots) - 1 - 1 # once for first arg, once for vararg
+        refined_args = (args[1:num_args]..., (args[num_args+1:end]..., ))
+    else
+        refined_args = args
+    end
+
+    # Load the arguments into `ai.arg_slots`.
+    return __load_args!(ai.arg_slots, refined_args)
+end
+
+@generated function __load_args!(arg_slots::Tuple, args::Tuple)
+    return Expr(
+        :block,
+        map(n -> :(arg_slots[$(n + 1)][] = args[$n]), eachindex(args.parameters))...,
+        :(return nothing),
+    )
+end
+
+#
+# Construct and run an InterpretedFunction.
+#
+
+struct InterpretedFunction{sig<:Tuple, C, Treturn, Targ_info<:ArgInfo}
+    ctx::C
+    return_slot::SlotRef{Treturn}
+    arg_info::Targ_info
     slots::Vector{SlotRef}
     instructions::Vector{IFInstruction}
     bb_starts::Vector{Int}
+    bb_ends::Vector{Int}
     ir::IRCode
 end
 
-function InterpretedFunction(sig::Type{<:Tuple})
-    @nospecialize sig
+function InterpretedFunction(ctx::C, sig::Type{<:Tuple}) where {C}
+    @nospecialize ctx, sig
 
     # Grab code associated to this function.
-    ir, Treturn = Base.code_ircode_by_type(sig)[1]
+    interp = TapedInterpreter(ctx)
+    ir, Treturn = Base.code_ircode_by_type(sig; interp)[1]
+    # display(sig)
+    # display(ir)
+    # println()
+
+    # Slot into which the output of this function will be placed.
+    return_slot = SlotRef{Treturn}()
 
     # Construct argument reference references.
-    arg_slots = map(T -> SlotRef{_get_type(T)}(), (ir.argtypes..., ))
-    Targ_slots = Core.Typeof(arg_slots)
+    arg_types = Tuple{map(_get_type, ir.argtypes)..., }
+    is_vararg = Base.which(sig).isva
+    arg_info = arginfo_from_argtypes(arg_types, is_vararg)
 
     # Extract slots.
     slots = SlotRef[SlotRef{_get_type(T)}() for T in ir.stmts.type]
 
-    # Construct instructions (we should ideally do this recursively, but can't yet).
+    # Allocate memory for instructions and argument loading instructions.
     instructions = Vector{IFInstruction}(undef, length(slots))
 
+    # Compute the index of the instruction associated with the start of each basic block
+    # in `ir`. This is used to know where to jump to when we hit a `Core.GotoNode` or
+    # `Core.GotoIfNot`. The `ir.cfg` very nearly gives this to us for free.
+    bb_starts = vcat(1, ir.cfg.index)
+    bb_ends = vcat(ir.cfg.index .- 1, length(slots))
+
     # Extract the starting location of each basic block from the CFG and build IF.
-    return InterpretedFunction{sig, Treturn, Targ_slots}(
-        SlotRef{Treturn}(), arg_slots, slots, instructions, vcat(1, ir.cfg.index), ir
+    return InterpretedFunction{sig, C, Treturn, Core.Typeof(arg_info)}(
+        ctx, return_slot, arg_info, slots, instructions, bb_starts, bb_ends, ir,
     )
 end
 
-function (in_f::InterpretedFunction)(args::Vararg{Any, N}) where {N}
+function (in_f::InterpretedFunction{sig})(args::Vararg{Any, N}) where {N, sig}
     @nospecialize in_f, args
-    load_args!(in_f, args)
+    load_args!(in_f.arg_info, args)
     prev_block = 0
     next_block = 0
     current_block = 1
     n = 1
     instructions = in_f.instructions
     while next_block != -1
-        # @show prev_block, next_block, current_block, n
+        # @show prev_block, current_block, next_block, n
         if !isassigned(instructions, n)
             instructions[n] = build_instruction(in_f, n)
         end
@@ -753,28 +922,19 @@ function (in_f::InterpretedFunction)(args::Vararg{Any, N}) where {N}
     return in_f.return_slot[]
 end
 
-load_args!(in_f::InterpretedFunction, args::Tuple) = load_args!(in_f.arg_slots, args)
-
-@generated function load_args!(arg_slots, args::Tuple)
-    return Expr(
-        :block,
-        map(n -> :(arg_slots[$(n + 1)][] = args[$n]), eachindex(args.parameters))...,
-        :(return nothing),
-    )
-end
-
 function build_instruction(in_f::InterpretedFunction{sig}, n::Int) where {sig}
     @nospecialize in_f
     ir = in_f.ir
     ir_inst = rewrite_special_cases(ir, ir.stmts.inst[n])
-    arg_slots = in_f.arg_slots
-    slots = in_f.slots
     return_slot = in_f.return_slot
-    inst = build_instruction(ir_inst, n, arg_slots, slots, return_slot)
+    is_block_end = n in in_f.bb_ends
+    inst = build_instruction(
+        in_f.ctx, ir_inst, n, in_f.arg_info, in_f.slots, return_slot, is_block_end
+    )
     return _make_opaque_closure(inst, sig, n)
 end
 
-function build_instruction(ir_inst::Any, arg_slots, slots, return_slot)
+function build_instruction(ctx, ir_inst::Any, arg_slots, slots, return_slot, is_block_end)
     println("IR in which error is found:")
     display(sig)
     display(ir)
@@ -782,29 +942,73 @@ function build_instruction(ir_inst::Any, arg_slots, slots, return_slot)
     throw(error("unhandled instruction $ir_inst, with type $(typeof(ir_inst))")) 
 end
 
-struct DelayedInterpretedFunction{F}
+struct DelayedInterpretedFunction{C, F}
+    ctx::C
     f::F
 end
 
-function (f::DelayedInterpretedFunction{F})(args...) where {F}
-    sig = Tuple{F, Core.Typeof(args).parameters...}
-    return is_primitive(sig) ? f.f(args...) : InterpretedFunction(sig)(args...)
+function (f::DelayedInterpretedFunction{C, F})(args...) where {C, F}
+    s = Tuple{F, Core.Typeof(args).parameters...}
+    return is_primitive(f.ctx, s) ? f.f(args...) : InterpretedFunction(f.ctx, s)(args...)
 end
 
 tangent_type(::Type{<:InterpretedFunction}) = NoTangent
 
+# Pre-allocate for AD-related instructions and quantities.
+function make_codual_slot(::SlotRef{P}) where {P}
+    if isconcretetype(P)
+        return SlotRef{CoDual{P, tangent_type(P)}}()
+    else
+        return SlotRef{CoDual}()
+    end
+end
+# make_codual_slot(::SlotRef{Any}) = SlotRef{CoDual}()
 
+function make_codual_arginfo(ai::ArgInfo{T, is_vararg}) where {T, is_vararg}
+    codual_arg_slots = map(make_codual_slot, ai.arg_slots)
+    return ArgInfo{Core.Typeof(codual_arg_slots), is_vararg}(codual_arg_slots)
+end
 
+function load_rrule_args!(ai::ArgInfo{T, is_vararg}, args::Tuple) where {T, is_vararg}
+    # There is a difference between the varargs that we recieve, and the varargs of the
+    # original function. This section sorts that out.
+    # For example if the original function is `f(x...)`, then the `argtypes` field of its
+    # `IRCode` when calling e.g. `f(5.0)` will be `Tuple{typeof(f), Tuple{Float64}}`, where
+    # the second tuple contains the vararg.
+    # However, the `argtypes` field of the corresponding `InterpretedFunction` will
+    # be `Tuple{<:InterpretedFunction, Tuple{typeof(f), Float64}}`.
+    # Therefore, the `args` field of this function will be a `Tuple{typeof(f), Float64}`.
+    # We must therefore transform it into a `Tuple` of type
+    # `Tuple{typeof(f), Tuple{Float64}}` before attempting to load it into `ai.arg_slots`.
+    if is_vararg
+        num_args = length(ai.arg_slots) - 1 - 1 # once for first arg, once for vararg
+        primals = map(primal, args)
+        tangents = map(tangent, args)
+        refined_primal_args = (primals[1:num_args]..., (primals[num_args+1:end]..., ))
+        refined_tangent_args = (tangents[1:num_args]..., (tangents[num_args+1:end]..., ))
+        refined_args = map(CoDual, refined_primal_args, refined_tangent_args)
+    else
+        refined_args = args
+    end
+
+    # Load the arguments into `ai.arg_slots`.
+    return __load_args!(ai.arg_slots, refined_args)
+end
+
+function flattened_rrule_args(ai::ArgInfo{T, is_vararg}) where {T, is_vararg}
+    args = map(getindex, ai.arg_slots[2:end])
+    !is_vararg && return args
+
+    va_arg = args[end]
+    return (args[1:end-1]..., map(CoDual, primal(va_arg), tangent(va_arg))...)
+end
 
 # Should really just use the signature for this to be honest. This makes quite a lot of
 # sense -- it's entirely possible that I'm willing to assert that I know something about the
 # types I'm going to be dealing with, but not the values associated to them.
 function build_rrule!!(f_in::InterpretedFunction{sig}) where {sig}
 
-    # Pre-allocate for AD-related instructions and quantities.
-    make_codual_slot(::SlotRef{P}) where {P} = SlotRef{CoDual{P, tangent_type(P)}}()
-
-    arg_slots = map(make_codual_slot, f_in.arg_slots)
+    arg_info = make_codual_arginfo(f_in.arg_info)
     slots = map(make_codual_slot, f_in.slots)
     return_slot = make_codual_slot(f_in.return_slot)
     fwds_instructions = Vector{FwdsIFInstruction}(undef, length(f_in.instructions))
@@ -815,21 +1019,27 @@ function build_rrule!!(f_in::InterpretedFunction{sig}) where {sig}
 
     # Construct rrule!! using pre-allcoated memory.
     function f_in_rrule!!(in_f::CoDual, args::Vararg{CoDual, N}) where {N}
-        load_args!(arg_slots, args)
+        load_rrule_args!(arg_info, args)
         in_f_primal = primal(in_f)
         prev_block = 0
         next_block = 0
         current_block = 1
         n = 1
-        j = 1
-        n_stack[1] = n
+        j = 0
         instructions = in_f_primal.instructions
         while next_block != -1
+            j += 1
+            if length(n_stack) >= j
+                n_stack[j] = n
+            else
+                push!(n_stack, n)
+            end
+
             if !isassigned(instructions, n) 
                 instructions[n] = build_instruction(in_f_primal, n)
             end
             if !isassigned(fwds_instructions, n)
-                fwds, bwds = generate_instructions(in_f, arg_slots, slots, return_slot, n)
+                fwds, bwds = generate_instructions(in_f, arg_info, slots, return_slot, n)
                 fwds_instructions[n] = fwds
                 bwds_instructions[n] = bwds
             end
@@ -842,35 +1052,29 @@ function build_rrule!!(f_in::InterpretedFunction{sig}) where {sig}
                 current_block = next_block
                 next_block = 0
             end
-            j += 1
-            if length(n_stack) >= j
-                n_stack[j] = n
-            else
-                push!(n_stack, n)
-            end
         end
 
         interpreted_function_pb!! = InterpretedFunctionPb(
-            j, bwds_instructions, return_slot, n_stack, arg_slots
+            j, bwds_instructions, return_slot, n_stack, arg_info
         )
         return return_slot[], interpreted_function_pb!!
     end
     return f_in_rrule!!
 end
 
-struct InterpretedFunctionPb{Treturn_slot, Targ_slots, Tbwds_f}
+struct InterpretedFunctionPb{Treturn_slot, Targ_info, Tbwds_f}
     j::Int
     bwds_instructions::Tbwds_f
     return_slot::Treturn_slot
     n_stack::Vector{Int}
-    arg_slots::Targ_slots
+    arg_info::Targ_info
 end
 
 function (if_pb!!::InterpretedFunctionPb)(dout, ::NoTangent, dargs::Vararg{Any, N}) where {N}
     bwds_instructions = if_pb!!.bwds_instructions
     return_slot = if_pb!!.return_slot
     n_stack = if_pb!!.n_stack
-    arg_slots = if_pb!!.arg_slots
+    arg_info = if_pb!!.arg_info
 
     replace_tangent!(return_slot, dout)
 
@@ -881,8 +1085,9 @@ function (if_pb!!::InterpretedFunctionPb)(dout, ::NoTangent, dargs::Vararg{Any, 
     end
 
     # Increment and return.
-    new_dargs = map(dargs, arg_slots[2:end]) do darg, arg_slot
-        return increment!!(darg, tangent(arg_slot[]))
+    flat_arg_slots = flattened_rrule_args(arg_info)
+    new_dargs = map(dargs, flat_arg_slots[1:end]) do darg, arg_slot
+        return increment!!(darg, tangent(arg_slot))
     end
     return NoTangent(), new_dargs...
 end
@@ -890,10 +1095,12 @@ end
 
 const __Tinst = Tuple{FwdsIFInstruction, BwdsIFInstruction}
 
-@noinline function generate_instructions(in_f, arg_slots, slots, return_slot, n)::__Tinst
+function generate_instructions(in_f, arg_info, slots, return_slot, n)::__Tinst
     ir = primal(in_f).ir
+    ctx = primal(in_f).ctx
     ir_inst = rewrite_special_cases(ir, ir.stmts.inst[n])
-    return build_coinstructions(ir_inst, n, arg_slots, slots, return_slot)
+    is_blk_end = n in primal(in_f).bb_ends
+    return build_coinstructions(ctx, ir_inst, n, arg_info, slots, return_slot, is_blk_end)
 end
 
 # Slow implementation, but useful for testing correctness.
@@ -944,6 +1151,19 @@ new_2_tester(x) = Foo(x, :symbol)
 
 type_unstable_tester(x::Ref{Any}) = cos(x[])
 
+type_unstable_tester_2(x::Ref{Real}) = cos(x[])
+
+type_unstable_function_eval(f::Ref{Any}, x::Float64) = f[](x)
+
+function phi_const_bool_tester(x)
+    if x > 0
+        a = true
+    else
+        a = false
+    end
+    return cos(a)
+end
+
 function pi_node_tester(y::Ref{Any})
     x = y[]
     return isa(x, Int) ? sin(x) : cos(x)
@@ -957,17 +1177,38 @@ function avoid_throwing_path_tester(x)
 end
 
 function foreigncall_tester(x)
-    X = @ccall jl_alloc_array_2d(Matrix{Float64}::Any, 5::Int, 5::Int)::Matrix{Float64}
+    if ccall(:jl_array_isassigned, Cint, (Any, UInt), x, 1) == 1
+        return cos(x[1])
+    else
+        return sin(x[1])
+    end
+end
+
+function no_primitive_inlining_tester(x)
+    X = Matrix{Float64}(undef, 5, 5) # contains a foreigncall which should never be hit
     for n in eachindex(X)
         X[n] = x
     end
     return X
 end
 
-# TODO notes:
-# 3. OpaqueClosures seem to work really quite well on 1.10.
-# 4. I need to think carefully about how to ensure that DynamicDispatch works properly. At
-#   present, I'm looking stuff up based on the static type of variables, however, I need the
-#   dynamic type in order to do dispatch in the general case. This just means deferring the
-#   construction of `InterpretedFunction`s until runtime in the case that the line is not
-#   type stable. Simply use `isconcretetype` to check.
+@noinline varargs_tester(x::Vararg{Any, N}) where {N} = x
+
+varargs_tester_2(x) = varargs_tester(x)
+varargs_tester_2(x, y) = varargs_tester(x, y)
+varargs_tester_2(x, y, z) = varargs_tester(x, y, z)
+
+@noinline varargs_tester_3(x, y::Vararg{Any, N}) where {N} = sin(x), y
+
+varargs_tester_4(x) = varargs_tester_3(x...)
+varargs_tester_4(x, y) = varargs_tester_3(x...)
+varargs_tester_4(x, y, z) = varargs_tester_3(x...)
+
+a_primitive(x) = sin(x)
+non_primitive(x) = sin(x)
+
+is_primitive(::DefaultCtx, ::Type{<:Tuple{typeof(a_primitive), Any}}) = true
+is_primitive(::DefaultCtx, ::Type{<:Tuple{typeof(non_primitive), Any}}) = false
+
+contains_primitive(x) = @inline a_primitive(x)
+contains_non_primitive(x) = @inline non_primitive(x)

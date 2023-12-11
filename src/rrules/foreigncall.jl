@@ -90,7 +90,7 @@ function isprimitive(
 end
 @is_primitive MinimalCtx Tuple{Type{<:Array}, typeof(undef), NTuple}
 function rrule!!(
-    ::CoDual{Type{Array{T, N}}}, ::CoDual{typeof(undef)}, m::CoDual{NTuple{N, Int}},
+    ::CoDual{<:Type{<:Array{T}}}, ::CoDual{typeof(undef)}, m::CoDual{NTuple{N, Int}},
 ) where {T, N}
     _m = primal(m)
     x = CoDual(Array{T, N}(undef, _m), Array{tangent_type(T), N}(undef, _m))
@@ -405,6 +405,22 @@ function rrule!!(
     y = CoDual(
         ccall(:jl_array_ptr, Ptr{T}, (Any, ), primal(a)),
         ccall(:jl_array_ptr, Ptr{V}, (Any, ), tangent(a)),
+    )
+    return y, NoPullback()
+end
+
+function rrule!!(
+    ::CoDual{<:Tforeigncall},
+    ::CoDual{Val{:jl_value_ptr}},
+    ::CoDual{Val{Ptr{Cvoid}}},
+    ::CoDual,
+    ::CoDual, # nreq
+    ::CoDual, # calling convention
+    a::CoDual
+)
+    y = CoDual(
+        ccall(:jl_value_ptr, Ptr{Cvoid}, (Any, ), primal(a)),
+        ccall(:jl_value_ptr, Ptr{NoTangent}, (Any, ), tangent(a)),
     )
     return y, NoPullback()
 end
