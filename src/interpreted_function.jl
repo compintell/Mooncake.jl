@@ -144,8 +144,11 @@ end
 extract_arg(x::SlotRef{T}) where {T} = x[]
 extract_arg(x::T) where {T} = x # assume literal
 
+struct TypeWrapper{T} end
+
+extract_codual(::TypeWrapper{T}) where {T} = uninit_codual(T)
 extract_codual(x::SlotRef{T}) where {T<:CoDual} = x[]
-extract_codual(x::T) where {T} = uninit_codual(x)
+extract_codual(x) = uninit_codual(x)
 
 Base.isassigned(x::SlotRef) = isdefined(x, :x)
 
@@ -497,7 +500,6 @@ function build_instruction(ir_inst::Expr, in_f, n::Int, is_block_end::Bool)
 
         # Extract function.
         fn = is_invoke ? ir_inst.args[2] : ir_inst.args[1]
-
         if fn isa Core.SSAValue || fn isa Core.Argument
             fn = _get_input(fn, slots, arg_info)[]
         end
@@ -518,8 +520,7 @@ function build_instruction(ir_inst::Expr, in_f, n::Int, is_block_end::Bool)
                 )
             end
         end
-        new_inst = CallInst(fn, arg_refs, val_ref, ir_inst, n, is_block_end)
-        return new_inst
+        return CallInst(fn, arg_refs, val_ref, ir_inst, n, is_block_end)
     elseif ir_inst.head in [
         :code_coverage_effect, :gc_preserve_begin, :gc_preserve_end, :loopinfo, :leave,
         :pop_exception,
@@ -555,17 +556,11 @@ function build_coinstructions(ir_inst::Expr, in_f, in_f_rrule!!, n, is_blk_end)
             fn = IntrinsicsWrappers.translate(Val(fn))
         end
 
-        # Check whether any arguments are duplicated. If they are, we must replace the
-        # function with a call to dedup.
-
         fn_sig = Tuple{
             Core.Typeof(fn),
             map(_robust_typeof ∘ primal ∘ extract_codual, codual_arg_refs)...,
         }
         __rrule!! = rrule!!
-        # @show fn_sig, is_primitive(in_f.ctx, fn_sig)
-        # @show Core.Typeof(fn_sig)
-        # @show Base.which(is_primitive, Tuple{MinimalCtx, Core.Typeof(fn_sig)})
         if !is_primitive(in_f.ctx, fn_sig)
             if all(Base.isconcretetype, fn_sig.parameters)
                 fn = InterpretedFunction(in_f.ctx, fn_sig; interp=in_f.interp)
@@ -603,12 +598,17 @@ function build_coinstructions(ir_inst::Expr, in_f, in_f_rrule!!, n, is_blk_end)
         old_vals = Vector{eltype(codual_val_ref)}(undef, 0)
         sizehint!(old_vals, 100)
 
+        # Wrap any types in a data structure which prevents the introduction of type-
+        # instabilities.
+        lift(T::DataType) = TypeWrapper{T}()
+        lift(x) = x
+        codual_arg_refs = map(lift, codual_arg_refs)
 
-        function __barrier(fn, codual_val_ref, __rrule!!, old_vals, pb_stack, is_blk_end)
+        function __barrier(
+            fn, codual_val_ref, __rrule!!, old_vals, pb_stack, is_blk_end, codual_arg_refs,
+        )
 
-            @noinline function ___fwds_pass(
-                codual_val_ref, old_vals, fn, pb_stack, current_blk
-            )
+            function ___fwds_pass(current_blk)
                 if isassigned(codual_val_ref)
                     push!(old_vals, codual_val_ref[])
                 end
@@ -620,7 +620,7 @@ function build_coinstructions(ir_inst::Expr, in_f, in_f_rrule!!, n, is_blk_end)
 
             # Construct operation to run the forwards-pass.
             run_fwds_pass = @opaque function (a::Int, current_blk::Int)
-                ___fwds_pass(codual_val_ref, old_vals, fn, pb_stack, current_blk)
+                ___fwds_pass(current_blk)
             end
             if !(run_fwds_pass isa FwdsIFInstruction)
                 @warn "Unable to compiled forwards pass -- running to generate the error."
@@ -645,7 +645,9 @@ function build_coinstructions(ir_inst::Expr, in_f, in_f_rrule!!, n, is_blk_end)
 
             return run_fwds_pass, run_rvs_pass
         end
-        return __barrier(fn, codual_val_ref, __rrule!!, old_vals, pb_stack, is_blk_end)
+        return __barrier(
+            fn, codual_val_ref, __rrule!!, old_vals, pb_stack, is_blk_end, codual_arg_refs
+        )
     elseif ir_inst isa Expr && ir_inst.head in [
         :code_coverage_effect, :gc_preserve_begin, :gc_preserve_end, :loopinfo,
         :leave, :pop_exception,
@@ -1238,12 +1240,10 @@ function avoid_throwing_path_tester(x)
     return sin(x)
 end
 
+simple_foreigncall_tester(x) = ccall(:jl_array_isassigned, Cint, (Any, UInt), x, 1)
+
 function foreigncall_tester(x)
-    if ccall(:jl_array_isassigned, Cint, (Any, UInt), x, 1) == 1
-        return cos(x[1])
-    else
-        return sin(x[1])
-    end
+    return ccall(:jl_array_isassigned, Cint, (Any, UInt), x, 1) == 1 ? cos(x[1]) : sin(x[1])
 end
 
 function no_primitive_inlining_tester(x)

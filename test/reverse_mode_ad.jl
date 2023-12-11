@@ -24,7 +24,7 @@
     ]
         @test Deduplicated{T}()(unique_args...) == target_output
         sig = Tuple{Deduplicated{T}, map(Core.Typeof, unique_args)...}
-        in_f = Taped.InterpretedFunction(DefaultCtx(), sig)
+        in_f = Taped.InterpretedFunction(DefaultCtx(), sig; interp=Taped.TInterp())
         TestUtils.test_rrule!!(
             Xoshiro(123456), in_f, unique_args...;
             perf_flag=:none, interface_only=false, is_primitive=false,
