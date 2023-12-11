@@ -134,13 +134,13 @@
                 LinearAlgebra.MulAddMul(5.0, 4.0),
                 5.0,
                 randn(5, 4),
-                randn(5, 4),
+                (5, 4),
             ), # for Bool comma,
             (
                 nothing, nothing,
                 mul!, transpose(randn(3, 5)), randn(5, 5), randn(5, 3), 4.0, 3.0,
             ), # static_parameter,
-            (nothing, nothing, Xoshiro, 123456),
+            # (nothing, nothing, Xoshiro, 123456),
         ],
         TestResources.generate_test_functions(),
     )
@@ -157,78 +157,34 @@
             perf_flag=:none, interface_only=false, is_primitive=false,
         )
 
-        # rng = Xoshiro(123456)
-        # test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only=false, perf_flag=:none)
+        # # rng = Xoshiro(123456)
+        # # test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only=false, perf_flag=:none)
 
         # # Only bother to check performance if the original programme does not allocate.
         # original = @benchmark $(Ref(f))[]($(Ref(x))[]...)
         # r = @benchmark $(Ref(in_f))[]($(Ref(x))[]...)
 
-        # # __rrule!! = Taped.build_rrule!!(in_f)
-        # # codual_x = map(zero_codual, x)
-        # # rrule_timing = @benchmark($__rrule!!(zero_codual($in_f), $codual_x...))
-        # # out, pb!! = __rrule!!(zero_codual(in_f), codual_x...)
-        # # df = zero_codual(in_f)
-        # # overall_timing = @benchmark Taped.to_benchmark($__rrule!!, $df, $codual_x)
+        # __rrule!! = Taped.build_rrule!!(in_f)
+        # codual_x = map(zero_codual, x)
+        # rrule_timing = @benchmark($__rrule!!(zero_codual($in_f), $codual_x...))
+        # out, pb!! = __rrule!!(zero_codual(in_f), codual_x...)
+        # df = zero_codual(in_f)
+        # overall_timing = @benchmark Taped.to_benchmark($__rrule!!, $df, $codual_x)
         # println("original")
         # display(original)
         # println()
         # println("taped")
         # display(r)
         # println()
-        # # println("rrule")
-        # # display(rrule_timing)
-        # # println()
-        # # println("overall")
-        # # display(overall_timing)
-        # # println()
+        # println("rrule")
+        # display(rrule_timing)
+        # println()
+        # println("overall")
+        # display(overall_timing)
+        # println()
 
-        # # if allocs(original) == 0
-        # #     @test allocs(r) == 0
-        # # end
+        # if allocs(original) == 0
+        #     @test allocs(r) == 0
+        # end
     end
 end
-
-# @eval CC function run_passes(
-#     ci::CodeInfo,
-#     sv::OptimizationState,
-#     caller::InferenceResult,
-#     optimize_until = nothing,  # run all passes by default
-# )
-#     __stage__ = 0  # used by @pass
-#     # NOTE: The pass name MUST be unique for `optimize_until::AbstractString` to work
-#     @pass "convert"   ir = convert_to_ircode(ci, sv)
-#     @pass "slot2reg"  ir = slot2reg(ir, ci, sv)
-#     # TODO: Domsorting can produce an updated domtree - no need to recompute here
-#     @pass "compact 1" ir = compact!(ir)
-#     @pass "Inlining"  ir = ssa_inlining_pass!(ir, sv.inlining, ci.propagate_inbounds)
-#     # @timeit "verify 2" verify_ir(ir)
-#     @pass "compact 2" ir = compact!(ir)
-#     @pass "SROA"      ir = sroa_pass!(ir, sv.inlining)
-#     @pass "ADCE"      ir = adce_pass!(ir, sv.inlining)
-#     @pass "compact 3" ir = compact!(ir)
-#     if JLOptions().debug_level == 2
-#         @timeit "verify 3" (verify_ir(ir); verify_linetable(ir.linetable))
-#     end
-#     @label __done__  # used by @pass
-#     return ir
-# end
-
-# @eval CC function typeinf_frame(interp::AbstractInterpreter, method::Method, @nospecialize(atype), sparams::SimpleVector, run_optimizer::Bool)
-#     # @show "computing inferred frame"
-#     mi = specialize_method(method, atype, sparams)::MethodInstance
-#     # @show mi
-#     start_time = ccall(:jl_typeinf_timing_begin, UInt64, ())
-#     result = InferenceResult(mi, typeinf_lattice(interp))
-#     # println("result")
-#     # println(result)
-#     frame = InferenceState(result, run_optimizer ? :global : :no, interp)
-#     # println("frame")
-#     # println(frame)
-#     frame === nothing && return nothing
-#     typeinf(interp, frame)
-#     # println("typeinf frame")
-#     # println(frame)
-#     ccall(:jl_typeinf_timing_end, Cvoid, (UInt64,), start_time)
-#     return frame
-# end

@@ -25,10 +25,10 @@ is_primitive(::MinimalCtx, ::Type{<:Tuple{typeof(foo), Float64}}) = true
 You should implemented more complicated method of `is_primitive` in the usual way.
 """
 macro is_primitive(Tctx, sig)
-    return esc(:(Taped.is_primitive(::$Tctx, ::Type{<:$sig}) = true))
+    return :(Taped.is_primitive(::$Tctx, ::Type{<:$sig}) = true)
 end
 
-@is_primitive MinimalCtx Tuple{Any}
+# @is_primitive MinimalCtx Tuple{Any}
 @is_primitive MinimalCtx Tuple{typeof(rebind), Any}
 
 """
@@ -49,11 +49,6 @@ struct TICache
 end
 
 TICache() = TICache(IdDict{Core.MethodInstance, Core.CodeInstance}())
-# struct TapedInterpreterCache
-#     dict::IdDict{Core.MethodInstance, Core.CodeInstance}
-# end
-
-# const __TapedInterpreterCache = TapedInterpreterCache()
 
 struct TapedInterpreter{C} <: CC.AbstractInterpreter
     ctx::C
@@ -101,50 +96,6 @@ function CC.setindex!(
 )
     return setindex!(wvc.cache.dict, ci, mi)
 end
-
-# CC.infer_compilation_signature(::TInterp) = true
-
-# function CC.switch_to_irinterp(interp::TInterp)
-#     return TInterp(
-#         interp.ctx;
-#         meta=interp.meta,
-#         world=interp.world,
-#         inf_params=interp.inf_params,
-#         opt_params=interp.opt_params,
-#         inf_cache=interp.inf_cache,
-#         code_cache=interp.code_cache,
-#         ir_interp=true,
-#     )
-# end
-
-# function CC.switch_from_irinterp(interp::TInterp)
-#     return TInterp(
-#         interp.ctx;
-#         meta=interp.meta,
-#         world=interp.world,
-#         inf_params=interp.inf_params,
-#         opt_params=interp.opt_params,
-#         inf_cache=interp.inf_cache,
-#         code_cache=interp.code_cache,
-#         ir_interp=false,
-#     )
-# end
-
-# function CC.typeinf_lattice(interp::TapedInterpreter)
-#     if interp.ir_interp
-#         return CC.InferenceLattice(CC.SimpleInferenceLattice.instance)
-#     else
-#         return CC.InferenceLattice(CC.BaseInferenceLattice.instance)
-#     end
-# end
-
-# function CC.ipo_lattice(interp::TapedInterpreter)
-#     if interp.ir_interp
-#         return CC.InferenceLattice(CC.SimpleInferenceLattice.instance)
-#     else
-#         return CC.InferenceLattice(CC.IPOResultLattice.instance)
-#     end
-# end
 
 _type(x) = x
 _type(x::CC.Const) = Core.Typeof(x.val)
@@ -411,8 +362,18 @@ function build_instruction(ir_inst::PiNode, in_f, n, is_blk_end)
     return PiNodeInst(_get_input(ir_inst.val, in_f), in_f.slots[n], is_blk_end)
 end
 
-function build_coinstructions(ir_inst::PiNode, in_f, in_f_rrule!!, n, is_blk_end)
-    throw(error("PiNode coinstructions not implemented"))
+function build_coinstructions(ir_inst::PiNode, _, in_f_rrule!!, n::Int, is_blk_end::Bool)
+    input_ref = _get_input(ir_inst.val, in_f_rrule!!)
+    val_ref = in_f_rrule!!.slots[n]
+    run_fwds_pass::FwdsIFInstruction = @opaque function(::Int, current_blk::Int)
+        val_ref[] = input_ref[]
+        return is_blk_end ? current_blk + 1 : 0
+    end
+    run_rvs_pass::BwdsIFInstruction = @opaque function(j::Int)
+        input_ref[] = val_ref[]
+        return j
+    end
+    return run_fwds_pass, run_rvs_pass
 end
 
 #
@@ -643,13 +604,17 @@ function build_coinstructions(ir_inst::Expr, in_f, in_f_rrule!!, n, is_blk_end)
             map(_robust_typeof ∘ primal ∘ extract_codual, codual_arg_refs)...,
         }
         __rrule!! = rrule!!
+        # @show fn_sig, is_primitive(in_f.ctx, fn_sig)
+        # @show Core.Typeof(fn_sig)
+        # @show Base.which(is_primitive, Tuple{MinimalCtx, Core.Typeof(fn_sig)})
         if !is_primitive(in_f.ctx, fn_sig)
             if all(Base.isconcretetype, fn_sig.parameters)
                 fn = InterpretedFunction(in_f.ctx, fn_sig; interp=in_f.interp)
                 __rrule!! = build_rrule!!(fn)
             else
-                throw(error("can't handle delays yet"))
-                fn = DelayedInterpretedFunction{Core.Typeof(ctx), Core.Typeof(fn)}(ctx, fn)
+                fn = DelayedInterpretedFunction{Core.Typeof(ctx), Core.Typeof(fn)}(
+                    ctx, fn, in_f.interp
+                )
             end
         end
 
@@ -1065,6 +1030,7 @@ function (f::DelayedInterpretedFunction{C, F})(args...) where {C, F}
 end
 
 tangent_type(::Type{<:InterpretedFunction}) = NoTangent
+tangent_type(::Type{<:DelayedInterpretedFunction}) = NoTangent
 
 # Pre-allocate for AD-related instructions and quantities.
 function make_codual_slot(::SlotRef{P}) where {P}

@@ -74,9 +74,9 @@ function isprimitive(
 ) where {T,N}
     return true
 end
-@is_primitive MinimalCtx Tuple{Type{<:Array}, typeof(undef), Vararg}
+@is_primitive MinimalCtx Tuple{Type{<:Array{T, N}}, typeof(undef), Vararg} where {T, N}
 function rrule!!(
-    ::CoDual{Type{Array{T, N}}}, ::CoDual{typeof(undef)}, m::Vararg{CoDual{Int}, N}
+    ::CoDual{Type{Array{T, N}}}, ::CoDual{typeof(undef)}, m::Vararg{CoDual}
 ) where {T, N}
     _m = map(primal, m)
     x = CoDual(Array{T, N}(undef, _m...), Array{tangent_type(T), N}(undef, _m...))
@@ -88,9 +88,9 @@ function isprimitive(
 ) where {T, N}
     return true
 end
-@is_primitive MinimalCtx Tuple{Type{<:Array}, typeof(undef), NTuple}
+@is_primitive MinimalCtx Tuple{Type{<:Array{T, N}}, typeof(undef), NTuple{N}} where {T, N}
 function rrule!!(
-    ::CoDual{<:Type{<:Array{T}}}, ::CoDual{typeof(undef)}, m::CoDual{NTuple{N, Int}},
+    ::CoDual{<:Type{<:Array{T, N}}}, ::CoDual{typeof(undef)}, m::CoDual{NTuple{N}},
 ) where {T, N}
     _m = primal(m)
     x = CoDual(Array{T, N}(undef, _m), Array{tangent_type(T), N}(undef, _m))
