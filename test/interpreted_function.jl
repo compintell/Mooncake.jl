@@ -113,6 +113,7 @@
             (nothing, nothing, Taped.phi_const_bool_tester, 5.0),
             (nothing, nothing, Taped.phi_const_bool_tester, -5.0),
             (nothing, nothing, Taped.avoid_throwing_path_tester, 5.0),
+            (nothing, nothing, Taped.simple_foreigncall_tester, randn(5)),
             (nothing, nothing, Taped.foreigncall_tester, randn(5)),
             (nothing, nothing, Taped.no_primitive_inlining_tester, 5.0),
             (nothing, nothing, Taped.varargs_tester, 5.0),
@@ -163,8 +164,8 @@
             perf_flag=:none, interface_only=false, is_primitive=false,
         )
 
-        # # rng = Xoshiro(123456)
-        # # test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only=false, perf_flag=:none)
+        # rng = Xoshiro(123456)
+        # test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only=false, perf_flag=:none)
 
         # # Only bother to check performance if the original programme does not allocate.
         # original = @benchmark $(Ref(f))[]($(Ref(x))[]...)
