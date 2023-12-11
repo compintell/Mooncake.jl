@@ -221,8 +221,8 @@ function (inst::ReturnInst)(::Int, ::Int)
     return -1
 end
 
-function build_instruction(ctx, ir_inst::ReturnNode, ::Int, arg_info, slots, return_slot, _, _)
-    return ReturnInst(return_slot, _get_input(ir_inst.val, slots, arg_info))
+function build_instruction(ir_inst::ReturnNode, in_f, n, is_block_end)
+    return ReturnInst(in_f.return_slot, _get_input(ir_inst.val, in_f))
 end
 
 # function run_profiler(__rrule!!, df, dx)
@@ -291,9 +291,7 @@ end
 
 (inst::GotoInst)(::Int, ::Int) = inst.n
 
-function build_instruction(_, ir_inst::GotoNode, n::Int, arg_info, slots, return_slot, _, _)
-    return GotoInst(ir_inst.label)
-end
+build_instruction(ir_inst::GotoNode, _, _, _) = GotoInst(ir_inst.label)
 
 function build_coinstructions(_, ir_inst::GotoNode, n::Int, arg_info, slots, return_slot, _, _)
 
@@ -328,8 +326,8 @@ function (inst::GotoIfNotInst)(::Int, current_block::Int)
     return extract_arg(inst.cond[]) ? current_block + 1 : inst.dest
 end
 
-function build_instruction(_, node::GotoIfNot, n::Int, arg_info, slots, _, _, _)
-    return GotoIfNotInst(_get_input(node.cond, slots, arg_info), node.dest, node, n)
+function build_instruction(ir_inst::GotoIfNot, in_f, n, _)
+    return GotoIfNotInst(_get_input(ir_inst.cond, in_f), ir_inst.dest, ir_inst, n)
 end
 
 function build_coinstructions(_, ir_inst::GotoIfNot, n::Int, arg_info, slots, _, _, _)
@@ -382,17 +380,17 @@ end
 
 struct UndefinedReference end
 
-function build_instruction(_, ir_inst::PhiNode, n::Int, arg_info, slots, _, is_blk_end, _)
+function build_instruction(ir_inst::PhiNode, in_f, n::Int, is_blk_end)
     edges = map(Int, (ir_inst.edges..., ))
     values_vec = map(eachindex(ir_inst.values)) do j
         if isassigned(ir_inst.values, j)
-            return _get_input(ir_inst.values[j], slots, arg_info)
+            return _get_input(ir_inst.values[j], in_f)
         else
             return UndefinedReference()
         end
     end
     values = map(x -> x isa SlotRef ? x : SlotRef(x), (values_vec..., ))
-    val_slot = slots[n]
+    val_slot = in_f.slots[n]
     return PhiNodeInst(edges, values, val_slot, ir_inst, n, is_blk_end)
 end
 
@@ -453,6 +451,8 @@ end
 # Core.PiNode
 #
 
+using Core: PiNode
+
 struct PiNodeInst{Tinput_ref<:SlotRef, Tval_ref<:SlotRef}
     input_ref::Tinput_ref
     val_ref::Tval_ref
@@ -463,9 +463,8 @@ function (inst::PiNodeInst)(::Int, current_block::Int)
     inst.val_ref[] = inst.input_ref[]
     return inst.is_blk_end ? current_block + 1 : 0
 end
-
-function build_instruction(_, node::Core.PiNode, n::Int, arg_info, slots, _, is_blk_end, _)
-    return PiNodeInst(_get_input(node.val, slots, arg_info), slots[n], is_blk_end)
+function build_instruction(ir_inst::PiNode, in_f, n, is_blk_end)
+    return PiNodeInst(_get_input(ir_inst.val, in_f), in_f.slots[n], is_blk_end)
 end
 
 #
@@ -476,7 +475,7 @@ struct NothingInst end
 
 (inst::NothingInst)(::Int, current_block::Int) = current_block + 1
 
-build_instruction(_, ::Nothing, n::Int, ::Any, ::Any, ::Any, ::Any, _) = NothingInst()
+build_instruction(::Nothing, in_f, n, is_block_end) = NothingInst()
 
 function build_coinstructions(_, ::Nothing, ::Int, ::Any, ::Any, ::Any, ::Any, _)
     run_fwds_pass = @opaque (a::Int, current_block::Int) -> current_block + 1
@@ -499,9 +498,7 @@ function (inst::BoolInst)(::Int, current_block::Int)
     return inst.is_blk_end ? current_block + 1 : 0
 end
 
-function build_instruction(_, val::Bool, n::Int, ::Any, slots, ::Any, is_blk_end, _)
-    return BoolInst(val, slots[n], is_blk_end)
-end
+build_instruction(val::Bool, in_f, n, is_blk_end) = BoolInst(val, in_f.slots[n], is_blk_end)
 
 function build_coinstructions(_, val::Bool, n::Int, ::Any, slots, ::Any, is_blk_end, _)
     function __barrier(val, val_ref::SlotRef{<:CoDual{Bool}}, is_blk_end)
@@ -530,9 +527,7 @@ function (inst::TypeInst)(::Int, current_block::Int)
     return inst.is_blk_end ? current_block + 1 : 0
 end
 
-function build_instruction(_, val::Type, n::Int, ::Any, slots, ::Any, is_blk_end, _)
-    return TypeInst(val, slots[n], is_blk_end)
-end
+build_instruction(val::Type, in_f, n, is_blk_end) = TypeInst(val, in_f.slots[n], is_blk_end)
 
 function build_coinstructions(_, val::Type, n::Int, ::Any, slots, ::Any, is_blk_end, _)
     function __barrier(val, val_ref::SlotRef{<:CoDual{<:Type}}, is_blk_end)
@@ -561,8 +556,8 @@ function (inst::GlobalRefInst)(::Int, current_block::Int)
     return inst.is_blk_end ? current_block + 1 : 0
 end
 
-function build_instruction(_, node::GlobalRef, n::Int, arg_info, slots, _, is_blk_end, _)
-    return GlobalRefInst(_get_globalref(node), slots[n], is_blk_end)
+function build_instruction(node::GlobalRef, in_f, n, is_blk_end)
+    return GlobalRefInst(_get_globalref(node), in_f.slots[n], is_blk_end)
 end
 
 function build_coinstructions(_, node::GlobalRef, n::Int, ::Any, slots, ::Any, is_blk_end, _)
@@ -618,7 +613,10 @@ end
 
 (::SkippedExpressionInst)(::Int, ::Int) = 0
 
-function build_instruction(ctx, ir_inst::Expr, n::Int, arg_info, slots, _, is_block_end, _)
+function build_instruction(ir_inst::Expr, in_f, n::Int, is_block_end::Bool)
+    ctx = in_f.ctx
+    arg_info = in_f.arg_info
+    slots = in_f.slots
     is_invoke = Meta.isexpr(ir_inst, :invoke)
     if is_invoke || Meta.isexpr(ir_inst, :call)
 
@@ -999,6 +997,8 @@ function is_vararg_sig(sig)
     return m.isva
 end
 
+_get_input(x, in_f::InterpretedFunction) = _get_input(x, in_f.slots, in_f.arg_info)
+
 function InterpretedFunction(
     ctx::C, sig::Type{<:Tuple}
 ) where {C}
@@ -1070,15 +1070,9 @@ end
 
 function build_instruction(in_f::InterpretedFunction{sig}, n::Int) where {sig}
     @nospecialize in_f
-    ir = in_f.ir
-    ir_inst = rewrite_special_cases(ir, ir.stmts.inst[n])
-    return_slot = in_f.return_slot
-    is_block_end = n in in_f.bb_ends
-    sptypes = in_f.ir.sptypes
-    inst = build_instruction(
-        in_f.ctx, ir_inst, n, in_f.arg_info, in_f.slots, return_slot, is_block_end, sptypes
-    )
-    return _make_opaque_closure(inst, sig, n)
+    ir_inst = rewrite_special_cases(in_f.ir, in_f.ir.stmts.inst[n])
+    is_blk_end = n in in_f.bb_ends
+    return _make_opaque_closure(build_instruction(ir_inst, in_f, n, is_blk_end), sig, n)
 end
 
 function build_instruction(ctx, ir_inst::Any, arg_slots, slots, return_slot, is_block_end)
