@@ -127,6 +127,12 @@
             (nothing, nothing, Taped.varargs_tester_4, 5.0),
             (nothing, nothing, Taped.varargs_tester_4, 5.0, 4),
             (nothing, nothing, Taped.varargs_tester_4, 5.0, 4, 3.0),
+            (nothing, nothing, Taped.splatting_tester, 5.0),
+            (nothing, nothing, Taped.splatting_tester, (5.0, 4.0)),
+            (nothing, nothing, Taped.splatting_tester, (5.0, 4.0, 3.0)),
+            # (nothing, nothing, Taped.unstable_splatting_tester, Ref{Any}(5.0)),
+            # (nothing, nothing, Taped.unstable_splatting_tester, Ref{Any}((5.0, 4.0))),
+            # (nothing, nothing, Taped.unstable_splatting_tester, Ref{Any}((5.0, 4.0, 3.0))),
             (
                 nothing,
                 nothing,
@@ -140,7 +146,7 @@
                 nothing, nothing,
                 mul!, transpose(randn(3, 5)), randn(5, 5), randn(5, 3), 4.0, 3.0,
             ), # static_parameter,
-            # (nothing, nothing, Xoshiro, 123456),
+            (nothing, nothing, Xoshiro, 123456),
         ],
         TestResources.generate_test_functions(),
     )

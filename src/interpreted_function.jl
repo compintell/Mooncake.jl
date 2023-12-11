@@ -377,69 +377,28 @@ function build_coinstructions(ir_inst::PiNode, _, in_f_rrule!!, n::Int, is_blk_e
 end
 
 #
-# Nothing
+# LiteralInst
 #
 
-struct NothingInst end
-
-(inst::NothingInst)(::Int, current_block::Int) = current_block + 1
-
-build_instruction(::Nothing, in_f, n, is_block_end) = NothingInst()
-
-function build_coinstructions(::Nothing, _, _, _, _)
-    run_fwds_pass = @opaque (a::Int, current_block::Int) -> current_block + 1
-    run_rvs_pass = @opaque (j::Int) -> j
-    return run_fwds_pass, run_rvs_pass
-end
-
-#
-# Bool
-#
-
-struct BoolInst
-    val::Bool
-    val_ref::SlotRef{Bool}
-    is_blk_end::Bool
-end
-
-function (inst::BoolInst)(::Int, current_block::Int)
-    inst.val_ref[] = inst.val
-    return inst.is_blk_end ? current_block + 1 : 0
-end
-
-build_instruction(val::Bool, in_f, n, is_blk_end) = BoolInst(val, in_f.slots[n], is_blk_end)
-
-function build_coinstructions(ir_inst::Bool, _, in_f_rrule!!, n, is_blk_end)
-    function __barrier(val, val_ref::SlotRef{<:CoDual{Bool}}, is_blk_end)
-        run_fwds_pass::FwdsIFInstruction = @opaque function(a::Int, current_block::Int)
-            val_ref[] = zero_codual(val)
-            return is_blk_end ? current_block + 1 : 0
-        end
-        run_rvs_pass::BwdsIFInstruction = @opaque (j::Int) -> j
-        return run_fwds_pass, run_rvs_pass
-    end
-    return __barrier(ir_inst, in_f_rrule!!.slots[n], is_blk_end)
-end
-
-#
-# Type
-#
-
-struct TypeInst{T}
-    val::Type
+struct LiteralInst{T}
+    val::T
     val_ref::SlotRef{T}
     is_blk_end::Bool
 end
 
-function (inst::TypeInst)(::Int, current_block::Int)
+const Tliterals = Union{Bool, Nothing, Type}
+
+function (inst::LiteralInst)(::Int, current_blk::Int)
     inst.val_ref[] = inst.val
-    return inst.is_blk_end ? current_block + 1 : 0
+    return inst.is_blk_end ? current_blk + 1 : 0
 end
 
-build_instruction(val::Type, in_f, n, is_blk_end) = TypeInst(val, in_f.slots[n], is_blk_end)
+function build_instruction(val::Tliterals, in_f, n, is_blk_end)
+    return LiteralInst(val, in_f.slots[n], is_blk_end)
+end
 
-function build_coinstructions(val::Type, _, in_f_rrule!!, n, is_blk_end)
-    function __barrier(val, val_ref::SlotRef{<:CoDual{<:Type}}, is_blk_end)
+function build_coinstructions(val::Tliterals, _, in_f_rrule!!, n, is_blk_end)
+    function __barrier(val, val_ref, is_blk_end)
         run_fwds_pass::FwdsIFInstruction = @opaque function(a::Int, current_block::Int)
             val_ref[] = zero_codual(val)
             return is_blk_end ? current_block + 1 : 0
@@ -1309,6 +1268,9 @@ varargs_tester_2(x, y, z) = varargs_tester(x, y, z)
 varargs_tester_4(x) = varargs_tester_3(x...)
 varargs_tester_4(x, y) = varargs_tester_3(x...)
 varargs_tester_4(x, y, z) = varargs_tester_3(x...)
+
+splatting_tester(x) = varargs_tester(x...)
+unstable_splatting_tester(x::Ref{Any}) = varargs_tester(x[]...)
 
 a_primitive(x) = sin(x)
 non_primitive(x) = sin(x)
