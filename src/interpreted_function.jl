@@ -44,97 +44,113 @@ is_primitive(::DefaultCtx, sig) = is_primitive(MinimalCtx(), sig)
 
 # Largely copied + extended from https://github.com/JuliaLang/julia/blob/2fe4190b3d26b4eee52b2b1b1054ddd6e38a941e/test/compiler/newinterp.jl#L11
 
-struct TapedInterpreterCache
+struct TICache
     dict::IdDict{Core.MethodInstance, Core.CodeInstance}
 end
 
-const __TapedInterpreterCache = TapedInterpreterCache()
+TICache() = TICache(IdDict{Core.MethodInstance, Core.CodeInstance}())
 
 struct TapedInterpreter{C} <: CC.AbstractInterpreter
-    parent::CC.NativeInterpreter
     ctx::C
+    meta # additional information
+    world::UInt
+    inf_params::CC.InferenceParams
+    opt_params::CC.OptimizationParams
+    inf_cache::Vector{CC.InferenceResult}
+    code_cache::TICache
+    function TapedInterpreter(
+        ctx::C=DefaultCtx();
+        meta=nothing,
+        world::UInt=Base.get_world_counter(),
+        inf_params::CC.InferenceParams=CC.InferenceParams(),
+        opt_params::CC.OptimizationParams=CC.OptimizationParams(),
+        inf_cache::Vector{CC.InferenceResult}=CC.InferenceResult[], 
+        code_cache::TICache=TICache(),
+    ) where {C}
+        return new{C}(ctx, meta, world, inf_params, opt_params, inf_cache, code_cache)
+    end
 end
 
-
-# InterpCacheName = esc(Symbol(string(InterpName, "Cache")))
-
-#     quote
-#         $InterpCacheName() = $InterpCacheName(IdDict{$C.MethodInstance,$C.CodeInstance}())
-#         struct $InterpName <: $CC.AbstractInterpreter
-#             meta # additional information
-#             world::UInt
-#             inf_params::$CC.InferenceParams
-#             opt_params::$CC.OptimizationParams
-#             inf_cache::Vector{$CC.InferenceResult}
-#             code_cache::$InterpCacheName
-#             function $InterpName(meta = nothing;
-#                                  world::UInt = Base.get_world_counter(),
-#                                  inf_params::$CC.InferenceParams = $CC.InferenceParams(),
-#                                  opt_params::$CC.OptimizationParams = $CC.OptimizationParams(),
-#                                  inf_cache::Vector{$CC.InferenceResult} = $CC.InferenceResult[],
-#                                  code_cache::$InterpCacheName = $InterpCacheName())
-#                 return new(meta, world, inf_params, opt_params, inf_cache, code_cache)
-#             end
-#         end
-#         $CC.InferenceParams(interp::$InterpName) = interp.inf_params
-#         $CC.OptimizationParams(interp::$InterpName) = interp.opt_params
-#         $CC.get_world_counter(interp::$InterpName) = interp.world
-#         $CC.get_inference_cache(interp::$InterpName) = interp.inf_cache
-#         $CC.code_cache(interp::$InterpName) = $CC.WorldView(interp.code_cache, $CC.WorldRange(interp.world))
-#         $CC.get(wvc::$CC.WorldView{$InterpCacheName}, mi::$C.MethodInstance, default) = get(wvc.cache.dict, mi, default)
-#         $CC.getindex(wvc::$CC.WorldView{$InterpCacheName}, mi::$C.MethodInstance) = getindex(wvc.cache.dict, mi)
-#         $CC.haskey(wvc::$CC.WorldView{$InterpCacheName}, mi::$C.MethodInstance) = haskey(wvc.cache.dict, mi)
-#         $CC.setindex!(wvc::$CC.WorldView{$InterpCacheName}, ci::$C.CodeInstance, mi::$C.MethodInstance) = setindex!(wvc.cache.dict, ci, mi)
-
-TapedInterpreter(ctx::C) where {C} = TapedInterpreter{C}(CC.NativeInterpreter(), ctx)
+CC.InferenceParams(interp::TapedInterpreter) = interp.inf_params
+CC.OptimizationParams(interp::TapedInterpreter) = interp.opt_params
+CC.get_world_counter(interp::TapedInterpreter) = interp.world
+CC.get_inference_cache(interp::TapedInterpreter) = interp.inf_cache
+function CC.code_cache(interp::TapedInterpreter)
+    return CC.WorldView(interp.code_cache, CC.WorldRange(interp.world))
+end
+function CC.get(wvc::CC.WorldView{TICache}, mi::Core.MethodInstance, default)
+    return get(wvc.cache.dict, mi, default)
+end
+function CC.getindex(wvc::CC.WorldView{TICache}, mi::Core.MethodInstance)
+    return getindex(wvc.cache.dict, mi)
+end
+CC.haskey(wvc::CC.WorldView{TICache}, mi::Core.MethodInstance) = haskey(wvc.cache.dict, mi)
+function CC.setindex!(
+    wvc::CC.WorldView{TICache}, ci::Core.CodeInstance, mi::Core.MethodInstance
+)
+    return setindex!(wvc.cache.dict, ci, mi)
+end
 
 const TInterp = TapedInterpreter
 
-CC.InferenceParams(interp::TInterp) = CC.InferenceParams(interp.parent)
-CC.OptimizationParams(interp::TInterp) = CC.OptimizationParams(interp.parent)
-CC.get_world_counter(interp::TInterp) = CC.get_world_counter(interp.parent)
-CC.get_inference_cache(interp::TInterp) = CC.get_inference_cache(interp.parent)
-CC.code_cache(interp::TInterp) = CC.code_cache(interp.parent)
-
-# No need to do any locking since we're not putting our results into the runtime cache
-function CC.lock_mi_inference(interp::TInterp, mi::CC.MethodInstance)
-    return CC.lock_mi_inference(interp.parent, mi)
-end
-function CC.unlock_mi_inference(interp::TInterp, mi::CC.MethodInstance)
-    return CC.unlock_mi_inference(interp.parent, mi)
-end
-
-function CC.add_remark!(interp::TInterp, sv::CC.InferenceState, msg)
-    return CC.add_remark!(interp.parent, sv, msg)
-end
-
-CC.may_optimize(interp::TInterp) = CC.may_optimize(interp.parent)
-CC.may_compress(interp::TInterp) = CC.may_compress(interp.parent)
-CC.may_discard_trees(interp::TInterp) = CC.may_discard_trees(interp.parent)
-CC.verbose_stmt_info(interp::TInterp) = CC.verbose_stmt_info(interp.parent)
-CC.method_table(interp::TInterp, sv::CC.InferenceState) = CC.method_table(interp.parent, sv)
-
-static_isprimitive(ctx, x::Type{<:Tuple}) = false
+# function CC.abstract_call(
+#     interp::TapedInterpreter,
+#     arginfo::CC.ArgInfo,
+#     si::CC.StmtInfo,
+#     sv::CC.InferenceState,
+#     max_methods::Int,
+# )
+#     @show "in this other one"
+#     ret = @invoke CC.abstract_call(interp::CC.AbstractInterpreter,
+#         arginfo::CC.ArgInfo, si::CC.StmtInfo, sv::CC.InferenceState, max_methods::Int)
+#     return ret
+# end
 
 _type(x) = x
 _type(x::CC.Const) = Core.Typeof(x.val)
 _type(x::CC.PartialStruct) = x.typ
 
 function CC.inlining_policy(
-    interp::TInterp,
+    interp::TapedInterpreter{C},
     @nospecialize(src),
     @nospecialize(info::CC.CallInfo),
-    stmt_flag::UInt8,
-    mi::CC.MethodInstance,
+    stmt_flag::UInt32,
+    mi::Core.MethodInstance,
     argtypes::Vector{Any},
-)
+) where {C}
+
     # Do not inline away primitives.
+    @show "in inlining routine"
     argtype_tuple = Tuple{map(_type, argtypes)...}
+    @show argtype_tuple, is_primitive(interp.ctx, argtype_tuple)
     is_primitive(interp.ctx, argtype_tuple) && return nothing
 
     # If not a primitive, AD doesn't care about it. Use the usual inlining strategy.
-    return CC.inlining_policy(interp.parent, src, info, stmt_flag, mi, argtypes)
+    return @invoke CC.inlining_policy(
+        interp::CC.AbstractInterpreter,
+        src::Any,
+        info::CC.CallInfo,
+        stmt_flag::UInt32,
+        mi::Core.MethodInstance,
+        argtypes::Vector{Any},
+    )
 end
+
+# function CC.inlining_policy(
+#     interp::TInterp,
+#     @nospecialize(src),
+#     @nospecialize(info::CC.CallInfo),
+#     stmt_flag::UInt8,
+#     mi::CC.MethodInstance,
+#     argtypes::Vector{Any},
+# )
+#     # Do not inline away primitives.
+#     argtype_tuple = Tuple{map(_type, argtypes)...}
+#     is_primitive(interp.ctx, argtype_tuple) && return nothing
+
+#     # If not a primitive, AD doesn't care about it. Use the usual inlining strategy.
+#     return CC.inlining_policy(interp.parent, src, info, stmt_flag, mi, argtypes)
+# end
 
 
 #
