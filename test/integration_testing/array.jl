@@ -1,5 +1,6 @@
 @testset "array" begin
     interp = Taped.TInterp()
+    Taped.flush_interpreted_function_cache!()
     @testset for (interface_only, f, x...) in vcat(
         [
             (false, adjoint, randn(sr(1), 5)),
@@ -160,9 +161,9 @@
             (false, PermutedDimsArray, randn(sr(1), 2, 3), [2, 1]),
             (false, SubArray, randn(sr(2), 2, 3), (1:2, 2:3)),
             (false, \, 0.67, randn(sr(3), 2, 2)),
-            # (false, \, Hermitian(randn(sr(0), 2, 2) + 3I), randn(sr(1), 2)), # missing foreigncall rule
-            # (false, \, Symmetric(randn(sr(3), 2, 2) + 3I), randn(sr(2), 2)), # missing foreigncall rule
-            # (false, \, SymTridiagonal(rand(sr(4), 3) .+ 1, randn(sr(5), 2)), randn(sr(6), 3)), # missing foreigncall
+            (false, \, Hermitian(randn(sr(0), 2, 2) + 3I), randn(sr(1), 2)), # missing foreigncall rule
+            (false, \, Symmetric(randn(sr(3), 2, 2) + 3I), randn(sr(2), 2)), # missing foreigncall rule
+            (false, \, SymTridiagonal(rand(sr(4), 3) .+ 1, randn(sr(5), 2)), randn(sr(6), 3)), # missing foreigncall
             (false, \, 3.0 * I, randn(sr(4), 2)),
             (false, \, 3.0 * I, randn(sr(5), 2, 1)),
             (false, \, UnitLowerTriangular(randn(sr(6), 2, 2)), randn(sr(7), 2)),
@@ -501,7 +502,7 @@
     )
         rng = StableRNG(123456)
         @info map(Core.Typeof, (f, x...))
-        sig = Tuple{typeof(f), map(typeof, x)...}
+        sig = Tuple{Core.Typeof(f), map(Core.Typeof, x)...}
         in_f = Taped.InterpretedFunction(DefaultCtx(), sig; interp)
         @test in_f(deepcopy(x)...) == f(deepcopy(x)...)
         # val, _ = Taped.trace(f, x...; ctx=Taped.RMC())
