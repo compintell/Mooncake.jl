@@ -895,10 +895,7 @@ function InterpretedFunction(ctx::C, sig::Type{<:Tuple}; interp) where {C}
     if isempty(output)
         throw(ArgumentError("No methods found for signature $sig"))
     elseif length(output) > 1
-        @warn "found multiple methods:"
-        display(output)
-        println()
-        throw(ArgumentError("Multiple methods found for signature $sig"))
+        throw(ArgumentError("$(length(output)) methods found for signature $sig"))
     end
     ir, Treturn = only(output)
 
