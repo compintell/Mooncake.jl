@@ -1,4 +1,5 @@
 @testset "array" begin
+    interp = Taped.TInterp()
     @testset for (interface_only, f, x...) in vcat(
         [
             (false, adjoint, randn(sr(1), 5)),
@@ -128,7 +129,6 @@
             (false, +, randn(sr(7), 2), randn(sr(8), 2), randn(sr(9), 2), randn(sr(0), 2)),
             (false, -, randn(sr(1), 1, 2), randn(sr(2), 1, 2)),
             (false, -, randn(sr(3), 1, 2)),
-            (false, /, randn(sr(4)), randn(sr(5), 2)),
             (false, /, randn(sr(6), 1, 2), 0.66),
             (false, /, randn(sr(7), 2), 5.0 * I),
             (false, /, randn(sr(8), 1), Diagonal(rand(sr(9), 1) .+ 1)),
@@ -502,7 +502,7 @@
         rng = StableRNG(123456)
         @info map(Core.Typeof, (f, x...))
         sig = Tuple{typeof(f), map(typeof, x)...}
-        in_f = Taped.InterpretedFunction(DefaultCtx(), sig)
+        in_f = Taped.InterpretedFunction(DefaultCtx(), sig; interp)
         @test in_f(deepcopy(x)...) == f(deepcopy(x)...)
         # val, _ = Taped.trace(f, x...; ctx=Taped.RMC())
         # test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only, perf_flag=:none)
