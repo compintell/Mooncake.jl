@@ -90,8 +90,10 @@
         @test @inferred Taped.load_args!(ai, x) === nothing
     end
 
+    interp = Taped.TInterp()
+    Taped.flush_interpreted_function_cache!()
+
     # nothings inserted for consistency with generate_test_functions.
-    # takes roughly 2 mins from startup if you do not propagate the interpreter
     @testset "$f, $(map(Core.Typeof, x))" for (a, b, f, x...) in vcat(
         Any[
             (nothing, nothing, Taped.foo, 5.0),
@@ -144,7 +146,7 @@
     )
         @info "$f, $x"
         sig = Tuple{Core.Typeof(f), map(Core.Typeof, x)...}
-        in_f = Taped.InterpretedFunction(DefaultCtx(), sig)
+        in_f = Taped.InterpretedFunction(DefaultCtx(), sig; interp)
 
         # Verify correctness.
         @assert f(x...) == f(x...) # primal runs
@@ -162,28 +164,28 @@
         # original = @benchmark $(Ref(f))[]($(Ref(x))[]...)
         # r = @benchmark $(Ref(in_f))[]($(Ref(x))[]...)
 
-        # __rrule!! = Taped.build_rrule!!(in_f)
-        # codual_x = map(zero_codual, x)
-        # rrule_timing = @benchmark($__rrule!!(zero_codual($in_f), $codual_x...))
-        # out, pb!! = __rrule!!(zero_codual(in_f), codual_x...)
-        # df = zero_codual(in_f)
-        # overall_timing = @benchmark Taped.to_benchmark($__rrule!!, $df, $codual_x)
+        # # __rrule!! = Taped.build_rrule!!(in_f)
+        # # codual_x = map(zero_codual, x)
+        # # rrule_timing = @benchmark($__rrule!!(zero_codual($in_f), $codual_x...))
+        # # out, pb!! = __rrule!!(zero_codual(in_f), codual_x...)
+        # # df = zero_codual(in_f)
+        # # overall_timing = @benchmark Taped.to_benchmark($__rrule!!, $df, $codual_x)
         # println("original")
         # display(original)
         # println()
         # println("taped")
         # display(r)
         # println()
-        # println("rrule")
-        # display(rrule_timing)
-        # println()
-        # println("overall")
-        # display(overall_timing)
-        # println()
+        # # println("rrule")
+        # # display(rrule_timing)
+        # # println()
+        # # println("overall")
+        # # display(overall_timing)
+        # # println()
 
-        # if allocs(original) == 0
-        #     @test allocs(r) == 0
-        # end
+        # # if allocs(original) == 0
+        # #     @test allocs(r) == 0
+        # # end
     end
 end
 

@@ -206,10 +206,8 @@ const BwdsIFInstruction = Core.OpaqueClosure{Tuple{Int}, Int}
 const ArgLoadInstruction = Core.OpaqueClosure{Tuple{Int}, Int}
 
 #
-# Core.ReturnNode
+# ReturnNode
 #
-
-using Core: ReturnNode
 
 struct ReturnInst{Treturn_slot<:SlotRef, Tval}
     return_slot::Treturn_slot
@@ -225,24 +223,7 @@ function build_instruction(ir_inst::ReturnNode, in_f, n, is_block_end)
     return ReturnInst(in_f.return_slot, _get_input(ir_inst.val, in_f))
 end
 
-# function run_profiler(__rrule!!, df, dx)
-#     foreach(1:10_000_000) do n
-#         out, pb!! = __rrule!!(df, dx...)
-#         pb!!(tangent(out), tangent(df), map(tangent, dx)...)
-#     end
-# end
-
-function to_benchmark(__rrule!!, df, dx)
-    out, pb!! = __rrule!!(df, dx...)
-    pb!!(tangent(out), tangent(df), map(tangent, dx)...)
-end
-
-function build_coinstructions(
-    _, ir_inst::ReturnNode, n::Int, arg_info, slots, return_slot, ::Bool, _
-)
-
-    _slot_to_return = _get_input(ir_inst.val, slots, arg_info)
-
+function build_coinstructions(ir_inst::ReturnNode, in_f, in_f_rrule!!, n, is_blk_end)
     function __barrier(return_slot::A, slot_to_return::B) where {A, B}
         # Construct operation to run the forwards-pass.
         run_fwds_pass = @opaque function (a::Int, b::Int)
@@ -253,9 +234,6 @@ function build_coinstructions(
             display(CC.code_typed_opaque_closure(run_fwds_pass)[1][1])
             println()
         end
-        # println("ReturnNode run_fwds_pass")
-        # display(@benchmark $run_fwds_pass(0, 0))
-        # println()
 
         # Construct operation to run the reverse-pass.
         run_rvs_pass = if slot_to_return isa SlotRef
@@ -270,20 +248,14 @@ function build_coinstructions(
             display(CC.code_typed_opaque_closure(run_fwds_pass)[1][1])
             println()
         end
-        # println("ReturnNode run_rvs_pass")
-        # display(@benchmark $run_rvs_pass())
-        # println()
         return run_fwds_pass, run_rvs_pass
     end
-
-    return __barrier(return_slot, _slot_to_return)
+    return __barrier(in_f_rrule!!.return_slot, _get_input(ir_inst.val, in_f_rrule!!))
 end
 
 #
-# Core.GotoNode
+# GotoNode
 #
-
-using Core: GotoNode
 
 struct GotoInst
     n::Int
@@ -293,27 +265,16 @@ end
 
 build_instruction(ir_inst::GotoNode, _, _, _) = GotoInst(ir_inst.label)
 
-function build_coinstructions(_, ir_inst::GotoNode, n::Int, arg_info, slots, return_slot, _, _)
-
-    # Extract relevant values.
+function build_coinstructions(ir_inst::GotoNode, in_f, in_f_rrule!!, n, is_blk_end)
     dest = ir_inst.label
-
-    # Construct operation to run the forwards-pass.
-    run_fwds_pass::FwdsIFInstruction = @opaque function (a::Int, b::Int)
-        return dest
-    end
-
-    # Construct operation to run the reverse-pass.
+    run_fwds_pass::FwdsIFInstruction = @opaque (a::Int, b::Int) -> dest
     run_rvs_pass::BwdsIFInstruction = @opaque (j::Int) -> j
-
     return run_fwds_pass, run_rvs_pass
 end
 
 #
-# Core.GotoIfNot
+# GotoIfNot
 #
-
-using Core: GotoIfNot
 
 struct GotoIfNotInst{Tcond}
     cond::Tcond
@@ -330,28 +291,19 @@ function build_instruction(ir_inst::GotoIfNot, in_f, n, _)
     return GotoIfNotInst(_get_input(ir_inst.cond, in_f), ir_inst.dest, ir_inst, n)
 end
 
-function build_coinstructions(_, ir_inst::GotoIfNot, n::Int, arg_info, slots, _, _, _)
-
-    # Extract relevant values.
-    cond_slot = _get_input(ir_inst.cond, slots, arg_info)
+function build_coinstructions(ir_inst::GotoIfNot, in_f, in_f_rrule!!, n, is_blk_end)
+    cond_slot = _get_input(ir_inst.cond, in_f_rrule!!)
     dest = ir_inst.dest
-
-    # Construct operation to run the forwards-pass.
     run_fwds_pass::FwdsIFInstruction = @opaque function (a::Int, current_block::Int)
         return primal(extract_codual(cond_slot)) ? current_block + 1 : dest
     end
-
-    # Construct operation to run the reverse-pass.
     run_rvs_pass::BwdsIFInstruction = @opaque (j::Int) -> j
-
     return run_fwds_pass, run_rvs_pass
 end
 
 #
-# Core.PhiNode
+# PhiNode
 #
-
-using Core: PhiNode
 
 # We can always safely assume that all `values` elements are SlotRefs.
 struct PhiNodeInst{Tedges<:Tuple, Tvalues<:Tuple, Tval_slot<:SlotRef}
@@ -364,17 +316,11 @@ struct PhiNodeInst{Tedges<:Tuple, Tvalues<:Tuple, Tval_slot<:SlotRef}
 end
 
 function (inst::PhiNodeInst)(prev_block::Int, current_block::Int)
-    # display(("phi", inst.line, inst.node, inst.edges, inst.values, prev_block))
-    found_a_match = false
     for n in eachindex(inst.edges)
         if inst.edges[n] == prev_block
-            found_a_match = true
             inst.val_slot[] = extract_arg(inst.values[n])
         end
     end
-    # if !found_a_match
-    #     throw(error("Not found a match"))
-    # end
     return inst.is_blk_end ? current_block + 1 : 0
 end
 
@@ -394,21 +340,20 @@ function build_instruction(ir_inst::PhiNode, in_f, n::Int, is_blk_end)
     return PhiNodeInst(edges, values, val_slot, ir_inst, n, is_blk_end)
 end
 
-function build_coinstructions(
-    _, ir_inst::Core.PhiNode, n::Int, arg_info, slots, _, is_blk_end::Bool, _
-)
+
+function build_coinstructions(ir_inst::PhiNode, _, in_f_rrule!!, n, is_blk_end)
 
     # Extract relevant values.
     edges = map(Int, (ir_inst.edges..., ))
     values_vec = map(eachindex(ir_inst.values)) do j
         if isassigned(ir_inst.values, j)
-            return _get_input(ir_inst.values[j], slots, arg_info)
+            return _get_input(ir_inst.values[j], in_f_rrule!!)
         else
             return UndefinedReference()
         end
     end
     values = map(x -> x isa SlotRef ? x : SlotRef(zero_codual(x)), (values_vec..., ))
-    val_slot = slots[n]
+    val_slot = in_f_rrule!!.slots[n]
 
     # Create a value slot stack.
     value_slot_stack = Vector{eltype(val_slot)}(undef, 0)
@@ -448,10 +393,8 @@ function build_coinstructions(
 end
 
 #
-# Core.PiNode
+# PiNode
 #
-
-using Core: PiNode
 
 struct PiNodeInst{Tinput_ref<:SlotRef, Tval_ref<:SlotRef}
     input_ref::Tinput_ref
@@ -463,8 +406,13 @@ function (inst::PiNodeInst)(::Int, current_block::Int)
     inst.val_ref[] = inst.input_ref[]
     return inst.is_blk_end ? current_block + 1 : 0
 end
+
 function build_instruction(ir_inst::PiNode, in_f, n, is_blk_end)
     return PiNodeInst(_get_input(ir_inst.val, in_f), in_f.slots[n], is_blk_end)
+end
+
+function build_coinstructions(ir_inst::PiNode, in_f, in_f_rrule!!, n, is_blk_end)
+    throw(error("PiNode coinstructions not implemented"))
 end
 
 #
@@ -477,7 +425,7 @@ struct NothingInst end
 
 build_instruction(::Nothing, in_f, n, is_block_end) = NothingInst()
 
-function build_coinstructions(_, ::Nothing, ::Int, ::Any, ::Any, ::Any, ::Any, _)
+function build_coinstructions(::Nothing, _, _, _, _)
     run_fwds_pass = @opaque (a::Int, current_block::Int) -> current_block + 1
     run_rvs_pass = @opaque (j::Int) -> j
     return run_fwds_pass, run_rvs_pass
@@ -500,7 +448,7 @@ end
 
 build_instruction(val::Bool, in_f, n, is_blk_end) = BoolInst(val, in_f.slots[n], is_blk_end)
 
-function build_coinstructions(_, val::Bool, n::Int, ::Any, slots, ::Any, is_blk_end, _)
+function build_coinstructions(ir_inst::Bool, _, in_f_rrule!!, n, is_blk_end)
     function __barrier(val, val_ref::SlotRef{<:CoDual{Bool}}, is_blk_end)
         run_fwds_pass::FwdsIFInstruction = @opaque function(a::Int, current_block::Int)
             val_ref[] = zero_codual(val)
@@ -509,7 +457,7 @@ function build_coinstructions(_, val::Bool, n::Int, ::Any, slots, ::Any, is_blk_
         run_rvs_pass::BwdsIFInstruction = @opaque (j::Int) -> j
         return run_fwds_pass, run_rvs_pass
     end
-    return __barrier(val, slots[n], is_blk_end)
+    return __barrier(ir_inst, in_f_rrule!!.slots[n], is_blk_end)
 end
 
 #
@@ -529,7 +477,7 @@ end
 
 build_instruction(val::Type, in_f, n, is_blk_end) = TypeInst(val, in_f.slots[n], is_blk_end)
 
-function build_coinstructions(_, val::Type, n::Int, ::Any, slots, ::Any, is_blk_end, _)
+function build_coinstructions(val::Type, _, in_f_rrule!!, n, is_blk_end)
     function __barrier(val, val_ref::SlotRef{<:CoDual{<:Type}}, is_blk_end)
         run_fwds_pass::FwdsIFInstruction = @opaque function(a::Int, current_block::Int)
             val_ref[] = zero_codual(val)
@@ -538,7 +486,7 @@ function build_coinstructions(_, val::Type, n::Int, ::Any, slots, ::Any, is_blk_
         run_rvs_pass::BwdsIFInstruction = @opaque (j::Int) -> j
         return run_fwds_pass, run_rvs_pass
     end
-    return __barrier(val, slots[n], is_blk_end)
+    return __barrier(val, in_f_rrule!!.slots[n], is_blk_end)
 end
 
 #
@@ -560,7 +508,7 @@ function build_instruction(node::GlobalRef, in_f, n, is_blk_end)
     return GlobalRefInst(_get_globalref(node), in_f.slots[n], is_blk_end)
 end
 
-function build_coinstructions(_, node::GlobalRef, n::Int, ::Any, slots, ::Any, is_blk_end, _)
+function build_coinstructions(node::GlobalRef, _, in_f_rrule!!, n, is_blk_end)
     function __barrier(c::A, val_ref::B) where {A, B}
         run_fwds_pass = @opaque function (a::Int, current_blk::Int)
             val_ref[] = c
@@ -569,7 +517,7 @@ function build_coinstructions(_, node::GlobalRef, n::Int, ::Any, slots, ::Any, i
         run_rvs_pass = @opaque (j::Int) -> j
         return run_fwds_pass, run_rvs_pass
     end
-    return __barrier(uninit_codual(_get_globalref(node)), slots[n])
+    return __barrier(uninit_codual(_get_globalref(node)), in_f_rrule!!.slots[n])
 end
 
 #
@@ -643,9 +591,11 @@ function build_instruction(ir_inst::Expr, in_f, n::Int, is_block_end::Bool)
         fn_sig = Tuple{Core.Typeof(fn), map(_robust_typeof, arg_refs)...}
         if !is_primitive(ctx, fn_sig)
             if all(Base.isconcretetype, fn_sig.parameters)
-                fn = InterpretedFunction(ctx, fn_sig)
+                fn = InterpretedFunction(ctx, fn_sig; interp=in_f.interp)
             else
-                fn = DelayedInterpretedFunction{Core.Typeof(ctx), Core.Typeof(fn)}(ctx, fn)
+                fn = DelayedInterpretedFunction{Core.Typeof(ctx), Core.Typeof(fn)}(
+                    ctx, fn, in_f.interp
+                )
             end
         end
         new_inst = CallInst(fn, arg_refs, val_ref, ir_inst, n, is_block_end)
@@ -662,21 +612,21 @@ end
 
 const OC = Core.OpaqueClosure
 
-function build_coinstructions(ctx, ir_inst::Expr, n::Int, arg_info, slots, _, is_blk_end, _)
+function build_coinstructions(ir_inst::Expr, in_f, in_f_rrule!!, n, is_blk_end)
     is_invoke = Meta.isexpr(ir_inst, :invoke)
     if is_invoke || Meta.isexpr(ir_inst, :call)
 
         # Extract args refs.
         __args = is_invoke ? ir_inst.args[3:end] : ir_inst.args[2:end]
-        codual_arg_refs = map(arg -> _get_input(arg, slots, arg_info), (__args..., ))
+        codual_arg_refs = map(arg -> _get_input(arg, in_f_rrule!!), (__args..., ))
 
         # Extract val ref.
-        codual_val_ref = slots[n]
+        codual_val_ref = in_f_rrule!!.slots[n]
 
         # Extract function.
         fn = is_invoke ? ir_inst.args[2] : ir_inst.args[1]
         if fn isa Core.SSAValue || fn isa Core.Argument
-            fn = primal(_get_input(fn, slots, arg_info)[])
+            fn = primal(_get_input(fn, in_f_rrule!!)[])
         end
         if fn isa GlobalRef
             fn = getglobal(fn.mod, fn.name)
@@ -693,14 +643,10 @@ function build_coinstructions(ctx, ir_inst::Expr, n::Int, arg_info, slots, _, is
             map(_robust_typeof ∘ primal ∘ extract_codual, codual_arg_refs)...,
         }
         __rrule!! = rrule!!
-        if !is_primitive(ctx, fn_sig)
-            _interp = TapedInterpreter(DefaultCtx())
-            num_methods = length(Base.code_ircode_by_type(fn_sig; interp=_interp))
-            if num_methods == 1
-                fn = InterpretedFunction(ctx, fn_sig)
+        if !is_primitive(in_f.ctx, fn_sig)
+            if all(Base.isconcretetype, fn_sig.parameters)
+                fn = InterpretedFunction(in_f.ctx, fn_sig; interp=in_f.interp)
                 __rrule!! = build_rrule!!(fn)
-            elseif num_methods == 0
-                throw(error("No methods found for fn_sig=$fn_sig"))
             else
                 throw(error("can't handle delays yet"))
                 fn = DelayedInterpretedFunction{Core.Typeof(ctx), Core.Typeof(fn)}(ctx, fn)
@@ -986,6 +932,7 @@ struct InterpretedFunction{sig<:Tuple, C, Treturn, Targ_info<:ArgInfo}
     bb_starts::Vector{Int}
     bb_ends::Vector{Int}
     ir::IRCode
+    interp::TapedInterpreter
 end
 
 function is_vararg_sig(sig)
@@ -999,13 +946,28 @@ end
 
 _get_input(x, in_f::InterpretedFunction) = _get_input(x, in_f.slots, in_f.arg_info)
 
-function InterpretedFunction(
-    ctx::C, sig::Type{<:Tuple}
-) where {C}
+const __InF_TABLE = Dict{Any, InterpretedFunction}()
+
+"""
+    flush_interpreted_function_cache!()
+
+If you modify any code that you have previously run as an `InterpretedFunction`, you should
+run this function to clear the cache -- in general, use this function liberally.
+"""
+function flush_interpreted_function_cache!()
+    empty!(__InF_TABLE)
+    return nothing
+end
+
+function InterpretedFunction(ctx::C, sig::Type{<:Tuple}; interp) where {C}
     @nospecialize ctx sig
 
+    if sig in keys(__InF_TABLE)
+        return __InF_TABLE[sig]
+    end
+
     # Grab code associated to this function.
-    output = Base.code_ircode_by_type(sig; interp=TapedInterpreter(DefaultCtx()))
+    output = Base.code_ircode_by_type(sig; interp)
     if isempty(output)
         throw(ArgumentError("No methods found for signature $sig"))
     elseif length(output) > 1
@@ -1037,9 +999,13 @@ function InterpretedFunction(
     bb_ends = vcat(ir.cfg.index .- 1, length(slots))
 
     # Extract the starting location of each basic block from the CFG and build IF.
-    return InterpretedFunction{sig, C, Treturn, Core.Typeof(arg_info)}(
-        ctx, return_slot, arg_info, slots, instructions, bb_starts, bb_ends, ir,
+    in_f = InterpretedFunction{sig, C, Treturn, Core.Typeof(arg_info)}(
+        ctx, return_slot, arg_info, slots, instructions, bb_starts, bb_ends, ir, interp
     )
+
+    __InF_TABLE[sig] = in_f
+
+    return in_f
 end
 
 function (in_f::InterpretedFunction{sig})(args::Vararg{Any, N}) where {N, sig}
@@ -1086,11 +1052,16 @@ end
 struct DelayedInterpretedFunction{C, F}
     ctx::C
     f::F
+    interp::TInterp
 end
 
 function (f::DelayedInterpretedFunction{C, F})(args...) where {C, F}
     s = Tuple{F, map(Core.Typeof, args)...}
-    return is_primitive(f.ctx, s) ? f.f(args...) : InterpretedFunction(f.ctx, s)(args...)
+    if is_primitive(f.ctx, s)
+        return f.f(args...)
+    else
+        return InterpretedFunction(f.ctx, s; interp=f.interp)(args...)
+    end
 end
 
 tangent_type(::Type{<:InterpretedFunction}) = NoTangent
@@ -1103,7 +1074,6 @@ function make_codual_slot(::SlotRef{P}) where {P}
         return SlotRef{CoDual}()
     end
 end
-# make_codual_slot(::SlotRef{Any}) = SlotRef{CoDual}()
 
 function make_codual_arginfo(ai::ArgInfo{T, is_vararg}) where {T, is_vararg}
     codual_arg_slots = map(make_codual_slot, ai.arg_slots)
@@ -1144,63 +1114,30 @@ function flattened_rrule_args(ai::ArgInfo{T, is_vararg}) where {T, is_vararg}
     return (args[1:end-1]..., map(CoDual, primal(va_arg), tangent(va_arg))...)
 end
 
-# Should really just use the signature for this to be honest. This makes quite a lot of
-# sense -- it's entirely possible that I'm willing to assert that I know something about the
-# types I'm going to be dealing with, but not the values associated to them.
-function build_rrule!!(f_in::InterpretedFunction{sig}) where {sig}
+struct InterpretedFunctionRRule{sig<:Tuple, Treturn, Targ_info<:ArgInfo}
+    return_slot::SlotRef{Treturn}
+    arg_info::Targ_info
+    slots::Vector{SlotRef}
+    fwds_instructions::Vector{FwdsIFInstruction}
+    bwds_instructions::Vector{BwdsIFInstruction}
+    n_stack::Vector{Int}
+end
 
-    arg_info = make_codual_arginfo(f_in.arg_info)
-    slots = map(make_codual_slot, f_in.slots)
-    return_slot = make_codual_slot(f_in.return_slot)
-    fwds_instructions = Vector{FwdsIFInstruction}(undef, length(f_in.instructions))
-    bwds_instructions = Vector{BwdsIFInstruction}(undef, length(f_in.instructions))
+_get_input(x, in_f::InterpretedFunctionRRule) = _get_input(x, in_f.slots, in_f.arg_info)
 
+function build_rrule!!(in_f::InterpretedFunction{sig}) where {sig}
+    return_slot = make_codual_slot(in_f.return_slot)
+    arg_info = make_codual_arginfo(in_f.arg_info)
     n_stack = Vector{Int}(undef, 1)
     sizehint!(n_stack, 100)
-
-    # Construct rrule!! using pre-allcoated memory.
-    function f_in_rrule!!(in_f::CoDual, args::Vararg{CoDual, N}) where {N}
-        load_rrule_args!(arg_info, args)
-        in_f_primal = primal(in_f)
-        prev_block = 0
-        next_block = 0
-        current_block = 1
-        n = 1
-        j = 0
-        instructions = in_f_primal.instructions
-        while next_block != -1
-            j += 1
-            if length(n_stack) >= j
-                n_stack[j] = n
-            else
-                push!(n_stack, n)
-            end
-
-            if !isassigned(instructions, n) 
-                instructions[n] = build_instruction(in_f_primal, n)
-            end
-            if !isassigned(fwds_instructions, n)
-                fwds, bwds = generate_instructions(in_f, arg_info, slots, return_slot, n)
-                fwds_instructions[n] = fwds
-                bwds_instructions[n] = bwds
-            end
-            next_block = fwds_instructions[n](prev_block, current_block)
-            if next_block == 0
-                n += 1
-            elseif next_block > 0
-                n = in_f_primal.bb_starts[next_block]
-                prev_block = current_block
-                current_block = next_block
-                next_block = 0
-            end
-        end
-
-        interpreted_function_pb!! = InterpretedFunctionPb(
-            j, bwds_instructions, return_slot, n_stack, arg_info
-        )
-        return return_slot[], interpreted_function_pb!!
-    end
-    return f_in_rrule!!
+    return InterpretedFunctionRRule{sig, eltype(return_slot), Core.Typeof(arg_info)}(
+        return_slot,
+        arg_info,
+        map(make_codual_slot, in_f.slots), # SlotRefs
+        Vector{FwdsIFInstruction}(undef, length(in_f.instructions)), # fwds_instructions
+        Vector{BwdsIFInstruction}(undef, length(in_f.instructions)), # bwds_instructions
+        n_stack,
+    )
 end
 
 struct InterpretedFunctionPb{Treturn_slot, Targ_info, Tbwds_f}
@@ -1211,22 +1148,74 @@ struct InterpretedFunctionPb{Treturn_slot, Targ_info, Tbwds_f}
     arg_info::Targ_info
 end
 
-function (if_pb!!::InterpretedFunctionPb)(dout, ::NoTangent, dargs::Vararg{Any, N}) where {N}
-    bwds_instructions = if_pb!!.bwds_instructions
-    return_slot = if_pb!!.return_slot
-    n_stack = if_pb!!.n_stack
-    arg_info = if_pb!!.arg_info
+function (in_f_rrule!!::InterpretedFunctionRRule{sig})(
+    _in_f::CoDual{<:InterpretedFunction{sig}}, args::Vararg{CoDual, N}
+) where {sig, N}
 
-    replace_tangent!(return_slot, dout)
+    # Load in variables.
+    return_slot = in_f_rrule!!.return_slot
+    arg_info = in_f_rrule!!.arg_info
+    slots = in_f_rrule!!.slots
+    n_stack = in_f_rrule!!.n_stack
+
+    # Initialise variables.
+    load_rrule_args!(arg_info, args)
+    in_f = primal(_in_f)
+    prev_block = 0
+    next_block = 0
+    current_block = 1
+    n = 1
+    j = 0
+
+    # Run instructions until done.
+    while next_block != -1
+        j += 1
+        if length(n_stack) >= j
+            n_stack[j] = n
+        else
+            push!(n_stack, n)
+        end
+
+        if !isassigned(in_f.instructions, n) 
+            in_f.instructions[n] = build_instruction(in_f, n)
+        end
+        if !isassigned(in_f_rrule!!.fwds_instructions, n)
+            fwds, bwds = generate_instructions(in_f, in_f_rrule!!, n)
+            in_f_rrule!!.fwds_instructions[n] = fwds
+            in_f_rrule!!.bwds_instructions[n] = bwds
+        end
+        next_block = in_f_rrule!!.fwds_instructions[n](prev_block, current_block)
+        if next_block == 0
+            n += 1
+        elseif next_block > 0
+            n = in_f.bb_starts[next_block]
+            prev_block = current_block
+            current_block = next_block
+            next_block = 0
+        end
+    end
+
+    interpreted_function_pb!! = InterpretedFunctionPb(
+        j, in_f_rrule!!.bwds_instructions, return_slot, n_stack, arg_info
+    )
+    return return_slot[], interpreted_function_pb!!
+end
+
+function (if_pb!!::InterpretedFunctionPb)(dout, ::NoTangent, dargs::Vararg{Any, N}) where {N}
+
+    # Update the output cotangent value to whatever is provided.
+    replace_tangent!(if_pb!!.return_slot, dout)
 
     # Run the instructions in reverse. Present assumes linear instruction ordering.
+    n_stack = if_pb!!.n_stack
+    bwds_instructions = if_pb!!.bwds_instructions
     for i in reverse(1:if_pb!!.j)
         inst = bwds_instructions[n_stack[i]]
         inst(i)
     end
 
     # Increment and return.
-    flat_arg_slots = flattened_rrule_args(arg_info)
+    flat_arg_slots = flattened_rrule_args(if_pb!!.arg_info)
     new_dargs = map(dargs, flat_arg_slots[1:end]) do darg, arg_slot
         return increment!!(darg, tangent(arg_slot))
     end
@@ -1235,14 +1224,10 @@ end
 
 const __Tinst = Tuple{FwdsIFInstruction, BwdsIFInstruction}
 
-function generate_instructions(in_f, arg_info, slots, return_slot, n)::__Tinst
-    ir = primal(in_f).ir
-    ctx = primal(in_f).ctx
-    ir_inst = rewrite_special_cases(ir, ir.stmts.inst[n])
-    is_blk_end = n in primal(in_f).bb_ends
-    return build_coinstructions(
-        ctx, ir_inst, n, arg_info, slots, return_slot, is_blk_end, primal(in_f).ir.sptypes
-    )
+function generate_instructions(in_f, in_f_rrule!!, n)::__Tinst
+    ir_inst = rewrite_special_cases(in_f.ir, in_f.ir.stmts.inst[n])
+    is_blk_end = n in in_f.bb_ends
+    return build_coinstructions(ir_inst, in_f, in_f_rrule!!, n, is_blk_end)
 end
 
 # Slow implementation, but useful for testing correctness.

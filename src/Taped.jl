@@ -19,7 +19,9 @@ using Base:
     arrayset
 using Base.Experimental: @opaque
 using Base.Iterators: product
-using Core: Intrinsics, bitcast, SimpleVector, svec
+using Core:
+    Intrinsics, bitcast, SimpleVector, svec, ReturnNode, GotoNode, GotoIfNot, PhiNode,
+    PiNode
 using Core.Compiler: IRCode
 using Core.Intrinsics: pointerref, pointerset
 using FunctionWrappers: FunctionWrapper
