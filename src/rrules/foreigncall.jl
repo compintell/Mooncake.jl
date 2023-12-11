@@ -409,21 +409,21 @@ function rrule!!(
     return y, NoPullback()
 end
 
-function rrule!!(
-    ::CoDual{<:Tforeigncall},
-    ::CoDual{Val{:jl_value_ptr}},
-    ::CoDual{Val{Ptr{Cvoid}}},
-    ::CoDual,
-    ::CoDual, # nreq
-    ::CoDual, # calling convention
-    a::CoDual
-)
-    y = CoDual(
-        ccall(:jl_value_ptr, Ptr{Cvoid}, (Any, ), primal(a)),
-        ccall(:jl_value_ptr, Ptr{NoTangent}, (Any, ), tangent(a)),
-    )
-    return y, NoPullback()
-end
+# function rrule!!(
+#     ::CoDual{<:Tforeigncall},
+#     ::CoDual{Val{:jl_value_ptr}},
+#     ::CoDual{Val{Ptr{Cvoid}}},
+#     ::CoDual,
+#     ::CoDual, # nreq
+#     ::CoDual, # calling convention
+#     a::CoDual
+# )
+#     y = CoDual(
+#         ccall(:jl_value_ptr, Ptr{Cvoid}, (Any, ), primal(a)),
+#         ccall(:jl_value_ptr, Ptr{NoTangent}, (Any, ), tangent(a)),
+#     )
+#     return y, NoPullback()
+# end
 
 function rrule!!(
     ::CoDual{<:Tforeigncall},
@@ -483,7 +483,7 @@ for name in [
     :(:jl_array_grow_end), :(:jl_array_del_end), :(:jl_array_copy), :(:jl_object_id),
     :(:jl_type_intersection), :(:memset), :(:jl_get_tls_world_age), :(:memmove),
     :(:jl_array_sizehint), :(:jl_array_del_at), :(:jl_array_grow_at), :(:jl_array_del_beg),
-    :(:jl_array_grow_beg),
+    :(:jl_array_grow_beg), :(:jl_value_ptr),
 ]
     @eval function rrule!!(::CoDual{<:Tforeigncall}, ::CoDual{Val{$name}}, args...)
         unexepcted_foreigncall_error($name)
