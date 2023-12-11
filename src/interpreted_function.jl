@@ -612,8 +612,8 @@ function build_coinstructions(ir_inst::Expr, in_f, in_f_rrule!!, n, is_blk_end)
                 fn = InterpretedFunction(in_f.ctx, fn_sig; interp=in_f.interp)
                 __rrule!! = build_rrule!!(fn)
             else
-                fn = DelayedInterpretedFunction{Core.Typeof(ctx), Core.Typeof(fn)}(
-                    ctx, fn, in_f.interp
+                fn = DelayedInterpretedFunction{Core.Typeof(in_f.ctx), Core.Typeof(fn)}(
+                    in_f.ctx, fn, in_f.interp
                 )
             end
         end
@@ -1026,6 +1026,17 @@ function (f::DelayedInterpretedFunction{C, F})(args...) where {C, F}
         return f.f(args...)
     else
         return InterpretedFunction(f.ctx, s; interp=f.interp)(args...)
+    end
+end
+
+function rrule!!(_f::CoDual{<:DelayedInterpretedFunction{C, F}}, args::CoDual...) where {C, F}
+    f = primal(_f)
+    s = Tuple{F, map(Core.Typeof ∘ primal, args)...}
+    if is_primitive(f.ctx, s)
+        return rrule!!(zero_codual(f.f), args...)
+    else
+        in_f = InterpretedFunction(f.ctx, s; interp=f.interp)
+        return build_rrule!!(in_f)(zero_codual(in_f), args...)
     end
 end
 
