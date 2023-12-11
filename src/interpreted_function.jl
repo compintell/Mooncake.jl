@@ -42,11 +42,49 @@ struct DefaultCtx end
 
 is_primitive(::DefaultCtx, sig) = is_primitive(MinimalCtx(), sig)
 
-# Largely copied from Enzyme.
+# Largely copied + extended from https://github.com/JuliaLang/julia/blob/2fe4190b3d26b4eee52b2b1b1054ddd6e38a941e/test/compiler/newinterp.jl#L11
+
+struct TapedInterpreterCache
+    dict::IdDict{Core.MethodInstance, Core.CodeInstance}
+end
+
+const __TapedInterpreterCache = TapedInterpreterCache()
+
 struct TapedInterpreter{C} <: CC.AbstractInterpreter
     parent::CC.NativeInterpreter
     ctx::C
 end
+
+
+# InterpCacheName = esc(Symbol(string(InterpName, "Cache")))
+
+#     quote
+#         $InterpCacheName() = $InterpCacheName(IdDict{$C.MethodInstance,$C.CodeInstance}())
+#         struct $InterpName <: $CC.AbstractInterpreter
+#             meta # additional information
+#             world::UInt
+#             inf_params::$CC.InferenceParams
+#             opt_params::$CC.OptimizationParams
+#             inf_cache::Vector{$CC.InferenceResult}
+#             code_cache::$InterpCacheName
+#             function $InterpName(meta = nothing;
+#                                  world::UInt = Base.get_world_counter(),
+#                                  inf_params::$CC.InferenceParams = $CC.InferenceParams(),
+#                                  opt_params::$CC.OptimizationParams = $CC.OptimizationParams(),
+#                                  inf_cache::Vector{$CC.InferenceResult} = $CC.InferenceResult[],
+#                                  code_cache::$InterpCacheName = $InterpCacheName())
+#                 return new(meta, world, inf_params, opt_params, inf_cache, code_cache)
+#             end
+#         end
+#         $CC.InferenceParams(interp::$InterpName) = interp.inf_params
+#         $CC.OptimizationParams(interp::$InterpName) = interp.opt_params
+#         $CC.get_world_counter(interp::$InterpName) = interp.world
+#         $CC.get_inference_cache(interp::$InterpName) = interp.inf_cache
+#         $CC.code_cache(interp::$InterpName) = $CC.WorldView(interp.code_cache, $CC.WorldRange(interp.world))
+#         $CC.get(wvc::$CC.WorldView{$InterpCacheName}, mi::$C.MethodInstance, default) = get(wvc.cache.dict, mi, default)
+#         $CC.getindex(wvc::$CC.WorldView{$InterpCacheName}, mi::$C.MethodInstance) = getindex(wvc.cache.dict, mi)
+#         $CC.haskey(wvc::$CC.WorldView{$InterpCacheName}, mi::$C.MethodInstance) = haskey(wvc.cache.dict, mi)
+#         $CC.setindex!(wvc::$CC.WorldView{$InterpCacheName}, ci::$C.CodeInstance, mi::$C.MethodInstance) = setindex!(wvc.cache.dict, ci, mi)
 
 TapedInterpreter(ctx::C) where {C} = TapedInterpreter{C}(CC.NativeInterpreter(), ctx)
 
@@ -146,7 +184,7 @@ function (inst::ReturnInst)(::Int, ::Int)
     return -1
 end
 
-function build_instruction(ctx, ir_inst::ReturnNode, ::Int, arg_info, slots, return_slot, _)
+function build_instruction(ctx, ir_inst::ReturnNode, ::Int, arg_info, slots, return_slot, _, _)
     return ReturnInst(return_slot, _get_input(ir_inst.val, slots, arg_info))
 end
 
@@ -163,7 +201,7 @@ function to_benchmark(__rrule!!, df, dx)
 end
 
 function build_coinstructions(
-    _, ir_inst::ReturnNode, n::Int, arg_info, slots, return_slot, ::Bool
+    _, ir_inst::ReturnNode, n::Int, arg_info, slots, return_slot, ::Bool, _
 )
 
     _slot_to_return = _get_input(ir_inst.val, slots, arg_info)
@@ -216,11 +254,11 @@ end
 
 (inst::GotoInst)(::Int, ::Int) = inst.n
 
-function build_instruction(_, ir_inst::GotoNode, n::Int, arg_info, slots, return_slot, _)
+function build_instruction(_, ir_inst::GotoNode, n::Int, arg_info, slots, return_slot, _, _)
     return GotoInst(ir_inst.label)
 end
 
-function build_coinstructions(_, ir_inst::GotoNode, n::Int, arg_info, slots, return_slot, _)
+function build_coinstructions(_, ir_inst::GotoNode, n::Int, arg_info, slots, return_slot, _, _)
 
     # Extract relevant values.
     dest = ir_inst.label
@@ -253,11 +291,11 @@ function (inst::GotoIfNotInst)(::Int, current_block::Int)
     return extract_arg(inst.cond[]) ? current_block + 1 : inst.dest
 end
 
-function build_instruction(_, node::GotoIfNot, n::Int, arg_info, slots, _, _)
+function build_instruction(_, node::GotoIfNot, n::Int, arg_info, slots, _, _, _)
     return GotoIfNotInst(_get_input(node.cond, slots, arg_info), node.dest, node, n)
 end
 
-function build_coinstructions(_, ir_inst::GotoIfNot, n::Int, arg_info, slots, _, _)
+function build_coinstructions(_, ir_inst::GotoIfNot, n::Int, arg_info, slots, _, _, _)
 
     # Extract relevant values.
     cond_slot = _get_input(ir_inst.cond, slots, arg_info)
@@ -307,7 +345,7 @@ end
 
 struct UndefinedReference end
 
-function build_instruction(_, ir_inst::PhiNode, n::Int, arg_info, slots, _, is_blk_end)
+function build_instruction(_, ir_inst::PhiNode, n::Int, arg_info, slots, _, is_blk_end, _)
     edges = map(Int, (ir_inst.edges..., ))
     values_vec = map(eachindex(ir_inst.values)) do j
         if isassigned(ir_inst.values, j)
@@ -322,7 +360,7 @@ function build_instruction(_, ir_inst::PhiNode, n::Int, arg_info, slots, _, is_b
 end
 
 function build_coinstructions(
-    _, ir_inst::Core.PhiNode, n::Int, arg_info, slots, _, is_blk_end::Bool
+    _, ir_inst::Core.PhiNode, n::Int, arg_info, slots, _, is_blk_end::Bool, _
 )
 
     # Extract relevant values.
@@ -389,7 +427,7 @@ function (inst::PiNodeInst)(::Int, current_block::Int)
     return inst.is_blk_end ? current_block + 1 : 0
 end
 
-function build_instruction(_, node::Core.PiNode, n::Int, arg_info, slots, _, is_blk_end)
+function build_instruction(_, node::Core.PiNode, n::Int, arg_info, slots, _, is_blk_end, _)
     return PiNodeInst(_get_input(node.val, slots, arg_info), slots[n], is_blk_end)
 end
 
@@ -401,12 +439,74 @@ struct NothingInst end
 
 (inst::NothingInst)(::Int, current_block::Int) = current_block + 1
 
-build_instruction(_, ::Nothing, n::Int, ::Any, ::Any, ::Any, ::Any) = NothingInst()
+build_instruction(_, ::Nothing, n::Int, ::Any, ::Any, ::Any, ::Any, _) = NothingInst()
 
-function build_coinstructions(_, ::Nothing, ::Int, ::Any, ::Any, ::Any, ::Any)
+function build_coinstructions(_, ::Nothing, ::Int, ::Any, ::Any, ::Any, ::Any, _)
     run_fwds_pass = @opaque (a::Int, current_block::Int) -> current_block + 1
     run_rvs_pass = @opaque (j::Int) -> j
     return run_fwds_pass, run_rvs_pass
+end
+
+#
+# Bool
+#
+
+struct BoolInst
+    val::Bool
+    val_ref::SlotRef{Bool}
+    is_blk_end::Bool
+end
+
+function (inst::BoolInst)(::Int, current_block::Int)
+    inst.val_ref[] = inst.val
+    return inst.is_blk_end ? current_block + 1 : 0
+end
+
+function build_instruction(_, val::Bool, n::Int, ::Any, slots, ::Any, is_blk_end, _)
+    return BoolInst(val, slots[n], is_blk_end)
+end
+
+function build_coinstructions(_, val::Bool, n::Int, ::Any, slots, ::Any, is_blk_end, _)
+    function __barrier(val, val_ref::SlotRef{<:CoDual{Bool}}, is_blk_end)
+        run_fwds_pass::FwdsIFInstruction = @opaque function(a::Int, current_block::Int)
+            val_ref[] = zero_codual(val)
+            return is_blk_end ? current_block + 1 : 0
+        end
+        run_rvs_pass::BwdsIFInstruction = @opaque (j::Int) -> j
+        return run_fwds_pass, run_rvs_pass
+    end
+    return __barrier(val, slots[n], is_blk_end)
+end
+
+#
+# Type
+#
+
+struct TypeInst{T}
+    val::Type
+    val_ref::SlotRef{T}
+    is_blk_end::Bool
+end
+
+function (inst::TypeInst)(::Int, current_block::Int)
+    inst.val_ref[] = inst.val
+    return inst.is_blk_end ? current_block + 1 : 0
+end
+
+function build_instruction(_, val::Type, n::Int, ::Any, slots, ::Any, is_blk_end, _)
+    return TypeInst(val, slots[n], is_blk_end)
+end
+
+function build_coinstructions(_, val::Type, n::Int, ::Any, slots, ::Any, is_blk_end, _)
+    function __barrier(val, val_ref::SlotRef{<:CoDual{<:Type}}, is_blk_end)
+        run_fwds_pass::FwdsIFInstruction = @opaque function(a::Int, current_block::Int)
+            val_ref[] = zero_codual(val)
+            return is_blk_end ? current_block + 1 : 0
+        end
+        run_rvs_pass::BwdsIFInstruction = @opaque (j::Int) -> j
+        return run_fwds_pass, run_rvs_pass
+    end
+    return __barrier(val, slots[n], is_blk_end)
 end
 
 #
@@ -424,11 +524,11 @@ function (inst::GlobalRefInst)(::Int, current_block::Int)
     return inst.is_blk_end ? current_block + 1 : 0
 end
 
-function build_instruction(_, node::GlobalRef, n::Int, arg_info, slots, _, is_blk_end)
+function build_instruction(_, node::GlobalRef, n::Int, arg_info, slots, _, is_blk_end, _)
     return GlobalRefInst(_get_globalref(node), slots[n], is_blk_end)
 end
 
-function build_coinstructions(_, node::GlobalRef, n::Int, ::Any, slots, ::Any, is_blk_end)
+function build_coinstructions(_, node::GlobalRef, n::Int, ::Any, slots, ::Any, is_blk_end, _)
     function __barrier(c::A, val_ref::B) where {A, B}
         run_fwds_pass = @opaque function (a::Int, current_blk::Int)
             val_ref[] = c
@@ -481,7 +581,7 @@ end
 
 (::SkippedExpressionInst)(::Int, ::Int) = 0
 
-function build_instruction(ctx, ir_inst::Expr, n::Int, arg_info, slots, _, is_block_end)
+function build_instruction(ctx, ir_inst::Expr, n::Int, arg_info, slots, _, is_block_end, _)
     is_invoke = Meta.isexpr(ir_inst, :invoke)
     if is_invoke || Meta.isexpr(ir_inst, :call)
 
@@ -508,7 +608,8 @@ function build_instruction(ctx, ir_inst::Expr, n::Int, arg_info, slots, _, is_bl
         fn_sig = Tuple{Core.Typeof(fn), map(_robust_typeof, arg_refs)...}
         if !is_primitive(ctx, fn_sig)
             interp = TapedInterpreter(ctx)
-            if length(Base.code_ircode_by_type(fn_sig; interp)) == 1
+            if all(Base.isconcretetype, fn_sig.parameters)
+            # if length(Base.code_ircode_by_type(fn_sig; interp)) == 1
                 fn = InterpretedFunction(ctx, fn_sig)
             else
                 fn = DelayedInterpretedFunction{Core.Typeof(ctx), Core.Typeof(fn)}(ctx, fn)
@@ -516,7 +617,7 @@ function build_instruction(ctx, ir_inst::Expr, n::Int, arg_info, slots, _, is_bl
         end
         new_inst = CallInst(fn, arg_refs, val_ref, ir_inst, n, is_block_end)
         return new_inst
-    elseif ir_inst isa Expr && ir_inst.head in [
+    elseif ir_inst.head in [
         :code_coverage_effect, :gc_preserve_begin, :gc_preserve_end, :loopinfo, :leave,
         :pop_exception,
     ]
@@ -528,7 +629,7 @@ end
 
 const OC = Core.OpaqueClosure
 
-function build_coinstructions(ctx, ir_inst::Expr, n::Int, arg_info, slots, _, is_blk_end)
+function build_coinstructions(ctx, ir_inst::Expr, n::Int, arg_info, slots, _, is_blk_end, _)
     is_invoke = Meta.isexpr(ir_inst, :invoke)
     if is_invoke || Meta.isexpr(ir_inst, :call)
 
@@ -651,18 +752,9 @@ function build_coinstructions(ctx, ir_inst::Expr, n::Int, arg_info, slots, _, is
     end
 end
 
-
-
-
-
-
-
-
 #
 # Code execution
 #
-
-
 
 _robust_typeof(x::T) where {T} = T
 _robust_typeof(::Type{T}) where {T} = Type{T}
@@ -794,6 +886,12 @@ function rewrite_special_cases(ir::IRCode, st::Expr)
         end
         ex.args = Any[New{T}(), ex.args[2:end]...]
     end
+    if Meta.isexpr(ex, :static_parameter)
+        ex = ir.sptypes[ex.args[1]]
+        if ex isa CC.VarState
+            ex = ex.typ
+        end
+    end
     return Meta.isexpr(st, :(=)) ? Expr(:(=), st.args[1], ex) : ex
 end
 rewrite_special_cases(::IRCode, st) = st
@@ -860,22 +958,31 @@ struct InterpretedFunction{sig<:Tuple, C, Treturn, Targ_info<:ArgInfo}
     ir::IRCode
 end
 
+function is_vararg_sig(sig)
+    world = Base.get_world_counter()
+    min = RefValue{UInt}(typemin(UInt))
+    max = RefValue{UInt}(typemax(UInt))
+    ms = Base._methods_by_ftype(sig, nothing, -1, world, true, min, max, Ptr{Int32}(C_NULL))::Vector
+    m = only(ms).method
+    return m.isva
+end
+
 function InterpretedFunction(ctx::C, sig::Type{<:Tuple}) where {C}
-    @nospecialize ctx, sig
+    @nospecialize ctx sig
 
     # Grab code associated to this function.
     interp = TapedInterpreter(ctx)
-    ir, Treturn = Base.code_ircode_by_type(sig; interp)[1]
-    # display(sig)
-    # display(ir)
-    # println()
+    display(sig)
+    ir, Treturn = only(Base.code_ircode_by_type(sig; interp))
+    display(ir)
+    println()
 
     # Slot into which the output of this function will be placed.
     return_slot = SlotRef{Treturn}()
 
     # Construct argument reference references.
     arg_types = Tuple{map(_get_type, ir.argtypes)..., }
-    is_vararg = Base.which(sig).isva
+    is_vararg = is_vararg_sig(sig)
     arg_info = arginfo_from_argtypes(arg_types, is_vararg)
 
     # Extract slots.
@@ -928,8 +1035,9 @@ function build_instruction(in_f::InterpretedFunction{sig}, n::Int) where {sig}
     ir_inst = rewrite_special_cases(ir, ir.stmts.inst[n])
     return_slot = in_f.return_slot
     is_block_end = n in in_f.bb_ends
+    sptypes = in_f.ir.sptypes
     inst = build_instruction(
-        in_f.ctx, ir_inst, n, in_f.arg_info, in_f.slots, return_slot, is_block_end
+        in_f.ctx, ir_inst, n, in_f.arg_info, in_f.slots, return_slot, is_block_end, sptypes
     )
     return _make_opaque_closure(inst, sig, n)
 end
@@ -948,7 +1056,7 @@ struct DelayedInterpretedFunction{C, F}
 end
 
 function (f::DelayedInterpretedFunction{C, F})(args...) where {C, F}
-    s = Tuple{F, Core.Typeof(args).parameters...}
+    s = Tuple{F, map(Core.Typeof, args)...}
     return is_primitive(f.ctx, s) ? f.f(args...) : InterpretedFunction(f.ctx, s)(args...)
 end
 
@@ -1092,7 +1200,6 @@ function (if_pb!!::InterpretedFunctionPb)(dout, ::NoTangent, dargs::Vararg{Any, 
     return NoTangent(), new_dargs...
 end
 
-
 const __Tinst = Tuple{FwdsIFInstruction, BwdsIFInstruction}
 
 function generate_instructions(in_f, arg_info, slots, return_slot, n)::__Tinst
@@ -1100,7 +1207,9 @@ function generate_instructions(in_f, arg_info, slots, return_slot, n)::__Tinst
     ctx = primal(in_f).ctx
     ir_inst = rewrite_special_cases(ir, ir.stmts.inst[n])
     is_blk_end = n in primal(in_f).bb_ends
-    return build_coinstructions(ctx, ir_inst, n, arg_info, slots, return_slot, is_blk_end)
+    return build_coinstructions(
+        ctx, ir_inst, n, arg_info, slots, return_slot, is_blk_end, primal(in_f).ir.sptypes
+    )
 end
 
 # Slow implementation, but useful for testing correctness.
@@ -1203,6 +1312,11 @@ varargs_tester_2(x, y, z) = varargs_tester(x, y, z)
 varargs_tester_4(x) = varargs_tester_3(x...)
 varargs_tester_4(x, y) = varargs_tester_3(x...)
 varargs_tester_4(x, y, z) = varargs_tester_3(x...)
+
+# sparams_tester(::Val{T}, x) where {T} = T ? sin(x) : cos(x)
+
+sparams_tester(x::T) where {T} = T
+sparams_tester_caller(x::Bool) = sparams_tester(Val(x))
 
 a_primitive(x) = sin(x)
 non_primitive(x) = sin(x)
