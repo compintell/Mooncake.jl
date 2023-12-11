@@ -49,6 +49,11 @@ struct TICache
 end
 
 TICache() = TICache(IdDict{Core.MethodInstance, Core.CodeInstance}())
+# struct TapedInterpreterCache
+#     dict::IdDict{Core.MethodInstance, Core.CodeInstance}
+# end
+
+# const __TapedInterpreterCache = TapedInterpreterCache()
 
 struct TapedInterpreter{C} <: CC.AbstractInterpreter
     ctx::C
@@ -58,6 +63,7 @@ struct TapedInterpreter{C} <: CC.AbstractInterpreter
     opt_params::CC.OptimizationParams
     inf_cache::Vector{CC.InferenceResult}
     code_cache::TICache
+    ir_interp::Bool
     function TapedInterpreter(
         ctx::C=DefaultCtx();
         meta=nothing,
@@ -66,16 +72,21 @@ struct TapedInterpreter{C} <: CC.AbstractInterpreter
         opt_params::CC.OptimizationParams=CC.OptimizationParams(),
         inf_cache::Vector{CC.InferenceResult}=CC.InferenceResult[], 
         code_cache::TICache=TICache(),
+        ir_interp=false,
     ) where {C}
-        return new{C}(ctx, meta, world, inf_params, opt_params, inf_cache, code_cache)
+        return new{C}(
+            ctx, meta, world, inf_params, opt_params, inf_cache, code_cache, ir_interp
+        )
     end
 end
 
-CC.InferenceParams(interp::TapedInterpreter) = interp.inf_params
-CC.OptimizationParams(interp::TapedInterpreter) = interp.opt_params
-CC.get_world_counter(interp::TapedInterpreter) = interp.world
-CC.get_inference_cache(interp::TapedInterpreter) = interp.inf_cache
-function CC.code_cache(interp::TapedInterpreter)
+const TInterp = TapedInterpreter
+
+CC.InferenceParams(interp::TInterp) = interp.inf_params
+CC.OptimizationParams(interp::TInterp) = interp.opt_params
+CC.get_world_counter(interp::TInterp) = interp.world
+CC.get_inference_cache(interp::TInterp) = interp.inf_cache
+function CC.code_cache(interp::TInterp)
     return CC.WorldView(interp.code_cache, CC.WorldRange(interp.world))
 end
 function CC.get(wvc::CC.WorldView{TICache}, mi::Core.MethodInstance, default)
@@ -91,19 +102,48 @@ function CC.setindex!(
     return setindex!(wvc.cache.dict, ci, mi)
 end
 
-const TInterp = TapedInterpreter
+# CC.infer_compilation_signature(::TInterp) = true
 
-# function CC.abstract_call(
-#     interp::TapedInterpreter,
-#     arginfo::CC.ArgInfo,
-#     si::CC.StmtInfo,
-#     sv::CC.InferenceState,
-#     max_methods::Int,
-# )
-#     @show "in this other one"
-#     ret = @invoke CC.abstract_call(interp::CC.AbstractInterpreter,
-#         arginfo::CC.ArgInfo, si::CC.StmtInfo, sv::CC.InferenceState, max_methods::Int)
-#     return ret
+# function CC.switch_to_irinterp(interp::TInterp)
+#     return TInterp(
+#         interp.ctx;
+#         meta=interp.meta,
+#         world=interp.world,
+#         inf_params=interp.inf_params,
+#         opt_params=interp.opt_params,
+#         inf_cache=interp.inf_cache,
+#         code_cache=interp.code_cache,
+#         ir_interp=true,
+#     )
+# end
+
+# function CC.switch_from_irinterp(interp::TInterp)
+#     return TInterp(
+#         interp.ctx;
+#         meta=interp.meta,
+#         world=interp.world,
+#         inf_params=interp.inf_params,
+#         opt_params=interp.opt_params,
+#         inf_cache=interp.inf_cache,
+#         code_cache=interp.code_cache,
+#         ir_interp=false,
+#     )
+# end
+
+# function CC.typeinf_lattice(interp::TapedInterpreter)
+#     if interp.ir_interp
+#         return CC.InferenceLattice(CC.SimpleInferenceLattice.instance)
+#     else
+#         return CC.InferenceLattice(CC.BaseInferenceLattice.instance)
+#     end
+# end
+
+# function CC.ipo_lattice(interp::TapedInterpreter)
+#     if interp.ir_interp
+#         return CC.InferenceLattice(CC.SimpleInferenceLattice.instance)
+#     else
+#         return CC.InferenceLattice(CC.IPOResultLattice.instance)
+#     end
 # end
 
 _type(x) = x
@@ -114,15 +154,13 @@ function CC.inlining_policy(
     interp::TapedInterpreter{C},
     @nospecialize(src),
     @nospecialize(info::CC.CallInfo),
-    stmt_flag::UInt32,
+    stmt_flag::UInt8,
     mi::Core.MethodInstance,
     argtypes::Vector{Any},
 ) where {C}
 
     # Do not inline away primitives.
-    @show "in inlining routine"
     argtype_tuple = Tuple{map(_type, argtypes)...}
-    @show argtype_tuple, is_primitive(interp.ctx, argtype_tuple)
     is_primitive(interp.ctx, argtype_tuple) && return nothing
 
     # If not a primitive, AD doesn't care about it. Use the usual inlining strategy.
@@ -130,28 +168,11 @@ function CC.inlining_policy(
         interp::CC.AbstractInterpreter,
         src::Any,
         info::CC.CallInfo,
-        stmt_flag::UInt32,
+        stmt_flag::UInt8,
         mi::Core.MethodInstance,
         argtypes::Vector{Any},
     )
 end
-
-# function CC.inlining_policy(
-#     interp::TInterp,
-#     @nospecialize(src),
-#     @nospecialize(info::CC.CallInfo),
-#     stmt_flag::UInt8,
-#     mi::CC.MethodInstance,
-#     argtypes::Vector{Any},
-# )
-#     # Do not inline away primitives.
-#     argtype_tuple = Tuple{map(_type, argtypes)...}
-#     is_primitive(interp.ctx, argtype_tuple) && return nothing
-
-#     # If not a primitive, AD doesn't care about it. Use the usual inlining strategy.
-#     return CC.inlining_policy(interp.parent, src, info, stmt_flag, mi, argtypes)
-# end
-
 
 #
 # Special Ref type to avoid confusion between existing ref types.
@@ -611,7 +632,7 @@ function build_instruction(ctx, ir_inst::Expr, n::Int, arg_info, slots, _, is_bl
         # Extract function.
         fn = is_invoke ? ir_inst.args[2] : ir_inst.args[1]
 
-        if fn isa Core.SSAValue
+        if fn isa Core.SSAValue || fn isa Core.Argument
             fn = _get_input(fn, slots, arg_info)[]
         end
         if fn isa GlobalRef
@@ -623,9 +644,7 @@ function build_instruction(ctx, ir_inst::Expr, n::Int, arg_info, slots, _, is_bl
 
         fn_sig = Tuple{Core.Typeof(fn), map(_robust_typeof, arg_refs)...}
         if !is_primitive(ctx, fn_sig)
-            interp = TapedInterpreter(ctx)
             if all(Base.isconcretetype, fn_sig.parameters)
-            # if length(Base.code_ircode_by_type(fn_sig; interp)) == 1
                 fn = InterpretedFunction(ctx, fn_sig)
             else
                 fn = DelayedInterpretedFunction{Core.Typeof(ctx), Core.Typeof(fn)}(ctx, fn)
@@ -658,7 +677,7 @@ function build_coinstructions(ctx, ir_inst::Expr, n::Int, arg_info, slots, _, is
 
         # Extract function.
         fn = is_invoke ? ir_inst.args[2] : ir_inst.args[1]
-        if fn isa Core.SSAValue
+        if fn isa Core.SSAValue || fn isa Core.Argument
             fn = primal(_get_input(fn, slots, arg_info)[])
         end
         if fn isa GlobalRef
@@ -677,8 +696,8 @@ function build_coinstructions(ctx, ir_inst::Expr, n::Int, arg_info, slots, _, is
         }
         __rrule!! = rrule!!
         if !is_primitive(ctx, fn_sig)
-            interp = TapedInterpreter(ctx)
-            num_methods = length(Base.code_ircode_by_type(fn_sig; interp))
+            _interp = TapedInterpreter(DefaultCtx())
+            num_methods = length(Base.code_ircode_by_type(fn_sig; interp=_interp))
             if num_methods == 1
                 fn = InterpretedFunction(ctx, fn_sig)
                 __rrule!! = build_rrule!!(fn)
@@ -697,7 +716,16 @@ function build_coinstructions(ctx, ir_inst::Expr, n::Int, arg_info, slots, _, is
         codual_sig = Tuple{
             Core.Typeof(fn), map(_robust_typeof ∘ extract_codual, codual_arg_refs)...
         }
-        T_pb!! = only(Base.return_types(__rrule!!, codual_sig))
+        output = Base.return_types(__rrule!!, codual_sig)
+        if length(output) == 0
+            throw(error("No return type inferred for __rrule!! with sig $codual_sig"))
+        elseif length(output) > 1
+            @warn "Too many output types inferred"
+            display(output)
+            println()
+            throw(error("> 1 return type inferred for __rrule!! with sig $codual_sig "))
+        end
+        T_pb!! = only(output)
         if T_pb!! <: Tuple && T_pb!! !== Union{}
             pb_stack = Vector{T_pb!!.parameters[2]}(undef, 0)
         else
@@ -730,9 +758,6 @@ function build_coinstructions(ctx, ir_inst::Expr, n::Int, arg_info, slots, _, is
                 @warn "Unable to compiled forwards pass -- running to generate the error."
                 @show run_fwds_pass(5, 4)
             end
-            # println("CallInst run_fwds_pass")
-            # display(@benchmark $run_fwds_pass(0, 0))
-            # println()
 
             # Construct operation to run the reverse-pass.
             run_rvs_pass = @opaque function (j::Int)
@@ -749,9 +774,6 @@ function build_coinstructions(ctx, ir_inst::Expr, n::Int, arg_info, slots, _, is
                 @warn "Unable to compiled reverse pass -- running to generate the error."
                 @show run_reverse_pass(5)
             end
-            # println("CallInst run_rvs_pass")
-            # display(@benchmark $run_fwds_pass(0, 0))
-            # println()
 
             return run_fwds_pass, run_rvs_pass
         end
@@ -806,12 +828,6 @@ function _make_opaque_closure(inst, sig, n)
         display(inst)
         println()
         @show oc(5, 4)
-        # println("IRCode from inst (source of failure) has argtypes:")
-        # display(new_ir.argtypes)
-        # println()
-        # println("and IR")
-        # display(inst.ir)
-        # println()
     end
     return oc::IFInstruction
 end
@@ -983,15 +999,22 @@ function is_vararg_sig(sig)
     return m.isva
 end
 
-function InterpretedFunction(ctx::C, sig::Type{<:Tuple}) where {C}
+function InterpretedFunction(
+    ctx::C, sig::Type{<:Tuple}
+) where {C}
     @nospecialize ctx sig
 
     # Grab code associated to this function.
-    interp = TapedInterpreter(ctx)
-    display(sig)
-    ir, Treturn = only(Base.code_ircode_by_type(sig; interp))
-    display(ir)
-    println()
+    output = Base.code_ircode_by_type(sig; interp=TapedInterpreter(DefaultCtx()))
+    if isempty(output)
+        throw(ArgumentError("No methods found for signature $sig"))
+    elseif length(output) > 1
+        @warn "found multiple methods:"
+        display(output)
+        println()
+        throw(ArgumentError("Multiple methods found for signature $sig"))
+    end
+    ir, Treturn = only(output)
 
     # Slot into which the output of this function will be placed.
     return_slot = SlotRef{Treturn}()
@@ -1280,6 +1303,8 @@ type_unstable_tester_2(x::Ref{Real}) = cos(x[])
 
 type_unstable_function_eval(f::Ref{Any}, x::Float64) = f[](x)
 
+type_unstable_argument_eval(@nospecialize(f), x::Float64) = f(x)
+
 function phi_const_bool_tester(x)
     if x > 0
         a = true
@@ -1291,7 +1316,7 @@ end
 
 function pi_node_tester(y::Ref{Any})
     x = y[]
-    return isa(x, Int) ? sin(x) : cos(x)
+    return isa(x, Int) ? sin(x) : x
 end
 
 function avoid_throwing_path_tester(x)
@@ -1329,11 +1354,6 @@ varargs_tester_4(x) = varargs_tester_3(x...)
 varargs_tester_4(x, y) = varargs_tester_3(x...)
 varargs_tester_4(x, y, z) = varargs_tester_3(x...)
 
-# sparams_tester(::Val{T}, x) where {T} = T ? sin(x) : cos(x)
-
-sparams_tester(x::T) where {T} = T
-sparams_tester_caller(x::Bool) = sparams_tester(Val(x))
-
 a_primitive(x) = sin(x)
 non_primitive(x) = sin(x)
 
@@ -1342,3 +1362,4 @@ is_primitive(::DefaultCtx, ::Type{<:Tuple{typeof(non_primitive), Any}}) = false
 
 contains_primitive(x) = @inline a_primitive(x)
 contains_non_primitive(x) = @inline non_primitive(x)
+contains_primitive_behind_call(x) = @inline contains_primitive(x)

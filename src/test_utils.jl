@@ -357,6 +357,17 @@ function test_taped_rrule!!(rng, f, x...; interface_only=false, recursive=true, 
     end
 end
 
+function test_interpreted_rrule!!(rng::AbstractRNG, f, x...; interface_only=false, kwargs...)
+    sig = Tuple{Core.Typeof(f), map(Core.Typeof, x)...}
+    in_f = Taped.InterpretedFunction(DefaultCtx(), sig)
+    test_rrule!!(
+        rng, in_f, x...; is_primitive=false, interface_only, perf_flag=:none, kwargs...
+    )
+    return nothing
+end
+
+
+
 
 
 #
@@ -557,7 +568,8 @@ end
 function run_derived_rrule!!_test_cases(rng_ctor, v::Val)
     test_cases, memory = Taped.generate_derived_rrule!!_test_cases(rng_ctor, v)
     GC.@preserve memory @testset "$f, $(typeof(x))" for (interface_only, _, f, x...) in test_cases
-        test_taped_rrule!!(rng_ctor(123), f, x...; interface_only)
+        test_interpreted_rrule!!(rng_ctor(123), f, x...; interface_only)
+        # test_taped_rrule!!(rng_ctor(123), f, x...; interface_only)
     end
 end
 

@@ -214,7 +214,8 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
     ]
         @info "$(map(typeof, (d, x)))"
         rng = StableRNG(123456)
-        test_taped_rrule!!(rng, logpdf, d, deepcopy(x); interface_only, perf_flag=:none)
+        TestUtils.test_interpreted_rrule!!(rng, logpdf, d, deepcopy(x); interface_only, perf_flag=:none)
+        # test_taped_rrule!!(rng, logpdf, d, deepcopy(x); interface_only, perf_flag=:none)
     end
     @testset "$name" for (name, f, x) in [
         ("InverseGamma", (a, b, x) -> logpdf(InverseGamma(a, b), x), (1.5, 1.4, 0.4)),
@@ -253,6 +254,7 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
     ]
         @info "$name"
         rng = StableRNG(123456)
-        test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only=false, perf_flag=:none)
+        TestUtils.test_interpreted_rrule!!(rng, f, deepcopy(x)...; interface_only=false, perf_flag=:none)
+        # test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only=false, perf_flag=:none)
     end
 end

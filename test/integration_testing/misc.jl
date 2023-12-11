@@ -86,6 +86,6 @@
     )
         @info "$(map(typeof, (f, x...)))"
         rng = Xoshiro(123456)
-        test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only, perf_flag=:none)
+        TestUtils.test_interpreted_rrule!!(rng, f, deepcopy(x)...; interface_only, perf_flag=:none)
     end
 end
