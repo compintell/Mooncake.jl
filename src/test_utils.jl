@@ -27,6 +27,9 @@ function has_equal_data(x::T, y::T; equal_undefs=true) where {T}
     ))
 end
 has_equal_data(x::T, y::T; equal_undefs=true) where {T<:Umlaut.Tape} = true
+function has_equal_data(x::GlobalRef, y::GlobalRef; equal_undefs=true)
+    return x.mod == y.mod && x.name == y.name
+end
 
 has_equal_data_up_to_undefs(x::T, y::T) where {T} = has_equal_data(x, y; equal_undefs=false)
 

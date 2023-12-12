@@ -16,7 +16,8 @@ using
 
 using Base: unsafe_load, pointer_from_objref
 using Base.Iterators: product
-using Core: bitcast, svec
+using Core:
+    bitcast, svec, ReturnNode, PhiNode, PiNode, GotoIfNot, GotoNode, SSAValue, Argument
 using Core.Intrinsics: pointerref, pointerset
 using FunctionWrappers: FunctionWrapper
 
@@ -45,7 +46,16 @@ using Taped:
     lgetfield,
     might_be_active,
     rebind,
-    build_tangent
+    build_tangent,
+    preprocess_ir,
+    SlotRef,
+    Literal,
+    ReturnInst,
+    GotoInst,
+    GotoIfNotInst,
+    PhiNodeInst,
+    PiNodeInst,
+    CallInst
 
 using Taped.Umlaut: __new__, __to_tuple__
 
