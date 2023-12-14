@@ -100,6 +100,7 @@ end
 _type(x) = x
 _type(x::CC.Const) = Core.Typeof(x.val)
 _type(x::CC.PartialStruct) = x.typ
+_type(x::CC.Conditional) = Union{x.thentype, x.elsetype}
 
 function CC.inlining_policy(
     interp::TapedInterpreter{C},
@@ -210,7 +211,7 @@ function (inst::ReturnInst)(::Int, ::Int)
     return -1
 end
 
-preprocess_ir(st::ReturnNode, sptypes) = ReturnNode(preprocess_ir(st.val, sptypes))
+preprocess_ir(st::ReturnNode, in_f) = ReturnNode(preprocess_ir(st.val, in_f))
 
 function build_instruction(ir_inst::ReturnNode, in_f, n, is_block_end)
     return ReturnInst(in_f.return_slot, _get_input(ir_inst.val, in_f))
@@ -284,7 +285,7 @@ function (inst::GotoIfNotInst)(::Int, current_block::Int)
     return extract_arg(inst.cond) ? current_block + 1 : inst.dest
 end
 
-preprocess_ir(st::GotoIfNot, sptypes) = GotoIfNot(preprocess_ir(st.cond, sptypes), st.dest)
+preprocess_ir(st::GotoIfNot, in_f) = GotoIfNot(preprocess_ir(st.cond, in_f), st.dest)
 
 function build_instruction(ir_inst::GotoIfNot, in_f, n, _)
     return GotoIfNotInst(_get_input(ir_inst.cond, in_f), ir_inst.dest, ir_inst, n)
@@ -320,17 +321,20 @@ _isassigned(x) = true
 function (inst::PhiNodeInst)(prev_blk::Int, current_blk::Int)
     for n in eachindex(inst.edges)
         if inst.edges[n] == prev_blk && _isassigned(inst.values[n])
-            inst.val_slot[] = extract_arg(inst.values[n])
+            new_val = extract_arg(inst.values[n])
+            if new_val isa eltype(inst.val_slot)
+                inst.val_slot[] = new_val
+            end
         end
     end
     return _standard_next_block(inst.is_blk_end, current_blk)
 end
 
-function preprocess_ir(st::PhiNode, sptypes)
+function preprocess_ir(st::PhiNode, in_f)
     new_vals = Vector{Any}(undef, length(st.values))
     for n in eachindex(new_vals)
         if isassigned(st.values, n)
-            new_vals[n] = preprocess_ir(st.values[n], sptypes)
+            new_vals[n] = preprocess_ir(st.values[n], in_f)
         end
     end
     return PhiNode(st.edges, new_vals)
@@ -426,7 +430,7 @@ function (inst::PiNodeInst)(::Int, current_blk::Int)
     return _standard_next_block(inst.is_blk_end, current_blk)
 end
 
-preprocess_ir(st::PiNode, sptypes) = PiNode(preprocess_ir(st.val, sptypes), st.typ)
+preprocess_ir(st::PiNode, in_f) = PiNode(preprocess_ir(st.val, in_f), st.typ)
 
 function build_instruction(ir_inst::PiNode, in_f, n, is_blk_end)
     return PiNodeInst(_get_input(ir_inst.val, in_f), in_f.slots[n], is_blk_end)
@@ -460,7 +464,7 @@ preprocess_ir(x::Literal, _) = x
 
 is_literal(::Union{Bool, Float16, Float32, Float64, Int, Nothing, DataType, Symbol}) = true
 is_literal(::Union{Val, UInt64, Char, UInt8, UInt16, UInt32, Function, Tuple, Type}) = true
-is_literal(::Union{UnionAll}) = true
+is_literal(::Union{UnionAll, Int8, Int16, Int32, Int128, UInt64, UInt128}) = true
 is_literal(_) = false
 
 function (inst::LiteralInst)(::Int, current_blk::Int)
@@ -531,7 +535,8 @@ struct CallInst{Targs<:NTuple{N, SlotRefOrLiteral} where {N}, T, Tval_ref<:SlotR
 end
 
 function (inst::CallInst{sig, T, SlotRef{A}})(::Int, current_blk::Int) where {sig, T, A}
-    inst.val_ref[] = inst.evaluator(map(extract_arg, inst.args)...)
+    new_val = inst.evaluator(map(extract_arg, inst.args)...)
+    inst.val_ref[] = new_val
     return _standard_next_block(inst.is_blk_end, current_blk)
 end
 
@@ -597,17 +602,18 @@ function _preprocess_expr_arg(ex, _)
     throw(error("$ex of type $(Core.Typeof(ex)) is not a known component of Julia SSAIR"))
 end
 
-function preprocess_ir(ex::Expr, sptypes)
+function preprocess_ir(ex::Expr, in_f)
     ex = CC.copy(ex)
+    sptypes = in_f.sptypes
+    spnames = in_f.spnames
     if Meta.isexpr(ex, :boundscheck)
         return Literal(true)
     elseif Meta.isexpr(ex, :foreigncall)
         args = ex.args
         name = extract_foreigncall_name(args[1])
-        RT = Val(args[2])
-        AT = (map(Val, args[3])..., )
-        # RT = Val(interpolate_sparams(args[2], sparams_dict))
-        # AT = (map(x -> Val(interpolate_sparams(x, sparams_dict)), args[3])..., )
+        sparams_dict = Dict(zip(spnames, sptypes))
+        RT = Val(interpolate_sparams(args[2], sparams_dict))
+        AT = (map(x -> Val(interpolate_sparams(x, sparams_dict)), args[3])..., )
         nreq = Val(args[4])
         calling_convention = Val(_extract(args[5]))
         x = args[6:end]
@@ -837,6 +843,17 @@ function extract_foreigncall_name(v::Tuple)
 end
 extract_foreigncall_name(x::QuoteNode) = extract_foreigncall_name(x.value)
 
+function sparam_names(m::Core.Method)
+    whereparams = ExprTools.where_parameters(m.sig)
+    whereparams === nothing && return []
+    return map(whereparams) do name
+        name isa Symbol && return name
+        Meta.isexpr(name, :(<:)) && return name.args[1]
+        Meta.isexpr(name, :(>:)) && return name.args[1]
+        error("unrecognised type param $name")
+    end
+end
+
 # Copied from Umlaut.jl. Originally, adapted from
 # https://github.com/JuliaDebug/JuliaInterpreter.jl/blob/aefaa300746b95b75f99d944a61a07a8cb145ef3/src/optimize.jl#L239
 function interpolate_sparams(@nospecialize(t::Type), sparams::Dict)
@@ -851,9 +868,12 @@ function interpolate_sparams(@nospecialize(t::Type), sparams::Dict)
     if Base.has_free_typevars(t)
         params = map(t.parameters) do @nospecialize(p)
             if isa(p, TypeVar)
-                return sparams[p.name]
+                return sparams[p.name].typ.val
             elseif isa(p, DataType) && Base.has_free_typevars(p)
                 return interpolate_sparams(p, sparams)
+            elseif p isa CC.VarState
+                @show "doing varstate"
+                p.typ
             else
                 return p
             end
@@ -921,15 +941,16 @@ struct InterpretedFunction{sig<:Tuple, C, Treturn, Targ_info<:ArgInfo}
     bb_ends::Vector{Int}
     ir::IRCode
     interp::TapedInterpreter
+    sparam_names::Any
 end
 
-function is_vararg_sig(sig)
+function is_vararg_sig_and_sparam_names(sig)
     world = Base.get_world_counter()
     min = RefValue{UInt}(typemin(UInt))
     max = RefValue{UInt}(typemax(UInt))
     ms = Base._methods_by_ftype(sig, nothing, -1, world, true, min, max, Ptr{Int32}(C_NULL))::Vector
     m = only(ms).method
-    return m.isva
+    return m.isva, sparam_names(m)
 end
 
 _get_input(x, in_f::InterpretedFunction) = _get_input(x, in_f.slots, in_f.arg_info)
@@ -968,14 +989,14 @@ function InterpretedFunction(ctx::C, sig::Type{<:Tuple}; interp) where {C}
 
     # Construct argument reference references.
     arg_types = Tuple{map(_get_type, ir.argtypes)..., }
-    is_vararg = is_vararg_sig(sig)
+    is_vararg, spnames = is_vararg_sig_and_sparam_names(sig)
     arg_info = arginfo_from_argtypes(arg_types, is_vararg)
 
     # Extract slots.
     slots = SlotRef[SlotRef{_get_type(T)}() for T in ir.stmts.type]
 
     # Allocate memory for instructions and argument loading instructions.
-    instructions = Vector{IFInstruction}(undef, length(slots))
+    insts = Vector{IFInstruction}(undef, length(slots))
 
     # Compute the index of the instruction associated with the start of each basic block
     # in `ir`. This is used to know where to jump to when we hit a `Core.GotoNode` or
@@ -985,7 +1006,7 @@ function InterpretedFunction(ctx::C, sig::Type{<:Tuple}; interp) where {C}
 
     # Extract the starting location of each basic block from the CFG and build IF.
     in_f = InterpretedFunction{sig, C, Treturn, Core.Typeof(arg_info)}(
-        ctx, return_slot, arg_info, slots, instructions, bb_starts, bb_ends, ir, interp
+        ctx, return_slot, arg_info, slots, insts, bb_starts, bb_ends, ir, interp, spnames,
     )
 
     __InF_TABLE[sig] = in_f
@@ -1037,7 +1058,8 @@ end
 
 function build_instruction(in_f::InterpretedFunction{sig}, n::Int) where {sig}
     @nospecialize in_f
-    ir_inst = preprocess_ir(in_f.ir.stmts.inst[n], in_f.ir.sptypes)
+    d = (sptypes=in_f.ir.sptypes, spnames=in_f.sparam_names)
+    ir_inst = preprocess_ir(in_f.ir.stmts.inst[n], d)
     is_blk_end = n in in_f.bb_ends
     return _make_opaque_closure(build_instruction(ir_inst, in_f, n, is_blk_end), sig, n)
 end
@@ -1238,7 +1260,8 @@ end
 const __Tinst = Tuple{FwdsIFInstruction, BwdsIFInstruction}
 
 function generate_instructions(in_f, in_f_rrule!!, n)::__Tinst
-    ir_inst = preprocess_ir(in_f.ir.stmts.inst[n], in_f.ir.sptypes)
+    d = (sptypes=in_f.ir.sptypes, spnames=in_f.sparam_names)
+    ir_inst = preprocess_ir(in_f.ir.stmts.inst[n], in_f)
     is_blk_end = n in in_f.bb_ends
     return build_coinstructions(ir_inst, in_f, in_f_rrule!!, n, is_blk_end)
 end
@@ -1343,6 +1366,10 @@ function avoid_throwing_path_tester(x)
 end
 
 simple_foreigncall_tester(x) = ccall(:jl_array_isassigned, Cint, (Any, UInt), x, 1)
+
+function simple_foreigncall_tester_2(a::Array{T, M}, dims::NTuple{N, Int}) where {T,N,M}
+    ccall(:jl_reshape_array, Array{T,N}, (Any, Any, Any), Array{T,N}, a, dims)
+end
 
 function foreigncall_tester(x)
     return ccall(:jl_array_isassigned, Cint, (Any, UInt), x, 1) == 1 ? cos(x[1]) : sin(x[1])

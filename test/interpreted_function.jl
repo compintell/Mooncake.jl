@@ -172,7 +172,8 @@
                 ),
             ],
         )
-            @test TestUtils.has_equal_data(preprocess_ir(x, Taped.CC.VarState[]), target)
+            d = (sptypes=Core.Compiler.VarState, spnames=nothing)
+            @test TestUtils.has_equal_data(preprocess_ir(x, d), target)
         end
     end
 
@@ -344,6 +345,7 @@
             (nothing, nothing, Taped.phi_node_with_undefined_value, false, 4.0),
             (nothing, nothing, Taped.avoid_throwing_path_tester, 5.0),
             (nothing, nothing, Taped.simple_foreigncall_tester, randn(5)),
+            (nothing, nothing, Taped.simple_foreigncall_tester_2, randn(6), (2, 3)),
             (nothing, nothing, Taped.foreigncall_tester, randn(5)),
             (nothing, nothing, Taped.no_primitive_inlining_tester, 5.0),
             (nothing, nothing, Taped.varargs_tester, 5.0),
@@ -387,8 +389,8 @@
 
         # Verify correctness.
         @assert f(x...) == f(x...) # primal runs
-        @test in_f(f, x...) == f(x...)
-        @test in_f(f, x...) == f(x...) # run twice to check for non-determinism.
+        @test TestUtils.has_equal_data(in_f(f, x...), f(x...))
+        @test TestUtils.has_equal_data(in_f(f, x...), f(x...)) # run twice to check for non-determinism.
         # TestUtils.test_rrule!!(
         #     Xoshiro(123456), in_f, x...;
         #     perf_flag=:none, interface_only=false, is_primitive=false,
