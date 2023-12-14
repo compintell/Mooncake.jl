@@ -314,9 +314,12 @@ struct PhiNodeInst{Tedges<:Tuple, Tvalues<:Tuple, Tval_slot<:SlotRef}
     is_blk_end::Bool
 end
 
+_isassigned(x::SlotRef) = isassigned(x)
+_isassigned(x) = true
+
 function (inst::PhiNodeInst)(prev_blk::Int, current_blk::Int)
     for n in eachindex(inst.edges)
-        if inst.edges[n] == prev_blk
+        if inst.edges[n] == prev_blk && _isassigned(inst.values[n])
             inst.val_slot[] = extract_arg(inst.values[n])
         end
     end
@@ -335,17 +338,24 @@ end
 
 struct UndefinedReference end
 
+create_slot(x) = SlotRef(x)
+create_slot(x::Union{Literal, TypedGlobalRef, SlotRef}) = x
+
 function build_instruction(ir_inst::PhiNode, in_f, n::Int, is_blk_end)
     edges = map(Int, (ir_inst.edges..., ))
-    values_vec = map(eachindex(ir_inst.values)) do j
+    values_vec_init = map(eachindex(ir_inst.values)) do j
         if isassigned(ir_inst.values, j)
             return _get_input(ir_inst.values[j], in_f)
         else
             return UndefinedReference()
         end
     end
-    values = map(x -> x isa Literal ? x[] : x, (values_vec..., ))
-    values = map(x -> x isa SlotRef ? x : SlotRef(x), values)
+    T = eltype(values_vec_init)
+    values_vec = map(eachindex(values_vec_init)) do n
+        x = values_vec_init[n]
+        return x isa UndefinedReference ? SlotRef{T}() : create_slot(x)
+    end
+    values = (values_vec..., )
     val_slot = in_f.slots[n]
     return PhiNodeInst(edges, values, val_slot, ir_inst, n, is_blk_end)
 end
@@ -449,7 +459,8 @@ end
 preprocess_ir(x::Literal, _) = x
 
 is_literal(::Union{Bool, Float16, Float32, Float64, Int, Nothing, DataType, Symbol}) = true
-is_literal(::Union{Val, UInt64, Char, UInt8, UInt16, UInt32, Function, Tuple}) = true
+is_literal(::Union{Val, UInt64, Char, UInt8, UInt16, UInt32, Function, Tuple, Type}) = true
+is_literal(::Union{UnionAll}) = true
 is_literal(_) = false
 
 function (inst::LiteralInst)(::Int, current_blk::Int)
@@ -488,13 +499,13 @@ function (inst::GlobalRefInst)(::Int, current_blk::Int)
     return _standard_next_block(inst.is_blk_end, current_blk)
 end
 
-preprocess_ir(st::GlobalRef, _) = st
+preprocess_ir(st::GlobalRef, _) = TypedGlobalRef(st)
 
-function build_instruction(node::GlobalRef, in_f, n, is_blk_end)
-    return GlobalRefInst(_get_globalref(node), in_f.slots[n], is_blk_end)
+function build_instruction(node::TypedGlobalRef, in_f, n, is_blk_end)
+    return GlobalRefInst(node[], in_f.slots[n], is_blk_end)
 end
 
-function build_coinstructions(node::GlobalRef, _, in_f_rrule!!, n, is_blk_end)
+function build_coinstructions(node::TypedGlobalRef, _, in_f_rrule!!, n, is_blk_end)
     function __barrier(c::A, val_ref::B) where {A, B}
         run_fwds_pass = @opaque function (a::Int, current_blk::Int)
             val_ref[] = c
@@ -503,7 +514,7 @@ function build_coinstructions(node::GlobalRef, _, in_f_rrule!!, n, is_blk_end)
         run_rvs_pass = @opaque (j::Int) -> j
         return run_fwds_pass, run_rvs_pass
     end
-    return __barrier(uninit_codual(_get_globalref(node)), in_f_rrule!!.slots[n])
+    return __barrier(uninit_codual(node[]), in_f_rrule!!.slots[n])
 end
 
 #
@@ -519,7 +530,7 @@ struct CallInst{Targs<:NTuple{N, SlotRefOrLiteral} where {N}, T, Tval_ref<:SlotR
     is_blk_end::Bool
 end
 
-function (inst::CallInst{sig, T, A})(::Int, current_blk::Int) where {sig, T, A}
+function (inst::CallInst{sig, T, SlotRef{A}})(::Int, current_blk::Int) where {sig, T, A}
     inst.val_ref[] = inst.evaluator(map(extract_arg, inst.args)...)
     return _standard_next_block(inst.is_blk_end, current_blk)
 end
@@ -544,6 +555,19 @@ struct SkippedExpressionInst
 end
 
 (::SkippedExpressionInst)(::Int, ::Int) = 0
+
+struct ThrowUndefIfNot{Tval}
+    sym::Symbol
+    val::Tval
+    is_blk_end::Bool
+end
+
+function (inst::ThrowUndefIfNot)(::Int, curr_blk::Int)
+    if !_isassigned(inst.val)
+        throw(error("Boooo, not assigned"))
+    end
+    return _standard_next_block(inst.is_blk_end, curr_blk)
+end
 
 _extract(x::Symbol) = x
 _extract(x::QuoteNode) = x.value
@@ -623,6 +647,9 @@ function build_instruction(ir_inst::Expr, in_f, n::Int, is_block_end::Bool)
             end
         end
         return CallInst(arg_refs, evaluator, in_f.slots[n], ir_inst, n, is_block_end)
+    elseif Meta.isexpr(ir_inst, :throw_undef_if_not)
+        val = _get_input(ir_inst.args[2], in_f)
+        return ThrowUndefIfNot(ir_inst.args[1][], val, is_block_end)
     elseif ir_inst.head in [
         :code_coverage_effect, :gc_preserve_begin, :gc_preserve_end, :loopinfo, :leave,
         :pop_exception,
@@ -970,10 +997,10 @@ load_args!(in_f::InterpretedFunction, args) = load_args!(in_f.arg_info, args)
 
 function (in_f::InterpretedFunction)(args::Vararg{Any, N}) where {N}
     load_args!(in_f, args)
-    return __barrier(in_f, args...)
+    return __barrier(in_f)
 end
 
-function __barrier(in_f::Tf, args::Vararg{Any, N}) where {Tf<:InterpretedFunction, N}
+function __barrier(in_f::Tf) where {Tf<:InterpretedFunction}
     prev_block = 0
     next_block = 0
     current_block = 1
@@ -1267,8 +1294,12 @@ new_tester_2(x) = Foo(x, :symbol)
     $(Expr(:new, :y, 5.0))
 end
 
-@eval function new_tester_4(@nospecialize(x))
-    $(Expr(:new, :x, 5.0))
+__x_for_gref_test = 5.0
+@eval globalref_tester() = $(GlobalRef(Taped, :__x_for_gref_test))
+
+function globalref_tester_2(use_gref::Bool)
+    v = use_gref ? __x_for_gref_test : 1
+    return sin(v)
 end
 
 type_unstable_tester(x::Ref{Any}) = cos(x[])
@@ -1286,6 +1317,17 @@ function phi_const_bool_tester(x)
         a = false
     end
     return cos(a)
+end
+
+function phi_node_with_undefined_value(x::Bool, y::Float64)
+    if x
+        v = sin(y)
+    end
+    z = cos(y)
+    if x
+        z += v
+    end
+    return z
 end
 
 function pi_node_tester(y::Ref{Any})

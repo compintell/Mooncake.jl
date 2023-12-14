@@ -155,7 +155,7 @@
                 (PiNode(SSAValue(3), Float64), PiNode(SSAValue(3), Float64)),
 
                 # GlobalRef
-                (GlobalRef(Main, :sin), GlobalRef(Main, :sin)),
+                (GlobalRef(Main, :sin), TypedGlobalRef(sin)),
 
                 # QuoteNode
                 (QuoteNode(CartesianIndex(1, 1)), Literal(CartesianIndex(1, 1))),
@@ -332,11 +332,16 @@
             (nothing, nothing, Taped.new_tester, 5.0, :hello),
             (nothing, nothing, Taped.new_tester_2, 4.0),
             (nothing, nothing, Taped.new_tester_3, Ref{Any}(Tuple{Float64})),
+            (nothing, nothing, Taped.globalref_tester),
+            (nothing, nothing, Taped.globalref_tester_2, true),
+            (nothing, nothing, Taped.globalref_tester_2, false),
             (nothing, nothing, Taped.type_unstable_tester, Ref{Any}(5.0)),
             (nothing, nothing, Taped.type_unstable_tester_2, Ref{Real}(5.0)),
             (nothing, nothing, Taped.type_unstable_function_eval, Ref{Any}(sin), 5.0),
             (nothing, nothing, Taped.phi_const_bool_tester, 5.0),
             (nothing, nothing, Taped.phi_const_bool_tester, -5.0),
+            (nothing, nothing, Taped.phi_node_with_undefined_value, true, 4.0),
+            (nothing, nothing, Taped.phi_node_with_undefined_value, false, 4.0),
             (nothing, nothing, Taped.avoid_throwing_path_tester, 5.0),
             (nothing, nothing, Taped.simple_foreigncall_tester, randn(5)),
             (nothing, nothing, Taped.foreigncall_tester, randn(5)),
@@ -393,31 +398,31 @@
         # rng = Xoshiro(123456)
         # test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only=false, perf_flag=:none)
 
-        # Only bother to check performance if the original programme does not allocate.
-        original = @benchmark $(Ref(f))[]($(Ref(x))[]...)
-        r = @benchmark $(Ref(in_f))[]($(Ref(f))[], $(Ref(x))[]...)
+        # # Only bother to check performance if the original programme does not allocate.
+        # original = @benchmark $(Ref(f))[]($(Ref(x))[]...)
+        # r = @benchmark $(Ref(in_f))[]($(Ref(f))[], $(Ref(x))[]...)
 
-        # __rrule!! = Taped.build_rrule!!(in_f)
-        # codual_x = map(zero_codual, x)
-        # rrule_timing = @benchmark($__rrule!!(zero_codual($in_f), $codual_x...))
-        # out, pb!! = __rrule!!(zero_codual(in_f), codual_x...)
-        # df = zero_codual(in_f)
-        # overall_timing = @benchmark Taped.to_benchmark($__rrule!!, $df, $codual_x)
-        println("original")
-        display(original)
-        println()
-        println("taped")
-        display(r)
-        println()
-        # println("rrule")
-        # display(rrule_timing)
+        # # __rrule!! = Taped.build_rrule!!(in_f)
+        # # codual_x = map(zero_codual, x)
+        # # rrule_timing = @benchmark($__rrule!!(zero_codual($in_f), $codual_x...))
+        # # out, pb!! = __rrule!!(zero_codual(in_f), codual_x...)
+        # # df = zero_codual(in_f)
+        # # overall_timing = @benchmark Taped.to_benchmark($__rrule!!, $df, $codual_x)
+        # println("original")
+        # display(original)
         # println()
-        # println("overall")
-        # display(overall_timing)
+        # println("taped")
+        # display(r)
         # println()
+        # # println("rrule")
+        # # display(rrule_timing)
+        # # println()
+        # # println("overall")
+        # # display(overall_timing)
+        # # println()
 
-        # if allocs(original) == 0
-        #     @test allocs(r) == 0
-        # end
+        # # if allocs(original) == 0
+        # #     @test allocs(r) == 0
+        # # end
     end
 end
