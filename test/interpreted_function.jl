@@ -90,14 +90,20 @@
         @test @inferred Taped.load_args!(ai, x) === nothing
     end
 
-    @testset "Literal" begin
-        @test Literal(5) isa Literal{5}
-        @test Literal(Int) isa Literal{Int}
-        @test Literal(Tuple{}) isa Literal{Tuple{}}
-        @test Literal(Tuple{Float64}) isa Literal{Tuple{Float64}}
-        @test Literal(Tuple{Any, Float64}) isa Literal{Tuple{Any, Float64}}
-        @test Literal((Float64 ,)) isa Literal{(Float64, )}
-        @test Literal((1, 2)) isa Literal{(1, 2)}
+    @testset "Literal, $x" for (x, target_type) in Any[
+        (5, Literal{5}),
+        (Int, Literal{Int}),
+        (Tuple{}, Literal{Tuple{}}),
+        (Tuple{Float64}, Literal{Tuple{Float64}}),
+        (Tuple{Any, Float64}, Literal{Tuple{Any, Float64}}),
+        ((Float64 ,), Literal{(Taped.TypeWrapper{Float64}(), )}),
+        (((Float64, ), 5), Literal{((Taped.TypeWrapper{Float64}(), ), 5)}),
+        ((1, 2), Literal{(1, 2)}),
+    ]
+        l = Literal(x)
+        @test l isa target_type
+        @test l[] == x
+        @test eltype(l) == Core.Typeof(x)
     end
 
     @testset "preprocess_ir" begin
@@ -150,6 +156,9 @@
 
                 # GlobalRef
                 (GlobalRef(Main, :sin), GlobalRef(Main, :sin)),
+
+                # QuoteNode
+                (QuoteNode(CartesianIndex(1, 1)), Literal(CartesianIndex(1, 1))),
 
                 # Expr
                 (Expr(:boundscheck), Literal(true)),
@@ -321,7 +330,8 @@
             (nothing, nothing, Taped.intrinsic_tester, 5.0),
             (nothing, nothing, Taped.goto_tester, 5.0),
             (nothing, nothing, Taped.new_tester, 5.0, :hello),
-            (nothing, nothing, Taped.new_2_tester, 4.0),
+            (nothing, nothing, Taped.new_tester_2, 4.0),
+            (nothing, nothing, Taped.new_tester_3, Ref{Any}(Tuple{Float64})),
             (nothing, nothing, Taped.type_unstable_tester, Ref{Any}(5.0)),
             (nothing, nothing, Taped.type_unstable_tester_2, Ref{Real}(5.0)),
             (nothing, nothing, Taped.type_unstable_function_eval, Ref{Any}(sin), 5.0),

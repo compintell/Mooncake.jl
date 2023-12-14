@@ -34,6 +34,13 @@ end
     end
 end
 
+for N in 0:32
+    @eval @inline function _new_(::Type{T}, x::Vararg{Any, $N}) where {T}
+        return $(Expr(:new, :T, map(n -> :(x[$n]), 1:N)...))
+    end
+end
+@is_primitive MinimalCtx Tuple{typeof(_new_), Vararg}
+
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:new})
     test_cases = Any[
         (false, :stability, nothing, New{Tuple{Float64, Int}}(), 5.0, 4),

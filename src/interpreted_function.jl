@@ -146,15 +146,29 @@ Base.eltype(::SlotRef{T}) where {T} = T
 extract_arg(x::SlotRef{T}) where {T} = x[]
 extract_codual(x::SlotRef{T}) where {T<:CoDual} = x[]
 
+# Used to make it possible to store types in Tuples in a type-stable way.
+struct TypeWrapper{T} end
+
+extract_codual(::TypeWrapper{T}) where {T} = uninit_codual(T)
+
 struct Literal{T} end
 
 Literal(x) = Literal{x}()
 Literal(::Type{T}) where {T} = Literal{T}()
 
-@inline Base.getindex(::Literal{T}) where {T} = T
-Base.eltype(::Literal{T}) where {T} = Core.Typeof(T)
+_wrap_types(x) = x
+_wrap_types(::Type{T}) where {T} = TypeWrapper{T}()
+_wrap_types(x::Tuple) = map(_wrap_types, x)
+Literal(x::Tuple) = Literal{_wrap_types(x)}()
 
-extract_arg(::Literal{T}) where {T} = T
+_unwrap_types(x) = x
+_unwrap_types(::TypeWrapper{T}) where {T} = T
+_unwrap_types(x::Tuple) = map(_unwrap_types, x)
+
+Base.getindex(::Literal{T}) where {T} = _unwrap_types(T)
+Base.eltype(x::Literal{T}) where {T} = Core.Typeof(x[])
+
+extract_arg(x::Literal{T}) where {T} = x[]
 extract_codual(x::Literal{T}) where {T} = uninit_codual(extract_arg(x))
 
 struct TypedGlobalRef{T}
@@ -173,9 +187,6 @@ extract_arg(x::TypedGlobalRef) = x[]
 Literal(::SlotRef) = throw(error("Attempting to construct a Literal of a SlotRef"))
 SlotRef(::Literal) = throw(error("Attempting to construct a SlotRef containing a Literal"))
 
-struct TypeWrapper{T} end
-
-extract_codual(::TypeWrapper{T}) where {T} = uninit_codual(T)
 
 const IFInstruction = Core.OpaqueClosure{Tuple{Int, Int}, Int}
 const FwdsIFInstruction = IFInstruction
@@ -438,11 +449,7 @@ end
 preprocess_ir(x::Literal, _) = x
 
 is_literal(::Union{Bool, Float16, Float32, Float64, Int, Nothing, DataType, Symbol}) = true
-is_literal(::Union{Val, UInt64, Char, UInt8, UInt16, UInt32, Function}) = true
-function is_literal(x::Tuple)
-    @show x
-    return true
-end
+is_literal(::Union{Val, UInt64, Char, UInt8, UInt16, UInt32, Function, Tuple}) = true
 is_literal(_) = false
 
 function (inst::LiteralInst)(::Int, current_blk::Int)
@@ -587,9 +594,7 @@ function preprocess_ir(ex::Expr, sptypes)
         return ex
     elseif Meta.isexpr(ex, :new)
         ex.head = :call
-        ex.args = map(Base.Fix2(_preprocess_expr_arg, sptypes), ex.args)
-        T = extract_arg(ex.args[1])
-        ex.args = Any[Literal(New{T}()), ex.args[2:end]...]
+        ex.args = map(Base.Fix2(_preprocess_expr_arg, sptypes), [_new_, ex.args...])
         return ex
     else
         ex.args = map(Base.Fix2(_preprocess_expr_arg, sptypes), ex.args)
@@ -994,6 +999,7 @@ end
 
 preprocess_ir(st::CC.SSAValue, _) = st
 preprocess_ir(st::CC.Argument, _) = st
+preprocess_ir(st::CC.QuoteNode, _) = Literal(st.value)
 function preprocess_ir(st, _)
     if is_literal(st)
         return Literal(st)
@@ -1254,7 +1260,16 @@ end
 
 new_tester(x, y) = Foo(x, y)
 
-new_2_tester(x) = Foo(x, :symbol)
+new_tester_2(x) = Foo(x, :symbol)
+
+@eval function new_tester_3(x::Ref{Any})
+    y = x[]
+    $(Expr(:new, :y, 5.0))
+end
+
+@eval function new_tester_4(@nospecialize(x))
+    $(Expr(:new, :x, 5.0))
+end
 
 type_unstable_tester(x::Ref{Any}) = cos(x[])
 
