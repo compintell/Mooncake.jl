@@ -5,6 +5,7 @@ const CC = Core.Compiler
 using
     BenchmarkTools,
     DiffRules,
+    ExprTools,
     FunctionWrappers,
     InteractiveUtils,
     LinearAlgebra,
