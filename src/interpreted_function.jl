@@ -141,19 +141,37 @@ end
     return x.x
 end
 @inline Base.isassigned(x::SlotRef) = isdefined(x, :x)
-@inline Base.eltype(::SlotRef{T}) where {T} = T
+Base.eltype(::SlotRef{T}) where {T} = T
 
 extract_arg(x::SlotRef{T}) where {T} = x[]
 extract_codual(x::SlotRef{T}) where {T<:CoDual} = x[]
 
-struct Literal{T}
+struct Literal{T} end
+
+Literal(x) = Literal{x}()
+Literal(::Type{T}) where {T} = Literal{T}()
+
+@inline Base.getindex(::Literal{T}) where {T} = T
+Base.eltype(::Literal{T}) where {T} = Core.Typeof(T)
+
+extract_arg(::Literal{T}) where {T} = T
+extract_codual(x::Literal{T}) where {T} = uninit_codual(extract_arg(x))
+
+struct TypedGlobalRef{T}
     x::T
 end
 
-Literal(::Type{T}) where {T} = Literal{Type{T}}(T)
+TypedGlobalRef(::Type{T}) where {T} = TypedGlobalRef{Type{T}}(T)
+TypedGlobalRef(x::GlobalRef) = TypedGlobalRef(getglobal(x.mod, x.name))
 
-extract_arg(x::Literal{T}) where {T} = x.x
-extract_codual(x::Literal{T}) where {T} = uninit_codual(extract_arg(x))
+@inline Base.getindex(x::TypedGlobalRef) = x.x
+Base.eltype(::TypedGlobalRef{T}) where {T} = T
+
+extract_arg(x::TypedGlobalRef) = x[]
+
+# We shouldn't get literals in slotrefs or slotrefs in literals
+Literal(::SlotRef) = throw(error("Attempting to construct a Literal of a SlotRef"))
+SlotRef(::Literal) = throw(error("Attempting to construct a SlotRef containing a Literal"))
 
 struct TypeWrapper{T} end
 
@@ -162,6 +180,7 @@ extract_codual(::TypeWrapper{T}) where {T} = uninit_codual(T)
 const IFInstruction = Core.OpaqueClosure{Tuple{Int, Int}, Int}
 const FwdsIFInstruction = IFInstruction
 const BwdsIFInstruction = Core.OpaqueClosure{Tuple{Int}, Int}
+const SlotRefOrLiteral = Union{SlotRef, Literal, TypedGlobalRef}
 
 # Standard handling for next-block returns for non control flow related instructions.
 _standard_next_block(is_blk_end::Bool, current_blk::Int) = is_blk_end ? current_blk + 1 : 0
@@ -170,7 +189,7 @@ _standard_next_block(is_blk_end::Bool, current_blk::Int) = is_blk_end ? current_
 # ReturnNode
 #
 
-struct ReturnInst{Treturn_slot<:SlotRef, Tval<:Union{SlotRef, Literal}}
+struct ReturnInst{Treturn_slot<:SlotRef, Tval<:SlotRefOrLiteral}
     return_slot::Treturn_slot
     val::Tval
 end
@@ -314,11 +333,11 @@ function build_instruction(ir_inst::PhiNode, in_f, n::Int, is_blk_end)
             return UndefinedReference()
         end
     end
-    values = map(x -> x isa SlotRef ? x : SlotRef(x), (values_vec..., ))
+    values = map(x -> x isa Literal ? x[] : x, (values_vec..., ))
+    values = map(x -> x isa SlotRef ? x : SlotRef(x), values)
     val_slot = in_f.slots[n]
     return PhiNodeInst(edges, values, val_slot, ir_inst, n, is_blk_end)
 end
-
 
 function build_coinstructions(ir_inst::PhiNode, _, in_f_rrule!!, n, is_blk_end)
 
@@ -410,19 +429,24 @@ end
 # LiteralInst
 #
 
-struct LiteralInst{T}
-    val::T
-    val_ref::SlotRef{T}
+struct LiteralInst{T, V}
+    val::Literal{T}
+    val_ref::SlotRef{V}
     is_blk_end::Bool
 end
 
 preprocess_ir(x::Literal, _) = x
 
-is_literal(::Union{Bool, Float16, Float32, Float64, Int, Nothing, Type, Symbol}) = true
+is_literal(::Union{Bool, Float16, Float32, Float64, Int, Nothing, DataType, Symbol}) = true
+is_literal(::Union{Val, UInt64, Char, UInt8, UInt16, UInt32, Function}) = true
+function is_literal(x::Tuple)
+    @show x
+    return true
+end
 is_literal(_) = false
 
 function (inst::LiteralInst)(::Int, current_blk::Int)
-    inst.val_ref[] = inst.val.x
+    inst.val_ref[] = inst.val[]
     return _standard_next_block(inst.is_blk_end, current_blk)
 end
 
@@ -479,19 +503,17 @@ end
 # Expr -- this is a big one
 #
 
-struct CallInst{Tf, Targs, Tval_ref<:SlotRef}
-    f::Tf
+struct CallInst{Targs<:NTuple{N, SlotRefOrLiteral} where {N}, T, Tval_ref<:SlotRef}
     args::Targs
+    evaluator::T
     val_ref::Tval_ref
     ir::Expr
     line::Int
     is_blk_end::Bool
 end
 
-function (inst::CallInst{sig, A})(::Int, current_blk::Int) where {sig, A}
-    # display(("call", inst.line, inst.ir, inst.args))
-    args = map(extract_arg, inst.args)
-    inst.val_ref[] = inst.f(args...)
+function (inst::CallInst{sig, T, A})(::Int, current_blk::Int) where {sig, T, A}
+    inst.val_ref[] = inst.evaluator(map(extract_arg, inst.args)...)
     return _standard_next_block(inst.is_blk_end, current_blk)
 end
 
@@ -532,18 +554,22 @@ function _preprocess_expr_arg(ex::Expr, sptypes)
     end
 end
 
-_preprocess_expr_arg(ex::Union{Argument, GlobalRef, SSAValue}, _) = ex
+_lift_intrinsic(x) = x
+_lift_instrinsic(x::Core.IntrinsicFunction) = IntrinsicsWrappers.translate(Val(x))
+
+_preprocess_expr_arg(ex::Union{Argument, SSAValue, CC.MethodInstance}, _) = ex
+_preprocess_expr_arg(ex::QuoteNode, _) = Literal(_lift_intrinsic(ex.value))
+_preprocess_expr_arg(ex::GlobalRef, _) = TypedGlobalRef(ex)
 
 function _preprocess_expr_arg(ex, _)
     is_literal(ex) && return Literal(ex)
-    throw(error("$ex is not a known component of Julia SSAIR"))
+    throw(error("$ex of type $(Core.Typeof(ex)) is not a known component of Julia SSAIR"))
 end
 
 function preprocess_ir(ex::Expr, sptypes)
     ex = CC.copy(ex)
-    ex.args = map(Base.Fix2(_preprocess_expr_arg, sptypes), ex.args)
     if Meta.isexpr(ex, :boundscheck)
-        ex = Literal(true)
+        return Literal(true)
     elseif Meta.isexpr(ex, :foreigncall)
         args = ex.args
         name = extract_foreigncall_name(args[1])
@@ -555,58 +581,43 @@ function preprocess_ir(ex::Expr, sptypes)
         calling_convention = Val(_extract(args[5]))
         x = args[6:end]
         ex.head = :call
-        ex.args = Any[_foreigncall_, name, RT, AT, nreq, calling_convention, x...]
+        f = GlobalRef(Taped, :_foreigncall_)
+        ex.args = Any[f, name, RT, AT, nreq, calling_convention, x...]
+        ex.args = map(Base.Fix2(_preprocess_expr_arg, sptypes), ex.args)
+        return ex
     elseif Meta.isexpr(ex, :new)
         ex.head = :call
-        T = if ex.args[1] isa GlobalRef
-            _get_globalref(ex.args[1])
-        elseif ex.args[1] isa Type
-            ex.args[1]
-        else
-            throw(error("type is $(ex.args[1]), of type $(Core.Typeof(ex.args[1]))"))
-        end
-        ex.args = Any[New{T}(), ex.args[2:end]...]
+        ex.args = map(Base.Fix2(_preprocess_expr_arg, sptypes), ex.args)
+        T = extract_arg(ex.args[1])
+        ex.args = Any[Literal(New{T}()), ex.args[2:end]...]
+        return ex
+    else
+        ex.args = map(Base.Fix2(_preprocess_expr_arg, sptypes), ex.args)
+        return ex
     end
-    return ex
 end
 
+@inline _eval(f::F, args::Vararg{Any, N}) where {F, N} = f(args...)
+
 function build_instruction(ir_inst::Expr, in_f, n::Int, is_block_end::Bool)
-    ctx = in_f.ctx
-    arg_info = in_f.arg_info
-    slots = in_f.slots
-    is_invoke = Meta.isexpr(ir_inst, :invoke)
-    if is_invoke || Meta.isexpr(ir_inst, :call)
+    if Meta.isexpr(ir_inst, :invoke) || Meta.isexpr(ir_inst, :call)
 
         # Extract args refs.
-        __args = is_invoke ? ir_inst.args[3:end] : ir_inst.args[2:end]
-        arg_refs = map(arg -> _get_input(arg, slots, arg_info), (__args..., ))
+        __args = Meta.isexpr(ir_inst, :invoke) ? ir_inst.args[2:end] : ir_inst.args
+        arg_refs = map(arg -> _get_input(arg, in_f), (__args..., ))
 
-        # Extract val ref.
-        val_ref = slots[n]
-
-        # Extract function.
-        fn = is_invoke ? ir_inst.args[2] : ir_inst.args[1]
-        if fn isa Core.SSAValue || fn isa Core.Argument
-            fn = _get_input(fn, slots, arg_info)[]
-        end
-        if fn isa GlobalRef
-            fn = getglobal(fn.mod, fn.name)
-        end
-        if fn isa Core.IntrinsicFunction
-            fn = IntrinsicsWrappers.translate(Val(fn))
-        end
-
-        fn_sig = Tuple{Core.Typeof(fn), map(_robust_typeof, arg_refs)...}
-        if !is_primitive(ctx, fn_sig)
-            if all(Base.isconcretetype, fn_sig.parameters)
-                fn = InterpretedFunction(ctx, fn_sig; interp=in_f.interp)
+        ctx = in_f.ctx
+        sig = Tuple{map(eltype, arg_refs)...}
+        evaluator = if is_primitive(ctx, sig)
+            _eval
+        else
+            if all(Base.isconcretetype, sig.parameters)
+                InterpretedFunction(ctx, sig; interp=in_f.interp)
             else
-                fn = DelayedInterpretedFunction{Core.Typeof(ctx), Core.Typeof(fn)}(
-                    ctx, fn, in_f.interp
-                )
+                DelayedInterpretedFunction{sig, Core.Typeof(ctx)}(ctx, in_f.interp)
             end
         end
-        return CallInst(fn, arg_refs, val_ref, ir_inst, n, is_block_end)
+        return CallInst(arg_refs, evaluator, in_f.slots[n], ir_inst, n, is_block_end)
     elseif ir_inst.head in [
         :code_coverage_effect, :gc_preserve_begin, :gc_preserve_end, :loopinfo, :leave,
         :pop_exception,
@@ -642,10 +653,7 @@ function build_coinstructions(ir_inst::Expr, in_f, in_f_rrule!!, n, is_blk_end)
             fn = IntrinsicsWrappers.translate(Val(fn))
         end
 
-        fn_sig = Tuple{
-            Core.Typeof(fn),
-            map(_robust_typeof ∘ primal ∘ extract_codual, codual_arg_refs)...,
-        }
+        fn_sig = Tuple{map(eltype ∘ primal ∘ extract_codual, codual_arg_refs)...}
         __rrule!! = rrule!!
         if !is_primitive(in_f.ctx, fn_sig)
             if all(Base.isconcretetype, fn_sig.parameters)
@@ -662,9 +670,7 @@ function build_coinstructions(ir_inst::Expr, in_f, in_f_rrule!!, n, is_blk_end)
         fn = uninit_codual(fn)
 
         # Create stacks for storing intermediates.
-        codual_sig = Tuple{
-            Core.Typeof(fn), map(_robust_typeof ∘ extract_codual, codual_arg_refs)...
-        }
+        codual_sig = Tuple{map(eltype ∘ extract_codual, codual_arg_refs)...}
         output = Base.return_types(__rrule!!, codual_sig)
         if length(output) == 0
             throw(error("No return type inferred for __rrule!! with sig $codual_sig"))
@@ -750,16 +756,8 @@ end
 # Code execution
 #
 
-_robust_typeof(x::T) where {T} = T
-_robust_typeof(::Type{T}) where {T} = Type{T}
-_robust_typeof(x::SlotRef{T}) where {T} = T
-
-_other_robust_typeof(x::T) where {T} = T
-_other_robust_typeof(::Type{T}) where {T} = Type{T}
-_other_robust_typeof(x::SlotRef{T}) where {T} = SlotRef{T}
-
 _get_type(x::Core.PartialStruct) = x.typ
-_get_type(x::Core.Const) = _robust_typeof(x.val)
+_get_type(x::Core.Const) = Core.Typeof(x.val)
 _get_type(T) = T
 
 _get_globalref(x::GlobalRef) = getglobal(x.mod, x.name)
@@ -767,11 +765,10 @@ _get_globalref(x::GlobalRef) = getglobal(x.mod, x.name)
 _deref(x::GlobalRef) = _get_globalref(x)
 _deref(::Type{T}) where {T} = T
 
-_get_input(x::QuoteNode, _, _) = x.value
-_get_input(x::GlobalRef, _, _) = _get_globalref(x)
 _get_input(x::Core.SSAValue, slots, _) = slots[x.id]
 _get_input(x::Core.Argument, _, arg_info) = arg_info.arg_slots[x.n]
-_get_input(x, _, _) = x
+_get_input(x::Literal, _, _) = x
+_get_input(x::TypedGlobalRef, _, _) = x
 
 function _make_opaque_closure(inst, sig, n)
     oc = @opaque Tuple{Int, Int} (p, q) -> inst(p, q)
@@ -787,8 +784,6 @@ function _make_opaque_closure(inst, sig, n)
     end
     return oc::IFInstruction
 end
-
-get_tuple_type(x::Tuple) = Tuple{map(_other_robust_typeof, x)...}
 
 _get_arg_type(::Type{Val{T}}) where {T} = T
 
@@ -841,7 +836,7 @@ end
 # Loading arguments into slots.
 #
 
-struct ArgInfo{Targ_slots<:Tuple, is_vararg}
+struct ArgInfo{Targ_slots<:NTuple{N, Union{SlotRef, Literal}} where {N}, is_vararg}
     arg_slots::Targ_slots
 end
 
@@ -850,7 +845,7 @@ function arginfo_from_argtypes(::Type{T}, is_vararg::Bool) where {T<:Tuple}
     return ArgInfo{Targ_slots, is_vararg}((map(t -> SlotRef{t}(), T.parameters)..., ))
 end
 
-function load_args!(ai::ArgInfo{T, is_vararg}, args::Tuple) where {T, is_vararg}
+@noinline function load_args!(ai::ArgInfo{T, is_vararg}, args::Tuple) where {T, is_vararg}
 
     # There is a difference between the varargs that we recieve, and the varargs of the
     # original function. This section sorts that out.
@@ -863,7 +858,7 @@ function load_args!(ai::ArgInfo{T, is_vararg}, args::Tuple) where {T, is_vararg}
     # We must therefore transform it into a `Tuple` of type
     # `Tuple{typeof(f), Tuple{Float64}}` before attempting to load it into `ai.arg_slots`.
     if is_vararg
-        num_args = length(ai.arg_slots) - 1 - 1 # once for first arg, once for vararg
+        num_args = length(ai.arg_slots) - 1 # once for vararg
         refined_args = (args[1:num_args]..., (args[num_args+1:end]..., ))
     else
         refined_args = args
@@ -874,11 +869,10 @@ function load_args!(ai::ArgInfo{T, is_vararg}, args::Tuple) where {T, is_vararg}
 end
 
 @generated function __load_args!(arg_slots::Tuple, args::Tuple)
-    return Expr(
-        :block,
-        map(n -> :(arg_slots[$(n + 1)][] = args[$n]), eachindex(args.parameters))...,
-        :(return nothing),
-    )
+    Ts = args.parameters
+    ns = filter(n -> !Base.issingletontype(Ts[n]), eachindex(Ts))
+    loaders = map(n -> :(arg_slots[$n][] = args[$n]), ns)
+    return Expr(:block, loaders..., :(return nothing))
 end
 
 #
@@ -967,9 +961,14 @@ function InterpretedFunction(ctx::C, sig::Type{<:Tuple}; interp) where {C}
     return in_f
 end
 
-function (in_f::InterpretedFunction{sig})(args::Vararg{Any, N}) where {N, sig}
-    @nospecialize in_f, args
-    load_args!(in_f.arg_info, args)
+load_args!(in_f::InterpretedFunction, args) = load_args!(in_f.arg_info, args)
+
+function (in_f::InterpretedFunction)(args::Vararg{Any, N}) where {N}
+    load_args!(in_f, args)
+    return __barrier(in_f, args...)
+end
+
+function __barrier(in_f::Tf, args::Vararg{Any, N}) where {Tf<:InterpretedFunction, N}
     prev_block = 0
     next_block = 0
     current_block = 1
@@ -999,13 +998,13 @@ function preprocess_ir(st, _)
     if is_literal(st)
         return Literal(st)
     else
-        throw(error("$st is not a known component of Julia SSAIR"))
+        throw(error("$st of type $(typeof(st)) is not a known component of Julia SSAIR"))
     end
 end
 
 function build_instruction(in_f::InterpretedFunction{sig}, n::Int) where {sig}
     @nospecialize in_f
-    ir_inst = preprocess_ir(in_f.ir, in_f.ir.stmts.inst[n])
+    ir_inst = preprocess_ir(in_f.ir.stmts.inst[n], in_f.ir.sptypes)
     is_blk_end = n in in_f.bb_ends
     return _make_opaque_closure(build_instruction(ir_inst, in_f, n, is_blk_end), sig, n)
 end
@@ -1018,18 +1017,18 @@ function build_instruction(ctx, ir_inst::Any, arg_slots, slots, return_slot, is_
     throw(error("unhandled instruction $ir_inst, with type $(typeof(ir_inst))")) 
 end
 
-struct DelayedInterpretedFunction{C, F}
+struct DelayedInterpretedFunction{sig, C}
     ctx::C
-    f::F
     interp::TInterp
 end
 
-function (f::DelayedInterpretedFunction{C, F})(args...) where {C, F}
-    s = Tuple{F, map(Core.Typeof, args)...}
-    if is_primitive(f.ctx, s)
-        return f.f(args...)
+function (din_f::DelayedInterpretedFunction)(fargs...)
+    sig = Tuple{map(Core.Typeof, fargs)...}
+    if is_primitive(din_f.ctx, sig)
+        f, args... = fargs
+        return f(args...)
     else
-        return InterpretedFunction(f.ctx, s; interp=f.interp)(args...)
+        return InterpretedFunction(din_f.ctx, sig; interp=din_f.interp)(fargs...)
     end
 end
 
@@ -1206,7 +1205,7 @@ end
 const __Tinst = Tuple{FwdsIFInstruction, BwdsIFInstruction}
 
 function generate_instructions(in_f, in_f_rrule!!, n)::__Tinst
-    ir_inst = preprocess_ir(in_f.ir, in_f.ir.stmts.inst[n])
+    ir_inst = preprocess_ir(in_f.ir.stmts.inst[n], in_f.ir.sptypes)
     is_blk_end = n in in_f.bb_ends
     return build_coinstructions(ir_inst, in_f, in_f_rrule!!, n, is_blk_end)
 end

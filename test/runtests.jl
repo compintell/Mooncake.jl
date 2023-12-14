@@ -55,7 +55,9 @@ using Taped:
     GotoIfNotInst,
     PhiNodeInst,
     PiNodeInst,
-    CallInst
+    CallInst,
+    LiteralInst,
+    TypedGlobalRef
 
 using Taped.Umlaut: __new__, __to_tuple__
 

@@ -864,29 +864,29 @@ function generate_test_functions()
         (
             false,
             (lb=100_000, ub=10_000_000),
-            test_naive_mat_mul!, randn(10, 5), randn(10, 3), randn(3, 5),
+            test_naive_mat_mul!, randn(100, 50), randn(100, 30), randn(30, 50),
         ),
         (
             false,
             (lb=10_000, ub=5_000_000),
-            (A, C) -> test_naive_mat_mul!(C, A, A), randn(2, 2), randn(2, 2),
+            (A, C) -> test_naive_mat_mul!(C, A, A), randn(100, 100), randn(100, 100),
         ),
-        (false, (lb=10_000, ub=50_000_000), sum, randn(3)),
-        (false, (lb=10_000, ub=50_000_000), test_diagonal_to_matrix, Diagonal(randn(3))),
+        (false, (lb=10_000, ub=50_000_000), sum, randn(30)),
+        (false, (lb=10_000, ub=50_000_000), test_diagonal_to_matrix, Diagonal(randn(30))),
         (
             false,
             (lb=10_000, ub=50_000_000),
-            ldiv!, randn(2, 2), Diagonal(rand(2) .+ 1), randn(2, 2),
+            ldiv!, randn(20, 20), Diagonal(rand(20) .+ 1), randn(20, 20),
         ),
         (
             false,
             (lb=10_000, ub=50_000_000),
-            kron!, randn(4, 4), Diagonal(randn(2)), randn(2, 2),
+            kron!, randn(400, 400), Diagonal(randn(20)), randn(20, 20),
         ),
         (
             false,
             (lb=100_000, ub=100_000_000),
-            test_mlp, randn(5, 2), randn(7, 5), randn(3, 7),
+            test_mlp, randn(50, 20), randn(70, 50), randn(30, 70),
         ),
     ]
 end

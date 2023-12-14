@@ -75,25 +75,31 @@
     @testset "ArgInfo: $Tx, $(x), $is_va" for (Tx, x, is_va) in Any[
 
         # No varargs examples.
-        Any[Tuple{Nothing, Float64}, (5.0,), false],
-        Any[Tuple{Nothing, Float64, Int}, (5.0, 3), false],
-        Any[Tuple{Nothing, Type{Float64}}, (Float64, ), false],
-        Any[Tuple{Nothing, Type{Any}}, (Any, ), false],
+        Any[Tuple{Float64}, (5.0,), false],
+        Any[Tuple{Float64, Int}, (5.0, 3), false],
+        Any[Tuple{Type{Float64}}, (Float64, ), false],
+        Any[Tuple{Type{Any}}, (Any, ), false],
 
         # Varargs examples.
-        Any[Tuple{Nothing, Tuple{Float64}}, (5.0, ), true],
-        Any[Tuple{Nothing, Tuple{Float64, Int}}, (5.0, 3), true],
-        Any[Tuple{Nothing, Float64, Tuple{Int}}, (5.0, 3), true],
-        Any[Tuple{Nothing, Float64, Tuple{Int, Float64}}, (5.0, 3, 4.0), true],
+        Any[Tuple{Tuple{Float64}}, (5.0, ), true],
+        Any[Tuple{Tuple{Float64, Int}}, (5.0, 3), true],
+        Any[Tuple{Float64, Tuple{Int}}, (5.0, 3), true],
+        Any[Tuple{Float64, Tuple{Int, Float64}}, (5.0, 3, 4.0), true],
     ]
         ai = Taped.arginfo_from_argtypes(Tx, is_va)
         @test @inferred Taped.load_args!(ai, x) === nothing
     end
 
     @testset "Literal" begin
-        @test Literal(5) isa Literal{Int}
-        @test Literal(Int) isa Literal{Type{Int}}
+        @test Literal(5) isa Literal{5}
+        @test Literal(Int) isa Literal{Int}
+        @test Literal(Tuple{}) isa Literal{Tuple{}}
+        @test Literal(Tuple{Float64}) isa Literal{Tuple{Float64}}
+        @test Literal(Tuple{Any, Float64}) isa Literal{Tuple{Any, Float64}}
+        @test Literal((Float64 ,)) isa Literal{(Float64, )}
+        @test Literal((1, 2)) isa Literal{(1, 2)}
     end
+
     @testset "preprocess_ir" begin
         _literals = Any[5, 5.0, 5f0, :hi, nothing, Int]
         part_defined_vals = Vector{Any}(undef, 3)
@@ -105,7 +111,7 @@
             Any[
                 # ReturnNodes
                 (ReturnNode(5), ReturnNode(Literal(5))),
-                (ReturnNode(Int), ReturnNode(Literal{Type{Int}}(Int))),
+                (ReturnNode(Int), ReturnNode(Literal(Int))),
                 (ReturnNode(SSAValue(5)), ReturnNode(SSAValue(5))),
                 (ReturnNode(Argument(1)), ReturnNode(Argument(1))),
 
@@ -149,11 +155,11 @@
                 (Expr(:boundscheck), Literal(true)),
                 (
                     Expr(:call, GlobalRef(Main, :sin), SSAValue(5)),
-                    Expr(:call, GlobalRef(Main, :sin), SSAValue(5)),
+                    Expr(:call, TypedGlobalRef(sin), SSAValue(5)),
                 ),
                 (
                     Expr(:call, GlobalRef(Main, :sin), 5.0),
-                    Expr(:call, GlobalRef(Main, :sin), Literal(5.0)),
+                    Expr(:call, TypedGlobalRef(sin), Literal(5.0)),
                 ),
             ],
         )
@@ -162,6 +168,10 @@
     end
 
     @testset "Unit tests for nodes and associated instructions" begin
+        @testset "ReturnInst construction checks" begin
+            @test_throws MethodError ReturnInst(SlotRef(5), 5)
+            @test_throws MethodError ReturnInst(SlotRef(5), SlotRef{Any}(5))
+        end
         @testset "ReturnInst $inst" for (inst, target, output) in Any[
             (ReturnInst(SlotRef{Float64}(), Literal(5.0)), 5.0, -1),
             (ReturnInst(SlotRef{Real}(), Literal(5.0)), 5.0, -1),
@@ -274,14 +284,21 @@
         end
 
         # TODO -- PiNodeInst tests
-        # TODO -- LiteralInst tests
+
+        @testset "LiteralInst $inst:" for (inst, val) in Any[
+            (LiteralInst(Literal(5), SlotRef{Int}(), false), 5),
+        ]
+            inst(0, 0)
+            @test inst.val_ref[] == val
+        end
 
         dummy_args = (:(sin(5.0)), 5, false)
         @testset "CallInst $inst" for (inst, val) in Any[
-            (CallInst(sin, (Literal(4.0), ), SlotRef{Float64}(), dummy_args...), sin(4.0)),
-            (CallInst(sin, (Literal(4.0), ), SlotRef{Any}(), dummy_args...), sin(4.0)),
-            (CallInst(sin, (SlotRef(5.0), ), SlotRef{Float64}(), dummy_args...), sin(5.0)),
-            (CallInst(sin, (SlotRef(5.0), ), SlotRef{Real}(), dummy_args...), sin(5.0)),
+            (CallInst((Literal(sin), Literal(4.0)), Taped._eval, SlotRef{Float64}(), dummy_args...), sin(4.0)),
+            (CallInst((Literal(sin), Literal(4.0)), Taped._eval, SlotRef{Any}(), dummy_args...), sin(4.0)),
+            (CallInst((Literal(sin), SlotRef(5.0)), Taped._eval, SlotRef{Float64}(), dummy_args...), sin(5.0)),
+            (CallInst((Literal(sin), SlotRef(5.0)), Taped._eval, SlotRef{Real}(), dummy_args...), sin(5.0)),
+            (CallInst((TypedGlobalRef(sin), SlotRef(5.0)), Taped._eval, SlotRef{Real}(), dummy_args...), sin(5.0)),
         ]
             inst(0, 0)
             @test inst.val_ref[] == val
@@ -300,74 +317,75 @@
             (nothing, nothing, Taped.const_tester),
             (nothing, nothing, Taped.type_unstable_argument_eval, sin, 5.0),
             (nothing, nothing, Taped.pi_node_tester, Ref{Any}(5.0)),
-            # (nothing, nothing, Taped.pi_node_tester, Ref{Any}(5)),
-            # (nothing, nothing, Taped.intrinsic_tester, 5.0),
-            # (nothing, nothing, Taped.goto_tester, 5.0),
-            # (nothing, nothing, Taped.new_tester, 5.0, :hello),
-            # (nothing, nothing, Taped.new_2_tester, 4.0),
-            # (nothing, nothing, Taped.type_unstable_tester, Ref{Any}(5.0)),
-            # (nothing, nothing, Taped.type_unstable_tester_2, Ref{Real}(5.0)),
-            # (nothing, nothing, Taped.type_unstable_function_eval, Ref{Any}(sin), 5.0),
-            # (nothing, nothing, Taped.phi_const_bool_tester, 5.0),
-            # (nothing, nothing, Taped.phi_const_bool_tester, -5.0),
-            # (nothing, nothing, Taped.avoid_throwing_path_tester, 5.0),
-            # (nothing, nothing, Taped.simple_foreigncall_tester, randn(5)),
-            # (nothing, nothing, Taped.foreigncall_tester, randn(5)),
-            # (nothing, nothing, Taped.no_primitive_inlining_tester, 5.0),
-            # (nothing, nothing, Taped.varargs_tester, 5.0),
-            # (nothing, nothing, Taped.varargs_tester, 5.0, 4),
-            # (nothing, nothing, Taped.varargs_tester, 5.0, 4, 3.0),
-            # (nothing, nothing, Taped.varargs_tester_2, 5.0),
-            # (nothing, nothing, Taped.varargs_tester_2, 5.0, 4),
-            # (nothing, nothing, Taped.varargs_tester_2, 5.0, 4, 3.0),
-            # (nothing, nothing, Taped.varargs_tester_3, 5.0),
-            # (nothing, nothing, Taped.varargs_tester_3, 5.0, 4),
-            # (nothing, nothing, Taped.varargs_tester_3, 5.0, 4, 3.0),
-            # (nothing, nothing, Taped.varargs_tester_4, 5.0),
-            # (nothing, nothing, Taped.varargs_tester_4, 5.0, 4),
-            # (nothing, nothing, Taped.varargs_tester_4, 5.0, 4, 3.0),
-            # (nothing, nothing, Taped.splatting_tester, 5.0),
-            # (nothing, nothing, Taped.splatting_tester, (5.0, 4.0)),
-            # (nothing, nothing, Taped.splatting_tester, (5.0, 4.0, 3.0)),
-            # # (nothing, nothing, Taped.unstable_splatting_tester, Ref{Any}(5.0)),
-            # # (nothing, nothing, Taped.unstable_splatting_tester, Ref{Any}((5.0, 4.0))),
-            # # (nothing, nothing, Taped.unstable_splatting_tester, Ref{Any}((5.0, 4.0, 3.0))),
-            # (
-            #     nothing,
-            #     nothing,
-            #     LinearAlgebra._modify!,
-            #     LinearAlgebra.MulAddMul(5.0, 4.0),
-            #     5.0,
-            #     randn(5, 4),
-            #     (5, 4),
-            # ), # for Bool comma,
-            # (
-            #     nothing, nothing,
-            #     mul!, transpose(randn(3, 5)), randn(5, 5), randn(5, 3), 4.0, 3.0,
-            # ), # static_parameter,
-            # (nothing, nothing, Xoshiro, 123456),
+            (nothing, nothing, Taped.pi_node_tester, Ref{Any}(5)),
+            (nothing, nothing, Taped.intrinsic_tester, 5.0),
+            (nothing, nothing, Taped.goto_tester, 5.0),
+            (nothing, nothing, Taped.new_tester, 5.0, :hello),
+            (nothing, nothing, Taped.new_2_tester, 4.0),
+            (nothing, nothing, Taped.type_unstable_tester, Ref{Any}(5.0)),
+            (nothing, nothing, Taped.type_unstable_tester_2, Ref{Real}(5.0)),
+            (nothing, nothing, Taped.type_unstable_function_eval, Ref{Any}(sin), 5.0),
+            (nothing, nothing, Taped.phi_const_bool_tester, 5.0),
+            (nothing, nothing, Taped.phi_const_bool_tester, -5.0),
+            (nothing, nothing, Taped.avoid_throwing_path_tester, 5.0),
+            (nothing, nothing, Taped.simple_foreigncall_tester, randn(5)),
+            (nothing, nothing, Taped.foreigncall_tester, randn(5)),
+            (nothing, nothing, Taped.no_primitive_inlining_tester, 5.0),
+            (nothing, nothing, Taped.varargs_tester, 5.0),
+            (nothing, nothing, Taped.varargs_tester, 5.0, 4),
+            (nothing, nothing, Taped.varargs_tester, 5.0, 4, 3.0),
+            (nothing, nothing, Taped.varargs_tester_2, 5.0),
+            (nothing, nothing, Taped.varargs_tester_2, 5.0, 4),
+            (nothing, nothing, Taped.varargs_tester_2, 5.0, 4, 3.0),
+            (nothing, nothing, Taped.varargs_tester_3, 5.0),
+            (nothing, nothing, Taped.varargs_tester_3, 5.0, 4),
+            (nothing, nothing, Taped.varargs_tester_3, 5.0, 4, 3.0),
+            (nothing, nothing, Taped.varargs_tester_4, 5.0),
+            (nothing, nothing, Taped.varargs_tester_4, 5.0, 4),
+            (nothing, nothing, Taped.varargs_tester_4, 5.0, 4, 3.0),
+            (nothing, nothing, Taped.splatting_tester, 5.0),
+            (nothing, nothing, Taped.splatting_tester, (5.0, 4.0)),
+            (nothing, nothing, Taped.splatting_tester, (5.0, 4.0, 3.0)),
+            # (nothing, nothing, Taped.unstable_splatting_tester, Ref{Any}(5.0)),
+            # (nothing, nothing, Taped.unstable_splatting_tester, Ref{Any}((5.0, 4.0))),
+            # (nothing, nothing, Taped.unstable_splatting_tester, Ref{Any}((5.0, 4.0, 3.0))),
+            (
+                nothing,
+                nothing,
+                LinearAlgebra._modify!,
+                LinearAlgebra.MulAddMul(5.0, 4.0),
+                5.0,
+                randn(5, 4),
+                (5, 4),
+            ), # for Bool comma,
+            (
+                nothing, nothing,
+                mul!, transpose(randn(3, 5)), randn(5, 5), randn(5, 3), 4.0, 3.0,
+            ), # static_parameter,
+            (nothing, nothing, Xoshiro, 123456),
         ],
-        # TestResources.generate_test_functions(),
+        TestResources.generate_test_functions(),
     )
-        @info "$f, $x"
+        @info "$f, $(Core.Typeof(x))"
         sig = Tuple{Core.Typeof(f), map(Core.Typeof, x)...}
         in_f = Taped.InterpretedFunction(DefaultCtx(), sig; interp)
 
         # Verify correctness.
         @assert f(x...) == f(x...) # primal runs
-        @test in_f(x...) == f(x...)
-        @test in_f(x...) == f(x...) # run twice to check for non-determinism.
-        TestUtils.test_rrule!!(
-            Xoshiro(123456), in_f, x...;
-            perf_flag=:none, interface_only=false, is_primitive=false,
-        )
+        @test in_f(f, x...) == f(x...)
+        @test in_f(f, x...) == f(x...) # run twice to check for non-determinism.
+        # TestUtils.test_rrule!!(
+        #     Xoshiro(123456), in_f, x...;
+        #     perf_flag=:none, interface_only=false, is_primitive=false,
+        # )
 
+        # Taped.trace(f, deepcopy(x)...; ctx=Taped.RMC())
         # rng = Xoshiro(123456)
         # test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only=false, perf_flag=:none)
 
-        # # Only bother to check performance if the original programme does not allocate.
-        # original = @benchmark $(Ref(f))[]($(Ref(x))[]...)
-        # r = @benchmark $(Ref(in_f))[]($(Ref(x))[]...)
+        # Only bother to check performance if the original programme does not allocate.
+        original = @benchmark $(Ref(f))[]($(Ref(x))[]...)
+        r = @benchmark $(Ref(in_f))[]($(Ref(f))[], $(Ref(x))[]...)
 
         # __rrule!! = Taped.build_rrule!!(in_f)
         # codual_x = map(zero_codual, x)
@@ -375,12 +393,12 @@
         # out, pb!! = __rrule!!(zero_codual(in_f), codual_x...)
         # df = zero_codual(in_f)
         # overall_timing = @benchmark Taped.to_benchmark($__rrule!!, $df, $codual_x)
-        # println("original")
-        # display(original)
-        # println()
-        # println("taped")
-        # display(r)
-        # println()
+        println("original")
+        display(original)
+        println()
+        println("taped")
+        display(r)
+        println()
         # println("rrule")
         # display(rrule_timing)
         # println()

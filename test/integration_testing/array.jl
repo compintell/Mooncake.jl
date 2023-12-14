@@ -504,7 +504,7 @@
         @info map(Core.Typeof, (f, x...))
         sig = Tuple{Core.Typeof(f), map(Core.Typeof, x)...}
         in_f = Taped.InterpretedFunction(DefaultCtx(), sig; interp)
-        @test in_f(deepcopy(x)...) == f(deepcopy(x)...)
+        @test in_f(f, deepcopy(x)...) == f(deepcopy(x)...)
         # val, _ = Taped.trace(f, x...; ctx=Taped.RMC())
         # test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only, perf_flag=:none)
     end
