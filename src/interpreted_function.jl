@@ -213,7 +213,7 @@ end
 
 preprocess_ir(st::ReturnNode, in_f) = ReturnNode(preprocess_ir(st.val, in_f))
 
-function build_instruction(ir_inst::ReturnNode, in_f, n, is_block_end)
+function build_instruction(ir_inst::ReturnNode, in_f, n, b, is_block_end)
     return ReturnInst(in_f.return_slot, _get_input(ir_inst.val, in_f))
 end
 
@@ -261,7 +261,7 @@ end
 
 preprocess_ir(st::GotoNode, _) = st
 
-build_instruction(ir_inst::GotoNode, _, _, _) = GotoInst(ir_inst.label)
+build_instruction(ir_inst::GotoNode, _, _, _, _) = GotoInst(ir_inst.label)
 
 function build_coinstructions(ir_inst::GotoNode, in_f, in_f_rrule!!, n, is_blk_end)
     dest = ir_inst.label
@@ -276,19 +276,20 @@ end
 
 struct GotoIfNotInst{Tcond}
     cond::Tcond
+    next_blk::Int
     dest::Int
     node::GotoIfNot
     line::Int
 end
 
 function (inst::GotoIfNotInst)(::Int, current_block::Int)
-    return extract_arg(inst.cond) ? current_block + 1 : inst.dest
+    return extract_arg(inst.cond) ? inst.next_blk : inst.dest
 end
 
 preprocess_ir(st::GotoIfNot, in_f) = GotoIfNot(preprocess_ir(st.cond, in_f), st.dest)
 
-function build_instruction(ir_inst::GotoIfNot, in_f, n, _)
-    return GotoIfNotInst(_get_input(ir_inst.cond, in_f), ir_inst.dest, ir_inst, n)
+function build_instruction(ir_inst::GotoIfNot, in_f, n, b, _)
+    return GotoIfNotInst(_get_input(ir_inst.cond, in_f), b + 1, ir_inst.dest, ir_inst, n)
 end
 
 function build_coinstructions(ir_inst::GotoIfNot, in_f, in_f_rrule!!, n, is_blk_end)
@@ -310,9 +311,9 @@ struct PhiNodeInst{Tedges<:Tuple, Tvalues<:Tuple, Tval_slot<:SlotRef}
     edges::Tedges
     values::Tvalues
     val_slot::Tval_slot
+    next_blk::Int
     node::PhiNode
     line::Int
-    is_blk_end::Bool
 end
 
 _isassigned(x::SlotRef) = isassigned(x)
@@ -327,7 +328,7 @@ function (inst::PhiNodeInst)(prev_blk::Int, current_blk::Int)
             end
         end
     end
-    return _standard_next_block(inst.is_blk_end, current_blk)
+    return inst.next_blk
 end
 
 function preprocess_ir(st::PhiNode, in_f)
@@ -345,7 +346,7 @@ struct UndefinedReference end
 create_slot(x) = SlotRef(x)
 create_slot(x::Union{Literal, TypedGlobalRef, SlotRef}) = x
 
-function build_instruction(ir_inst::PhiNode, in_f, n::Int, is_blk_end)
+function build_instruction(ir_inst::PhiNode, in_f, n::Int, b::Int, is_blk_end::Bool)
     edges = map(Int, (ir_inst.edges..., ))
     values_vec_init = map(eachindex(ir_inst.values)) do j
         if isassigned(ir_inst.values, j)
@@ -361,7 +362,8 @@ function build_instruction(ir_inst::PhiNode, in_f, n::Int, is_blk_end)
     end
     values = (values_vec..., )
     val_slot = in_f.slots[n]
-    return PhiNodeInst(edges, values, val_slot, ir_inst, n, is_blk_end)
+    next_blk = _standard_next_block(is_blk_end, b)
+    return PhiNodeInst(edges, values, val_slot, next_blk, ir_inst, n)
 end
 
 function build_coinstructions(ir_inst::PhiNode, _, in_f_rrule!!, n, is_blk_end)
@@ -422,18 +424,19 @@ end
 struct PiNodeInst{Tinput_ref<:SlotRef, Tval_ref<:SlotRef}
     input_ref::Tinput_ref
     val_ref::Tval_ref
-    is_blk_end::Bool
+    next_blk::Int
 end
 
 function (inst::PiNodeInst)(::Int, current_blk::Int)
     inst.val_ref[] = inst.input_ref[]
-    return _standard_next_block(inst.is_blk_end, current_blk)
+    return inst.next_blk
 end
 
 preprocess_ir(st::PiNode, in_f) = PiNode(preprocess_ir(st.val, in_f), st.typ)
 
-function build_instruction(ir_inst::PiNode, in_f, n, is_blk_end)
-    return PiNodeInst(_get_input(ir_inst.val, in_f), in_f.slots[n], is_blk_end)
+function build_instruction(ir_inst::PiNode, in_f, n, b, is_blk_end)
+    next_blk = _standard_next_block(is_blk_end, b)
+    return PiNodeInst(_get_input(ir_inst.val, in_f), in_f.slots[n], next_blk)
 end
 
 function build_coinstructions(ir_inst::PiNode, _, in_f_rrule!!, n::Int, is_blk_end::Bool)
@@ -457,7 +460,7 @@ end
 struct LiteralInst{T, V}
     val::Literal{T}
     val_ref::SlotRef{V}
-    is_blk_end::Bool
+    next_blk::Int
 end
 
 preprocess_ir(x::Literal, _) = x
@@ -469,11 +472,11 @@ is_literal(_) = false
 
 function (inst::LiteralInst)(::Int, current_blk::Int)
     inst.val_ref[] = inst.val[]
-    return _standard_next_block(inst.is_blk_end, current_blk)
+    return inst.next_blk
 end
 
-function build_instruction(val::Literal, in_f, n, is_blk_end)
-    return LiteralInst(val, in_f.slots[n], is_blk_end)
+function build_instruction(val::Literal, in_f, n, b, is_blk_end)
+    return LiteralInst(val, in_f.slots[n], _standard_next_block(is_blk_end, b))
 end
 
 function build_coinstructions(val::Literal, _, in_f_rrule!!, n, is_blk_end)
@@ -495,18 +498,18 @@ end
 struct GlobalRefInst{Tc, Tval_ref}
     c::Tc
     val_ref::Tval_ref
-    is_blk_end::Bool
+    next_blk::Int
 end
 
 function (inst::GlobalRefInst)(::Int, current_blk::Int)
     inst.val_ref[] = inst.c
-    return _standard_next_block(inst.is_blk_end, current_blk)
+    return inst.next_blk
 end
 
 preprocess_ir(st::GlobalRef, _) = TypedGlobalRef(st)
 
-function build_instruction(node::TypedGlobalRef, in_f, n, is_blk_end)
-    return GlobalRefInst(node[], in_f.slots[n], is_blk_end)
+function build_instruction(node::TypedGlobalRef, in_f, n::Int, b::Int, is_blk_end::Bool)
+    return GlobalRefInst(node[], in_f.slots[n], _standard_next_block(is_blk_end, b))
 end
 
 function build_coinstructions(node::TypedGlobalRef, _, in_f_rrule!!, n, is_blk_end)
@@ -529,15 +532,15 @@ struct CallInst{Targs<:NTuple{N, SlotRefOrLiteral} where {N}, T, Tval_ref<:SlotR
     args::Targs
     evaluator::T
     val_ref::Tval_ref
+    next_blk::Int
     ir::Expr
     line::Int
-    is_blk_end::Bool
 end
 
 function (inst::CallInst{sig, T, SlotRef{A}})(::Int, current_blk::Int) where {sig, T, A}
     new_val = inst.evaluator(map(extract_arg, inst.args)...)
     inst.val_ref[] = new_val
-    return _standard_next_block(inst.is_blk_end, current_blk)
+    return inst.next_blk
 end
 
 function replace_tangent!(x::SlotRef{<:CoDual{Tx, Tdx}}, new_tangent::Tdx) where {Tx, Tdx}
@@ -634,7 +637,7 @@ end
 
 @inline _eval(f::F, args::Vararg{Any, N}) where {F, N} = f(args...)
 
-function build_instruction(ir_inst::Expr, in_f, n::Int, is_block_end::Bool)
+function build_instruction(ir_inst::Expr, in_f, n::Int, b::Int, is_blk_end::Bool)
     if Meta.isexpr(ir_inst, :invoke) || Meta.isexpr(ir_inst, :call)
 
         # Extract args refs.
@@ -652,10 +655,11 @@ function build_instruction(ir_inst::Expr, in_f, n::Int, is_block_end::Bool)
                 DelayedInterpretedFunction{sig, Core.Typeof(ctx)}(ctx, in_f.interp)
             end
         end
-        return CallInst(arg_refs, evaluator, in_f.slots[n], ir_inst, n, is_block_end)
+        next_blk = _standard_next_block(is_blk_end, b)
+        return CallInst(arg_refs, evaluator, in_f.slots[n], next_blk, ir_inst, n)
     elseif Meta.isexpr(ir_inst, :throw_undef_if_not)
         val = _get_input(ir_inst.args[2], in_f)
-        return ThrowUndefIfNot(ir_inst.args[1][], val, is_block_end)
+        return ThrowUndefIfNot(ir_inst.args[1][], val, is_blk_end)
     elseif ir_inst.head in [
         :code_coverage_effect, :gc_preserve_begin, :gc_preserve_end, :loopinfo, :leave,
         :pop_exception,
@@ -1056,12 +1060,18 @@ function preprocess_ir(st, _)
     end
 end
 
+function block_map(cfg::CC.CFG)
+    line_to_blk_maps = map(((n, blk),) -> tuple.(blk.stmts, n), enumerate(cfg.blocks))
+    return Dict(reduce(vcat, line_to_blk_maps))
+end
+
 function build_instruction(in_f::InterpretedFunction{sig}, n::Int) where {sig}
     @nospecialize in_f
     d = (sptypes=in_f.ir.sptypes, spnames=in_f.sparam_names)
     ir_inst = preprocess_ir(in_f.ir.stmts.inst[n], d)
+    b = block_map(in_f.ir.cfg)[n]
     is_blk_end = n in in_f.bb_ends
-    return _make_opaque_closure(build_instruction(ir_inst, in_f, n, is_blk_end), sig, n)
+    return _make_opaque_closure(build_instruction(ir_inst, in_f, n, b, is_blk_end), sig, n)
 end
 
 function build_instruction(ctx, ir_inst::Any, arg_slots, slots, return_slot, is_block_end)

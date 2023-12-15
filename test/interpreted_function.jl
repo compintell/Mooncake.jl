@@ -200,10 +200,10 @@
 
         dummy_gtif = GotoIfNot(false, 5)
         @testset "GotoIfNot $inst" for (inst, output, prev_blk, current_blk) in Any[
-            (GotoIfNotInst(Literal(false), 5, dummy_gtif, 3), 5, 4, 3),
-            (GotoIfNotInst(SlotRef(false), 5, dummy_gtif, 3), 5, 4, 3),
-            (GotoIfNotInst(Literal(true), 5, dummy_gtif, 5), 4, 4, 3),
-            (GotoIfNotInst(SlotRef(true), 5, dummy_gtif, 5), 4, 4, 3),
+            (GotoIfNotInst(Literal(false), 4, 5, dummy_gtif, 3), 5, 4, 3),
+            (GotoIfNotInst(SlotRef(false), 4, 5, dummy_gtif, 3), 5, 4, 3),
+            (GotoIfNotInst(Literal(true), 4, 5, dummy_gtif, 5), 4, 4, 3),
+            (GotoIfNotInst(SlotRef(true), 4, 5, dummy_gtif, 5), 4, 4, 3),
         ]
             @test inst(prev_blk, current_blk) == output
         end
@@ -215,9 +215,9 @@
                     (1, 2),
                     (Literal(false), Literal(true)),
                     SlotRef{Bool}(),
+                    0,
                     dummy_pn,
                     1,
-                    false,
                 ),
                 false, 1, 3, 0,
             ),
@@ -226,9 +226,9 @@
                     (1, 2),
                     (Literal(false), Literal(true)),
                     SlotRef{Bool}(),
+                    0,
                     dummy_pn,
                     1,
-                    false,
                 ),
                 true, 2, 3, 0,
             ),
@@ -237,9 +237,9 @@
                     (1, 2),
                     (SlotRef(false), SlotRef{Bool}()),
                     SlotRef{Bool}(),
+                    0,
                     dummy_pn,
                     1,
-                    false,
                 ),
                 false, 1, 3, 0,
             ),
@@ -248,9 +248,9 @@
                     (1, 2),
                     (SlotRef{Bool}(), SlotRef(true)),
                     SlotRef{Bool}(),
+                    0,
                     dummy_pn,
                     1,
-                    false,
                 ),
                 true, 2, 3, 0,
             ),
@@ -259,9 +259,9 @@
                     (1, 2),
                     (SlotRef{Bool}(), SlotRef(true)),
                     SlotRef{Bool}(),
+                    0,
                     dummy_pn,
                     1,
-                    false,
                 ),
                 true, 2, 3, 0,
             ),
@@ -270,9 +270,9 @@
                     (1, 2),
                     (SlotRef{Bool}(), SlotRef{Bool}()),
                     SlotRef(false),
+                    0,
                     dummy_pn,
                     1,
-                    false,
                 ),
                 false, 4, 3, 0,
             ),
@@ -281,9 +281,9 @@
                     (1, 2),
                     (SlotRef{Bool}(), SlotRef{Bool}()),
                     SlotRef(true),
+                    0,
                     dummy_pn,
                     1,
-                    false,
                 ),
                 true, 4, 3, 0,
             ),
@@ -296,13 +296,13 @@
         # TODO -- PiNodeInst tests
 
         @testset "LiteralInst $inst:" for (inst, val) in Any[
-            (LiteralInst(Literal(5), SlotRef{Int}(), false), 5),
+            (LiteralInst(Literal(5), SlotRef{Int}(), 0), 5),
         ]
             inst(0, 0)
             @test inst.val_ref[] == val
         end
 
-        dummy_args = (:(sin(5.0)), 5, false)
+        dummy_args = (0, :(sin(5.0)), 5)
         @testset "CallInst $inst" for (inst, val) in Any[
             (CallInst((Literal(sin), Literal(4.0)), Taped._eval, SlotRef{Float64}(), dummy_args...), sin(4.0)),
             (CallInst((Literal(sin), Literal(4.0)), Taped._eval, SlotRef{Any}(), dummy_args...), sin(4.0)),
