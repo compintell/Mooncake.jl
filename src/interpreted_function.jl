@@ -130,22 +130,36 @@ end
 # Special types to represent data in an IRCode and a InterpretedFunction.
 #
 
-mutable struct SlotRef{T}
+abstract type AbstractSlot{T} end
+
+mutable struct SlotRef{T} <: AbstractSlot{T}
     x::T
     SlotRef{T}() where {T} = new{T}()
     SlotRef(x::T) where {T} = new{T}(x)
 end
 
-@inline Base.getindex(x::SlotRef) = getfield(x, :x)
-@inline function Base.setindex!(x::SlotRef, val)
+Base.getindex(x::SlotRef) = getfield(x, :x)
+function Base.setindex!(x::SlotRef, val)
     setfield!(x, :x, val)
     return x.x
 end
-@inline Base.isassigned(x::SlotRef) = isdefined(x, :x)
+Base.isassigned(x::SlotRef) = isdefined(x, :x)
 Base.eltype(::SlotRef{T}) where {T} = T
 
 extract_arg(x::SlotRef{T}) where {T} = x[]
 extract_codual(x::SlotRef{T}) where {T<:CoDual} = x[]
+
+struct ConstSlot{T} <: AbstractSlot{T}
+    x::T
+end
+
+Base.getindex(x::ConstSlot) = getfield(x, :x)
+Base.setindex!(x::ConstSlot, val) = nothing
+Base.isassigned(x::ConstSlot) = true
+Base.eltype(x::ConstSlot{T}) where {T} = T
+
+extract_arg(x::ConstSlot{T}) where {T} = getfield(x, :x)
+extract_codual(x::ConstSlot{T}) where {T<:CoDual} = getfield(x, :x)
 
 # Used to make it possible to store types in Tuples in a type-stable way.
 struct TypeWrapper{T} end
@@ -189,10 +203,10 @@ Literal(::SlotRef) = throw(error("Attempting to construct a Literal of a SlotRef
 SlotRef(::Literal) = throw(error("Attempting to construct a SlotRef containing a Literal"))
 
 
-const IFInstruction = Core.OpaqueClosure{Tuple{Int, Int}, Int}
+const IFInstruction = Core.OpaqueClosure{Tuple{Int}, Int}
 const FwdsIFInstruction = IFInstruction
 const BwdsIFInstruction = Core.OpaqueClosure{Tuple{Int}, Int}
-const SlotRefOrLiteral = Union{SlotRef, Literal, TypedGlobalRef}
+const SlotRefOrLiteral = Union{AbstractSlot, Literal, TypedGlobalRef}
 
 # Standard handling for next-block returns for non control flow related instructions.
 _standard_next_block(is_blk_end::Bool, current_blk::Int) = is_blk_end ? current_blk + 1 : 0
@@ -206,7 +220,7 @@ struct ReturnInst{Treturn_slot<:SlotRef, Tval<:SlotRefOrLiteral}
     val::Tval
 end
 
-function (inst::ReturnInst)(::Int, ::Int)
+function (inst::ReturnInst)(::Int)
     inst.return_slot[] = extract_arg(inst.val)
     return -1
 end
@@ -257,7 +271,7 @@ struct GotoInst
     n::Int
 end
 
-(inst::GotoInst)(::Int, ::Int) = inst.n
+(inst::GotoInst)(::Int) = inst.n
 
 preprocess_ir(st::GotoNode, _) = st
 
@@ -282,9 +296,7 @@ struct GotoIfNotInst{Tcond}
     line::Int
 end
 
-function (inst::GotoIfNotInst)(::Int, current_block::Int)
-    return extract_arg(inst.cond) ? inst.next_blk : inst.dest
-end
+(inst::GotoIfNotInst)(::Int) = extract_arg(inst.cond) ? inst.next_blk : inst.dest
 
 preprocess_ir(st::GotoIfNot, in_f) = GotoIfNot(preprocess_ir(st.cond, in_f), st.dest)
 
@@ -307,7 +319,7 @@ end
 #
 
 # We can always safely assume that all `values` elements are SlotRefs.
-struct PhiNodeInst{Tedges<:Tuple, Tvalues<:Tuple, Tval_slot<:SlotRef}
+struct PhiNodeInst{Tedges<:Tuple, Tvalues<:Tuple, Tval_slot<:AbstractSlot}
     edges::Tedges
     values::Tvalues
     val_slot::Tval_slot
@@ -316,10 +328,10 @@ struct PhiNodeInst{Tedges<:Tuple, Tvalues<:Tuple, Tval_slot<:SlotRef}
     line::Int
 end
 
-_isassigned(x::SlotRef) = isassigned(x)
+_isassigned(x::AbstractSlot) = isassigned(x)
 _isassigned(x) = true
 
-function (inst::PhiNodeInst)(prev_blk::Int, current_blk::Int)
+function (inst::PhiNodeInst)(prev_blk::Int)
     for n in eachindex(inst.edges)
         if inst.edges[n] == prev_blk && _isassigned(inst.values[n])
             new_val = extract_arg(inst.values[n])
@@ -344,7 +356,7 @@ end
 struct UndefinedReference end
 
 create_slot(x) = SlotRef(x)
-create_slot(x::Union{Literal, TypedGlobalRef, SlotRef}) = x
+create_slot(x::Union{Literal, TypedGlobalRef, AbstractSlot}) = x
 
 function build_instruction(ir_inst::PhiNode, in_f, n::Int, b::Int, is_blk_end::Bool)
     edges = map(Int, (ir_inst.edges..., ))
@@ -421,13 +433,13 @@ end
 # PiNode
 #
 
-struct PiNodeInst{Tinput_ref<:SlotRef, Tval_ref<:SlotRef}
+struct PiNodeInst{Tinput_ref<:AbstractSlot, Tval_ref<:AbstractSlot}
     input_ref::Tinput_ref
     val_ref::Tval_ref
     next_blk::Int
 end
 
-function (inst::PiNodeInst)(::Int, current_blk::Int)
+function (inst::PiNodeInst)(::Int)
     inst.val_ref[] = inst.input_ref[]
     return inst.next_blk
 end
@@ -457,9 +469,9 @@ end
 # LiteralInst
 #
 
-struct LiteralInst{T, V}
+struct LiteralInst{T, Tval_ref<:AbstractSlot}
     val::Literal{T}
-    val_ref::SlotRef{V}
+    val_ref::Tval_ref
     next_blk::Int
 end
 
@@ -470,7 +482,7 @@ is_literal(::Union{Val, UInt64, Char, UInt8, UInt16, UInt32, Function, Tuple, Ty
 is_literal(::Union{UnionAll, Int8, Int16, Int32, Int128, UInt64, UInt128}) = true
 is_literal(_) = false
 
-function (inst::LiteralInst)(::Int, current_blk::Int)
+function (inst::LiteralInst)(::Int)
     inst.val_ref[] = inst.val[]
     return inst.next_blk
 end
@@ -495,13 +507,13 @@ end
 # GlobalRef
 #
 
-struct GlobalRefInst{Tc, Tval_ref}
+struct GlobalRefInst{Tc, Tval_ref<:AbstractSlot}
     c::Tc
     val_ref::Tval_ref
     next_blk::Int
 end
 
-function (inst::GlobalRefInst)(::Int, current_blk::Int)
+function (inst::GlobalRefInst)(::Int)
     inst.val_ref[] = inst.c
     return inst.next_blk
 end
@@ -528,7 +540,7 @@ end
 # Expr -- this is a big one
 #
 
-struct CallInst{Targs<:NTuple{N, SlotRefOrLiteral} where {N}, T, Tval_ref<:SlotRef}
+struct CallInst{Targs<:NTuple{N, SlotRefOrLiteral} where {N}, T, Tval_ref<:AbstractSlot}
     args::Targs
     evaluator::T
     val_ref::Tval_ref
@@ -537,9 +549,8 @@ struct CallInst{Targs<:NTuple{N, SlotRefOrLiteral} where {N}, T, Tval_ref<:SlotR
     line::Int
 end
 
-function (inst::CallInst{sig, T, SlotRef{A}})(::Int, current_blk::Int) where {sig, T, A}
-    new_val = inst.evaluator(map(extract_arg, inst.args)...)
-    inst.val_ref[] = new_val
+function (inst::CallInst{sig, T})(::Int) where {sig, T}
+    inst.val_ref[] = inst.evaluator(map(extract_arg, inst.args)...)
     return inst.next_blk
 end
 
@@ -562,19 +573,19 @@ struct SkippedExpressionInst
     s::Symbol
 end
 
-(::SkippedExpressionInst)(::Int, ::Int) = 0
+(::SkippedExpressionInst)(::Int) = 0
 
 struct ThrowUndefIfNot{Tval}
     sym::Symbol
     val::Tval
-    is_blk_end::Bool
+    next_blk::Int
 end
 
-function (inst::ThrowUndefIfNot)(::Int, curr_blk::Int)
+function (inst::ThrowUndefIfNot)(::Int)
     if !_isassigned(inst.val)
         throw(error("Boooo, not assigned"))
     end
-    return _standard_next_block(inst.is_blk_end, curr_blk)
+    return inst.next_blk
 end
 
 _extract(x::Symbol) = x
@@ -598,7 +609,14 @@ _lift_instrinsic(x::Core.IntrinsicFunction) = IntrinsicsWrappers.translate(Val(x
 
 _preprocess_expr_arg(ex::Union{Argument, SSAValue, CC.MethodInstance}, _) = ex
 _preprocess_expr_arg(ex::QuoteNode, _) = Literal(_lift_intrinsic(ex.value))
-_preprocess_expr_arg(ex::GlobalRef, _) = TypedGlobalRef(ex)
+
+function _preprocess_expr_arg(ex::GlobalRef, _)
+    if _get_globalref(ex) isa Core.IntrinsicFunction
+        return Literal(_lift_intrinsic(_get_globalref(ex)))
+    else
+        return TypedGlobalRef(ex)
+    end
+end
 
 function _preprocess_expr_arg(ex, _)
     is_literal(ex) && return Literal(ex)
@@ -638,6 +656,7 @@ end
 @inline _eval(f::F, args::Vararg{Any, N}) where {F, N} = f(args...)
 
 function build_instruction(ir_inst::Expr, in_f, n::Int, b::Int, is_blk_end::Bool)
+    next_blk = _standard_next_block(is_blk_end, b)
     if Meta.isexpr(ir_inst, :invoke) || Meta.isexpr(ir_inst, :call)
 
         # Extract args refs.
@@ -655,11 +674,10 @@ function build_instruction(ir_inst::Expr, in_f, n::Int, b::Int, is_blk_end::Bool
                 DelayedInterpretedFunction{sig, Core.Typeof(ctx)}(ctx, in_f.interp)
             end
         end
-        next_blk = _standard_next_block(is_blk_end, b)
         return CallInst(arg_refs, evaluator, in_f.slots[n], next_blk, ir_inst, n)
     elseif Meta.isexpr(ir_inst, :throw_undef_if_not)
         val = _get_input(ir_inst.args[2], in_f)
-        return ThrowUndefIfNot(ir_inst.args[1][], val, is_blk_end)
+        return ThrowUndefIfNot(ir_inst.args[1][], val, next_blk)
     elseif ir_inst.head in [
         :code_coverage_effect, :gc_preserve_begin, :gc_preserve_end, :loopinfo, :leave,
         :pop_exception,
@@ -813,7 +831,7 @@ _get_input(x::Literal, _, _) = x
 _get_input(x::TypedGlobalRef, _, _) = x
 
 function _make_opaque_closure(inst, sig, n)
-    oc = @opaque Tuple{Int, Int} (p, q) -> inst(p, q)
+    oc = @opaque (p::Int) -> inst(p)
     if !(oc isa IFInstruction)
         println("Displaying debugging info from _make_opaque_closure:")
         println("sig of InterpretedFunction in which this is instruction $n:")
@@ -822,7 +840,7 @@ function _make_opaque_closure(inst, sig, n)
         println("inst:")
         display(inst)
         println()
-        @show oc(5, 4)
+        @show oc(5)
     end
     return oc::IFInstruction
 end
@@ -892,7 +910,7 @@ end
 # Loading arguments into slots.
 #
 
-struct ArgInfo{Targ_slots<:NTuple{N, Union{SlotRef, Literal}} where {N}, is_vararg}
+struct ArgInfo{Targ_slots<:NTuple{N, Union{AbstractSlot, Literal}} where {N}, is_vararg}
     arg_slots::Targ_slots
 end
 
@@ -939,7 +957,7 @@ struct InterpretedFunction{sig<:Tuple, C, Treturn, Targ_info<:ArgInfo}
     ctx::C
     return_slot::SlotRef{Treturn}
     arg_info::Targ_info
-    slots::Vector{SlotRef}
+    slots::Vector{Union{SlotRef, ConstSlot}}
     instructions::Vector{IFInstruction}
     bb_starts::Vector{Int}
     bb_ends::Vector{Int}
@@ -972,6 +990,10 @@ function flush_interpreted_function_cache!()
     return nothing
 end
 
+make_slot(::Type{T}) where {T} = SlotRef{T}()
+make_slot(x::CC.Const) = ConstSlot{Core.Typeof(x.val)}(x.val)
+make_slot(x::CC.PartialStruct) = SlotRef{x.typ}()
+
 function InterpretedFunction(ctx::C, sig::Type{<:Tuple}; interp) where {C}
     @nospecialize ctx sig
 
@@ -996,8 +1018,12 @@ function InterpretedFunction(ctx::C, sig::Type{<:Tuple}; interp) where {C}
     is_vararg, spnames = is_vararg_sig_and_sparam_names(sig)
     arg_info = arginfo_from_argtypes(arg_types, is_vararg)
 
-    # Extract slots.
-    slots = SlotRef[SlotRef{_get_type(T)}() for T in ir.stmts.type]
+    # Create slots. In most cases, these are instances of `SlotRef`s, which can be read from
+    # and written to by instructions (they are essentially `Base.RefValue`s with a
+    # different name. Very occassionally the compiler will deduce that a particular slot has
+    # a constant value. In these cases, we instead create an instance of `ConstSlot`, which
+    # cannot be written to.
+    slots = AbstractSlot[make_slot(T) for T in ir.stmts.type]
 
     # Allocate memory for instructions and argument loading instructions.
     insts = Vector{IFInstruction}(undef, length(slots))
@@ -1036,7 +1062,7 @@ function __barrier(in_f::Tf) where {Tf<:InterpretedFunction}
         if !isassigned(instructions, n)
             instructions[n] = build_instruction(in_f, n)
         end
-        next_block = instructions[n](prev_block, current_block)
+        next_block = instructions[n](prev_block)
         if next_block == 0
             n += 1
         elseif next_block > 0
@@ -1407,6 +1433,13 @@ varargs_tester_4(x, y, z) = varargs_tester_3(x...)
 
 splatting_tester(x) = varargs_tester(x...)
 unstable_splatting_tester(x::Ref{Any}) = varargs_tester(x[]...)
+
+function inferred_const_tester(x::Base.RefValue{Any})
+    y = x[]
+    y === nothing && return y
+    return 5y
+end
+inferred_const_tester(x::Int) = x == 5 ? x : 5x
 
 a_primitive(x) = sin(x)
 non_primitive(x) = sin(x)

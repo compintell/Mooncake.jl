@@ -188,28 +188,28 @@
             (ReturnInst(SlotRef{Type{Int}}(), Literal(Int)), Int, -1),
             (ReturnInst(SlotRef{DataType}(), Literal(Float64)), Float64, -1),
         ]
-            out = inst(0, 0)
+            out = inst(0)
             @test inst.return_slot[] == target
             @test output == out
         end
         @testset "GotoNode $inst" for (inst, output) in Any[
             (GotoInst(5), 5), (GotoInst(4), 4), (GotoInst(1), 1),
         ]
-            @test inst(0, 0) == output
+            @test inst(0) == output
         end
 
         dummy_gtif = GotoIfNot(false, 5)
-        @testset "GotoIfNot $inst" for (inst, output, prev_blk, current_blk) in Any[
-            (GotoIfNotInst(Literal(false), 4, 5, dummy_gtif, 3), 5, 4, 3),
-            (GotoIfNotInst(SlotRef(false), 4, 5, dummy_gtif, 3), 5, 4, 3),
-            (GotoIfNotInst(Literal(true), 4, 5, dummy_gtif, 5), 4, 4, 3),
-            (GotoIfNotInst(SlotRef(true), 4, 5, dummy_gtif, 5), 4, 4, 3),
+        @testset "GotoIfNot $inst" for (inst, output, prev_blk) in Any[
+            (GotoIfNotInst(Literal(false), 4, 5, dummy_gtif, 3), 5, 4),
+            (GotoIfNotInst(SlotRef(false), 4, 5, dummy_gtif, 3), 5, 4),
+            (GotoIfNotInst(Literal(true), 4, 5, dummy_gtif, 5), 4, 4),
+            (GotoIfNotInst(SlotRef(true), 4, 5, dummy_gtif, 5), 4, 4),
         ]
-            @test inst(prev_blk, current_blk) == output
+            @test inst(prev_blk) == output
         end
 
         dummy_pn = PhiNode(Int32[1], Any[5])
-        @testset "PhiNode $inst" for (inst, val, prev_blk, curr_blk, next_blk) in Any[
+        @testset "PhiNode $inst" for (inst, val, prev_blk, next_blk) in Any[
             (
                 PhiNodeInst(
                     (1, 2),
@@ -219,7 +219,7 @@
                     dummy_pn,
                     1,
                 ),
-                false, 1, 3, 0,
+                false, 1, 0,
             ),
             (
                 PhiNodeInst(
@@ -230,7 +230,7 @@
                     dummy_pn,
                     1,
                 ),
-                true, 2, 3, 0,
+                true, 2, 0,
             ),
             (
                 PhiNodeInst(
@@ -241,7 +241,7 @@
                     dummy_pn,
                     1,
                 ),
-                false, 1, 3, 0,
+                false, 1, 0,
             ),
             (
                 PhiNodeInst(
@@ -252,7 +252,7 @@
                     dummy_pn,
                     1,
                 ),
-                true, 2, 3, 0,
+                true, 2, 0,
             ),
             (
                 PhiNodeInst(
@@ -263,7 +263,7 @@
                     dummy_pn,
                     1,
                 ),
-                true, 2, 3, 0,
+                true, 2, 0,
             ),
             (
                 PhiNodeInst(
@@ -274,7 +274,7 @@
                     dummy_pn,
                     1,
                 ),
-                false, 4, 3, 0,
+                false, 4, 0,
             ),
             (
                 PhiNodeInst(
@@ -285,10 +285,10 @@
                     dummy_pn,
                     1,
                 ),
-                true, 4, 3, 0,
+                true, 4, 0,
             ),
         ]
-            output = inst(prev_blk, curr_blk)
+            output = inst(prev_blk)
             @test inst.val_slot[] == val
             @test output == next_blk
         end
@@ -298,7 +298,7 @@
         @testset "LiteralInst $inst:" for (inst, val) in Any[
             (LiteralInst(Literal(5), SlotRef{Int}(), 0), 5),
         ]
-            inst(0, 0)
+            inst(0)
             @test inst.val_ref[] == val
         end
 
@@ -310,7 +310,7 @@
             (CallInst((Literal(sin), SlotRef(5.0)), Taped._eval, SlotRef{Real}(), dummy_args...), sin(5.0)),
             (CallInst((TypedGlobalRef(sin), SlotRef(5.0)), Taped._eval, SlotRef{Real}(), dummy_args...), sin(5.0)),
         ]
-            inst(0, 0)
+            inst(0)
             @test inst.val_ref[] == val
         end
     end
@@ -366,6 +366,7 @@
             # (nothing, nothing, Taped.unstable_splatting_tester, Ref{Any}(5.0)),
             # (nothing, nothing, Taped.unstable_splatting_tester, Ref{Any}((5.0, 4.0))),
             # (nothing, nothing, Taped.unstable_splatting_tester, Ref{Any}((5.0, 4.0, 3.0))),
+            (nothing, nothing, Taped.inferred_const_tester, Ref{Any}(nothing)),
             (
                 nothing,
                 nothing,
