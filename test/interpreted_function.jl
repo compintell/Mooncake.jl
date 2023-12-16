@@ -195,15 +195,13 @@
             @test oc(3) == label
         end
 
-        # dummy_gtif = GotoIfNot(false, 5)
-        # @testset "GotoIfNot $inst" for (inst, output, prev_blk) in Any[
-        #     (GotoIfNotInst(Literal(false), 4, 5, dummy_gtif, 3), 5, 4),
-        #     (GotoIfNotInst(SlotRef(false), 4, 5, dummy_gtif, 3), 5, 4),
-        #     (GotoIfNotInst(Literal(true), 4, 5, dummy_gtif, 5), 4, 4),
-        #     (GotoIfNotInst(SlotRef(true), 4, 5, dummy_gtif, 5), 4, 4),
-        # ]
-        #     @test inst(prev_blk) == output
-        # end
+        @testset "GotoIfNot $cond" for cond in Any[
+            SlotRef(true), SlotRef(false), ConstSlot(true), ConstSlot(false),
+        ]
+            oc = build_inst(GotoIfNot, cond, 1, 2)
+            @test oc isa Taped.IFInstruction
+            @test oc(5) == (cond[] ? 1 : 2)
+        end
 
         # dummy_pn = PhiNode(Int32[1], Any[5])
         # @testset "PhiNode $inst" for (inst, val, prev_blk, next_blk) in Any[

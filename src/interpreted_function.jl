@@ -274,24 +274,12 @@ build_inst(::Type{GotoNode}, label::Int) = @opaque (p::Int) -> label
 # GotoIfNot
 #
 
-struct GotoIfNotInst{Tcond}
-    cond::Tcond
-    next_blk::Int
-    dest::Int
-    node::GotoIfNot
-    line::Int
-end
-
-(inst::GotoIfNotInst)(::Int) = extract_arg(inst.cond) ? inst.next_blk : inst.dest
-
 preprocess_ir(st::GotoIfNot, in_f) = GotoIfNot(preprocess_ir(st.cond, in_f), st.dest)
 
-function build_inst(ir_inst::GotoIfNot, in_f, n, b, _)
-    return GotoIfNotInst(_get_input(ir_inst.cond, in_f), b + 1, ir_inst.dest, ir_inst, n)
-end
+build_inst(x::GotoIfNot, in_f, n, b, _) = build_inst(GotoIfNot, x.cond, b + 1, x.dest)
 
-function build_inst(::Type{GotoIfNot}, cond::AbstractSlot, next_blk::Int, dest::Int)
-
+function build_inst(::Type{GotoIfNot}, cond::AbstractSlot{Bool}, next_blk::Int, dest::Int)
+    return @opaque (p::Int) -> cond[] ? next_blk : dest
 end
 
 # function build_coinstructions(ir_inst::GotoIfNot, in_f, in_f_rrule!!, n, is_blk_end)
