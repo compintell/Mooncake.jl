@@ -196,7 +196,10 @@
         end
 
         @testset "GotoIfNot $cond" for cond in Any[
-            SlotRef(true), SlotRef(false), ConstSlot(true), ConstSlot(false),
+            SlotRef(true), SlotRef(false),
+            ConstSlot(true), ConstSlot(false),
+            SlotRef{Any}(true), SlotRef{Real}(false),
+            ConstSlot{Any}(true), ConstSlot{Any}(false),
         ]
             oc = build_inst(GotoIfNot, cond, 1, 2)
             @test oc isa Taped.IFInstruction

@@ -136,6 +136,7 @@ mutable struct SlotRef{T} <: AbstractSlot{T}
     x::T
     SlotRef{T}() where {T} = new{T}()
     SlotRef(x::T) where {T} = new{T}(x)
+    SlotRef{T}(x) where {T} = new{T}(x)
 end
 
 Base.getindex(x::SlotRef) = getfield(x, :x)
@@ -278,7 +279,7 @@ preprocess_ir(st::GotoIfNot, in_f) = GotoIfNot(preprocess_ir(st.cond, in_f), st.
 
 build_inst(x::GotoIfNot, in_f, n, b, _) = build_inst(GotoIfNot, x.cond, b + 1, x.dest)
 
-function build_inst(::Type{GotoIfNot}, cond::AbstractSlot{Bool}, next_blk::Int, dest::Int)
+function build_inst(::Type{GotoIfNot}, cond::AbstractSlot, next_blk::Int, dest::Int)
     return @opaque (p::Int) -> cond[] ? next_blk : dest
 end
 
