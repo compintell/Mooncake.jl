@@ -181,15 +181,16 @@
                 (GlobalRef(Main, :sin), SlotRef{Any}()),
             ]
                 val, ret_slot = args
-                oc = build_instruction(ReturnNode, ret_slot, val)
+                oc = build_inst(ReturnNode, ret_slot, val)
                 @test oc isa Taped.IFInstruction
                 output = oc(0)
                 @test output == -1
                 @test ret_slot[] == extract_value(val)
             end
         end
+
         @testset "GotoNode $label" for label in Any[1, 2, 3, 4, 5]
-            oc = build_instruction(GotoNode, label)
+            oc = build_inst(GotoNode, label)
             @test oc isa Taped.IFInstruction
             @test oc(3) == label
         end

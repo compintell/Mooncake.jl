@@ -190,22 +190,22 @@ preprocess_ir(st::ReturnNode, in_f) = ReturnNode(preprocess_ir(st.val, in_f))
 
 # If the ReturnNode references an Argument or SlotRef, load it into the `ret_slot`.
 # Otherwise, interpolate whatever we get (e.g. a `GlobalRef`) into the instruction.
-function build_instruction(inst::ReturnNode, in_f, ::Int, ::Int, ::Bool)
+function build_inst(inst::ReturnNode, in_f, ::Int, ::Int, ::Bool)
     if inst.val isa JuliaSlot
-        return build_instruction(ReturnNode, _get_input(inst.val, in_f), in_f.return_slot)
+        return build_inst(ReturnNode, _get_input(inst.val, in_f), in_f.return_slot)
     else
         throw(error("Not implemented this branch yet"))
     end
 end
 
-function build_instruction(::Type{ReturnNode}, ret_slot::SlotRef, val_slot::AbstractSlot)
+function build_inst(::Type{ReturnNode}, ret_slot::SlotRef, val_slot::AbstractSlot)
     return @opaque function (prev_block::Int)
         ret_slot[] = val_slot[]
         return -1
     end
 end
 
-function build_instruction(::Type{ReturnNode}, ret_slot::SlotRef, val)
+function build_inst(::Type{ReturnNode}, ret_slot::SlotRef, val)
     ir = CC.copy(default_ir)
 
     # Get ret_slot from environment, then set its value.
@@ -259,9 +259,9 @@ end
 
 preprocess_ir(st::GotoNode, _) = st
 
-build_instruction(inst::GotoNode, _, _, _, _) = build_instruction(GotoNode, inst.label)
+build_inst(inst::GotoNode, _, _, _, _) = build_inst(GotoNode, inst.label)
 
-build_instruction(::Type{GotoNode}, label::Int) = @opaque (p::Int) -> label
+build_inst(::Type{GotoNode}, label::Int) = @opaque (p::Int) -> label
 
 # function build_coinstructions(ir_inst::GotoNode, in_f, in_f_rrule!!, n, is_blk_end)
 #     dest = ir_inst.label
@@ -270,25 +270,29 @@ build_instruction(::Type{GotoNode}, label::Int) = @opaque (p::Int) -> label
 #     return run_fwds_pass, run_rvs_pass
 # end
 
-# #
-# # GotoIfNot
-# #
+#
+# GotoIfNot
+#
 
-# struct GotoIfNotInst{Tcond}
-#     cond::Tcond
-#     next_blk::Int
-#     dest::Int
-#     node::GotoIfNot
-#     line::Int
-# end
+struct GotoIfNotInst{Tcond}
+    cond::Tcond
+    next_blk::Int
+    dest::Int
+    node::GotoIfNot
+    line::Int
+end
 
-# (inst::GotoIfNotInst)(::Int) = extract_arg(inst.cond) ? inst.next_blk : inst.dest
+(inst::GotoIfNotInst)(::Int) = extract_arg(inst.cond) ? inst.next_blk : inst.dest
 
-# preprocess_ir(st::GotoIfNot, in_f) = GotoIfNot(preprocess_ir(st.cond, in_f), st.dest)
+preprocess_ir(st::GotoIfNot, in_f) = GotoIfNot(preprocess_ir(st.cond, in_f), st.dest)
 
-# function build_instruction(ir_inst::GotoIfNot, in_f, n, b, _)
-#     return GotoIfNotInst(_get_input(ir_inst.cond, in_f), b + 1, ir_inst.dest, ir_inst, n)
-# end
+function build_inst(ir_inst::GotoIfNot, in_f, n, b, _)
+    return GotoIfNotInst(_get_input(ir_inst.cond, in_f), b + 1, ir_inst.dest, ir_inst, n)
+end
+
+function build_inst(::Type{GotoIfNot}, cond::AbstractSlot, next_blk::Int, dest::Int)
+
+end
 
 # function build_coinstructions(ir_inst::GotoIfNot, in_f, in_f_rrule!!, n, is_blk_end)
 #     cond_slot = _get_input(ir_inst.cond, in_f_rrule!!)
@@ -344,7 +348,7 @@ build_instruction(::Type{GotoNode}, label::Int) = @opaque (p::Int) -> label
 # create_slot(x) = SlotRef(x)
 # create_slot(x::Union{Literal, TypedGlobalRef, AbstractSlot}) = x
 
-# function build_instruction(ir_inst::PhiNode, in_f, n::Int, b::Int, is_blk_end::Bool)
+# function build_inst(ir_inst::PhiNode, in_f, n::Int, b::Int, is_blk_end::Bool)
 #     edges = map(Int, (ir_inst.edges..., ))
 #     values_vec_init = map(eachindex(ir_inst.values)) do j
 #         if isassigned(ir_inst.values, j)
@@ -432,7 +436,7 @@ build_instruction(::Type{GotoNode}, label::Int) = @opaque (p::Int) -> label
 
 # preprocess_ir(st::PiNode, in_f) = PiNode(preprocess_ir(st.val, in_f), st.typ)
 
-# function build_instruction(ir_inst::PiNode, in_f, n, b, is_blk_end)
+# function build_inst(ir_inst::PiNode, in_f, n, b, is_blk_end)
 #     next_blk = _standard_next_block(is_blk_end, b)
 #     return PiNodeInst(_get_input(ir_inst.val, in_f), in_f.slots[n], next_blk)
 # end
@@ -473,7 +477,7 @@ build_instruction(::Type{GotoNode}, label::Int) = @opaque (p::Int) -> label
 #     return inst.next_blk
 # end
 
-# function build_instruction(val::Literal, in_f, n, b, is_blk_end)
+# function build_inst(val::Literal, in_f, n, b, is_blk_end)
 #     return LiteralInst(val, in_f.slots[n], _standard_next_block(is_blk_end, b))
 # end
 
@@ -506,7 +510,7 @@ build_instruction(::Type{GotoNode}, label::Int) = @opaque (p::Int) -> label
 
 # preprocess_ir(st::GlobalRef, _) = TypedGlobalRef(st)
 
-# function build_instruction(node::TypedGlobalRef, in_f, n::Int, b::Int, is_blk_end::Bool)
+# function build_inst(node::TypedGlobalRef, in_f, n::Int, b::Int, is_blk_end::Bool)
 #     return GlobalRefInst(node[], in_f.slots[n], _standard_next_block(is_blk_end, b))
 # end
 
@@ -643,7 +647,7 @@ _get_globalref(x::GlobalRef) = getglobal(x.mod, x.name)
 
 # @inline _eval(f::F, args::Vararg{Any, N}) where {F, N} = f(args...)
 
-# function build_instruction(ir_inst::Expr, in_f, n::Int, b::Int, is_blk_end::Bool)
+# function build_inst(ir_inst::Expr, in_f, n::Int, b::Int, is_blk_end::Bool)
 #     next_blk = _standard_next_block(is_blk_end, b)
 #     if Meta.isexpr(ir_inst, :invoke) || Meta.isexpr(ir_inst, :call)
 
@@ -1011,7 +1015,7 @@ function __barrier(in_f::Tf) where {Tf<:InterpretedFunction}
     while next_block != -1
         # @show prev_block, current_block, next_block, n
         if !isassigned(instructions, n)
-            instructions[n] = build_instruction(in_f, n)
+            instructions[n] = build_inst(in_f, n)
         end
         next_block = instructions[n](prev_block)
         if next_block == 0
@@ -1036,16 +1040,16 @@ function block_map(cfg::CC.CFG)
     return Dict(reduce(vcat, line_to_blk_maps))
 end
 
-function build_instruction(in_f::InterpretedFunction{sig}, n::Int) where {sig}
+function build_inst(in_f::InterpretedFunction{sig}, n::Int) where {sig}
     @nospecialize in_f
     d = (sptypes=in_f.ir.sptypes, spnames=in_f.sparam_names)
     ir_inst = preprocess_ir(in_f.ir.stmts.inst[n], d)
     b = block_map(in_f.ir.cfg)[n]
     is_blk_end = n in in_f.bb_ends
-    return _make_opaque_closure(build_instruction(ir_inst, in_f, n, b, is_blk_end), sig, n)
+    return _make_opaque_closure(build_inst(ir_inst, in_f, n, b, is_blk_end), sig, n)
 end
 
-function build_instruction(ctx, ir_inst::Any, arg_slots, slots, return_slot, is_block_end)
+function build_inst(ctx, ir_inst::Any, arg_slots, slots, return_slot, is_block_end)
     println("IR in which error is found:")
     display(sig)
     display(ir)
@@ -1193,7 +1197,7 @@ function (in_f_rrule!!::InterpretedFunctionRRule{sig})(
         end
 
         if !isassigned(in_f.instructions, n) 
-            in_f.instructions[n] = build_instruction(in_f, n)
+            in_f.instructions[n] = build_inst(in_f, n)
         end
         if !isassigned(in_f_rrule!!.fwds_instructions, n)
             fwds, bwds = generate_instructions(in_f, in_f_rrule!!, n)

@@ -50,7 +50,7 @@ using Taped:
     preprocess_ir,
     SlotRef,
     ConstSlot,
-    build_instruction
+    build_inst
 
 using Taped.Umlaut: __new__, __to_tuple__
 
