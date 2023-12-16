@@ -58,7 +58,7 @@ struct TapedInterpreter{C} <: CC.AbstractInterpreter
     opt_params::CC.OptimizationParams
     inf_cache::Vector{CC.InferenceResult}
     code_cache::TICache
-    ir_interp::Bool
+    in_f_cache::Dict{Any, Any}
     function TapedInterpreter(
         ctx::C=DefaultCtx();
         meta=nothing,
@@ -67,10 +67,10 @@ struct TapedInterpreter{C} <: CC.AbstractInterpreter
         opt_params::CC.OptimizationParams=CC.OptimizationParams(),
         inf_cache::Vector{CC.InferenceResult}=CC.InferenceResult[], 
         code_cache::TICache=TICache(),
-        ir_interp=false,
+        in_f_cache::Dict{Any, Any}=Dict(),
     ) where {C}
         return new{C}(
-            ctx, meta, world, inf_params, opt_params, inf_cache, code_cache, ir_interp
+            ctx, meta, world, inf_params, opt_params, inf_cache, code_cache, in_f_cache
         )
     end
 end
@@ -146,9 +146,6 @@ end
 Base.isassigned(x::SlotRef) = isdefined(x, :x)
 Base.eltype(::SlotRef{T}) where {T} = T
 
-extract_arg(x::SlotRef{T}) where {T} = x[]
-extract_codual(x::SlotRef{T}) where {T<:CoDual} = x[]
-
 struct ConstSlot{T} <: AbstractSlot{T}
     x::T
 end
@@ -158,659 +155,650 @@ Base.setindex!(x::ConstSlot, val) = nothing
 Base.isassigned(x::ConstSlot) = true
 Base.eltype(x::ConstSlot{T}) where {T} = T
 
-extract_arg(x::ConstSlot{T}) where {T} = getfield(x, :x)
-extract_codual(x::ConstSlot{T}) where {T<:CoDual} = getfield(x, :x)
-
-# Used to make it possible to store types in Tuples in a type-stable way.
-struct TypeWrapper{T} end
-
-extract_codual(::TypeWrapper{T}) where {T} = uninit_codual(T)
-
-struct Literal{T} end
-
-Literal(x) = Literal{x}()
-Literal(::Type{T}) where {T} = Literal{T}()
-
-_wrap_types(x) = x
-_wrap_types(::Type{T}) where {T} = TypeWrapper{T}()
-_wrap_types(x::Tuple) = map(_wrap_types, x)
-Literal(x::Tuple) = Literal{_wrap_types(x)}()
-
-_unwrap_types(x) = x
-_unwrap_types(::TypeWrapper{T}) where {T} = T
-_unwrap_types(x::Tuple) = map(_unwrap_types, x)
-
-Base.getindex(::Literal{T}) where {T} = _unwrap_types(T)
-Base.eltype(x::Literal{T}) where {T} = Core.Typeof(x[])
-
-extract_arg(x::Literal{T}) where {T} = x[]
-extract_codual(x::Literal{T}) where {T} = uninit_codual(extract_arg(x))
-
-struct TypedGlobalRef{T}
-    x::T
-end
-
-TypedGlobalRef(::Type{T}) where {T} = TypedGlobalRef{Type{T}}(T)
-TypedGlobalRef(x::GlobalRef) = TypedGlobalRef(getglobal(x.mod, x.name))
-
-@inline Base.getindex(x::TypedGlobalRef) = x.x
-Base.eltype(::TypedGlobalRef{T}) where {T} = T
-
-extract_arg(x::TypedGlobalRef) = x[]
-
-# We shouldn't get literals in slotrefs or slotrefs in literals
-Literal(::SlotRef) = throw(error("Attempting to construct a Literal of a SlotRef"))
-SlotRef(::Literal) = throw(error("Attempting to construct a SlotRef containing a Literal"))
-
+#
+# Utility functionality used through instruction construction.
+#
 
 const IFInstruction = Core.OpaqueClosure{Tuple{Int}, Int}
-const FwdsIFInstruction = IFInstruction
+const FwdsIFInstruction = Core.OpaqueClosure{Tuple{Int}, Int}
 const BwdsIFInstruction = Core.OpaqueClosure{Tuple{Int}, Int}
-const SlotRefOrLiteral = Union{AbstractSlot, Literal, TypedGlobalRef}
+const JuliaSlot = Union{Argument, SSAValue}
 
 # Standard handling for next-block returns for non control flow related instructions.
 _standard_next_block(is_blk_end::Bool, current_blk::Int) = is_blk_end ? current_blk + 1 : 0
+
+__empty_function(::Int) = 0
+
+const default_ir = Base.code_ircode_by_type(Tuple{typeof(__empty_function), Int})[1][1]
+
+# Various bits of functionality that we need acces to in order to work with IRCode.
+Base.iterate(compact::CC.IncrementalCompact, state) = CC.iterate(compact, state)
+Base.iterate(compact::CC.IncrementalCompact) = CC.iterate(compact)
+Base.getindex(c::CC.IncrementalCompact, args...) = CC.getindex(c, args...)
+Base.setindex!(c::CC.IncrementalCompact, args...) = CC.setindex!(c, args...)
+Base.setindex!(i::CC.Instruction, args...) = CC.setindex!(i, args...)
+Base.getindex(c::IRCode, args...) = CC.getindex(c, args...)
+Base.setindex!(c::IRCode, args...) = CC.setindex!(c, args...)
+
+new_inst(expr) = CC.NewInstruction(expr, Any, CC.NoCallInfo(), Int32(1), CC.IR_FLAG_REFINED)
 
 #
 # ReturnNode
 #
 
-struct ReturnInst{Treturn_slot<:SlotRef, Tval<:SlotRefOrLiteral}
-    return_slot::Treturn_slot
-    val::Tval
-end
-
-function (inst::ReturnInst)(::Int)
-    inst.return_slot[] = extract_arg(inst.val)
-    return -1
-end
-
 preprocess_ir(st::ReturnNode, in_f) = ReturnNode(preprocess_ir(st.val, in_f))
 
-function build_instruction(ir_inst::ReturnNode, in_f, n, b, is_block_end)
-    return ReturnInst(in_f.return_slot, _get_input(ir_inst.val, in_f))
-end
-
-function build_coinstructions(ir_inst::ReturnNode, in_f, in_f_rrule!!, n, is_blk_end)
-    function __barrier(return_slot::A, slot_to_return::B) where {A, B}
-        # Construct operation to run the forwards-pass.
-        run_fwds_pass = @opaque function (a::Int, b::Int)
-            return_slot[] = extract_codual(slot_to_return)
-            return -1
-        end
-        if !(run_fwds_pass isa FwdsIFInstruction)
-            run_fwds_pass(5, 4)
-            display(CC.code_typed_opaque_closure(run_fwds_pass)[1][1])
-            println()
-        end
-
-        # Construct operation to run the reverse-pass.
-        run_rvs_pass = if slot_to_return isa SlotRef
-            @opaque  function (j::Int)
-                setfield!(slot_to_return, :x, getfield(return_slot, :x))
-                return j
-            end
-        else
-            @opaque (j::Int) -> j
-        end
-        if !(run_rvs_pass isa BwdsIFInstruction)
-            run_rvs_pass(4)
-            display(CC.code_typed_opaque_closure(run_fwds_pass)[1][1])
-            println()
-        end
-        return run_fwds_pass, run_rvs_pass
+# If the ReturnNode references an Argument or SlotRef, load it into the `ret_slot`.
+# Otherwise, interpolate whatever we get (e.g. a `GlobalRef`) into the instruction.
+function build_instruction(inst::ReturnNode, in_f, ::Int, ::Int, ::Bool)
+    if inst.val isa JuliaSlot
+        return build_instruction(ReturnNode, _get_input(inst.val, in_f), in_f.return_slot)
+    else
+        throw(error("Not implemented this branch yet"))
     end
-    return __barrier(in_f_rrule!!.return_slot, _get_input(ir_inst.val, in_f_rrule!!))
 end
+
+function build_instruction(::Type{ReturnNode}, ret_slot::SlotRef, val_slot::AbstractSlot)
+    return @opaque function (prev_block::Int)
+        ret_slot[] = val_slot[]
+        return -1
+    end
+end
+
+function build_instruction(::Type{ReturnNode}, ret_slot::SlotRef, val)
+    ir = CC.copy(default_ir)
+
+    # Get ret_slot from environment, then set its value.
+    CC.insert_node!(ir, 1, new_inst(Expr(:call, :getfield, Argument(1), 1)), false)
+    CC.insert_node!(ir, 1, new_inst(Expr(:call, :setfield!, SSAValue(1), 1, val)), false)
+    ir = Core.Compiler.compact!(ir)
+
+    # Always return -1.
+    ir[SSAValue(3)][:inst] = ReturnNode(-1)
+
+    # Tidy up the IR and return.
+    Core.Compiler.verify_ir(ir)
+    return Core.OpaqueClosure(ir, ret_slot; do_compile=true)
+end
+
+# function build_coinstructions(ir_inst::ReturnNode, in_f, in_f_rrule!!, n, is_blk_end)
+#     function __barrier(return_slot::A, slot_to_return::B) where {A, B}
+#         # Construct operation to run the forwards-pass.
+#         run_fwds_pass = @opaque function (a::Int, b::Int)
+#             return_slot[] = extract_codual(slot_to_return)
+#             return -1
+#         end
+#         if !(run_fwds_pass isa FwdsIFInstruction)
+#             run_fwds_pass(5, 4)
+#             display(CC.code_typed_opaque_closure(run_fwds_pass)[1][1])
+#             println()
+#         end
+
+#         # Construct operation to run the reverse-pass.
+#         run_rvs_pass = if slot_to_return isa SlotRef
+#             @opaque  function (j::Int)
+#                 setfield!(slot_to_return, :x, getfield(return_slot, :x))
+#                 return j
+#             end
+#         else
+#             @opaque (j::Int) -> j
+#         end
+#         if !(run_rvs_pass isa BwdsIFInstruction)
+#             run_rvs_pass(4)
+#             display(CC.code_typed_opaque_closure(run_fwds_pass)[1][1])
+#             println()
+#         end
+#         return run_fwds_pass, run_rvs_pass
+#     end
+#     return __barrier(in_f_rrule!!.return_slot, _get_input(ir_inst.val, in_f_rrule!!))
+# end
 
 #
 # GotoNode
 #
 
-struct GotoInst
-    n::Int
-end
-
-(inst::GotoInst)(::Int) = inst.n
-
 preprocess_ir(st::GotoNode, _) = st
 
-build_instruction(ir_inst::GotoNode, _, _, _, _) = GotoInst(ir_inst.label)
-
-function build_coinstructions(ir_inst::GotoNode, in_f, in_f_rrule!!, n, is_blk_end)
-    dest = ir_inst.label
-    run_fwds_pass::FwdsIFInstruction = @opaque (a::Int, b::Int) -> dest
-    run_rvs_pass::BwdsIFInstruction = @opaque (j::Int) -> j
-    return run_fwds_pass, run_rvs_pass
-end
-
-#
-# GotoIfNot
-#
-
-struct GotoIfNotInst{Tcond}
-    cond::Tcond
-    next_blk::Int
-    dest::Int
-    node::GotoIfNot
-    line::Int
-end
-
-(inst::GotoIfNotInst)(::Int) = extract_arg(inst.cond) ? inst.next_blk : inst.dest
-
-preprocess_ir(st::GotoIfNot, in_f) = GotoIfNot(preprocess_ir(st.cond, in_f), st.dest)
-
-function build_instruction(ir_inst::GotoIfNot, in_f, n, b, _)
-    return GotoIfNotInst(_get_input(ir_inst.cond, in_f), b + 1, ir_inst.dest, ir_inst, n)
-end
-
-function build_coinstructions(ir_inst::GotoIfNot, in_f, in_f_rrule!!, n, is_blk_end)
-    cond_slot = _get_input(ir_inst.cond, in_f_rrule!!)
-    dest = ir_inst.dest
-    run_fwds_pass::FwdsIFInstruction = @opaque function (a::Int, current_block::Int)
-        return primal(extract_codual(cond_slot)) ? current_block + 1 : dest
-    end
-    run_rvs_pass::BwdsIFInstruction = @opaque (j::Int) -> j
-    return run_fwds_pass, run_rvs_pass
-end
-
-#
-# PhiNode
-#
-
-# We can always safely assume that all `values` elements are SlotRefs.
-struct PhiNodeInst{Tedges<:Tuple, Tvalues<:Tuple, Tval_slot<:AbstractSlot}
-    edges::Tedges
-    values::Tvalues
-    val_slot::Tval_slot
-    next_blk::Int
-    node::PhiNode
-    line::Int
-end
-
-_isassigned(x::AbstractSlot) = isassigned(x)
-_isassigned(x) = true
-
-function (inst::PhiNodeInst)(prev_blk::Int)
-    for n in eachindex(inst.edges)
-        if inst.edges[n] == prev_blk && _isassigned(inst.values[n])
-            new_val = extract_arg(inst.values[n])
-            if new_val isa eltype(inst.val_slot)
-                inst.val_slot[] = new_val
-            end
-        end
-    end
-    return inst.next_blk
-end
-
-function preprocess_ir(st::PhiNode, in_f)
-    new_vals = Vector{Any}(undef, length(st.values))
-    for n in eachindex(new_vals)
-        if isassigned(st.values, n)
-            new_vals[n] = preprocess_ir(st.values[n], in_f)
-        end
-    end
-    return PhiNode(st.edges, new_vals)
-end
-
-struct UndefinedReference end
-
-create_slot(x) = SlotRef(x)
-create_slot(x::Union{Literal, TypedGlobalRef, AbstractSlot}) = x
-
-function build_instruction(ir_inst::PhiNode, in_f, n::Int, b::Int, is_blk_end::Bool)
-    edges = map(Int, (ir_inst.edges..., ))
-    values_vec_init = map(eachindex(ir_inst.values)) do j
-        if isassigned(ir_inst.values, j)
-            return _get_input(ir_inst.values[j], in_f)
-        else
-            return UndefinedReference()
-        end
-    end
-    T = eltype(values_vec_init)
-    values_vec = map(eachindex(values_vec_init)) do n
-        x = values_vec_init[n]
-        return x isa UndefinedReference ? SlotRef{T}() : create_slot(x)
-    end
-    values = (values_vec..., )
-    val_slot = in_f.slots[n]
-    next_blk = _standard_next_block(is_blk_end, b)
-    return PhiNodeInst(edges, values, val_slot, next_blk, ir_inst, n)
-end
-
-function build_coinstructions(ir_inst::PhiNode, _, in_f_rrule!!, n, is_blk_end)
-
-    # Extract relevant values.
-    edges = map(Int, (ir_inst.edges..., ))
-    values_vec = map(eachindex(ir_inst.values)) do j
-        if isassigned(ir_inst.values, j)
-            return _get_input(ir_inst.values[j], in_f_rrule!!)
-        else
-            return UndefinedReference()
-        end
-    end
-    values = map(x -> x isa SlotRef ? x : SlotRef(zero_codual(x)), (values_vec..., ))
-    val_slot = in_f_rrule!!.slots[n]
-
-    # Create a value slot stack.
-    value_slot_stack = Vector{eltype(val_slot)}(undef, 0)
-    prev_block_stack = Vector{Int}(undef, 0)
-
-    # Construct operation to run the forwards-pass.
-    run_fwds_pass::FwdsIFInstruction = @opaque function (prev_blk::Int, current_blk::Int)
-        push!(prev_block_stack, prev_blk)
-        for n in eachindex(edges)
-            if edges[n] == prev_blk
-                if isassigned(val_slot)
-                    push!(value_slot_stack, val_slot[])
-                end
-                val_slot[] = extract_arg(values[n])
-            end
-        end
-        return is_blk_end ? current_blk + 1 : 0
-    end
-
-    # Construct operation to run the reverse-pass.
-    run_rvs_pass::BwdsIFInstruction = @opaque function (j::Int)
-        prev_block = pop!(prev_block_stack)
-        for n in eachindex(edges)
-            if edges[n] == prev_block
-                replace_tangent!(
-                    values[n], increment!!(tangent(values[n][]), tangent(val_slot[])),
-                )
-                if !isempty(value_slot_stack)
-                    val_slot[] = pop!(value_slot_stack)
-                end
-            end
-        end
-        return j
-    end
-
-    return run_fwds_pass, run_rvs_pass
-end
-
-#
-# PiNode
-#
-
-struct PiNodeInst{Tinput_ref<:AbstractSlot, Tval_ref<:AbstractSlot}
-    input_ref::Tinput_ref
-    val_ref::Tval_ref
-    next_blk::Int
-end
-
-function (inst::PiNodeInst)(::Int)
-    inst.val_ref[] = inst.input_ref[]
-    return inst.next_blk
-end
-
-preprocess_ir(st::PiNode, in_f) = PiNode(preprocess_ir(st.val, in_f), st.typ)
-
-function build_instruction(ir_inst::PiNode, in_f, n, b, is_blk_end)
-    next_blk = _standard_next_block(is_blk_end, b)
-    return PiNodeInst(_get_input(ir_inst.val, in_f), in_f.slots[n], next_blk)
-end
-
-function build_coinstructions(ir_inst::PiNode, _, in_f_rrule!!, n::Int, is_blk_end::Bool)
-    input_ref = _get_input(ir_inst.val, in_f_rrule!!)
-    val_ref = in_f_rrule!!.slots[n]
-    run_fwds_pass::FwdsIFInstruction = @opaque function(::Int, current_blk::Int)
-        val_ref[] = input_ref[]
-        return is_blk_end ? current_blk + 1 : 0
-    end
-    run_rvs_pass::BwdsIFInstruction = @opaque function(j::Int)
-        input_ref[] = val_ref[]
-        return j
-    end
-    return run_fwds_pass, run_rvs_pass
-end
-
-#
-# LiteralInst
-#
-
-struct LiteralInst{T, Tval_ref<:AbstractSlot}
-    val::Literal{T}
-    val_ref::Tval_ref
-    next_blk::Int
-end
-
-preprocess_ir(x::Literal, _) = x
-
-is_literal(::Union{Bool, Float16, Float32, Float64, Int, Nothing, DataType, Symbol}) = true
-is_literal(::Union{Val, UInt64, Char, UInt8, UInt16, UInt32, Function, Tuple, Type}) = true
-is_literal(::Union{UnionAll, Int8, Int16, Int32, Int128, UInt64, UInt128}) = true
-is_literal(_) = false
-
-function (inst::LiteralInst)(::Int)
-    inst.val_ref[] = inst.val[]
-    return inst.next_blk
-end
-
-function build_instruction(val::Literal, in_f, n, b, is_blk_end)
-    return LiteralInst(val, in_f.slots[n], _standard_next_block(is_blk_end, b))
-end
-
-function build_coinstructions(val::Literal, _, in_f_rrule!!, n, is_blk_end)
-    function __barrier(val, val_ref, is_blk_end)
-        run_fwds_pass::FwdsIFInstruction = @opaque function(a::Int, current_block::Int)
-            val_ref[] = zero_codual(val.x)
-            return is_blk_end ? current_block + 1 : 0
-        end
-        run_rvs_pass::BwdsIFInstruction = @opaque (j::Int) -> j
-        return run_fwds_pass, run_rvs_pass
-    end
-    return __barrier(val, in_f_rrule!!.slots[n], is_blk_end)
-end
-
-#
-# GlobalRef
-#
-
-struct GlobalRefInst{Tc, Tval_ref<:AbstractSlot}
-    c::Tc
-    val_ref::Tval_ref
-    next_blk::Int
-end
-
-function (inst::GlobalRefInst)(::Int)
-    inst.val_ref[] = inst.c
-    return inst.next_blk
-end
-
-preprocess_ir(st::GlobalRef, _) = TypedGlobalRef(st)
-
-function build_instruction(node::TypedGlobalRef, in_f, n::Int, b::Int, is_blk_end::Bool)
-    return GlobalRefInst(node[], in_f.slots[n], _standard_next_block(is_blk_end, b))
-end
-
-function build_coinstructions(node::TypedGlobalRef, _, in_f_rrule!!, n, is_blk_end)
-    function __barrier(c::A, val_ref::B) where {A, B}
-        run_fwds_pass = @opaque function (a::Int, current_blk::Int)
-            val_ref[] = c
-            return is_blk_end ? current_blk + 1 : 0
-        end
-        run_rvs_pass = @opaque (j::Int) -> j
-        return run_fwds_pass, run_rvs_pass
-    end
-    return __barrier(uninit_codual(node[]), in_f_rrule!!.slots[n])
-end
-
-#
-# Expr -- this is a big one
-#
-
-struct CallInst{Targs<:NTuple{N, SlotRefOrLiteral} where {N}, T, Tval_ref<:AbstractSlot}
-    args::Targs
-    evaluator::T
-    val_ref::Tval_ref
-    next_blk::Int
-    ir::Expr
-    line::Int
-end
-
-function (inst::CallInst{sig, T})(::Int) where {sig, T}
-    inst.val_ref[] = inst.evaluator(map(extract_arg, inst.args)...)
-    return inst.next_blk
-end
-
-function replace_tangent!(x::SlotRef{<:CoDual{Tx, Tdx}}, new_tangent::Tdx) where {Tx, Tdx}
-    x_val = x[]
-    x[] = CoDual(primal(x_val), new_tangent)
-    return nothing
-end
-
-function replace_tangent!(x::SlotRef{<:CoDual}, new_tangent)
-    x_val = x[]
-    x[] = CoDual(primal(x_val), new_tangent)
-    return nothing
-end
-
-# Handles the case where `x` is a constant, rather than a slot.
-replace_tangent!(x, new_tangent) = nothing
-
-struct SkippedExpressionInst
-    s::Symbol
-end
-
-(::SkippedExpressionInst)(::Int) = 0
-
-struct ThrowUndefIfNot{Tval}
-    sym::Symbol
-    val::Tval
-    next_blk::Int
-end
-
-function (inst::ThrowUndefIfNot)(::Int)
-    if !_isassigned(inst.val)
-        throw(error("Boooo, not assigned"))
-    end
-    return inst.next_blk
-end
-
-_extract(x::Symbol) = x
-_extract(x::QuoteNode) = x.value
-
-function _preprocess_expr_arg(ex::Expr, sptypes)
-    if Meta.isexpr(ex, :boundscheck)
-        return Literal(true)
-    elseif Meta.isexpr(ex, :static_parameter)
-        ex = sptypes[ex.args[1]]
-        if ex isa CC.VarState
-            ex = ex.typ
-        end
-    else
-        return ex
-    end
-end
-
-_lift_intrinsic(x) = x
-_lift_instrinsic(x::Core.IntrinsicFunction) = IntrinsicsWrappers.translate(Val(x))
-
-_preprocess_expr_arg(ex::Union{Argument, SSAValue, CC.MethodInstance}, _) = ex
-_preprocess_expr_arg(ex::QuoteNode, _) = Literal(_lift_intrinsic(ex.value))
-
-function _preprocess_expr_arg(ex::GlobalRef, _)
-    if _get_globalref(ex) isa Core.IntrinsicFunction
-        return Literal(_lift_intrinsic(_get_globalref(ex)))
-    else
-        return TypedGlobalRef(ex)
-    end
-end
-
-function _preprocess_expr_arg(ex, _)
-    is_literal(ex) && return Literal(ex)
-    throw(error("$ex of type $(Core.Typeof(ex)) is not a known component of Julia SSAIR"))
-end
-
-function preprocess_ir(ex::Expr, in_f)
-    ex = CC.copy(ex)
-    sptypes = in_f.sptypes
-    spnames = in_f.spnames
-    if Meta.isexpr(ex, :boundscheck)
-        return Literal(true)
-    elseif Meta.isexpr(ex, :foreigncall)
-        args = ex.args
-        name = extract_foreigncall_name(args[1])
-        sparams_dict = Dict(zip(spnames, sptypes))
-        RT = Val(interpolate_sparams(args[2], sparams_dict))
-        AT = (map(x -> Val(interpolate_sparams(x, sparams_dict)), args[3])..., )
-        nreq = Val(args[4])
-        calling_convention = Val(_extract(args[5]))
-        x = args[6:end]
-        ex.head = :call
-        f = GlobalRef(Taped, :_foreigncall_)
-        ex.args = Any[f, name, RT, AT, nreq, calling_convention, x...]
-        ex.args = map(Base.Fix2(_preprocess_expr_arg, sptypes), ex.args)
-        return ex
-    elseif Meta.isexpr(ex, :new)
-        ex.head = :call
-        ex.args = map(Base.Fix2(_preprocess_expr_arg, sptypes), [_new_, ex.args...])
-        return ex
-    else
-        ex.args = map(Base.Fix2(_preprocess_expr_arg, sptypes), ex.args)
-        return ex
-    end
-end
-
-@inline _eval(f::F, args::Vararg{Any, N}) where {F, N} = f(args...)
-
-function build_instruction(ir_inst::Expr, in_f, n::Int, b::Int, is_blk_end::Bool)
-    next_blk = _standard_next_block(is_blk_end, b)
-    if Meta.isexpr(ir_inst, :invoke) || Meta.isexpr(ir_inst, :call)
-
-        # Extract args refs.
-        __args = Meta.isexpr(ir_inst, :invoke) ? ir_inst.args[2:end] : ir_inst.args
-        arg_refs = map(arg -> _get_input(arg, in_f), (__args..., ))
-
-        ctx = in_f.ctx
-        sig = Tuple{map(eltype, arg_refs)...}
-        evaluator = if is_primitive(ctx, sig)
-            _eval
-        else
-            if all(Base.isconcretetype, sig.parameters)
-                InterpretedFunction(ctx, sig; interp=in_f.interp)
-            else
-                DelayedInterpretedFunction{sig, Core.Typeof(ctx)}(ctx, in_f.interp)
-            end
-        end
-        return CallInst(arg_refs, evaluator, in_f.slots[n], next_blk, ir_inst, n)
-    elseif Meta.isexpr(ir_inst, :throw_undef_if_not)
-        val = _get_input(ir_inst.args[2], in_f)
-        return ThrowUndefIfNot(ir_inst.args[1][], val, next_blk)
-    elseif ir_inst.head in [
-        :code_coverage_effect, :gc_preserve_begin, :gc_preserve_end, :loopinfo, :leave,
-        :pop_exception,
-    ]
-        return SkippedExpressionInst(ir_inst.head)
-    else
-        throw(error("Unrecognised expression $ir_inst"))
-    end
-end
-
-const OC = Core.OpaqueClosure
-
-function build_coinstructions(ir_inst::Expr, in_f, in_f_rrule!!, n, is_blk_end)
-    is_invoke = Meta.isexpr(ir_inst, :invoke)
-    if is_invoke || Meta.isexpr(ir_inst, :call)
-
-        # Extract args refs.
-        __args = is_invoke ? ir_inst.args[3:end] : ir_inst.args[2:end]
-        codual_arg_refs = map(arg -> _get_input(arg, in_f_rrule!!), (__args..., ))
-
-        # Extract val ref.
-        codual_val_ref = in_f_rrule!!.slots[n]
-
-        # Extract function.
-        fn = is_invoke ? ir_inst.args[2] : ir_inst.args[1]
-        if fn isa Core.SSAValue || fn isa Core.Argument
-            fn = primal(_get_input(fn, in_f_rrule!!)[])
-        end
-        if fn isa GlobalRef
-            fn = getglobal(fn.mod, fn.name)
-        end
-        if fn isa Core.IntrinsicFunction
-            fn = IntrinsicsWrappers.translate(Val(fn))
-        end
-
-        fn_sig = Tuple{map(eltype ∘ primal ∘ extract_codual, codual_arg_refs)...}
-        __rrule!! = rrule!!
-        if !is_primitive(in_f.ctx, fn_sig)
-            if all(Base.isconcretetype, fn_sig.parameters)
-                fn = InterpretedFunction(in_f.ctx, fn_sig; interp=in_f.interp)
-                __rrule!! = build_rrule!!(fn)
-            else
-                fn = DelayedInterpretedFunction{Core.Typeof(in_f.ctx), Core.Typeof(fn)}(
-                    in_f.ctx, fn, in_f.interp
-                )
-            end
-        end
-
-        # Wrap f to make it rrule!!-friendly.
-        fn = uninit_codual(fn)
-
-        # Create stacks for storing intermediates.
-        codual_sig = Tuple{map(eltype ∘ extract_codual, codual_arg_refs)...}
-        output = Base.return_types(__rrule!!, codual_sig)
-        if length(output) == 0
-            throw(error("No return type inferred for __rrule!! with sig $codual_sig"))
-        elseif length(output) > 1
-            @warn "Too many output types inferred"
-            display(output)
-            println()
-            throw(error("> 1 return type inferred for __rrule!! with sig $codual_sig "))
-        end
-        T_pb!! = only(output)
-        if T_pb!! <: Tuple && T_pb!! !== Union{}
-            pb_stack = Vector{T_pb!!.parameters[2]}(undef, 0)
-        else
-            pb_stack = Vector{Any}(undef, 0)
-        end
-        sizehint!(pb_stack, 100)
-        old_vals = Vector{eltype(codual_val_ref)}(undef, 0)
-        sizehint!(old_vals, 100)
-
-        # Wrap any types in a data structure which prevents the introduction of type-
-        # instabilities.
-        lift(T::DataType) = TypeWrapper{T}()
-        lift(x) = x
-        codual_arg_refs = map(lift, codual_arg_refs)
-
-        function __barrier(
-            fn, codual_val_ref, __rrule!!, old_vals, pb_stack, is_blk_end, codual_arg_refs,
-        )
-
-            function ___fwds_pass(current_blk)
-                if isassigned(codual_val_ref)
-                    push!(old_vals, codual_val_ref[])
-                end
-                out, pb!! = __rrule!!(fn, map(extract_codual, codual_arg_refs)...)
-                codual_val_ref[] = out
-                push!(pb_stack, pb!!)
-                return is_blk_end ? current_blk + 1 : 0
-            end
-
-            # Construct operation to run the forwards-pass.
-            run_fwds_pass = @opaque function (a::Int, current_blk::Int)
-                ___fwds_pass(current_blk)
-            end
-            if !(run_fwds_pass isa FwdsIFInstruction)
-                @warn "Unable to compiled forwards pass -- running to generate the error."
-                @show run_fwds_pass(5, 4)
-            end
-
-            # Construct operation to run the reverse-pass.
-            run_rvs_pass = @opaque function (j::Int)
-                dout = tangent(codual_val_ref[])
-                dargs = map(tangent, map(extract_codual, codual_arg_refs))
-                _, new_dargs... = pop!(pb_stack)(dout, tangent(fn), dargs...)
-                map(replace_tangent!, codual_arg_refs, new_dargs)
-                if !isempty(old_vals)
-                    codual_val_ref[] = pop!(old_vals) # restore old state.
-                end
-                return j
-            end
-            if !(run_rvs_pass isa BwdsIFInstruction)
-                @warn "Unable to compiled reverse pass -- running to generate the error."
-                @show run_reverse_pass(5)
-            end
-
-            return run_fwds_pass, run_rvs_pass
-        end
-        return __barrier(
-            fn, codual_val_ref, __rrule!!, old_vals, pb_stack, is_blk_end, codual_arg_refs
-        )
-    elseif ir_inst isa Expr && ir_inst.head in [
-        :code_coverage_effect, :gc_preserve_begin, :gc_preserve_end, :loopinfo,
-        :leave, :pop_exception,
-    ]
-        run_fwds_pass = @opaque (a::Int, b::Int) -> 0
-        run_rvs_pass = @opaque (j::Int) -> j
-        return run_fwds_pass, run_rvs_pass
-    else
-        throw(error("Unrecognised expression $ir_inst"))
-    end
-end
+build_instruction(inst::GotoNode, _, _, _, _) = build_instruction(GotoNode, inst.label)
+
+build_instruction(::Type{GotoNode}, label::Int) = @opaque (p::Int) -> label
+
+# function build_coinstructions(ir_inst::GotoNode, in_f, in_f_rrule!!, n, is_blk_end)
+#     dest = ir_inst.label
+#     run_fwds_pass::FwdsIFInstruction = @opaque (a::Int, b::Int) -> dest
+#     run_rvs_pass::BwdsIFInstruction = @opaque (j::Int) -> j
+#     return run_fwds_pass, run_rvs_pass
+# end
+
+# #
+# # GotoIfNot
+# #
+
+# struct GotoIfNotInst{Tcond}
+#     cond::Tcond
+#     next_blk::Int
+#     dest::Int
+#     node::GotoIfNot
+#     line::Int
+# end
+
+# (inst::GotoIfNotInst)(::Int) = extract_arg(inst.cond) ? inst.next_blk : inst.dest
+
+# preprocess_ir(st::GotoIfNot, in_f) = GotoIfNot(preprocess_ir(st.cond, in_f), st.dest)
+
+# function build_instruction(ir_inst::GotoIfNot, in_f, n, b, _)
+#     return GotoIfNotInst(_get_input(ir_inst.cond, in_f), b + 1, ir_inst.dest, ir_inst, n)
+# end
+
+# function build_coinstructions(ir_inst::GotoIfNot, in_f, in_f_rrule!!, n, is_blk_end)
+#     cond_slot = _get_input(ir_inst.cond, in_f_rrule!!)
+#     dest = ir_inst.dest
+#     run_fwds_pass::FwdsIFInstruction = @opaque function (a::Int, current_block::Int)
+#         return primal(extract_codual(cond_slot)) ? current_block + 1 : dest
+#     end
+#     run_rvs_pass::BwdsIFInstruction = @opaque (j::Int) -> j
+#     return run_fwds_pass, run_rvs_pass
+# end
+
+# #
+# # PhiNode
+# #
+
+# # We can always safely assume that all `values` elements are SlotRefs.
+# struct PhiNodeInst{Tedges<:Tuple, Tvalues<:Tuple, Tval_slot<:AbstractSlot}
+#     edges::Tedges
+#     values::Tvalues
+#     val_slot::Tval_slot
+#     next_blk::Int
+#     node::PhiNode
+#     line::Int
+# end
+
+# _isassigned(x::AbstractSlot) = isassigned(x)
+# _isassigned(x) = true
+
+# function (inst::PhiNodeInst)(prev_blk::Int)
+#     for n in eachindex(inst.edges)
+#         if inst.edges[n] == prev_blk && _isassigned(inst.values[n])
+#             new_val = extract_arg(inst.values[n])
+#             if new_val isa eltype(inst.val_slot)
+#                 inst.val_slot[] = new_val
+#             end
+#         end
+#     end
+#     return inst.next_blk
+# end
+
+# function preprocess_ir(st::PhiNode, in_f)
+#     new_vals = Vector{Any}(undef, length(st.values))
+#     for n in eachindex(new_vals)
+#         if isassigned(st.values, n)
+#             new_vals[n] = preprocess_ir(st.values[n], in_f)
+#         end
+#     end
+#     return PhiNode(st.edges, new_vals)
+# end
+
+# struct UndefinedReference end
+
+# create_slot(x) = SlotRef(x)
+# create_slot(x::Union{Literal, TypedGlobalRef, AbstractSlot}) = x
+
+# function build_instruction(ir_inst::PhiNode, in_f, n::Int, b::Int, is_blk_end::Bool)
+#     edges = map(Int, (ir_inst.edges..., ))
+#     values_vec_init = map(eachindex(ir_inst.values)) do j
+#         if isassigned(ir_inst.values, j)
+#             return _get_input(ir_inst.values[j], in_f)
+#         else
+#             return UndefinedReference()
+#         end
+#     end
+#     T = eltype(values_vec_init)
+#     values_vec = map(eachindex(values_vec_init)) do n
+#         x = values_vec_init[n]
+#         return x isa UndefinedReference ? SlotRef{T}() : create_slot(x)
+#     end
+#     values = (values_vec..., )
+#     val_slot = in_f.slots[n]
+#     next_blk = _standard_next_block(is_blk_end, b)
+#     return PhiNodeInst(edges, values, val_slot, next_blk, ir_inst, n)
+# end
+
+# function build_coinstructions(ir_inst::PhiNode, _, in_f_rrule!!, n, is_blk_end)
+
+#     # Extract relevant values.
+#     edges = map(Int, (ir_inst.edges..., ))
+#     values_vec = map(eachindex(ir_inst.values)) do j
+#         if isassigned(ir_inst.values, j)
+#             return _get_input(ir_inst.values[j], in_f_rrule!!)
+#         else
+#             return UndefinedReference()
+#         end
+#     end
+#     values = map(x -> x isa SlotRef ? x : SlotRef(zero_codual(x)), (values_vec..., ))
+#     val_slot = in_f_rrule!!.slots[n]
+
+#     # Create a value slot stack.
+#     value_slot_stack = Vector{eltype(val_slot)}(undef, 0)
+#     prev_block_stack = Vector{Int}(undef, 0)
+
+#     # Construct operation to run the forwards-pass.
+#     run_fwds_pass::FwdsIFInstruction = @opaque function (prev_blk::Int, current_blk::Int)
+#         push!(prev_block_stack, prev_blk)
+#         for n in eachindex(edges)
+#             if edges[n] == prev_blk
+#                 if isassigned(val_slot)
+#                     push!(value_slot_stack, val_slot[])
+#                 end
+#                 val_slot[] = extract_arg(values[n])
+#             end
+#         end
+#         return is_blk_end ? current_blk + 1 : 0
+#     end
+
+#     # Construct operation to run the reverse-pass.
+#     run_rvs_pass::BwdsIFInstruction = @opaque function (j::Int)
+#         prev_block = pop!(prev_block_stack)
+#         for n in eachindex(edges)
+#             if edges[n] == prev_block
+#                 replace_tangent!(
+#                     values[n], increment!!(tangent(values[n][]), tangent(val_slot[])),
+#                 )
+#                 if !isempty(value_slot_stack)
+#                     val_slot[] = pop!(value_slot_stack)
+#                 end
+#             end
+#         end
+#         return j
+#     end
+
+#     return run_fwds_pass, run_rvs_pass
+# end
+
+# #
+# # PiNode
+# #
+
+# struct PiNodeInst{Tinput_ref<:AbstractSlot, Tval_ref<:AbstractSlot}
+#     input_ref::Tinput_ref
+#     val_ref::Tval_ref
+#     next_blk::Int
+# end
+
+# function (inst::PiNodeInst)(::Int)
+#     inst.val_ref[] = inst.input_ref[]
+#     return inst.next_blk
+# end
+
+# preprocess_ir(st::PiNode, in_f) = PiNode(preprocess_ir(st.val, in_f), st.typ)
+
+# function build_instruction(ir_inst::PiNode, in_f, n, b, is_blk_end)
+#     next_blk = _standard_next_block(is_blk_end, b)
+#     return PiNodeInst(_get_input(ir_inst.val, in_f), in_f.slots[n], next_blk)
+# end
+
+# function build_coinstructions(ir_inst::PiNode, _, in_f_rrule!!, n::Int, is_blk_end::Bool)
+#     input_ref = _get_input(ir_inst.val, in_f_rrule!!)
+#     val_ref = in_f_rrule!!.slots[n]
+#     run_fwds_pass::FwdsIFInstruction = @opaque function(::Int, current_blk::Int)
+#         val_ref[] = input_ref[]
+#         return is_blk_end ? current_blk + 1 : 0
+#     end
+#     run_rvs_pass::BwdsIFInstruction = @opaque function(j::Int)
+#         input_ref[] = val_ref[]
+#         return j
+#     end
+#     return run_fwds_pass, run_rvs_pass
+# end
+
+# #
+# # LiteralInst
+# #
+
+# struct LiteralInst{T, Tval_ref<:AbstractSlot}
+#     val::Literal{T}
+#     val_ref::Tval_ref
+#     next_blk::Int
+# end
+
+# preprocess_ir(x::Literal, _) = x
+
+# is_literal(::Union{Bool, Float16, Float32, Float64, Int, Nothing, DataType, Symbol}) = true
+# is_literal(::Union{Val, UInt64, Char, UInt8, UInt16, UInt32, Function, Tuple, Type}) = true
+# is_literal(::Union{UnionAll, Int8, Int16, Int32, Int128, UInt64, UInt128}) = true
+# is_literal(_) = false
+
+# function (inst::LiteralInst)(::Int)
+#     inst.val_ref[] = inst.val[]
+#     return inst.next_blk
+# end
+
+# function build_instruction(val::Literal, in_f, n, b, is_blk_end)
+#     return LiteralInst(val, in_f.slots[n], _standard_next_block(is_blk_end, b))
+# end
+
+# function build_coinstructions(val::Literal, _, in_f_rrule!!, n, is_blk_end)
+#     function __barrier(val, val_ref, is_blk_end)
+#         run_fwds_pass::FwdsIFInstruction = @opaque function(a::Int, current_block::Int)
+#             val_ref[] = zero_codual(val.x)
+#             return is_blk_end ? current_block + 1 : 0
+#         end
+#         run_rvs_pass::BwdsIFInstruction = @opaque (j::Int) -> j
+#         return run_fwds_pass, run_rvs_pass
+#     end
+#     return __barrier(val, in_f_rrule!!.slots[n], is_blk_end)
+# end
+
+# #
+# # GlobalRef
+# #
+
+# struct GlobalRefInst{Tc, Tval_ref<:AbstractSlot}
+#     c::Tc
+#     val_ref::Tval_ref
+#     next_blk::Int
+# end
+
+# function (inst::GlobalRefInst)(::Int)
+#     inst.val_ref[] = inst.c
+#     return inst.next_blk
+# end
+
+# preprocess_ir(st::GlobalRef, _) = TypedGlobalRef(st)
+
+# function build_instruction(node::TypedGlobalRef, in_f, n::Int, b::Int, is_blk_end::Bool)
+#     return GlobalRefInst(node[], in_f.slots[n], _standard_next_block(is_blk_end, b))
+# end
+
+# function build_coinstructions(node::TypedGlobalRef, _, in_f_rrule!!, n, is_blk_end)
+#     function __barrier(c::A, val_ref::B) where {A, B}
+#         run_fwds_pass = @opaque function (a::Int, current_blk::Int)
+#             val_ref[] = c
+#             return is_blk_end ? current_blk + 1 : 0
+#         end
+#         run_rvs_pass = @opaque (j::Int) -> j
+#         return run_fwds_pass, run_rvs_pass
+#     end
+#     return __barrier(uninit_codual(node[]), in_f_rrule!!.slots[n])
+# end
+
+# #
+# # Expr -- this is a big one
+# #
+
+# struct CallInst{Targs<:NTuple{N, SlotRefOrLiteral} where {N}, T, Tval_ref<:AbstractSlot}
+#     args::Targs
+#     evaluator::T
+#     val_ref::Tval_ref
+#     next_blk::Int
+#     ir::Expr
+#     line::Int
+# end
+
+# function (inst::CallInst{sig, T})(::Int) where {sig, T}
+#     inst.val_ref[] = inst.evaluator(map(extract_arg, inst.args)...)
+#     return inst.next_blk
+# end
+
+# function replace_tangent!(x::SlotRef{<:CoDual{Tx, Tdx}}, new_tangent::Tdx) where {Tx, Tdx}
+#     x_val = x[]
+#     x[] = CoDual(primal(x_val), new_tangent)
+#     return nothing
+# end
+
+# function replace_tangent!(x::SlotRef{<:CoDual}, new_tangent)
+#     x_val = x[]
+#     x[] = CoDual(primal(x_val), new_tangent)
+#     return nothing
+# end
+
+# # Handles the case where `x` is a constant, rather than a slot.
+# replace_tangent!(x, new_tangent) = nothing
+
+# struct SkippedExpressionInst
+#     s::Symbol
+# end
+
+# (::SkippedExpressionInst)(::Int) = 0
+
+# struct ThrowUndefIfNot{Tval}
+#     sym::Symbol
+#     val::Tval
+#     next_blk::Int
+# end
+
+# function (inst::ThrowUndefIfNot)(::Int)
+#     if !_isassigned(inst.val)
+#         throw(error("Boooo, not assigned"))
+#     end
+#     return inst.next_blk
+# end
+
+# _extract(x::Symbol) = x
+# _extract(x::QuoteNode) = x.value
+
+# function _preprocess_expr_arg(ex::Expr, sptypes)
+#     if Meta.isexpr(ex, :boundscheck)
+#         return Literal(true)
+#     elseif Meta.isexpr(ex, :static_parameter)
+#         ex = sptypes[ex.args[1]]
+#         if ex isa CC.VarState
+#             ex = ex.typ
+#         end
+#     else
+#         return ex
+#     end
+# end
+
+# _lift_intrinsic(x) = x
+# _lift_instrinsic(x::Core.IntrinsicFunction) = IntrinsicsWrappers.translate(Val(x))
+
+# _preprocess_expr_arg(ex::Union{Argument, SSAValue, CC.MethodInstance}, _) = ex
+# _preprocess_expr_arg(ex::QuoteNode, _) = Literal(_lift_intrinsic(ex.value))
+
+_get_globalref(x::GlobalRef) = getglobal(x.mod, x.name)
+
+# function _preprocess_expr_arg(ex::GlobalRef, _)
+#     if _get_globalref(ex) isa Core.IntrinsicFunction
+#         return Literal(_lift_intrinsic(_get_globalref(ex)))
+#     else
+#         return TypedGlobalRef(ex)
+#     end
+# end
+
+# function _preprocess_expr_arg(ex, _)
+#     is_literal(ex) && return Literal(ex)
+#     throw(error("$ex of type $(Core.Typeof(ex)) is not a known component of Julia SSAIR"))
+# end
+
+# function preprocess_ir(ex::Expr, in_f)
+#     ex = CC.copy(ex)
+#     sptypes = in_f.sptypes
+#     spnames = in_f.spnames
+#     if Meta.isexpr(ex, :boundscheck)
+#         return Literal(true)
+#     elseif Meta.isexpr(ex, :foreigncall)
+#         args = ex.args
+#         name = extract_foreigncall_name(args[1])
+#         sparams_dict = Dict(zip(spnames, sptypes))
+#         RT = Val(interpolate_sparams(args[2], sparams_dict))
+#         AT = (map(x -> Val(interpolate_sparams(x, sparams_dict)), args[3])..., )
+#         nreq = Val(args[4])
+#         calling_convention = Val(_extract(args[5]))
+#         x = args[6:end]
+#         ex.head = :call
+#         f = GlobalRef(Taped, :_foreigncall_)
+#         ex.args = Any[f, name, RT, AT, nreq, calling_convention, x...]
+#         ex.args = map(Base.Fix2(_preprocess_expr_arg, sptypes), ex.args)
+#         return ex
+#     elseif Meta.isexpr(ex, :new)
+#         ex.head = :call
+#         ex.args = map(Base.Fix2(_preprocess_expr_arg, sptypes), [_new_, ex.args...])
+#         return ex
+#     else
+#         ex.args = map(Base.Fix2(_preprocess_expr_arg, sptypes), ex.args)
+#         return ex
+#     end
+# end
+
+# @inline _eval(f::F, args::Vararg{Any, N}) where {F, N} = f(args...)
+
+# function build_instruction(ir_inst::Expr, in_f, n::Int, b::Int, is_blk_end::Bool)
+#     next_blk = _standard_next_block(is_blk_end, b)
+#     if Meta.isexpr(ir_inst, :invoke) || Meta.isexpr(ir_inst, :call)
+
+#         # Extract args refs.
+#         __args = Meta.isexpr(ir_inst, :invoke) ? ir_inst.args[2:end] : ir_inst.args
+#         arg_refs = map(arg -> _get_input(arg, in_f), (__args..., ))
+
+#         ctx = in_f.ctx
+#         sig = Tuple{map(eltype, arg_refs)...}
+#         evaluator = if is_primitive(ctx, sig)
+#             _eval
+#         else
+#             if all(Base.isconcretetype, sig.parameters)
+#                 InterpretedFunction(ctx, sig, in_f.interp)
+#             else
+#                 DelayedInterpretedFunction{sig, Core.Typeof(ctx)}(ctx, in_f.interp)
+#             end
+#         end
+#         return CallInst(arg_refs, evaluator, in_f.slots[n], next_blk, ir_inst, n)
+#     elseif Meta.isexpr(ir_inst, :throw_undef_if_not)
+#         val = _get_input(ir_inst.args[2], in_f)
+#         return ThrowUndefIfNot(ir_inst.args[1][], val, next_blk)
+#     elseif ir_inst.head in [
+#         :code_coverage_effect, :gc_preserve_begin, :gc_preserve_end, :loopinfo, :leave,
+#         :pop_exception,
+#     ]
+#         return SkippedExpressionInst(ir_inst.head)
+#     else
+#         throw(error("Unrecognised expression $ir_inst"))
+#     end
+# end
+
+# const OC = Core.OpaqueClosure
+
+# function build_coinstructions(ir_inst::Expr, in_f, in_f_rrule!!, n, is_blk_end)
+#     is_invoke = Meta.isexpr(ir_inst, :invoke)
+#     if is_invoke || Meta.isexpr(ir_inst, :call)
+
+#         # Extract args refs.
+#         __args = is_invoke ? ir_inst.args[3:end] : ir_inst.args[2:end]
+#         codual_arg_refs = map(arg -> _get_input(arg, in_f_rrule!!), (__args..., ))
+
+#         # Extract val ref.
+#         codual_val_ref = in_f_rrule!!.slots[n]
+
+#         # Extract function.
+#         fn = is_invoke ? ir_inst.args[2] : ir_inst.args[1]
+#         if fn isa Core.SSAValue || fn isa Core.Argument
+#             fn = primal(_get_input(fn, in_f_rrule!!)[])
+#         end
+#         if fn isa GlobalRef
+#             fn = getglobal(fn.mod, fn.name)
+#         end
+#         if fn isa Core.IntrinsicFunction
+#             fn = IntrinsicsWrappers.translate(Val(fn))
+#         end
+
+#         fn_sig = Tuple{map(eltype ∘ primal ∘ extract_codual, codual_arg_refs)...}
+#         __rrule!! = rrule!!
+#         if !is_primitive(in_f.ctx, fn_sig)
+#             if all(Base.isconcretetype, fn_sig.parameters)
+#                 fn = InterpretedFunction(in_f.ctx, fn_sig, in_f.interp)
+#                 __rrule!! = build_rrule!!(fn)
+#             else
+#                 fn = DelayedInterpretedFunction{Core.Typeof(in_f.ctx), Core.Typeof(fn)}(
+#                     in_f.ctx, fn, in_f.interp
+#                 )
+#             end
+#         end
+
+#         # Wrap f to make it rrule!!-friendly.
+#         fn = uninit_codual(fn)
+
+#         # Create stacks for storing intermediates.
+#         codual_sig = Tuple{map(eltype ∘ extract_codual, codual_arg_refs)...}
+#         output = Base.return_types(__rrule!!, codual_sig)
+#         if length(output) == 0
+#             throw(error("No return type inferred for __rrule!! with sig $codual_sig"))
+#         elseif length(output) > 1
+#             @warn "Too many output types inferred"
+#             display(output)
+#             println()
+#             throw(error("> 1 return type inferred for __rrule!! with sig $codual_sig "))
+#         end
+#         T_pb!! = only(output)
+#         if T_pb!! <: Tuple && T_pb!! !== Union{}
+#             pb_stack = Vector{T_pb!!.parameters[2]}(undef, 0)
+#         else
+#             pb_stack = Vector{Any}(undef, 0)
+#         end
+#         sizehint!(pb_stack, 100)
+#         old_vals = Vector{eltype(codual_val_ref)}(undef, 0)
+#         sizehint!(old_vals, 100)
+
+#         # Wrap any types in a data structure which prevents the introduction of type-
+#         # instabilities.
+#         lift(T::DataType) = TypeWrapper{T}()
+#         lift(x) = x
+#         codual_arg_refs = map(lift, codual_arg_refs)
+
+#         function __barrier(
+#             fn, codual_val_ref, __rrule!!, old_vals, pb_stack, is_blk_end, codual_arg_refs,
+#         )
+
+#             function ___fwds_pass(current_blk)
+#                 if isassigned(codual_val_ref)
+#                     push!(old_vals, codual_val_ref[])
+#                 end
+#                 out, pb!! = __rrule!!(fn, map(extract_codual, codual_arg_refs)...)
+#                 codual_val_ref[] = out
+#                 push!(pb_stack, pb!!)
+#                 return is_blk_end ? current_blk + 1 : 0
+#             end
+
+#             # Construct operation to run the forwards-pass.
+#             run_fwds_pass = @opaque function (a::Int, current_blk::Int)
+#                 ___fwds_pass(current_blk)
+#             end
+#             if !(run_fwds_pass isa FwdsIFInstruction)
+#                 @warn "Unable to compiled forwards pass -- running to generate the error."
+#                 @show run_fwds_pass(5, 4)
+#             end
+
+#             # Construct operation to run the reverse-pass.
+#             run_rvs_pass = @opaque function (j::Int)
+#                 dout = tangent(codual_val_ref[])
+#                 dargs = map(tangent, map(extract_codual, codual_arg_refs))
+#                 _, new_dargs... = pop!(pb_stack)(dout, tangent(fn), dargs...)
+#                 map(replace_tangent!, codual_arg_refs, new_dargs)
+#                 if !isempty(old_vals)
+#                     codual_val_ref[] = pop!(old_vals) # restore old state.
+#                 end
+#                 return j
+#             end
+#             if !(run_rvs_pass isa BwdsIFInstruction)
+#                 @warn "Unable to compiled reverse pass -- running to generate the error."
+#                 @show run_reverse_pass(5)
+#             end
+
+#             return run_fwds_pass, run_rvs_pass
+#         end
+#         return __barrier(
+#             fn, codual_val_ref, __rrule!!, old_vals, pb_stack, is_blk_end, codual_arg_refs
+#         )
+#     elseif ir_inst isa Expr && ir_inst.head in [
+#         :code_coverage_effect, :gc_preserve_begin, :gc_preserve_end, :loopinfo,
+#         :leave, :pop_exception,
+#     ]
+#         run_fwds_pass = @opaque (a::Int, b::Int) -> 0
+#         run_rvs_pass = @opaque (j::Int) -> j
+#         return run_fwds_pass, run_rvs_pass
+#     else
+#         throw(error("Unrecognised expression $ir_inst"))
+#     end
+# end
 
 #
 # Code execution
@@ -820,32 +808,8 @@ _get_type(x::Core.PartialStruct) = x.typ
 _get_type(x::Core.Const) = Core.Typeof(x.val)
 _get_type(T) = T
 
-_get_globalref(x::GlobalRef) = getglobal(x.mod, x.name)
-
-_deref(x::GlobalRef) = _get_globalref(x)
-_deref(::Type{T}) where {T} = T
-
-_get_input(x::Core.SSAValue, slots, _) = slots[x.id]
 _get_input(x::Core.Argument, _, arg_info) = arg_info.arg_slots[x.n]
-_get_input(x::Literal, _, _) = x
-_get_input(x::TypedGlobalRef, _, _) = x
-
-function _make_opaque_closure(inst, sig, n)
-    oc = @opaque (p::Int) -> inst(p)
-    if !(oc isa IFInstruction)
-        println("Displaying debugging info from _make_opaque_closure:")
-        println("sig of InterpretedFunction in which this is instruction $n:")
-        display(sig)
-        println()
-        println("inst:")
-        display(inst)
-        println()
-        @show oc(5)
-    end
-    return oc::IFInstruction
-end
-
-_get_arg_type(::Type{Val{T}}) where {T} = T
+_get_input(x::Core.SSAValue, slots, _) = slots[x.id]
 
 # Copied from Umlaut.jl.
 extract_foreigncall_name(x::Symbol) = Val(x)
@@ -910,7 +874,7 @@ end
 # Loading arguments into slots.
 #
 
-struct ArgInfo{Targ_slots<:NTuple{N, Union{AbstractSlot, Literal}} where {N}, is_vararg}
+struct ArgInfo{Targ_slots<:NTuple{N, Any} where {N}, is_vararg}
     arg_slots::Targ_slots
 end
 
@@ -977,29 +941,15 @@ end
 
 _get_input(x, in_f::InterpretedFunction) = _get_input(x, in_f.slots, in_f.arg_info)
 
-const __InF_TABLE = Dict{Any, InterpretedFunction}()
-
-"""
-    flush_interpreted_function_cache!()
-
-If you modify any code that you have previously run as an `InterpretedFunction`, you should
-run this function to clear the cache -- in general, use this function liberally.
-"""
-function flush_interpreted_function_cache!()
-    empty!(__InF_TABLE)
-    return nothing
-end
-
 make_slot(::Type{T}) where {T} = SlotRef{T}()
 make_slot(x::CC.Const) = ConstSlot{Core.Typeof(x.val)}(x.val)
 make_slot(x::CC.PartialStruct) = SlotRef{x.typ}()
 
-function InterpretedFunction(ctx::C, sig::Type{<:Tuple}; interp) where {C}
+function InterpretedFunction(ctx::C, sig::Type{<:Tuple}, interp) where {C}
     @nospecialize ctx sig
 
-    if sig in keys(__InF_TABLE)
-        return __InF_TABLE[sig]
-    end
+    # If we've already constructed this interpreted function, just return it.
+    sig in keys(interp.in_f_cache) && return interp.in_f_cache[sig]
 
     # Grab code associated to this function.
     output = Base.code_ircode_by_type(sig; interp)
@@ -1039,7 +989,8 @@ function InterpretedFunction(ctx::C, sig::Type{<:Tuple}; interp) where {C}
         ctx, return_slot, arg_info, slots, insts, bb_starts, bb_ends, ir, interp, spnames,
     )
 
-    __InF_TABLE[sig] = in_f
+    # Cache this InterpretedFunction so that we don't have tobuild it again.
+    interp.interpreted_function_cache[sig] = in_f
 
     return in_f
 end
@@ -1078,13 +1029,7 @@ end
 preprocess_ir(st::CC.SSAValue, _) = st
 preprocess_ir(st::CC.Argument, _) = st
 preprocess_ir(st::CC.QuoteNode, _) = Literal(st.value)
-function preprocess_ir(st, _)
-    if is_literal(st)
-        return Literal(st)
-    else
-        throw(error("$st of type $(typeof(st)) is not a known component of Julia SSAIR"))
-    end
-end
+preprocess_ir(st, _) = st
 
 function block_map(cfg::CC.CFG)
     line_to_blk_maps = map(((n, blk),) -> tuple.(blk.stmts, n), enumerate(cfg.blocks))
@@ -1119,7 +1064,7 @@ function (din_f::DelayedInterpretedFunction)(fargs...)
         f, args... = fargs
         return f(args...)
     else
-        return InterpretedFunction(din_f.ctx, sig; interp=din_f.interp)(fargs...)
+        return InterpretedFunction(din_f.ctx, sig, din_f.interp)(fargs...)
     end
 end
 
@@ -1129,7 +1074,7 @@ function rrule!!(_f::CoDual{<:DelayedInterpretedFunction{C, F}}, args::CoDual...
     if is_primitive(f.ctx, s)
         return rrule!!(zero_codual(f.f), args...)
     else
-        in_f = InterpretedFunction(f.ctx, s; interp=f.interp)
+        in_f = InterpretedFunction(f.ctx, s, f.interp)
         return build_rrule!!(in_f)(zero_codual(in_f), args...)
     end
 end

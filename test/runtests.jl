@@ -49,15 +49,8 @@ using Taped:
     build_tangent,
     preprocess_ir,
     SlotRef,
-    Literal,
-    ReturnInst,
-    GotoInst,
-    GotoIfNotInst,
-    PhiNodeInst,
-    PiNodeInst,
-    CallInst,
-    LiteralInst,
-    TypedGlobalRef
+    ConstSlot,
+    build_instruction
 
 using Taped.Umlaut: __new__, __to_tuple__
 
