@@ -788,13 +788,6 @@ function test_mutation!(x::AbstractVector{<:Real})
     return x[1]
 end
 
-function test_for_loop(x)
-    for _ in 1:5
-        x = sin(x)
-    end
-    return x
-end
-
 function test_while_loop(x)
     n = 3
     while n > 0
@@ -802,6 +795,24 @@ function test_while_loop(x)
         n -= 1
     end
     return x
+end
+
+function test_for_loop(x)
+    for _ in 1:5
+        x = sin(x)
+    end
+    return x
+end
+
+function test_multiple_phinode_block(x::Float64)
+    a = 1.0
+    b = x
+    for i in 1:2
+        temp = a
+        a = b
+        b = 2temp
+    end
+    return (a, b)
 end
 
 test_mutable_struct_basic(x) = Foo(x).x
@@ -855,6 +866,7 @@ function generate_test_functions()
         (false, (lb=1_000, ub=50_000), test_mutation!, [1.0, 2.0]),
         (false, (lb=1_000, ub=25_000), test_while_loop, 2.0),
         (false, (lb=1_000, ub=100_000), test_for_loop, 3.0),
+        (false, (lb=1_000, ub=100_000), test_multiple_phinode_block, 3.0),
         (false, (lb=1_000, ub=50_000), test_mutable_struct_basic, 5.0),
         (false, (lb=1_000, ub=20_000), test_mutable_struct_basic_sin, 5.0),
         (false, (lb=1_000, ub=100_000), test_mutable_struct_setfield, 4.0),
@@ -886,7 +898,7 @@ function generate_test_functions()
         (
             false,
             (lb=100_000, ub=100_000_000),
-            test_mlp, randn(50, 20), randn(70, 50), randn(30, 70),
+            test_mlp, randn(500, 20), randn(700, 500), randn(300, 700),
         ),
     ]
 end
@@ -929,11 +941,6 @@ function Taped.rrule!!(::Taped.CoDual{typeof(my_setfield!)}, value, name, x)
 end
 
 # Tests brought in from DiffTests.jl
-const _n = rand()
-const _x = rand(5, 5)
-const _y = rand(26)
-const _A = rand(5, 5)
-const _B = rand(5, 5)
 const _rng = Xoshiro(123456)
 
 const DIFFTESTS_FUNCTIONS = vcat(
