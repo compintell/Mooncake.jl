@@ -23,6 +23,8 @@ function rrule!!(::CoDual{<:Tforeigncall}, args...)
     ))
 end
 
+_get_arg_type(::Type{Val{T}}) where {T} = T
+
 """
     function _foreigncall_(
         ::Val{name}, ::Val{RT}, AT::Tuple, ::Val{nreq}, ::Val{calling_convention}, x...
@@ -44,8 +46,8 @@ Credit: Umlaut.jl has the original implementation of this function. This is larg
 over from there.
 """
 @generated function _foreigncall_(
-    ::Val{name}, ::Val{RT}, AT::Tuple, ::Val{nreq}, ::Val{calling_convention}, x...
-) where {name, RT, nreq, calling_convention}
+    ::Val{name}, ::Val{RT}, AT::Tuple, ::Val{nreq}, ::Val{calling_convention}, x::Vararg{Any, N}
+) where {name, RT, nreq, calling_convention, N}
     return Expr(
         :foreigncall,
         QuoteNode(name),
@@ -55,6 +57,10 @@ over from there.
         QuoteNode(calling_convention),
         map(n -> :(x[$n]), 1:length(x))...,
     )
+end
+
+@generated function _eval(::typeof(_foreigncall_), x::Vararg{Any, N}) where {N}
+    return Expr(:call, :_foreigncall_, map(n -> :(getfield(x, $n)), 1:N)...)
 end
 
 @is_primitive MinimalCtx Tuple{typeof(_foreigncall_), Vararg}
@@ -466,6 +472,12 @@ function rrule!!(::CoDual{typeof(deepcopy)}, x::CoDual)
     return deepcopy(x), deepcopy_pb!!
 end
 
+@is_primitive MinimalCtx Tuple{Type{UnionAll}, TypeVar, Any}
+@is_primitive MinimalCtx Tuple{Type{UnionAll}, TypeVar, Type}
+function rrule!!(::CoDual{<:Type{UnionAll}}, ::CoDual{<:TypeVar}, ::CoDual)
+    throw(error("This thing doesn't have an rrule yet."))
+end
+
 function unexepcted_foreigncall_error(name)
     throw(error(
         "AD has hit a :($name) ccall. This should not happen. " *
@@ -483,8 +495,13 @@ for name in [
     :(:jl_array_grow_end), :(:jl_array_del_end), :(:jl_array_copy), :(:jl_object_id),
     :(:jl_type_intersection), :(:memset), :(:jl_get_tls_world_age), :(:memmove),
     :(:jl_array_sizehint), :(:jl_array_del_at), :(:jl_array_grow_at), :(:jl_array_del_beg),
-    :(:jl_array_grow_beg), :(:jl_value_ptr),
+    :(:jl_array_grow_beg), :(:jl_value_ptr), :(:jl_type_unionall),
 ]
+    @eval function _foreigncall_(
+        ::Val{$name}, ::Val{RT}, AT::Tuple, ::Val{nreq}, ::Val{calling_convention}, x...,
+    ) where {RT, nreq, calling_convention}
+        unexepcted_foreigncall_error($name)
+    end
     @eval function rrule!!(::CoDual{<:Tforeigncall}, ::CoDual{Val{$name}}, args...)
         unexepcted_foreigncall_error($name)
     end
@@ -560,6 +577,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:foreigncall})
         (false, :none, nothing, deepcopy, TestResources.StructFoo(5.0, randn(5))),
         (false, :stability, nothing, deepcopy, (5.0, randn(5))),
         (false, :stability, nothing, deepcopy, (a=5.0, b=randn(5))),
+        (false, :none, nothing, UnionAll, TypeVar(:a), Real),
     ]
     memory = Any[_x, _dx, _a, _da, _b, _db]
     return test_cases, memory
