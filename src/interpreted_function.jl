@@ -160,6 +160,7 @@ function Base.setindex!(x::SlotRef, val)
 end
 Base.isassigned(x::SlotRef) = isdefined(x, :x)
 Base.eltype(::SlotRef{T}) where {T} = T
+Base.copy(x::SlotRef{T}) where {T} = isassigned(x) ? SlotRef{T}(x[]) : SlotRef{T}()
 
 """
     ConstSlot(x)
@@ -177,6 +178,7 @@ Base.getindex(x::ConstSlot) = getfield(x, :x)
 Base.setindex!(::ConstSlot, val) = nothing
 Base.isassigned(::ConstSlot) = true
 Base.eltype(::ConstSlot{T}) where {T} = T
+Base.copy(x::ConstSlot{T}) where {T} = ConstSlot{T}(x[])
 
 """
     TypedGlobalRef(x::GlobalRef)
@@ -326,46 +328,53 @@ end
 # PhiNode
 #
 
-struct TypedPhiNode{Tedges<:Tuple, Tvalues<:Tuple, Tval_slot<:AbstractSlot}
-    edges::Tedges
-    values::Tvalues
-    val_slot::Tval_slot
+struct TypedPhiNode{Tr<:AbstractSlot, Te<:Tuple, Tv<:Tuple}
+    tmp_slot::Tr
+    return_slot::Tr
+    edges::Te
+    values::Tv
 end
 
-function (node::TypedPhiNode)(prev_blk::Int)
-    map(node.edges, node.vals) do edge, val
-        (edge == prev_blk) && isassigned(val) && (val_slot[] = val[])
+function store_tmp_value!(node::TypedPhiNode, prev_blk::Int)
+    map(node.edges, node.values) do edge, val
+        (edge == prev_blk) && isassigned(val) && (node.tmp_slot[] = val[])
     end
-    return next_blk
+    return nothing
+end
+
+function transfer_tmp_value!(node::TypedPhiNode)
+    node.return_slot[] = node.tmp_slot[]
 end
 
 struct UndefRef end
 
-function build_inst(ir_inst::PhiNode, in_f, n::Int, b::Int, is_blk_end::Bool)::IFInstruction
+# Runs a collection of PhiNodes (semantically) simulataneously.
+function build_phinode_insts(
+    ir_insts::Vector{PhiNode}, in_f, n_first::Int, b::Int, is_blk_end::Bool
+)::IFInstruction
     @nospecialize in_f
-    edges = map(Int, (ir_inst.edges..., ))
-    vals = ir_inst.values
-    _init = map(eachindex(vals)) do j
-        return isassigned(vals, j) ? _get_slot(vals[j], in_f) : UndefRef()
+    nodes = map(enumerate(ir_insts)) do (j, ir_inst)
+        edges = map(Int, (ir_inst.edges..., ))
+        vals = ir_inst.values
+        _init = map(eachindex(vals)) do j
+            return isassigned(vals, j) ? _get_slot(vals[j], in_f) : UndefRef()
+        end
+        T = eltype(_init)
+        values_vec = map(n -> _init[n] isa UndefRef ? SlotRef{T}() : _init[n], eachindex(_init))
+        values = (values_vec..., )
+        return_slot = in_f.slots[n_first + j - 1]
+        tmp_slot = SlotRef{eltype(return_slot)}()
+        tmp_slot = copy(return_slot)
+        return TypedPhiNode(tmp_slot, return_slot, edges, values)
     end
-    T = eltype(_init)
-    values_vec = map(n -> _init[n] isa UndefRef ? SlotRef{T}() : _init[n], eachindex(_init))
-    val_slot = in_f.slots[n]
     next_blk = _standard_next_block(is_blk_end, b)
-    return build_inst(PhiNode, edges, (values_vec..., ), val_slot, next_blk)
+    return build_inst(Vector{PhiNode}, (nodes..., ), next_blk)
 end
 
-function build_inst(
-    ::Type{PhiNode},
-    edges::NTuple{N, Int},
-    vals::NTuple{N, AbstractSlot},
-    val_slot::AbstractSlot,
-    next_blk::Int,
-) where {N}
+function build_inst(::Type{Vector{PhiNode}}, nodes::Tuple, next_blk::Int)
     return @opaque function (prev_blk::Int)
-        map(edges, vals) do edge, val
-            (edge == prev_blk) && isassigned(val) && (val_slot[] = val[])
-        end
+        map(Base.Fix2(store_tmp_value!, prev_blk), nodes)
+        map(transfer_tmp_value!, nodes)
         return next_blk
     end
 end
@@ -611,27 +620,27 @@ function get_evaluator(ctx::T, sig, _, interp) where {T}
     end
 end
 
-# Interpolate getfield if the argument is provided. This is completely crucial for
-# performance when structs are involved.
-function get_evaluator(ctx, sig::Type{<:Tuple{typeof(getfield), D, T}}, args, _) where {D, T<:Union{Symbol, Int}}
-    if args[3] isa ConstSlot
-        return @eval @opaque function (foo::typeof(getfield), d::$D, f::$T)
-            return getfield(d, $(QuoteNode(args[3][])))
-        end
-    else
-        return _eval
-    end
-end
+# # Interpolate getfield if the argument is provided. This is completely crucial for
+# # performance when structs are involved.
+# function get_evaluator(ctx, sig::Type{<:Tuple{typeof(getfield), D, T}}, args, _) where {D, T<:Union{Symbol, Int}}
+#     if args[3] isa ConstSlot
+#         return @eval @opaque function (foo::typeof(getfield), d::$D, f::$T)
+#             return getfield(d, $(QuoteNode(args[3][])))
+#         end
+#     else
+#         return _eval
+#     end
+# end
 
-function get_evaluator(ctx, sig::Type{<:Tuple{typeof(getfield), D, T, Bool}}, args, _) where {D, T<:Union{Symbol, Int}}
-    if args[3] isa ConstSlot && args[4] isa ConstSlot
-        return @eval @opaque function (foo::typeof(getfield), d::$D, f::$T, b::Bool)
-            return getfield(d, $(args[3][]), $(args[4][]))
-        end
-    else
-        return _eval
-    end
-end
+# function get_evaluator(ctx, sig::Type{<:Tuple{typeof(getfield), D, T, Bool}}, args, _) where {D, T<:Union{Symbol, Int}}
+#     if args[3] isa ConstSlot && args[4] isa ConstSlot
+#         return @eval @opaque function (foo::typeof(getfield), d::$D, f::$T, b::Bool)
+#             return getfield(d, $(args[3][]), $(args[4][]))
+#         end
+#     else
+#         return _eval
+#     end
+# end
 
 function build_inst(::Val{:boundscheck}, val_slot::AbstractSlot, next_blk::Int)::IFInstruction
     return @opaque function (prev_blk::Int)
@@ -961,6 +970,47 @@ make_slot(x::CC.Const) = ConstSlot{Core.Typeof(x.val)}(x.val)
 make_slot(x::CC.PartialStruct) = SlotRef{x.typ}()
 make_slot(::CC.PartialTypeVar) = SlotRef{TypeVar}()
 
+# Have to be careful not to return a constant -- for some reason it causes allocations...
+make_dummy_instruction(next_blk::Int) = @opaque (p::Int) -> next_blk
+
+# Special handling is required for PhiNodes, because their semantics require that when
+# more than one PhiNode appears at the start of a basic block, they are run simulataneously
+# rather than in sequence. See the SSAIR docs for an explanation of why this is the case.
+function make_phi_instructions!(in_f::InterpretedFunction)
+    ir = in_f.ir
+    insts = in_f.instructions
+    for (b, bb) in enumerate(in_f.ir.cfg.blocks)
+
+        # Find any phi nodes at the start of the block.
+        phi_node_inds = Int[]
+        for n in bb.stmts
+            if ir.stmts.inst[n] isa PhiNode
+                push!(phi_node_inds, n)
+            end
+        end
+        isempty(phi_node_inds) && continue
+
+        # Make a single instruction which runs all of the PhiNodes "simulataneously".
+        # Specifically, this instruction runs all of the phi nodes, storing the results of
+        # this into temporary storage, then writing from the temporary slots to the
+        # final slots. This has the effect of ensuring that phi nodes that depend on other
+        # phi nodes get the "old" values, not the new updated values. This was a
+        # surprisingly hard bug to catch and resolve.
+        phi_nodes = [ir.stmts.inst[n] for n in phi_node_inds]
+        n_first = first(phi_node_inds)
+        is_blk_end = length(phi_node_inds) == length(bb.stmts)
+        insts[phi_node_inds[1]] = build_phinode_insts(
+            phi_nodes, in_f, n_first, b, is_blk_end
+        )
+
+        # Create dummy instructions for the remainder of the nodes.
+        for n in phi_node_inds[2:end]
+            insts[n] = make_dummy_instruction(_standard_next_block(is_blk_end, b))
+        end
+    end
+    return nothing
+end
+
 function InterpretedFunction(ctx::C, sig::Type{<:Tuple}, interp) where {C}
     @nospecialize ctx sig
 
@@ -1004,6 +1054,9 @@ function InterpretedFunction(ctx::C, sig::Type{<:Tuple}, interp) where {C}
     in_f = InterpretedFunction{sig, C, Treturn, Core.Typeof(arg_info)}(
         ctx, return_slot, arg_info, slots, insts, bb_starts, bb_ends, ir, interp, spnames,
     )
+
+    # Eagerly create PhiNode instructions, as this requires special handling.
+    make_phi_instructions!(in_f)
 
     # Cache this InterpretedFunction so that we don't have tobuild it again.
     interp.in_f_cache[sig] = in_f

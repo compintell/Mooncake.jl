@@ -107,6 +107,21 @@
         @test @inferred Taped.load_args!(ai, x) === nothing
     end
 
+    @testset "TypedPhiNode" begin
+        node = TypedPhiNode(
+            SlotRef{Float64}(), SlotRef{Float64}(), (1, 2), (ConstSlot(5.0), SlotRef(4.0))
+        )
+        Taped.store_tmp_value!(node, 1)
+        @test node.tmp_slot[] == 5.0
+        Taped.transfer_tmp_value!(node)
+        @test node.return_slot[] == 5.0
+        Taped.store_tmp_value!(node, 2)
+        @test node.tmp_slot[] == 4.0
+        @test node.return_slot[] == 5.0
+        Taped.transfer_tmp_value!(node)
+        @test node.return_slot[] == 4.0
+    end
+
     @testset "Unit tests for nodes and associated instructions" begin
 
         global __x_for_gref = 5.0
@@ -225,6 +240,7 @@
                     Taped.MinimalCtx(),
                     Tuple{typeof(getfield), Tuple{Float64, Int}, Int},
                     Expr(:call, ConstSlot(:getfield), SlotRef((5.0, 5)), ConstSlot(1)).args,
+                    nothing,
                 ),
                 SlotRef{Float64}(),
                 3,

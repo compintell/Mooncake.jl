@@ -50,7 +50,10 @@ using Taped:
     preprocess_ir,
     SlotRef,
     ConstSlot,
-    build_inst
+    TypedGlobalRef,
+    build_inst,
+    _lift_expr_arg,
+    TypedPhiNode
 
 using Taped.Umlaut: __new__, __to_tuple__
 
