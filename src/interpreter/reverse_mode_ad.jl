@@ -1,96 +1,79 @@
-#
-# Utility functionality used through instruction construction.
-#
+# FwdsInsts have the same signature as Insts, but have different side-effects.
+const FwdsInst = Core.OpaqueClosure{Tuple{Int}, Int}
 
-const FwdsIFInstruction = Core.OpaqueClosure{Tuple{Int}, Int}
-const BwdsIFInstruction = Core.OpaqueClosure{Tuple{Int}, Int}
+# The backwards instructions don't actually need to return an Int, however, there is
+# currently a performance bug in OpaqueClosures which means that an allocation is produced
+# if a constant is returned. Consequently, we have to return something non-constant.
+# See https://github.com/JuliaLang/julia/issues/52620 for info.
+# By convention, any backwards instruction which "does nothing" just returns its input, and
+# does no other work.
+const BwdsInst = Core.OpaqueClosure{Tuple{Int}, Int}
 
-#
-# ReturnNode
-#
+const CoDualSlot = AbstractSlot{<:CoDual}
 
-# function build_coinstructions(ir_inst::ReturnNode, in_f, in_f_rrule!!, n, is_blk_end)
-#     function __barrier(return_slot::A, slot_to_return::B) where {A, B}
-#         # Construct operation to run the forwards-pass.
-#         run_fwds_pass = @opaque function (a::Int, b::Int)
-#             return_slot[] = extract_codual(slot_to_return)
-#             return -1
-#         end
-#         if !(run_fwds_pass isa FwdsIFInstruction)
-#             run_fwds_pass(5, 4)
-#             display(CC.code_typed_opaque_closure(run_fwds_pass)[1][1])
-#             println()
-#         end
+# Operations on Slots involving CoDuals
 
-#         # Construct operation to run the reverse-pass.
-#         run_rvs_pass = if slot_to_return isa SlotRef
-#             @opaque  function (j::Int)
-#                 setfield!(slot_to_return, :x, getfield(return_slot, :x))
-#                 return j
-#             end
-#         else
-#             @opaque (j::Int) -> j
-#         end
-#         if !(run_rvs_pass isa BwdsIFInstruction)
-#             run_rvs_pass(4)
-#             display(CC.code_typed_opaque_closure(run_fwds_pass)[1][1])
-#             println()
-#         end
-#         return run_fwds_pass, run_rvs_pass
+function increment_tangent!(x::SlotRef{<:CoDual}, y::CoDualSlot)
+    x_val = x[]
+    x[] = CoDual(primal(x_val), increment!!(tangent(x_val), tangent(y[])))
+    return nothing
+end
+
+increment_tangent!(x::ConstSlot{<:CoDual}, new_tangent) = nothing
+
+## ReturnNode
+function build_coinsts(node::ReturnNode, _, _rrule!!, ::Int, ::Int, ::Bool)
+    return build_coinsts(ReturnNode, _rrule!!.return_slot, _get_slot(node.val, _rrule!!))
+end
+function build_coinsts(::Type{ReturnNode}, ret_slot::SlotRef{<:CoDual}, val::CoDualSlot)
+    fwds_inst = build_inst(ReturnNode, ret_slot, val)
+    bwds_inst = @opaque (j::Int) -> (ret_slot[] = val[]; return j)
+    return fwds_inst::FwdsInst, bwds_inst::BwdsInst
+end
+
+## GotoNode
+build_coinsts(x::GotoNode, in_f, _, ::Int, ::Int, ::Bool) = build_coinsts(GotoNode, x.dest)
+function build_coinsts(::Type{GotoNode}, dest::Int)
+    return build_inst(GotoNode, dest)::FwdsInst, (@opaque (j::Int) -> j)::BwdsInst
+end
+
+## GotoIfNot
+function build_coinsts(x::GotoIfNot, in_f, _rrule!!, n::Int, b::Int, is_blk_end::Bool)
+    return build_coinsts(ir_inst.dest, b + 1, _get_slot(ir_inst.cond, _rrule!!))
+end
+function build_coinsts(::Type{GotoIfNot}, dest::Int, next_blk::Int, cond::CoDualSlot)
+    fwds_inst = @opaque (p::Int) -> primal(cond[]) ? next_blk : dest
+    bwds_inst = @opaque (j::Int) -> j
+    return fwds_inst::FwdsInst, bwds_inst::BwdsInst
+end
+
+# ## PhiNode
+
+# function increment_predecessor_from_tmp!(x::TypedPhiNode{<:CoDualSlot}, prev_blk::Int)
+#     map(node.edges, node.values) do edge, v
+#         (edge == prev_blk) && isassigned(v) && increment_tangent!(v, x.tmp_slot)
 #     end
-#     return __barrier(in_f_rrule!!.return_slot, _get_slot(ir_inst.val, in_f_rrule!!))
+#     return nothing
 # end
 
-#
-# GotoNode
-#
-
-# function build_coinstructions(ir_inst::GotoNode, in_f, in_f_rrule!!, n, is_blk_end)
-#     dest = ir_inst.label
-#     run_fwds_pass::FwdsIFInstruction = @opaque (a::Int, b::Int) -> dest
-#     run_rvs_pass::BwdsIFInstruction = @opaque (j::Int) -> j
-#     return run_fwds_pass, run_rvs_pass
+# function increment_tmp_from_return!(x::TypedPhiNode{<:CoDualSlot})
+#     isassigned(x.return_slot) && increment_tangent!(x.tmp_slot, x.return_slot)
+#     return nothing
 # end
 
-#
-# GotoIfNot
-#
+# function build_coinsts(ir_insts::Vector{PhiNode}, _, _rrule!!, n_first::Int, b::Int, is_blk_end::Bool)
 
-# function build_coinstructions(ir_inst::GotoIfNot, in_f, in_f_rrule!!, n, is_blk_end)
-#     cond_slot = _get_slot(ir_inst.cond, in_f_rrule!!)
-#     dest = ir_inst.dest
-#     run_fwds_pass::FwdsIFInstruction = @opaque function (a::Int, current_block::Int)
-#         return primal(extract_codual(cond_slot)) ? current_block + 1 : dest
-#     end
-#     run_rvs_pass::BwdsIFInstruction = @opaque (j::Int) -> j
-#     return run_fwds_pass, run_rvs_pass
-# end
-
-#
-# PhiNode
-#
-
-# function build_coinstructions(ir_inst::PhiNode, _, in_f_rrule!!, n, is_blk_end)
-
-#     # Extract relevant values.
-#     edges = map(Int, (ir_inst.edges..., ))
-#     values_vec = map(eachindex(ir_inst.values)) do j
-#         if isassigned(ir_inst.values, j)
-#             return _get_slot(ir_inst.values[j], in_f_rrule!!)
-#         else
-#             return UndefinedReference()
-#         end
-#     end
-#     values = map(x -> x isa SlotRef ? x : SlotRef(zero_codual(x)), (values_vec..., ))
-#     val_slot = in_f_rrule!!.slots[n]
-
-#     # Create a value slot stack.
-#     value_slot_stack = Vector{eltype(val_slot)}(undef, 0)
+#     typed_phi_nodes = build_typed_phi_nodes(ir_insts, _rrule!!, n_first)
+#     tmp_slots_stack = Vector{eltype(val_slot)}(undef, 0)
+#     value_slots_stack = Vector{eltype(val_slot)}(undef, 0)
 #     prev_block_stack = Vector{Int}(undef, 0)
 
+
+
 #     # Construct operation to run the forwards-pass.
-#     run_fwds_pass::FwdsIFInstruction = @opaque function (prev_blk::Int, current_blk::Int)
+#     run_fwds_pass::FwdsInst = @opaque function (prev_blk::Int, current_blk::Int)
 #         push!(prev_block_stack, prev_blk)
+
 #         for n in eachindex(edges)
 #             if edges[n] == prev_blk
 #                 if isassigned(val_slot)
@@ -103,7 +86,7 @@ const BwdsIFInstruction = Core.OpaqueClosure{Tuple{Int}, Int}
 #     end
 
 #     # Construct operation to run the reverse-pass.
-#     run_rvs_pass::BwdsIFInstruction = @opaque function (j::Int)
+#     run_rvs_pass::BwdsInst = @opaque function (j::Int)
 #         prev_block = pop!(prev_block_stack)
 #         for n in eachindex(edges)
 #             if edges[n] == prev_block
@@ -121,18 +104,16 @@ const BwdsIFInstruction = Core.OpaqueClosure{Tuple{Int}, Int}
 #     return run_fwds_pass, run_rvs_pass
 # end
 
-#
 # PiNode
-#
 
 # function build_coinstructions(ir_inst::PiNode, _, in_f_rrule!!, n::Int, is_blk_end::Bool)
 #     input_ref = _get_slot(ir_inst.val, in_f_rrule!!)
 #     val_ref = in_f_rrule!!.slots[n]
-#     run_fwds_pass::FwdsIFInstruction = @opaque function(::Int, current_blk::Int)
+#     run_fwds_pass::FwdsInst = @opaque function(::Int, current_blk::Int)
 #         val_ref[] = input_ref[]
 #         return is_blk_end ? current_blk + 1 : 0
 #     end
-#     run_rvs_pass::BwdsIFInstruction = @opaque function(j::Int)
+#     run_rvs_pass::BwdsInst = @opaque function(j::Int)
 #         input_ref[] = val_ref[]
 #         return j
 #     end
@@ -262,7 +243,7 @@ const BwdsIFInstruction = Core.OpaqueClosure{Tuple{Int}, Int}
 #             run_fwds_pass = @opaque function (a::Int, current_blk::Int)
 #                 ___fwds_pass(current_blk)
 #             end
-#             if !(run_fwds_pass isa FwdsIFInstruction)
+#             if !(run_fwds_pass isa FwdsInst)
 #                 @warn "Unable to compiled forwards pass -- running to generate the error."
 #                 @show run_fwds_pass(5, 4)
 #             end
@@ -278,7 +259,7 @@ const BwdsIFInstruction = Core.OpaqueClosure{Tuple{Int}, Int}
 #                 end
 #                 return j
 #             end
-#             if !(run_rvs_pass isa BwdsIFInstruction)
+#             if !(run_rvs_pass isa BwdsInst)
 #                 @warn "Unable to compiled reverse pass -- running to generate the error."
 #                 @show run_reverse_pass(5)
 #             end
@@ -370,8 +351,8 @@ struct InterpretedFunctionRRule{sig<:Tuple, Treturn, Targ_info<:ArgInfo}
     return_slot::SlotRef{Treturn}
     arg_info::Targ_info
     slots::Vector{SlotRef}
-    fwds_instructions::Vector{FwdsIFInstruction}
-    bwds_instructions::Vector{BwdsIFInstruction}
+    fwds_instructions::Vector{FwdsInst}
+    bwds_instructions::Vector{BwdsInst}
     n_stack::Vector{Int}
 end
 
@@ -386,8 +367,8 @@ function build_rrule!!(in_f::InterpretedFunction{sig}) where {sig}
         return_slot,
         arg_info,
         map(make_codual_slot, in_f.slots), # SlotRefs
-        Vector{FwdsIFInstruction}(undef, length(in_f.instructions)), # fwds_instructions
-        Vector{BwdsIFInstruction}(undef, length(in_f.instructions)), # bwds_instructions
+        Vector{FwdsInst}(undef, length(in_f.instructions)), # fwds_instructions
+        Vector{BwdsInst}(undef, length(in_f.instructions)), # bwds_instructions
         n_stack,
     )
 end
@@ -474,7 +455,7 @@ function (if_pb!!::InterpretedFunctionPb)(dout, ::NoTangent, dargs::Vararg{Any, 
     return NoTangent(), new_dargs...
 end
 
-const __Tinst = Tuple{FwdsIFInstruction, BwdsIFInstruction}
+const __Tinst = Tuple{FwdsInst, BwdsInst}
 
 function generate_instructions(in_f, in_f_rrule!!, n)::__Tinst
     ir_inst = in_f.ir.stmts.inst[n]

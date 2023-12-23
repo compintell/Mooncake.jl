@@ -267,11 +267,8 @@ end
 
 struct UndefRef end
 
-# Runs a collection of PhiNodes (semantically) simulataneously.
-function build_phinode_insts(
-    ir_insts::Vector{PhiNode}, @nospecialize(in_f), n_first::Int, b::Int, is_blk_end::Bool
-)::Inst
-    nodes = map(enumerate(ir_insts)) do (j, ir_inst)
+function build_typed_phi_nodes(ir_insts::Vector{PhiNode}, in_f, n_first::Int)
+    return map(enumerate(ir_insts)) do (j, ir_inst)
         edges = map(Int, (ir_inst.edges..., ))
         vals = ir_inst.values
         _init = map(eachindex(vals)) do j
@@ -282,6 +279,13 @@ function build_phinode_insts(
         return_slot = in_f.slots[n_first + j - 1]
         return TypedPhiNode(copy(return_slot), return_slot, edges, (values_vec..., ))
     end
+end
+
+# Runs a collection of PhiNodes (semantically) simulataneously.
+function build_phinode_insts(
+    ir_insts::Vector{PhiNode}, in_f, n_first::Int, b::Int, is_blk_end::Bool
+)::Inst
+    nodes = build_typed_phi_nodes(ir_insts, in_f, n_first)
     next_blk = _standard_next_block(is_blk_end, b)
     return build_inst(Vector{PhiNode}, (nodes..., ), next_blk)
 end

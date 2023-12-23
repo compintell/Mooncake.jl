@@ -52,7 +52,8 @@ using Taped:
     TypedGlobalRef,
     build_inst,
     _lift_expr_arg,
-    TypedPhiNode
+    TypedPhiNode,
+    build_coinsts
 
 using Taped.Umlaut: __new__, __to_tuple__
 
@@ -87,6 +88,7 @@ sr(n::Int) = StableRNG(n)
         # include("tangents.jl")
         # include("reverse_mode_ad.jl")
         include("interpreted_function.jl")
+        include(joinpath("interpreter", "reverse_mode_ad.jl"))
         # include("test_utils.jl")
         # @testset "rrules" begin
         #     @info "avoiding_non_differentiable_code"
