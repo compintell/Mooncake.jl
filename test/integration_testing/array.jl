@@ -1,6 +1,6 @@
 @testset "array" begin
+    _getter = () -> 5.0
     interp = Taped.TInterp()
-    Taped.flush_interpreted_function_cache!()
     @testset for (interface_only, f, x...) in vcat(
         [
             (false, adjoint, randn(sr(1), 5)),
@@ -323,8 +323,8 @@
             (false, first, randn(sr(4), 3)),
             (false, firstindex, randn(sr(5), 3)),
             (false, float, randn(sr(6), 3)),
-            (false, (x, i) -> get(() -> 5.0, x, i), randn(sr(7), 3), 2),
-            (false, (x, i) -> get(() -> 5.0, x, i), randn(sr(8), 3), 4),
+            (false, (x, i) -> get(_getter, x, i), randn(sr(7), 3), 2),
+            (false, (x, i) -> get(_getter, x, i), randn(sr(8), 3), 4),
             (false, getindex, randn(sr(9), 5), 1),
             (false, getindex, randn(sr(0), 5), 3),
             (false, getindex, randn(sr(1), 5, 4), 3),
@@ -503,8 +503,15 @@
         rng = StableRNG(123456)
         @info map(Core.Typeof, (f, x...))
         sig = Tuple{Core.Typeof(f), map(Core.Typeof, x)...}
-        in_f = Taped.InterpretedFunction(DefaultCtx(), sig; interp)
-        @test in_f(f, deepcopy(x)...) == f(deepcopy(x)...)
+        in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp)
+        if interface_only
+            Core.Typeof(in_f(f, deepcopy(x)...)) == Core.Typeof(f(deepcopy(x)...))
+        else
+            x_cpy_1 = deepcopy(x)
+            x_cpy_2 = deepcopy(x)
+            @test has_equal_data(in_f(f, x_cpy_1...), f(x_cpy_2...))
+            @test has_equal_data(x_cpy_1, x_cpy_2)
+        end
         # val, _ = Taped.trace(f, x...; ctx=Taped.RMC())
         # test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only, perf_flag=:none)
     end

@@ -140,7 +140,7 @@
             ]
                 val, ret_slot = args
                 oc = build_inst(ReturnNode, ret_slot, val)
-                @test oc isa Taped.IFInstruction
+                @test oc isa Taped.Inst
                 output = oc(0)
                 @test output == -1
                 @test ret_slot[] == val[]
@@ -149,7 +149,7 @@
 
         @testset "GotoNode $label" for label in Any[1, 2, 3, 4, 5]
             oc = build_inst(GotoNode, label)
-            @test oc isa Taped.IFInstruction
+            @test oc isa Taped.Inst
             @test oc(3) == label
         end
 
@@ -162,7 +162,7 @@
             TypedGlobalRef(GlobalRef(Main, :__global_bool)),
         ]
             oc = build_inst(GotoIfNot, cond, 1, 2)
-            @test oc isa Taped.IFInstruction
+            @test oc isa Taped.Inst
             @test oc(5) == (cond[] ? 1 : 2)
         end
 
@@ -173,7 +173,7 @@
             (TypedGlobalRef(GlobalRef(Main, :__global_bool)), ConstSlot(true), 2, 2)
         ]
             oc = build_inst(PiNode, input, out, next_blk)
-            @test oc isa Taped.IFInstruction
+            @test oc isa Taped.Inst
             @test oc(prev_blk) == next_blk
             @test out[] == input[]
         end
@@ -184,7 +184,7 @@
             (SlotRef{typeof(sin)}(), ConstSlot(sin), 4),
         ]
             oc = build_inst(GlobalRef, x, out, next_blk)
-            @test oc isa Taped.IFInstruction
+            @test oc isa Taped.Inst
             @test oc(4) == next_blk
             @test out[] == x[]
         end
@@ -193,7 +193,7 @@
             (ConstSlot(5), SlotRef{Int}(), 5),
         ]
             oc = build_inst(nothing, x, out, next_blk)
-            @test oc isa Taped.IFInstruction
+            @test oc isa Taped.Inst
             @test oc(1) == next_blk
             @test out[] == x[]
         end
@@ -201,7 +201,7 @@
         @testset "Val{:boundscheck}" begin
             val_ref = SlotRef{Bool}()
             oc = build_inst(Val(:boundscheck), val_ref, 3)
-            @test oc isa Taped.IFInstruction
+            @test oc isa Taped.Inst
             @test oc(5) == 3
             @test val_ref[] == true
         end
@@ -229,7 +229,7 @@
             ),
         ]
             oc = build_inst(Val(:call), arg_slots, evaluator, val_slot, next_blk)
-            @test oc isa Taped.IFInstruction
+            @test oc isa Taped.Inst
             @test oc(0) == next_blk
             f, args... = map(getindex, arg_slots)
             @test val_slot[] == f(args...)
@@ -237,7 +237,7 @@
 
         @testset "Val{:skipped_expression}" begin
             oc = build_inst(Val(:skipped_expression), 3)
-            @test oc isa Taped.IFInstruction
+            @test oc isa Taped.Inst
             @test oc(5) == 3
         end
 
@@ -245,19 +245,19 @@
             @testset "defined" begin
                 slot_to_check = SlotRef(5.0)
                 oc = build_inst(Val(:throw_undef_if_not), slot_to_check, 2)
-                @test oc isa Taped.IFInstruction
+                @test oc isa Taped.Inst
                 @test oc(0) == 2
             end
             @testset "undefined (non-isbits)" begin
                 slot_to_check = SlotRef{Any}()
                 oc = build_inst(Val(:throw_undef_if_not), slot_to_check, 2)
-                @test oc isa Taped.IFInstruction
+                @test oc isa Taped.Inst
                 @test_throws ErrorException oc(3)
             end
             @testset "undefined (isbits)" begin
                 slot_to_check = SlotRef{Float64}()
                 oc = build_inst(Val(:throw_undef_if_not), slot_to_check, 2)
-                @test oc isa Taped.IFInstruction
+                @test oc isa Taped.Inst
 
                 # a placeholder for failing to throw an ErrorException when evaluated
                 @test_broken oc(5) == 1 

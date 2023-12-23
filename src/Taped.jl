@@ -37,7 +37,11 @@ include("tracing.jl")
 include("acceleration.jl")
 include("tangents.jl")
 include("reverse_mode_ad.jl")
-include("interpreted_function.jl")
+
+include(joinpath("interpreter", "interpreted_function.jl"))
+include(joinpath("interpreter", "reverse_mode_ad.jl"))
+include(joinpath("interpreter", "test_cases.jl"))
+
 include("test_utils.jl")
 
 include(joinpath("rrules", "avoiding_non_differentiable_code.jl"))

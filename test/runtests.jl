@@ -1,7 +1,6 @@
 using
     BenchmarkTools,
     DiffRules,
-    Distributions,
     FillArrays,
     FunctionWrappers,
     JET,
