@@ -27,7 +27,7 @@ is_primitive(::MinimalCtx, ::Type{<:Tuple{typeof(foo), Float64}}) = true
 You should implemented more complicated method of `is_primitive` in the usual way.
 """
 macro is_primitive(Tctx, sig)
-    return :(Taped.is_primitive(::$Tctx, ::Type{<:$sig}) = true)
+    return esc(:(Taped.is_primitive(::$Tctx, ::Type{<:$sig}) = true))
 end
 
 @is_primitive MinimalCtx Tuple{typeof(rebind), Any}
