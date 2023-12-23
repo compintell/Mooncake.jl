@@ -11,6 +11,9 @@
 
             # Pre-condition: must inline away under usual compilation.
             usual_ir = Base.code_ircode_by_type(sig)[1][1]
+            @show sig
+            display(usual_ir)
+            println()
             @assert length(usual_ir.stmts) == 2
             @assert usual_ir.stmts.inst[1].head == :invoke
             @assert usual_ir.stmts.inst[1].args[2] == GlobalRef(Taped, :sin)
