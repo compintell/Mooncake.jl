@@ -260,7 +260,10 @@ function store_tmp_value!(node::TypedPhiNode, prev_blk::Int)
     return nothing
 end
 
-transfer_tmp_value!(node::TypedPhiNode) = (node.return_slot[] = node.tmp_slot[]; nothing)
+function transfer_tmp_value!(node::TypedPhiNode)
+    isassigned(node.tmp_slot) && (node.return_slot[] = node.tmp_slot[])
+    return nothing
+end
 
 struct UndefRef end
 
@@ -283,7 +286,7 @@ function build_phinode_insts(
     return build_inst(Vector{PhiNode}, (nodes..., ), next_blk)
 end
 
-function build_inst(::Type{Vector{PhiNode}}, nodes::Tuple, next_blk::Int)
+function build_inst(::Type{Vector{PhiNode}}, nodes::Tuple, next_blk::Int)::Inst
     return @opaque function (prev_blk::Int)
         map(Base.Fix2(store_tmp_value!, prev_blk), nodes)
         map(transfer_tmp_value!, nodes)

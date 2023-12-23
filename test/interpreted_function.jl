@@ -108,18 +108,35 @@
     end
 
     @testset "TypedPhiNode" begin
-        node = TypedPhiNode(
-            SlotRef{Float64}(), SlotRef{Float64}(), (1, 2), (ConstSlot(5.0), SlotRef(4.0))
-        )
-        Taped.store_tmp_value!(node, 1)
-        @test node.tmp_slot[] == 5.0
-        Taped.transfer_tmp_value!(node)
-        @test node.return_slot[] == 5.0
-        Taped.store_tmp_value!(node, 2)
-        @test node.tmp_slot[] == 4.0
-        @test node.return_slot[] == 5.0
-        Taped.transfer_tmp_value!(node)
-        @test node.return_slot[] == 4.0
+        @testset "standard example of a phi node" begin
+            node = TypedPhiNode(
+                SlotRef{Float64}(),
+                SlotRef{Float64}(),
+                (1, 2),
+                (ConstSlot(5.0), SlotRef(4.0)),
+            )
+            Taped.store_tmp_value!(node, 1)
+            @test node.tmp_slot[] == 5.0
+            Taped.transfer_tmp_value!(node)
+            @test node.return_slot[] == 5.0
+            Taped.store_tmp_value!(node, 2)
+            @test node.tmp_slot[] == 4.0
+            @test node.return_slot[] == 5.0
+            Taped.transfer_tmp_value!(node)
+            @test node.return_slot[] == 4.0
+        end
+        @testset "phi node with nothing in it" begin
+            node = TypedPhiNode(SlotRef{Union{}}(), SlotRef{Union{}}(), (), ())
+            Taped.store_tmp_value!(node, 1)
+            Taped.transfer_tmp_value!(node)
+        end
+        @testset "phi node with undefined value" begin
+            node = TypedPhiNode(
+                SlotRef{Float64}(), SlotRef{Float64}(), (1, ), (SlotRef{Float64}(),)
+            )
+            Taped.store_tmp_value!(node, 1)
+            Taped.transfer_tmp_value!(node)
+        end
     end
 
     @testset "Unit tests for nodes and associated instructions" begin
