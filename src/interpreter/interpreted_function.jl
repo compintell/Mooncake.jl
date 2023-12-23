@@ -657,7 +657,7 @@ function make_phi_instructions!(in_f::InterpretedFunction)
 end
 
 function InterpretedFunction(ctx::C, sig::Type{<:Tuple}, interp) where {C}
-    @nospecialize ctx sig interp
+    # @nospecialize ctx sig interp
 
     # If we've already constructed this interpreted function, just return it.
     sig in keys(interp.in_f_cache) && return interp.in_f_cache[sig]
