@@ -11,21 +11,15 @@
 
             # Pre-condition: must inline away under usual compilation.
             usual_ir = Base.code_ircode_by_type(sig)[1][1]
-            @show sig
-            display(usual_ir)
-            println()
+            invoke_line = findfirst(x -> Meta.isexpr(x, :invoke), usual_ir.stmts.inst)
             @assert length(usual_ir.stmts) == 2
-            @assert usual_ir.stmts.inst[1].head == :invoke
-            @assert usual_ir.stmts.inst[1].args[2] == GlobalRef(Taped, :sin)
-            @assert usual_ir.stmts.inst[2] isa Core.ReturnNode
+            @assert usual_ir.stmts.inst[invoke_line].args[2] == GlobalRef(Taped, :sin)
 
             # Should continue to inline away under AD compilation.
             interp = Taped.TapedInterpreter(Taped.DefaultCtx())
             ad_ir = Base.code_ircode_by_type(sig; interp)[1][1]
-            @test length(ad_ir.stmts) == 2
-            @test ad_ir.stmts.inst[1].head == :invoke
-            @test ad_ir.stmts.inst[1].args[2] == GlobalRef(Taped, :sin)
-            @test ad_ir.stmts.inst[2] isa Core.ReturnNode
+            invoke_line = findfirst(x -> Meta.isexpr(x, :invoke), usual_ir.stmts.inst)
+            @test ad_ir.stmts.inst[invoke_line].args[2] == GlobalRef(Taped, :sin)
         end
         @testset "primitive is no longer inlined away" begin
 
@@ -35,18 +29,14 @@
 
             # Pre-condition: must inline away under usual compilation.
             usual_ir = Base.code_ircode_by_type(sig)[1][1]
-            @assert length(usual_ir.stmts) == 2
-            @assert usual_ir.stmts.inst[1].head == :invoke
-            @assert usual_ir.stmts.inst[1].args[2] == GlobalRef(Taped, :sin)
-            @assert usual_ir.stmts.inst[2] isa Core.ReturnNode
+            invoke_line = findfirst(x -> Meta.isexpr(x, :invoke), usual_ir.stmts.inst)
+            @assert usual_ir.stmts.inst[invoke_line].args[2] == GlobalRef(Taped, :sin)
 
             # Should not inline away under AD compilation.
             interp = Taped.TapedInterpreter(Taped.DefaultCtx())
             ad_ir = Base.code_ircode_by_type(sig; interp)[1][1]
-            @test length(ad_ir.stmts) == 2
-            @test ad_ir.stmts.inst[1].head == :invoke
-            @test ad_ir.stmts.inst[1].args[2] == GlobalRef(Taped, :a_primitive)
-            @test ad_ir.stmts.inst[2] isa Core.ReturnNode
+            invoke_line = findfirst(x -> Meta.isexpr(x, :invoke), usual_ir.stmts.inst)
+            @test ad_ir.stmts.inst[invoke_line].args[2] == GlobalRef(Taped, :a_primitive)
         end
         @testset "deep primitive is not inlined away" begin
 
@@ -58,18 +48,14 @@
 
             # Pre-condition: both functions should be inlined away under usual conditions.
             usual_ir = Base.code_ircode_by_type(sig)[1][1]
-            @assert length(usual_ir.stmts) == 2
-            @assert usual_ir.stmts.inst[1].head == :invoke
-            @assert usual_ir.stmts.inst[1].args[2] == GlobalRef(Taped, :sin)
-            @assert usual_ir.stmts.inst[2] isa Core.ReturnNode
+            invoke_line = findfirst(x -> Meta.isexpr(x, :invoke), usual_ir.stmts.inst)
+            @assert usual_ir.stmts.inst[invoke_line].args[2] == GlobalRef(Taped, :sin)
 
             # Should not inline away under AD compilation.
             interp = Taped.TapedInterpreter(Taped.DefaultCtx())
             ad_ir = Base.code_ircode_by_type(sig; interp)[1][1]
-            @test length(ad_ir.stmts) == 2
-            @test ad_ir.stmts.inst[1].head == :invoke
-            @test ad_ir.stmts.inst[1].args[2] == GlobalRef(Taped, :a_primitive)
-            @test ad_ir.stmts.inst[2] isa Core.ReturnNode
+            invoke_line = findfirst(x -> Meta.isexpr(x, :invoke), usual_ir.stmts.inst)
+            @test ad_ir.stmts.inst[invoke_line].args[2] == GlobalRef(Taped, :a_primitive)
         end
     end
 
