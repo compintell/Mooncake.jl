@@ -34,6 +34,7 @@ jobs:
         with:
           version: '1'
           arch: x64
+          include-all-prereleases: true
       - uses: julia-actions/cache@v1
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
@@ -54,6 +55,7 @@ jobs:
         with:
           version: '1'
           arch: x64
+          include-all-prereleases: true
       - uses: julia-actions/cache@v1
       - uses: julia-actions/julia-buildpkg@v1
       - run: julia --project=benchmarking --eval 'include("benchmarking/run_benchmarks.jl")'
