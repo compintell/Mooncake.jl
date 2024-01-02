@@ -248,7 +248,7 @@ end
 
 struct TypedPhiNode{Tr<:AbstractSlot, Te<:Tuple, Tv<:Tuple}
     tmp_slot::Tr
-    return_slot::Tr
+    ret_slot::Tr
     edges::Te
     values::Tv
 end
@@ -261,7 +261,7 @@ function store_tmp_value!(node::TypedPhiNode, prev_blk::Int)
 end
 
 function transfer_tmp_value!(node::TypedPhiNode)
-    isassigned(node.tmp_slot) && (node.return_slot[] = node.tmp_slot[])
+    isassigned(node.tmp_slot) && (node.ret_slot[] = node.tmp_slot[])
     return nothing
 end
 
@@ -276,8 +276,8 @@ function build_typed_phi_nodes(ir_insts::Vector{PhiNode}, in_f, n_first::Int)
         end
         T = eltype(_init)
         values_vec = map(n -> _init[n] isa UndefRef ? SlotRef{T}() : _init[n], eachindex(_init))
-        return_slot = in_f.slots[n_first + j - 1]
-        return TypedPhiNode(copy(return_slot), return_slot, edges, (values_vec..., ))
+        ret_slot = in_f.slots[n_first + j - 1]
+        return TypedPhiNode(copy(ret_slot), ret_slot, edges, (values_vec..., ))
     end
 end
 
