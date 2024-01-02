@@ -106,12 +106,12 @@
             Taped.store_tmp_value!(node, 1)
             @test node.tmp_slot[] == 5.0
             Taped.transfer_tmp_value!(node)
-            @test node.return_slot[] == 5.0
+            @test node.ret_slot[] == 5.0
             Taped.store_tmp_value!(node, 2)
             @test node.tmp_slot[] == 4.0
-            @test node.return_slot[] == 5.0
+            @test node.ret_slot[] == 5.0
             Taped.transfer_tmp_value!(node)
-            @test node.return_slot[] == 4.0
+            @test node.ret_slot[] == 4.0
         end
         @testset "phi node with nothing in it" begin
             node = TypedPhiNode(SlotRef{Union{}}(), SlotRef{Union{}}(), (), ())
