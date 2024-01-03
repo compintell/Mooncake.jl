@@ -104,7 +104,21 @@ end
 
 @inactive_intrinsic bswap_int
 @inactive_intrinsic ceil_llvm
-# cglobal
+
+function __cglobal(s::Symbol, x...)
+    @show s, x
+    return __inner(Val(s), x...)
+end
+
+@generated function __inner(::Val{T}, args...) where {T}
+    return :(cglobal($(Symbol(T)), args...))
+end
+
+translate(::Val{Intrinsics.cglobal}) = __cglobal
+# @is_primitive MinimalCtx Tuple{typeof(__cglobal), Vararg}
+Taped.is_primitive(::MinimalCtx, ::Type{<:Tuple{typeof(__cglobal), Vararg}}) = true
+rrule!!(::CoDual{typeof(__cglobal)}, args...) = cglobal(map(primal, args...)), NoPullback()
+
 @inactive_intrinsic checked_sadd_int
 @inactive_intrinsic checked_sdiv_int
 @inactive_intrinsic checked_smul_int
@@ -468,6 +482,7 @@ end
 
 function rrule!!(::CoDual{typeof(getfield)}, value::CoDual, name::CoDual)
     _name = primal(name)
+    # _name_static = SInt(_name)
     function getfield_pullback(dy, ::NoTangent, dvalue, ::NoTangent)
         new_dvalue = _increment_field!!(dvalue, dy, _name)
         return NoTangent(), new_dvalue, NoTangent()
@@ -609,6 +624,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         [false, :stability, nothing, IntrinsicsWrappers.bswap_int, 5],
         [false, :stability, nothing, IntrinsicsWrappers.ceil_llvm, 4.1],
         # cglobal -- NEEDS IMPLEMENTING AND TESTING
+        # [false, :none, nothing, Intrinsics.cglobal, ()]
         [false, :stability, nothing, IntrinsicsWrappers.checked_sadd_int, 5, 4],
         [false, :stability, nothing, IntrinsicsWrappers.checked_sdiv_int, 5, 4],
         [false, :stability, nothing, IntrinsicsWrappers.checked_smul_int, 5, 4],
