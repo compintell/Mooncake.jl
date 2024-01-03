@@ -181,42 +181,71 @@
         @test bwds_inst(10) == 10
     end
 
-    # @testset "Expr(:boundscheck)" begin
-    #     val_ref = SlotRef{Bool}()
-    #     oc = build_inst(Val(:boundscheck), val_ref, 3)
-    #     @test oc isa Taped.Inst
-    #     @test oc(5) == 3
-    #     @test val_ref[] == true
-    # end
+    @testset "Expr(:boundscheck)" begin
+        val_ref = SlotRef{codual_type(Bool)}()
+        next_blk = 3
+        fwds_inst, bwds_inst = build_coinsts(Val(:boundscheck), val_ref, next_blk)
 
-    # global __int_output = 5
-    # @testset "Expr(:call)" for (arg_slots, evaluator, val_slot, next_blk) in Any[
-    #     ((ConstSlot(sin), SlotRef(5.0)), Taped._eval, SlotRef{Float64}(), 3),
-    #     ((ConstSlot(*), SlotRef(4.0), ConstSlot(4.0)), Taped._eval, SlotRef{Any}(), 3),
-    #     (
-    #         (ConstSlot(+), ConstSlot(4), ConstSlot(5)),
-    #         Taped._eval,
-    #         TypedGlobalRef(Main, :__int_output),
-    #         2,
-    #     ),
-    #     (
-    #         (ConstSlot(getfield), SlotRef((5.0, 5)), ConstSlot(1)),
-    #         Taped.get_evaluator(
-    #             Taped.MinimalCtx(),
-    #             Tuple{typeof(getfield), Tuple{Float64, Int}, Int},
-    #             Expr(:call, ConstSlot(:getfield), SlotRef((5.0, 5)), ConstSlot(1)).args,
-    #             nothing,
-    #         ),
-    #         SlotRef{Float64}(),
-    #         3,
-    #     ),
-    # ]
-    #     oc = build_inst(Val(:call), arg_slots, evaluator, val_slot, next_blk)
-    #     @test oc isa Taped.Inst
-    #     @test oc(0) == next_blk
-    #     f, args... = map(getindex, arg_slots)
-    #     @test val_slot[] == f(args...)
-    # end
+        @test fwds_inst isa Taped.FwdsInst
+        @test fwds_inst(0) == next_blk
+        @test val_ref[] == zero_codual(true)
+        @test bwds_inst isa Taped.BwdsInst
+        @test bwds_inst(2) == 2
+    end
+
+    global __int_output = 5
+    @testset "Expr(:call)" for (out, arg_slots, next_blk) in Any[
+        (
+            SlotRef{codual_type(Float64)}(),
+            (ConstSlot(zero_codual(sin)), SlotRef(zero_codual(5.0))),
+            3,
+        ),
+        (
+            SlotRef{CoDual}(),
+            (
+                ConstSlot(zero_codual(*)),
+                SlotRef(zero_codual(4.0)),
+                ConstSlot(zero_codual(4.0)),
+            ),
+            3,
+        ),
+        (
+            SlotRef{codual_type(Int)}(),
+            (
+                ConstSlot(zero_codual(+)),
+                ConstSlot(zero_codual(4)),
+                ConstSlot(zero_codual(5)),
+            ),
+            2,
+        ),
+        (
+            SlotRef{codual_type(Float64)}(),    
+            (
+                ConstSlot(zero_codual(getfield)),
+                SlotRef(zero_codual((5.0, 5))),
+                ConstSlot(zero_codual(1)),
+            ),
+            3,
+        ),
+    ]
+        sig = Tuple{map(Core.Typeof ∘ primal ∘ getindex, arg_slots)...}
+        interp = Taped.TInterp()
+        evaluator = Taped.get_evaluator(Taped.MinimalCtx(), sig, nothing, interp)
+        __rrule!! = Taped.get_rrule!!_evaluator(evaluator)
+        old_vals = Vector{eltype(out)}(undef, 0)
+        pb_stack = Taped.build_pb_stack(__rrule!!, evaluator, arg_slots)
+        fwds_inst, bwds_inst = build_coinsts(
+            Val(:call), out, arg_slots, evaluator, __rrule!!, old_vals, pb_stack, next_blk
+        )
+
+        # Test forwards-pass.
+        @test fwds_inst isa Taped.FwdsInst
+        @test fwds_inst(0) == next_blk
+
+        # Test reverse-pass.
+        @test bwds_inst isa Taped.BwdsInst
+        @test bwds_inst(5) == 5
+    end
 
     @testset "Expr(:skipped_expression)" begin
         next_blk = 3
@@ -252,4 +281,122 @@
     #         @test_broken oc(5) == 1 
     #     end
     # end
+
+    interp = Taped.TInterp()
+
+    # nothings inserted for consistency with generate_test_functions.
+    @testset "$f, $(map(Core.Typeof, x))" for (a, b, f, x...) in vcat(
+        Any[
+            (nothing, nothing, Taped.const_tester),
+            (nothing, nothing, identity, 5.0),
+            (nothing, nothing, Taped.foo, 5.0),
+            (nothing, nothing, Taped.bar, 5.0, 4.0),
+            (nothing, nothing, Taped.type_unstable_argument_eval, sin, 5.0),
+            (nothing, nothing, Taped.pi_node_tester, Ref{Any}(5.0)),
+            (nothing, nothing, Taped.pi_node_tester, Ref{Any}(5)),
+            (nothing, nothing, Taped.intrinsic_tester, 5.0),
+            (nothing, nothing, Taped.goto_tester, 5.0),
+            (nothing, nothing, Taped.new_tester, 5.0, :hello),
+            (nothing, nothing, Taped.new_tester_2, 4.0),
+            (nothing, nothing, Taped.new_tester_3, Ref{Any}(Tuple{Float64})),
+            # (nothing, nothing, Taped.globalref_tester),
+            # (nothing, nothing, Taped.globalref_tester_2, true),
+            # (nothing, nothing, Taped.globalref_tester_2, false),
+            (nothing, nothing, Taped.type_unstable_tester, Ref{Any}(5.0)),
+            (nothing, nothing, Taped.type_unstable_tester_2, Ref{Real}(5.0)),
+            (nothing, nothing, Taped.type_unstable_function_eval, Ref{Any}(sin), 5.0),
+            (nothing, nothing, Taped.phi_const_bool_tester, 5.0),
+            (nothing, nothing, Taped.phi_const_bool_tester, -5.0),
+            (nothing, nothing, Taped.phi_node_with_undefined_value, true, 4.0),
+            (nothing, nothing, Taped.phi_node_with_undefined_value, false, 4.0),
+            (nothing, nothing, Taped.avoid_throwing_path_tester, 5.0),
+            (nothing, nothing, Taped.simple_foreigncall_tester, randn(5)),
+            (nothing, nothing, Taped.simple_foreigncall_tester_2, randn(6), (2, 3)),
+            (nothing, nothing, Taped.foreigncall_tester, randn(5)),
+            (nothing, nothing, Taped.no_primitive_inlining_tester, 5.0),
+            # (nothing, nothing, Taped.varargs_tester, 5.0),
+            # (nothing, nothing, Taped.varargs_tester, 5.0, 4),
+            # (nothing, nothing, Taped.varargs_tester, 5.0, 4, 3.0),
+            # (nothing, nothing, Taped.varargs_tester_2, 5.0),
+            # (nothing, nothing, Taped.varargs_tester_2, 5.0, 4),
+            # (nothing, nothing, Taped.varargs_tester_2, 5.0, 4, 3.0),
+            # (nothing, nothing, Taped.varargs_tester_3, 5.0),
+            # (nothing, nothing, Taped.varargs_tester_3, 5.0, 4),
+            # (nothing, nothing, Taped.varargs_tester_3, 5.0, 4, 3.0),
+            # (nothing, nothing, Taped.varargs_tester_4, 5.0),
+            # (nothing, nothing, Taped.varargs_tester_4, 5.0, 4),
+            # (nothing, nothing, Taped.varargs_tester_4, 5.0, 4, 3.0),
+            # (nothing, nothing, Taped.splatting_tester, 5.0),
+            # (nothing, nothing, Taped.splatting_tester, (5.0, 4.0)),
+            # (nothing, nothing, Taped.splatting_tester, (5.0, 4.0, 3.0)),
+            # # (nothing, nothing, Taped.unstable_splatting_tester, Ref{Any}(5.0)),
+            # # (nothing, nothing, Taped.unstable_splatting_tester, Ref{Any}((5.0, 4.0))),
+            # # (nothing, nothing, Taped.unstable_splatting_tester, Ref{Any}((5.0, 4.0, 3.0))),
+            (nothing, nothing, Taped.inferred_const_tester, Ref{Any}(nothing)),
+            # (
+            #     nothing,
+            #     nothing,
+            #     LinearAlgebra._modify!,
+            #     LinearAlgebra.MulAddMul(5.0, 4.0),
+            #     5.0,
+            #     randn(5, 4),
+            #     (5, 4),
+            # ), # for Bool comma,
+            # (nothing, nothing, Taped.getfield_tester, (5.0, 5)),
+            # (nothing, nothing, Taped.getfield_tester_2, (5.0, 5)),
+            # (
+            #     nothing, nothing,
+            #     mul!, transpose(randn(3, 5)), randn(5, 5), randn(5, 3), 4.0, 3.0,
+            # ), # static_parameter,
+            # (nothing, nothing, Xoshiro, 123456),
+            # (nothing, nothing, *, randn(250, 500), randn(500, 250)),
+        ],
+        # TestResources.generate_test_functions(),
+    )
+        @info "$f, $(Core.Typeof(x))"
+        sig = Tuple{Core.Typeof(f), map(Core.Typeof, x)...}
+        in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp)
+
+        # Verify correctness.
+        @assert f(deepcopy(x)...) == f(deepcopy(x)...) # primal runs
+        x_cpy_1 = deepcopy(x)
+        x_cpy_2 = deepcopy(x)
+        @test has_equal_data(in_f(f, x_cpy_1...), f(x_cpy_2...))
+        @test has_equal_data(x_cpy_1, x_cpy_2)
+        TestUtils.test_rrule!!(
+            Xoshiro(123456), in_f, f, x...;
+            perf_flag=:none, interface_only=true, is_primitive=false,
+        )
+
+        # # Taped.trace(f, deepcopy(x)...; ctx=Taped.RMC())
+        # # rng = Xoshiro(123456)
+        # # test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only=false, perf_flag=:none)
+
+        # # Only bother to check performance if the original programme does not allocate.
+        # original = @benchmark $(Ref(f))[]($(Ref(x))[]...)
+        # r = @benchmark $(Ref(in_f))[]($(Ref(f))[], $(Ref(x))[]...)
+
+        # # __rrule!! = Taped.build_rrule!!(in_f)
+        # # codual_x = map(zero_codual, x)
+        # # rrule_timing = @benchmark($__rrule!!(zero_codual($in_f), $codual_x...))
+        # # out, pb!! = __rrule!!(zero_codual(in_f), codual_x...)
+        # # df = zero_codual(in_f)
+        # # overall_timing = @benchmark Taped.to_benchmark($__rrule!!, $df, $codual_x)
+        # println("original")
+        # display(original)
+        # println()
+        # println("taped")
+        # display(r)
+        # println()
+        # # println("rrule")
+        # # display(rrule_timing)
+        # # println()
+        # # println("overall")
+        # # display(overall_timing)
+        # # println()
+
+        # # if allocs(original) == 0
+        # #     @test allocs(r) == 0
+        # # end
+    end
 end

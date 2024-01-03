@@ -38,6 +38,21 @@ for N in 0:32
     @eval @inline function _new_(::Type{T}, x::Vararg{Any, $N}) where {T}
         return $(Expr(:new, :T, map(n -> :(x[$n]), 1:N)...))
     end
+    @eval function _new_pullback!!(dy, d_new_, d_T, dx::Vararg{Any, $N})
+        return d_new_, d_T, map((x, y) -> increment!!(x, _value(y)), dx, dy.fields)...
+    end
+    @eval function _new_pullback!!(
+        dy::Union{Tuple, NamedTuple}, d_new_, d_T, dx::Vararg{Any, $N}
+    )
+        return d_new_, d_T, map(increment!!, dx, dy)...
+    end
+    @eval function rrule!!(
+        ::CoDual{typeof(_new_)}, ::CoDual{Type{P}}, x::Vararg{CoDual, $N}
+    ) where {P}
+        y = $(Expr(:new, :P, map(n -> :(primal(x[$n])), 1:N)...))
+        dy = build_tangent(P, tuple_map(tangent, x)...)
+        return CoDual(y, dy), _new_pullback!!
+    end
 end
 @is_primitive MinimalCtx Tuple{typeof(_new_), Vararg}
 

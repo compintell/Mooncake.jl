@@ -269,14 +269,14 @@ struct UndefRef end
 
 function build_typed_phi_nodes(ir_insts::Vector{PhiNode}, in_f, n_first::Int)
     return map(enumerate(ir_insts)) do (j, ir_inst)
+        ret_slot = in_f.slots[n_first + j - 1]
         edges = map(Int, (ir_inst.edges..., ))
         vals = ir_inst.values
         _init = map(eachindex(vals)) do j
             return isassigned(vals, j) ? _get_slot(vals[j], in_f) : UndefRef()
         end
-        T = eltype(_init)
+        T = eltype(ret_slot)
         values_vec = map(n -> _init[n] isa UndefRef ? SlotRef{T}() : _init[n], eachindex(_init))
-        ret_slot = in_f.slots[n_first + j - 1]
         return TypedPhiNode(copy(ret_slot), ret_slot, edges, (values_vec..., ))
     end
 end
@@ -390,6 +390,8 @@ function preprocess_ir(ex::Expr, in_f)
 end
 
 @inline _eval(f::F, args::Vararg{Any, N}) where {F, N} = f(args...)
+
+tangent_type(::Type{typeof(_eval)}) = NoTangent
 
 function build_inst(x::Expr, @nospecialize(in_f), n::Int, b::Int, is_blk_end::Bool)::Inst
     x = preprocess_ir(x, in_f)
@@ -600,7 +602,7 @@ struct InterpretedFunction{sig<:Tuple, C, Treturn, Targ_info<:ArgInfo}
     ctx::C
     return_slot::SlotRef{Treturn}
     arg_info::Targ_info
-    slots::Vector{Union{SlotRef, ConstSlot}}
+    slots::Vector{AbstractSlot}
     instructions::Vector{Inst}
     bb_starts::Vector{Int}
     bb_ends::Vector{Int}

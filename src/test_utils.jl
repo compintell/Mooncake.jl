@@ -362,9 +362,9 @@ end
 
 function test_interpreted_rrule!!(rng::AbstractRNG, f, x...; interface_only=false, kwargs...)
     sig = Tuple{Core.Typeof(f), map(Core.Typeof, x)...}
-    in_f = Taped.InterpretedFunction(DefaultCtx(), sig; interp=Taped.TInterp())
+    in_f = Taped.InterpretedFunction(DefaultCtx(), sig, Taped.TInterp())
     test_rrule!!(
-        rng, in_f, x...; is_primitive=false, interface_only, perf_flag=:none, kwargs...
+        rng, in_f, f, x...; is_primitive=false, interface_only, perf_flag=:none, kwargs...
     )
     return nothing
 end
