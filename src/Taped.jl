@@ -74,6 +74,7 @@ export
     _diff,
     _dot,
     zero_codual,
+    codual_type,
     rrule!!
 
 end

@@ -41,6 +41,15 @@ Equivalent to `CoDual(x, randn_tangent(rng, x))`.
 """
 randn_codual(rng::AbstractRNG, x) = CoDual(x, randn_tangent(rng, x))
 
+"""
+    codual_type(P::Type)
+
+Shorthand for `CoDual{P, tangent_type(P}}` when `P` is concrete, equal to `CoDual` if not.
+"""
+function codual_type(::Type{P}) where {P}
+    return isconcretetype(P) ? CoDual{P, tangent_type(P)} : CoDual
+end
+
 set_tangent!!(x::CoDual, dx) = CoDual(primal(x), increment!!(set_to_zero!!(tangent(x)), dx))
 
 function verify_codual_type(::CoDual{P, T}) where {P, T}
