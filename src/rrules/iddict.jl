@@ -49,7 +49,6 @@ end
 # All of the rules in here are provided in order to avoid nasty `:ccall`s, and to support
 # standard built-in functionality on `IdDict`s.
 
-isprimitive(::RMC, ::typeof(Base.rehash!), ::IdDict, ::Any) = true
 @is_primitive MinimalCtx Tuple{typeof(Base.rehash!), IdDict, Any}
 function rrule!!(::CoDual{typeof(Base.rehash!)}, d::CoDual{<:IdDict}, newsz::CoDual)
     Base.rehash!(primal(d), primal(newsz))
@@ -57,7 +56,6 @@ function rrule!!(::CoDual{typeof(Base.rehash!)}, d::CoDual{<:IdDict}, newsz::CoD
     return d, NoPullback()
 end
 
-isprimitive(::RMC, ::typeof(setindex!), ::IdDict, ::Any, ::Any) = true
 @is_primitive MinimalCtx Tuple{typeof(setindex!), IdDict, Any, Any}
 function rrule!!(::CoDual{typeof(setindex!)}, d::CoDual{IdDict{K,V}}, val, key) where {K, V}
 
@@ -90,7 +88,6 @@ function rrule!!(::CoDual{typeof(setindex!)}, d::CoDual{IdDict{K,V}}, val, key) 
     return d, setindex_pb!!
 end
 
-isprimitive(::RMC, ::typeof(get), ::IdDict, ::Any, ::Any) = true
 @is_primitive MinimalCtx Tuple{typeof(get), IdDict, Any, Any}
 function rrule!!(
     ::CoDual{typeof(get)}, d::CoDual{IdDict{K, V}}, key::CoDual, default::CoDual
@@ -110,7 +107,6 @@ function rrule!!(
     return y, get_pb!!
 end
 
-isprimitive(::RMC, ::typeof(getindex), ::IdDict, ::Any) = true
 @is_primitive MinimalCtx Tuple{typeof(getindex), IdDict, Any}
 function rrule!!(
     ::CoDual{typeof(getindex)}, d::CoDual{IdDict{K, V}}, key::CoDual
@@ -127,7 +123,7 @@ end
 for name in [
     :(:jl_idtable_rehash), :(:jl_eqtable_put), :(:jl_eqtable_get), :(:jl_eqtable_nextind),
 ]
-    @eval function rrule!!(::CoDual{typeof(__foreigncall__)}, ::CoDual{Val{$name}}, args...)
+    @eval function rrule!!(::CoDual{typeof(_foreigncall_)}, ::CoDual{Val{$name}}, args...)
         unexepcted_foreigncall_error($name)
     end
 end

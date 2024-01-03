@@ -14,11 +14,10 @@
 
 module IntrinsicsWrappers
 
-import Umlaut: isprimitive
 using Core: Intrinsics
 using Taped
 import ..Taped:
-    rrule!!, CoDual, primal, tangent, zero_tangent, isprimitive, RMC, NoPullback,
+    rrule!!, CoDual, primal, tangent, zero_tangent, NoPullback,
     tangent_type, increment!!, @is_primitive, MinimalCtx, is_primitive
 
 # Note: performance is not considered _at_ _all_ in this implementation.
@@ -30,7 +29,6 @@ macro intrinsic(name)
     expr = quote
         $name(x...) = Intrinsics.$name(x...)
         (is_primitive)(::MinimalCtx, ::Type{<:Tuple{typeof($name), Vararg}}) = true
-        (isprimitive)(::RMC, ::typeof($name), args...) = true
         translate(::Val{Intrinsics.$name}) = $name
     end
     return esc(expr)
@@ -40,7 +38,6 @@ macro inactive_intrinsic(name)
     expr = quote
         $name(x...) = Intrinsics.$name(x...)
         (is_primitive)(::MinimalCtx, ::Type{<:Tuple{typeof($name), Vararg}}) = true
-        (isprimitive)(::RMC, ::typeof($name), args...) = true
         translate(::Val{Intrinsics.$name}) = $name
         function rrule!!(::CoDual{typeof($name)}, args...)
             y = $name(map(primal, args)...)

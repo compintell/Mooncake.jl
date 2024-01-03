@@ -6,7 +6,6 @@ struct New{T} end
 tangent_type(::Type{<:New}) = NoTangent
 
 @is_primitive MinimalCtx Tuple{New, Vararg}
-Umlaut.isprimitive(::RMC, ::New, args...) = true
 
 @generated function New_pullback(dy, d__new__, dxs::Vararg{Any, N}) where {N}
     inc_exprs = map(n -> :(increment!!(dxs[$n], _value(fs[$n]))), 1:N)

@@ -218,7 +218,6 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
         @info "$(map(typeof, (d, x)))"
         rng = StableRNG(123456)
         # TestUtils.test_interpreted_rrule!!(rng, logpdf, d, deepcopy(x); interface_only, perf_flag=:none)
-        # test_taped_rrule!!(rng, logpdf, d, deepcopy(x); interface_only, perf_flag=:none)
         f = logpdf
         x = (d, x)
         sig = Tuple{Core.Typeof(f), map(Core.Typeof, x)...}
@@ -275,6 +274,5 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
     #     @info "$name"
     #     rng = StableRNG(123456)
     #     TestUtils.test_interpreted_rrule!!(rng, f, deepcopy(x)...; interface_only=false, perf_flag=:none)
-    #     # test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only=false, perf_flag=:none)
     # end
 end

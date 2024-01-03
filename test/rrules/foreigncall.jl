@@ -10,10 +10,6 @@
     ]
         @test_throws(
             ErrorException,
-            Taped.rrule!!(zero_codual(Umlaut.__foreigncall__), zero_codual(Val(name))),
-        )
-        @test_throws(
-            ErrorException,
             Taped.rrule!!(zero_codual(Taped._foreigncall_), zero_codual(Val(name))),
         )
     end

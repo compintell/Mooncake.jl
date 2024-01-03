@@ -10,10 +10,7 @@ using
     InteractiveUtils,
     LinearAlgebra,
     Random,
-    Setfield,
-    Umlaut
-
-import Umlaut: isprimitive, Frame, Tracer, __foreigncall__, __to_tuple__, __new__
+    Setfield
 
 using Base:
     IEEEFloat, unsafe_convert, unsafe_pointer_to_objref, pointer_from_objref, arrayref,
@@ -31,10 +28,8 @@ using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!, potrf!, potrs!
 
 # Needs to be defined before various other things.
 function _foreigncall_ end
-const Tforeigncall = Union{typeof(_foreigncall_), typeof(__foreigncall__)}
+const Tforeigncall = Union{typeof(_foreigncall_)}
 
-include("tracing.jl")
-include("acceleration.jl")
 include("tangents.jl")
 include("reverse_mode_ad.jl")
 
@@ -53,8 +48,6 @@ include(joinpath("rrules", "lapack.jl"))
 include(joinpath("rrules", "low_level_maths.jl"))
 include(joinpath("rrules", "misc.jl"))
 include(joinpath("rrules", "new.jl"))
-include(joinpath("rrules", "umlaut_internals_rules.jl"))
-include(joinpath("rrules", "unrolled_function.jl"))
 
 export
     primal,

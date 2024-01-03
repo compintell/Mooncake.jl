@@ -18,6 +18,5 @@
             @test has_equal_data(x_cpy_1, x_cpy_2)
         end
         # TestUtils.test_interpreted_rrule!!(rng, f, deepcopy(x)...; interface_only, perf_flag=:none)
-        # test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only, perf_flag=:none)
     end
 end

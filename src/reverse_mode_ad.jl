@@ -1,7 +1,3 @@
-struct ReverseModeADContext <: TapedContext end
-
-const RMC = ReverseModeADContext
-
 struct CoDual{Tx, Tdx}
     x::Tx
     dx::Tdx
@@ -65,12 +61,6 @@ struct NoPullback end
 
 might_be_active(args) = any(might_be_active ∘ typeof, args)
 
-isprimitive(::RMC, args...) = might_be_active(args) ? false : true
-isprimitive(::RMC, ::typeof(Umlaut.__new__), T, x...) = true
-isprimitive(::RMC, ::typeof(Umlaut.__foreigncall__), args...) = true
-isprimitive(::RMC, ::typeof(__intrinsic__), args...) = true
-isprimitive(::RMC, ::Core.Builtin, x...) = true
-
 """
     rebind(x)
 
@@ -86,8 +76,6 @@ rebind_pb!!(ȳ, f̄, x̄) = f̄, increment!!(x̄, ȳ)
 function rrule!!(::CoDual{typeof(rebind)}, x::CoDual)
     return CoDual(primal(x), rebind_tangent(tangent(x))), rebind_pb!!
 end
-
-isprimitive(::RMC, ::typeof(rebind), x) = true
 
 
 """

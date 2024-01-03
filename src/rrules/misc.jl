@@ -25,7 +25,6 @@ for name in [
     :(Base.datatype_fielddesc_type),
     :(LinearAlgebra.chkstride1),
 ]
-    @eval isprimitive(::RMC, ::Core.Typeof($name), args...) = true
     @eval @is_primitive MinimalCtx Tuple{typeof($name), Vararg}
     @eval function rrule!!(::CoDual{Core.Typeof($name)}, args::CoDual...)
         v = $name(map(primal, args)...)
@@ -62,9 +61,6 @@ function rrule!!(
     return y, lgetfield_pb!!
 end
 
-Umlaut.isprimitive(::RMC, ::typeof(lgetfield), args...) = true
-
-isprimitive(::RMC, ::Type, ::TypeVar, ::Type) = true
 @is_primitive MinimalCtx Tuple{Type, TypeVar, Type}
 function rrule!!(x::CoDual{<:Type}, y::CoDual{<:TypeVar}, z::CoDual{<:Type})
     return CoDual(primal(x)(primal(y), primal(z)), NoTangent()), NoPullback()

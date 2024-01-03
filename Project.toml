@@ -16,7 +16,6 @@ LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Setfield = "efcf1570-3423-57d1-acb7-fd33fddbac46"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-Umlaut = "92992a2b-8ce5-4a9c-bb9d-58be9a7dc841"
 
 [weakdeps]
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
@@ -39,7 +38,6 @@ Setfield = "1"
 SpecialFunctions = "2"
 StableRNGs = "1"
 Turing = "0.29"
-Umlaut = "0.6.1"
 julia = "1"
 
 [extras]

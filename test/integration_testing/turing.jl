@@ -44,9 +44,6 @@ end
         @info model_function
         rng = sr(123)
         f, x = build_turing_problem(rng, model_function, args...)
-        # display(Taped.trace(f, x, model_function, args...; ctx=Taped.RMC()))
-        # println()
-        # TestUtils.test_taped_rrule!!(rng, f, x, model_function, args...)
 
         x = (x, model_function, args...)
 

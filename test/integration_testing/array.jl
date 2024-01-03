@@ -512,7 +512,5 @@
             @test has_equal_data(in_f(f, x_cpy_1...), f(x_cpy_2...))
             @test has_equal_data(x_cpy_1, x_cpy_2)
         end
-        # val, _ = Taped.trace(f, x...; ctx=Taped.RMC())
-        # test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only, perf_flag=:none)
     end
 end

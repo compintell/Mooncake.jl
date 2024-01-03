@@ -1,6 +1,6 @@
 module TestUtils
 
-using JET, Random, Taped, Test, Umlaut
+using JET, Random, Taped, Test
 using Taped: CoDual, NoTangent, rrule!!, is_init, zero_codual, DefaultCtx
 
 has_equal_data(x::T, y::T; equal_undefs=true) where {T<:String} = x == y
@@ -26,7 +26,6 @@ function has_equal_data(x::T, y::T; equal_undefs=true) where {T}
         fieldnames(T),
     ))
 end
-has_equal_data(x::T, y::T; equal_undefs=true) where {T<:Umlaut.Tape} = true
 function has_equal_data(x::GlobalRef, y::GlobalRef; equal_undefs=true)
     return x.mod == y.mod && x.name == y.name
 end
@@ -186,7 +185,6 @@ function test_rrule_interface(f_f̄, x_x̄...; is_primitive, ctx)
 
     # Verify that the function to which the rrule applies is considered a primitive.
     # It is not clear that this really belongs here to be frank.
-    is_primitive && @test Umlaut.isprimitive(Taped.RMC(), f, deepcopy(x)...)
     if is_primitive
         @test Taped.is_primitive(ctx, Tuple{Core.Typeof(f), map(Core.Typeof, x)...})
     end
@@ -307,57 +305,6 @@ function test_rrule!!(
 
     # Test the performance of the rule.
     test_rrule_performance(perf_flag, x_x̄...)
-end
-
-# Functionality for testing AD via Umlaut.
-function test_taped_rrule!!(rng, f, x...; interface_only=false, recursive=true, kwargs...)
-    @nospecialize rng f x
-
-    # Try to run the primal, just to make sure that we're not calling it on bad inputs.
-    f(_deepcopy(x)...)
-
-    # Construct the tape.
-    if recursive
-        f_t = last(Taped.trace_recursive_tape!!(f, map(_deepcopy, x)...))
-    else
-        f_t = Taped.UnrolledFunction(last(trace(f, map(_deepcopy, x)...; ctx=Taped.RMC())))
-    end
-
-    # Check that the gradient is self-consistent.
-    test_rrule!!(
-        rng, f_t, f, x...; is_primitive=false, perf_flag=:none, interface_only, kwargs...
-    )
-
-    # Check that f_t remains a faithful representation of the original function.
-    if !interface_only
-
-        xs_lhs = deepcopy(x)
-        xs_rhs = deepcopy(x)
-        y_lhs = f(xs_lhs...)
-        y_rhs = play!(f_t.tape, f, xs_rhs...)
-        if !has_equal_data(y_lhs, y_rhs) || !has_equal_data(xs_lhs, xs_rhs)
-
-            println("f")
-            display(f)
-            println()
-
-            println("y_lhs")
-            display(y_lhs)
-            println()
-            println("y_rhs")
-            display(y_rhs)
-            println()
-
-            println("xs_lhs")
-            display(xs_lhs)
-            println()
-            println("xs_rhs")
-            display(xs_rhs)
-            println()
-        end
-        @test has_equal_data(y_lhs, y_rhs)
-        @test has_equal_data(xs_lhs, xs_rhs)
-    end
 end
 
 function test_interpreted_rrule!!(rng::AbstractRNG, f, x...; interface_only=false, kwargs...)
@@ -729,10 +676,6 @@ function Taped.rrule!!(::CoDual{typeof(p_setfield!)}, value, name::CoDual{Symbol
         __setfield!(_dvalue, _name, tangent(x)),
     )
     return y, p_setfield!_pb!!
-end
-
-for f in [p_sin, p_mul, p_mat_mul!, p_setfield!]
-    @eval Taped.Umlaut.isprimitive(::Taped.RMC, ::typeof($f), x...) = true
 end
 
 const __A = randn(3, 3)

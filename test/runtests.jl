@@ -10,8 +10,7 @@ using
     SpecialFunctions,
     StableRNGs,
     Taped,
-    Test,
-    Umlaut
+    Test
 
 using Base: unsafe_load, pointer_from_objref
 using Base.Iterators: product
@@ -25,19 +24,10 @@ using Taped:
     TestUtils,
     TestResources,
     CoDual,
-    to_reverse_mode_ad,
     _wrap_field,
-    build_coinstruction,
-    const_coinstruction,
     Deduplicated,
     DefaultCtx,
-    input_primals,
-    input_tangents,
     New,
-    output_primal,
-    output_tangent,
-    pullback!,
-    seed_output_tangent!,
     rrule!!,
     set_tangent!!,
     SSym,
@@ -55,11 +45,8 @@ using Taped:
     TypedPhiNode,
     build_coinsts
 
-using Taped.Umlaut: __new__, __to_tuple__
-
 using .TestUtils:
     test_rrule!!,
-    test_taped_rrule!!,
     has_equal_data,
     AddressMap,
     populate_address_map!,
@@ -83,11 +70,9 @@ sr(n::Int) = StableRNG(n)
 
 @testset "Taped.jl" begin
     if test_group == "basic"
-        # include("tracing.jl")
-        # include("acceleration.jl")
         # include("tangents.jl")
         # include("reverse_mode_ad.jl")
-        include("interpreted_function.jl")
+        # include("interpreted_function.jl")
         include(joinpath("interpreter", "reverse_mode_ad.jl"))
         # include("test_utils.jl")
         # @testset "rrules" begin
@@ -107,10 +92,6 @@ sr(n::Int) = StableRNG(n)
         #     include(joinpath("rrules", "misc.jl"))
         #     @info "new"
         #     include(joinpath("rrules", "new.jl"))
-        #     @info "umlaut_internals_rules"
-        #     include(joinpath("rrules", "umlaut_internals_rules.jl"))
-        #     @info "unrolled_function"
-        #     include(joinpath("rrules", "unrolled_function.jl"))
         # end
     elseif test_group == "integration_testing/misc"
         include(joinpath("integration_testing/", "misc.jl"))
