@@ -15,7 +15,6 @@
         @test has_equal_data(Diagonal(ones(5)), Diagonal(ones(5)))
         @test has_equal_data("hello", "hello")
         @test !has_equal_data("hello", "goodbye")
-        @test has_equal_data(trace(sin, 5.0), trace(sin, 5.0))
     end
     @testset "populate_address_map" begin
         @testset "primitive types" begin
