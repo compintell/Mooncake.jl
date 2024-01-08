@@ -29,18 +29,18 @@ function build_coinsts(node::ReturnNode, _, _rrule!!, ::Int, ::Int, ::Bool)
 end
 function build_coinsts(::Type{ReturnNode}, ret_slot::SlotRef{<:CoDual}, val::CoDualSlot)
     fwds_inst = build_inst(ReturnNode, ret_slot, val)
-    bwds_inst = @opaque (j::Int) -> (ret_slot[] = val[]; return j)
+    bwds_inst = @opaque (j::Int) -> (val[] = ret_slot[]; return j)
     return fwds_inst::FwdsInst, bwds_inst::BwdsInst
 end
 
 ## GotoNode
-build_coinsts(x::GotoNode, in_f, _, ::Int, ::Int, ::Bool) = build_coinsts(GotoNode, x.label)
+build_coinsts(x::GotoNode, _, _, ::Int, ::Int, ::Bool) = build_coinsts(GotoNode, x.label)
 function build_coinsts(::Type{GotoNode}, dest::Int)
     return build_inst(GotoNode, dest)::FwdsInst, (@opaque (j::Int) -> j)::BwdsInst
 end
 
 ## GotoIfNot
-function build_coinsts(x::GotoIfNot, in_f, _rrule!!, n::Int, b::Int, is_blk_end::Bool)
+function build_coinsts(x::GotoIfNot, _, _rrule!!, ::Int, b::Int, is_blk_end::Bool)
     return build_coinsts(GotoIfNot, x.dest, b + 1, _get_slot(x.cond, _rrule!!))
 end
 function build_coinsts(::Type{GotoIfNot}, dest::Int, next_blk::Int, cond::CoDualSlot)
@@ -117,7 +117,7 @@ end
 ## PiNode
 function build_coinsts(x::PiNode, _, _rrule!!, n::Int, b::Int, is_blk_end::Bool)
     val = _get_slot(x.val, _rrule!!)
-    ret = _get_slot(n, _rrule!!)
+    ret = _rrule!!.slots[n]
     return build_coinsts(PiNode, val, ret, _standard_next_block(is_blk_end, b))
 end
 function build_coinsts(
@@ -133,10 +133,10 @@ end
 ## GlobalRef
 function build_coinsts(x::GlobalRef, _, _rrule!!, n::Int, b::Int, is_blk_end::Bool)
     next_blk = _standard_next_block(is_blk_end, b)
-    return build_coinsts(GlobalRef, _globalref_to_slot(x), _get_slot(n, _rrule!!), next_blk)
+    return build_coinsts(GlobalRef, _globalref_to_slot(x), _rrule!!.slots[n], next_blk)
 end
 function build_coinsts(::Type{GlobalRef}, x::AbstractSlot, out::CoDualSlot, next_blk::Int)
-    fwds_inst = @opaque (p::Int) -> (out[] = zero_codual(x[]); return next_blk)
+    fwds_inst = @opaque (p::Int) -> (out[] = uninit_codual(x[]); return next_blk)
     bwds_inst = @opaque (j::Int) -> j
     return fwds_inst::FwdsInst, bwds_inst::BwdsInst
 end
@@ -145,7 +145,7 @@ end
 function build_coinsts(node, _, _rrule!!, n::Int, b::Int, is_blk_end::Bool)
     x = ConstSlot(zero_codual(node isa QuoteNode ? node.value : node))
     next_blk = _standard_next_block(is_blk_end, b)
-    return build_coinsts(nothing, x, _get_slot(n, _rrule!!), next_blk)
+    return build_coinsts(nothing, x, _rrule!!.slots[n], next_blk)
 end
 function build_coinsts(::Nothing, x::ConstSlot{<:CoDual}, out::CoDualSlot, next_blk::Int)
     fwds_inst = @opaque (p::Int) -> (out[] = x[]; return next_blk)
@@ -157,6 +157,7 @@ end
 
 get_rrule!!_evaluator(::typeof(_eval)) = rrule!!
 get_rrule!!_evaluator(in_f::InterpretedFunction) = build_rrule!!(in_f)
+get_rrule!!_evaluator(::DelayedInterpretedFunction) = rrule!!
 
 # Constructs a Vector which can holds instances of the pullback associated to
 # `__rrule!!` when applied to the types in `codual_sig`. If `__rrule!!` infers for these
@@ -185,6 +186,7 @@ function build_pb_stack(__rrule!!, evaluator, arg_slots)
 end
 
 _wrap_codual_slot(x::CoDualSlot) = x
+_wrap_codual_slot(x::ConstSlot{<:CoDual}) = x
 _wrap_codual_slot(x::ConstSlot{P}) where {P} = ConstSlot{codual_type(P)}(zero_codual(x[]))
 
 function build_coinsts(ir_inst::Expr, in_f, _rrule!!, n::Int, b::Int, is_blk_end::Bool)
@@ -304,7 +306,7 @@ end
 
 function rrule!!(_f::CoDual{<:DelayedInterpretedFunction{C, F}}, args::CoDual...) where {C, F}
     f = primal(_f)
-    s = Tuple{F, map(Core.Typeof ∘ primal, args)...}
+    s = Tuple{map(Core.Typeof ∘ primal, args)...}
     if is_primitive(f.ctx, s)
         return rrule!!(zero_codual(f.f), args...)
     else
@@ -341,7 +343,7 @@ function load_rrule_args!(ai::ArgInfo{T, is_vararg}, args::Tuple) where {T, is_v
     # We must therefore transform it into a `Tuple` of type
     # `Tuple{typeof(f), Tuple{Float64}}` before attempting to load it into `ai.arg_slots`.
     if is_vararg
-        num_args = length(ai.arg_slots) - 1 - 1 # once for first arg, once for vararg
+        num_args = length(ai.arg_slots) - 1 # once for first arg, once for vararg
         primals = map(primal, args)
         tangents = map(tangent, args)
         refined_primal_args = (primals[1:num_args]..., (primals[num_args+1:end]..., ))
@@ -462,10 +464,6 @@ function (in_f_rrule!!::InterpretedFunctionRRule{sig})(
             n_stack[j] = n
         else
             push!(n_stack, n)
-        end
-
-        if !isassigned(in_f.instructions, n) 
-            in_f.instructions[n] = build_inst(in_f, n)
         end
         if !isassigned(in_f_rrule!!.fwds_instructions, n)
             fwds, bwds = generate_coinstructions(in_f, in_f_rrule!!, n)

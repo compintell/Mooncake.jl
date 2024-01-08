@@ -57,6 +57,8 @@ type_unstable_tester(x::Ref{Any}) = cos(x[])
 
 type_unstable_tester_2(x::Ref{Real}) = cos(x[])
 
+type_unstable_tester_3(x::Ref{Any}) = foo(x[])
+
 type_unstable_function_eval(f::Ref{Any}, x::Float64) = f[](x)
 
 type_unstable_argument_eval(@nospecialize(f), x::Float64) = f(x)
@@ -135,6 +137,10 @@ inferred_const_tester(x::Int) = x == 5 ? x : 5x
 
 getfield_tester(x::Tuple) = x[1]
 getfield_tester_2(x::Tuple) = getfield(x, 1)
+
+function datatype_slot_tester(n::Int)
+    return (Float64, Int)[n]
+end
 
 a_primitive(x) = sin(x)
 non_primitive(x) = sin(x)

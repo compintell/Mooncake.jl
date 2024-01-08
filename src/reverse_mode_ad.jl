@@ -43,6 +43,7 @@ randn_codual(rng::AbstractRNG, x) = CoDual(x, randn_tangent(rng, x))
 Shorthand for `CoDual{P, tangent_type(P}}` when `P` is concrete, equal to `CoDual` if not.
 """
 function codual_type(::Type{P}) where {P}
+    P == DataType && return CoDual
     return isconcretetype(P) ? CoDual{P, tangent_type(P)} : CoDual
 end
 
