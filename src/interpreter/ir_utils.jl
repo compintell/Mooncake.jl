@@ -3,7 +3,7 @@
         inst::Vector{Any},
         argtypes::Vector{Any},
         sptypes::Vector{CC.VarState}=CC.VarState[],
-    )
+    ) -> IRCode
 
 Constructs an instance of an `IRCode`. This is useful for constructing test cases with known
 properties.
@@ -75,29 +75,43 @@ function __insts_to_instruction_stream(insts::Vector{Any})
     )
 end
 
+"""
+    infer_ir!(ir::IRCode) -> IRCode
 
+Runs type inference on `ir`, which mutates `ir`, and returns it.
+"""
+function infer_ir!(ir::IRCode)
+    return __infer_ir!(ir, CC.NativeInterpreter(), __get_toplevel_mi_from_ir(ir, Taped))
+end
 
-
-# Generic Julia `IRCode` helper functionality.
-# Credit to Frames White (@oxinabox) for `get_toplevel_mi_for_ir` and `infer_ir!`.
+# Sometimes types in `IRCode` have been replaced by constants, or partially-completed
+# structs. A particularly common case is that the first element of the `argtypes` field of
+# an `IRCode` is a `Core.Const` containing the function to be called. `_get_type` recovers
+# the type in such situations.
+_get_type(x::Core.PartialStruct) = x.typ
+_get_type(x::Core.Const) = Core.Typeof(x.val)
+_get_type(T) = T
 
 # Given some IR generates a MethodInstance suitable for passing to infer_ir!, if you don't
-# already have one with the right argument types
-function get_toplevel_mi_from_ir(ir, _module::Module)
+# already have one with the right argument types. Credit to @oxinabox:
+# https://gist.github.com/oxinabox/cdcffc1392f91a2f6d80b2524726d802#file-example-jl-L54
+function __get_toplevel_mi_from_ir(ir, _module::Module)
     mi = ccall(:jl_new_method_instance_uninit, Ref{Core.MethodInstance}, ());
-    mi.specTypes = Tuple{ir.argtypes...}
+    mi.specTypes = Tuple{map(_get_type, ir.argtypes)...}
     mi.def = _module
     return mi
 end
 
-# run type inference and constant propagation on the ir
-function infer_ir!(ir, interp::CC.AbstractInterpreter, mi::CC.MethodInstance)
+# Run type inference and constant propagation on the ir. Credit to @oxinabox:
+# https://gist.github.com/oxinabox/cdcffc1392f91a2f6d80b2524726d802#file-example-jl-L54
+function __infer_ir!(ir, interp::CC.AbstractInterpreter, mi::CC.MethodInstance)
     method_info = CC.MethodInfo(#=propagate_inbounds=#true, nothing)
     min_world = world = CC.get_world_counter(interp)
     max_world = Base.get_world_counter()
     irsv = CC.IRInterpretationState(
         interp, method_info, ir, mi, ir.argtypes, world, min_world, max_world
     )
+    ir.stmts.flag .|= CC.IR_FLAG_REFINED
     rt = CC._ir_abstract_constant_propagation(interp, irsv)
     return ir
 end
