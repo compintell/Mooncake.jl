@@ -1,48 +1,3 @@
-# Contexts -- these are used to govern what are considered primitives.
-
-"""
-    struct MinimalCtx end
-
-Functions should only be primitives in this context if not making them so would cause AD to
-fail. In particular, do not add primitives to this context if you are writing them for
-performance only.
-"""
-struct MinimalCtx end
-
-is_primitive(::MinimalCtx, ::Any) = false
-
-"""
-    @is_primitive context_type signature
-
-Creates a method of `is_primitive` which always returns `true` for the context_type and
-`signature` provided. For example
-```julia
-@is_primitive MinimalCtx Tuple{typeof(foo), Float64}
-```
-is equivalent to
-```julia
-is_primitive(::MinimalCtx, ::Type{<:Tuple{typeof(foo), Float64}}) = true
-```
-
-You should implemented more complicated method of `is_primitive` in the usual way.
-"""
-macro is_primitive(Tctx, sig)
-    return esc(:(Taped.is_primitive(::$Tctx, ::Type{<:$sig}) = true))
-end
-
-@is_primitive MinimalCtx Tuple{typeof(rebind), Any}
-
-"""
-    struct DefaultCtx end
-
-Context for all usually used AD primitives. Anything which is a primitive in a MinimalCtx is
-a primitive in the DefaultCtx automatically. If you are adding a rule for the sake of
-performance, it should be a primitive in the DefaultCtx, but not the MinimalCtx.
-"""
-struct DefaultCtx end
-
-is_primitive(::DefaultCtx, sig) = is_primitive(MinimalCtx(), sig)
-
 # AbstractInterpretation -- this is an instance of a Julia AbstractInterpreter. We use it
 # in conjunction with the contexts above to decide what should be inlined and what should
 # not be inlined. Similar strategies are employed by Enzyme and Diffractor.
@@ -327,68 +282,6 @@ end
 
 ## Expr
 
-function _lift_expr_arg(ex::Expr, sptypes)
-    if Meta.isexpr(ex, :boundscheck)
-        return ConstSlot(true)
-    elseif Meta.isexpr(ex, :static_parameter)
-        out_type = sptypes[ex.args[1]]
-        if out_type isa CC.VarState
-            out_type = out_type.typ
-        end
-        return ConstSlot(out_type)
-    else
-        throw(ArgumentError("Found unexpected expr $ex"))
-    end
-end
-
-_lift_intrinsic(x) = x
-function _lift_intrinsic(x::Core.IntrinsicFunction)
-    return x == cglobal ? x : IntrinsicsWrappers.translate(Val(x))
-end
-
-_lift_expr_arg(ex::Union{Argument, SSAValue, CC.MethodInstance}, _) = ex
-_lift_expr_arg(ex::QuoteNode, _) = ConstSlot(_lift_intrinsic(ex.value))
-_lift_expr_arg(ex::GlobalRef, _) = _globalref_to_slot(ex)
-
-function _globalref_to_slot(ex::GlobalRef)
-    val = getglobal(ex.mod, ex.name)
-    val isa Core.IntrinsicFunction && return ConstSlot(_lift_intrinsic(val))
-    isconst(ex) && return ConstSlot(val)
-    return TypedGlobalRef(ex)
-end
-
-_lift_expr_arg(ex, _) = ConstSlot(ex)
-
-_lift_expr_arg(ex::AbstractSlot, _) = throw(ArgumentError("ex is already a slot!"))
-
-function preprocess_ir(ex::Expr, in_f)
-    ex = CC.copy(ex)
-    sptypes = in_f.ir.sptypes
-    spnames = in_f.spnames
-    if Meta.isexpr(ex, :foreigncall)
-        args = ex.args
-        name = extract_foreigncall_name(args[1])
-        sparams_dict = Dict(zip(spnames, sptypes))
-        RT = Val(interpolate_sparams(args[2], sparams_dict))
-        AT = (map(x -> Val(interpolate_sparams(x, sparams_dict)), args[3])..., )
-        nreq = Val(args[4])
-        calling_convention = Val(args[5] isa QuoteNode ? args[5].value : args[5])
-        x = args[6:end]
-        ex.head = :call
-        f = GlobalRef(Taped, :_foreigncall_)
-        ex.args = Any[f, name, RT, AT, nreq, calling_convention, x...]
-        ex.args = map(Base.Fix2(_lift_expr_arg, sptypes), ex.args)
-        return ex
-    elseif Meta.isexpr(ex, :new)
-        ex.head = :call
-        ex.args = map(Base.Fix2(_lift_expr_arg, sptypes), [_new_, ex.args...])
-        return ex
-    else
-        ex.args = map(Base.Fix2(_lift_expr_arg, sptypes), ex.args)
-        return ex
-    end
-end
-
 @inline _eval(f::F, args::Vararg{Any, N}) where {F, N} = f(args...)
 
 tangent_type(::Type{typeof(_eval)}) = NoTangent
@@ -480,10 +373,6 @@ end
 # Code execution
 #
 
-_get_type(x::Core.PartialStruct) = x.typ
-_get_type(x::Core.Const) = Core.Typeof(x.val)
-_get_type(T) = T
-
 _get_slot(x::Argument, _, arg_info) = arg_info.arg_slots[x.n]
 _get_slot(x::GlobalRef, _, _) = _globalref_to_slot(x)
 _get_slot(x::QuoteNode, _, _) = ConstSlot(x.value)
@@ -494,64 +383,6 @@ _get_slot(x, _, _) = ConstSlot(x)
 function _get_slot(x::Expr, _, _)
     Meta.isexpr(x, :boundscheck) || throw(ArgumentError("Unexpceted expr $x"))
     return ConstSlot(true)
-end
-
-# Copied from Umlaut.jl.
-extract_foreigncall_name(x::Symbol) = Val(x)
-function extract_foreigncall_name(x::Expr)
-    # Make sure that we're getting the expression that we're expecting.
-    !Meta.isexpr(x, :call) && error("unexpected expr $x")
-    !isa(x.args[1], GlobalRef) && error("unexpected expr $x")
-    x.args[1].name != :tuple && error("unexpected expr $x")
-    length(x.args) != 3 && error("unexpected expr $x")
-
-    # Parse it into a name that can be passed as a type.
-    v = eval(x)
-    return Val((Symbol(v[1]), Symbol(v[2])))
-end
-extract_foreigncall_name(v::Tuple) = Val((Symbol(v[1]), Symbol(v[2])))
-extract_foreigncall_name(x::QuoteNode) = extract_foreigncall_name(x.value)
-extract_foreigncall_name(x::GlobalRef) = extract_foreigncall_name(getglobal(x.mod, x.name))
-
-function sparam_names(m::Core.Method)
-    whereparams = ExprTools.where_parameters(m.sig)
-    whereparams === nothing && return []
-    return map(whereparams) do name
-        name isa Symbol && return name
-        Meta.isexpr(name, :(<:)) && return name.args[1]
-        Meta.isexpr(name, :(>:)) && return name.args[1]
-        error("unrecognised type param $name")
-    end
-end
-
-# Copied from Umlaut.jl. Originally, adapted from
-# https://github.com/JuliaDebug/JuliaInterpreter.jl/blob/aefaa300746b95b75f99d944a61a07a8cb145ef3/src/optimize.jl#L239
-function interpolate_sparams(@nospecialize(t::Type), sparams::Dict)
-    t isa Core.TypeofBottom && return t
-    while t isa UnionAll
-        t = t.body
-    end
-    t = t::DataType
-    if Base.isvarargtype(t)
-        return Expr(:(...), t.parameters[1])
-    end
-    if Base.has_free_typevars(t)
-        params = map(t.parameters) do @nospecialize(p)
-            if isa(p, TypeVar)
-                return sparams[p.name].typ.val
-            elseif isa(p, DataType) && Base.has_free_typevars(p)
-                return interpolate_sparams(p, sparams)
-            elseif p isa CC.VarState
-                @show "doing varstate"
-                p.typ
-            else
-                return p
-            end
-        end
-        T = t.name.Typeofwrapper.parameters[1]
-        return T{params...}
-    end
-    return t
 end
 
 #
@@ -618,6 +449,17 @@ function is_vararg_sig_and_sparam_names(sig)
     ms = Base._methods_by_ftype(sig, nothing, -1, world, true, min, max, Ptr{Int32}(C_NULL))::Vector
     m = only(ms).method
     return m.isva, sparam_names(m)
+end
+
+function sparam_names(m::Core.Method)
+    whereparams = ExprTools.where_parameters(m.sig)
+    whereparams === nothing && return []
+    return map(whereparams) do name
+        name isa Symbol && return name
+        Meta.isexpr(name, :(<:)) && return name.args[1]
+        Meta.isexpr(name, :(>:)) && return name.args[1]
+        error("unrecognised type param $name")
+    end
 end
 
 _get_slot(x, in_f::InterpretedFunction) = _get_slot(x, in_f.slots, in_f.arg_info)
