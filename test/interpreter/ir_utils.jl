@@ -35,4 +35,28 @@
         # Check that the ir is runable.
         @test Core.OpaqueClosure(ir)(5.0) == cos(sin(5.0))
     end
+    @testset "replace_all_uses_with" begin
+
+        # Test individual translation strategies.
+        @testset "replace_uses_with $val" for (val, target) in Any[
+            (5.0, 5.0),
+            (5, 5),
+            (Expr(:call, sin, SSAValue(1)), Expr(:call, sin, SSAValue(2))),
+            (Expr(:call, sin, SSAValue(3)), Expr(:call, sin, SSAValue(3))),
+            (GotoNode(1), GotoNode(1)),
+            (GotoIfNot(false, 5), GotoIfNot(false, 5)),
+            (GotoIfNot(SSAValue(1), 3), GotoIfNot(SSAValue(2), 3)),
+            (GotoIfNot(SSAValue(3), 3), GotoIfNot(SSAValue(3), 3)),
+            (
+                PhiNode(Int32[1, 2, 3], Any[5, SSAValue(1), SSAValue(3)]),
+                PhiNode(Int32[1, 2, 3], Any[5, SSAValue(2), SSAValue(3)]),
+            ),
+            (QuoteNode(:a_quote), QuoteNode(:a_quote)),
+            (ReturnNode(5), ReturnNode(5)),
+            (ReturnNode(SSAValue(1)), ReturnNode(SSAValue(2))),
+            (ReturnNode(SSAValue(3)), ReturnNode(SSAValue(3))),
+        ]
+            @test Taped.replace_uses_with(val, SSAValue(1), SSAValue(2)) == target
+        end
+    end
 end

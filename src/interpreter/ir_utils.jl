@@ -116,3 +116,38 @@ function __infer_ir!(ir, interp::CC.AbstractInterpreter, mi::CC.MethodInstance)
     return ir
 end
 
+"""
+    replace_all_uses_with!(ir::IRCode, value::SSAValue, new_value::Any) -> IRCode
+
+Wherever `value` appears in `ir`, replace it with `new_value`.
+"""
+function replace_all_uses_with!(ir::IRCode, value::SSAValue, new_value::Any)
+    insts = ir.stmts.inst
+    for (n, inst) in enumerate(insts)
+        insts[n] = replace_uses_with(inst, value, new_value)
+    end
+    return ir
+end
+
+#=
+    replace_uses_with(x, value::SSAValue, new_value)
+
+Replace all occurences of `value` in the IR node `x` with `new_value`. The semantics of this
+are node-dependent.
+=#
+replace_uses_with(x::Any, ::SSAValue, _) = x # constants
+function replace_uses_with(x::Expr, v::SSAValue, new_v)
+    return Expr(x.head, [_replace(v, new_v, a) for a in x.args]...)
+end
+replace_uses_with(x::GotoNode, ::SSAValue, _) = x
+function replace_uses_with(x::GotoIfNot, v::SSAValue, new_v)
+    return GotoIfNot(_replace(v, new_v, x.cond), x.dest)
+end
+function replace_uses_with(x::PhiNode, v::SSAValue, new_v)
+    return PhiNode(x.edges, Any[_replace(v, new_v, a) for a in x.values])
+end
+replace_uses_with(x::QuoteNode, ::SSAValue, _) = x
+replace_uses_with(x::ReturnNode, v::SSAValue, new_v) = ReturnNode(_replace(v, new_v, x.val))
+
+# Return new_value if val equals current_val.
+_replace(val::SSAValue, new_val, current_val) = val == current_val ? new_val : current_val
