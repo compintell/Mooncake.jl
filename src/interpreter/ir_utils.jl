@@ -146,6 +146,7 @@ end
 function replace_uses_with(x::PhiNode, v::SSAValue, new_v)
     return PhiNode(x.edges, Any[_replace(v, new_v, a) for a in x.values])
 end
+replace_uses_with(x::PiNode, v::SSAValue, new_v) = PiNode(_replace(v, new_v, x.val), x.typ)
 replace_uses_with(x::QuoteNode, ::SSAValue, _) = x
 replace_uses_with(x::ReturnNode, v::SSAValue, new_v) = ReturnNode(_replace(v, new_v, x.val))
 

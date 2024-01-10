@@ -35,9 +35,10 @@
         # Check that the ir is runable.
         @test Core.OpaqueClosure(ir)(5.0) == cos(sin(5.0))
     end
-    @testset "replace_all_uses_with" begin
+    @testset "replace_all_uses_with!" begin
 
-        # Test individual translation strategies.
+        # `replace_all_uses_with!` is just a lightweight wrapper around `replace_uses_with`,
+        # so we just test that carefully.
         @testset "replace_uses_with $val" for (val, target) in Any[
             (5.0, 5.0),
             (5, 5),
@@ -51,6 +52,9 @@
                 PhiNode(Int32[1, 2, 3], Any[5, SSAValue(1), SSAValue(3)]),
                 PhiNode(Int32[1, 2, 3], Any[5, SSAValue(2), SSAValue(3)]),
             ),
+            (PiNode(SSAValue(1), Float64), PiNode(SSAValue(2), Float64)),
+            (PiNode(SSAValue(3), Float64), PiNode(SSAValue(3), Float64)),
+            (PiNode(Argument(1), Float64), PiNode(Argument(1), Float64)),
             (QuoteNode(:a_quote), QuoteNode(:a_quote)),
             (ReturnNode(5), ReturnNode(5)),
             (ReturnNode(SSAValue(1)), ReturnNode(SSAValue(2))),
