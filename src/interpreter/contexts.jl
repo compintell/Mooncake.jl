@@ -1,4 +1,4 @@
-# Contexts -- these are used to govern what are considered primitives.
+# Contexts are used to govern what are considered primitives.
 
 """
     struct MinimalCtx end
