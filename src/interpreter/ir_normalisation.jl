@@ -8,8 +8,8 @@ unchanged, but make AD more straightforward. In particular, replace
 3. `:new` `Expr`s with `:call`s to `Taped._new_`,
 4. `Core.IntrinsicFunction`s with counterparts from `Taped.IntrinsicWrappers`.
 
-After these standardisations are applied, applies `ensure_single_argument_usage_per_call!`,
-which is _essential_ for the correctness of AD.
+Additionally applies `rebind_phi_nodes!` and `rebind_multiple_usage!`, which are _essential_
+for the correctness of AD.
 
 `spnames` are the names associated to the static parameters of `ir`. These are needed when
 handling `:foreigncall` expressions, in which it is not necessarily the case that all
@@ -33,7 +33,9 @@ function normalise!(ir::IRCode, spnames::Vector{Symbol})
     end
 
     # Apply multi-line transformations.
-    return ensure_single_argument_usage_per_call!(ir)
+    ir = rebind_phi_nodes!(ir)
+    ir = rebind_multiple_usage!(ir)
+    return ir
 end
 
 """
@@ -149,33 +151,14 @@ Otherwise, return `x`.
 new_expr_to_call_expr(x) = Meta.isexpr(x, :new) ? Expr(:call, _new_, x.args...) : x
 
 """
-    intrinsic_calls_to_function_calls!(ir::IRCode)
-
-Replace `:call`s to `Core.IntrinsicFunction`s with `:call`s to counterpart functions in
-`Taped.IntrinsicWrappers`. These wrappers are primitives, and have `rrule!!`s written for
-them directly.
-"""
-function intrinsic_calls_to_function_calls!(ir::IRCode)
-    for inst in ir.stmts.inst
-        if Meta.isexpr(inst, :call)
-            ex.args = map(Base.Fix2(_lift_expr_arg, ir.sptypes), ex.args)
-        end
-    end
-    return ir
-end
-
-"""
     intrinsic_to_function(inst)
 
 If `inst` is a `:call` expression to a `Core.IntrinsicFunction`, replace it with a call to
-the corresponding `Function` from `Taped.IntrinsicsWrappers`, else return inst.
+the corresponding `function` from `Taped.IntrinsicsWrappers`, else return inst.
 """
 function intrinsic_to_function(inst)
-    if Meta.isexpr(inst, :call)
-        return Expr(:call, lift_intrinsic(inst.args[1]), inst.args[2:end]...)
-    else
-        return inst
-    end
+    Meta.isexpr(inst, :call) || return inst
+    return Expr(:call, lift_intrinsic(inst.args[1]), inst.args[2:end]...)
 end
 
 lift_intrinsic(x) = x
@@ -288,40 +271,3 @@ __rebind(x) = x
 @is_primitive MinimalCtx Tuple{typeof(__rebind), Any}
 __rebind_pb!!(dy, df, dx) = df, increment!!(dx, dy)
 rrule!!(::CoDual{typeof(__rebind)}, x::CoDual) = x, __rebind_pb!!
-
-
-
-
-function slotify!(ir::IRCode)
-
-end
-
-function _lift_expr_arg(ex::Expr, sptypes)
-    if Meta.isexpr(ex, :boundscheck)
-        return ConstSlot(true)
-    elseif Meta.isexpr(ex, :static_parameter)
-        out_type = sptypes[ex.args[1]]
-        if out_type isa CC.VarState
-            out_type = out_type.typ
-        end
-        return ConstSlot(out_type)
-    else
-        throw(ArgumentError("Found unexpected expr $ex"))
-    end
-end
-
-
-_lift_expr_arg(ex::Union{Argument, SSAValue, CC.MethodInstance}, _) = ex
-_lift_expr_arg(ex::QuoteNode, _) = ConstSlot(_lift_intrinsic(ex.value))
-_lift_expr_arg(ex::GlobalRef, _) = _globalref_to_slot(ex)
-
-function _globalref_to_slot(ex::GlobalRef)
-    val = getglobal(ex.mod, ex.name)
-    val isa Core.IntrinsicFunction && return ConstSlot(_lift_intrinsic(val))
-    isconst(ex) && return ConstSlot(val)
-    return TypedGlobalRef(ex)
-end
-
-_lift_expr_arg(ex, _) = ConstSlot(ex)
-
-_lift_expr_arg(ex::AbstractSlot, _) = throw(ArgumentError("ex is already a slot!"))
