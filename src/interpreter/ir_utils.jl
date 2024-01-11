@@ -147,7 +147,14 @@ function replace_uses_with(x::GotoIfNot, v::SSAValue, new_v)
     return GotoIfNot(_replace(v, new_v, x.cond), x.dest)
 end
 function replace_uses_with(x::PhiNode, v::SSAValue, new_v)
-    return PhiNode(x.edges, Any[_replace(v, new_v, a) for a in x.values])
+    values = x.values
+    new_values = Vector{Any}(undef, length(values))
+    for n in eachindex(new_values)
+        if isassigned(values, n)
+            new_values[n] = _replace(v, new_v, values[n])
+        end
+    end
+    return PhiNode(x.edges, new_values)
 end
 replace_uses_with(x::PiNode, v::SSAValue, new_v) = PiNode(_replace(v, new_v, x.val), x.typ)
 replace_uses_with(x::QuoteNode, ::SSAValue, _) = x

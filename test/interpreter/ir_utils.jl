@@ -37,6 +37,8 @@
     end
     @testset "replace_all_uses_with!" begin
 
+
+
         # `replace_all_uses_with!` is just a lightweight wrapper around `replace_uses_with`,
         # so we just test that carefully.
         @testset "replace_uses_with $val" for (val, target) in Any[
@@ -61,6 +63,14 @@
             (ReturnNode(SSAValue(3)), ReturnNode(SSAValue(3))),
         ]
             @test Taped.replace_uses_with(val, SSAValue(1), SSAValue(2)) == target
+        end
+        @testset "PhiNode with undefined" begin
+            vals_with_undef_1 = Vector{Any}(undef, 2)
+            vals_with_undef_1[2] = SSAValue(1)
+            val = PhiNode(Int32[1, 2], vals_with_undef_1)
+            result = Taped.replace_uses_with(val, SSAValue(1), SSAValue(2))
+            @test result.values[2] == SSAValue(2)
+            @test !isassigned(result.values, 1)
         end
     end
 end
