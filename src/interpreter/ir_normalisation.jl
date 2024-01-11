@@ -9,43 +9,24 @@ unchanged, but make AD more straightforward. In particular, replace
 4. `Core.IntrinsicFunction`s with counterparts from `Taped.IntrinsicWrappers`.
 
 After these standardisations are applied, applies `ensure_single_argument_usage_per_call!`,
-which is essential for the correctness of AD.
+which is _essential_ for the correctness of AD.
 """
 function normalise!(ir::IRCode)
-
-
-    return ensure_single_argument_usage_per_call!(ir)
+    invokes_to_calls!(ir)
+    foreigncall_exprs_to_call_exprs!(ir)
+    new_exprs_to_call_exprs!(ir)
+    intrinsic_calls_to_function_calls!(ir)
+    ensure_single_argument_usage_per_call!(ir)
+    return ir
 end
 
 """
-    ensure_single_argument_usage_per_call!(ir::IRCode)
+    invokes_to_calls!(ir::IRCode)
 
-Transforms `ir` to ensures that all `:call` expressions have only a single usage of any
-`Argument` or `SSAValue`.
-
-For example, an expression such as
-```julia
-foo(%1, %2, %1)
-```
-uses the `SSAValue` `%1` twice. This can cause correctness issues issues on the reverse-pass
-of AD if `%1` happens to be differentiable and a bits-type.
-
-`ensure_single_argument_usage_per_call!` transforms the above example, and generalisations
-thereof, into
-```julia
-x = __single_use_shim(%1)
-foo(%1, %2, x)
-```
-where `__single_use_shim` is equivalent to the `identity`, but is always a primitive.
+Replaces all instances of `:invoke` expressions with equivalent `:call` expressions.
 """
-function ensure_single_argument_usage_per_call!(ir::IRCode)
-
-end
-
-# Replaces all instances of `:invoke` expressions with equivalent `:call` expressions.
-function __invokes_to_calls!(ir::IRCode)
-    insts::Vector{Any} = ir.stmts.inst
-    for (n, inst) in enumerate(insts)
+function invokes_to_calls!(ir::IRCode)
+    for inst in ir.stmts.inst
         if Meta.isexpr(inst, :invoke)
 
             # A _sufficient_ condition for it to be safe to perform this transformation is
@@ -62,6 +43,98 @@ function __invokes_to_calls!(ir::IRCode)
         end
     end
     return ir
+end
+
+"""
+    foreigncall_exprs_to_call_exprs!(ir::IRCode)
+
+Replace all instance of `:foreigncall` expressions with equivalent `:call` expressions.
+"""
+function foreigncall_exprs_to_call_exprs!(ir::IRCode)
+    foreach(__foreigncall_expr_to_call_expr!, ir.stmts.inst)
+end
+
+# If `inst` is a :foreigncall expression, translate it into an equivalent :call expression.
+function __foreigncall_expr_to_call_expr!(inst)
+    if Meta.isexpr(inst, :foreigncall)
+        args = inst.args
+        name = __extract_foreigncall_name(args[1])
+        sparams_dict = Dict(zip(spnames, sptypes))
+        RT = Val(interpolate_sparams(args[2], sparams_dict))
+        AT = (map(x -> Val(interpolate_sparams(x, sparams_dict)), args[3])..., )
+        nreq = Val(args[4])
+        calling_convention = Val(args[5] isa QuoteNode ? args[5].value : args[5])
+        x = args[6:end]
+        inst.head = :call
+        f = GlobalRef(Taped, :_foreigncall_)
+        inst.args = Any[f, name, RT, AT, nreq, calling_convention, x...]
+    end
+    return inst
+end
+
+# Copied from Umlaut.jl.
+__extract_foreigncall_name(x::Symbol) = Val(x)
+function __extract_foreigncall_name(x::Expr)
+    # Make sure that we're getting the expression that we're expecting.
+    !Meta.isexpr(x, :call) && error("unexpected expr $x")
+    !isa(x.args[1], GlobalRef) && error("unexpected expr $x")
+    x.args[1].name != :tuple && error("unexpected expr $x")
+    length(x.args) != 3 && error("unexpected expr $x")
+
+    # Parse it into a name that can be passed as a type.
+    v = eval(x)
+    return Val((Symbol(v[1]), Symbol(v[2])))
+end
+__extract_foreigncall_name(v::Tuple) = Val((Symbol(v[1]), Symbol(v[2])))
+__extract_foreigncall_name(x::QuoteNode) = __extract_foreigncall_name(x.value)
+function __extract_foreigncall_name(x::GlobalRef)
+    return __extract_foreigncall_name(getglobal(x.mod, x.name))
+end
+
+# Copied from Umlaut.jl. Originally, adapted from
+# https://github.com/JuliaDebug/JuliaInterpreter.jl/blob/aefaa300746b95b75f99d944a61a07a8cb145ef3/src/optimize.jl#L239
+function interpolate_sparams(@nospecialize(t::Type), sparams::Dict)
+    t isa Core.TypeofBottom && return t
+    while t isa UnionAll
+        t = t.body
+    end
+    t = t::DataType
+    if Base.isvarargtype(t)
+        return Expr(:(...), t.parameters[1])
+    end
+    if Base.has_free_typevars(t)
+        params = map(t.parameters) do @nospecialize(p)
+            if isa(p, TypeVar)
+                return sparams[p.name].typ.val
+            elseif isa(p, DataType) && Base.has_free_typevars(p)
+                return interpolate_sparams(p, sparams)
+            elseif p isa CC.VarState
+                @show "doing varstate"
+                p.typ
+            else
+                return p
+            end
+        end
+        T = t.name.Typeofwrapper.parameters[1]
+        return T{params...}
+    end
+    return t
+end
+
+"""
+    new_exprs_to_call_exprs!(ir::IRCode)
+
+Replaces all `:new` expressions with `:call` expressions to `Taped._new_`.
+"""
+function new_exprs_to_call_exprs!(ir::IRCode)
+    foreach(__new_expr_to_call_expr!, ir.stmts.inst)
+end
+
+function __new_expr_to_call_expr!(ex::Expr)
+    if Meta.isexpr(ex, :new)
+        ex.head = :call
+        ex.args = [_new_, ex.args...]
+    end
 end
 
 function _lift_expr_arg(ex::Expr, sptypes)
@@ -98,30 +171,50 @@ end
 
 # _lift_expr_arg(ex::AbstractSlot, _) = throw(ArgumentError("ex is already a slot!"))
 
-# function preprocess_ir(ex::Expr, in_f)
-#     ex = CC.copy(ex)
-#     sptypes = in_f.ir.sptypes
-#     spnames = in_f.spnames
-#     if Meta.isexpr(ex, :foreigncall)
-#         args = ex.args
-#         name = extract_foreigncall_name(args[1])
-#         sparams_dict = Dict(zip(spnames, sptypes))
-#         RT = Val(interpolate_sparams(args[2], sparams_dict))
-#         AT = (map(x -> Val(interpolate_sparams(x, sparams_dict)), args[3])..., )
-#         nreq = Val(args[4])
-#         calling_convention = Val(args[5] isa QuoteNode ? args[5].value : args[5])
-#         x = args[6:end]
-#         ex.head = :call
-#         f = GlobalRef(Taped, :_foreigncall_)
-#         ex.args = Any[f, name, RT, AT, nreq, calling_convention, x...]
-#         ex.args = map(Base.Fix2(_lift_expr_arg, sptypes), ex.args)
-#         return ex
-#     elseif Meta.isexpr(ex, :new)
-#         ex.head = :call
-#         ex.args = map(Base.Fix2(_lift_expr_arg, sptypes), [_new_, ex.args...])
-#         return ex
-#     else
-#         ex.args = map(Base.Fix2(_lift_expr_arg, sptypes), ex.args)
-#         return ex
-#     end
-# end
+"""
+    intrinsic_calls_to_function_calls!(ir::IRCode)
+
+Replace `:call`s to `Core.IntrinsicFunction`s with `:call`s to counterpart functions in
+`Taped.IntrinsicWrappers`. These wrappers are primitives, and have `rrule!!`s written for
+them directly.
+"""
+function intrinsic_calls_to_function_calls!(ir::IRCode)
+    sptypes = ir.sptypes
+    spnames = in_f.spnames # need method for this stuff
+    for inst in ir.stmts.inst
+        if Meta.isexpr(inst, :call)
+            ex.args = map(Base.Fix2(_lift_expr_arg, sptypes), ex.args)
+        end
+    end
+    return ir
+end
+
+"""
+    ensure_single_argument_usage_per_call!(ir::IRCode)
+
+Transforms `ir` to ensures that all `:call` expressions have only a single usage of any
+`Argument` or `SSAValue`.
+
+For example, an expression such as
+```julia
+foo(%1, %2, %1)
+```
+uses the `SSAValue` `%1` twice. This can cause correctness issues issues on the reverse-pass
+of AD if `%1` happens to be differentiable and a bits-type.
+
+`ensure_single_argument_usage_per_call!` transforms the above example, and generalisations
+thereof, into
+```julia
+x = __rebind(%1)
+foo(%1, %2, x)
+```
+where `__rebind` is equivalent to the `identity`, but is always a primitive.
+"""
+function ensure_single_argument_usage_per_call!(ir::IRCode)
+
+end
+
+__rebind(x) = x
+@is_primitive MinimalCtx Tuple{typeof(__rebind), Any}
+__rebind_pb!!(dy, df, dx) = df, increment!!(dx, dy)
+rrule!!(::CoDual{typeof(__rebind)}, x::CoDual) = x, __rebind_pb!!
