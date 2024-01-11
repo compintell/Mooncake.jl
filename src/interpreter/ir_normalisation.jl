@@ -243,7 +243,7 @@ end
 """
     rebind_multiple_usage!(ir::IRCode)
 
-Transforms `ir` to ensures that all `:call` expressions have only a single usage of any
+Transforms `ir` to ensure that all `:call` expressions have only a single usage of any
 `Argument` or `SSAValue`.
 
 For example, an expression such as
@@ -256,13 +256,26 @@ of AD if `%1` happens to be differentiable and a bits-type.
 `rebind_multiple_usage!` transforms the above example, and generalisations
 thereof, into
 ```julia
-x = __rebind(%1)
+x = Taped.__rebind(%1)
 foo(%1, %2, x)
 ```
-where `__rebind` is equivalent to the `identity`, but is always a primitive.
+where `Taped.__rebind` is equivalent to the `identity`, but is always a primitive.
 """
 function rebind_multiple_usage!(ir::IRCode)
-
+    for (n, inst) in enumerate(ir.stmts.inst)
+        if Meta.isexpr(inst, :call)
+            args = inst.args
+            for (j, arg) in enumerate(args)
+                isa(arg, Union{SSAValue, Argument}) || continue
+                m = findfirst(==(arg), view(args, 1:j-1))
+                m === nothing && continue
+                new_inst = CC.NewInstruction(Expr(:call, __rebind, arg), Any)
+                rebound_arg = CC.insert_node!(ir, n, new_inst, #=insert_after=#false)
+                args[j] = rebound_arg
+            end
+        end
+    end
+    return CC.compact!(ir)
 end
 
 """

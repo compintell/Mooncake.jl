@@ -86,6 +86,44 @@
         @test gotoifnot.cond == SSAValue(5)
     end
     @testset "rebind_multiple_usage!" begin
-    
+        @testset "single-line case" begin
+            ir = Taped.ircode(
+                Any[
+                    Expr(:call, GlobalRef(Base, :(+)), Argument(1), Argument(1)),
+                ],
+                Any[Tuple{}, Float64],
+            )
+            new_ir = Taped.rebind_multiple_usage!(CC.copy(ir))
+            @test new_ir.stmts.inst == Any[
+                Expr(:call, Taped.__rebind, Argument(1)),
+                Expr(:call, GlobalRef(Base, :(+)), Argument(1), SSAValue(1)),
+            ]
+        end
+        @testset "function which calls itself" begin
+            ir = Taped.ircode(
+                Any[Expr(:call, Argument(1), Argument(1)),], Any[Tuple{}, Float64],
+            )
+            new_ir = Taped.rebind_multiple_usage!(CC.copy(ir))
+            @test new_ir.stmts.inst == Any[
+                Expr(:call, Taped.__rebind, Argument(1)),
+                Expr(:call, Argument(1), SSAValue(1)),
+            ]
+        end
+        @testset "Lots of uses of SSAValue" begin
+            ir = Taped.ircode(
+                Any[
+                    Expr(:call, sin, Argument(2)),
+                    Expr(:call, Argument(1), SSAValue(1), SSAValue(1), SSAValue(1)),
+                ],
+                Any[Tuple{}, Float64],
+            )
+            new_ir = Taped.rebind_multiple_usage!(CC.copy(ir))
+            @test new_ir.stmts.inst == Any[
+                Expr(:call, sin, Argument(2)),
+                Expr(:call, Taped.__rebind, SSAValue(1)),
+                Expr(:call, Taped.__rebind, SSAValue(1)),
+                Expr(:call, Argument(1), SSAValue(1), SSAValue(2), SSAValue(3)),
+            ]
+        end
     end
 end
