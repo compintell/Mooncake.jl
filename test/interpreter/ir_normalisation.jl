@@ -4,26 +4,15 @@
         ir = CC.IRCode()
 
     end
-    @testset "invokes_to_calls!" begin
-
-        # Generate ir with an invoke in it, and verify that it runs.
+    @testset "invoke_to_call" begin
         mi = which(Tuple{typeof(sin), Float64}).specializations
-        ir = Taped.ircode(
-            Any[
-                Expr(:invoke, mi, sin, 5.0),
-                ReturnNode(SSAValue(1)),
-            ],
-            Any[Tuple{}],
-        )
-        @assert Core.OpaqueClosure(ir)() == sin(5.0)
-
-        # Transform invokes to calls and verify the results.
-        Taped.invokes_to_calls!(ir)
-        @test ir.stmts.inst[1] == Expr(:call, sin, 5.0)
-        @test Core.OpaqueClosure(ir)() == sin(5.0)
+        invoke_inst = Expr(:invoke, mi, sin, 5.0)
+        call_inst = Taped.invoke_to_call(invoke_inst)
+        @test call_inst.head == :call
+        @test call_inst.args == invoke_inst.args[2:end]
     end
-    @testset "foreigncall_exprs_to_call_exprs!" begin
-        expr = Expr(
+    @testset "foreigncall_to_call" begin
+        foreigncall = Expr(
             :foreigncall,
             :(:jl_array_isassigned),
             Int32,
@@ -35,16 +24,27 @@
             0x0000000000000001,
         )
         sp_map = Dict{Symbol, CC.VarState}()
-        Taped.__foreigncall_expr_to_call_expr!(expr, sp_map)
-        @test Meta.isexpr(expr, :call)
-        @test expr.args[1] == Taped._foreigncall_
+        call = Taped.foreigncall_to_call(foreigncall, sp_map)
+        @test Meta.isexpr(call, :call)
+        @test call.args[1] == Taped._foreigncall_
     end
-    @testset "new_exprs_to_call_exprs!" begin
-        args = Any[GlobalRef(Taped, :Foo), SSAValue(1), :hi]
-        ex = Expr(:new, args...)
-        Taped.__new_expr_to_call_expr!(ex)
-        @test Meta.isexpr(ex, :call)
-        @test ex.args[1] == Taped._new_
-        @test ex.args[2:end] == args
+    @testset "new_expr_to_call_expr" begin
+        new_ex = Expr(:new, GlobalRef(Taped, :Foo), SSAValue(1), :hi)
+        call_ex = Taped.new_expr_to_call_expr(new_ex)
+        @test Meta.isexpr(call_ex, :call)
+        @test call_ex.args[1] == Taped._new_
+        @test call_ex.args[2:end] == new_ex.args
+    end
+    @testset "intrinsic_to_function" begin
+        @testset "GlobalRef" begin
+            intrinsic_ex = Expr(:call, GlobalRef(Core.Intrinsics, :abs_float), SSAValue(1))
+            wrapper_ex = Taped.intrinsic_to_function(intrinsic_ex)
+            @test wrapper_ex.args[1] == Taped.IntrinsicsWrappers.abs_float
+        end
+        @testset "IntrinsicFunction" begin
+            intrinsic_ex = Expr(:call, Core.Intrinsics.abs_float, SSAValue(1))
+            wrapper_ex = Taped.intrinsic_to_function(intrinsic_ex)
+            @test wrapper_ex.args[1] == Taped.IntrinsicsWrappers.abs_float
+        end
     end
 end

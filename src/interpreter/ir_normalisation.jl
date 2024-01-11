@@ -21,51 +21,62 @@ from which the `IRCode` is derived must be consulted. `Taped.is_vararg_sig_and_s
 provides a convenient way to do this.
 """
 function normalise!(ir::IRCode, spnames::Vector{Symbol})
-    invokes_to_calls!(ir)
-    foreigncall_exprs_to_call_exprs!(ir)
-    new_exprs_to_call_exprs!(ir)
-    intrinsic_calls_to_function_calls!(ir)
-    ensure_single_argument_usage_per_call!(ir)
-    return ir
+
+    # Apply per-instruction transformations to each instruction.
+    sp_map = Dict{Symbol, CC.VarState}(zip(spnames, ir.sptypes))
+    for (n, inst) in enumerate(ir.stmts.inst)
+        inst = invoke_to_call(inst)
+        inst = foreigncall_expr_to_call_expr(inst, sp_map)
+        inst = new_expr_to_call_expr(inst)
+        inst = intrinsics_to_function_calls(inst)
+        ir.stmts.inst[n] = inst
+    end
+
+    # Apply multi-line transformations.
+    return ensure_single_argument_usage_per_call!(ir)
 end
 
 """
-    invokes_to_calls!(ir::IRCode)
+    invoke_to_call(inst)
 
-Replaces all instances of `:invoke` expressions with equivalent `:call` expressions.
+If `inst` is an `:invoke` expression, return an equivalent `:call` expression if it is
+safe to do so. If `inst` is an `invoke` and it cannot be safely translated into a `:call`,
+throws an assertion error.
+
+If anything else just return `inst`.
 """
-invokes_to_calls!(ir::IRCode) = foreach(__invoke_to_call!, ir.stmts.inst)
-
-function __invoke_to_call!(ex)
-    if Meta.isexpr(ex, :invoke)
+function invoke_to_call(inst)
+    if Meta.isexpr(inst, :invoke)
 
         # A _sufficient_ condition for it to be safe to perform this transformation is
         # that the types in the `MethodInstance` that this `:invoke` node refers to are
         # concrete. Check this. It _might_ be that there exist `:invoke` nodes which do
         # not satisfy this criterion, but for which it is safe to perform this
         # transformation -- if this is true, I (Will) have yet to encounter one.
-        mi = ex.args[1]
+        mi = inst.args[1]
         @assert all(isconcretetype, mi.specTypes.parameters)
 
         # Change to a call.
-        ex.head = :call
-        ex.args = ex.args[2:end]
+        return Expr(:call, inst.args[2:end]...)
+    else
+        return inst
     end
 end
 
 """
-    foreigncall_exprs_to_call_exprs!(ir::IRCode, spnames::Vector{Symbol})
+    foreigncall_to_call(inst, sp_map::Dict{Symbol, CC.VarState})
 
-Replace all instance of `:foreigncall` expressions with equivalent `:call` expressions.
+If `inst` is a `:foreigncall` expression translate it into an equivalent `:call` expression.
+If anything else, just return `inst`.
+
+`sp_map` maps the names of the static parameters to their values. This function is intended
+to be called in the context of an `IRCode`, in which case the values of `sp_map` are given
+by the `sptypes` field of said `IRCode`. The keys should generally be obtained from the
+`Method` from which the `IRCode` is derived. See `Taped.normalise!` for more details.
 """
-function foreigncall_exprs_to_call_exprs!(ir::IRCode, spnames::Vector{Symbol})
-    sp_map = Dict{Symbol, CC.VarState}(zip(spnames, ir.sptypes))
-    foreach(__foreigncall_expr_to_call_expr!, ir.stmts.inst, sp_map)
-end
-
-# If `inst` is a :foreigncall expression, translate it into an equivalent :call expression.
-function __foreigncall_expr_to_call_expr!(inst, sp_map::Dict{Symbol, CC.VarState})
+function foreigncall_to_call(inst, sp_map::Dict{Symbol, CC.VarState})
     if Meta.isexpr(inst, :foreigncall)
+        # See Julia's AST devdocs for info on `:foreigncall` expressions.
         args = inst.args
         name = __extract_foreigncall_name(args[1])
         RT = Val(interpolate_sparams(args[2], sp_map))
@@ -73,8 +84,9 @@ function __foreigncall_expr_to_call_expr!(inst, sp_map::Dict{Symbol, CC.VarState
         nreq = Val(args[4])
         calling_convention = Val(args[5] isa QuoteNode ? args[5].value : args[5])
         x = args[6:end]
-        inst.head = :call
-        inst.args = Any[_foreigncall_, name, RT, AT, nreq, calling_convention, x...]
+        return Expr(:call, _foreigncall_, name, RT, AT, nreq, calling_convention, x...)
+    else
+        return inst
     end
     return inst
 end
@@ -129,18 +141,12 @@ function interpolate_sparams(@nospecialize(t::Type), sparams::Dict{Symbol, CC.Va
 end
 
 """
-    new_exprs_to_call_exprs!(ir::IRCode)
+    new_expr_to_call_expr(x)
 
-Replaces all `:new` expressions with `:call` expressions to `Taped._new_`.
+If instruction `x` is a `:new` expression, replace if with a `:call` to `Taped._new_`.
+Otherwise, return `x`.
 """
-new_exprs_to_call_exprs!(ir::IRCode) = foreach(__new_expr_to_call_expr!, ir.stmts.inst)
-
-function __new_expr_to_call_expr!(ex::Expr)
-    if Meta.isexpr(ex, :new)
-        ex.head = :call
-        ex.args = [_new_, ex.args...]
-    end
-end
+new_expr_to_call_expr(x) = Meta.isexpr(x, :new) ? Expr(:call, _new_, x.args...) : x
 
 """
     intrinsic_calls_to_function_calls!(ir::IRCode)
@@ -158,39 +164,28 @@ function intrinsic_calls_to_function_calls!(ir::IRCode)
     return ir
 end
 
-function _lift_expr_arg(ex::Expr, sptypes)
-    if Meta.isexpr(ex, :boundscheck)
-        return ConstSlot(true)
-    elseif Meta.isexpr(ex, :static_parameter)
-        out_type = sptypes[ex.args[1]]
-        if out_type isa CC.VarState
-            out_type = out_type.typ
-        end
-        return ConstSlot(out_type)
+"""
+    intrinsic_to_function(inst)
+
+If `inst` is a `:call` expression to a `Core.IntrinsicFunction`, replace it with a call to
+the corresponding `Function` from `Taped.IntrinsicsWrappers`, else return inst.
+"""
+function intrinsic_to_function(inst)
+    if Meta.isexpr(inst, :call)
+        return Expr(:call, lift_intrinsic(inst.args[1]), inst.args[2:end]...)
     else
-        throw(ArgumentError("Found unexpected expr $ex"))
+        return inst
     end
 end
 
-_lift_intrinsic(x) = x
-function _lift_intrinsic(x::Core.IntrinsicFunction)
+lift_intrinsic(x) = x
+function lift_intrinsic(x::GlobalRef)
+    val = getglobal(x.mod, x.name)
+    return val isa Core.IntrinsicFunction ? lift_intrinsic(val) : x
+end
+function lift_intrinsic(x::Core.IntrinsicFunction)
     return x == cglobal ? x : IntrinsicsWrappers.translate(Val(x))
 end
-
-_lift_expr_arg(ex::Union{Argument, SSAValue, CC.MethodInstance}, _) = ex
-_lift_expr_arg(ex::QuoteNode, _) = ConstSlot(_lift_intrinsic(ex.value))
-_lift_expr_arg(ex::GlobalRef, _) = _globalref_to_slot(ex)
-
-function _globalref_to_slot(ex::GlobalRef)
-    val = getglobal(ex.mod, ex.name)
-    val isa Core.IntrinsicFunction && return ConstSlot(_lift_intrinsic(val))
-    isconst(ex) && return ConstSlot(val)
-    return TypedGlobalRef(ex)
-end
-
-_lift_expr_arg(ex, _) = ConstSlot(ex)
-
-_lift_expr_arg(ex::AbstractSlot, _) = throw(ArgumentError("ex is already a slot!"))
 
 """
     ensure_single_argument_usage_per_call!(ir::IRCode)
@@ -221,3 +216,40 @@ __rebind(x) = x
 @is_primitive MinimalCtx Tuple{typeof(__rebind), Any}
 __rebind_pb!!(dy, df, dx) = df, increment!!(dx, dy)
 rrule!!(::CoDual{typeof(__rebind)}, x::CoDual) = x, __rebind_pb!!
+
+
+
+
+function slotify!(ir::IRCode)
+    
+end
+
+function _lift_expr_arg(ex::Expr, sptypes)
+    if Meta.isexpr(ex, :boundscheck)
+        return ConstSlot(true)
+    elseif Meta.isexpr(ex, :static_parameter)
+        out_type = sptypes[ex.args[1]]
+        if out_type isa CC.VarState
+            out_type = out_type.typ
+        end
+        return ConstSlot(out_type)
+    else
+        throw(ArgumentError("Found unexpected expr $ex"))
+    end
+end
+
+
+_lift_expr_arg(ex::Union{Argument, SSAValue, CC.MethodInstance}, _) = ex
+_lift_expr_arg(ex::QuoteNode, _) = ConstSlot(_lift_intrinsic(ex.value))
+_lift_expr_arg(ex::GlobalRef, _) = _globalref_to_slot(ex)
+
+function _globalref_to_slot(ex::GlobalRef)
+    val = getglobal(ex.mod, ex.name)
+    val isa Core.IntrinsicFunction && return ConstSlot(_lift_intrinsic(val))
+    isconst(ex) && return ConstSlot(val)
+    return TypedGlobalRef(ex)
+end
+
+_lift_expr_arg(ex, _) = ConstSlot(ex)
+
+_lift_expr_arg(ex::AbstractSlot, _) = throw(ArgumentError("ex is already a slot!"))
