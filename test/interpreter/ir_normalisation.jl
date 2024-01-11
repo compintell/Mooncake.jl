@@ -1,9 +1,4 @@
 @testset "ir_normalisation" begin
-    @testset "ensure_single_argument_usage_per_call!" begin
-        ir = Base.code_ircode(x -> x * x, Tuple{Float64})
-        ir = CC.IRCode()
-
-    end
     @testset "invoke_to_call" begin
         mi = which(Tuple{typeof(sin), Float64}).specializations
         invoke_inst = Expr(:invoke, mi, sin, 5.0)
@@ -46,5 +41,48 @@
             wrapper_ex = Taped.intrinsic_to_function(intrinsic_ex)
             @test wrapper_ex.args[1] == Taped.IntrinsicsWrappers.abs_float
         end
+    end
+    @testset "translate_to_single_argument_usage" begin
+        ir = Taped.ircode(
+            Any[
+                Expr(:call, println, "1"),
+                PhiNode(Int32[1, 3], Any[SSAValue(1), Argument(2)]),
+                PhiNode(Int32[1, 3], Any[SSAValue(2), false]),
+                Expr(:call, sin, SSAValue(1)),
+                Expr(:call, +, SSAValue(4), SSAValue(2)),
+                GotoIfNot(SSAValue(3), 8),
+                Expr(:call, println, "hmm"),
+                ReturnNode(SSAValue(5)),
+            ],
+            Any[Tuple{}, Float64],
+        )
+        rebound_ir = Taped.rebind_phi_nodes!(CC.copy(ir))
+
+        # Check first rebind is correct.
+        first_rebind = rebound_ir.stmts.inst[4]
+        @test Meta.isexpr(first_rebind, :call)
+        @test first_rebind.args[1] == Taped.__rebind
+        @test first_rebind.args[2] == SSAValue(2)
+
+        # Check second rebind is correct.
+        second_rebind = rebound_ir.stmts.inst[5]
+        @test Meta.isexpr(second_rebind, :call)
+        @test second_rebind.args[1] == Taped.__rebind
+        @test second_rebind.args[2] == SSAValue(3)
+
+        # Check that the reference to the first PhiNode in the second PhiNode is replaced.
+        second_phi_node = rebound_ir.stmts.inst[3]
+        @test second_phi_node isa PhiNode
+        @test second_phi_node.values[1] == SSAValue(4)
+
+        # Check that the reference to the first PhiNode in the `+` call is replaced.
+        plus_call = rebound_ir.stmts.inst[7]
+        @test Meta.isexpr(plus_call, :call)
+        @test plus_call.args == Any[+, SSAValue(6), SSAValue(4)]
+
+        # Check that the reference to thesecond PhiNode in the `GotoIfNot` node is replaced.
+        gotoifnot = rebound_ir.stmts.inst[8]
+        @test gotoifnot isa CC.GotoIfNot
+        @test gotoifnot.cond == SSAValue(5)
     end
 end
