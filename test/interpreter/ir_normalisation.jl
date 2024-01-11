@@ -23,9 +23,9 @@
         @test Meta.isexpr(call, :call)
         @test call.args[1] == Taped._foreigncall_
     end
-    @testset "new_expr_to_call_expr" begin
+    @testset "new_to_call" begin
         new_ex = Expr(:new, GlobalRef(Taped, :Foo), SSAValue(1), :hi)
-        call_ex = Taped.new_expr_to_call_expr(new_ex)
+        call_ex = Taped.new_to_call(new_ex)
         @test Meta.isexpr(call_ex, :call)
         @test call_ex.args[1] == Taped._new_
         @test call_ex.args[2:end] == new_ex.args

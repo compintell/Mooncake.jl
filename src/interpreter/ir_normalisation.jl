@@ -26,14 +26,13 @@ function normalise!(ir::IRCode, spnames::Vector{Symbol})
     sp_map = Dict{Symbol, CC.VarState}(zip(spnames, ir.sptypes))
     for (n, inst) in enumerate(ir.stmts.inst)
         inst = invoke_to_call(inst)
-        inst = foreigncall_expr_to_call_expr(inst, sp_map)
-        inst = new_expr_to_call_expr(inst)
-        inst = intrinsics_to_function_calls(inst)
+        inst = foreigncall_to_call(inst, sp_map)
+        inst = new_to_call(inst)
+        inst = intrinsic_to_function(inst)
         ir.stmts.inst[n] = inst
     end
 
     # Apply multi-line transformations.
-    ir = rebind_phi_nodes!(ir)
     ir = rebind_multiple_usage!(ir)
     return ir
 end
@@ -41,29 +40,12 @@ end
 """
     invoke_to_call(inst)
 
-If `inst` is an `:invoke` expression, return an equivalent `:call` expression if it is
-safe to do so. If `inst` is an `invoke` and it cannot be safely translated into a `:call`,
-throws an assertion error.
+If `inst` is an `:invoke` expression, return an equivalent `:call` expression. If anything
+else just return `inst`.
 
-If anything else just return `inst`.
+Warning: this function does *not* check whether this transformation is safe to perform.
 """
-function invoke_to_call(inst)
-    if Meta.isexpr(inst, :invoke)
-
-        # A _sufficient_ condition for it to be safe to perform this transformation is
-        # that the types in the `MethodInstance` that this `:invoke` node refers to are
-        # concrete. Check this. It _might_ be that there exist `:invoke` nodes which do
-        # not satisfy this criterion, but for which it is safe to perform this
-        # transformation -- if this is true, I (Will) have yet to encounter one.
-        mi = inst.args[1]
-        @assert all(isconcretetype, mi.specTypes.parameters)
-
-        # Change to a call.
-        return Expr(:call, inst.args[2:end]...)
-    else
-        return inst
-    end
-end
+invoke_to_call(inst) = Meta.isexpr(inst, :invoke) ? Expr(:call, inst.args[2:end]...) : inst
 
 """
     foreigncall_to_call(inst, sp_map::Dict{Symbol, CC.VarState})
@@ -143,12 +125,12 @@ function interpolate_sparams(@nospecialize(t::Type), sparams::Dict{Symbol, CC.Va
 end
 
 """
-    new_expr_to_call_expr(x)
+    new_to_call(x)
 
 If instruction `x` is a `:new` expression, replace if with a `:call` to `Taped._new_`.
 Otherwise, return `x`.
 """
-new_expr_to_call_expr(x) = Meta.isexpr(x, :new) ? Expr(:call, _new_, x.args...) : x
+new_to_call(x) = Meta.isexpr(x, :new) ? Expr(:call, _new_, x.args...) : x
 
 """
     intrinsic_to_function(inst)
