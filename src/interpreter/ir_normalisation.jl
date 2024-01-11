@@ -1,5 +1,5 @@
 """
-    normalise!(ir::IRCode)
+    normalise!(ir::IRCode, spnames::Vector{Symbol})
 
 Apply a sequence of standardising transformations to `ir` which leaves its semantics
 unchanged, but make AD more straightforward. In particular, replace
@@ -10,8 +10,17 @@ unchanged, but make AD more straightforward. In particular, replace
 
 After these standardisations are applied, applies `ensure_single_argument_usage_per_call!`,
 which is _essential_ for the correctness of AD.
+
+`spnames` are the names associated to the static parameters of `ir`. These are needed when
+handling `:foreigncall` expressions, in which it is not necessarily the case that all
+static parameter names have been translated into either types, or `:static_parameter`
+expressions.
+
+Unfortunately, the static parameter names are not retained in `IRCode`, and the `Method`
+from which the `IRCode` is derived must be consulted. `Taped.is_vararg_sig_and_sparam_names`
+provides a convenient way to do this.
 """
-function normalise!(ir::IRCode, spnames)
+function normalise!(ir::IRCode, spnames::Vector{Symbol})
     invokes_to_calls!(ir)
     foreigncall_exprs_to_call_exprs!(ir)
     new_exprs_to_call_exprs!(ir)
@@ -141,11 +150,9 @@ Replace `:call`s to `Core.IntrinsicFunction`s with `:call`s to counterpart funct
 them directly.
 """
 function intrinsic_calls_to_function_calls!(ir::IRCode)
-    sptypes = ir.sptypes
-    spnames = in_f.spnames # need method for this stuff
     for inst in ir.stmts.inst
         if Meta.isexpr(inst, :call)
-            ex.args = map(Base.Fix2(_lift_expr_arg, sptypes), ex.args)
+            ex.args = map(Base.Fix2(_lift_expr_arg, ir.sptypes), ex.args)
         end
     end
     return ir
@@ -165,25 +172,25 @@ function _lift_expr_arg(ex::Expr, sptypes)
     end
 end
 
-# _lift_intrinsic(x) = x
-# function _lift_intrinsic(x::Core.IntrinsicFunction)
-#     return x == cglobal ? x : IntrinsicsWrappers.translate(Val(x))
-# end
+_lift_intrinsic(x) = x
+function _lift_intrinsic(x::Core.IntrinsicFunction)
+    return x == cglobal ? x : IntrinsicsWrappers.translate(Val(x))
+end
 
-# _lift_expr_arg(ex::Union{Argument, SSAValue, CC.MethodInstance}, _) = ex
-# _lift_expr_arg(ex::QuoteNode, _) = ConstSlot(_lift_intrinsic(ex.value))
-# _lift_expr_arg(ex::GlobalRef, _) = _globalref_to_slot(ex)
+_lift_expr_arg(ex::Union{Argument, SSAValue, CC.MethodInstance}, _) = ex
+_lift_expr_arg(ex::QuoteNode, _) = ConstSlot(_lift_intrinsic(ex.value))
+_lift_expr_arg(ex::GlobalRef, _) = _globalref_to_slot(ex)
 
-# function _globalref_to_slot(ex::GlobalRef)
-#     val = getglobal(ex.mod, ex.name)
-#     val isa Core.IntrinsicFunction && return ConstSlot(_lift_intrinsic(val))
-#     isconst(ex) && return ConstSlot(val)
-#     return TypedGlobalRef(ex)
-# end
+function _globalref_to_slot(ex::GlobalRef)
+    val = getglobal(ex.mod, ex.name)
+    val isa Core.IntrinsicFunction && return ConstSlot(_lift_intrinsic(val))
+    isconst(ex) && return ConstSlot(val)
+    return TypedGlobalRef(ex)
+end
 
-# _lift_expr_arg(ex, _) = ConstSlot(ex)
+_lift_expr_arg(ex, _) = ConstSlot(ex)
 
-# _lift_expr_arg(ex::AbstractSlot, _) = throw(ArgumentError("ex is already a slot!"))
+_lift_expr_arg(ex::AbstractSlot, _) = throw(ArgumentError("ex is already a slot!"))
 
 """
     ensure_single_argument_usage_per_call!(ir::IRCode)
