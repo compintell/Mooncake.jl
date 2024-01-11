@@ -11,7 +11,7 @@ unchanged, but make AD more straightforward. In particular, replace
 After these standardisations are applied, applies `ensure_single_argument_usage_per_call!`,
 which is _essential_ for the correctness of AD.
 """
-function normalise!(ir::IRCode)
+function normalise!(ir::IRCode, spnames)
     invokes_to_calls!(ir)
     foreigncall_exprs_to_call_exprs!(ir)
     new_exprs_to_call_exprs!(ir)
@@ -25,49 +25,47 @@ end
 
 Replaces all instances of `:invoke` expressions with equivalent `:call` expressions.
 """
-function invokes_to_calls!(ir::IRCode)
-    for inst in ir.stmts.inst
-        if Meta.isexpr(inst, :invoke)
+invokes_to_calls!(ir::IRCode) = foreach(__invoke_to_call!, ir.stmts.inst)
 
-            # A _sufficient_ condition for it to be safe to perform this transformation is
-            # that the types in the `MethodInstance` that this `:invoke` node refers to are
-            # concrete. Check this. It _might_ be that there exist `:invoke` nodes which do
-            # not satisfy this criterion, but for which it is safe to perform this
-            # transformation -- if this is true, I (Will) have yet to encounter one.
-            mi = inst.args[1]
-            @assert all(isconcretetype, mi.specTypes.parameters)
+function __invoke_to_call!(ex)
+    if Meta.isexpr(ex, :invoke)
 
-            # Change to a call.
-            inst.head = :call
-            inst.args = inst.args[2:end]
-        end
+        # A _sufficient_ condition for it to be safe to perform this transformation is
+        # that the types in the `MethodInstance` that this `:invoke` node refers to are
+        # concrete. Check this. It _might_ be that there exist `:invoke` nodes which do
+        # not satisfy this criterion, but for which it is safe to perform this
+        # transformation -- if this is true, I (Will) have yet to encounter one.
+        mi = ex.args[1]
+        @assert all(isconcretetype, mi.specTypes.parameters)
+
+        # Change to a call.
+        ex.head = :call
+        ex.args = ex.args[2:end]
     end
-    return ir
 end
 
 """
-    foreigncall_exprs_to_call_exprs!(ir::IRCode)
+    foreigncall_exprs_to_call_exprs!(ir::IRCode, spnames::Vector{Symbol})
 
 Replace all instance of `:foreigncall` expressions with equivalent `:call` expressions.
 """
-function foreigncall_exprs_to_call_exprs!(ir::IRCode)
-    foreach(__foreigncall_expr_to_call_expr!, ir.stmts.inst)
+function foreigncall_exprs_to_call_exprs!(ir::IRCode, spnames::Vector{Symbol})
+    sp_map = Dict{Symbol, CC.VarState}(zip(spnames, ir.sptypes))
+    foreach(__foreigncall_expr_to_call_expr!, ir.stmts.inst, sp_map)
 end
 
 # If `inst` is a :foreigncall expression, translate it into an equivalent :call expression.
-function __foreigncall_expr_to_call_expr!(inst)
+function __foreigncall_expr_to_call_expr!(inst, sp_map::Dict{Symbol, CC.VarState})
     if Meta.isexpr(inst, :foreigncall)
         args = inst.args
         name = __extract_foreigncall_name(args[1])
-        sparams_dict = Dict(zip(spnames, sptypes))
-        RT = Val(interpolate_sparams(args[2], sparams_dict))
-        AT = (map(x -> Val(interpolate_sparams(x, sparams_dict)), args[3])..., )
+        RT = Val(interpolate_sparams(args[2], sp_map))
+        AT = (map(x -> Val(interpolate_sparams(x, sp_map)), args[3])..., )
         nreq = Val(args[4])
         calling_convention = Val(args[5] isa QuoteNode ? args[5].value : args[5])
         x = args[6:end]
         inst.head = :call
-        f = GlobalRef(Taped, :_foreigncall_)
-        inst.args = Any[f, name, RT, AT, nreq, calling_convention, x...]
+        inst.args = Any[_foreigncall_, name, RT, AT, nreq, calling_convention, x...]
     end
     return inst
 end
@@ -93,7 +91,7 @@ end
 
 # Copied from Umlaut.jl. Originally, adapted from
 # https://github.com/JuliaDebug/JuliaInterpreter.jl/blob/aefaa300746b95b75f99d944a61a07a8cb145ef3/src/optimize.jl#L239
-function interpolate_sparams(@nospecialize(t::Type), sparams::Dict)
+function interpolate_sparams(@nospecialize(t::Type), sparams::Dict{Symbol, CC.VarState})
     t isa Core.TypeofBottom && return t
     while t isa UnionAll
         t = t.body
@@ -126,15 +124,31 @@ end
 
 Replaces all `:new` expressions with `:call` expressions to `Taped._new_`.
 """
-function new_exprs_to_call_exprs!(ir::IRCode)
-    foreach(__new_expr_to_call_expr!, ir.stmts.inst)
-end
+new_exprs_to_call_exprs!(ir::IRCode) = foreach(__new_expr_to_call_expr!, ir.stmts.inst)
 
 function __new_expr_to_call_expr!(ex::Expr)
     if Meta.isexpr(ex, :new)
         ex.head = :call
         ex.args = [_new_, ex.args...]
     end
+end
+
+"""
+    intrinsic_calls_to_function_calls!(ir::IRCode)
+
+Replace `:call`s to `Core.IntrinsicFunction`s with `:call`s to counterpart functions in
+`Taped.IntrinsicWrappers`. These wrappers are primitives, and have `rrule!!`s written for
+them directly.
+"""
+function intrinsic_calls_to_function_calls!(ir::IRCode)
+    sptypes = ir.sptypes
+    spnames = in_f.spnames # need method for this stuff
+    for inst in ir.stmts.inst
+        if Meta.isexpr(inst, :call)
+            ex.args = map(Base.Fix2(_lift_expr_arg, sptypes), ex.args)
+        end
+    end
+    return ir
 end
 
 function _lift_expr_arg(ex::Expr, sptypes)
@@ -170,24 +184,6 @@ end
 # _lift_expr_arg(ex, _) = ConstSlot(ex)
 
 # _lift_expr_arg(ex::AbstractSlot, _) = throw(ArgumentError("ex is already a slot!"))
-
-"""
-    intrinsic_calls_to_function_calls!(ir::IRCode)
-
-Replace `:call`s to `Core.IntrinsicFunction`s with `:call`s to counterpart functions in
-`Taped.IntrinsicWrappers`. These wrappers are primitives, and have `rrule!!`s written for
-them directly.
-"""
-function intrinsic_calls_to_function_calls!(ir::IRCode)
-    sptypes = ir.sptypes
-    spnames = in_f.spnames # need method for this stuff
-    for inst in ir.stmts.inst
-        if Meta.isexpr(inst, :call)
-            ex.args = map(Base.Fix2(_lift_expr_arg, sptypes), ex.args)
-        end
-    end
-    return ir
-end
 
 """
     ensure_single_argument_usage_per_call!(ir::IRCode)

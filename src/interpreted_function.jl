@@ -814,10 +814,6 @@ end
 # Code execution
 #
 
-_get_type(x::Core.PartialStruct) = x.typ
-_get_type(x::Core.Const) = Core.Typeof(x.val)
-_get_type(T) = T
-
 _get_slot(x::Argument, _, arg_info) = arg_info.arg_slots[x.n]
 _get_slot(x::GlobalRef, _, _) = _globalref_to_slot(x)
 _get_slot(x::QuoteNode, _, _) = ConstSlot(x.value)
@@ -853,9 +849,9 @@ extract_foreigncall_name(x::QuoteNode) = extract_foreigncall_name(x.value)
 # extract_foreigncall_name(x::GlobalRef) = extract_foreigncall_name((x.mod, x.name))
 extract_foreigncall_name(x::GlobalRef) = extract_foreigncall_name(getglobal(x.mod, x.name))
 
-function sparam_names(m::Core.Method)
+function sparam_names(m::Core.Method)::Vector{Symbol}
     whereparams = ExprTools.where_parameters(m.sig)
-    whereparams === nothing && return []
+    whereparams === nothing && return Symbol[]
     return map(whereparams) do name
         name isa Symbol && return name
         Meta.isexpr(name, :(<:)) && return name.args[1]

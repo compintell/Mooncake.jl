@@ -18,7 +18,7 @@
         @assert Core.OpaqueClosure(ir)() == sin(5.0)
 
         # Transform invokes to calls and verify the results.
-        ir = Taped.invokes_to_calls!(ir)
+        Taped.invokes_to_calls!(ir)
         @test ir.stmts.inst[1] == Expr(:call, sin, 5.0)
         @test Core.OpaqueClosure(ir)() == sin(5.0)
     end
@@ -34,8 +34,10 @@
             0x0000000000000001,
             0x0000000000000001,
         )
-        # Taped.__foreigncall_expr_to_call_expr!(expr)
-        # @test Meta.isexpr(expr, :call)
+        sp_map = Dict{Symbol, CC.VarState}()
+        Taped.__foreigncall_expr_to_call_expr!(expr, sp_map)
+        @test Meta.isexpr(expr, :call)
+        @test expr.args[1] == Taped._foreigncall_
     end
     @testset "new_exprs_to_call_exprs!" begin
         args = Any[GlobalRef(Taped, :Foo), SSAValue(1), :hi]
