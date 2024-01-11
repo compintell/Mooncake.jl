@@ -241,7 +241,7 @@ function rebind_phi_nodes!(ir::IRCode)
 end
 
 """
-    ensure_single_argument_usage_per_call!(ir::IRCode)
+    rebind_multiple_usage!(ir::IRCode)
 
 Transforms `ir` to ensures that all `:call` expressions have only a single usage of any
 `Argument` or `SSAValue`.
@@ -253,7 +253,7 @@ foo(%1, %2, %1)
 uses the `SSAValue` `%1` twice. This can cause correctness issues issues on the reverse-pass
 of AD if `%1` happens to be differentiable and a bits-type.
 
-`ensure_single_argument_usage_per_call!` transforms the above example, and generalisations
+`rebind_multiple_usage!` transforms the above example, and generalisations
 thereof, into
 ```julia
 x = __rebind(%1)
@@ -261,7 +261,7 @@ foo(%1, %2, x)
 ```
 where `__rebind` is equivalent to the `identity`, but is always a primitive.
 """
-function ensure_single_argument_usage_per_call!(ir::IRCode)
+function rebind_multiple_usage!(ir::IRCode)
 
 end
 

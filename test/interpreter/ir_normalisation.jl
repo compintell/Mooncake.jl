@@ -42,7 +42,7 @@
             @test wrapper_ex.args[1] == Taped.IntrinsicsWrappers.abs_float
         end
     end
-    @testset "translate_to_single_argument_usage" begin
+    @testset "rebind_phi_nodes!" begin
         ir = Taped.ircode(
             Any[
                 Expr(:call, println, "1"),
@@ -84,5 +84,8 @@
         gotoifnot = rebound_ir.stmts.inst[8]
         @test gotoifnot isa CC.GotoIfNot
         @test gotoifnot.cond == SSAValue(5)
+    end
+    @testset "rebind_multiple_usage!" begin
+    
     end
 end
