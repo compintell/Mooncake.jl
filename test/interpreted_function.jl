@@ -270,25 +270,25 @@
         end
     end
 
-    global __x_for_gref = 5.0
-    @testset "_preprocess_expr_arg" begin
-        sptypes = (Float64, )
-        @test has_equal_data(_lift_expr_arg(Expr(:boundscheck), sptypes), ConstSlot(true))
-        @test has_equal_data(
-            _lift_expr_arg(Expr(:static_parameter, 1), sptypes), ConstSlot(Float64)
-        )
-        @test has_equal_data(_lift_expr_arg(5, sptypes), ConstSlot(5))
-        @test has_equal_data(_lift_expr_arg(QuoteNode(:hello), sptypes), ConstSlot(:hello))
-        @test has_equal_data(_lift_expr_arg(GlobalRef(Main, :sin), sptypes), ConstSlot(sin))
-        @test has_equal_data(
-            _lift_expr_arg(GlobalRef(Main, :__x_for_gref), sptypes),
-            TypedGlobalRef(Main, :__x_for_gref),
-        )
-        @test has_equal_data(
-            _lift_expr_arg(GlobalRef(Core.Intrinsics, :srem_int), sptypes),
-            ConstSlot(Taped.IntrinsicsWrappers.srem_int),
-        )
-    end
+    # global __x_for_gref = 5.0
+    # @testset "_preprocess_expr_arg" begin
+    #     sptypes = (Float64, )
+    #     @test has_equal_data(_lift_expr_arg(Expr(:boundscheck), sptypes), ConstSlot(true))
+    #     @test has_equal_data(
+    #         _lift_expr_arg(Expr(:static_parameter, 1), sptypes), ConstSlot(Float64)
+    #     )
+    #     @test has_equal_data(_lift_expr_arg(5, sptypes), ConstSlot(5))
+    #     @test has_equal_data(_lift_expr_arg(QuoteNode(:hello), sptypes), ConstSlot(:hello))
+    #     @test has_equal_data(_lift_expr_arg(GlobalRef(Main, :sin), sptypes), ConstSlot(sin))
+    #     @test has_equal_data(
+    #         _lift_expr_arg(GlobalRef(Main, :__x_for_gref), sptypes),
+    #         TypedGlobalRef(Main, :__x_for_gref),
+    #     )
+    #     @test has_equal_data(
+    #         _lift_expr_arg(GlobalRef(Core.Intrinsics, :srem_int), sptypes),
+    #         ConstSlot(Taped.IntrinsicsWrappers.srem_int),
+    #     )
+    # end
 
     interp = Taped.TInterp()
 

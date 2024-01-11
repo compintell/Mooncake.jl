@@ -162,6 +162,12 @@ Base.setindex!(x::TypedGlobalRef, val) = setglobal!(x.mod, x.name, val)
 Base.isassigned(::TypedGlobalRef) = true
 Base.eltype(::TypedGlobalRef{T}) where {T} = T
 
+function _globalref_to_slot(ex::GlobalRef)
+    val = getglobal(ex.mod, ex.name)
+    val isa Core.IntrinsicFunction && return ConstSlot(_lift_intrinsic(val))
+    isconst(ex) && return ConstSlot(val)
+    return TypedGlobalRef(ex)
+end
 
 # Utility functionality used through instruction construction.
 
@@ -287,20 +293,14 @@ end
 tangent_type(::Type{typeof(_eval)}) = NoTangent
 
 function build_inst(x::Expr, @nospecialize(in_f), n::Int, b::Int, is_blk_end::Bool)::Inst
-    x = preprocess_ir(x, in_f)
     next_blk = _standard_next_block(is_blk_end, b)
     val_slot = in_f.slots[n]
     if Meta.isexpr(x, :boundscheck)
         return build_inst(Val(:boundscheck), val_slot, next_blk)
-    elseif Meta.isexpr(x, :invoke) || Meta.isexpr(x, :call)
-
-        # Extract args refs.
-        __args = Meta.isexpr(x, :invoke) ? x.args[2:end] : x.args
-        arg_refs = map(arg -> _get_slot(arg, in_f), (__args..., ))
-
-        ctx = in_f.ctx
+    elseif Meta.isexpr(x, :call)
+        arg_refs = map(arg -> _get_slot(arg, in_f), (x.args..., ))
         sig = Tuple{map(eltype, arg_refs)...}
-        evaluator = get_evaluator(ctx, sig, __args, in_f.interp)
+        evaluator = get_evaluator(in_f.ctx, sig, x.args, in_f.interp)
         return build_inst(Val(:call), arg_refs, evaluator, val_slot, next_blk)
     elseif x.head in [
         :code_coverage_effect, :gc_preserve_begin, :gc_preserve_end, :loopinfo, :leave,
@@ -373,16 +373,22 @@ end
 # Code execution
 #
 
-_get_slot(x::Argument, _, arg_info) = arg_info.arg_slots[x.n]
-_get_slot(x::GlobalRef, _, _) = _globalref_to_slot(x)
-_get_slot(x::QuoteNode, _, _) = ConstSlot(x.value)
-_get_slot(x::SSAValue, slots, _) = slots[x.id]
-_get_slot(x::AbstractSlot, _, _) = x
-_get_slot(x::Core.IntrinsicFunction, _, _) = ConstSlot(_lift_intrinsic(x))
-_get_slot(x, _, _) = ConstSlot(x)
-function _get_slot(x::Expr, _, _)
-    Meta.isexpr(x, :boundscheck) || throw(ArgumentError("Unexpceted expr $x"))
-    return ConstSlot(true)
+_get_slot(x::Argument, _, arg_info, _) = arg_info.arg_slots[x.n]
+_get_slot(x::GlobalRef, _, _, _) = _globalref_to_slot(x)
+_get_slot(x::QuoteNode, _, _, _) = ConstSlot(x.value)
+_get_slot(x::SSAValue, slots, _, _) = slots[x.id]
+_get_slot(x::AbstractSlot, _, _, _) = throw(error("Already a slot!"))
+_get_slot(x::Core.IntrinsicFunction, _, _, _) = ConstSlot(_lift_intrinsic(x))
+_get_slot(x, _, _, _) = ConstSlot(x)
+function _get_slot(x::Expr, _, _, sptypes)
+    # There are only a couple of `Expr`s possible as arguments to `Expr`s.
+    if Meta.isexpr(x, :boundscheck)
+        return ConstSlot(true)
+    elseif Meta.isexpr(x, :static_parameter)
+        return ConstSlot(sptypes[x.args[1]].typ)
+    else
+        throw(ArgumentError("Found unexpected expr $x"))
+    end
 end
 
 #
@@ -451,9 +457,9 @@ function is_vararg_sig_and_sparam_names(sig)
     return m.isva, sparam_names(m)
 end
 
-function sparam_names(m::Core.Method)
+function sparam_names(m::Core.Method)::Vector{Symbol}
     whereparams = ExprTools.where_parameters(m.sig)
-    whereparams === nothing && return []
+    whereparams === nothing && return Symbol[]
     return map(whereparams) do name
         name isa Symbol && return name
         Meta.isexpr(name, :(<:)) && return name.args[1]
@@ -462,7 +468,9 @@ function sparam_names(m::Core.Method)
     end
 end
 
-_get_slot(x, in_f::InterpretedFunction) = _get_slot(x, in_f.slots, in_f.arg_info)
+function _get_slot(x, in_f::InterpretedFunction)
+    return _get_slot(x, in_f.slots, in_f.arg_info, in_f.ir.sptypes)
+end
 
 make_slot(x::Type{T}) where {T} = (@isdefined T) ? SlotRef{T}() : SlotRef{DataType}()
 make_slot(x::CC.Const) = ConstSlot{Core.Typeof(x.val)}(x.val)
@@ -505,7 +513,6 @@ function make_phi_instructions!(in_f::InterpretedFunction)
 end
 
 function InterpretedFunction(ctx::C, sig::Type{<:Tuple}, interp) where {C}
-    # @nospecialize ctx sig interp
 
     # If we've already constructed this interpreted function, just return it.
     sig in keys(interp.in_f_cache) && return interp.in_f_cache[sig]
@@ -526,6 +533,7 @@ function InterpretedFunction(ctx::C, sig::Type{<:Tuple}, interp) where {C}
     arg_types = Tuple{map(_get_type, ir.argtypes)..., }
     is_vararg, spnames = is_vararg_sig_and_sparam_names(sig)
     arg_info = arginfo_from_argtypes(arg_types, is_vararg)
+    ir = normalise!(ir, spnames)
 
     # Create slots. In most cases, these are instances of `SlotRef`s, which can be read from
     # and written to by instructions (they are essentially `Base.RefValue`s with a
