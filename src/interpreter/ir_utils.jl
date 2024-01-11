@@ -8,12 +8,13 @@
 Constructs an instance of an `IRCode`. This is useful for constructing test cases with known
 properties.
 
-No optimisations or type inference are performed on the resulting `IRCode` to ensure that
+No optimisations or type inference are performed on the resulting `IRCode`, so that
 the `IRCode` contains exactly what is intended by the caller. Please make use of
 `infer_types!` if you require the types to be inferred.
 
-Edges in `PhiNode`s, `GotoIfNot`s, and `GotoNode`s must refer to lines, as in `CodeInfo`.
-This function transforms them into block references, as required by `IRCode`.
+Edges in `PhiNode`s, `GotoIfNot`s, and `GotoNode`s found in `inst` must refer to lines (as
+in `CodeInfo`). In the `IRCode` returned by this function, these line references are
+translated into block references.
 """
 function ircode(
     insts::Vector{Any}, argtypes::Vector{Any}, sptypes::Vector{CC.VarState}=CC.VarState[]
