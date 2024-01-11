@@ -121,6 +121,8 @@ end
     replace_all_uses_with!(ir::IRCode, value::SSAValue, new_value::Any) -> IRCode
 
 Wherever `value` appears in `ir`, replace it with `new_value`.
+
+Note: this will *not* effect anything in the `new_nodes` field of `ir`.
 """
 function replace_all_uses_with!(ir::IRCode, value::SSAValue, new_value::Any)
     insts = ir.stmts.inst
