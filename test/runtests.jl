@@ -20,6 +20,7 @@ using Core.Intrinsics: pointerref, pointerset
 using FunctionWrappers: FunctionWrapper
 
 using Taped:
+    CC,
     IntrinsicsWrappers,
     TestUtils,
     TestResources,
@@ -36,12 +37,10 @@ using Taped:
     might_be_active,
     rebind,
     build_tangent,
-    preprocess_ir,
     SlotRef,
     ConstSlot,
     TypedGlobalRef,
     build_inst,
-    _lift_expr_arg,
     TypedPhiNode,
     build_coinsts
 
@@ -72,8 +71,12 @@ sr(n::Int) = StableRNG(n)
     if test_group == "basic"
         # include("tangents.jl")
         # include("reverse_mode_ad.jl")
-        # include("interpreted_function.jl")
-        include(joinpath("interpreter", "reverse_mode_ad.jl"))
+        @testset "interpreter" begin
+            include(joinpath("interpreter", "ir_utils.jl"))
+            include(joinpath("interpreter", "ir_normalisation.jl"))
+            include(joinpath("interpreter", "interpreted_function.jl"))
+            include(joinpath("interpreter", "reverse_mode_ad.jl"))
+        end
         # include("test_utils.jl")
         # @testset "rrules" begin
         #     @info "avoiding_non_differentiable_code"
