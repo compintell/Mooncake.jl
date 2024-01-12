@@ -29,7 +29,7 @@ function build_coinsts(node::ReturnNode, _, _rrule!!, ::Int, ::Int, ::Bool)
 end
 function build_coinsts(::Type{ReturnNode}, ret_slot::SlotRef{<:CoDual}, val::CoDualSlot)
     fwds_inst = build_inst(ReturnNode, ret_slot, val)
-    bwds_inst = @opaque (j::Int) -> (val[] = ret_slot[]; return j)
+    bwds_inst = @opaque (j::Int) -> (increment_tangent!(val, ret_slot); return j)
     return fwds_inst::FwdsInst, bwds_inst::BwdsInst
 end
 
@@ -126,7 +126,7 @@ function build_coinsts(
     make_fwds(v) = R(primal(v), tangent(v))
     make_bwds(r) = V(primal(r), tangent(r))
     fwds_inst = @opaque (p::Int) -> (ret[] = make_fwds(val[]); return next_blk)
-    bwds_inst = @opaque (j::Int) -> (val[] = make_bwds(ret[]); return j)
+    bwds_inst = @opaque (j::Int) -> (increment_tangent!(val, ret); return j)
     return fwds_inst::FwdsInst, bwds_inst::BwdsInst
 end
 
@@ -190,7 +190,6 @@ _wrap_codual_slot(x::ConstSlot{<:CoDual}) = x
 _wrap_codual_slot(x::ConstSlot{P}) where {P} = ConstSlot{codual_type(P)}(zero_codual(x[]))
 
 function build_coinsts(ir_inst::Expr, in_f, _rrule!!, n::Int, b::Int, is_blk_end::Bool)
-    ir_inst = preprocess_ir(ir_inst, in_f)
     is_invoke = Meta.isexpr(ir_inst, :invoke)
     next_blk = _standard_next_block(is_blk_end, b)
     val_slot = _rrule!!.slots[n]
@@ -215,7 +214,7 @@ function build_coinsts(ir_inst::Expr, in_f, _rrule!!, n::Int, b::Int, is_blk_end
         sizehint!(old_vals, 100)
 
         return build_coinsts(
-            Val(:call), val_slot, arg_slots, evaluator, __rrule!!, old_vals, pb_stack, next_blk,
+            Val(:call), val_slot, arg_slots, evaluator, __rrule!!, old_vals, pb_stack, next_blk
         )
     elseif ir_inst.head in [
         :code_coverage_effect, :gc_preserve_begin, :gc_preserve_end, :loopinfo,
@@ -364,10 +363,11 @@ struct InterpretedFunctionRRule{sig<:Tuple, Treturn, Targ_info<:ArgInfo}
     fwds_instructions::Vector{FwdsInst}
     bwds_instructions::Vector{BwdsInst}
     n_stack::Vector{Int}
+    ir::IRCode
 end
 
 function _get_slot(x, in_f::InterpretedFunctionRRule)
-    return _wrap_codual_slot(_get_slot(x, in_f.slots, in_f.arg_info))
+    return _wrap_codual_slot(_get_slot(x, in_f.slots, in_f.arg_info, in_f.ir))
 end
 
 # Special handling is required for PhiNodes, because their semantics require that when
@@ -412,7 +412,7 @@ end
 function build_rrule!!(in_f::InterpretedFunction{sig}) where {sig}
     return_slot = make_codual_slot(in_f.return_slot)
     arg_info = make_codual_arginfo(in_f.arg_info)
-    n_stack = Vector{Int}(undef, 1)
+    n_stack = Vector{Int}(undef, 0)
     sizehint!(n_stack, 100)
 
     # Construct rrule!! for in_f.
@@ -423,6 +423,7 @@ function build_rrule!!(in_f::InterpretedFunction{sig}) where {sig}
         Vector{FwdsInst}(undef, length(in_f.instructions)), # fwds_instructions
         Vector{BwdsInst}(undef, length(in_f.instructions)), # bwds_instructions
         n_stack,
+        in_f.ir,
     )
 
     # Set PhiNodes.
@@ -455,16 +456,11 @@ function (in_f_rrule!!::InterpretedFunctionRRule{sig})(
     next_block = 0
     current_block = 1
     n = 1
-    j = 0
+    j = length(n_stack)
 
     # Run instructions until done.
     while next_block != -1
-        j += 1
-        if length(n_stack) >= j
-            n_stack[j] = n
-        else
-            push!(n_stack, n)
-        end
+        push!(n_stack, n)
         if !isassigned(in_f_rrule!!.fwds_instructions, n)
             fwds, bwds = generate_coinstructions(in_f, in_f_rrule!!, n)
             in_f_rrule!!.fwds_instructions[n] = fwds
@@ -481,10 +477,11 @@ function (in_f_rrule!!::InterpretedFunctionRRule{sig})(
         end
     end
 
+    return_val = return_slot[]
     interpreted_function_pb!! = InterpretedFunctionPb(
         j, in_f_rrule!!.bwds_instructions, return_slot, n_stack, arg_info
     )
-    return return_slot[], interpreted_function_pb!!
+    return return_val, interpreted_function_pb!!
 end
 
 function flattened_rrule_args(ai::ArgInfo{T, is_vararg}) where {T, is_vararg}
@@ -495,25 +492,40 @@ function flattened_rrule_args(ai::ArgInfo{T, is_vararg}) where {T, is_vararg}
     return (args[1:end-1]..., map(CoDual, primal(va_arg), tangent(va_arg))...)
 end
 
+@noinline function load_tangents!(ai::ArgInfo{T, is_vararg}, dargs::Tuple) where {T, is_vararg}
+    if is_vararg
+        num_args = length(ai.arg_slots) - 1 # once for vararg
+        refined_dargs = (dargs[1:num_args]..., (dargs[num_args+1:end]..., ))
+    else
+        refined_dargs = dargs
+    end
+    return __load_tangents!(ai.arg_slots, refined_dargs)
+end
+
+@generated function __load_tangents!(arg_slots::Tuple, dargs::Tuple)
+    Ts = dargs.parameters
+    ns = filter(n -> !Base.issingletontype(Ts[n]), eachindex(Ts))
+    loaders = map(n -> :(replace_tangent!(arg_slots[$n], dargs[$n])), ns)
+    return Expr(:block, loaders..., :(return nothing))
+end
+
 function (if_pb!!::InterpretedFunctionPb)(dout, ::NoTangent, dargs::Vararg{Any, N}) where {N}
 
     # Update the output cotangent value to whatever is provided.
     replace_tangent!(if_pb!!.return_slot, dout)
+    load_tangents!(if_pb!!.arg_info, dargs)
 
     # Run the instructions in reverse. Present assumes linear instruction ordering.
     n_stack = if_pb!!.n_stack
     bwds_instructions = if_pb!!.bwds_instructions
-    for i in reverse(1:if_pb!!.j)
-        inst = bwds_instructions[n_stack[i]]
-        inst(i)
+    while length(n_stack) > if_pb!!.j
+        inst = bwds_instructions[pop!(n_stack)]
+        inst(0)
     end
 
-    # Increment and return.
+    # Return resulting tangents from slots.
     flat_arg_slots = flattened_rrule_args(if_pb!!.arg_info)
-    new_dargs = map(dargs, flat_arg_slots) do darg, arg_slot
-        return increment!!(darg, tangent(arg_slot))
-    end
-    return NoTangent(), new_dargs...
+    return NoTangent(), tuple_map(tangent, flat_arg_slots)...
 end
 
 function generate_coinstructions(in_f, in_f_rrule!!, n)
