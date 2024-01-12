@@ -312,6 +312,7 @@
             (nothing, nothing, Taped.globalref_tester_2, false),
             (nothing, nothing, Taped.type_unstable_tester, Ref{Any}(5.0)),
             (nothing, nothing, Taped.type_unstable_tester_2, Ref{Real}(5.0)),
+            (nothing, nothing, Taped.type_unstable_tester_3, Ref{Any}(5.0)),
             (nothing, nothing, Taped.type_unstable_function_eval, Ref{Any}(sin), 5.0),
             (nothing, nothing, Taped.phi_const_bool_tester, 5.0),
             (nothing, nothing, Taped.phi_const_bool_tester, -5.0),
@@ -337,10 +338,12 @@
             (nothing, nothing, Taped.splatting_tester, 5.0),
             (nothing, nothing, Taped.splatting_tester, (5.0, 4.0)),
             (nothing, nothing, Taped.splatting_tester, (5.0, 4.0, 3.0)),
-            # (nothing, nothing, Taped.unstable_splatting_tester, Ref{Any}(5.0)),
-            # (nothing, nothing, Taped.unstable_splatting_tester, Ref{Any}((5.0, 4.0))),
-            # (nothing, nothing, Taped.unstable_splatting_tester, Ref{Any}((5.0, 4.0, 3.0))),
+            (nothing, nothing, Taped.unstable_splatting_tester, Ref{Any}(5.0)), # known failure case -- no rrule for _apply_iterate
+            (nothing, nothing, Taped.unstable_splatting_tester, Ref{Any}((5.0, 4.0))), # known failure case -- no rrule for _apply_iterate
+            (nothing, nothing, Taped.unstable_splatting_tester, Ref{Any}((5.0, 4.0, 3.0))), # known failure case -- no rrule for _apply_iterate
             (nothing, nothing, Taped.inferred_const_tester, Ref{Any}(nothing)),
+            (nothing, nothing, Taped.datatype_slot_tester, 1),
+            (nothing, nothing, Taped.datatype_slot_tester, 2),
             (
                 nothing,
                 nothing,
@@ -373,10 +376,6 @@
         x_cpy_2 = deepcopy(x)
         @test has_equal_data(in_f(f, x_cpy_1...), f(x_cpy_2...))
         @test has_equal_data(x_cpy_1, x_cpy_2)
-        # TestUtils.test_rrule!!(
-        #     Xoshiro(123456), in_f, x...;
-        #     perf_flag=:none, interface_only=false, is_primitive=false,
-        # )
 
         # # rng = Xoshiro(123456)
         # # test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only=false, perf_flag=:none)
