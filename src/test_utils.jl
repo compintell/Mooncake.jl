@@ -123,7 +123,7 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...)
 
     # Use finite differences to estimate vjps
     ẋ = randn_tangent(rng, x)
-    ε = 1e-5
+    ε = 1e-9
     x′ = _add_to_primal(x, _scale(ε, ẋ))
     y′ = f(x′...)
     ẏ = _scale(1 / ε, _diff(y′, y_primal))
@@ -535,7 +535,7 @@ end
 module TestResources
 
 using ..Taped
-using ..Taped: CoDual, Tangent, MutableTangent, NoTangent, PossiblyUninitTangent
+using ..Taped: CoDual, Tangent, MutableTangent, NoTangent, PossiblyUninitTangent, ircode
 
 using DiffTests, LinearAlgebra, Random, Setfield
 
@@ -695,7 +695,7 @@ const PRIMITIVE_TEST_FUNCTIONS = Any[
 # that most language primitives have rules defined.
 #
 
-test_sin(x) = sin(x)
+@noinline test_sin(x) = sin(x)
 
 test_cos_sin(x) = cos(sin(x))
 
@@ -722,6 +722,18 @@ end
 function test_isbits_multiple_usage_5(x::Float64)
     y = Core.Intrinsics.mul_float(x, x)
     return x > 0.0 ? cos(y) : sin(y)
+end
+
+function test_isbits_multiple_usage_phi(x::Bool, y::Float64)
+    z = x ? y : 1.0
+    return z * y
+end
+
+function test_multiple_call_non_primitive(x::Float64)
+    for _ in 1:2
+        x = test_sin(x)
+    end
+    return x
 end
 
 test_getindex(x::AbstractArray{<:Real}) = x[1]
@@ -794,7 +806,12 @@ test_diagonal_to_matrix(D::Diagonal) = Matrix(D)
 
 relu(x) = max(x, zero(x))
 
-test_mlp(x, W1, W2) = W2 * relu.(W1 * x)
+test_mlp(x, W1, W2) = W2 * tanh.(W1 * x)
+
+function test_multiple_pi_nodes(x::Base.RefValue{Any})
+    v = x[]
+    return (v::Float64, v::Float64) # PiNode applied to the same SSAValue
+end
 
 function generate_test_functions()
     return Any[
@@ -805,6 +822,10 @@ function generate_test_functions()
         (false, (lb=1_000, ub=20_000), test_isbits_multiple_usage_3, 4.1),
         (false, (lb=1_000, ub=100_000), test_isbits_multiple_usage_4, 5.0),
         (false, (lb=1_000, ub=100_000), test_isbits_multiple_usage_5, 4.1),
+        (false, (lb=1_000, ub=100_000), test_isbits_multiple_usage_phi, false, 1.1),
+        (false, (lb=1_000, ub=100_000), test_isbits_multiple_usage_phi, true, 1.1),
+        (false, (lb=1_000, ub=100_000), test_multiple_call_non_primitive, 5.0),
+        (false, (lb=1_000, ub=100_000), test_multiple_pi_nodes, Ref{Any}(5.0)),
         (false, (lb=1_000, ub=20_000), test_getindex, [1.0, 2.0]),
         (false, (lb=1_000, ub=50_000), test_mutation!, [1.0, 2.0]),
         (false, (lb=1_000, ub=25_000), test_while_loop, 2.0),
@@ -841,7 +862,7 @@ function generate_test_functions()
         (
             false,
             (lb=100_000, ub=100_000_000),
-            test_mlp, randn(500, 20), randn(700, 500), randn(300, 700),
+            test_mlp, randn(500, 200), randn(700, 500), randn(300, 700),
         ),
     ]
 end
