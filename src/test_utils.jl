@@ -123,7 +123,7 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...)
 
     # Use finite differences to estimate vjps
     ẋ = randn_tangent(rng, x)
-    ε = 1e-9
+    ε = 1e-5
     x′ = _add_to_primal(x, _scale(ε, ẋ))
     y′ = f(x′...)
     ẏ = _scale(1 / ε, _diff(y′, y_primal))
@@ -813,6 +813,16 @@ function test_multiple_pi_nodes(x::Base.RefValue{Any})
     return (v::Float64, v::Float64) # PiNode applied to the same SSAValue
 end
 
+function test_multi_use_pi_node(x::Base.RefValue{Any})
+    v = x[]
+    for _ in 1:2
+        v = sin(v)::Float64
+    end
+    return v
+end
+
+sr(n) = Xoshiro(n)
+
 function generate_test_functions()
     return Any[
         (false, (lb=100, ub=10_000), test_sin, 1.0),
@@ -826,6 +836,7 @@ function generate_test_functions()
         (false, (lb=1_000, ub=100_000), test_isbits_multiple_usage_phi, true, 1.1),
         (false, (lb=1_000, ub=100_000), test_multiple_call_non_primitive, 5.0),
         (false, (lb=1_000, ub=100_000), test_multiple_pi_nodes, Ref{Any}(5.0)),
+        (false, (lb=1_000, ub=100_000), test_multi_use_pi_node, Ref{Any}(5.0)),
         (false, (lb=1_000, ub=20_000), test_getindex, [1.0, 2.0]),
         (false, (lb=1_000, ub=50_000), test_mutation!, [1.0, 2.0]),
         (false, (lb=1_000, ub=25_000), test_while_loop, 2.0),
@@ -862,7 +873,10 @@ function generate_test_functions()
         (
             false,
             (lb=100_000, ub=100_000_000),
-            test_mlp, randn(500, 200), randn(700, 500), randn(300, 700),
+            test_mlp,
+            randn(sr(1), 500, 200),
+            randn(sr(2), 700, 500),
+            randn(sr(3), 300, 700),
         ),
     ]
 end

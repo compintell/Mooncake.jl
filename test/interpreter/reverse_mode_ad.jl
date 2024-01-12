@@ -135,9 +135,10 @@
     end
     @testset "PiNode" begin
         val = SlotRef{CoDual{Any, Any}}(CoDual{Any, Any}(5.0, 0.0))
-        ret = SlotRef{CoDual{Float64, Float64}}()
+        ret = SlotRef{CoDual{Float64, Float64}}(CoDual(-1.0, -1.0))
+        old_vals = Vector{CoDual{Float64, Float64}}(undef, 0)
         next_blk = 5
-        fwds_inst, bwds_inst = build_coinsts(PiNode, val, ret, next_blk)
+        fwds_inst, bwds_inst = build_coinsts(PiNode, val, ret, old_vals, next_blk)
 
         # Test forwards instruction.
         @test fwds_inst isa Taped.FwdsInst
@@ -145,12 +146,17 @@
         @test primal(ret[]) == primal(val[])
         @test tangent(ret[]) == tangent(val[])
 
+        # Increment tangent associated to `val`. This is done in order to check that the
+        # tangent to `val` is incremented on the reverse-pass, not replaced.
+        val[] = CoDual{Any, Any}(primal(val[]), tangent(val[]) + 0.1)
+
         # Test backwards instruction.
         @test bwds_inst isa Taped.BwdsInst
         ret[] = CoDual(5.0, 1.6)
         @test bwds_inst(3) == 3
-        @test primal(val[]) == primal(ret[])
-        @test tangent(val[]) == tangent(ret[])
+        @test primal(ret[]) == -1.0
+        @test tangent(ret[]) == -1.0
+        @test tangent(val[]) == 1.6 + 0.1 # check increment has happened.
     end
     global __x_for_gref = 5.0
     @testset "GlobalRef" for (out, x, next_blk) in Any[
