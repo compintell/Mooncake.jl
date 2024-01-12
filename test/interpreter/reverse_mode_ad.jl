@@ -17,7 +17,7 @@
             @test bwds_inst isa Taped.BwdsInst
             ret_slot[] = CoDual(5.0, 2.0)
             @test bwds_inst(5) isa Int
-            @test val_slot[] == ret_slot[]
+            @test val_slot[] == CoDual(5.0, 3.0)
             @test (@allocations bwds_inst(5)) == 0
         end
         @testset "val slot is const" begin
@@ -358,7 +358,7 @@
     )
         @info "$f, $(Core.Typeof(x))"
         sig = Tuple{Core.Typeof(f), map(Core.Typeof, x)...}
-        in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp)
+        in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp);
 
         # Verify correctness.
         @assert f(deepcopy(x)...) == f(deepcopy(x)...) # primal runs
