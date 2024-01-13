@@ -123,7 +123,7 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...)
 
     # Use finite differences to estimate vjps
     ẋ = randn_tangent(rng, x)
-    ε = 1e-5
+    ε = 1e-7
     x′ = _add_to_primal(x, _scale(ε, ẋ))
     y′ = f(x′...)
     ẏ = _scale(1 / ε, _diff(y′, y_primal))
