@@ -79,8 +79,14 @@ function rrule!!(
     ::CoDual{Type{Array{T, N}}}, ::CoDual{typeof(undef)}, m::Vararg{CoDual}
 ) where {T, N}
     _m = map(primal, m)
-    x = CoDual(Array{T, N}(undef, _m...), Array{tangent_type(T), N}(undef, _m...))
-    return x, NoPullback()
+    p = Array{T, N}(undef, _m...)
+    t = Array{tangent_type(T), N}(undef, _m...)
+    if isassigned(t, 1)
+        for n in eachindex(t)
+            @inbounds t[n] = zero_tangent(p[n])
+        end
+    end
+    return CoDual(p, t), NoPullback()
 end
 
 @is_primitive MinimalCtx Tuple{Type{<:Array{T, N}}, typeof(undef), NTuple{N}} where {T, N}
@@ -88,8 +94,14 @@ function rrule!!(
     ::CoDual{<:Type{<:Array{T, N}}}, ::CoDual{typeof(undef)}, m::CoDual{NTuple{N}},
 ) where {T, N}
     _m = primal(m)
-    x = CoDual(Array{T, N}(undef, _m), Array{tangent_type(T), N}(undef, _m))
-    return x, NoPullback()
+    p = Array{T, N}(undef, _m)
+    t = Array{tangent_type(T), N}(undef, _m)
+    if isassigned(t, 1)
+        for n in eachindex(t)
+            @inbounds t[n] = zero_tangent(p[n])
+        end
+    end
+    return CoDual(p, t), NoPullback()
 end
 
 @is_primitive MinimalCtx Tuple{typeof(copy), Array}
