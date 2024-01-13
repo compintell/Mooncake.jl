@@ -7,7 +7,8 @@
         TestResources.DIFFTESTS_FUNCTIONS[91:end], # SKIPPING SPARSE_LDIV
     )
         @info "$(map(typeof, (f, x...)))"
-        rng = Xoshiro(123456)
+        interp = Taped.TInterp()
+        rng = sr(123456)
         sig = Tuple{Core.Typeof(f), map(Core.Typeof, x)...}
         in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp);
         if interface_only
@@ -19,7 +20,7 @@
             @test has_equal_data(x_cpy_1, x_cpy_2)
         end
         TestUtils.test_rrule!!(
-            Xoshiro(123456), in_f, f, x...;
+            sr(123456), in_f, f, x...;
             perf_flag=:none, interface_only=false, is_primitive=false,
         )
     end

@@ -78,24 +78,24 @@ sr(n::Int) = StableRNG(n)
             include(joinpath("interpreter", "reverse_mode_ad.jl"))
         end
         # include("test_utils.jl")
-        # @testset "rrules" begin
-        #     @info "avoiding_non_differentiable_code"
-        #     include(joinpath("rrules", "avoiding_non_differentiable_code.jl"))
-        #     @info "blas"
-        #     include(joinpath("rrules", "blas.jl"))
-        #     @info "builtins"
-        #     include(joinpath("rrules", "builtins.jl"))
-        #     @info "foreigncall"
-        #     include(joinpath("rrules", "foreigncall.jl"))
-        #     @info "lapack"
-        #     include(joinpath("rrules", "lapack.jl"))
-        #     @info "low_level_maths"
-        #     include(joinpath("rrules", "low_level_maths.jl"))
-        #     @info "misc"
-        #     include(joinpath("rrules", "misc.jl"))
-        #     @info "new"
-        #     include(joinpath("rrules", "new.jl"))
-        # end
+        @testset "rrules" begin
+            @info "avoiding_non_differentiable_code"
+            include(joinpath("rrules", "avoiding_non_differentiable_code.jl"))
+            @info "blas"
+            include(joinpath("rrules", "blas.jl"))
+            @info "builtins"
+            include(joinpath("rrules", "builtins.jl"))
+            @info "foreigncall"
+            include(joinpath("rrules", "foreigncall.jl"))
+            @info "lapack"
+            include(joinpath("rrules", "lapack.jl"))
+            @info "low_level_maths"
+            include(joinpath("rrules", "low_level_maths.jl"))
+            @info "misc"
+            include(joinpath("rrules", "misc.jl"))
+            @info "new"
+            include(joinpath("rrules", "new.jl"))
+        end
     elseif test_group == "integration_testing/misc"
         include(joinpath("integration_testing/", "misc.jl"))
         include(joinpath("integration_testing", "battery_tests.jl"))

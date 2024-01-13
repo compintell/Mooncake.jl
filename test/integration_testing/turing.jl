@@ -55,9 +55,13 @@ end
         else
             @test has_equal_data(in_f(f, deepcopy(x)...), f(deepcopy(x)...))
         end
-        display(@benchmark $f($x...))
-        println()
-        display(@benchmark $in_f($f, $x...))
-        println()
+        # display(@benchmark $f($x...))
+        # println()
+        # display(@benchmark $in_f($f, $x...))
+        # println()
+        TestUtils.test_rrule!!(
+            sr(123456), in_f, f, x...;
+            perf_flag=:none, interface_only, is_primitive=false,
+        )
     end
 end
