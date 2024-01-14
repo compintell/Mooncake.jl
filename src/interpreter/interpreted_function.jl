@@ -164,7 +164,6 @@ Base.eltype(::TypedGlobalRef{T}) where {T} = T
 
 function _globalref_to_slot(ex::GlobalRef)
     val = getglobal(ex.mod, ex.name)
-    val isa Core.IntrinsicFunction && return ConstSlot(_lift_intrinsic(val))
     isconst(ex) && return ConstSlot(val)
     return TypedGlobalRef(ex)
 end
@@ -378,7 +377,6 @@ _get_slot(x::GlobalRef, _, _, _) = _globalref_to_slot(x)
 _get_slot(x::QuoteNode, _, _, _) = ConstSlot(x.value)
 _get_slot(x::SSAValue, slots, _, _) = slots[x.id]
 _get_slot(x::AbstractSlot, _, _, _) = throw(error("Already a slot!"))
-_get_slot(x::Core.IntrinsicFunction, _, _, _) = ConstSlot(_lift_intrinsic(x))
 _get_slot(x, _, _, _) = ConstSlot(x)
 function _get_slot(x::Expr, _, _, sptypes)
     # There are only a couple of `Expr`s possible as arguments to `Expr`s.

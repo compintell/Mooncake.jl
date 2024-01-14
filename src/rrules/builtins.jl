@@ -102,19 +102,13 @@ end
 @inactive_intrinsic bswap_int
 @inactive_intrinsic ceil_llvm
 
-function __cglobal(s::Symbol, x...)
-    @show s, x
-    return __inner(Val(s), x...)
-end
-
-@generated function __inner(::Val{T}, args...) where {T}
-    return :(cglobal($(Symbol(T)), args...))
-end
+__cglobal(::Val{s}, x::Vararg{Any, N}) where {s, N} = cglobal(s, x...)
 
 translate(::Val{Intrinsics.cglobal}) = __cglobal
-# @is_primitive MinimalCtx Tuple{typeof(__cglobal), Vararg}
 Taped.is_primitive(::MinimalCtx, ::Type{<:Tuple{typeof(__cglobal), Vararg}}) = true
-rrule!!(::CoDual{typeof(__cglobal)}, args...) = cglobal(map(primal, args...)), NoPullback()
+function rrule!!(::CoDual{typeof(__cglobal)}, args...)
+    return Taped.uninit_codual(__cglobal(map(primal, args)...)), NoPullback()
+end
 
 @inactive_intrinsic checked_sadd_int
 @inactive_intrinsic checked_sdiv_int
@@ -620,8 +614,14 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         [false, :stability, nothing, IntrinsicsWrappers.bitcast, Int64, 5.0],
         [false, :stability, nothing, IntrinsicsWrappers.bswap_int, 5],
         [false, :stability, nothing, IntrinsicsWrappers.ceil_llvm, 4.1],
-        # cglobal -- NEEDS IMPLEMENTING AND TESTING
-        # [false, :none, nothing, Intrinsics.cglobal, ()]
+        [
+            true,
+            :stability,
+            nothing,
+            IntrinsicsWrappers.__cglobal,
+            Val{:jl_uv_stdout}(),
+            Ptr{Cvoid},
+        ],
         [false, :stability, nothing, IntrinsicsWrappers.checked_sadd_int, 5, 4],
         [false, :stability, nothing, IntrinsicsWrappers.checked_sdiv_int, 5, 4],
         [false, :stability, nothing, IntrinsicsWrappers.checked_smul_int, 5, 4],

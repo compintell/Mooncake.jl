@@ -72,7 +72,6 @@ function foreigncall_to_call(inst, sp_map::Dict{Symbol, CC.VarState})
     else
         return inst
     end
-    return inst
 end
 
 # Copied from Umlaut.jl.
@@ -137,19 +136,26 @@ new_to_call(x) = Meta.isexpr(x, :new) ? Expr(:call, _new_, x.args...) : x
 
 If `inst` is a `:call` expression to a `Core.IntrinsicFunction`, replace it with a call to
 the corresponding `function` from `Taped.IntrinsicsWrappers`, else return inst.
+
+`cglobal` is a special case -- it requires that its first argument be static in exactly the
+same way as `:foreigncall`. See `IntrinsicsWrappers.__cglobal` for more info.
 """
 function intrinsic_to_function(inst)
-    Meta.isexpr(inst, :call) || return inst
-    return Expr(:call, lift_intrinsic(inst.args[1]), inst.args[2:end]...)
+    return Meta.isexpr(inst, :call) ? Expr(:call, lift_intrinsic(inst.args...)...) : inst
 end
 
-lift_intrinsic(x) = x
-function lift_intrinsic(x::GlobalRef)
+lift_intrinsic(x...) = x
+function lift_intrinsic(x::GlobalRef, args...)
     val = getglobal(x.mod, x.name)
-    return val isa Core.IntrinsicFunction ? lift_intrinsic(val) : x
+    return val isa Core.IntrinsicFunction ? lift_intrinsic(val, args...) : (x, args...)
 end
-function lift_intrinsic(x::Core.IntrinsicFunction)
-    return x == cglobal ? x : IntrinsicsWrappers.translate(Val(x))
+function lift_intrinsic(x::Core.IntrinsicFunction, v, args...)
+    if x == cglobal
+        s = __extract_foreigncall_name(v)
+        return IntrinsicsWrappers.__cglobal, s, args...
+    else
+        return IntrinsicsWrappers.translate(Val(x)), v, args...
+    end
 end
 
 """

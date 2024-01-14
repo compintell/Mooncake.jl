@@ -41,6 +41,11 @@
             wrapper_ex = Taped.intrinsic_to_function(intrinsic_ex)
             @test wrapper_ex.args[1] == Taped.IntrinsicsWrappers.abs_float
         end
+        @testset "cglobal" begin
+            cglobal_ex = Expr(:call, cglobal, :jl_uv_stdout, Ptr{Cvoid})
+            wrapper_ex = Taped.intrinsic_to_function(cglobal_ex)
+            @test wrapper_ex.args[1] == Taped.IntrinsicsWrappers.__cglobal
+        end
     end
     @testset "rebind_phi_nodes!" begin
         ir = Taped.ircode(
