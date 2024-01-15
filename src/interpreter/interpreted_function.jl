@@ -313,9 +313,6 @@ function _get_slot(x::Expr, _, _, sptypes)
     end
 end
 
-function _get_slot(x, in_f::InterpretedFunction)
-    return _get_slot(x, in_f.slots, in_f.arg_info, in_f.ir.sptypes)
-end
 
 
 #
@@ -375,6 +372,11 @@ struct InterpretedFunction{sig<:Tuple, C, Treturn, Targ_info<:ArgInfo}
     ir::IRCode
     interp::TapedInterpreter
     spnames::Any
+end
+
+# See above for other `_get_slot` methods.
+function _get_slot(x, in_f::InterpretedFunction)
+    return _get_slot(x, in_f.slots, in_f.arg_info, in_f.ir.sptypes)
 end
 
 function is_vararg_sig_and_sparam_names(sig)
