@@ -150,9 +150,8 @@ function lift_intrinsic(x::GlobalRef, args...)
     return val isa Core.IntrinsicFunction ? lift_intrinsic(val, args...) : (x, args...)
 end
 function lift_intrinsic(x::Core.IntrinsicFunction, v, args...)
-    if x == cglobal
-        s = __extract_foreigncall_name(v)
-        return IntrinsicsWrappers.__cglobal, s, args...
+    if x === cglobal
+        return IntrinsicsWrappers.__cglobal, __extract_foreigncall_name(v), args...
     else
         return IntrinsicsWrappers.translate(Val(x)), v, args...
     end
