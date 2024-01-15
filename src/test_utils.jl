@@ -50,6 +50,7 @@ throws an `AssertionError` if the same address is not mapped to in `tangent` eac
 """
 function populate_address_map!(m::AddressMap, primal::P, tangent::T) where {P, T}
     isprimitivetype(P) && return m
+    T === NoTangent && return m
     if ismutabletype(P)
         @assert T <: MutableTangent
         k = pointer_from_objref(primal)
