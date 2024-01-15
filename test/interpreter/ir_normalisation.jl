@@ -47,6 +47,87 @@
             @test wrapper_ex.args[1] == Taped.IntrinsicsWrappers.__cglobal
         end
     end
+    @testset "rebind_phi_nodes!" begin
+        @testset "fully-defined values" begin
+            ir = Taped.ircode(
+                Any[
+                    Expr(:call, println, "1"),
+                    PhiNode(Int32[1, 3], Any[SSAValue(1), Argument(2)]),
+                    PhiNode(Int32[1, 3], Any[SSAValue(2), false]),
+                    Expr(:call, sin, SSAValue(1)),
+                    Expr(:call, +, SSAValue(4), SSAValue(2)),
+                    GotoIfNot(SSAValue(3), 8),
+                    Expr(:call, println, "hmm"),
+                    ReturnNode(SSAValue(5)),
+                ],
+                Any[Tuple{}, Float64],
+            )
+            rebound_ir = Taped.rebind_phi_nodes!(CC.copy(ir))
+        
+            # Check first rebind is correct.
+            first_rebind = rebound_ir.stmts.inst[4]
+            @test Meta.isexpr(first_rebind, :call)
+            @test first_rebind.args[1] == Taped.__rebind
+            @test first_rebind.args[2] == SSAValue(2)
+        
+            # Check second rebind is correct.
+            second_rebind = rebound_ir.stmts.inst[5]
+            @test Meta.isexpr(second_rebind, :call)
+            @test second_rebind.args[1] == Taped.__rebind
+            @test second_rebind.args[2] == SSAValue(3)
+        
+            # Check that the reference to the first PhiNode in the second PhiNode is replaced.
+            second_phi_node = rebound_ir.stmts.inst[3]
+            @test second_phi_node isa PhiNode
+            @test second_phi_node.values[1] == SSAValue(4)
+        
+            # Check that the reference to the first PhiNode in the `+` call is replaced.
+            plus_call = rebound_ir.stmts.inst[7]
+            @test Meta.isexpr(plus_call, :call)
+            @test plus_call.args == Any[+, SSAValue(6), SSAValue(4)]
+        
+            # Check that the reference to thesecond PhiNode in the `GotoIfNot` node is replaced.
+            gotoifnot = rebound_ir.stmts.inst[8]
+            @test gotoifnot isa CC.GotoIfNot
+            @test gotoifnot.cond == SSAValue(5)
+        end
+        @testset "partially-defined values" begin
+            partly_defined_values = Vector{Any}(undef, 2)
+            partly_defined_values[1] = SSAValue(2)
+            ir = Taped.ircode(
+                Any[
+                    GotoIfNot(Argument(2), 3),
+                    Expr(:call, sin, Argument(3)),
+                    PhiNode(Int32[2, 1], partly_defined_values),
+                    PhiNode(Int32[2, 1], Any[true, false]),
+                    Expr(:call, cos, Argument(3)),
+                    GotoIfNot(Argument(2), 9),
+                    Expr(:throw_undef_if_not, :v, SSAValue(4)),
+                    Expr(:call, Base.add_float, SSAValue(5), SSAValue(3)),
+                    PhiNode(Int32[7, 3], Any[SSAValue(8), SSAValue(5)]),
+                    ReturnNode(SSAValue(9)),
+                ],
+                Any[Tuple{}, Bool, Float64],
+            )
+            rebound_ir = Taped.rebind_phi_nodes!(CC.copy(ir))
+
+            # Verify that the IR runs and agrees the function that it is meant to be
+            # equivalent to.
+            oc = Core.OpaqueClosure(ir; do_compile=false)
+            @assert oc(false, 5.0) == TestResources.phi_node_with_undefined_value(false, 5.0)
+            @assert oc(true, 5.0) == TestResources.phi_node_with_undefined_value(true, 5.0)
+
+            # Verify that the undefined value has been defined. It doesn't matter what is
+            # put in its place, as long as _something_ is.
+            @test all(isassigned.(Ref(rebound_ir.stmts.inst[3].values), 1:2))
+            @test all(isa.(rebound_ir.stmts.inst[3].values, Ref(SSAValue)))
+
+            # # Verify that the modified IR runs.
+            # oc_rebound = Core.OpaqueClosure(rebound_ir; do_compile=false)
+            # @test oc_rebound(false, 5.0) == oc(false, 5.0)
+            # @test oc_rebound(true, 5.0) == oc(true, 5.0)
+        end
+    end
     @testset "rebind_multiple_usage!" begin
         @testset "single-line case" begin
             ir = Taped.ircode(
