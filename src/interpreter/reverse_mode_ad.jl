@@ -196,10 +196,6 @@ function build_pb_stack(__rrule!!, evaluator, arg_slots)
     return pb_stack
 end
 
-_wrap_codual_slot(x::CoDualSlot) = x
-_wrap_codual_slot(x::ConstSlot{<:CoDual}) = x
-_wrap_codual_slot(x::ConstSlot{P}) where {P} = ConstSlot{codual_type(P)}(zero_codual(x[]))
-
 function build_coinsts(ir_inst::Expr, in_f, _rrule!!, n::Int, b::Int, is_blk_end::Bool)
     is_invoke = Meta.isexpr(ir_inst, :invoke)
     next_blk = _standard_next_block(is_blk_end, b)
@@ -380,6 +376,10 @@ end
 function _get_slot(x, in_f::InterpretedFunctionRRule)
     return _wrap_codual_slot(_get_slot(x, in_f.slots, in_f.arg_info, in_f.ir))
 end
+
+_wrap_codual_slot(x::CoDualSlot) = x
+_wrap_codual_slot(x::ConstSlot{<:CoDual}) = x
+_wrap_codual_slot(x::ConstSlot{P}) where {P} = ConstSlot{codual_type(P)}(zero_codual(x[]))
 
 # Special handling is required for PhiNodes, because their semantics require that when
 # more than one PhiNode appears at the start of a basic block, they are run simulataneously
