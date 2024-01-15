@@ -31,7 +31,7 @@ function _foreigncall_ end
 const Tforeigncall = Union{typeof(_foreigncall_)}
 
 include("tangents.jl")
-include("reverse_mode_ad.jl")
+include("codual.jl")
 
 include(joinpath("interpreter", "contexts.jl"))
 include(joinpath("interpreter", "ir_utils.jl"))
