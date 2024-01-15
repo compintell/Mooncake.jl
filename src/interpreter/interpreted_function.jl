@@ -133,16 +133,17 @@ struct TypedPhiNode{Tr<:AbstractSlot, Te<:Tuple, Tv<:Tuple}
     values::Tv
 end
 
-function store_tmp_value!(node::TypedPhiNode, prev_blk::Int)
-    map(node.edges, node.values) do edge, val
-        (edge == prev_blk) && isassigned(val) && (node.tmp_slot[] = val[])
-    end
-    return nothing
-end
-
-function transfer_tmp_value!(node::TypedPhiNode)
-    isassigned(node.tmp_slot) && (node.ret_slot[] = node.tmp_slot[])
-    return nothing
+# Runs a collection of PhiNodes (semantically) simulataneously. Does this by first writing
+# the value associated to each PhiNode to its `tmp_slot`. Once all values have been written,
+# copies the `tmp_slot` value across to the `ret_slot`. This ensures that if e.g.
+# PhiNode B takes the value associated to PhiNode A, it gets the value _before_ this
+# collection of PhiNodes started to run, rather than after. See SSAIR docs for more info.
+function build_phinode_insts(
+    ir_insts::Vector{PhiNode}, in_f, n_first::Int, b::Int, is_blk_end::Bool
+)::Inst
+    nodes = build_typed_phi_nodes(ir_insts, in_f, n_first)
+    next_blk = _standard_next_block(is_blk_end, b)
+    return build_inst(Vector{PhiNode}, (nodes..., ), next_blk)
 end
 
 struct UndefRef end
@@ -161,25 +162,24 @@ function build_typed_phi_nodes(ir_insts::Vector{PhiNode}, in_f, n_first::Int)
     end
 end
 
-# Runs a collection of PhiNodes (semantically) simulataneously. Does this by first writing
-# the value associated to each PhiNode to its `tmp_slot`. Once all values have been written,
-# copies the `tmp_slot` value across to the `ret_slot`. This ensures that if e.g.
-# PhiNode B takes the value associated to PhiNode A, it gets the value _before_ this
-# collection of PhiNodes started to run, rather than after. See SSAIR docs for more info.
-function build_phinode_insts(
-    ir_insts::Vector{PhiNode}, in_f, n_first::Int, b::Int, is_blk_end::Bool
-)::Inst
-    nodes = build_typed_phi_nodes(ir_insts, in_f, n_first)
-    next_blk = _standard_next_block(is_blk_end, b)
-    return build_inst(Vector{PhiNode}, (nodes..., ), next_blk)
-end
-
 function build_inst(::Type{Vector{PhiNode}}, nodes::Tuple, next_blk::Int)::Inst
     return @opaque function (prev_blk::Int)
         map(Base.Fix2(store_tmp_value!, prev_blk), nodes)
         map(transfer_tmp_value!, nodes)
         return next_blk
     end
+end
+
+function store_tmp_value!(node::TypedPhiNode, prev_blk::Int)
+    map(node.edges, node.values) do edge, val
+        (edge == prev_blk) && isassigned(val) && (node.tmp_slot[] = val[])
+    end
+    return nothing
+end
+
+function transfer_tmp_value!(node::TypedPhiNode)
+    isassigned(node.tmp_slot) && (node.ret_slot[] = node.tmp_slot[])
+    return nothing
 end
 
 ## PiNode

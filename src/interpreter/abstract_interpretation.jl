@@ -20,6 +20,7 @@ struct TapedInterpreter{C} <: CC.AbstractInterpreter
     inf_cache::Vector{CC.InferenceResult}
     code_cache::TICache
     in_f_cache::Dict{Any, Any}
+    in_f_rrule_cache::Dict{Any, Any}
     function TapedInterpreter(
         ctx::C=DefaultCtx();
         meta=nothing,
@@ -29,9 +30,10 @@ struct TapedInterpreter{C} <: CC.AbstractInterpreter
         inf_cache::Vector{CC.InferenceResult}=CC.InferenceResult[], 
         code_cache::TICache=TICache(),
         in_f_cache::Dict{Any, Any}=Dict(),
+        in_f_rrule_cache::Dict{Any, Any}=Dict(),
     ) where {C}
         return new{C}(
-            ctx, meta, world, inf_params, opt_params, inf_cache, code_cache, in_f_cache
+            ctx, meta, world, inf_params, opt_params, inf_cache, code_cache, in_f_cache, in_f_rrule_cache
         )
     end
 end

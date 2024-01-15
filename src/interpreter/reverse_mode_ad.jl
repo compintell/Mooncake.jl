@@ -421,6 +421,11 @@ function make_phi_instructions!(
 end
 
 function build_rrule!!(in_f::InterpretedFunction{sig}) where {sig}
+
+    # If we've already constructed the rule, don't build it again.
+    interp = in_f.interp
+    sig in keys(interp.in_f_rrule_cache) && return interp.in_f_rrule_cache[sig]
+
     return_slot = make_codual_slot(in_f.return_slot)
     arg_info = make_codual_arginfo(in_f.arg_info)
     n_stack = Vector{Int}(undef, 0)
@@ -439,6 +444,9 @@ function build_rrule!!(in_f::InterpretedFunction{sig}) where {sig}
 
     # Set PhiNodes.
     make_phi_instructions!(in_f, __rrule!!)
+
+    # Cache the rule.
+    interp.in_f_rrule_cache[sig] = __rrule!!
 
     return __rrule!!
 end
