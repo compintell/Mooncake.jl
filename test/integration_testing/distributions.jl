@@ -26,7 +26,7 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
         (false, Cauchy(), -0.5),
         (false, Cauchy(1.0), 0.99),
         (false, Cauchy(1.0, 0.1), 1.01),
-        # (false, Chernoff(), 0.5), takes forever
+        (false, Chernoff(), 0.5),
         (false, Chi(2.5), 0.5),
         (false, Chi(5.5), 1.1),
         (false, Chi(0.1), 0.7),
