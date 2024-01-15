@@ -67,8 +67,9 @@ sr(n::Int) = StableRNG(n)
 @testset "Taped.jl" begin
     if test_group == "basic"
         include("tangents.jl")
-        include("reverse_mode_ad.jl")
+        include("codual.jl")
         @testset "interpreter" begin
+            include(joinpath("interpreter", "contexts.jl"))
             include(joinpath("interpreter", "ir_utils.jl"))
             include(joinpath("interpreter", "ir_normalisation.jl"))
             include(joinpath("interpreter", "interpreted_function.jl"))
