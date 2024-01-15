@@ -452,8 +452,8 @@ end
 
 @is_primitive MinimalCtx Tuple{Type{UnionAll}, TypeVar, Any}
 @is_primitive MinimalCtx Tuple{Type{UnionAll}, TypeVar, Type}
-function rrule!!(::CoDual{<:Type{UnionAll}}, ::CoDual{<:TypeVar}, ::CoDual)
-    throw(error("This thing doesn't have an rrule yet."))
+function rrule!!(::CoDual{<:Type{UnionAll}}, x::CoDual{<:TypeVar}, y::CoDual{<:Type})
+    return CoDual(UnionAll(primal(x), primal(y)), NoTangent()), NoPullback()
 end
 
 function unexepcted_foreigncall_error(name)
