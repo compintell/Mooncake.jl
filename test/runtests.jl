@@ -29,7 +29,6 @@ using Taped:
     DefaultCtx,
     New,
     rrule!!,
-    set_tangent!!,
     SSym,
     SInt,
     lgetfield,
