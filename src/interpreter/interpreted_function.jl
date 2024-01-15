@@ -491,7 +491,7 @@ While the details of what each kind of `OpaqueClosure` can be found in the corre
 - write result to the instruction's ssa slot,
 - return an integer indicating which instruction to execute next.
 
-The integer must either be
+The returned integer is permitted to take one of the following values:
 - `-1`, in which case we should return,
 - `0`, in which case the next instruction should be run,
 - a positive integer, in which case execution jumps to the start of that block.
