@@ -1,7 +1,7 @@
 module TestUtils
 
 using JET, Random, Taped, Test
-using Taped: CoDual, NoTangent, rrule!!, is_init, zero_codual, DefaultCtx
+using Taped: CoDual, NoTangent, rrule!!, is_init, zero_codual, DefaultCtx, @is_primitive
 
 has_equal_data(x::T, y::T; equal_undefs=true) where {T<:String} = x == y
 has_equal_data(x::Type, y::Type; equal_undefs=true) = x == y
@@ -535,7 +535,9 @@ end
 module TestResources
 
 using ..Taped
-using ..Taped: CoDual, Tangent, MutableTangent, NoTangent, PossiblyUninitTangent, ircode
+using ..Taped:
+    CoDual, Tangent, MutableTangent, NoTangent, PossiblyUninitTangent, ircode,
+    @is_primitive, MinimalCtx
 
 using DiffTests, LinearAlgebra, Random, Setfield
 
@@ -608,20 +610,25 @@ end
 # re-write of the rules begins.
 #
 
-p_sin(x) = sin(x)
+@is_primitive MinimalCtx Tuple{typeof(p_sin), Float64}
+p_sin(x::Float64) = sin(x)
 
 function Taped.rrule!!(::CoDual{typeof(p_sin)}, x::CoDual{Float64, Float64})
     p_sin_pb!!(ȳ::Float64, df, dx) = df, dx + ȳ * cos(primal(x))
     return CoDual(sin(primal(x)), zero(Float64)), p_sin_pb!!
 end
 
-p_mul(x, y) = x * y
+@is_primitive MinimalCtx Tuple{typeof(p_mul), Float64, Float64}
+p_mul(x::Float64, y::Float64) = x * y
 
 function Taped.rrule!!(::CoDual{typeof(p_mul)}, x::CoDual{Float64}, y::CoDual{Float64})
     p_mul_pb!!(z̄, df, dx, dy) = df, dx + z̄ * primal(y), dy + z̄ * primal(x)
     return CoDual(primal(x) * primal(y), zero(Float64)), p_mul_pb!!
 end
 
+@is_primitive(
+    MinimalCtx, Tuple{typeof(p_mat_mul!), Matrix{Float64}, Matrix{Float64}, Matrix{Float64}}
+)
 p_mat_mul!(C, A, B) = mul!(C, A, B)
 
 function Taped.rrule!!(
@@ -640,6 +647,7 @@ function Taped.rrule!!(
     return C, p_mat_mul_pb!!
 end
 
+@is_primitive MinimalCtx Tuple{typeof(p_setfield!), Any, Symbol, Any}
 p_setfield!(value, name::Symbol, x) = setfield!(value, name, x)
 
 __replace_value(::T, v) where {T<:PossiblyUninitTangent} = T(v)
@@ -680,15 +688,17 @@ end
 
 const __A = randn(3, 3)
 
-const PRIMITIVE_TEST_FUNCTIONS = Any[
-    (:stability, p_sin, 5.0),
-    (:none, p_mat_mul!, randn(4, 5), randn(4, 3), randn(3, 5)),
-    (:none, p_mul, 5.0, 4.0),
-    (:none, p_mat_mul!, randn(3, 3), __A, __A),
-    (:none, p_setfield!, Foo(5.0), :x, 4.0),
-    (:none, p_setfield!, MutableFoo(5.0, randn(5)), :b, randn(6)),
-    (:none, p_setfield!, MutableFoo(5.0), :a, 5.0),
-]
+function generate_primitive_test_functions()
+    return Any[
+        (:stability, p_sin, 5.0),
+        (:stability, p_mul, 5.0, 4.0),
+        (:stability, p_mat_mul!, randn(4, 5), randn(4, 3), randn(3, 5)),
+        (:stability, p_mat_mul!, randn(3, 3), __A, __A),
+        (:none, p_setfield!, Foo(5.0), :x, 4.0),
+        (:none, p_setfield!, MutableFoo(5.0, randn(5)), :b, randn(6)),
+        (:none, p_setfield!, MutableFoo(5.0), :a, 5.0),
+    ]
+end
 
 #
 # Tests for AD. There are not rules defined directly on these functions, and they require
