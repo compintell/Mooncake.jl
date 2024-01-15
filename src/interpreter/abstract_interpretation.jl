@@ -2,7 +2,7 @@
 # in conjunction with the contexts above to decide what should be inlined and what should
 # not be inlined. Similar strategies are employed by Enzyme and Diffractor.
 
-# The most important bit of this code is `inlining_policy` -- the rest of copy + pasted
+# The most important bit of this code is `inlining_policy` -- the rest is copy + pasted
 # boiler plate, largely taken from https://github.com/JuliaLang/julia/blob/2fe4190b3d26b4eee52b2b1b1054ddd6e38a941e/test/compiler/newinterp.jl#L11
 
 struct TICache

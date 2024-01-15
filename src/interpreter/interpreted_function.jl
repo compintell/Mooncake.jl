@@ -92,6 +92,12 @@ _standard_next_block(is_blk_end::Bool, current_blk::Int) = is_blk_end ? current_
 
 
 # IR node handlers -- translates Julia SSAIR nodes into executable `Inst`s (see above).
+# Each node may have several methods of `build_inst`. One will always be a method which
+# accepts a variety of arguments, including an `InterpretedFunction`, extracts only the data
+# that it needs, and calls another method of `build_inst`. This other method of
+# `build_inst` will actually build the instruction. This structure is used to make it
+# easy to construct unit test cases for the second method (if you inspect the tests for this
+# code, you will find that the second method is usually called).
 
 ## ReturnNode
 function build_inst(inst::ReturnNode, @nospecialize(in_f), ::Int, ::Int, ::Bool)::Inst
@@ -155,7 +161,11 @@ function build_typed_phi_nodes(ir_insts::Vector{PhiNode}, in_f, n_first::Int)
     end
 end
 
-# Runs a collection of PhiNodes (semantically) simulataneously.
+# Runs a collection of PhiNodes (semantically) simulataneously. Does this by first writing
+# the value associated to each PhiNode to its `tmp_slot`. Once all values have been written,
+# copies the `tmp_slot` value across to the `ret_slot`. This ensures that if e.g.
+# PhiNode B takes the value associated to PhiNode A, it gets the value _before_ this
+# collection of PhiNodes started to run, rather than after. See SSAIR docs for more info.
 function build_phinode_insts(
     ir_insts::Vector{PhiNode}, in_f, n_first::Int, b::Int, is_blk_end::Bool
 )::Inst
@@ -303,15 +313,22 @@ function _get_slot(x::Expr, _, _, sptypes)
     end
 end
 
+function _get_slot(x, in_f::InterpretedFunction)
+    return _get_slot(x, in_f.slots, in_f.arg_info, in_f.ir.sptypes)
+end
+
+
 #
 # Loading arguments into slots.
 #
 
+# Data structure to handle arguments to functions. Comprises a collection of slots, and
+# knows whether or not it represents the arguments of a varargs function.
 struct ArgInfo{Targ_slots<:NTuple{N, Any} where {N}, is_vararg}
     arg_slots::Targ_slots
 end
 
-function arginfo_from_argtypes(::Type{T}, is_vararg::Bool) where {T<:Tuple}
+function ArgInfo(::Type{T}, is_vararg::Bool) where {T<:Tuple}
     Targ_slots = Tuple{map(t -> SlotRef{t}, T.parameters)...}
     return ArgInfo{Targ_slots, is_vararg}((map(t -> SlotRef{t}(), T.parameters)..., ))
 end
@@ -380,16 +397,11 @@ function sparam_names(m::Core.Method)::Vector{Symbol}
     end
 end
 
-function _get_slot(x, in_f::InterpretedFunction)
-    return _get_slot(x, in_f.slots, in_f.arg_info, in_f.ir.sptypes)
-end
-
 make_slot(x::Type{T}) where {T} = (@isdefined T) ? SlotRef{T}() : SlotRef{DataType}()
 make_slot(x::CC.Const) = ConstSlot{Core.Typeof(x.val)}(x.val)
 make_slot(x::CC.PartialStruct) = SlotRef{x.typ}()
 make_slot(::CC.PartialTypeVar) = SlotRef{TypeVar}()
 
-# Have to be careful not to return a constant -- for some reason it causes allocations...
 make_dummy_instruction(next_blk::Int) = @opaque (p::Int) -> next_blk
 
 # Special handling is required for PhiNodes, because their semantics require that when
@@ -424,6 +436,69 @@ function make_phi_instructions!(in_f::InterpretedFunction)
     return nothing
 end
 
+"""
+    InterpretedFunction(ctx::C, sig::Type{<:Tuple}, interp) where {C}
+
+Construct a data structure which can be used to execute the instruction specified by `sig`.
+For example,
+```julia
+in_f = InterpretedFunction(DefaultCtx(), Tuple{typeof(sin), Float64}, Taped.TInterp())
+in_f(sin, 5.0)
+```
+will yield exactly the same result as running `sin(5.0)`. The advantage of this data
+structure is that `build_rrule!!` is implemented for it, meaning that it can be
+differentiated.
+
+The performance of `InterpretedFunction` largely depends on what the functions are that it
+operates on, but it definitely adds a notable amount of overhead when compared to regular
+Julia code. Typically this overhead is on the order 10ns per operation (on a modern CPU).
+
+For example, running on low-level code involving small scalar operations will
+_typically_ take 10-100 times longer than running the original Julia function, but BLAS
+calls on moderately large matrices has negligible overhead when compared with the original
+function.
+
+## Caching
+
+`InterpretedFunction`s are cached by `interp` -- as a consequence, if you call
+`InterpretedFunction` twice with the same arguments, the second call will just return a
+cached result.
+
+## Known-Limitations
+
+While much of the language is supported, there are a few things that `InterpretedFunction`
+_cannot_ execute. These include anything to do with threading, and exception handling.
+The ability to handling threading may improve in future versions of `InterpretedFunction`,
+but exception handling is unlikely to be supported, as it is not at all clear how it would
+be handled in reverse-mode AD.
+
+Note that `InterpretedFunction`s should be fine with the constructs involved in exception
+handling _provided_ that no exceptions are actually thrown.
+
+# Implementation
+
+An `InterpretedFunction` operates by first looking up the _optimised_ IRCode associated to
+`sig` under `interp`. It associates each instruction in the IR with a `Core.OpaqueClosure`,
+and each `Argument` / `SSAValue` in the IR with a (heap-allocated) `AbstractSlot` (for the
+most part, these slots are `Ref`s).
+
+While the details of what each kind of `OpaqueClosure` can be found in the corresponding
+`Taped.build_inst` method, they generally have the following structure:
+- load data from argument / ssa slots,
+- do computation,
+- write result to the instruction's ssa slot,
+- return an integer indicating which instruction to execute next.
+
+The integer must either be
+- `-1`, in which case we should return,
+- `0`, in which case the next instruction should be run,
+- a positive integer, in which case execution jumps to the start of that block.
+
+The only argument to each `Core.OpaqueClosure` is an integer corresponding to the index of
+the previous block that was run. As a result, each instruction has the _same_ signature,
+meaning that while each instruction tends to do quite different things, we do not see an
+explosion of types. Moreover, type-stability it maintained.
+"""
 function InterpretedFunction(ctx::C, sig::Type{<:Tuple}, interp) where {C}
 
     # If we've already constructed this interpreted function, just return it.
@@ -444,7 +519,7 @@ function InterpretedFunction(ctx::C, sig::Type{<:Tuple}, interp) where {C}
     # Construct argument reference references.
     arg_types = Tuple{map(_get_type, ir.argtypes)..., }
     is_vararg, spnames = is_vararg_sig_and_sparam_names(sig)
-    arg_info = arginfo_from_argtypes(arg_types, is_vararg)
+    arg_info = ArgInfo(arg_types, is_vararg)
     ir = normalise!(ir, spnames)
 
     # Create slots. In most cases, these are instances of `SlotRef`s, which can be read from
@@ -476,13 +551,14 @@ function InterpretedFunction(ctx::C, sig::Type{<:Tuple}, interp) where {C}
     return in_f
 end
 
-load_args!(in_f::InterpretedFunction, args) = load_args!(in_f.arg_info, args)
-
 function (in_f::InterpretedFunction)(args::Vararg{Any, N}) where {N}
     load_args!(in_f, args)
     return __barrier(in_f)
 end
 
+load_args!(in_f::InterpretedFunction, args) = load_args!(in_f.arg_info, args)
+
+# Execute an interpreted function, having already loaded the arguments into their slots.
 function __barrier(in_f::Tf) where {Tf<:InterpretedFunction}
     prev_block = 0
     next_block = 0
@@ -519,6 +595,7 @@ As a consequence, if `x` is very long, this function may have very large compile
     return Expr(:call, :tuple, map(n -> :(f(x[$n])), eachindex(x.parameters))...)
 end
 
+# Produce a `Dict` mapping from block numbers to line number of their first statement.
 function block_map(cfg::CC.CFG)
     line_to_blk_maps = map(((n, blk),) -> tuple.(blk.stmts, n), enumerate(cfg.blocks))
     return Dict(reduce(vcat, line_to_blk_maps))

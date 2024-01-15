@@ -32,7 +32,7 @@
         Any[Tuple{Float64, Tuple{Int}}, (5.0, 3), true],
         Any[Tuple{Float64, Tuple{Int, Float64}}, (5.0, 3, 4.0), true],
     ]
-        ai = Taped.arginfo_from_argtypes(Tx, is_va)
+        ai = Taped.ArgInfo(Tx, is_va)
         @test @inferred Taped.load_args!(ai, x) === nothing
     end
 
