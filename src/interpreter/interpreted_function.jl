@@ -54,8 +54,8 @@ Base.copy(x::ConstSlot{T}) where {T} = ConstSlot{T}(x[])
     TypedGlobalRef(x::GlobalRef)
 
 A (potentially) type-stable getter for a `GlobalRef`. In particular, if the `GlobalRef` is
-declared to be a concrete type, this function will be type-stable. If no declaration was
-made, then calling `getindex` on a `TypedGlobalRef` will have a return type of `Any`.
+declared to be a concrete type, this `getindex(::TypedGlobalRef)` will be type-stable. If no
+declaration was made, then `getindex(::TypedGlobalRef)` will infer to `Any`.
 
 If a `GlobalRef` is declared to be constant, prefer to represent it using a `ConstSlot`,
 rather than a `TypedGlobalRef`.
@@ -73,6 +73,10 @@ Base.setindex!(x::TypedGlobalRef, val) = setglobal!(x.mod, x.name, val)
 Base.isassigned(::TypedGlobalRef) = true
 Base.eltype(::TypedGlobalRef{T}) where {T} = T
 
+#=
+Returns either a `ConstSlot` or a `TypedGlobalRef`, both of which are `AbstractSlot`s.
+In particular, a `ConstSlot` is returned only if the `ex` is declared to be constant.
+=#
 function _globalref_to_slot(ex::GlobalRef)
     val = getglobal(ex.mod, ex.name)
     isconst(ex) && return ConstSlot(val)
