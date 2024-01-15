@@ -86,7 +86,6 @@ end
 # Utility functionality used through instruction construction.
 
 const Inst = Core.OpaqueClosure{Tuple{Int}, Int}
-const JuliaSlot = Union{Argument, SSAValue}
 
 # Standard handling for next-block returns for non control flow related instructions.
 _standard_next_block(is_blk_end::Bool, current_blk::Int) = is_blk_end ? current_blk + 1 : 0
