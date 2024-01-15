@@ -32,6 +32,7 @@ function normalise!(ir::IRCode, spnames::Vector{Symbol})
     end
 
     # Apply multi-line transformations.
+    ir = rebind_phi_nodes!(ir)
     ir = rebind_multiple_usage!(ir)
     return ir
 end

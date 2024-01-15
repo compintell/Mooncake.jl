@@ -167,7 +167,9 @@ function replace_uses_with(x::PhiNode, v::SSAValue, new_v)
 end
 replace_uses_with(x::PiNode, v::SSAValue, new_v) = PiNode(_replace(v, new_v, x.val), x.typ)
 replace_uses_with(x::QuoteNode, ::SSAValue, _) = x
-replace_uses_with(x::ReturnNode, v::SSAValue, new_v) = ReturnNode(_replace(v, new_v, x.val))
+function replace_uses_with(x::ReturnNode, v::SSAValue, new_v)
+    return isdefined(x, :val) ? ReturnNode(_replace(v, new_v, x.val)) : x
+end
 
 # Return new_value if val equals current_val.
 _replace(val::SSAValue, new_val, current_val) = val == current_val ? new_val : current_val

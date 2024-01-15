@@ -37,8 +37,6 @@
     end
     @testset "replace_all_uses_with!" begin
 
-
-
         # `replace_all_uses_with!` is just a lightweight wrapper around `replace_uses_with`,
         # so we just test that carefully.
         @testset "replace_uses_with $val" for (val, target) in Any[
@@ -61,6 +59,7 @@
             (ReturnNode(5), ReturnNode(5)),
             (ReturnNode(SSAValue(1)), ReturnNode(SSAValue(2))),
             (ReturnNode(SSAValue(3)), ReturnNode(SSAValue(3))),
+            (ReturnNode(), ReturnNode()),
         ]
             @test Taped.replace_uses_with(val, SSAValue(1), SSAValue(2)) == target
         end
