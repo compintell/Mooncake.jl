@@ -50,7 +50,7 @@ invoke_to_call(inst) = Meta.isexpr(inst, :invoke) ? Expr(:call, inst.args[2:end]
     foreigncall_to_call(inst, sp_map::Dict{Symbol, CC.VarState})
 
 If `inst` is a `:foreigncall` expression translate it into an equivalent `:call` expression.
-If anything else, just return `inst`.
+If anything else, just return `inst`. See `Taped._foreigncall_` for details.
 
 `sp_map` maps the names of the static parameters to their values. This function is intended
 to be called in the context of an `IRCode`, in which case the values of `sp_map` are given
