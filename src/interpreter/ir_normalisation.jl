@@ -2,14 +2,13 @@
     normalise!(ir::IRCode, spnames::Vector{Symbol})
 
 Apply a sequence of standardising transformations to `ir` which leaves its semantics
-unchanged, but make AD more straightforward. In particular, replace
+unchanged, but makes AD more straightforward. In particular, replace
 1. `:invoke` `Expr`s with `:call`s,
 2. `:foreigncall` `Expr`s with `:call`s to `Taped._foreigncall_`,
 3. `:new` `Expr`s with `:call`s to `Taped._new_`,
 4. `Core.IntrinsicFunction`s with counterparts from `Taped.IntrinsicWrappers`.
 
-Additionally applies `rebind_phi_nodes!` and `rebind_multiple_usage!`, which are _essential_
-for the correctness of AD.
+Additionally applies `rebind_multiple_usage!`, which is _essential_ for AD correctness.
 
 `spnames` are the names associated to the static parameters of `ir`. These are needed when
 handling `:foreigncall` expressions, in which it is not necessarily the case that all
@@ -135,7 +134,7 @@ new_to_call(x) = Meta.isexpr(x, :new) ? Expr(:call, _new_, x.args...) : x
     intrinsic_to_function(inst)
 
 If `inst` is a `:call` expression to a `Core.IntrinsicFunction`, replace it with a call to
-the corresponding `function` from `Taped.IntrinsicsWrappers`, else return inst.
+the corresponding `function` from `Taped.IntrinsicsWrappers`, else return `inst`.
 
 `cglobal` is a special case -- it requires that its first argument be static in exactly the
 same way as `:foreigncall`. See `IntrinsicsWrappers.__cglobal` for more info.
@@ -252,7 +251,7 @@ end
     __rebind(x)
 
 A different name for the `identity` function. `__rebind` is a primitive in the `MinimalCtx`,
-and is used to ensure the correctness of AD.
+and is used to ensure the correctness of AD. See `Taped.rebind_multiple_usage!` for details.
 """
 __rebind(x) = x
 @is_primitive MinimalCtx Tuple{typeof(__rebind), Any}
