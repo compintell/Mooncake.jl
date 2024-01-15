@@ -29,7 +29,8 @@ end
 
 #=
 Converts any edges in `GotoNode`s, `GotoIfNot`s, `PhiNode`s, and `:enter` expressions which
-refer to line numbers into references to block numbers.
+refer to line numbers into references to block numbers. The `cfg` provides the information
+required to perform this conversion.
 
 For context, `CodeInfo` objects have references to line numbers, while `IRCode` uses
 block numbers.
@@ -63,7 +64,7 @@ Produces an instruction stream whose
 - `line` field is all `Int32(1)`, and
 - `flag` field is all `Core.Compiler.IR_FLAG_REFINED`.
 
-As such, if you wish to ensure that your `IRCode` prints, you should ensure that its
+As such, if you wish to ensure that your `IRCode` prints nicely, you should ensure that its
 linetable field has at least one element.
 =#
 function __insts_to_instruction_stream(insts::Vector{Any})
@@ -80,6 +81,12 @@ end
     infer_ir!(ir::IRCode) -> IRCode
 
 Runs type inference on `ir`, which mutates `ir`, and returns it.
+
+Note: the compiler will not infer the types of anything where the corrsponding element of
+`ir.stmts.flag` is not set to `Core.Compiler.IR_FLAG_REFINED`. Nor will it attempt to refine
+the type of the value returned by a `:invoke` expressions. Consequently, if you find that
+the types in your IR are not being refined, you may wish to check that neither of these
+things are happening.
 """
 function infer_ir!(ir::IRCode)
     return __infer_ir!(ir, CC.NativeInterpreter(), __get_toplevel_mi_from_ir(ir, Taped))
@@ -93,7 +100,7 @@ _get_type(x::Core.PartialStruct) = x.typ
 _get_type(x::Core.Const) = Core.Typeof(x.val)
 _get_type(T) = T
 
-# Given some IR generates a MethodInstance suitable for passing to infer_ir!, if you don't
+# Given some IR, generates a MethodInstance suitable for passing to infer_ir!, if you don't
 # already have one with the right argument types. Credit to @oxinabox:
 # https://gist.github.com/oxinabox/cdcffc1392f91a2f6d80b2524726d802#file-example-jl-L54
 function __get_toplevel_mi_from_ir(ir, _module::Module)
@@ -133,10 +140,12 @@ function replace_all_uses_with!(ir::IRCode, value::SSAValue, new_value::Any)
 end
 
 #=
-    replace_uses_with(x, value::SSAValue, new_value)
+    replace_uses_with(x::Any, value::SSAValue, new_value::Any)
 
 Replace all occurences of `value` in the IR node `x` with `new_value`. The semantics of this
 are node-dependent.
+
+If `value` appears by itself as a constant, it will not be replaced.
 =#
 replace_uses_with(x::Any, ::SSAValue, _) = x # constants
 function replace_uses_with(x::Expr, v::SSAValue, new_v)
