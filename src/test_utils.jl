@@ -610,27 +610,24 @@ end
 # re-write of the rules begins.
 #
 
-@is_primitive MinimalCtx Tuple{typeof(p_sin), Float64}
 p_sin(x::Float64) = sin(x)
-
+@is_primitive MinimalCtx Tuple{typeof(p_sin), Float64}
 function Taped.rrule!!(::CoDual{typeof(p_sin)}, x::CoDual{Float64, Float64})
     p_sin_pb!!(ȳ::Float64, df, dx) = df, dx + ȳ * cos(primal(x))
     return CoDual(sin(primal(x)), zero(Float64)), p_sin_pb!!
 end
 
-@is_primitive MinimalCtx Tuple{typeof(p_mul), Float64, Float64}
 p_mul(x::Float64, y::Float64) = x * y
-
+@is_primitive MinimalCtx Tuple{typeof(p_mul), Float64, Float64}
 function Taped.rrule!!(::CoDual{typeof(p_mul)}, x::CoDual{Float64}, y::CoDual{Float64})
     p_mul_pb!!(z̄, df, dx, dy) = df, dx + z̄ * primal(y), dy + z̄ * primal(x)
     return CoDual(primal(x) * primal(y), zero(Float64)), p_mul_pb!!
 end
 
+p_mat_mul!(C, A, B) = mul!(C, A, B)
 @is_primitive(
     MinimalCtx, Tuple{typeof(p_mat_mul!), Matrix{Float64}, Matrix{Float64}, Matrix{Float64}}
 )
-p_mat_mul!(C, A, B) = mul!(C, A, B)
-
 function Taped.rrule!!(
     ::CoDual{typeof(p_mat_mul!)}, C::T, A::T, B::T
 ) where {T<:CoDual{Matrix{Float64}}}
@@ -647,8 +644,8 @@ function Taped.rrule!!(
     return C, p_mat_mul_pb!!
 end
 
-@is_primitive MinimalCtx Tuple{typeof(p_setfield!), Any, Symbol, Any}
 p_setfield!(value, name::Symbol, x) = setfield!(value, name, x)
+@is_primitive MinimalCtx Tuple{typeof(p_setfield!), Any, Symbol, Any}
 
 __replace_value(::T, v) where {T<:PossiblyUninitTangent} = T(v)
 
