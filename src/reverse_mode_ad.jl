@@ -61,19 +61,3 @@ struct NoPullback end
 @inline (::NoPullback)(dy, dx...) = dx
 
 might_be_active(args) = any(might_be_active ∘ typeof, args)
-
-"""
-    rebind(x)
-
-Primal evaluation is equivalent to the identity function. However, the `rrule!!` ensures
-that something sensible happens with the tangent. Not to be used by downstream users.
-Is basically a hack to ensure that double counting doesn't occur.
-
-TODO: improve docstring + explain / understand semantics better.
-"""
-rebind(x) = x
-
-rebind_pb!!(ȳ, f̄, x̄) = f̄, increment!!(x̄, ȳ)
-function rrule!!(::CoDual{typeof(rebind)}, x::CoDual)
-    return CoDual(primal(x), rebind_tangent(tangent(x))), rebind_pb!!
-end

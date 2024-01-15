@@ -30,8 +30,6 @@ macro is_primitive(Tctx, sig)
     return esc(:(Taped.is_primitive(::$Tctx, ::Type{<:$sig}) = true))
 end
 
-@is_primitive MinimalCtx Tuple{typeof(rebind), Any}
-
 """
     struct DefaultCtx end
 

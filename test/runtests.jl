@@ -34,7 +34,6 @@ using Taped:
     SInt,
     lgetfield,
     might_be_active,
-    rebind,
     build_tangent,
     SlotRef,
     ConstSlot,
