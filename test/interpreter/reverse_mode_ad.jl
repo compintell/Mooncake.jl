@@ -291,77 +291,9 @@
     interp = Taped.TInterp()
 
     # nothings inserted for consistency with generate_test_functions.
-    @testset "$f, $(map(Core.Typeof, x))" for (a, b, f, x...) in vcat(
-        Any[
-            (nothing, nothing, Taped.const_tester),
-            (nothing, nothing, identity, 5.0),
-            (nothing, nothing, Taped.foo, 5.0),
-            (nothing, nothing, Taped.bar, 5.0, 4.0),
-            (nothing, nothing, Taped.type_unstable_argument_eval, sin, 5.0),
-            (nothing, nothing, Taped.pi_node_tester, Ref{Any}(5.0)),
-            (nothing, nothing, Taped.pi_node_tester, Ref{Any}(5)),
-            (nothing, nothing, Taped.intrinsic_tester, 5.0),
-            (nothing, nothing, Taped.goto_tester, 5.0),
-            (nothing, nothing, Taped.new_tester, 5.0, :hello),
-            (nothing, nothing, Taped.new_tester_2, 4.0),
-            (nothing, nothing, Taped.new_tester_3, Ref{Any}(Tuple{Float64})),
-            (nothing, nothing, Taped.globalref_tester),
-            # (nothing, nothing, Taped.globalref_tester_2, true),
-            # (nothing, nothing, Taped.globalref_tester_2, false),
-            (nothing, nothing, Taped.type_unstable_tester, Ref{Any}(5.0)),
-            (nothing, nothing, Taped.type_unstable_tester_2, Ref{Real}(5.0)),
-            (nothing, nothing, Taped.type_unstable_tester_3, Ref{Any}(5.0)),
-            (nothing, nothing, Taped.type_unstable_function_eval, Ref{Any}(sin), 5.0),
-            (nothing, nothing, Taped.phi_const_bool_tester, 5.0),
-            (nothing, nothing, Taped.phi_const_bool_tester, -5.0),
-            (nothing, nothing, Taped.phi_node_with_undefined_value, true, 4.0),
-            (nothing, nothing, Taped.phi_node_with_undefined_value, false, 4.0),
-            (nothing, nothing, Taped.avoid_throwing_path_tester, 5.0),
-            (nothing, nothing, Taped.simple_foreigncall_tester, randn(5)),
-            (nothing, nothing, Taped.simple_foreigncall_tester_2, randn(6), (2, 3)),
-            (nothing, nothing, Taped.foreigncall_tester, randn(5)),
-            (nothing, nothing, Taped.no_primitive_inlining_tester, 5.0),
-            (nothing, nothing, Taped.varargs_tester, 5.0),
-            (nothing, nothing, Taped.varargs_tester, 5.0, 4),
-            (nothing, nothing, Taped.varargs_tester, 5.0, 4, 3.0),
-            (nothing, nothing, Taped.varargs_tester_2, 5.0),
-            (nothing, nothing, Taped.varargs_tester_2, 5.0, 4),
-            (nothing, nothing, Taped.varargs_tester_2, 5.0, 4, 3.0),
-            (nothing, nothing, Taped.varargs_tester_3, 5.0),
-            (nothing, nothing, Taped.varargs_tester_3, 5.0, 4),
-            (nothing, nothing, Taped.varargs_tester_3, 5.0, 4, 3.0),
-            (nothing, nothing, Taped.varargs_tester_4, 5.0),
-            (nothing, nothing, Taped.varargs_tester_4, 5.0, 4),
-            (nothing, nothing, Taped.varargs_tester_4, 5.0, 4, 3.0),
-            (nothing, nothing, Taped.splatting_tester, 5.0),
-            (nothing, nothing, Taped.splatting_tester, (5.0, 4.0)),
-            (nothing, nothing, Taped.splatting_tester, (5.0, 4.0, 3.0)),
-            # (nothing, nothing, Taped.unstable_splatting_tester, Ref{Any}(5.0)), # known failure case -- no rrule for _apply_iterate
-            # (nothing, nothing, Taped.unstable_splatting_tester, Ref{Any}((5.0, 4.0))), # known failure case -- no rrule for _apply_iterate
-            # (nothing, nothing, Taped.unstable_splatting_tester, Ref{Any}((5.0, 4.0, 3.0))), # known failure case -- no rrule for _apply_iterate
-            (nothing, nothing, Taped.inferred_const_tester, Ref{Any}(nothing)),
-            (nothing, nothing, Taped.datatype_slot_tester, 1),
-            (nothing, nothing, Taped.datatype_slot_tester, 2),
-            (
-                nothing,
-                nothing,
-                LinearAlgebra._modify!,
-                LinearAlgebra.MulAddMul(5.0, 4.0),
-                5.0,
-                randn(5, 4),
-                (5, 4),
-            ), # for Bool comma,
-            (nothing, nothing, Taped.getfield_tester, (5.0, 5)),
-            (nothing, nothing, Taped.getfield_tester_2, (5.0, 5)),
-            (
-                nothing, nothing,
-                mul!, transpose(randn(3, 5)), randn(5, 5), randn(5, 3), 4.0, 3.0,
-            ), # static_parameter,
-            (nothing, nothing, Xoshiro, 123456),
-            (nothing, nothing, *, randn(250, 500), randn(500, 250)),
-        ],
-        TestResources.generate_test_functions(),
-    )
+    @testset "$f, $(map(Core.Typeof, x))" for (a, b, f, x...) in
+        TestResources.generate_test_functions()
+
         @info "$f, $(Core.Typeof(x))"
         sig = Tuple{Core.Typeof(f), map(Core.Typeof, x)...}
         in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp);

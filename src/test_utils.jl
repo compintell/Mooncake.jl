@@ -703,6 +703,145 @@ end
 # that most language primitives have rules defined.
 #
 
+@noinline function foo(x)
+    y = sin(x)
+    z = cos(y)
+    return z
+end
+
+function bar(x, y)
+    x1 = sin(x)
+    x2 = cos(y)
+    x3 = foo(x2)
+    x4 = foo(x3)
+    x5 = x2 + x4
+    return x5
+end
+
+const_tester() = cos(5.0)
+
+intrinsic_tester(x) = 5x
+
+function goto_tester(x)
+    if x > cos(x)
+        @goto aha
+    end
+    x = sin(x)
+    @label aha
+    return cos(x)
+end
+
+struct StableFoo
+    x::Float64
+    y::Symbol
+end
+
+new_tester(x, y) = StableFoo(x, y)
+
+new_tester_2(x) = StableFoo(x, :symbol)
+
+@eval function new_tester_3(x::Ref{Any})
+    y = x[]
+    $(Expr(:new, :y, 5.0))
+end
+
+__x_for_gref_test = 5.0
+@eval globalref_tester() = $(GlobalRef(@__MODULE__, :__x_for_gref_test))
+
+function globalref_tester_2(use_gref::Bool)
+    v = use_gref ? __x_for_gref_test : 1
+    return sin(v)
+end
+
+type_unstable_tester(x::Ref{Any}) = cos(x[])
+
+type_unstable_tester_2(x::Ref{Real}) = cos(x[])
+
+type_unstable_tester_3(x::Ref{Any}) = Foo(x[])
+
+type_unstable_function_eval(f::Ref{Any}, x::Float64) = f[](x)
+
+type_unstable_argument_eval(@nospecialize(f), x::Float64) = f(x)
+
+function phi_const_bool_tester(x)
+    if x > 0
+        a = true
+    else
+        a = false
+    end
+    return cos(a)
+end
+
+function phi_node_with_undefined_value(x::Bool, y::Float64)
+    if x
+        v = sin(y)
+    end
+    z = cos(y)
+    if x
+        z += v
+    end
+    return z
+end
+
+function pi_node_tester(y::Ref{Any})
+    x = y[]
+    return isa(x, Int) ? sin(x) : x
+end
+
+function avoid_throwing_path_tester(x)
+    if x < 0
+        Base.throw_boundserror(1:5, 6)
+    end
+    return sin(x)
+end
+
+simple_foreigncall_tester(x) = ccall(:jl_array_isassigned, Cint, (Any, UInt), x, 1)
+
+function simple_foreigncall_tester_2(a::Array{T, M}, dims::NTuple{N, Int}) where {T,N,M}
+    ccall(:jl_reshape_array, Array{T,N}, (Any, Any, Any), Array{T,N}, a, dims)
+end
+
+function foreigncall_tester(x)
+    return ccall(:jl_array_isassigned, Cint, (Any, UInt), x, 1) == 1 ? cos(x[1]) : sin(x[1])
+end
+
+function no_primitive_inlining_tester(x)
+    X = Matrix{Float64}(undef, 5, 5) # contains a foreigncall which should never be hit
+    for n in eachindex(X)
+        X[n] = x
+    end
+    return X
+end
+
+@noinline varargs_tester(x::Vararg{Any, N}) where {N} = x
+
+varargs_tester_2(x) = varargs_tester(x)
+varargs_tester_2(x, y) = varargs_tester(x, y)
+varargs_tester_2(x, y, z) = varargs_tester(x, y, z)
+
+@noinline varargs_tester_3(x, y::Vararg{Any, N}) where {N} = sin(x), y
+
+varargs_tester_4(x) = varargs_tester_3(x...)
+varargs_tester_4(x, y) = varargs_tester_3(x...)
+varargs_tester_4(x, y, z) = varargs_tester_3(x...)
+
+splatting_tester(x) = varargs_tester(x...)
+unstable_splatting_tester(x::Ref{Any}) = varargs_tester(x[]...)
+
+function inferred_const_tester(x::Base.RefValue{Any})
+    y = x[]
+    y === nothing && return y
+    return 5y
+end
+inferred_const_tester(x::Int) = x == 5 ? x : 5x
+
+getfield_tester(x::Tuple) = x[1]
+getfield_tester_2(x::Tuple) = getfield(x, 1)
+
+function datatype_slot_tester(n::Int)
+    return (Float64, Int)[n]
+end
+
 @noinline test_sin(x) = sin(x)
 
 test_cos_sin(x) = cos(sin(x))
@@ -833,6 +972,72 @@ sr(n) = Xoshiro(n)
 
 function generate_test_functions()
     return Any[
+        (nothing, nothing, const_tester),
+        (nothing, nothing, identity, 5.0),
+        (nothing, nothing, foo, 5.0),
+        (nothing, nothing, bar, 5.0, 4.0),
+        (nothing, nothing, type_unstable_argument_eval, sin, 5.0),
+        (nothing, nothing, pi_node_tester, Ref{Any}(5.0)),
+        (nothing, nothing, pi_node_tester, Ref{Any}(5)),
+        (nothing, nothing, intrinsic_tester, 5.0),
+        (nothing, nothing, goto_tester, 5.0),
+        (nothing, nothing, new_tester, 5.0, :hello),
+        (nothing, nothing, new_tester_2, 4.0),
+        (nothing, nothing, new_tester_3, Ref{Any}(Tuple{Float64})),
+        (nothing, nothing, globalref_tester),
+        # (nothing, nothing, globalref_tester_2, true),
+        # (nothing, nothing, globalref_tester_2, false),
+        (nothing, nothing, type_unstable_tester, Ref{Any}(5.0)),
+        (nothing, nothing, type_unstable_tester_2, Ref{Real}(5.0)),
+        (nothing, nothing, type_unstable_tester_3, Ref{Any}(5.0)),
+        (nothing, nothing, type_unstable_function_eval, Ref{Any}(sin), 5.0),
+        (nothing, nothing, phi_const_bool_tester, 5.0),
+        (nothing, nothing, phi_const_bool_tester, -5.0),
+        (nothing, nothing, phi_node_with_undefined_value, true, 4.0),
+        (nothing, nothing, phi_node_with_undefined_value, false, 4.0),
+        (nothing, nothing, avoid_throwing_path_tester, 5.0),
+        (nothing, nothing, simple_foreigncall_tester, randn(5)),
+        (nothing, nothing, simple_foreigncall_tester_2, randn(6), (2, 3)),
+        (nothing, nothing, foreigncall_tester, randn(5)),
+        (nothing, nothing, no_primitive_inlining_tester, 5.0),
+        (nothing, nothing, varargs_tester, 5.0),
+        (nothing, nothing, varargs_tester, 5.0, 4),
+        (nothing, nothing, varargs_tester, 5.0, 4, 3.0),
+        (nothing, nothing, varargs_tester_2, 5.0),
+        (nothing, nothing, varargs_tester_2, 5.0, 4),
+        (nothing, nothing, varargs_tester_2, 5.0, 4, 3.0),
+        (nothing, nothing, varargs_tester_3, 5.0),
+        (nothing, nothing, varargs_tester_3, 5.0, 4),
+        (nothing, nothing, varargs_tester_3, 5.0, 4, 3.0),
+        (nothing, nothing, varargs_tester_4, 5.0),
+        (nothing, nothing, varargs_tester_4, 5.0, 4),
+        (nothing, nothing, varargs_tester_4, 5.0, 4, 3.0),
+        (nothing, nothing, splatting_tester, 5.0),
+        (nothing, nothing, splatting_tester, (5.0, 4.0)),
+        (nothing, nothing, splatting_tester, (5.0, 4.0, 3.0)),
+        # (nothing, nothing, unstable_splatting_tester, Ref{Any}(5.0)), # known failure case -- no rrule for _apply_iterate
+        # (nothing, nothing, unstable_splatting_tester, Ref{Any}((5.0, 4.0))), # known failure case -- no rrule for _apply_iterate
+        # (nothing, nothing, unstable_splatting_tester, Ref{Any}((5.0, 4.0, 3.0))), # known failure case -- no rrule for _apply_iterate
+        (nothing, nothing, inferred_const_tester, Ref{Any}(nothing)),
+        (nothing, nothing, datatype_slot_tester, 1),
+        (nothing, nothing, datatype_slot_tester, 2),
+        (
+            nothing,
+            nothing,
+            LinearAlgebra._modify!,
+            LinearAlgebra.MulAddMul(5.0, 4.0),
+            5.0,
+            randn(5, 4),
+            (5, 4),
+        ), # for Bool comma,
+        (nothing, nothing, getfield_tester, (5.0, 5)),
+        (nothing, nothing, getfield_tester_2, (5.0, 5)),
+        (
+            nothing, nothing,
+            mul!, transpose(randn(3, 5)), randn(5, 5), randn(5, 3), 4.0, 3.0,
+        ), # static_parameter,
+        (nothing, nothing, Xoshiro, 123456),
+        (nothing, nothing, *, randn(250, 500), randn(500, 250)),
         (false, (lb=100, ub=10_000), test_sin, 1.0),
         (false, (lb=100, ub=10_000), test_cos_sin, 2.0),
         (false, (lb=1_000, ub=20_000), test_isbits_multiple_usage, 5.0),
