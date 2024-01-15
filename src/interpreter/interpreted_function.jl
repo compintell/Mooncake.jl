@@ -244,28 +244,6 @@ function get_evaluator(ctx::T, sig, _, interp) where {T}
     return DelayedInterpretedFunction(ctx, Dict(), interp)
 end
 
-# # Interpolate getfield if the argument is provided. This is completely crucial for
-# # performance when structs are involved.
-# function get_evaluator(ctx, sig::Type{<:Tuple{typeof(getfield), D, T}}, args, _) where {D, T<:Union{Symbol, Int}}
-#     if args[3] isa ConstSlot
-#         return @eval @opaque function (foo::typeof(getfield), d::$D, f::$T)
-#             return getfield(d, $(QuoteNode(args[3][])))
-#         end
-#     else
-#         return _eval
-#     end
-# end
-
-# function get_evaluator(ctx, sig::Type{<:Tuple{typeof(getfield), D, T, Bool}}, args, _) where {D, T<:Union{Symbol, Int}}
-#     if args[3] isa ConstSlot && args[4] isa ConstSlot
-#         return @eval @opaque function (foo::typeof(getfield), d::$D, f::$T, b::Bool)
-#             return getfield(d, $(args[3][]), $(args[4][]))
-#         end
-#     else
-#         return _eval
-#     end
-# end
-
 function build_inst(::Val{:boundscheck}, val_slot::AbstractSlot, next_blk::Int)::Inst
     return @opaque (prev_blk::Int) -> (val_slot[] = true; return next_blk)
 end
