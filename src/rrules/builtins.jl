@@ -102,6 +102,17 @@ end
 @inactive_intrinsic bswap_int
 @inactive_intrinsic ceil_llvm
 
+#=
+Replacement for `Core.Intrinsics.cglobal`. `cglobal` is different from the other intrinsics
+in that the name `cglobal` is reversed by the language (try creating a variable called
+`cglobal` -- Julia will not let you). Additionally, it requires that its first argument,
+the specification of the name of the C cglobal variable that this intrinsic returns a
+pointer to, is known statically. In this regard it is like foreigncalls.
+
+As a consequence, it requires special handling. The name is converted into a `Val` so that
+it is available statically, and the function into which `cglobal` calls are converted is
+named `Taped.IntrinsicsWrappers.__cglobal`, rather than `Taped.IntrinsicsWrappers.cglobal`.
+=#
 __cglobal(::Val{s}, x::Vararg{Any, N}) where {s, N} = cglobal(s, x...)
 
 translate(::Val{Intrinsics.cglobal}) = __cglobal
