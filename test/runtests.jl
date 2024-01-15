@@ -72,6 +72,7 @@ sr(n::Int) = StableRNG(n)
             include(joinpath("interpreter", "contexts.jl"))
             include(joinpath("interpreter", "ir_utils.jl"))
             include(joinpath("interpreter", "ir_normalisation.jl"))
+            include(joinpath("interpreter", "abstract_interpretation.jl"))
             include(joinpath("interpreter", "interpreted_function.jl"))
             include(joinpath("interpreter", "reverse_mode_ad.jl"))
         end
