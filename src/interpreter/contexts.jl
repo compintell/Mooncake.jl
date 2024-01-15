@@ -3,7 +3,7 @@
 
 Functions should only be primitives in this context if not making them so would cause AD to
 fail. In particular, do not add primitives to this context if you are writing them for
-performance only.
+performance only -- instead, make these primitives in the DefaultCtx.
 """
 struct MinimalCtx end
 
