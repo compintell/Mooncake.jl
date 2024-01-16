@@ -23,6 +23,13 @@ end
 
 increment_tangent!(x::ConstSlot{<:CoDual}, new_tangent) = nothing
 
+# Non slot version of increment_tangent!
+function increment_tangent!(x::SlotRef{C}, t) where {C}
+    x_val = x[]
+    x[] = C(primal(x_val), increment!!(tangent(x_val), t))
+    return nothing
+end
+
 ## ReturnNode
 function build_coinsts(node::ReturnNode, _, _rrule!!, ::Int, ::Int, ::Bool)
     return build_coinsts(ReturnNode, _rrule!!.return_slot, _get_slot(node.val, _rrule!!))
@@ -276,9 +283,9 @@ function build_coinsts(
     end
     bwds_inst = @opaque function (j::Int)
         dout = tangent(out[])
-        dargs = tuple_map(tangent ∘ getindex, arg_slots)
+        dargs = tuple_map(set_immutable_to_zero ∘ tangent ∘ getindex, arg_slots)
         _, new_dargs... = pop!(pb_stack)(dout, NoTangent(), dargs...)
-        map(replace_tangent!, arg_slots, new_dargs)
+        map(increment_tangent!, arg_slots, new_dargs)
         if !isempty(old_vals)
             out[] = pop!(old_vals) # restore old state.
         end
