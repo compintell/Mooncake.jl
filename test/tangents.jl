@@ -106,6 +106,20 @@
         test_tangent(rng, p, z, x, y)
     end
 
+    @testset "set_immutable_to_zero($(Core.Typeof(x)))" for x in Any[
+        NoTangent(),
+        5.0,
+        5f0,
+        (5.0, NoTangent()),
+        (a=5.0, b=NoTangent(), c=(5.0, )),
+        randn(5),
+        [randn(3), 5.0, NoTangent()],
+        randn_tangent(Xoshiro(1), TestResources.StableFoo(5.0, :hi)),
+        randn_tangent(Xoshiro(1), TestResources.MutableFoo(5.0, randn(3))),
+    ]
+        @test Taped.set_immutable_to_zero(x) isa Core.Typeof(x)
+    end
+
     tangent(nt::NamedTuple) = Tangent(map(PossiblyUninitTangent, nt))
     mutable_tangent(nt::NamedTuple) = MutableTangent(map(PossiblyUninitTangent, nt))
 
