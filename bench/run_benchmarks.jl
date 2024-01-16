@@ -116,7 +116,7 @@ function benchmark_derived_rrules!!(rng_ctor)
     interp = Taped.TInterp()
     GC.@preserve memory begin
         results = map(enumerate(test_cases)) do (n, args)
-            @info "$n / $(length(test_cases))", args
+            @info "$n / $(length(test_cases))", Core.Typeof(args)
 
             # Generate CoDuals etc.
             args = args[3:end]
