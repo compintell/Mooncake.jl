@@ -25,46 +25,41 @@ for name in [
     :(Base.datatype_fielddesc_type),
     :(LinearAlgebra.chkstride1),
 ]
-    @eval isprimitive(::RMC, ::Core.Typeof($name), args...) = true
+    @eval @is_primitive MinimalCtx Tuple{typeof($name), Vararg}
     @eval function rrule!!(::CoDual{Core.Typeof($name)}, args::CoDual...)
         v = $name(map(primal, args)...)
         return CoDual(v, zero_tangent(v)), NoPullback()
     end
 end
 
-"""
-    lgetfield(x, f::Union{SSym, SInt})
+@is_primitive MinimalCtx Tuple{Type, TypeVar, Type}
+function rrule!!(x::CoDual{<:Type}, y::CoDual{<:TypeVar}, z::CoDual{<:Type})
+    return CoDual(primal(x)(primal(y), primal(z)), NoTangent()), NoPullback()
+end
 
-An implementation of `getfield` in which the the field `f` is specified statically via an
-`SSym` or `SInt`. This enables the implementation to be type-stable even when it is not
+"""
+    lgetfield(x, f::Val)
+
+An implementation of `getfield` in which the the field `f` is specified statically via a
+`Val`. This enables the implementation to be type-stable even when it is not
 possible to constant-propagate `f`. Moreover, it enable the pullback to also be type-stable.
 
 It will always be the case that
 ```julia
-getfield(x, :f) === lgetfield(x, SSym(:f))
-getfield(x, 2) === lgetfield(x, SInt(2))
+getfield(x, :f) === lgetfield(x, Val(:f))
+getfield(x, 2) === lgetfield(x, Val(2))
 ```
 
 This approach is identical to the one taken by `Zygote.jl` to circumvent the same problem.
 `Zygote.jl` calls the function `literal_getfield`, while we call it `lgetfield`.
 """
-lgetfield(x, ::SSym{f}) where {f} = getfield(x, f)
+lgetfield(x, ::Val{f}) where {f} = getfield(x, f)
 
-lgetfield(x::Tuple, ::SInt{i}) where {i} = getfield(x, i)
-
-function rrule!!(
-    ::CoDual{typeof(lgetfield)}, x::CoDual, ::CoDual{T}
-) where {f, T<:Union{SSym{f}, SInt{f}}}
-    lgetfield_pb!!(dy, df, dx, dsym) = df, increment_field!!(dx, dy, T()), dsym
+@is_primitive MinimalCtx Tuple{typeof(lgetfield), Any, Any}
+function rrule!!(::CoDual{typeof(lgetfield)}, x::CoDual, ::CoDual{Val{f}}) where {f}
+    lgetfield_pb!!(dy, df, dx, dsym) = df, increment_field!!(dx, dy, Val{f}()), dsym
     y = CoDual(getfield(primal(x), f), _get_tangent_field(primal(x), tangent(x), f))
     return y, lgetfield_pb!!
-end
-
-Umlaut.isprimitive(::RMC, ::typeof(lgetfield), args...) = true
-
-isprimitive(::RMC, ::Type, ::TypeVar, ::Type) = true
-function rrule!!(x::CoDual{<:Type}, y::CoDual{<:TypeVar}, z::CoDual{<:Type})
-    return CoDual(primal(x)(primal(y), primal(z)), NoTangent()), NoPullback()
 end
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
@@ -106,6 +101,14 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
         (false, :stability, nothing, promote_type, Float64, Float64),
         (false, :stability, nothing, LinearAlgebra.chkstride1, randn(3, 3)),
         (false, :stability, nothing, LinearAlgebra.chkstride1, randn(3, 3), randn(2, 2)),
+
+        # Literal replacements for getfield and others.
+        (false, :stability, nothing, lgetfield, (5.0, 4), Val(1)),
+        (false, :stability, nothing, lgetfield, (5.0, 4), Val(2)),
+        (false, :stability, nothing, lgetfield, (a=5.0, b=4), Val(1)),
+        (false, :stability, nothing, lgetfield, (a=5.0, b=4), Val(2)),
+        (false, :stability, nothing, lgetfield, (a=5.0, b=4), Val(:a)),
+        (false, :stability, nothing, lgetfield, (a=5.0, b=4), Val(:b)),
     ]
     return test_cases, memory
 end

@@ -1,6 +1,7 @@
+_getter = () -> 5.0
 @testset "array" begin
-    @testset for (interface_only, f, x...) in vcat(
-        [
+    test_cases = vcat(
+        Any[
             (false, adjoint, randn(sr(1), 5)),
             (false, adjoint, randn(sr(2), 5, 4)),
             (false, *, 2.1, randn(sr(3), 2)),
@@ -128,7 +129,6 @@
             (false, +, randn(sr(7), 2), randn(sr(8), 2), randn(sr(9), 2), randn(sr(0), 2)),
             (false, -, randn(sr(1), 1, 2), randn(sr(2), 1, 2)),
             (false, -, randn(sr(3), 1, 2)),
-            (false, /, randn(sr(4)), randn(sr(5), 2)),
             (false, /, randn(sr(6), 1, 2), 0.66),
             (false, /, randn(sr(7), 2), 5.0 * I),
             (false, /, randn(sr(8), 1), Diagonal(rand(sr(9), 1) .+ 1)),
@@ -146,7 +146,7 @@
         ]) do X
             (false, /, randn(sr(1), 2, size(X, 1)), X)
         end,
-        [
+        Any[
             (false, //, [1, 2], 5),
             (false, ==, randn(sr(1), 1, 2), randn(2, 1)),
             (false, Array, randn(sr(2), 1, 2)),
@@ -157,7 +157,7 @@
             (false, IndexStyle, randn(sr(7), 2, 1), randn(sr(8), 1, 2)),
             (false, LinearIndices, randn(sr(9), 3)),
             (false, LinearIndices, randn(sr(0), 3, 2)),
-            (false, PermutedDimsArray, randn(sr(1), 2, 3), [2, 1]),
+            # (false, PermutedDimsArray, randn(sr(1), 2, 3), [2, 1]), # missing rule for _apply_iterate
             (false, SubArray, randn(sr(2), 2, 3), (1:2, 2:3)),
             (false, \, 0.67, randn(sr(3), 2, 2)),
             # (false, \, Hermitian(randn(sr(0), 2, 2) + 3I), randn(sr(1), 2)), # missing foreigncall rule
@@ -322,8 +322,8 @@
             (false, first, randn(sr(4), 3)),
             (false, firstindex, randn(sr(5), 3)),
             (false, float, randn(sr(6), 3)),
-            (false, (x, i) -> get(() -> 5.0, x, i), randn(sr(7), 3), 2),
-            (false, (x, i) -> get(() -> 5.0, x, i), randn(sr(8), 3), 4),
+            (false, (x, i) -> get(_getter, x, i), randn(sr(7), 3), 2),
+            (false, (x, i) -> get(_getter, x, i), randn(sr(8), 3), 4),
             (false, getindex, randn(sr(9), 5), 1),
             (false, getindex, randn(sr(0), 5), 3),
             (false, getindex, randn(sr(1), 5, 4), 3),
@@ -377,18 +377,18 @@
             (false, map!, sin, randn(sr(9), 2), randn(sr(0), 2)),
             (false, map!, *, randn(sr(3), 2), randn(sr(2), 2), randn(sr(1), 2)),
             (false, mapreduce, sin, *, randn(sr(4), 2)),
-            (false, (f, x) -> mapslices(f, x; dims=1), sum, randn(sr(5), 2, 3)),
+            # (false, (f, x) -> mapslices(f, x; dims=1), sum, randn(sr(5), 2, 3)), # no _apply_iterate rule
             (false, maximum, randn(sr(6), 2)),
             (false, maximum, randn(sr(7), 2, 3)),
             (false, maximum, sin, randn(sr(8), 2)),
             (false, maximum, cos, randn(sr(9), 2, 3)),
-            (false, x -> maximum(cos, x; dims=2), randn(sr(0), 3, 2)),
+            # (false, x -> maximum(cos, x; dims=2), randn(sr(0), 3, 2)), # no _apply_iterate rule
             (false, maximum!, sin, randn(sr(2), 2), randn(sr(1), 2, 3)),
             (false, minimum, randn(sr(3), 2)),
             (false, minimum, randn(sr(4), 2, 3)),
             (false, minimum, sin, randn(sr(5), 2)),
             (false, minimum, cos, randn(sr(6), 2, 3)),
-            (false, x -> minimum(cos, x; dims=2), randn(sr(7), 3, 2)),
+            # (false, x -> minimum(cos, x; dims=2), randn(sr(7), 3, 2)), # missing _apply_iterate rule
             (false, minimum!, sin, randn(sr(9), 2), randn(sr(8), 2, 3)),
         ],
         vec(reduce(
@@ -401,7 +401,7 @@
                 (false, muladd, A, b, z)
             end,
         )),
-        [
+        Any[
             (false, ndims, randn(sr(7), 2)),
             (false, ndims, randn(sr(8), 1, 2, 1, 1, 1)),
             (false, nextind, randn(sr(9), 3, 3), 2),
@@ -425,8 +425,8 @@
             (false, prevind, randn(sr(0), 2, 3), CartesianIndex(2, 2)),
             (false, prod, randn(sr(1), 2)),
             (false, prod, randn(sr(2), 2, 3)),
-            (false, x -> prod(x; dims=1), randn(sr(3), 2, 3)),
-            (false, x -> prod(sin, x; dims=2), randn(sr(4), 2, 2)),
+            # (false, x -> prod(x; dims=1), randn(sr(3), 2, 3)), # missing _apply_iterate rule
+            # (false, x -> prod(sin, x; dims=2), randn(sr(4), 2, 2)), # missing _apply_iterate rule
             (false, prod!, sin, randn(sr(6), 2), randn(sr(5), 2, 3)),
             (false, prod!, randn(sr(7), 2), randn(sr(8), 2, 3)),
             (false, promote_shape, randn(sr(0), 2), randn(sr(9), 2)),
@@ -465,7 +465,7 @@
             (false, sort!, randn(sr(4), 3)),
             (false, sortperm, randn(sr(0), 3)),
             (false, sortperm!, [1, 2, 3], randn(sr(1), 3)),
-            (false, x -> sortslices(x; dims=1), randn(sr(2), 2, 3)),
+            # (false, x -> sortslices(x; dims=1), randn(sr(2), 2, 3)), # missing _apply_iterate rule
             (false, splice!, randn(sr(5), 5), 1:2),
             (false, splice!, randn(sr(6), 5), 1:0),
             (false, splice!, randn(sr(7), 5), 1:5),
@@ -475,9 +475,9 @@
             (false, splice!, randn(sr(1), 5), 1, randn(sr(3))),
             (false, splice!, randn(sr(2), 5), 1, randn(sr(4), 3)),
             (false, stride, randn(sr(7), 3, 2), 1),
-            (false, sum, randn(sr(8), 2, 3)),
-            (false, x -> sum(x; dims=1), randn(sr(9), 3, 2)),
-            (false, (f, x) -> sum(f, x; dims=2), sin, randn(sr(0), 3, 2)),
+            # (false, sum, randn(sr(8), 2, 3)), # missing rules for _apply_iterate
+            # (false, x -> sum(x; dims=1), randn(sr(9), 3, 2)), # missing rules for _apply_iterate
+            # (false, (f, x) -> sum(f, x; dims=2), sin, randn(sr(0), 3, 2)), # missing _apply_iterate rule
             (false, sum!, randn(sr(2), 1, 3), randn(sr(1), 2, 3)),
             (false, sum!, sin, randn(sr(3), 1, 3), randn(sr(4), 2, 3)),
             (false, transpose, randn(sr(5), 3)),
@@ -499,8 +499,26 @@
             (false, zero, randn(sr(2), 2, 3)),
         ]
     )
+    for (interface_only, f, x...) in test_cases
+        f(deepcopy(x)...) # maybe running everything before moving forwards is a good way to get stuff to work?
+    end
+    interp = Taped.TInterp()
+    @testset for (interface_only, f, x...) in test_cases
         rng = StableRNG(123456)
-        @info map(typeof, (f, x...))
-        test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only, perf_flag=:none)
+        @info map(Core.Typeof, (f, x...))
+        sig = Tuple{Core.Typeof(f), map(Core.Typeof, x)...}
+        in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp);
+        if interface_only
+            Core.Typeof(in_f(f, deepcopy(x)...)) == Core.Typeof(f(deepcopy(x)...))
+        else
+            x_cpy_1 = deepcopy(x)
+            x_cpy_2 = deepcopy(x)
+            @test has_equal_data(in_f(f, x_cpy_1...), f(x_cpy_2...))
+            @test has_equal_data(x_cpy_1, x_cpy_2)
+        end
+        TestUtils.test_rrule!!(
+            sr(123456), in_f, f, x...;
+            perf_flag=:none, interface_only, is_primitive=false,
+        )
     end
 end

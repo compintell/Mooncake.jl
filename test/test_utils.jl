@@ -15,7 +15,6 @@
         @test has_equal_data(Diagonal(ones(5)), Diagonal(ones(5)))
         @test has_equal_data("hello", "hello")
         @test !has_equal_data("hello", "goodbye")
-        @test has_equal_data(trace(sin, 5.0), trace(sin, 5.0))
     end
     @testset "populate_address_map" begin
         @testset "primitive types" begin
@@ -81,8 +80,8 @@
         z̄ = (x̄..., tangent(y_ȳ))
         @test_throws AssertionError populate_address_map(z, z̄)
     end
-    @testset "PRIMITIVE_TEST_FUNCTIONS ($f)" for (perf_flag, f, x...) in
-        TestResources.PRIMITIVE_TEST_FUNCTIONS
+    @testset "primitive test functions ($f)" for (perf_flag, f, x...) in
+        TestResources.generate_primitive_test_functions()
 
         TestUtils.test_rrule!!(Xoshiro(123456), f, x...; perf_flag)
     end

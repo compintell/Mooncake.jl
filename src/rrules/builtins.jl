@@ -9,13 +9,16 @@
 # As of version 1.9.2 of Julia, there are exactly 139 examples of `Core.Builtin`s.
 #
 
+
+@is_primitive MinimalCtx Tuple{Core.Builtin, Vararg}
+
 module IntrinsicsWrappers
 
-import Umlaut: isprimitive
 using Core: Intrinsics
+using Taped
 import ..Taped:
-    rrule!!, CoDual, primal, tangent, zero_tangent, isprimitive, RMC, NoPullback,
-    tangent_type, increment!!
+    rrule!!, CoDual, primal, tangent, zero_tangent, NoPullback,
+    tangent_type, increment!!, @is_primitive, MinimalCtx, is_primitive
 
 # Note: performance is not considered _at_ _all_ in this implementation.
 function rrule!!(f::CoDual{<:Core.IntrinsicFunction}, args...)
@@ -25,7 +28,7 @@ end
 macro intrinsic(name)
     expr = quote
         $name(x...) = Intrinsics.$name(x...)
-        (isprimitive)(::RMC, ::typeof($name), args...) = true
+        (is_primitive)(::MinimalCtx, ::Type{<:Tuple{typeof($name), Vararg}}) = true
         translate(::Val{Intrinsics.$name}) = $name
     end
     return esc(expr)
@@ -34,7 +37,7 @@ end
 macro inactive_intrinsic(name)
     expr = quote
         $name(x...) = Intrinsics.$name(x...)
-        (isprimitive)(::RMC, ::typeof($name), args...) = true
+        (is_primitive)(::MinimalCtx, ::Type{<:Tuple{typeof($name), Vararg}}) = true
         translate(::Val{Intrinsics.$name}) = $name
         function rrule!!(::CoDual{typeof($name)}, args...)
             y = $name(map(primal, args)...)
@@ -98,7 +101,29 @@ end
 
 @inactive_intrinsic bswap_int
 @inactive_intrinsic ceil_llvm
-# cglobal
+
+#=
+Replacement for `Core.Intrinsics.cglobal`. `cglobal` is different from the other intrinsics
+in that the name `cglobal` is reversed by the language (try creating a variable called
+`cglobal` -- Julia will not let you). Additionally, it requires that its first argument,
+the specification of the name of the C cglobal variable that this intrinsic returns a
+pointer to, is known statically. In this regard it is like foreigncalls.
+
+As a consequence, it requires special handling. The name is converted into a `Val` so that
+it is available statically, and the function into which `cglobal` calls are converted is
+named `Taped.IntrinsicsWrappers.__cglobal`, rather than `Taped.IntrinsicsWrappers.cglobal`.
+
+If you examine the code associated with `Taped.intrinsic_to_function`, you will see that
+special handling of `cglobal` is used.
+=#
+__cglobal(::Val{s}, x::Vararg{Any, N}) where {s, N} = cglobal(s, x...)
+
+translate(::Val{Intrinsics.cglobal}) = __cglobal
+Taped.is_primitive(::MinimalCtx, ::Type{<:Tuple{typeof(__cglobal), Vararg}}) = true
+function rrule!!(::CoDual{typeof(__cglobal)}, args...)
+    return Taped.uninit_codual(__cglobal(map(primal, args)...)), NoPullback()
+end
+
 @inactive_intrinsic checked_sadd_int
 @inactive_intrinsic checked_sdiv_int
 @inactive_intrinsic checked_smul_int
@@ -602,7 +627,14 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         [false, :stability, nothing, IntrinsicsWrappers.bitcast, Int64, 5.0],
         [false, :stability, nothing, IntrinsicsWrappers.bswap_int, 5],
         [false, :stability, nothing, IntrinsicsWrappers.ceil_llvm, 4.1],
-        # cglobal -- NEEDS IMPLEMENTING AND TESTING
+        [
+            true,
+            :stability,
+            nothing,
+            IntrinsicsWrappers.__cglobal,
+            Val{:jl_uv_stdout}(),
+            Ptr{Cvoid},
+        ],
         [false, :stability, nothing, IntrinsicsWrappers.checked_sadd_int, 5, 4],
         [false, :stability, nothing, IntrinsicsWrappers.checked_sdiv_int, 5, 4],
         [false, :stability, nothing, IntrinsicsWrappers.checked_smul_int, 5, 4],
@@ -791,7 +823,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         [
             false,
             :none,
-            (lb=100, ub=1_000),
+            nothing,
             setfield!,
             TestResources.MutableFoo(5.0, randn(5)),
             :b,

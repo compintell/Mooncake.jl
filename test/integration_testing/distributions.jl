@@ -1,8 +1,11 @@
+using Distributions
+
 _sym(A) = A'A
 _pdmat(A) = PDMat(_sym(A) + 5I)
 
 @testset "distributions" begin
-    @testset "$(typeof(d))" for (interface_only, d, x) in [
+    interp = Taped.TInterp()
+    @testset "$(typeof(d))" for (interface_only, d, x) in Any[
 
         #
         # Univariate
@@ -23,7 +26,7 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
         (false, Cauchy(), -0.5),
         (false, Cauchy(1.0), 0.99),
         (false, Cauchy(1.0, 0.1), 1.01),
-        # (false, Chernoff(), 0.5), takes forever
+        (false, Chernoff(), 0.5),
         (false, Chi(2.5), 0.5),
         (false, Chi(5.5), 1.1),
         (false, Chi(0.1), 0.7),
@@ -214,38 +217,59 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
     ]
         @info "$(map(typeof, (d, x)))"
         rng = StableRNG(123456)
-        test_taped_rrule!!(rng, logpdf, d, deepcopy(x); interface_only, perf_flag=:none)
+        f = logpdf
+        x = (d, x)
+        sig = Tuple{Core.Typeof(f), map(Core.Typeof, x)...}
+        in_f = Taped.InterpretedFunction(Taped.DefaultCtx(), sig, interp)
+        if interface_only
+            in_f(f, deepcopy(x)...)
+        else
+            x_cpy_1 = deepcopy(x)
+            x_cpy_2 = deepcopy(x)
+            @test has_equal_data(in_f(f, x_cpy_1...), f(x_cpy_2...))
+            @test has_equal_data(x_cpy_1, x_cpy_2)
+        end
+        TestUtils.test_rrule!!(
+            sr(123456), in_f, f, x...;
+            perf_flag=:none, interface_only, is_primitive=false,
+        )
     end
-    @testset "$name" for (name, f, x) in [
-        ("InverseGamma", (a, b, x) -> logpdf(InverseGamma(a, b), x), (1.5, 1.4, 0.4)),
-        ("NormalCanon", (m, s, x) -> logpdf(NormalCanon(m, s), x), (0.1, 1.0, -0.5)),
+    @testset "$name" for (interface_only, name, f, x) in Any[
+        (false, "InverseGamma", (a, b, x) -> logpdf(InverseGamma(a, b), x), (1.5, 1.4, 0.4)),
+        (false, "NormalCanon", (m, s, x) -> logpdf(NormalCanon(m, s), x), (0.1, 1.0, -0.5)),
         (
+            false,
             "MvLogitNormal",
             (m, S, x) -> logpdf(MvLogitNormal(m, S), vcat(x, 1 - sum(x))),
             ([0.4, 0.6], Symmetric(_pdmat([0.9 0.4; 0.5 1.1])), [0.27, 0.24]),
         ),
         (
+            false,
             "truncated Beta",
             (a, b, α, β, x) -> logpdf(truncated(Beta(α, β), a, b), x),
             (0.1, 0.9, 1.1, 1.3, 0.4),
         ),
         (
+            false,
             "truncated Normal",
             (a, b, x) -> logpdf(truncated(Normal(), a, b), x),
             (-0.3, 0.3, 0.1),
         ),
         (
+            false,
             "truncated Uniform",
             (a, b, α, β, x) -> logpdf(truncated(Uniform(α, β), a, b), x),
             (0.1, 0.9, -0.1, 1.1, 0.4),
         ),
-        ("Dirichlet", (a, x) -> logpdf(Dirichlet(a), [x, 1-x]), ([1.5, 1.1], 0.6)),
+        (false, "Dirichlet", (a, x) -> logpdf(Dirichlet(a), [x, 1-x]), ([1.5, 1.1], 0.6)),
         (
+            false,
             "reshape",
             x -> logpdf(reshape(product_distribution([Normal(), Uniform()]), 1, 2), x),
             ([2.1 0.7],),
         ),
         (
+            false,
             "vec",
             x -> logpdf(vec(LKJ(2, 1.1)), x),
             ([1.0, 0.489, 0.489, 1.0],),
@@ -253,6 +277,11 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
     ]
         @info "$name"
         rng = StableRNG(123456)
-        test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only=false, perf_flag=:none)
+        sig = Tuple{Core.Typeof(f), map(Core.Typeof, x)...}
+        in_f = Taped.InterpretedFunction(Taped.DefaultCtx(), sig, interp)
+        TestUtils.test_rrule!!(
+            sr(123456), in_f, f, x...;
+            perf_flag=:none, interface_only, is_primitive=false,
+        )
     end
 end

@@ -27,7 +27,7 @@ end
 
 for (fname, elty) in ((:cblas_ddot,:Float64), (:cblas_sdot,:Float32))
     @eval function rrule!!(
-        ::CoDual{typeof(__foreigncall__)},
+        ::CoDual{<:Tforeigncall},
         ::CoDual{Val{$(blas_name(fname))}},
         ::CoDual, # return type
         ::CoDual, # argument types
@@ -62,7 +62,7 @@ end
 
 for (fname, elty) in ((:dscal_, :Float64), (:sscal_, :Float32))
     @eval function Taped.rrule!!(
-        ::CoDual{typeof(__foreigncall__)},
+        ::CoDual{<:Tforeigncall},
         ::CoDual{Val{$(blas_name(fname))}},
         ::CoDual, # return type
         ::CoDual, # argument types
@@ -110,7 +110,7 @@ end
 
 for (gemv, elty) in ((:dgemv_, :Float64), (:sgemm_, :Float32))
     @eval function rrule!!(
-        ::CoDual{typeof(Umlaut.__foreigncall__)},
+        ::CoDual{<:Tforeigncall},
         ::CoDual{Val{$(blas_name(gemv))}},
         ::CoDual,
         ::CoDual,
@@ -173,7 +173,7 @@ end
 
 for (trmv, elty) in ((:dtrmv_, :Float64), (:strmv_, :Float32))
     @eval function rrule!!(
-        ::CoDual{typeof(Umlaut.__foreigncall__)},
+        ::CoDual{<:Tforeigncall},
         ::CoDual{Val{$(blas_name(trmv))}},
         ::CoDual,
         ::CoDual,
@@ -228,7 +228,7 @@ end
 
 for (gemm, elty) in ((:dgemm_, :Float64), (:sgemm_, :Float32))
     @eval function rrule!!(
-        ::CoDual{typeof(__foreigncall__)},
+        ::CoDual{<:Tforeigncall},
         ::CoDual{Val{$(blas_name(gemm))}},
         RT::CoDual{Val{Cvoid}},
         AT::CoDual, # arg types
@@ -299,7 +299,7 @@ end
 
 for (trmm, elty) in ((:dtrmm_, :Float64), (:strmm_, :Float32))
     @eval function rrule!!(
-        ::CoDual{typeof(__foreigncall__)},
+        ::CoDual{<:Tforeigncall},
         ::CoDual{Val{$(blas_name(trmm))}},
         ::CoDual,
         ::CoDual, # arg types
@@ -364,7 +364,7 @@ end
 
 for (trsm, elty) in ((:dtrsm_, :Float64), (:strsm_, :Float32))
     @eval function rrule!!(
-        ::CoDual{typeof(__foreigncall__)},
+        ::CoDual{<:Tforeigncall},
         ::CoDual{Val{$(blas_name(trsm))}},
         ::CoDual,
         ::CoDual, # arg types

@@ -6,13 +6,11 @@
         :jl_array_copy, :jl_type_intersection, :memset, :jl_get_tls_world_age, :memmove,
         :jl_object_id, :jl_array_sizehint, :jl_array_grow_beg, :jl_array_grow_end,
         :jl_array_grow_at, :jl_array_del_beg, :jl_array_del_end, :jl_array_del_at,
+        :jl_value_ptr,
     ]
         @test_throws(
             ErrorException,
-            Taped.rrule!!(
-                CoDual(Umlaut.__foreigncall__, NoTangent()),
-                CoDual(Val(name), NoTangent()),
-            )
+            Taped.rrule!!(zero_codual(Taped._foreigncall_), zero_codual(Val(name))),
         )
     end
 end

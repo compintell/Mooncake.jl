@@ -1,29 +1,46 @@
 module Taped
 
+const CC = Core.Compiler
+
 using
+    BenchmarkTools,
     DiffRules,
+    ExprTools,
     FunctionWrappers,
+    InteractiveUtils,
     LinearAlgebra,
     Random,
-    Setfield,
-    Umlaut
-
-import Umlaut: isprimitive, Frame, Tracer, __foreigncall__, __to_tuple__, __new__
+    Setfield
 
 using Base:
     IEEEFloat, unsafe_convert, unsafe_pointer_to_objref, pointer_from_objref, arrayref,
     arrayset
+using Base.Experimental: @opaque
 using Base.Iterators: product
-using Core: Intrinsics, bitcast, SimpleVector, svec
+using Core:
+    Intrinsics, bitcast, SimpleVector, svec, ReturnNode, GotoNode, GotoIfNot, PhiNode,
+    PiNode, SSAValue, Argument
+using Core.Compiler: IRCode
 using Core.Intrinsics: pointerref, pointerset
 using FunctionWrappers: FunctionWrapper
 using LinearAlgebra.BLAS: @blasfunc, BlasInt, trsm!
 using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!, potrf!, potrs!
 
-include("tracing.jl")
-include("acceleration.jl")
+# Needs to be defined before various other things.
+function _foreigncall_ end
+const Tforeigncall = Union{typeof(_foreigncall_)}
+
 include("tangents.jl")
-include("reverse_mode_ad.jl")
+include("codual.jl")
+
+include(joinpath("interpreter", "contexts.jl"))
+include(joinpath("interpreter", "ir_utils.jl"))
+include(joinpath("interpreter", "ir_normalisation.jl"))
+include(joinpath("interpreter", "abstract_interpretation.jl"))
+include(joinpath("interpreter", "interpreted_function.jl"))
+include(joinpath("interpreter", "reverse_mode_ad.jl"))
+include(joinpath("interpreter", "test_cases.jl"))
+
 include("test_utils.jl")
 
 include(joinpath("rrules", "avoiding_non_differentiable_code.jl"))
@@ -34,8 +51,7 @@ include(joinpath("rrules", "iddict.jl"))
 include(joinpath("rrules", "lapack.jl"))
 include(joinpath("rrules", "low_level_maths.jl"))
 include(joinpath("rrules", "misc.jl"))
-include(joinpath("rrules", "umlaut_internals_rules.jl"))
-include(joinpath("rrules", "unrolled_function.jl"))
+include(joinpath("rrules", "new.jl"))
 
 export
     primal,
@@ -55,6 +71,7 @@ export
     _diff,
     _dot,
     zero_codual,
+    codual_type,
     rrule!!
 
 end

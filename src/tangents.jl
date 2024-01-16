@@ -372,53 +372,36 @@ function set_to_zero!!(x::MutableTangent)
 end
 
 """
-    struct SInt{i} end
-
-Static representation of an `Int` `i`.
-"""
-struct SInt{i} end
-SInt(i::Int) = SInt{i}()
-
-"""
-    struct SSym{f} end
-
-Static representation of a `Symbol` `f`.
-"""
-struct SSym{f} end
-SSym(f::Symbol) = SSym{f}()
-
-const SSymOrInt{F} = Union{SSym{F}, SInt{F}}
-
-"""
     increment_field!!(x::T, y::V, f) where {T, V}
 
 `increment!!` the field `f` of `x` by `y`, and return the updated `x`.
 """
-@generated function increment_field!!(x::Tuple, y, ::SInt{i}) where {i}
+@inline @generated function increment_field!!(x::Tuple, y, ::Val{i}) where {i}
     exprs = map(n -> n == i ? :(increment!!(x[$n], y)) : :(x[$n]), fieldnames(x))
     return Expr(:tuple, exprs...)
 end
-function increment_field!!(x::T, y, ::SInt{f}) where {T<:NamedTuple, f}
-    return T(ntuple(n -> n == f ? increment!!(x[n], y) : x[n], length(x)))
+
+@inline @generated function increment_field!!(x::T, y, ::Val{f}) where {T<:NamedTuple, f}
+    i = f isa Symbol ? findfirst(==(f), fieldnames(T)) : f
+    new_fields = Expr(:call, increment_field!!, :(Tuple(x)), :y, :(Val($i)))
+    return Expr(:call, T, new_fields)
 end
-function increment_field!!(x::NamedTuple, y, ::SSym{f}) where {f}
-    return @set x.$f = increment!!(getfield(x, f), y)
-end
-function increment_field!!(x::Tangent{T}, y, f::V) where {T, F, V<:SSymOrInt{F}}
+
+function increment_field!!(x::Tangent{T}, y, f::V) where {T, F, V<:Val{F}}
     y isa NoTangent && return x
     return Tangent(increment_field!!(x.fields, fieldtype(T, F)(y), f))
 end
-function increment_field!!(x::MutableTangent{T}, y, f::V) where {T, F, V<:SSymOrInt{F}}
+function increment_field!!(x::MutableTangent{T}, y, f::V) where {T, F, V<:Val{F}}
     y isa NoTangent && return x
     setfield!(x, :fields, increment_field!!(x.fields, fieldtype(T, F)(y), f))
     return x
 end
 
-increment_field!!(x, y, f::Symbol) = increment_field!!(x, y, SSym(f))
-increment_field!!(x, y, n::Int) = increment_field!!(x, y, SInt(n))
+increment_field!!(x, y, f::Symbol) = increment_field!!(x, y, Val(f))
+increment_field!!(x, y, n::Int) = increment_field!!(x, y, Val(n))
 
-# Fallback method for when a tangent type for a struct is decelared to be `NoTangent`.
-for T in [Symbol, Int, SSym, SInt]
+# Fallback method for when a tangent type for a struct is declared to be `NoTangent`.
+for T in [Symbol, Int, Val]
     @eval increment_field!!(::NoTangent, ::NoTangent, f::Union{$T}) = NoTangent()
 end
 
