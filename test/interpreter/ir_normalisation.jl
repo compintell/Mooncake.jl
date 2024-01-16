@@ -47,6 +47,27 @@
             @test wrapper_ex.args[1] == Taped.IntrinsicsWrappers.__cglobal
         end
     end
+    @testset "lift_getfield_and_others $ex" for (ex, target) in Any[
+        (ReturnNode(5), ReturnNode(5)),
+        (
+            Expr(:call, getfield, SSAValue(1), 5),
+            Expr(:call, lgetfield, SSAValue(1), Val(5)),
+        ),
+        (
+            Expr(:call, GlobalRef(Core, :getfield), SSAValue(1), 5),
+            Expr(:call, lgetfield, SSAValue(1), Val(5)),
+        ),
+        (
+            Expr(:call, QuoteNode(getfield), SSAValue(1), 5),
+            Expr(:call, lgetfield, SSAValue(1), Val(5)),
+        ),
+        (
+            Expr(:call, getfield, SSAValue(1), SSAValue(2)),
+            Expr(:call, getfield, SSAValue(1), SSAValue(2)),
+        ),
+    ]
+        @test Taped.lift_getfield_and_others(ex) == target
+    end
     @testset "rebind_multiple_usage!" begin
         @testset "single-line case" begin
             ir = Taped.ircode(

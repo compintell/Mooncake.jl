@@ -9,22 +9,4 @@
     end
 
     TestUtils.run_rrule!!_test_cases(StableRNG, Val(:misc))
-
-    @testset "literals" begin
-        rng = Xoshiro(123456)
-        @testset "Tuple" begin
-            x = (5.0, randn(5))
-            @test @inferred(lgetfield(x, SInt(1))) == getfield(x, 1)
-            test_rrule!!(rng, lgetfield, x, SInt(1); perf_flag=:stability)
-            @test @inferred(lgetfield(x, SInt(2))) == getfield(x, 2)
-            test_rrule!!(rng, lgetfield, x, SInt(2); perf_flag=:stability)
-        end
-        @testset "NamedTuple" begin
-            x = (a=5.0, b=randn(5))
-            @test @inferred(lgetfield(x, SSym(:a))) == getfield(x, :a)
-            test_rrule!!(rng, lgetfield, x, SSym(:a); perf_flag=:stability)
-            @test @inferred(lgetfield(x, SSym(:b))) == getfield(x, :b)
-            test_rrule!!(rng, lgetfield, x, SSym(:b); perf_flag=:stability)
-        end
-    end
 end

@@ -487,7 +487,6 @@ end
 
 function rrule!!(::CoDual{typeof(getfield)}, value::CoDual, name::CoDual)
     _name = primal(name)
-    # _name_static = SInt(_name)
     function getfield_pullback(dy, ::NoTangent, dvalue, ::NoTangent)
         new_dvalue = _increment_field!!(dvalue, dy, _name)
         return NoTangent(), new_dvalue, NoTangent()

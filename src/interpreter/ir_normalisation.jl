@@ -28,6 +28,7 @@ function normalise!(ir::IRCode, spnames::Vector{Symbol})
         inst = foreigncall_to_call(inst, sp_map)
         inst = new_to_call(inst)
         inst = intrinsic_to_function(inst)
+        inst = lift_getfield_and_others(inst)
         ir.stmts.inst[n] = inst
     end
 
@@ -155,6 +156,29 @@ function lift_intrinsic(x::Core.IntrinsicFunction, v, args...)
         return IntrinsicsWrappers.translate(Val(x)), v, args...
     end
 end
+
+"""
+    lift_getfield_and_others(inst)
+
+Converts expressions of the form `getfield(x, :a)` into `lgetfield(x, Val(:a))`. This has
+identical semantics, but is performant in the absence of proper constant propagation.
+
+Does the same for...
+"""
+function lift_getfield_and_others(inst)
+    Meta.isexpr(inst, :call) || return inst
+    f = __get_arg(inst.args[1])
+    field = inst.args[3]
+    if f === getfield && field isa Union{Symbol, Int}
+        return Expr(:call, lgetfield, inst.args[2], Val(field))
+    else
+        return inst
+    end
+end
+
+__get_arg(x::GlobalRef) = getglobal(x.mod, x.name)
+__get_arg(x::QuoteNode) = x.value
+__get_arg(x) = x
 
 """
     rebind_multiple_usage!(ir::IRCode)
