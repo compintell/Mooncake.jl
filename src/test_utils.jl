@@ -1094,6 +1094,10 @@ function generate_test_functions()
     ]
 end
 
+function Taped.generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:test_utils})
+    return TestResources.generate_test_functions(), Any[]
+end
+
 function value_dependent_control_flow(x, n)
     while n > 0
         x = cos(x)
