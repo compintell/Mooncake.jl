@@ -193,6 +193,21 @@ end
 
 const perf_group = get(ENV, "PERF_GROUP", "hand_written")
 
+function identify_concerning_items!(df::DataFrame)
+
+    # Compute whether each item is in its specified forwards range.
+    df.forwards_range = map((l, u) -> (lb=l, ub=u), df.forwards_lb, df.forwards_ub)
+    df.in_forwards_range = map(between, df.forwards_ratio, df.forwards_range)
+
+    # Compute whether each item is in its specified pullback range.
+    df.pullback_range = map((l, u) -> (lb=l, ub=u), df.pullback_lb, df.pullback_ub)
+    df.in_pullback_range = map(between, df.pullback_ratio, df.pullback_range)
+
+    # Compute whether each item is inside both ranges.
+    df.in_all_ranges = map(&, df.in_forwards_range, df.in_pullback_range)
+    return df
+end
+
 function main()
     if perf_group == "hand_written"
         hand_written_results = benchmark_hand_written_rrules!!(Xoshiro)
