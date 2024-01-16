@@ -58,7 +58,7 @@ jobs:
           include-all-prereleases: true
       - uses: julia-actions/cache@v1
       - uses: julia-actions/julia-buildpkg@v1
-      - run: julia --project=benchmarking --eval 'include("benchmarking/run_benchmarks.jl")'
+      - run: julia --project=bench --eval 'include("bench/run_benchmarks.jl"); main()'
         env:
           PERF_GROUP: ${{ matrix.perf_group }}
         shell: bash

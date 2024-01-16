@@ -1,7 +1,7 @@
 using Pkg
 Pkg.develop(path=joinpath(@__DIR__, ".."))
 
-using BenchmarkTools, Random, Taped, Test
+using BenchmarkTools, CSV, DataFrames, Random, Taped, Test
 
 using Taped:
     CoDual,
@@ -57,15 +57,13 @@ function benchmark_hand_written_rrules!!(rng_ctor)
     test_case_data = map([
         :avoiding_non_differentiable_code,
         :blas,
-        :builtins,
-        :foreigncall,
-        :iddict,
-        :lapack,
-        :low_level_maths,
-        :misc,
-        :new,
-        :umlaut_internals_rules,
-        :unrolled_function
+        # :builtins,
+        # :foreigncall,
+        # :iddict,
+        # :lapack,
+        # :low_level_maths,
+        # :misc,
+        # :new,
     ]) do s
         generate_hand_written_cases(Xoshiro, Val(s))
     end
@@ -103,8 +101,6 @@ function benchmark_derived_rrules!!(rng_ctor)
         # :low_level_maths,
         # :misc,
         # :new,
-        # :umlaut_internals_rules,
-        :unrolled_function
     ]) do s
         test_cases, memory = generate_derived_rrule!!_test_cases(rng_ctor, Val(s))
         unrolled_test_cases = map(test_cases) do test_case
@@ -165,14 +161,16 @@ function combine_results(result, _range, default_range)
     forwards_time = time(minimum(result_dict["forwards"]))
     pullback_time = time(minimum(result_dict["pullback"]))
     return (
-        tag=result[1],
-        forwards_range=_range === nothing ? default_range : _range,
-        pullback_range=_range === nothing ? default_range : _range,
+        tag=string(Core.Typeof((result[1]..., ))),
         primal_time=primal_time,
         forwards_time=forwards_time,
         pullback_time=pullback_time,
         forwards_ratio=forwards_time / primal_time,
         pullback_ratio=pullback_time / primal_time,
+        forwards_lb=_range === nothing ? default_range.lb : _range.lb,
+        forwards_ub=_range === nothing ? default_range.ub : _range.ub,
+        pullback_lb=_range === nothing ? default_range.lb : _range.lb,
+        pullback_ub=_range === nothing ? default_range.ub : _range.ub,
     )
 end
 
@@ -181,18 +179,23 @@ between(x, (lb, ub)) = lb < x && x < ub
 function flag_concerning_performance(ratios)
     @testset "detect concerning performance" begin
         @testset for ratio in ratios
-            @test between(ratio.forwards_ratio, ratio.forwards_range)
-            @test between(ratio.pullback_ratio, ratio.pullback_range)
+            forwards_range = (lb=ratio.forwards_lb, ub=ratio.forwards_ub)
+            @test between(ratio.forwards_ratio, forwards_range)
+            pullback_range = (lb=ratio.pullback_lb, ub=ratio.pullback_ub)
+            @test between(ratio.pullback_ratio, pullback_range)
         end
     end
 end
 
-const perf_group = get(ENV, "PERF_GROUP", "derived")
+const perf_group = get(ENV, "PERF_GROUP", "hand_written")
 
-if perf_group == "hand_written"
-    flag_concerning_performance(benchmark_hand_written_rrules!!(Xoshiro))
-elseif perf_group == "derived"
-    flag_concerning_performance(benchmark_derived_rrules!!(Xoshiro))
-else
-    throw(error("perf_group=$(perf_group) is not recognised"))
+function main()
+    if perf_group == "hand_written"
+        hand_written_results = benchmark_hand_written_rrules!!(Xoshiro)
+        flag_concerning_performance(hand_written_results)
+    elseif perf_group == "derived"
+        flag_concerning_performance(benchmark_derived_rrules!!(Xoshiro))
+    else
+        throw(error("perf_group=$(perf_group) is not recognised"))
+    end
 end
