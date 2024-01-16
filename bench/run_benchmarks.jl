@@ -57,13 +57,13 @@ function benchmark_hand_written_rrules!!(rng_ctor)
     test_case_data = map([
         :avoiding_non_differentiable_code,
         :blas,
-        # :builtins,
-        # :foreigncall,
-        # :iddict,
-        # :lapack,
-        # :low_level_maths,
-        # :misc,
-        # :new,
+        :builtins,
+        :foreigncall,
+        :iddict,
+        :lapack,
+        :low_level_maths,
+        :misc,
+        :new,
     ]) do s
         generate_hand_written_cases(Xoshiro, Val(s))
     end
@@ -83,7 +83,7 @@ function benchmark_hand_written_rrules!!(rng_ctor)
     return combine_results.(results, ranges, Ref(default_hand_written_ratios()))
 end
 
-default_derived_ratios() = (lb=100, ub=100_000)
+default_derived_ratios() = (lb=1, ub=100)
 
 function benchmark_derived_rrules!!(rng_ctor)
     rng = rng_ctor(123)
@@ -101,26 +101,26 @@ function benchmark_derived_rrules!!(rng_ctor)
         # :low_level_maths,
         # :misc,
         # :new,
+        :test_utils
     ]) do s
         test_cases, memory = generate_derived_rrule!!_test_cases(rng_ctor, Val(s))
-        unrolled_test_cases = map(test_cases) do test_case
-            f, x... = test_case[3:end]
-            f_t = last(Taped.trace_recursive_tape!!(f, map(_deepcopy, x)...))
-            return Any[f_t, f, x...]
-        end
         ranges = map(x -> x[2], test_cases)
-        return unrolled_test_cases, memory, ranges
+        return test_cases, memory, ranges
     end
     test_cases = reduce(vcat, map(first, test_case_data))
     memory = map(x -> x[2], test_case_data)
     ranges = reduce(vcat, map(x -> x[3], test_case_data))
 
+
+    ctx = Taped.DefaultCtx()
+    interp = Taped.TInterp()
     GC.@preserve memory begin
         results = map(enumerate(test_cases)) do (n, args)
             @info "$n / $(length(test_cases))", args
 
             # Generate CoDuals etc.
-            primals = map(x -> x isa CoDual ? primal(x) : x, args[2:end])
+            args = args[3:end]
+            primals = map(x -> x isa CoDual ? primal(x) : x, args)
             unrolled_primals = map(x -> x isa CoDual ? primal(x) : x, args)
             dargs = map(x -> x isa CoDual ? tangent(x) : randn_tangent(rng, x), args)
             cd_args = map(CoDual, unrolled_primals, dargs)
@@ -134,16 +134,20 @@ function benchmark_derived_rrules!!(rng_ctor)
             )
 
             # Benchmark forwards-pass.
+            sig = Tuple{map(Core.Typeof, args)...}
+            in_f = Taped.InterpretedFunction(ctx, sig, interp)
+            cd_in_f = zero_codual(in_f)
+            __rrule!! = Taped.build_rrule!!(in_f)
             suite["forwards"] = @benchmarkable(
-                Taped.rrule!!(ca...);
-                setup=(ca = ($cd_args[1], _deepcopy($(cd_args)[2:end])...)),
+                $__rrule!!(ca...);
+                setup=(ca = ($cd_in_f, _deepcopy($(cd_args))...)),
                 evals=1,
             )
 
             # Benchmark pullback.
             suite["pullback"] = @benchmarkable(
                 x[2]((tangent(x[1])), map(tangent, ca)...),
-                setup=(ca = ($cd_args[1], _deepcopy($cd_args[2:end])...); x = Taped.rrule!!(ca...)),
+                setup=(ca = ($cd_in_f, _deepcopy($cd_args)...); x = Taped.rrule!!(ca...)),
                 evals=1,
             )
 
@@ -194,7 +198,8 @@ function main()
         hand_written_results = benchmark_hand_written_rrules!!(Xoshiro)
         flag_concerning_performance(hand_written_results)
     elseif perf_group == "derived"
-        flag_concerning_performance(benchmark_derived_rrules!!(Xoshiro))
+        derived_results = benchmark_derived_rrules!!(Xoshiro)
+        flag_concerning_performance(derived_results)
     else
         throw(error("perf_group=$(perf_group) is not recognised"))
     end
