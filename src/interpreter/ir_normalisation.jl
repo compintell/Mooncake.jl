@@ -6,7 +6,8 @@ unchanged, but makes AD more straightforward. In particular, replace
 1. `:invoke` `Expr`s with `:call`s,
 2. `:foreigncall` `Expr`s with `:call`s to `Taped._foreigncall_`,
 3. `:new` `Expr`s with `:call`s to `Taped._new_`,
-4. `Core.IntrinsicFunction`s with counterparts from `Taped.IntrinsicWrappers`.
+4. `Core.IntrinsicFunction`s with counterparts from `Taped.IntrinsicWrappers`,
+5. `getfield(x, 1)` with `lgetfield(x, Val(1))`, and related transformations.
 
 `spnames` are the names associated to the static parameters of `ir`. These are needed when
 handling `:foreigncall` expressions, in which it is not necessarily the case that all
