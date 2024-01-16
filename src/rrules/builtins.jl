@@ -824,7 +824,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         [
             false,
             :none,
-            (lb=100, ub=1_000),
+            nothing,
             setfield!,
             TestResources.MutableFoo(5.0, randn(5)),
             :b,
