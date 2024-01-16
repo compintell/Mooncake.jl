@@ -309,40 +309,27 @@
             perf_flag=:none, interface_only=false, is_primitive=false,
         )
 
-        # # Helper code for debugging.
-        # rule = Taped.build_rrule!!(in_f)
-        # args = map(zero_codual, (in_f, f, x...))
-        # out, pb!! = rule(args...)
-        # pb!!(tangent(out), map(tangent, args)...)
+        # # Estimate primal performance.
+        # original = @benchmark $(Ref(f))[]($(Ref(deepcopy(x)))[]...)
 
-        # # rng = Xoshiro(123456)
-        # # test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only=false, perf_flag=:none)
+        # # Estimate interpretered function performance.
+        # r = @benchmark $(Ref(in_f))[]($(Ref(f))[], $(Ref(deepcopy(x)))[]...)
 
-        # # Only bother to check performance if the original programme does not allocate.
-        # original = @benchmark $(Ref(f))[]($(Ref(x))[]...)
-        # r = @benchmark $(Ref(in_f))[]($(Ref(f))[], $(Ref(x))[]...)
+        # # Estimate overal forwards-pass and pullback performance.
+        # __rrule!! = Taped.build_rrule!!(in_f)
+        # df = zero_codual(in_f)
+        # codual_x = map(zero_codual, (f, x...))
+        # overall_timing = @benchmark Taped.to_benchmark($__rrule!!, $df, $codual_x)
 
-        # # __rrule!! = Taped.build_rrule!!(in_f)
-        # # codual_x = map(zero_codual, x)
-        # # rrule_timing = @benchmark($__rrule!!(zero_codual($in_f), $codual_x...))
-        # # out, pb!! = __rrule!!(zero_codual(in_f), codual_x...)
-        # # df = zero_codual(in_f)
-        # # overall_timing = @benchmark Taped.to_benchmark($__rrule!!, $df, $codual_x)
+        # # Print the results.
         # println("original")
         # display(original)
         # println()
         # println("taped")
         # display(r)
         # println()
-        # # println("rrule")
-        # # display(rrule_timing)
-        # # println()
-        # # println("overall")
-        # # display(overall_timing)
-        # # println()
-
-        # # if allocs(original) == 0
-        # #     @test allocs(r) == 0
-        # # end
+        # println("overall")
+        # display(overall_timing)
+        # println()
     end
 end
