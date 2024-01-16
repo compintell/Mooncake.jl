@@ -8,8 +8,6 @@ unchanged, but makes AD more straightforward. In particular, replace
 3. `:new` `Expr`s with `:call`s to `Taped._new_`,
 4. `Core.IntrinsicFunction`s with counterparts from `Taped.IntrinsicWrappers`.
 
-Additionally applies `rebind_multiple_usage!`, which is _essential_ for AD correctness.
-
 `spnames` are the names associated to the static parameters of `ir`. These are needed when
 handling `:foreigncall` expressions, in which it is not necessarily the case that all
 static parameter names have been translated into either types, or `:static_parameter`
@@ -31,9 +29,6 @@ function normalise!(ir::IRCode, spnames::Vector{Symbol})
         inst = lift_getfield_and_others(inst)
         ir.stmts.inst[n] = inst
     end
-
-    # Apply multi-line transformations.
-    ir = rebind_multiple_usage!(ir)
     return ir
 end
 
@@ -180,52 +175,3 @@ end
 __get_arg(x::GlobalRef) = getglobal(x.mod, x.name)
 __get_arg(x::QuoteNode) = x.value
 __get_arg(x) = x
-
-"""
-    rebind_multiple_usage!(ir::IRCode)
-
-Transforms `ir` to ensure that all `:call` expressions have only a single usage of any
-`Argument` or `SSAValue`.
-
-For example, an expression such as
-```julia
-foo(%1, %2, %1)
-```
-uses the `SSAValue` `%1` twice. This can cause correctness issues issues on the reverse-pass
-of AD if `%1` happens to be differentiable and a bits-type.
-
-`rebind_multiple_usage!` transforms the above example, and generalisations
-thereof, into
-```julia
-x = Taped.__rebind(%1)
-foo(%1, %2, x)
-```
-where `Taped.__rebind` is equivalent to the `identity`, but is always a primitive.
-"""
-function rebind_multiple_usage!(ir::IRCode)
-    for (n, inst) in enumerate(ir.stmts.inst)
-        if Meta.isexpr(inst, :call)
-            args = inst.args
-            for (j, arg) in enumerate(args)
-                isa(arg, Union{SSAValue, Argument}) || continue
-                m = findfirst(==(arg), view(args, 1:j-1))
-                m === nothing && continue
-                new_inst = CC.NewInstruction(Expr(:call, __rebind, arg), Any)
-                rebound_arg = CC.insert_node!(ir, n, new_inst, #=insert_after=#false)
-                args[j] = rebound_arg
-            end
-        end
-    end
-    return CC.compact!(ir)
-end
-
-"""
-    __rebind(x)
-
-A different name for the `identity` function. `__rebind` is a primitive in the `MinimalCtx`,
-and is used to ensure the correctness of AD. See `Taped.rebind_multiple_usage!` for details.
-"""
-__rebind(x) = x
-@is_primitive MinimalCtx Tuple{typeof(__rebind), Any}
-__rebind_pb!!(dy, df, dx) = df, increment!!(dx, dy)
-rrule!!(::CoDual{typeof(__rebind)}, x::CoDual) = x, __rebind_pb!!
