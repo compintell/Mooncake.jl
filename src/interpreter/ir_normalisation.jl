@@ -18,8 +18,6 @@ from which the `IRCode` is derived must be consulted. `Taped.is_vararg_sig_and_s
 provides a convenient way to do this.
 """
 function normalise!(ir::IRCode, spnames::Vector{Symbol})
-
-    # Apply per-instruction transformations to each instruction.
     sp_map = Dict{Symbol, CC.VarState}(zip(spnames, ir.sptypes))
     for (n, inst) in enumerate(ir.stmts.inst)
         inst = invoke_to_call(inst)
