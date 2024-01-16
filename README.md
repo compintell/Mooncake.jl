@@ -18,7 +18,7 @@ For a given function and arguments, it is roughly speaking the case that either
 2. no hand-written method of `rrule!!` is applicable.
 
 In the first case, we run the `rrule!!`.
-In the second, we create an `rrule!!` automatically by "doing AD" -- we decompose the function into a composition of functions which _do_ have hand-written `rrule!!`s.
+In the second, we create an `rrule!!` by "doing AD" -- we decompose the function into a composition of functions which _do_ have hand-written `rrule!!`s.
 In general, the goal is to write as few hand-written `rrule!!`s as is necessary, and to "do AD" for the vast majority of functions.
 
 
@@ -56,7 +56,8 @@ This contrasts with `ReverseDiff.jl`, which silently fails in this scenario.
 Hand-written `rrule!!`s have excellent performance, provided that they have been written well.
 Consequently, whether or not the overall AD system has good performance is largely a question of how much overhead is associated to the mechanism by which hand-written `rrules!!`s are algorithmically composed.
 
-At present (11/2023), we do _not_ do this in a performant way, but this will change.
+~~At present (11/2023), we do _not_ do this in a performant way, but this will change.~~
+At present (01/2024), we do this in a _moderately_ performant way.
 See [Project Status](#project-status) below for more info.
 
 Additionally, the strategy of immediately incrementing (co)tangents resolves long-standing performance issues associated with indexing arrays.
@@ -69,9 +70,8 @@ These two approaches entail different tradeoffs.
 
 # Project Name
 
-The package is called `Taped.jl` because it currently uses a traditional tape-based AD system.
-That is, at present, we implement `rrule!!` for an arbitrary function by tracing the function's execution onto a tape -- an operation winds up on the tape if there is a method of `rrule!!` which applies to it.
-However, the work is broader in scope than tape-based AD, so this name is somewhat misleading.
+The package is called `Taped.jl` because it originally used a traditional tape-based AD system.
+This is no longer the case, so the name is now somewhat arbitrary.
 Please do _not_ assume from the name that we just care about traditional "Wengert list" tape-based AD.
 
 # Project Status
@@ -84,7 +84,11 @@ The plan is to proceed in three phases:
 You should take this with a pinch of salt, as it seems highly likely that we will have to revisit some design choices when optimising performance -- we do not, however, anticipate requiring major re-writes to the design as part of performance optimisation.
 We aim to reach the maintenance phase of the project before 01/06/2024.
 
-At the time of writing (06/11/2023), we are mostly through the first phase.
+*Update: (16/01/2023)*
+Phase 2 is now well underway. We now make use of a much faster approach to interpreting / executing Julia code, which yields performance that is comparable with ReverseDiff (when things go well). The current focus is on ironing out performance issues, and simplifying the implementation.
+
+*Update: (06/11/2023)*
+We are mostly through the first phase.
 Correctness testing is proceeding well, and we are ironing out known issues.
 Notably, our broad experience at present is that as we continue to increase the amount of Julia code on which the package is tested, things fail for known, predictable, straightforwardly-fixable reasons (largely missing rrules for `ccall`s), rather than unanticipated problems.
 
