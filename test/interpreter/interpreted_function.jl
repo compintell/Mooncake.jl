@@ -211,29 +211,8 @@
         end
     end
 
-    # global __x_for_gref = 5.0
-    # @testset "_preprocess_expr_arg" begin
-    #     sptypes = (Float64, )
-    #     @test has_equal_data(_lift_expr_arg(Expr(:boundscheck), sptypes), ConstSlot(true))
-    #     @test has_equal_data(
-    #         _lift_expr_arg(Expr(:static_parameter, 1), sptypes), ConstSlot(Float64)
-    #     )
-    #     @test has_equal_data(_lift_expr_arg(5, sptypes), ConstSlot(5))
-    #     @test has_equal_data(_lift_expr_arg(QuoteNode(:hello), sptypes), ConstSlot(:hello))
-    #     @test has_equal_data(_lift_expr_arg(GlobalRef(Main, :sin), sptypes), ConstSlot(sin))
-    #     @test has_equal_data(
-    #         _lift_expr_arg(GlobalRef(Main, :__x_for_gref), sptypes),
-    #         TypedGlobalRef(Main, :__x_for_gref),
-    #     )
-    #     @test has_equal_data(
-    #         _lift_expr_arg(GlobalRef(Core.Intrinsics, :srem_int), sptypes),
-    #         ConstSlot(Taped.IntrinsicsWrappers.srem_int),
-    #     )
-    # end
-
+    # Check that a suite of test cases run and give the correct answer.
     interp = Taped.TInterp()
-
-    # nothings inserted for consistency with generate_test_functions.
     @testset "$f, $(map(Core.Typeof, x))" for (a, b, f, x...) in 
         TestResources.generate_test_functions()
 
@@ -242,42 +221,10 @@
         in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp)
 
         # Verify correctness.
-        @assert f(x...) == f(x...) # primal runs
-        # @test TestUtils.has_equal_data(in_f(f, x...), f(x...))
-        # @test TestUtils.has_equal_data(in_f(f, x...), f(x...)) # run twice to check for non-determinism.
+        @assert f(x...) == f(x...) # check that the primal runs
         x_cpy_1 = deepcopy(x)
         x_cpy_2 = deepcopy(x)
         @test has_equal_data(in_f(f, x_cpy_1...), f(x_cpy_2...))
         @test has_equal_data(x_cpy_1, x_cpy_2)
-
-        # # rng = Xoshiro(123456)
-        # # test_taped_rrule!!(rng, f, deepcopy(x)...; interface_only=false, perf_flag=:none)
-
-        # # Only bother to check performance if the original programme does not allocate.
-        # original = @benchmark $(Ref(f))[]($(Ref(x))[]...)
-        # r = @benchmark $(Ref(in_f))[]($(Ref(f))[], $(Ref(x))[]...)
-
-        # # __rrule!! = Taped.build_rrule!!(in_f)
-        # # codual_x = map(zero_codual, x)
-        # # rrule_timing = @benchmark($__rrule!!(zero_codual($in_f), $codual_x...))
-        # # out, pb!! = __rrule!!(zero_codual(in_f), codual_x...)
-        # # df = zero_codual(in_f)
-        # # overall_timing = @benchmark Taped.to_benchmark($__rrule!!, $df, $codual_x)
-        # println("original")
-        # display(original)
-        # println()
-        # println("taped")
-        # display(r)
-        # println()
-        # # println("rrule")
-        # # display(rrule_timing)
-        # # println()
-        # # println("overall")
-        # # display(overall_timing)
-        # # println()
-
-        # # if allocs(original) == 0
-        # #     @test allocs(r) == 0
-        # # end
     end
 end
