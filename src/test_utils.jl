@@ -745,6 +745,9 @@ new_tester_2(x) = StableFoo(x, :symbol)
     $(Expr(:new, :y, 5.0))
 end
 
+type_stable_getfield_tester_1(x::StableFoo) = x.x
+type_stable_getfield_tester_2(x::StableFoo) = x.y
+
 __x_for_gref_test = 5.0
 @eval globalref_tester() = $(GlobalRef(@__MODULE__, :__x_for_gref_test))
 
@@ -984,6 +987,8 @@ function generate_test_functions()
         (false, nothing, new_tester, 5.0, :hello),
         (false, nothing, new_tester_2, 4.0),
         (false, nothing, new_tester_3, Ref{Any}(Tuple{Float64})),
+        (false, nothing, type_stable_getfield_tester_1, StableFoo(5.0, :hi)),
+        (false, nothing, type_stable_getfield_tester_2, StableFoo(5.0, :hi)),
         (false, nothing, globalref_tester),
         # (false, nothing, globalref_tester_2, true),
         # (false, nothing, globalref_tester_2, false),
