@@ -156,23 +156,23 @@
             @test increment_field!!(x, 3.0, 1) == tangent((a=8.0, b=nt))
             @test increment_field!!(x, nt, 2) == tangent((a=5.0, b=nt))
         end
-        # @testset "MutableTangent" begin
-        #     nt = NoTangent()
-        #     @testset "$f" for (f, val, comp) in [
-        #         (Val(:a), 3.0, mutable_tangent((a=8.0, b=nt))),
-        #         (:a, 3.0, mutable_tangent((a=8.0, b=nt))),
-        #         (Val(:b), nt, mutable_tangent((a=5.0, b=nt))),
-        #         (:b, nt, mutable_tangent((a=5.0, b=nt))),
-        #         (Val(1), 3.0, mutable_tangent((a=8.0, b=nt))),
-        #         (1, 3.0, mutable_tangent((a=8.0, b=nt))),
-        #         (Val(2), nt, mutable_tangent((a=5.0, b=nt))),
-        #         (2, nt, mutable_tangent((a=5.0, b=nt))),
-        #     ]
-        #         x = mutable_tangent((a=5.0, b=nt))
-        #         @test @inferred(increment_field!!(x, val, f)) == comp
-        #         @test @inferred(increment_field!!(x, val, f)) === x
-        #     end
-        # end
+        @testset "MutableTangent" begin
+            nt = NoTangent()
+            @testset "$f" for (f, val, comp) in [
+                (Val(:a), 3.0, mutable_tangent((a=8.0, b=nt))),
+                (:a, 3.0, mutable_tangent((a=8.0, b=nt))),
+                (Val(:b), nt, mutable_tangent((a=5.0, b=nt))),
+                (:b, nt, mutable_tangent((a=5.0, b=nt))),
+                (Val(1), 3.0, mutable_tangent((a=8.0, b=nt))),
+                (1, 3.0, mutable_tangent((a=8.0, b=nt))),
+                (Val(2), nt, mutable_tangent((a=5.0, b=nt))),
+                (2, nt, mutable_tangent((a=5.0, b=nt))),
+            ]
+                x = mutable_tangent((a=5.0, b=nt))
+                @test @inferred(increment_field!!(x, val, f)) == comp
+                @test @inferred(increment_field!!(x, val, f)) === x
+            end
+        end
     end
 end
 
