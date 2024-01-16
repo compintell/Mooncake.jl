@@ -369,6 +369,7 @@ function set_immutable_to_zero(x::T) where {T<:PossiblyUninitTangent}
 end
 set_immutable_to_zero(x::Tangent) = Tangent(set_immutable_to_zero(x.fields))
 set_immutable_to_zero(x::MutableTangent) = x
+set_immutable_to_zero(x::Ptr) = x
 
 """
     increment_field!!(x::T, y::V, f) where {T, V}

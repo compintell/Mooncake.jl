@@ -106,6 +106,8 @@
         test_tangent(rng, p, z, x, y)
     end
 
+    __x = randn(10)
+    p = pointer(__x, 3)
     @testset "set_immutable_to_zero($(Core.Typeof(x)))" for x in Any[
         NoTangent(),
         5.0,
@@ -116,6 +118,7 @@
         [randn(3), 5.0, NoTangent()],
         randn_tangent(Xoshiro(1), TestResources.StableFoo(5.0, :hi)),
         randn_tangent(Xoshiro(1), TestResources.MutableFoo(5.0, randn(3))),
+        p,
     ]
         @test Taped.set_immutable_to_zero(x) isa Core.Typeof(x)
     end
