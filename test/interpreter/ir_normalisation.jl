@@ -65,6 +65,14 @@
             Expr(:call, getfield, SSAValue(1), SSAValue(2)),
             Expr(:call, getfield, SSAValue(1), SSAValue(2)),
         ),
+        (
+            Expr(:call, getfield, SSAValue(1), QuoteNode(:x)),
+            Expr(:call, lgetfield, SSAValue(1), Val(:x)),
+        ),
+        (
+            Expr(:call, sin, SSAValue(1)),
+            Expr(:call, sin, SSAValue(1)),
+        ),
     ]
         @test Taped.lift_getfield_and_others(ex) == target
     end

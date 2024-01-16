@@ -168,9 +168,10 @@ Does the same for...
 function lift_getfield_and_others(inst)
     Meta.isexpr(inst, :call) || return inst
     f = __get_arg(inst.args[1])
-    field = inst.args[3]
-    if f === getfield && field isa Union{Symbol, Int}
-        return Expr(:call, lgetfield, inst.args[2], Val(field))
+    if f === getfield && length(inst.args) == 3 && inst.args[3] isa Union{QuoteNode, Int}
+        field = inst.args[3]
+        new_field = field isa Int ? Val(field) : Val(field.value)
+        return Expr(:call, lgetfield, inst.args[2], new_field)
     else
         return inst
     end
