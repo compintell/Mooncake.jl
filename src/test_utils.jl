@@ -909,6 +909,9 @@ function test_for_loop(x)
     return x
 end
 
+# This catches the case where there are multiple phi nodes at the start of the block, and
+# they refer to one another. It is in this instance that the distinction between phi nodes
+# acting "instanteneously" and "in sequence" becomes apparent.
 function test_multiple_phinode_block(x::Float64)
     a = 1.0
     b = x

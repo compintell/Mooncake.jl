@@ -23,6 +23,13 @@ end
 
 increment_tangent!(x::ConstSlot{<:CoDual}, new_tangent) = nothing
 
+# Non slot version of increment_tangent!
+function increment_tangent!(x::SlotRef{C}, t) where {C}
+    x_val = x[]
+    x[] = C(primal(x_val), increment!!(tangent(x_val), t))
+    return nothing
+end
+
 ## ReturnNode
 function build_coinsts(node::ReturnNode, _, _rrule!!, ::Int, ::Int, ::Bool)
     return build_coinsts(ReturnNode, _rrule!!.return_slot, _get_slot(node.val, _rrule!!))
@@ -51,36 +58,22 @@ end
 
 ## PhiNode
 
-function make_stacks(nodes::NTuple{N, TypedPhiNode}) where {N}
-    tmp_stacks = map(n -> Vector{eltype(n.tmp_slot)}(undef, 0), nodes)
-    ret_stacks = map(n -> Vector{eltype(n.ret_slot)}(undef, 0), nodes)
-    prev_blks = Vector{Int}(undef, 0)
-    return tmp_stacks, ret_stacks, prev_blks
-end
-
 function build_coinsts(ir_insts::Vector{PhiNode}, _, _rrule!!, n_first::Int, b::Int, is_blk_end::Bool)
     nodes = (build_typed_phi_nodes(ir_insts, _rrule!!, n_first)..., )
     next_blk = _standard_next_block(is_blk_end, b)
     return build_coinsts(Vector{PhiNode}, nodes, next_blk, make_stacks(nodes)...)
 end
 
-function increment_predecessor_from_tmp!(x::TypedPhiNode{<:CoDualSlot}, prev_blk::Int)
-    map(x.edges, x.values) do edge, v
-        (edge == prev_blk) && isassigned(v) && increment_tangent!(v, x.tmp_slot)
-    end
-    return nothing
-end
-
-function increment_tmp_from_return!(x::TypedPhiNode{<:CoDualSlot})
-    isassigned(x.ret_slot) && increment_tangent!(x.tmp_slot, x.ret_slot)
-    return nothing
+function make_stacks(nodes::NTuple{N, TypedPhiNode}) where {N}
+    ret_stacks = map(n -> Vector{eltype(n.ret_slot)}(undef, 0), nodes)
+    prev_blks = Vector{Int}(undef, 0)
+    return ret_stacks, prev_blks
 end
 
 function build_coinsts(
     ::Type{Vector{PhiNode}},
     nodes::NTuple{N, TypedPhiNode},
     next_blk::Int,
-    tmp_stacks::NTuple{N, Vector},
     ret_stacks::NTuple{N, Vector},
     prev_stack::Vector{Int},
 ) where {N}
@@ -91,27 +84,41 @@ function build_coinsts(
 
     # Pre-allocate a little bit of memory.
     sizehint!(prev_stack, 10)
-    foreach(Base.Fix2(sizehint!, 10), tmp_stacks)
     foreach(Base.Fix2(sizehint!, 10), ret_stacks)
 
     # Construct instructions.
     fwds_inst = @opaque function (p::Int)
-        push!(prev_stack, p)
-        map((n, t) -> isassigned(n.tmp_slot) && push!(t, n.tmp_slot[]), nodes, tmp_stacks)
-        map(Base.Fix2(store_tmp_value!, p), nodes)
-        map((n, r) -> isassigned(n.ret_slot) && push!(r, n.ret_slot[]), nodes, ret_stacks)
-        map(transfer_tmp_value!, nodes)
+        push!(prev_stack, p) # record the preceding block
+        map(Base.Fix2(store_tmp_value!, p), nodes) # transfer new value into tmp slots
+        map(log_ret_value!, nodes, ret_stacks) # log old value
+        map(transfer_tmp_value!, nodes) # transfer new value from tmp slots into ret slots
         return next_blk
     end
     bwds_inst = @opaque function (j::Int)
-        p = pop!(prev_stack)
-        map(increment_tmp_from_return!, nodes)
-        map((n, r) -> (!isempty(r)) && (n.ret_slot[] = pop!(r)), nodes, ret_stacks)
+        p = pop!(prev_stack) # get the index of the previous block
+        map(replace_tmp_tangent_from_ret!, nodes) # transfer data from ret slots to tmp
+        map((n, r) -> (!isempty(r)) && (n.ret_slot[] = pop!(r)), nodes, ret_stacks) # restore ret slots to previous state
         map(Base.Fix2(increment_predecessor_from_tmp!, p), nodes)
-        map((n, t) -> (!isempty(t)) && (n.tmp_slot[] = pop!(t)), nodes, tmp_stacks)
         return j
     end
     return fwds_inst::FwdsInst, bwds_inst::BwdsInst
+end
+
+function log_ret_value!(x::TypedPhiNode{<:CoDualSlot}, ret_stack::Vector{<:CoDual})
+    isassigned(x.ret_slot) && push!(ret_stack, x.ret_slot[])
+    return nothing
+end
+
+function replace_tmp_tangent_from_ret!(x::TypedPhiNode{<:CoDualSlot})
+    isassigned(x.ret_slot) && replace_tangent!(x.tmp_slot, tangent(x.ret_slot[]))
+    return nothing
+end
+
+function increment_predecessor_from_tmp!(x::TypedPhiNode{<:CoDualSlot}, prev_blk::Int)
+    map(x.edges, x.values) do edge, v
+        (edge == prev_blk) && isassigned(v) && increment_tangent!(v, x.tmp_slot)
+    end
+    return nothing
 end
 
 ## PiNode
@@ -276,9 +283,9 @@ function build_coinsts(
     end
     bwds_inst = @opaque function (j::Int)
         dout = tangent(out[])
-        dargs = tuple_map(tangent ∘ getindex, arg_slots)
+        dargs = tuple_map(set_immutable_to_zero ∘ tangent ∘ getindex, arg_slots)
         _, new_dargs... = pop!(pb_stack)(dout, NoTangent(), dargs...)
-        map(replace_tangent!, arg_slots, new_dargs)
+        map(increment_tangent!, arg_slots, new_dargs)
         if !isempty(old_vals)
             out[] = pop!(old_vals) # restore old state.
         end

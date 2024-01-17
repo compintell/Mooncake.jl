@@ -106,6 +106,23 @@
         test_tangent(rng, p, z, x, y)
     end
 
+    __x = randn(10)
+    p = pointer(__x, 3)
+    @testset "set_immutable_to_zero($(Core.Typeof(x)))" for x in Any[
+        NoTangent(),
+        5.0,
+        5f0,
+        (5.0, NoTangent()),
+        (a=5.0, b=NoTangent(), c=(5.0, )),
+        randn(5),
+        [randn(3), 5.0, NoTangent()],
+        randn_tangent(Xoshiro(1), TestResources.StableFoo(5.0, :hi)),
+        randn_tangent(Xoshiro(1), TestResources.MutableFoo(5.0, randn(3))),
+        p,
+    ]
+        @test Taped.set_immutable_to_zero(x) isa Core.Typeof(x)
+    end
+
     tangent(nt::NamedTuple) = Tangent(map(PossiblyUninitTangent, nt))
     mutable_tangent(nt::NamedTuple) = MutableTangent(map(PossiblyUninitTangent, nt))
 
@@ -156,23 +173,23 @@
             @test increment_field!!(x, 3.0, 1) == tangent((a=8.0, b=nt))
             @test increment_field!!(x, nt, 2) == tangent((a=5.0, b=nt))
         end
-        # @testset "MutableTangent" begin
-        #     nt = NoTangent()
-        #     @testset "$f" for (f, val, comp) in [
-        #         (Val(:a), 3.0, mutable_tangent((a=8.0, b=nt))),
-        #         (:a, 3.0, mutable_tangent((a=8.0, b=nt))),
-        #         (Val(:b), nt, mutable_tangent((a=5.0, b=nt))),
-        #         (:b, nt, mutable_tangent((a=5.0, b=nt))),
-        #         (Val(1), 3.0, mutable_tangent((a=8.0, b=nt))),
-        #         (1, 3.0, mutable_tangent((a=8.0, b=nt))),
-        #         (Val(2), nt, mutable_tangent((a=5.0, b=nt))),
-        #         (2, nt, mutable_tangent((a=5.0, b=nt))),
-        #     ]
-        #         x = mutable_tangent((a=5.0, b=nt))
-        #         @test @inferred(increment_field!!(x, val, f)) == comp
-        #         @test @inferred(increment_field!!(x, val, f)) === x
-        #     end
-        # end
+        @testset "MutableTangent" begin
+            nt = NoTangent()
+            @testset "$f" for (f, val, comp) in [
+                (Val(:a), 3.0, mutable_tangent((a=8.0, b=nt))),
+                (:a, 3.0, mutable_tangent((a=8.0, b=nt))),
+                (Val(:b), nt, mutable_tangent((a=5.0, b=nt))),
+                (:b, nt, mutable_tangent((a=5.0, b=nt))),
+                (Val(1), 3.0, mutable_tangent((a=8.0, b=nt))),
+                (1, 3.0, mutable_tangent((a=8.0, b=nt))),
+                (Val(2), nt, mutable_tangent((a=5.0, b=nt))),
+                (2, nt, mutable_tangent((a=5.0, b=nt))),
+            ]
+                x = mutable_tangent((a=5.0, b=nt))
+                @test @inferred(increment_field!!(x, val, f)) == comp
+                @test @inferred(increment_field!!(x, val, f)) === x
+            end
+        end
     end
 end
 

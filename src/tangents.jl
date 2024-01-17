@@ -337,23 +337,6 @@ function increment!!(x::T, y::T) where {T<:MutableTangent}
 end
 
 """
-    rebind_tangent(t)
-
-TODO: write a very careful docstring, and properly understand what this operation means.
-At the time of writing, the only place it is required is in `duplicate`.
-Behaviour is very closely related to `increment!!` -- expand on this.
-"""
-rebind_tangent(::NoTangent) = NoTangent()
-rebind_tangent(x::IEEEFloat) = zero(x)
-rebind_tangent(x::Ptr) = x
-rebind_tangent(x::Array) = x
-rebind_tangent(x::Tuple) = map(rebind_tangent, x)
-rebind_tangent(x::NamedTuple) = map(rebind_tangent, x)
-rebind_tangent(x::T) where {T<:__PUT} = is_init(x) ? T(rebind_tangent(x.tangent)) : T()
-rebind_tangent(x::Tangent) = Tangent(map(rebind_tangent, x.fields))
-rebind_tangent(x::MutableTangent) = x
-
-"""
     set_to_zero!!(x)
 
 Set `x` to its zero element (`x` should be a tangent, so the zero must exist).
@@ -370,6 +353,23 @@ function set_to_zero!!(x::MutableTangent)
     x.fields = set_to_zero!!(x.fields)
     return x
 end
+
+"""
+    set_immutable_to_zero(x::T) where {T}
+
+Return a `T` whose immutable components are zero, and whose mutable components are `===` to
+`x`. Please consult implementation for details.
+"""
+set_immutable_to_zero(x::NoTangent) = NoTangent()
+set_immutable_to_zero(x::Base.IEEEFloat) = zero(x)
+set_immutable_to_zero(x::Union{Tuple, NamedTuple}) = map(set_immutable_to_zero, x)
+set_immutable_to_zero(x::Array) = x
+function set_immutable_to_zero(x::T) where {T<:PossiblyUninitTangent}
+    return is_init(x) ? T(set_immutable_to_zero(x.tangent)) : x
+end
+set_immutable_to_zero(x::Tangent) = Tangent(set_immutable_to_zero(x.fields))
+set_immutable_to_zero(x::MutableTangent) = x
+set_immutable_to_zero(x::Ptr) = x
 
 """
     increment_field!!(x::T, y::V, f) where {T, V}

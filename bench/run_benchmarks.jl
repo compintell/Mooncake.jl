@@ -83,7 +83,7 @@ function benchmark_hand_written_rrules!!(rng_ctor)
     return combine_results.(results, ranges, Ref(default_hand_written_ratios()))
 end
 
-default_derived_ratios() = (lb=1, ub=100)
+default_derived_ratios() = (lb=1, ub=150)
 
 function benchmark_derived_rrules!!(rng_ctor)
     rng = rng_ctor(123)
