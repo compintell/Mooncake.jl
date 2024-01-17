@@ -79,7 +79,12 @@ function increment_predecessor_from_tmp!(x::TypedPhiNode{<:CoDualSlot}, prev_blk
 end
 
 function increment_tmp_from_return!(x::TypedPhiNode{<:CoDualSlot})
-    isassigned(x.ret_slot) && increment_tangent!(x.tmp_slot, x.ret_slot)
+    isassigned(x.ret_slot) && replace_tangent!(x.tmp_slot, tangent(x.ret_slot[]))
+    return nothing
+end
+
+function log_ret_value!(x::TypedPhiNode{<:CoDualSlot}, ret_stack::Vector{<:CoDual})
+    isassigned(x.ret_slot) && push!(ret_stack, x.ret_slot[])
     return nothing
 end
 
@@ -103,19 +108,22 @@ function build_coinsts(
 
     # Construct instructions.
     fwds_inst = @opaque function (p::Int)
-        push!(prev_stack, p)
-        map((n, t) -> isassigned(n.tmp_slot) && push!(t, n.tmp_slot[]), nodes, tmp_stacks)
-        map(Base.Fix2(store_tmp_value!, p), nodes)
-        map((n, r) -> isassigned(n.ret_slot) && push!(r, n.ret_slot[]), nodes, ret_stacks)
-        map(transfer_tmp_value!, nodes)
+        push!(prev_stack, p) # record the preceding block
+        # map((n, t) -> isassigned(n.tmp_slot) && push!(t, n.tmp_slot[]), nodes, tmp_stacks)
+        map(Base.Fix2(store_tmp_value!, p), nodes) # Transfer new value into tmp slots
+        map(log_ret_value!, nodes, ret_stacks) # Log old value
+        map(transfer_tmp_value!, nodes) # Transfer new value from tmp slots into ret slots
         return next_blk
     end
     bwds_inst = @opaque function (j::Int)
         p = pop!(prev_stack)
-        map(increment_tmp_from_return!, nodes)
-        map((n, r) -> (!isempty(r)) && (n.ret_slot[] = pop!(r)), nodes, ret_stacks)
-        map(Base.Fix2(increment_predecessor_from_tmp!, p), nodes)
-        map((n, t) -> (!isempty(t)) && (n.tmp_slot[] = pop!(t)), nodes, tmp_stacks)
+        map(increment_tmp_from_return!, nodes) # transfer data from ret slots to tmp
+        map((n, r) -> (!isempty(r)) && (n.ret_slot[] = pop!(r)), nodes, ret_stacks) # restore ret slots to previous state
+        map(Base.Fix2(increment_predecessor_from_tmp!, p), nodes) # transfer tangents to tmp
+
+        # Copy ret slots into tmp.
+        map(n -> isassigned(n.ret_slot) && (n.tmp_slot[] = n.ret_slot[]), nodes)
+        # map((n, t) -> (!isempty(t)) && (n.tmp_slot[] = pop!(t)), nodes, tmp_stacks)
         return j
     end
     return fwds_inst::FwdsInst, bwds_inst::BwdsInst
