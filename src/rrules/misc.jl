@@ -62,6 +62,20 @@ function rrule!!(::CoDual{typeof(lgetfield)}, x::CoDual, ::CoDual{Val{f}}) where
     return y, lgetfield_pb!!
 end
 
+lgetfield(x, ::Val{f}, ::Val{order}) where {f, order} = getfield(x, f, order)
+
+@is_primitive MinimalCtx Tuple{typeof(lgetfield), Any, Any, Any}
+function rrule!!(::CoDual{typeof(lgetfield)}, x::CoDual, ::CoDual{Val{f}}, ::CoDual{Val{order}}) where {f, order}
+    lgetfield_pb!!(dy, df, dx, dsym, dorder) = df, increment_field!!(dx, dy, Val{f}()), dsym, dorder
+    y = CoDual(getfield(primal(x), f), _get_tangent_field(primal(x), tangent(x), f))
+    return y, lgetfield_pb!!
+end
+
+@is_primitive MinimalCtx Tuple{typeof(Threads.nthreads)}
+function rrule!!(::CoDual{typeof(Threads.nthreads)})
+    return CoDual(Threads.nthreads(), NoTangent()), NoPullback()
+end
+
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
 
     # Data which needs to not be GC'd.

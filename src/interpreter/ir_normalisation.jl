@@ -166,6 +166,10 @@ function lift_getfield_and_others(inst)
         field = inst.args[3]
         new_field = field isa Int ? Val(field) : Val(field.value)
         return Expr(:call, lgetfield, inst.args[2], new_field)
+    elseif f === getfield && length(inst.args) == 4 && inst.args[3] isa Union{QuoteNode, Int} && inst.args[4] isa Bool
+        field = inst.args[3]
+        new_field = field isa Int ? Val(field) : Val(field.value)
+        return Expr(:call, lgetfield, inst.args[2], new_field, Val(inst.args[4]))
     else
         return inst
     end
