@@ -7,4 +7,5 @@
     @test codual_type(Int) == CoDual{Int, NoTangent}
     @test codual_type(Real) == CoDual
     @test codual_type(Any) == CoDual
+    @test codual_type(Type{UnitRange{Int}}) == CoDual{Type{UnitRange{Int}}, NoTangent}
 end

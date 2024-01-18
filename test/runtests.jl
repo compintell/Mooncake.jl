@@ -27,7 +27,6 @@ using Taped:
     CoDual,
     _wrap_field,
     DefaultCtx,
-    New,
     rrule!!,
     lgetfield,
     might_be_active,
@@ -37,7 +36,8 @@ using Taped:
     TypedGlobalRef,
     build_inst,
     TypedPhiNode,
-    build_coinsts
+    build_coinsts,
+    Stack
 
 using .TestUtils:
     test_rrule!!,
@@ -66,6 +66,7 @@ sr(n::Int) = StableRNG(n)
     if test_group == "basic"
         include("tangents.jl")
         include("codual.jl")
+        include("stack.jl")
         @testset "interpreter" begin
             include(joinpath("interpreter", "contexts.jl"))
             include(joinpath("interpreter", "ir_utils.jl"))

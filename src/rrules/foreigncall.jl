@@ -361,6 +361,9 @@ function rrule!!(::CoDual{typeof(Base.unsafe_pointer_to_objref)}, x::CoDual{<:Pt
     return y, NoPullback()
 end
 
+@is_primitive MinimalCtx Tuple{typeof(Threads.threadid)}
+rrule!!(::CoDual{typeof(Threads.threadid)}) = zero_codual(Threads.threadid()), NoPullback()
+
 @is_primitive MinimalCtx Tuple{typeof(typeintersect), Any, Any}
 function rrule!!(::CoDual{typeof(typeintersect)}, @nospecialize(a), @nospecialize(b))
     y = typeintersect(primal(a), primal(b))
@@ -473,7 +476,7 @@ for name in [
     :(:jl_array_grow_end), :(:jl_array_del_end), :(:jl_array_copy), :(:jl_object_id),
     :(:jl_type_intersection), :(:memset), :(:jl_get_tls_world_age), :(:memmove),
     :(:jl_array_sizehint), :(:jl_array_del_at), :(:jl_array_grow_at), :(:jl_array_del_beg),
-    :(:jl_array_grow_beg), :(:jl_value_ptr), :(:jl_type_unionall),
+    :(:jl_array_grow_beg), :(:jl_value_ptr), :(:jl_type_unionall), :(:jl_threadid),
 ]
     @eval function _foreigncall_(
         ::Val{$name}, ::Val{RT}, AT::Tuple, ::Val{nreq}, ::Val{calling_convention}, x...,
@@ -539,6 +542,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:foreigncall})
             false, :none, (lb=0.1, ub=100.0),
             Core.Compiler.return_type, Tuple{typeof(sin), Float64},
         ),
+        (false, :stability, nothing, Threads.threadid),
         (false, :stability, nothing, typeintersect, Float64, Int),
         (
             true, :stability, nothing,

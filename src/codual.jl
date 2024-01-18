@@ -36,6 +36,8 @@ function codual_type(::Type{P}) where {P}
     return isconcretetype(P) ? CoDual{P, tangent_type(P)} : CoDual
 end
 
+codual_type(::Type{Type{P}}) where {P} = CoDual{Type{P}, NoTangent}
+
 struct NoPullback end
 
 @inline (::NoPullback)(dy, dx...) = dx

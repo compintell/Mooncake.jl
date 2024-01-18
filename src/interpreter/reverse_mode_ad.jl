@@ -65,8 +65,8 @@ function build_coinsts(ir_insts::Vector{PhiNode}, _, _rrule!!, n_first::Int, b::
 end
 
 function make_stacks(nodes::NTuple{N, TypedPhiNode}) where {N}
-    ret_stacks = map(n -> Vector{eltype(n.ret_slot)}(undef, 0), nodes)
-    prev_blks = Vector{Int}(undef, 0)
+    ret_stacks = map(n -> Stack{eltype(n.ret_slot)}(), nodes)
+    prev_blks = Stack{Int}()
     return ret_stacks, prev_blks
 end
 
@@ -74,17 +74,13 @@ function build_coinsts(
     ::Type{Vector{PhiNode}},
     nodes::NTuple{N, TypedPhiNode},
     next_blk::Int,
-    ret_stacks::NTuple{N, Vector},
-    prev_stack::Vector{Int},
+    ret_stacks,
+    prev_stack::Stack{Int},
 ) where {N}
 
     # Check that we're operating on CoDuals.
     @assert all(x -> x.ret_slot isa CoDualSlot, nodes)
     @assert all(x -> all(y -> isa(y, CoDualSlot), x.values), nodes)
-
-    # Pre-allocate a little bit of memory.
-    sizehint!(prev_stack, 10)
-    foreach(Base.Fix2(sizehint!, 10), ret_stacks)
 
     # Construct instructions.
     fwds_inst = @opaque function (p::Int)
@@ -104,7 +100,7 @@ function build_coinsts(
     return fwds_inst::FwdsInst, bwds_inst::BwdsInst
 end
 
-function log_ret_value!(x::TypedPhiNode{<:CoDualSlot}, ret_stack::Vector{<:CoDual})
+function log_ret_value!(x::TypedPhiNode{<:CoDualSlot}, ret_stack)
     isassigned(x.ret_slot) && push!(ret_stack, x.ret_slot[])
     return nothing
 end
@@ -195,11 +191,10 @@ function build_pb_stack(__rrule!!, evaluator, arg_slots)
     end
     T_pb!! = only(possible_output_types)
     if T_pb!! <: Tuple && T_pb!! !== Union{}
-        pb_stack = Vector{T_pb!!.parameters[2]}(undef, 0)
+        pb_stack = Stack{T_pb!!.parameters[2]}()
     else
-        pb_stack = Vector{Any}(undef, 0)
+        pb_stack = Stack{Any}()
     end
-    sizehint!(pb_stack, 100)
     return pb_stack
 end
 
@@ -215,6 +210,22 @@ function build_coinsts(ir_inst::Expr, in_f, _rrule!!, n::Int, b::Int, is_blk_end
         __args = is_invoke ? ir_inst.args[2:end] : ir_inst.args
         arg_slots = map(arg -> _get_slot(arg, _rrule!!), (__args..., ))
 
+        # if primal(arg_slots[1][]) isa typeof(_new_)
+        #     println("in new")
+        #     display(Core.Typeof(arg_slots))
+        #     println()
+        #     display(map(getindex, arg_slots))
+        #     println()
+        #     display(__args)
+        #     println()
+        #     println("primal arg slots")
+        #     display(map(arg -> _get_slot(arg, in_f), (__args..., )))
+        #     println()
+        #     println("tangent arg slots")
+        #     display(arg_slots)
+        #     println()
+        # end
+
         # Construct signature, and determine how the rrule is to be computed.
         primal_sig = Tuple{map(Core.Typeof ∘ primal ∘ getindex, arg_slots)...}
         evaluator = get_evaluator(in_f.ctx, primal_sig, __args, in_f.interp)
@@ -224,8 +235,7 @@ function build_coinsts(ir_inst::Expr, in_f, _rrule!!, n::Int, b::Int, is_blk_end
         pb_stack = build_pb_stack(__rrule!!, evaluator, arg_slots)
 
         # Create stack for storing values.
-        old_vals = Vector{eltype(val_slot)}(undef, 0)
-        sizehint!(old_vals, 100)
+        old_vals = Stack{eltype(val_slot)}()
 
         return build_coinsts(
             Val(:call), val_slot, arg_slots, evaluator, __rrule!!, old_vals, pb_stack, next_blk
@@ -270,18 +280,29 @@ function build_coinsts(
     arg_slots::NTuple{N, CoDualSlot} where {N},
     evaluator::Teval,
     __rrule!!::Trrule!!,
-    old_vals::Vector,
-    pb_stack::Vector,
+    old_vals::Stack,
+    pb_stack::Stack,
     next_blk::Int,
 ) where {Teval, Trrule!!}
-    fwds_inst = @opaque function (p::Int)
+
+    function fwds_pass()
         isassigned(out) && push!(old_vals, out[])
-        _out, pb!! = __rrule!!(zero_codual(evaluator), tuple_map(getindex, arg_slots)...)
+        args = tuple_map(getindex, arg_slots)
+        z_ev = zero_codual(evaluator)
+        _out, pb!! = __rrule!!(z_ev, args...)
         out[] = _out
         push!(pb_stack, pb!!)
+        return nothing
+    end
+    # display(InteractiveUtils.code_warntype(fwds_pass, Tuple{}))
+    # println()
+
+    fwds_inst = @opaque function (p::Int)
+        fwds_pass()
         return next_blk
     end
-    bwds_inst = @opaque function (j::Int)
+
+    function bwds_pass()
         dout = tangent(out[])
         dargs = tuple_map(set_immutable_to_zero ∘ tangent ∘ getindex, arg_slots)
         _, new_dargs... = pop!(pb_stack)(dout, NoTangent(), dargs...)
@@ -289,6 +310,12 @@ function build_coinsts(
         if !isempty(old_vals)
             out[] = pop!(old_vals) # restore old state.
         end
+        return nothing
+    end
+    # display(InteractiveUtils.code_warntype(bwds_pass, Tuple{}))
+    # println()
+    bwds_inst = @opaque function (j::Int)
+        bwds_pass()
         return j
     end
     return fwds_inst::FwdsInst, bwds_inst::BwdsInst
@@ -376,7 +403,7 @@ struct InterpretedFunctionRRule{sig<:Tuple, Treturn, Targ_info<:ArgInfo}
     slots::Vector{CoDualSlot}
     fwds_instructions::Vector{FwdsInst}
     bwds_instructions::Vector{BwdsInst}
-    n_stack::Vector{Int}
+    n_stack::Stack{Int}
     ir::IRCode
 end
 
@@ -435,8 +462,6 @@ function build_rrule!!(in_f::InterpretedFunction{sig}) where {sig}
 
     return_slot = make_codual_slot(in_f.return_slot)
     arg_info = make_codual_arginfo(in_f.arg_info)
-    n_stack = Vector{Int}(undef, 0)
-    sizehint!(n_stack, 100)
 
     # Construct rrule!! for in_f.
     __rrule!! =  InterpretedFunctionRRule{sig, eltype(return_slot), Core.Typeof(arg_info)}(
@@ -445,7 +470,7 @@ function build_rrule!!(in_f::InterpretedFunction{sig}) where {sig}
         map(make_codual_slot, in_f.slots), # SlotRefs
         Vector{FwdsInst}(undef, length(in_f.instructions)), # fwds_instructions
         Vector{BwdsInst}(undef, length(in_f.instructions)), # bwds_instructions
-        n_stack,
+        Stack{Int}(),
         in_f.ir,
     )
 
@@ -462,7 +487,7 @@ struct InterpretedFunctionPb{Treturn_slot, Targ_info, Tbwds_f}
     j::Int
     bwds_instructions::Tbwds_f
     return_slot::Treturn_slot
-    n_stack::Vector{Int}
+    n_stack::Stack{Int}
     arg_info::Targ_info
 end
 
@@ -485,6 +510,7 @@ function (in_f_rrule!!::InterpretedFunctionRRule{sig})(
     j = length(n_stack)
 
     # Run instructions until done.
+    # @show "before (fwds)", length(n_stack), length(n_stack.memory)
     while next_block != -1
         push!(n_stack, n)
         if !isassigned(in_f_rrule!!.fwds_instructions, n)
@@ -492,6 +518,7 @@ function (in_f_rrule!!::InterpretedFunctionRRule{sig})(
             in_f_rrule!!.fwds_instructions[n] = fwds
             in_f_rrule!!.bwds_instructions[n] = bwds
         end
+        # println(n)
         next_block = in_f_rrule!!.fwds_instructions[n](prev_block)
         if next_block == 0
             n += 1
@@ -502,6 +529,7 @@ function (in_f_rrule!!::InterpretedFunctionRRule{sig})(
             next_block = 0
         end
     end
+    # @show "after (fwds)", length(n_stack), length(n_stack.memory)
 
     return_val = return_slot[]
     interpreted_function_pb!! = InterpretedFunctionPb(
@@ -544,10 +572,12 @@ function (if_pb!!::InterpretedFunctionPb)(dout, ::NoTangent, dargs::Vararg{Any, 
     # Run the instructions in reverse. Present assumes linear instruction ordering.
     n_stack = if_pb!!.n_stack
     bwds_instructions = if_pb!!.bwds_instructions
+    # @show "before", length(n_stack), length(n_stack.memory)
     while length(n_stack) > if_pb!!.j
         inst = bwds_instructions[pop!(n_stack)]
         inst(0)
     end
+    # @show "after", length(n_stack), length(n_stack.memory)
 
     # Return resulting tangents from slots.
     flat_arg_slots = flattened_rrule_args(if_pb!!.arg_info)
