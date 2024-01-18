@@ -38,7 +38,7 @@ for N in 0:32
         return $(Expr(:new, :T, map(n -> :(x[$n]), 1:N)...))
     end
     @eval function _new_pullback!!(dy, d_new_, d_T, dx::Vararg{Any, $N})
-        return d_new_, d_T, map((x, y) -> increment!!(x, _value(y)), dx, dy.fields)...
+        return d_new_, d_T, map((x, y) -> increment!!(x, _value(y)), dx, Tuple(dy.fields))...
     end
     @eval function _new_pullback!!(
         dy::Union{Tuple, NamedTuple}, d_new_, d_T, dx::Vararg{Any, $N}
@@ -57,19 +57,19 @@ end
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:new})
     test_cases = Any[
-        (false, :stability, nothing, New{Tuple{Float64, Int}}(), 5.0, 4),
-        (false, :stability, nothing, New{Tuple{Float64, Float64}}(), 5.0, 4.0),
+        (false, :stability, nothing, _new_, Tuple{Float64, Int}, 5.0, 4),
+        (false, :stability, nothing, _new_, Tuple{Float64, Float64}, 5.0, 4.0),
         (
             false, :stability, nothing,
-            New{TestResources.TypeStableStruct{Float64}}(), 5, 4.0,
+            _new_, TestResources.TypeStableStruct{Float64}, 5, 4.0,
         ),
         (
             false, :stability, nothing,
-            New{TestResources.TypeStableMutableStruct{Float64}}(), 5.0, 4.0,
+            _new_, TestResources.TypeStableMutableStruct{Float64}, 5.0, 4.0,
         ),
         (
             false, :none, nothing,
-            New{TestResources.TypeStableMutableStruct{Any}}(), 5.0, 4.0,
+            _new_, TestResources.TypeStableMutableStruct{Any}, 5.0, 4.0,
         ),
     ]
     memory = Any[]
