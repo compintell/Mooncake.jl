@@ -58,15 +58,20 @@ end
 
 Base.:(==)(x::MutableTangent, y::MutableTangent) = x.fields == y.fields
 
-function build_tangent(::Type{P}, fields...) where {P}
+@generated function build_tangent(::Type{P}, fields::Vararg{Any, N}) where {P, N}
     tangent_types = map(P -> PossiblyUninitTangent{tangent_type(P)}, fieldtypes(P))
-    tangent_values = ntuple(length(tangent_types)) do n
-        n <= length(fields) ? tangent_types[n](fields[n]) : tangent_types[n]()
+    tangent_values_exprs = ntuple(length(tangent_types)) do n
+        if n <= N
+            return Expr(:call, tangent_types[n], :(fields[$n]))
+        else
+            return Expr(:call, tangent_types[n])
+        end
     end
-    return tangent_type(P)(NamedTuple{fieldnames(P)}(tangent_values))
+    T = tangent_type(P)
+    return Expr(:call, T, Expr(:call, NamedTuple{fieldnames(P)}, Expr(:tuple, tangent_values_exprs...)))
 end
 
-function build_tangent(::Type{P}, fields...) where {P<:Union{Tuple, NamedTuple}}
+function build_tangent(::Type{P}, fields::Vararg{Any, N}) where {P<:Union{Tuple, NamedTuple}, N}
     return tangent_type(P)(fields)
 end
 
