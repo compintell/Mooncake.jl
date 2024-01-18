@@ -456,10 +456,6 @@ end
 
 function build_rrule!!(in_f::InterpretedFunction{sig}) where {sig}
 
-    # # If we've already constructed the rule, don't build it again.
-    # interp = in_f.interp
-    # sig in keys(interp.in_f_rrule_cache) && return interp.in_f_rrule_cache[sig]
-
     return_slot = make_codual_slot(in_f.return_slot)
     arg_info = make_codual_arginfo(in_f.arg_info)
 
@@ -476,9 +472,6 @@ function build_rrule!!(in_f::InterpretedFunction{sig}) where {sig}
 
     # Set PhiNodes.
     make_phi_instructions!(in_f, __rrule!!)
-
-    # # Cache the rule.
-    # interp.in_f_rrule_cache[sig] = __rrule!!
 
     return __rrule!!
 end
@@ -510,7 +503,6 @@ function (in_f_rrule!!::InterpretedFunctionRRule{sig})(
     j = length(n_stack)
 
     # Run instructions until done.
-    # @show "before (fwds)", length(n_stack), length(n_stack.memory)
     while next_block != -1
         push!(n_stack, n)
         if !isassigned(in_f_rrule!!.fwds_instructions, n)
@@ -518,7 +510,6 @@ function (in_f_rrule!!::InterpretedFunctionRRule{sig})(
             in_f_rrule!!.fwds_instructions[n] = fwds
             in_f_rrule!!.bwds_instructions[n] = bwds
         end
-        # println(n)
         next_block = in_f_rrule!!.fwds_instructions[n](prev_block)
         if next_block == 0
             n += 1
@@ -529,7 +520,6 @@ function (in_f_rrule!!::InterpretedFunctionRRule{sig})(
             next_block = 0
         end
     end
-    # @show "after (fwds)", length(n_stack), length(n_stack.memory)
 
     return_val = return_slot[]
     interpreted_function_pb!! = InterpretedFunctionPb(
@@ -572,12 +562,10 @@ function (if_pb!!::InterpretedFunctionPb)(dout, ::NoTangent, dargs::Vararg{Any, 
     # Run the instructions in reverse. Present assumes linear instruction ordering.
     n_stack = if_pb!!.n_stack
     bwds_instructions = if_pb!!.bwds_instructions
-    # @show "before", length(n_stack), length(n_stack.memory)
     while length(n_stack) > if_pb!!.j
         inst = bwds_instructions[pop!(n_stack)]
         inst(0)
     end
-    # @show "after", length(n_stack), length(n_stack.memory)
 
     # Return resulting tangents from slots.
     flat_arg_slots = flattened_rrule_args(if_pb!!.arg_info)
