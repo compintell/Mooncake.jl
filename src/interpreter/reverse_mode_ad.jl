@@ -285,8 +285,8 @@ function build_coinsts(
     arg_slots::NTuple{N, CoDualSlot} where {N},
     evaluator::Teval,
     __rrule!!::Trrule!!,
-    old_vals,
-    pb_stack,
+    old_vals::Stack,
+    pb_stack::Stack,
     next_blk::Int,
 ) where {Teval, Trrule!!}
 
