@@ -250,11 +250,11 @@ end
 
 function build_inst(
     ::Val{:call},
-    arg_slots::NTuple{N, AbstractSlot} where {N},
+    arg_slots::Targ_slots,
     ev::Teval,
     val_slot::AbstractSlot,
     next_blk::Int,
-)::Inst where {Teval}
+)::Inst where {Teval, Targ_slots}
     return @opaque function (prev_blk::Int)
         val_slot[] = ev(tuple_map(getindex, arg_slots)...)
         return next_blk
@@ -308,7 +308,7 @@ function ArgInfo(::Type{T}, is_vararg::Bool) where {T<:Tuple}
     return ArgInfo{Targ_slots, is_vararg}((map(t -> SlotRef{t}(), T.parameters)..., ))
 end
 
-@noinline function load_args!(ai::ArgInfo{T, is_vararg}, args::Tuple) where {T, is_vararg}
+function load_args!(ai::ArgInfo{T, is_vararg}, args::Tuple) where {T, is_vararg}
     # There is a difference between the varargs that we recieve, and the varargs of the
     # original function. This section sorts that out.
     # For example if the original function is `f(x...)`, then the `argtypes` field of its
@@ -536,7 +536,7 @@ function (in_f::InterpretedFunction)(args::Vararg{Any, N}) where {N}
     return __barrier(in_f)
 end
 
-load_args!(in_f::InterpretedFunction, args) = load_args!(in_f.arg_info, args)
+load_args!(in_f::InterpretedFunction, args::Targs) where {Targs} = load_args!(in_f.arg_info, args)
 
 # Execute an interpreted function, having already loaded the arguments into their slots.
 function __barrier(in_f::Tf) where {Tf<:InterpretedFunction}
