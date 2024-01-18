@@ -17,15 +17,14 @@ end
     y ~ Normal(μ, σ)
 end
 
-function build_turing_problem(rng, model_function, args...)
-    model = model_function(args...)
+function build_turing_problem(rng, model)
     ctx = Turing.DefaultContext()
     vi = Turing.SimpleVarInfo(model)
     vi_linked = Turing.link(vi, model)
     ldp = Turing.LogDensityFunction(vi_linked, model, ctx)
     test_function = Base.Fix1(Turing.LogDensityProblems.logdensity, ldp)
 
-    m = model_function(args...)
+    m = model
     v = Turing.SimpleVarInfo(m)
     v_linked = Turing.link(v, m)
     _ldp = Turing.LogDensityFunction(v_linked, m, Turing.DefaultContext())
@@ -36,13 +35,15 @@ end
 
 @testset "turing" begin
     interp = Taped.TInterp()
-    @testset "$model_function" for (interface_only, model_function, args...) in [
-        (false, simple_model),
-        (false, demo),
-    ]
-        @info model_function
+    @testset "$model" for (interface_only, model) in vcat(
+        Any[
+            (false, simple_model()),
+            (false, demo()),
+        ],
+    )
+        @info model
         rng = sr(123)
-        f, x = build_turing_problem(rng, model_function, args...)
+        f, x = build_turing_problem(rng, model)
 
         sig = Tuple{Core.Typeof(f), Core.Typeof(x)}
         in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp);
