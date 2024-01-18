@@ -8,7 +8,7 @@ for N in 0:32
     @eval function _new_pullback!!(
         dy::Union{Tuple, NamedTuple}, d_new_, d_T, dx::Vararg{Any, $N}
     )
-        return d_new_, d_T, map(increment!!, dx, dy)...
+        return d_new_, d_T, map(increment!!, dx, Tuple(dy))...
     end
     @eval function rrule!!(
         ::CoDual{typeof(_new_)}, ::CoDual{Type{P}}, x::Vararg{CoDual, $N}
@@ -18,12 +18,15 @@ for N in 0:32
         return CoDual(y, dy), _new_pullback!!
     end
 end
+
 @is_primitive MinimalCtx Tuple{typeof(_new_), Vararg}
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:new})
     test_cases = Any[
         (false, :stability, nothing, _new_, Tuple{Float64, Int}, 5.0, 4),
         (false, :stability, nothing, _new_, Tuple{Float64, Float64}, 5.0, 4.0),
+        (false, :stability, nothing, _new_, @NamedTuple{y::Float64}, 5.0),
+        (false, :stability, nothing, _new_, @NamedTuple{y::Float64, x::Int}, 5.0, 4),
         (
             false, :stability, nothing,
             _new_, TestResources.TypeStableStruct{Float64}, 5, 4.0,
