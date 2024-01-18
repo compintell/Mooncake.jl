@@ -239,6 +239,7 @@
         evaluator = Taped.get_evaluator(Taped.MinimalCtx(), sig, nothing, interp)
         __rrule!! = Taped.get_rrule!!_evaluator(evaluator)
         old_vals = Vector{eltype(out)}(undef, 0)
+        old_vals = Stack{eltype(out)}()
         pb_stack = Taped.build_pb_stack(__rrule!!, evaluator, arg_slots)
         fwds_inst, bwds_inst = build_coinsts(
             Val(:call), out, arg_slots, evaluator, __rrule!!, old_vals, pb_stack, next_blk
@@ -310,16 +311,16 @@
         )
 
         # # Estimate primal performance.
-        # original = @benchmark $(Ref(f))[]($(Ref(deepcopy(x)))[]...)
+        # original = @benchmark $(Ref(f))[]($(Ref(deepcopy(x)))[]...);
 
         # # Estimate interpretered function performance.
-        # r = @benchmark $(Ref(in_f))[]($(Ref(f))[], $(Ref(deepcopy(x)))[]...)
+        # r = @benchmark $(Ref(in_f))[]($(Ref(f))[], $(Ref(deepcopy(x)))[]...);
 
         # # Estimate overal forwards-pass and pullback performance.
-        # __rrule!! = Taped.build_rrule!!(in_f)
-        # df = zero_codual(in_f)
-        # codual_x = map(zero_codual, (f, x...))
-        # overall_timing = @benchmark Taped.to_benchmark($__rrule!!, $df, $codual_x)
+        # __rrule!! = Taped.build_rrule!!(in_f);
+        # df = zero_codual(in_f);
+        # codual_x = map(zero_codual, (f, x...));
+        # overall_timing = @benchmark Taped.to_benchmark($__rrule!!, $df, $codual_x);
 
         # # Print the results.
         # println("original")
