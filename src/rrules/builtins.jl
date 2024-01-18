@@ -87,12 +87,11 @@ end
 # atomic_pointerswap
 
 @intrinsic bitcast
-function rrule!!(::CoDual{typeof(bitcast)}, T, x)
-    _T = primal(T)
+function rrule!!(::CoDual{typeof(bitcast)}, ::CoDual{Type{T}}, x) where {T}
     _x = primal(x)
-    v = bitcast(_T, _x)
-    if _T <: Ptr && _x isa Ptr
-        dv = bitcast(Ptr{tangent_type(eltype(_T))}, tangent(x))
+    v = bitcast(T, _x)
+    if T <: Ptr && _x isa Ptr
+        dv = bitcast(Ptr{tangent_type(eltype(T))}, tangent(x))
     else
         dv = zero_tangent(v)
     end
@@ -426,6 +425,10 @@ function rrule!!(
     _inbounds = primal(inbounds)
     _inds = map(primal, inds)
 
+    if isbitstype(P)
+        return isbits_arrayset_rrule(_inbounds, _inds, A, v)
+    end
+
     to_save = isassigned(primal(A), _inds...)
     old_A = Ref{Tuple{P, V}}()
     if to_save
@@ -437,7 +440,7 @@ function rrule!!(
 
     arrayset(_inbounds, primal(A), primal(v), _inds...)
     arrayset(_inbounds, tangent(A), tangent(v), _inds...)
-    function setindex_pullback!!(dA::TdA, df, dinbounds, dA2::TdA, dv, dinds::NoTangent...)
+    function arrayset_pullback!!(dA::TdA, df, dinbounds, dA2::TdA, dv, dinds::NoTangent...)
         dv_new = increment!!(dv, arrayref(_inbounds, dA, _inds...))
         if to_save
             arrayset(_inbounds, primal(A), old_A[][1], _inds...)
@@ -445,7 +448,25 @@ function rrule!!(
         end
         return df, dinbounds, dA, dv_new, dinds...
     end
-    return A, setindex_pullback!!
+    return A, arrayset_pullback!!
+end
+
+function isbits_arrayset_rrule(
+    _inbounds, _inds, A::CoDual{<:Array{P}, TdA}, v
+) where {P, V, TdA <: Array{V}}
+    old_A = (
+        arrayref(_inbounds, primal(A), _inds...),
+        arrayref(_inbounds, tangent(A), _inds...),
+    )
+    arrayset(_inbounds, primal(A), primal(v), _inds...)
+    arrayset(_inbounds, tangent(A), tangent(v), _inds...)
+    function isbits_arrayset_pullback!!(dA::TdA, df, dinbounds, dA2::TdA, dv, dinds::NoTangent...)
+        dv_new = increment!!(dv, arrayref(_inbounds, dA, _inds...))
+        arrayset(_inbounds, primal(A), old_A[1], _inds...)
+        arrayset(_inbounds, dA, old_A[2], _inds...)
+        return df, dinbounds, dA, dv_new, dinds...
+    end
+    return A, isbits_arrayset_pullback!!
 end
 
 function rrule!!(::CoDual{typeof(Core.arraysize)}, X, dim)

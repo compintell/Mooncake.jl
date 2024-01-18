@@ -6,7 +6,6 @@ using
     BenchmarkTools,
     DiffRules,
     ExprTools,
-    FunctionWrappers,
     InteractiveUtils,
     LinearAlgebra,
     Random,
@@ -22,7 +21,6 @@ using Core:
     PiNode, SSAValue, Argument
 using Core.Compiler: IRCode
 using Core.Intrinsics: pointerref, pointerset
-using FunctionWrappers: FunctionWrapper
 using LinearAlgebra.BLAS: @blasfunc, BlasInt, trsm!
 using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!, potrf!, potrs!
 
@@ -40,7 +38,6 @@ include(joinpath("interpreter", "ir_normalisation.jl"))
 include(joinpath("interpreter", "abstract_interpretation.jl"))
 include(joinpath("interpreter", "interpreted_function.jl"))
 include(joinpath("interpreter", "reverse_mode_ad.jl"))
-include(joinpath("interpreter", "test_cases.jl"))
 
 include("test_utils.jl")
 
