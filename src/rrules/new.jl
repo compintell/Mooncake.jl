@@ -1,38 +1,3 @@
-
-struct New{T} end
-
-@generated (::New{T})(x...) where {T} = Expr(:new, T, map(n -> :(x[$n]), 1:length(x))...)
-
-tangent_type(::Type{<:New}) = NoTangent
-
-@is_primitive MinimalCtx Tuple{New, Vararg}
-
-@generated function New_pullback(dy, d__new__, dxs::Vararg{Any, N}) where {N}
-    inc_exprs = map(n -> :(increment!!(dxs[$n], _value(fs[$n]))), 1:N)
-    return quote
-        fs = dy.fields
-        return $(Expr(:tuple, :d__new__, inc_exprs...))
-    end
-end
-
-@generated function New_pullback(
-    dy::Union{Tuple, NamedTuple}, d__new__, dxs::Vararg{Any, N}
-) where {N}
-    inc_exprs = map(n -> :(increment!!(dxs[$n], dy[$n])), 1:N)
-    return quote
-        return $(Expr(:tuple, :d__new__, inc_exprs...))
-    end
-end
-
-@generated function rrule!!(::CoDual{New{P}}, xs::Vararg{Any, N}) where {P, N}
-    return quote
-        x_ps = map(primal, xs)
-        y = $(Expr(:new, P, map(n -> :(x_ps[$n]), 1:N)...))
-        dy = build_tangent(P, map(tangent, xs)...)
-        return CoDual(y, dy), New_pullback
-    end
-end
-
 for N in 0:32
     @eval @inline function _new_(::Type{T}, x::Vararg{Any, $N}) where {T}
         return $(Expr(:new, :T, map(n -> :(x[$n]), 1:N)...))
