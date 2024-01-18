@@ -24,8 +24,9 @@ for name in [
     :(Base.datatype_alignment),
     :(Base.datatype_fielddesc_type),
     :(LinearAlgebra.chkstride1),
+    :(Threads.nthreads),
 ]
-    @eval @is_primitive MinimalCtx Tuple{typeof($name), Vararg}
+    @eval @is_primitive DefaultCtx Tuple{typeof($name), Vararg}
     @eval function rrule!!(::CoDual{Core.Typeof($name)}, args::CoDual...)
         v = $name(map(primal, args)...)
         return CoDual(v, zero_tangent(v)), NoPullback()
@@ -71,11 +72,6 @@ function rrule!!(::CoDual{typeof(lgetfield)}, x::CoDual, ::CoDual{Val{f}}, ::CoD
     return y, lgetfield_pb!!
 end
 
-@is_primitive MinimalCtx Tuple{typeof(Threads.nthreads)}
-function rrule!!(::CoDual{typeof(Threads.nthreads)})
-    return CoDual(Threads.nthreads(), NoTangent()), NoPullback()
-end
-
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
 
     # Data which needs to not be GC'd.
@@ -115,6 +111,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
         (false, :stability, nothing, promote_type, Float64, Float64),
         (false, :stability, nothing, LinearAlgebra.chkstride1, randn(3, 3)),
         (false, :stability, nothing, LinearAlgebra.chkstride1, randn(3, 3), randn(2, 2)),
+        (false, :stability, nothing, Threads.nthreads),
 
         # Literal replacements for getfield and others.
         (false, :stability, nothing, lgetfield, (5.0, 4), Val(1)),
