@@ -48,7 +48,7 @@ function generate_hand_written_cases(rng_ctor, v::Val)
     return map(x -> x[4:end], test_cases), memory, ranges
 end
 
-default_hand_written_ratios() = (lb=1e-3, ub=10.0)
+default_hand_written_ratios() = (lb=1e-3, ub=25.0)
 
 function benchmark_hand_written_rrules!!(rng_ctor)
     rng = rng_ctor(123)
