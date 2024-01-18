@@ -997,7 +997,7 @@ function generate_test_functions()
         # (false, nothing, globalref_tester_2, false),
         (false, nothing, type_unstable_tester, Ref{Any}(5.0)),
         (false, nothing, type_unstable_tester_2, Ref{Real}(5.0)),
-        (false, (lb=10, ub=1000), type_unstable_tester_3, Ref{Any}(5.0)),
+        (false, (lb=1, ub=1000), type_unstable_tester_3, Ref{Any}(5.0)),
         (false, nothing, type_unstable_function_eval, Ref{Any}(sin), 5.0),
         (false, nothing, phi_const_bool_tester, 5.0),
         (false, nothing, phi_const_bool_tester, -5.0),
