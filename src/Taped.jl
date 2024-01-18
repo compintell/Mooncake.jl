@@ -6,7 +6,6 @@ using
     BenchmarkTools,
     DiffRules,
     ExprTools,
-    FunctionWrappers,
     InteractiveUtils,
     LinearAlgebra,
     Random,
@@ -22,7 +21,6 @@ using Core:
     PiNode, SSAValue, Argument
 using Core.Compiler: IRCode
 using Core.Intrinsics: pointerref, pointerset
-using FunctionWrappers: FunctionWrapper
 using LinearAlgebra.BLAS: @blasfunc, BlasInt, trsm!
 using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!, potrf!, potrs!
 
