@@ -1083,7 +1083,7 @@ function generate_test_functions()
         (false, (lb=100, ub=10_000), test_diagonal_to_matrix, Diagonal(randn(30))),
         (
             false,
-            (lb=100, ub=1_000),
+            (lb=100, ub=10_000),
             ldiv!, randn(20, 20), Diagonal(rand(20) .+ 1), randn(20, 20),
         ),
         (
