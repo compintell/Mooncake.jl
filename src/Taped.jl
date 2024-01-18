@@ -38,7 +38,6 @@ include(joinpath("interpreter", "ir_normalisation.jl"))
 include(joinpath("interpreter", "abstract_interpretation.jl"))
 include(joinpath("interpreter", "interpreted_function.jl"))
 include(joinpath("interpreter", "reverse_mode_ad.jl"))
-include(joinpath("interpreter", "test_cases.jl"))
 
 include("test_utils.jl")
 

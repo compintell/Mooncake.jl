@@ -529,6 +529,17 @@ function run_rrule!!_test_cases(rng_ctor, v::Val)
     run_derived_rrule!!_test_cases(rng_ctor, v)
 end
 
+function to_benchmark(__rrule!!::R, df::F, dx::X) where {R, F, X}
+    out, pb!! = __rrule!!(df, dx...)
+    pb!!(tangent(out), tangent(df), map(tangent, dx)...)
+end
+
+function gradient(__rrule!!::R, df::F, dx::X) where {R, F, X}
+    out, pb!! = __rrule!!(df, dx...)
+    @assert out isa CoDual{Float64, Float64}
+    return pb!!(1.0, tangent(df), map(tangent, dx)...)
+end
+
 end
 
 
