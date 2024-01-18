@@ -1,4 +1,6 @@
-using ReverseDiff, Turing
+using Turing
+
+# using ReverseDiff
 
 @model function simple_model()
     y ~ Normal()
@@ -49,10 +51,7 @@ end
         else
             @test has_equal_data(in_f(f, deepcopy(x)), f(deepcopy(x)))
         end
-        # display(@benchmark $f($x))
-        # println()
-        # display(@benchmark $in_f($f, $x))
-        # println()
+
         TestUtils.test_rrule!!(
             sr(123456), in_f, f, x;
             perf_flag=:none, interface_only=true, is_primitive=false,
@@ -67,11 +66,19 @@ end
         # codualed_args = map(zero_codual, (in_f, f, x));
         # Taped.gradient(__rrule, codualed_args[1], codualed_args[2:end])[end]
 
-        # display(@benchmark ReverseDiff.gradient!($result, $tape, $x))
+        # # @profview run_many_times(10, Taped.gradient, __rrule, codualed_args[1], codualed_args[2:end])
+
+        # println("primal")
+        # display(@benchmark $f($x))
         # println()
-        # display(@benchmark $__rrule($codualed_args...))
+        # println("interpreted")
+        # display(@benchmark $in_f($f, $x))
         # println()
+        # println("gradient")
         # display(@benchmark Taped.gradient($__rrule, $codualed_args[1], $(codualed_args[2:end])))
+        # println()
+        # println("gradient (ReverseDiff.jl)")
+        # display(@benchmark ReverseDiff.gradient!($result, $tape, $x))
         # println()
     end
 end
