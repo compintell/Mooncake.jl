@@ -1,6 +1,6 @@
 module TestUtils
 
-using JET, Random, Taped, Test
+using JET, Random, Taped, Test, InteractiveUtils
 using Taped: CoDual, NoTangent, rrule!!, is_init, zero_codual, DefaultCtx, @is_primitive
 
 has_equal_data(x::T, y::T; equal_undefs=true) where {T<:String} = x == y
