@@ -2,7 +2,6 @@ using
     BenchmarkTools,
     DiffRules,
     FillArrays,
-    FunctionWrappers,
     JET,
     LinearAlgebra,
     PDMats,
