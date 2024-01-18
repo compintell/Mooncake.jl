@@ -4,7 +4,6 @@ const CC = Core.Compiler
 
 using
     BenchmarkTools,
-    DataStructures,
     DiffRules,
     ExprTools,
     FunctionWrappers,
@@ -33,6 +32,7 @@ const Tforeigncall = Union{typeof(_foreigncall_)}
 
 include("tangents.jl")
 include("codual.jl")
+include("stack.jl")
 
 include(joinpath("interpreter", "contexts.jl"))
 include(joinpath("interpreter", "ir_utils.jl"))
