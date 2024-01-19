@@ -1,7 +1,7 @@
 module TestUtils
 
 using JET, Random, Taped, Test, InteractiveUtils
-using Taped: CoDual, NoTangent, rrule!!, is_init, zero_codual, DefaultCtx, @is_primitive
+using Taped: CoDual, NoTangent, rrule!!, is_init, zero_codual, DefaultCtx, @is_primitive, val
 
 has_equal_data(x::T, y::T; equal_undefs=true) where {T<:String} = x == y
 has_equal_data(x::Type, y::Type; equal_undefs=true) = x == y
@@ -61,7 +61,7 @@ function populate_address_map!(m::AddressMap, primal::P, tangent::T) where {P, T
     foreach(fieldnames(P)) do n
         t_field = getfield(tangent.fields, n)
         if isdefined(primal, n) && is_init(t_field)
-            populate_address_map!(m, getfield(primal, n), t_field.tangent)
+            populate_address_map!(m, getfield(primal, n), val(t_field))
         elseif isdefined(primal, n) && !is_init(t_field)
             throw(error("unhandled defined-ness"))
         elseif !isdefined(primal, n) && is_init(t_field)
@@ -108,7 +108,7 @@ function address_maps_are_consistent(x::AddressMap, y::AddressMap)
 end
 
 # Assumes that the interface has been tested, and we can simply check for numerical issues.
-function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...)
+function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...; rule)
     @nospecialize rng f_f̄ x_x̄
 
     x_x̄ = map(_deepcopy, x_x̄) # defensive copy
@@ -134,7 +134,7 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...)
     # can later verify that non-zero values do not get propagated by the rule.
     x_x̄_rule = map(x -> CoDual(_deepcopy(x), zero_tangent(x)), x)
     inputs_address_map = populate_address_map(map(primal, x_x̄_rule), map(tangent, x_x̄_rule))
-    y_ȳ_rule, pb!! = rrule!!(f_f̄, x_x̄_rule...)
+    y_ȳ_rule, pb!! = rule(f_f̄, x_x̄_rule...)
 
     # Verify that inputs / outputs are the same under `f` and its rrule.
     @test has_equal_data(x_primal, map(primal, x_x̄_rule))
@@ -174,7 +174,7 @@ rrule_output_type(::Type{Ty}) where {Ty} = Tuple{CoDual{Ty, tangent_type(Ty)}, A
 # Central definition of _typeof in case I need to specalise it for particular types.
 _typeof(x::T) where {T} = Core.Typeof(x)
 
-function test_rrule_interface(f_f̄, x_x̄...; is_primitive, ctx)
+function test_rrule_interface(f_f̄, x_x̄...; is_primitive, ctx, rule)
     @nospecialize f_f̄ x_x̄
 
     # Pull out primals and run primal computation.
@@ -209,7 +209,7 @@ function test_rrule_interface(f_f̄, x_x̄...; is_primitive, ctx)
     # Throw a meaningful exception if the rrule doesn't run at all.
     x_addresses = map(get_address, x)
     rrule_ret = try
-        rrule!!(f_f̄, x_x̄...)
+        rule(f_f̄, x_x̄...)
     catch e
         display(e)
         println()
@@ -242,11 +242,17 @@ function test_rrule_interface(f_f̄, x_x̄...; is_primitive, ctx)
     @test all(map((x̄, x̄_new) -> ismutable(x̄) ? x̄ === x̄_new : true, x̄, x̄_new))
 end
 
-function test_rrule_performance(performance_checks_flag::Symbol, f_f̄, x_x̄...)
-    @nospecialize f_f̄ x_x̄
+function __forwards_and_backwards(rule, x_x̄::Vararg{Any, N}) where {N}
+    out, pb!! = rule(x_x̄...)
+    return pb!!(tangent(out), map(tangent, x_x̄)...)
+end
+
+function test_rrule_performance(
+    performance_checks_flag::Symbol, rule, f_f̄, x_x̄::Vararg{Any, N}
+) where {N}
 
     # Verify that a valid performance flag has been passed.
-    valid_flags = (:none, :stability)
+    valid_flags = (:none, :stability, :allocs, :stability_and_allocs)
     if !in(performance_checks_flag, valid_flags)
         throw(ArgumentError(
             "performance_checks=$performance_checks_flag. Must be one of $valid_flags"
@@ -254,20 +260,33 @@ function test_rrule_performance(performance_checks_flag::Symbol, f_f̄, x_x̄...
     end
     performance_checks_flag == :none && return nothing
 
-    if performance_checks_flag == :stability
+    if performance_checks_flag in (:stability, :stability_and_allocs)
 
         # Test primal stability.
         JET.test_opt(primal(f_f̄), map(_typeof ∘ primal, x_x̄))
 
         # Test forwards-pass stability.
-        JET.test_opt(rrule!!, (typeof(f_f̄), map(_typeof, x_x̄)...))
+        JET.test_opt(rule, (typeof(f_f̄), map(_typeof, x_x̄)...))
 
         # Test reverse-pass stability.
-        y_ȳ, pb!! = rrule!!(f_f̄, _deepcopy(x_x̄)...)
+        y_ȳ, pb!! = rule(f_f̄, _deepcopy(x_x̄)...)
         JET.test_opt(
             pb!!,
             (_typeof(tangent(y_ȳ)), _typeof(tangent(f_f̄)), map(_typeof ∘ tangent, x_x̄)...),
         )
+    end
+
+    if performance_checks_flag in (:allocs, :stability_and_allocs)
+        f = primal(f_f̄)
+        x = map(primal, x_x̄)
+
+        # Test allocations in primal.
+        f(x...)
+        @test (@allocations f(x...)) == 0
+
+        # Test allocations in round-trip.
+        __forwards_and_backwards(rule, f_f̄, x_x̄...)
+        @test (@allocations __forwards_and_backwards(rule, f_f̄, x_x̄...)) == 0
     end
 end
 
@@ -278,6 +297,7 @@ end
         is_primitive=true,
         perf_flag::Symbol,
         ctx=DefaultCtx(),
+        rule=rrule!!,
     )
 
 Run standardised tests on the `rrule!!` for `x`.
@@ -290,22 +310,26 @@ readily defined should be a `CoDual` containing the primal, and a _manually_ con
 tangent field.
 """
 function test_rrule!!(
-    rng, x...; interface_only=false, is_primitive=true, perf_flag::Symbol, ctx=DefaultCtx()
+    rng, x...;
+    interface_only=false,
+    is_primitive=true,
+    perf_flag::Symbol,
+    ctx=DefaultCtx(),
+    rule=rrule!!,
 )
     @nospecialize rng x
 
     # Generate random tangents for anything that is not already a CoDual.
-    # x_x̄ = map(x -> x isa CoDual ? x : CoDual(x, randn_tangent(rng, x)), x)
     x_x̄ = map(x -> x isa CoDual ? x : zero_codual(x), x)
 
     # Test that the interface is basically satisfied (checks types / memory addresses).
-    test_rrule_interface(x_x̄...; is_primitive, ctx)
+    test_rrule_interface(x_x̄...; is_primitive, ctx, rule)
 
     # Test that answers are numerically correct / consistent.
-    interface_only || test_rrule_numerical_correctness(rng, x_x̄...)
+    interface_only || test_rrule_numerical_correctness(rng, x_x̄...; rule)
 
     # Test the performance of the rule.
-    test_rrule_performance(perf_flag, x_x̄...)
+    test_rrule_performance(perf_flag, rule, x_x̄...)
 end
 
 function test_interpreted_rrule!!(rng::AbstractRNG, f, x...; interface_only=false, kwargs...)
@@ -518,9 +542,9 @@ end
 
 function run_derived_rrule!!_test_cases(rng_ctor, v::Val)
     test_cases, memory = Taped.generate_derived_rrule!!_test_cases(rng_ctor, v)
-    GC.@preserve memory @testset "$f, $(typeof(x))" for (interface_only, _, f, x...) in test_cases
-        test_interpreted_rrule!!(rng_ctor(123), f, x...; interface_only)
-        # test_taped_rrule!!(rng_ctor(123), f, x...; interface_only)
+    GC.@preserve memory @testset "$f, $(typeof(x))" for
+        (interface_only, perf_flag, _, f, x...) in test_cases
+        test_interpreted_rrule!!(rng_ctor(123), f, x...; interface_only, perf_flag)
     end
 end
 
@@ -549,7 +573,7 @@ module TestResources
 using ..Taped
 using ..Taped:
     CoDual, Tangent, MutableTangent, NoTangent, PossiblyUninitTangent, ircode,
-    @is_primitive, MinimalCtx
+    @is_primitive, MinimalCtx, val
 
 using DiffTests, LinearAlgebra, Random, Setfield
 
@@ -673,12 +697,12 @@ function Taped.rrule!!(::CoDual{typeof(p_setfield!)}, value, name::CoDual{Symbol
     _value = primal(value)
     _dvalue = tangent(value)
     old_x = getfield(_value, _name)
-    old_dx = getfield(_dvalue.fields, _name).tangent
+    old_dx = val(getfield(_dvalue.fields, _name))
 
     function p_setfield!_pb!!(dy, df, dvalue, dname, dx)
 
         # Add all increments to dx.
-        dx = increment!!(dx, getfield(dvalue.fields, _name).tangent)
+        dx = increment!!(dx, val(getfield(dvalue.fields, _name)))
         dx = increment!!(dx, dy)
 
         # Restore old values.
@@ -767,6 +791,12 @@ function globalref_tester_2(use_gref::Bool)
     return sin(v)
 end
 
+const __x_for_gref_tester_3 = 5.0
+@eval globalref_tester_3() = $(GlobalRef(@__MODULE__, :__x_for_gref_tester_3))
+
+__x_for_gref_tester_4::Float64 = 3.0
+@eval globalref_tester_4() = $(GlobalRef(@__MODULE__, :__x_for_gref_tester_4))
+
 type_unstable_tester(x::Ref{Any}) = cos(x[])
 
 type_unstable_tester_2(x::Ref{Real}) = cos(x[])
@@ -851,6 +881,11 @@ inferred_const_tester(x::Int) = x == 5 ? x : 5x
 
 getfield_tester(x::Tuple) = x[1]
 getfield_tester_2(x::Tuple) = getfield(x, 1)
+
+function setfield_tester!(x::TypeStableMutableStruct, new_field)
+    x.b = new_field
+    return new_field
+end
 
 function datatype_slot_tester(n::Int)
     return (Float64, Int)[n]
@@ -989,59 +1024,62 @@ sr(n) = Xoshiro(n)
 
 function generate_test_functions()
     return Any[
-        (false, nothing, const_tester),
-        (false, nothing, identity, 5.0),
-        (false, nothing, foo, 5.0),
-        (false, nothing, bar, 5.0, 4.0),
-        (false, nothing, type_unstable_argument_eval, sin, 5.0),
-        (false, (lb=1, ub=500), pi_node_tester, Ref{Any}(5.0)),
-        (false, (lb=1, ub=500), pi_node_tester, Ref{Any}(5)),
-        (false, nothing, intrinsic_tester, 5.0),
-        (false, nothing, goto_tester, 5.0),
-        (false, (lb=1, ub=500), new_tester, 5.0, :hello),
-        (false, (lb=1, ub=500), new_tester_2, 4.0),
-        (false, nothing, new_tester_3, Ref{Any}(Tuple{Float64})),
-        (false, nothing, type_stable_getfield_tester_1, StableFoo(5.0, :hi)),
-        (false, nothing, type_stable_getfield_tester_2, StableFoo(5.0, :hi)),
-        (false, nothing, globalref_tester),
-        # (false, nothing, globalref_tester_2, true),
-        # (false, nothing, globalref_tester_2, false),
-        (false, nothing, type_unstable_tester, Ref{Any}(5.0)),
-        (false, nothing, type_unstable_tester_2, Ref{Real}(5.0)),
-        (false, (lb=1, ub=1000), type_unstable_tester_3, Ref{Any}(5.0)),
-        (false, nothing, type_unstable_function_eval, Ref{Any}(sin), 5.0),
-        (false, nothing, phi_const_bool_tester, 5.0),
-        (false, nothing, phi_const_bool_tester, -5.0),
-        (false, nothing, phi_node_with_undefined_value, true, 4.0),
-        (false, nothing, phi_node_with_undefined_value, false, 4.0),
-        (false, nothing, avoid_throwing_path_tester, 5.0),
-        (false, nothing, simple_foreigncall_tester, randn(5)),
-        (false, (lb=1, ub=1_000), simple_foreigncall_tester_2, randn(6), (2, 3)),
-        (false, nothing, foreigncall_tester, randn(5)),
-        (false, (lb=1, ub=1_000), no_primitive_inlining_tester, 5.0),
-        (false, nothing, varargs_tester, 5.0),
-        (false, nothing, varargs_tester, 5.0, 4),
-        (false, nothing, varargs_tester, 5.0, 4, 3.0),
-        (false, nothing, varargs_tester_2, 5.0),
-        (false, nothing, varargs_tester_2, 5.0, 4),
-        (false, nothing, varargs_tester_2, 5.0, 4, 3.0),
-        (false, nothing, varargs_tester_3, 5.0),
-        (false, nothing, varargs_tester_3, 5.0, 4),
-        (false, nothing, varargs_tester_3, 5.0, 4, 3.0),
-        (false, nothing, varargs_tester_4, 5.0),
-        (false, nothing, varargs_tester_4, 5.0, 4),
-        (false, nothing, varargs_tester_4, 5.0, 4, 3.0),
-        (false, nothing, splatting_tester, 5.0),
-        (false, nothing, splatting_tester, (5.0, 4.0)),
-        (false, nothing, splatting_tester, (5.0, 4.0, 3.0)),
-        # (false, nothing, unstable_splatting_tester, Ref{Any}(5.0)), # known failure case -- no rrule for _apply_iterate
-        # (false, nothing, unstable_splatting_tester, Ref{Any}((5.0, 4.0))), # known failure case -- no rrule for _apply_iterate
-        # (false, nothing, unstable_splatting_tester, Ref{Any}((5.0, 4.0, 3.0))), # known failure case -- no rrule for _apply_iterate
-        (false, nothing, inferred_const_tester, Ref{Any}(nothing)),
-        (false, (lb=1, ub=1_000), datatype_slot_tester, 1),
-        (false, (lb=1, ub=1_000), datatype_slot_tester, 2),
+        (false, :allocs, nothing, const_tester),
+        (false, :allocs, nothing, identity, 5.0),
+        (false, :allocs, nothing, foo, 5.0),
+        (false, :allocs, nothing, bar, 5.0, 4.0),
+        (false, :none, nothing, type_unstable_argument_eval, sin, 5.0),
+        (false, :none, (lb=1, ub=500), pi_node_tester, Ref{Any}(5.0)),
+        (false, :none, (lb=1, ub=500), pi_node_tester, Ref{Any}(5)),
+        (false, :allocs, nothing, intrinsic_tester, 5.0),
+        (false, :allocs, nothing, goto_tester, 5.0),
+        (false, :allocs, (lb=1, ub=500), new_tester, 5.0, :hello),
+        (false, :allocs, (lb=1, ub=500), new_tester_2, 4.0),
+        (false, :none, nothing, new_tester_3, Ref{Any}(Tuple{Float64})),
+        (false, :allocs, nothing, type_stable_getfield_tester_1, StableFoo(5.0, :hi)),
+        (false, :allocs, nothing, type_stable_getfield_tester_2, StableFoo(5.0, :hi)),
+        (false, :none, nothing, globalref_tester),
+        # (false, :stability, nothing, globalref_tester_2, true),
+        # (false, :stability, nothing, globalref_tester_2, false),
+        (false, :allocs, nothing, globalref_tester_3),
+        (false, :allocs, nothing, globalref_tester_4),
+        (false, :none, nothing, type_unstable_tester, Ref{Any}(5.0)),
+        (false, :none, nothing, type_unstable_tester_2, Ref{Real}(5.0)),
+        (false, :none, (lb=1, ub=1000), type_unstable_tester_3, Ref{Any}(5.0)),
+        (false, :none, nothing, type_unstable_function_eval, Ref{Any}(sin), 5.0),
+        (false, :allocs, nothing, phi_const_bool_tester, 5.0),
+        (false, :allocs, nothing, phi_const_bool_tester, -5.0),
+        (false, :allocs, nothing, phi_node_with_undefined_value, true, 4.0),
+        (false, :allocs, nothing, phi_node_with_undefined_value, false, 4.0),
+        (false, :allocs, nothing, avoid_throwing_path_tester, 5.0),
+        (false, :allocs, nothing, simple_foreigncall_tester, randn(5)),
+        (false, :none, (lb=1, ub=1_000), simple_foreigncall_tester_2, randn(6), (2, 3)),
+        (false, :allocs, nothing, foreigncall_tester, randn(5)),
+        (false, :none, (lb=1, ub=1_000), no_primitive_inlining_tester, 5.0),
+        (false, :allocs, nothing, varargs_tester, 5.0),
+        (false, :allocs, nothing, varargs_tester, 5.0, 4),
+        (false, :allocs, nothing, varargs_tester, 5.0, 4, 3.0),
+        (false, :allocs, nothing, varargs_tester_2, 5.0),
+        (false, :allocs, nothing, varargs_tester_2, 5.0, 4),
+        (false, :allocs, nothing, varargs_tester_2, 5.0, 4, 3.0),
+        (false, :allocs, nothing, varargs_tester_3, 5.0),
+        (false, :allocs, nothing, varargs_tester_3, 5.0, 4),
+        (false, :allocs, nothing, varargs_tester_3, 5.0, 4, 3.0),
+        (false, :allocs, nothing, varargs_tester_4, 5.0),
+        (false, :allocs, nothing, varargs_tester_4, 5.0, 4),
+        (false, :allocs, nothing, varargs_tester_4, 5.0, 4, 3.0),
+        (false, :allocs, nothing, splatting_tester, 5.0),
+        (false, :allocs, nothing, splatting_tester, (5.0, 4.0)),
+        (false, :allocs, nothing, splatting_tester, (5.0, 4.0, 3.0)),
+        # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}(5.0)), # known failure case -- no rrule for _apply_iterate
+        # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}((5.0, 4.0))), # known failure case -- no rrule for _apply_iterate
+        # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}((5.0, 4.0, 3.0))), # known failure case -- no rrule for _apply_iterate
+        (false, :none, nothing, inferred_const_tester, Ref{Any}(nothing)),
+        (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 1),
+        (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 2),
         (
             false,
+            :none,
             (lb=1, ub=1_000),
             LinearAlgebra._modify!,
             LinearAlgebra.MulAddMul(5.0, 4.0),
@@ -1049,61 +1087,88 @@ function generate_test_functions()
             randn(5, 4),
             (5, 4),
         ), # for Bool comma,
-        (false, (lb=1, ub=1_000), getfield_tester, (5.0, 5)),
-        (false, (lb=1, ub=1_000), getfield_tester_2, (5.0, 5)),
-        (
-            false, (lb=100, ub=1_000_000),
-            mul!, transpose(randn(3, 5)), randn(5, 5), randn(5, 3), 4.0, 3.0,
-        ), # static_parameter,
-        (false, (lb=100, ub=10_000_000), Xoshiro, 123456),
-        (false, (lb=1, ub=10_000), *, randn(250, 500), randn(500, 250)),
-        (false, nothing, test_sin, 1.0),
-        (false, nothing, test_cos_sin, 2.0),
-        (false, nothing, test_isbits_multiple_usage, 5.0),
-        (false, (lb=1, ub=500), test_isbits_multiple_usage_2, 5.0),
-        (false, (lb=1, ub=500), test_isbits_multiple_usage_3, 4.1),
-        (false, (lb=1, ub=500), test_isbits_multiple_usage_4, 5.0),
-        (false, (lb=1, ub=500), test_isbits_multiple_usage_5, 4.1),
-        (false, nothing, test_isbits_multiple_usage_phi, false, 1.1),
-        (false, nothing, test_isbits_multiple_usage_phi, true, 1.1),
-        (false, nothing, test_multiple_call_non_primitive, 5.0),
-        (false, (lb=1, ub=500), test_multiple_pi_nodes, Ref{Any}(5.0)),
-        (false, (lb=1, ub=500), test_multi_use_pi_node, Ref{Any}(5.0)),
-        (false, nothing, test_getindex, [1.0, 2.0]),
-        (false, nothing, test_mutation!, [1.0, 2.0]),
-        (false, nothing, test_while_loop, 2.0),
-        (false, nothing, test_for_loop, 3.0),
-        (false, nothing, test_multiple_phinode_block, 3.0),
-        (false, nothing, test_mutable_struct_basic, 5.0),
-        (false, nothing, test_mutable_struct_basic_sin, 5.0),
-        (false, nothing, test_mutable_struct_setfield, 4.0),
-        (false, nothing, test_mutable_struct, 5.0),
-        (false, nothing, test_struct_partial_init, 3.5),
-        (false, nothing, test_mutable_partial_init, 3.3),
+        (false, :allocs, (lb=1, ub=1_000), getfield_tester, (5.0, 5)),
+        (false, :allocs, (lb=1, ub=1_000), getfield_tester_2, (5.0, 5)),
         (
             false,
+            :none,
+            (lb=1, ub=1_000),
+            setfield_tester!,
+            TypeStableMutableStruct{Symbol}(5.0, :hi),
+            :boo,
+        ),
+        (
+            false,
+            :none,
+            (lb=1, ub=1_000),
+            setfield_tester!,
+            TypeStableMutableStruct{Float64}(5.0,  1.0),
+            2.0,
+        ),
+        (
+            false, :none, (lb=100, ub=1_000_000),
+            mul!, transpose(randn(3, 5)), randn(5, 5), randn(5, 3), 4.0, 3.0,
+        ), # static_parameter,
+        (false, :none, (lb=100, ub=10_000_000), Xoshiro, 123456),
+        (false, :none, (lb=1, ub=10_000), *, randn(250, 500), randn(500, 250)),
+        (false, :allocs, nothing, test_sin, 1.0),
+        (false, :allocs, nothing, test_cos_sin, 2.0),
+        (false, :allocs, nothing, test_isbits_multiple_usage, 5.0),
+        (false, :allocs, (lb=1, ub=500), test_isbits_multiple_usage_2, 5.0),
+        (false, :allocs, (lb=1, ub=500), test_isbits_multiple_usage_3, 4.1),
+        (false, :allocs, (lb=1, ub=500), test_isbits_multiple_usage_4, 5.0),
+        (false, :allocs, (lb=1, ub=500), test_isbits_multiple_usage_5, 4.1),
+        (false, :allocs, nothing, test_isbits_multiple_usage_phi, false, 1.1),
+        (false, :allocs, nothing, test_isbits_multiple_usage_phi, true, 1.1),
+        (false, :allocs, nothing, test_multiple_call_non_primitive, 5.0),
+        (false, :none, (lb=1, ub=500), test_multiple_pi_nodes, Ref{Any}(5.0)),
+        (false, :none, (lb=1, ub=500), test_multi_use_pi_node, Ref{Any}(5.0)),
+        (false, :allocs, nothing, test_getindex, [1.0, 2.0]),
+        (false, :allocs, nothing, test_mutation!, [1.0, 2.0]),
+        (false, :allocs, nothing, test_while_loop, 2.0),
+        (false, :allocs, nothing, test_for_loop, 3.0),
+        (false, :allocs, nothing, test_multiple_phinode_block, 3.0),
+        (false, :none, nothing, test_mutable_struct_basic, 5.0),
+        (false, :none, nothing, test_mutable_struct_basic_sin, 5.0),
+        (false, :none, nothing, test_mutable_struct_setfield, 4.0),
+        (false, :none, nothing, test_mutable_struct, 5.0),
+        (false, :none, nothing, test_struct_partial_init, 3.5),
+        (false, :none, nothing, test_mutable_partial_init, 3.3),
+        (
+            false,
+            :allocs,
             (lb=100, ub=1_000),
             test_naive_mat_mul!, randn(100, 50), randn(100, 30), randn(30, 50),
         ),
         (
             false,
+            :allocs,
             (lb=100, ub=10_000),
             (A, C) -> test_naive_mat_mul!(C, A, A), randn(100, 100), randn(100, 100),
         ),
-        (false, (lb=10, ub=10_000_000), sum, randn(30)),
-        (false, (lb=100, ub=10_000), test_diagonal_to_matrix, Diagonal(randn(30))),
+        (false, :allocs, (lb=10, ub=10_000_000), sum, randn(30)),
+        (false, :none, (lb=100, ub=10_000), test_diagonal_to_matrix, Diagonal(randn(30))),
         (
             false,
+            :none,
             (lb=100, ub=10_000),
             ldiv!, randn(20, 20), Diagonal(rand(20) .+ 1), randn(20, 20),
         ),
         (
             false,
+            :allocs,
+            (lb=100, ub=10_000),
+            kron!, randn(400, 400), randn(20, 20), randn(20, 20),
+        ),
+        (
+            false,
+            :none,
             (lb=100, ub=10_000),
             kron!, randn(400, 400), Diagonal(randn(20)), randn(20, 20),
         ),
         (
             false,
+            :none,
             nothing,
             test_mlp,
             randn(sr(1), 500, 200),
@@ -1138,7 +1203,7 @@ function Taped.rrule!!(::Taped.CoDual{typeof(my_setfield!)}, value, name, x)
     _name = primal(name)
     old_x = isdefined(primal(value), _name) ? getfield(primal(value), _name) : nothing
     function setfield!_pullback(dy, df, dvalue, ::NoTangent, dx)
-        new_dx = increment!!(dx, getfield(dvalue.fields, _name).tangent)
+        new_dx = increment!!(dx, val(getfield(dvalue.fields, _name)))
         new_dx = increment!!(new_dx, dy)
         old_x !== nothing && setfield!(primal(value), _name, old_x)
         return df, dvalue, NoTangent(), new_dx

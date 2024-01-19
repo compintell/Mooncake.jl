@@ -213,7 +213,7 @@
 
     # Check that a suite of test cases run and give the correct answer.
     interp = Taped.TInterp()
-    @testset "$f, $(map(Core.Typeof, x))" for (a, b, f, x...) in 
+    @testset "$f, $(map(Core.Typeof, x))" for (a, b, c, f, x...) in 
         TestResources.generate_test_functions()
 
         @info "$f, $(Core.Typeof(x))"

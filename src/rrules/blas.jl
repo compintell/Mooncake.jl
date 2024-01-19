@@ -455,11 +455,11 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
         #
 
         [
-            Any[false, nothing, BLAS.dot, 3, randn(5), 1, randn(4), 1],
-            Any[false, nothing, BLAS.dot, 3, randn(6), 2, randn(4), 1],
-            Any[false, nothing, BLAS.dot, 3, randn(6), 1, randn(9), 3],
-            Any[false, nothing, BLAS.dot, 3, randn(12), 3, randn(9), 2],
-            Any[false, nothing, BLAS.scal!, 10, 2.4, randn(30), 2],
+            Any[false, :none, nothing, BLAS.dot, 3, randn(5), 1, randn(4), 1],
+            Any[false, :none, nothing, BLAS.dot, 3, randn(6), 2, randn(4), 1],
+            Any[false, :none, nothing, BLAS.dot, 3, randn(6), 1, randn(9), 3],
+            Any[false, :none, nothing, BLAS.dot, 3, randn(12), 3, randn(9), 2],
+            Any[false, :none, nothing, BLAS.scal!, 10, 2.4, randn(30), 2],
         ],
 
         #
@@ -478,7 +478,7 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
                 xs = [randn(N), view(randn(15), 3:N+2), view(randn(30), 1:2:2N)]
                 ys = [randn(M), view(randn(15), 2:M+1), view(randn(30), 2:2:2M)]
                 return map(Iterators.product(As, xs, ys)) do (A, x, y)
-                    Any[false, nothing, BLAS.gemv!, tA, randn(), A, x, randn(), y]
+                    Any[false, :none, nothing, BLAS.gemv!, tA, randn(), A, x, randn(), y]
                 end
             end,
         )),
@@ -490,7 +490,7 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
                 As = [randn(N, N), view(randn(15, 15), 3:N+2, 4:N+3)]
                 bs = [randn(N), view(randn(14), 4:N+3)]
                 return map(product(As, bs)) do (A, b)
-                    Any[false, nothing, BLAS.trmv!, ul, tA, dA, A, b]
+                    Any[false, :none, nothing, BLAS.trmv!, ul, tA, dA, A, b]
                 end
             end,
         )),
@@ -503,13 +503,13 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
         vec(map(product(t_flags, t_flags)) do (tA, tB)
             A = tA == 'N' ? randn(3, 4) : randn(4, 3)
             B = tB == 'N' ? randn(4, 5) : randn(5, 4)
-            Any[false, nothing, BLAS.gemm!, tA, tB, randn(), A, B, randn(), randn(3, 5)]
+            Any[false, :none, nothing, BLAS.gemm!, tA, tB, randn(), A, B, randn(), randn(3, 5)]
         end),
 
         vec(map(product(t_flags, t_flags)) do (tA, tB)
             A = randn(5, 5)
             B = randn(5, 5)
-            Any[false, nothing, aliased_gemm!, tA, tB, randn(), randn(), A, B]
+            Any[false, :none, nothing, aliased_gemm!, tA, tB, randn(), randn(), A, B]
         end),
 
         # trmm!
@@ -524,7 +524,7 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
                 Bs = [randn(M, N), view(randn(15, 15), 2:M+1, 5:N+4)]
                 return map(product(As, Bs)) do (A, B)
                     alpha = randn()
-                    Any[false, nothing, BLAS.trmm!, side, ul, tA, dA, alpha, A, B]
+                    Any[false, :none, nothing, BLAS.trmm!, side, ul, tA, dA, alpha, A, B]
                 end
             end,
         )),
@@ -541,7 +541,7 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
                 Bs = [randn(M, N), view(randn(15, 15), 2:M+1, 5:N+4)]
                 return map(product(As, Bs)) do (A, B)
                     alpha = randn()
-                    Any[false, nothing, BLAS.trsm!, side, ul, tA, dA, alpha, A, B]
+                    Any[false, :none, nothing, BLAS.trsm!, side, ul, tA, dA, alpha, A, B]
                 end
             end,
         )),
