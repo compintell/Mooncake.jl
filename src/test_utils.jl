@@ -634,8 +634,7 @@ end
 """
     zero_out_arguments!!(codualed_fargs::CoDual...)
 
-Set the tangent component of a collection of `CoDuals` is set to zero. Operates in-place
-where possible.
+Set the tangent component of a collection of `CoDuals` to zero. Mutates where possible.
 """
 function zero_out_arguments!!(codualed_fargs::CoDual...)
     return map(x -> CoDual(primal(x), Taped.set_to_zero!!(tangent(x))), codualed_fargs)
