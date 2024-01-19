@@ -8,16 +8,6 @@ You might need to use this for `primitive type`s though.
 """
 struct NoTangent end
 
-# 1. Look at `n_uninitialized` field of type to know number of uninit fields
-# 2. Use Core.Compiler.datatype_min_ninitialized to get a more stable version of this
-# 4. Make my tests much more thorough for performance and correctness of these kinds of
-#   methods. They're currently quite inadequate, and very hard to work with.
-#   I need to construct test-case types for all of the kinds of things that can happen that
-#   I am aware of, test their correctness, and test their performance.
-#   This is starting to become a problem now.
-# 5. Make much more minimal use of `PossiblyUninitTangent` -- it doesn't need to be used in
-#   all cases.
-
 """
     PossiblyUninitTangent{T}
 
@@ -51,13 +41,6 @@ function Base.:(==)(t::PossiblyUninitTangent{T}, s::PossiblyUninitTangent{T}) wh
     !is_init(t) && is_init(s) && return false
     return true
 end
-
-# function Base.:+(t::PossiblyUninitTangent{T}, s::PossiblyUninitTangent{T}) where {T}
-#     is_init(t) && is_init(s) && return PossiblyUninitTangent{T}(val(t) + val(s))
-#     is_init(t) && !is_init(s) && return t
-#     !is_init(t) && is_init(s) && return s
-#     return t
-# end
 
 _wrap_type(::Type{T}) where {T} = PossiblyUninitTangent{T}
 
