@@ -8,9 +8,8 @@ Semantically equivalent to a usual stack, but never de-allocates memory once all
 mutable struct Stack{T}
     memory::Vector{T}
     position::Int
+    Stack{T}() where {T} = new{T}(Vector{T}(undef, 0), 0)
 end
-
-Stack{T}() where {T} = Stack{T}(Vector{T}(undef, 0), 0)
 
 function Base.push!(x::Stack{T}, val::T) where {T}
     position = x.position + 1

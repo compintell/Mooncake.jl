@@ -70,6 +70,18 @@
             Expr(:call, lgetfield, SSAValue(1), Val(:x)),
         ),
         (
+            Expr(:call, GlobalRef(Core, :setfield!), SSAValue(1), 2, SSAValue(3)),
+            Expr(:call, lsetfield!, SSAValue(1), Val(2), SSAValue(3)),
+        ),
+        (
+            Expr(:call, setfield!, SSAValue(1), 2, SSAValue(3)),
+            Expr(:call, lsetfield!, SSAValue(1), Val(2), SSAValue(3)),
+        ),
+        (
+            Expr(:call, setfield!, SSAValue(1), QuoteNode(:a), SSAValue(3)),
+            Expr(:call, lsetfield!, SSAValue(1), Val(:a), SSAValue(3)),
+        ),
+        (
             Expr(:call, sin, SSAValue(1)),
             Expr(:call, sin, SSAValue(1)),
         ),

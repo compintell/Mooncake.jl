@@ -72,6 +72,38 @@ function rrule!!(::CoDual{typeof(lgetfield)}, x::CoDual, ::CoDual{Val{f}}, ::CoD
     return y, lgetfield_pb!!
 end
 
+"""
+    lsetfield!(value, name::Val, x, [order::Val])
+
+This function is to `setfield!` what `lgetfield` is to `getfield`. It will always hold that
+```julia
+setfield!(copy(x), :f, v) == lsetfield!(copy(x), Val(:f), v)
+setfield!(copy(x), 2, v) == lsetfield(copy(x), Val(2), v)
+```
+"""
+lsetfield!(value, ::Val{name}, x) where {name} = setfield!(value, name, x)
+
+@is_primitive MinimalCtx Tuple{typeof(lsetfield!), Any, Any, Any}
+function rrule!!(
+    ::CoDual{typeof(lsetfield!)}, value::CoDual, ::CoDual{Val{name}}, x::CoDual
+) where {name}
+    save = isdefined(primal(value), name)
+    old_x = save ? getfield(primal(value), name) : nothing
+    old_dx = save ? val(getfield(tangent(value).fields, name)) : nothing
+    function setfield!_pullback(dy, df, dvalue, dname, dx)
+        new_dx = increment!!(dx, val(getfield(dvalue.fields, name)))
+        new_dx = increment!!(new_dx, dy)
+        old_x !== nothing && lsetfield!(primal(value), Val(name), old_x)
+        old_x !== nothing && _setfield!(tangent(value), name, old_dx)
+        return df, dvalue, dname, new_dx
+    end
+    y = CoDual(
+        lsetfield!(primal(value), Val(name), primal(x)),
+        _setfield!(tangent(value), name, tangent(x)),
+    )
+    return y, setfield!_pullback
+end
+
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
 
     # Data which needs to not be GC'd.
@@ -94,32 +126,52 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
         ),
 
         # Lack of activity-analysis rules:
-        (false, :stability, nothing, Base.elsize, randn(5, 4)),
-        (false, :stability, nothing, Base.elsize, view(randn(5, 4), 1:2, 1:2)),
-        (false, :stability, nothing, Core.Compiler.sizeof_nothrow, Float64),
-        (false, :stability, nothing, Base.datatype_haspadding, Float64),
+        (false, :stability_and_allocs, nothing, Base.elsize, randn(5, 4)),
+        (false, :stability_and_allocs, nothing, Base.elsize, view(randn(5, 4), 1:2, 1:2)),
+        (false, :stability_and_allocs, nothing, Core.Compiler.sizeof_nothrow, Float64),
+        (false, :stability_and_allocs, nothing, Base.datatype_haspadding, Float64),
 
         # Performance-rules that would ideally be completely removed.
-        (false, :stability, nothing, size, randn(5, 4)),
-        (false, :stability, nothing, LinearAlgebra.lapack_size, 'N', randn(5, 4)),
-        (false, :stability, nothing, Base.require_one_based_indexing, randn(2, 3), randn(2, 1)),
-        (false, :stability, nothing, in, 5.0, randn(4)),
-        (false, :stability, nothing, iszero, 5.0),
-        (false, :stability, nothing, isempty, randn(5)),
-        (false, :stability, nothing, isbitstype, Float64),
-        (false, :stability, nothing, sizeof, Float64),
-        (false, :stability, nothing, promote_type, Float64, Float64),
-        (false, :stability, nothing, LinearAlgebra.chkstride1, randn(3, 3)),
-        (false, :stability, nothing, LinearAlgebra.chkstride1, randn(3, 3), randn(2, 2)),
-        (false, :stability, nothing, Threads.nthreads),
+        (false, :stability_and_allocs, nothing, size, randn(5, 4)),
+        (false, :stability_and_allocs, nothing, LinearAlgebra.lapack_size, 'N', randn(5, 4)),
+        (false, :stability_and_allocs, nothing, Base.require_one_based_indexing, randn(2, 3), randn(2, 1)),
+        (false, :stability_and_allocs, nothing, in, 5.0, randn(4)),
+        (false, :stability_and_allocs, nothing, iszero, 5.0),
+        (false, :stability_and_allocs, nothing, isempty, randn(5)),
+        (false, :stability_and_allocs, nothing, isbitstype, Float64),
+        (false, :stability_and_allocs, nothing, sizeof, Float64),
+        (false, :stability_and_allocs, nothing, promote_type, Float64, Float64),
+        (false, :stability_and_allocs, nothing, LinearAlgebra.chkstride1, randn(3, 3)),
+        (false, :stability_and_allocs, nothing, LinearAlgebra.chkstride1, randn(3, 3), randn(2, 2)),
+        (false, :stability_and_allocs, nothing, Threads.nthreads),
 
-        # Literal replacements for getfield and others.
-        (false, :stability, nothing, lgetfield, (5.0, 4), Val(1)),
-        (false, :stability, nothing, lgetfield, (5.0, 4), Val(2)),
-        (false, :stability, nothing, lgetfield, (a=5.0, b=4), Val(1)),
-        (false, :stability, nothing, lgetfield, (a=5.0, b=4), Val(2)),
-        (false, :stability, nothing, lgetfield, (a=5.0, b=4), Val(:a)),
-        (false, :stability, nothing, lgetfield, (a=5.0, b=4), Val(:b)),
+        # Literal replacements for getfield.
+        (false, :stability_and_allocs, nothing, lgetfield, (5.0, 4), Val(1)),
+        (false, :stability_and_allocs, nothing, lgetfield, (5.0, 4), Val(2)),
+        (false, :stability_and_allocs, nothing, lgetfield, (a=5.0, b=4), Val(1)),
+        (false, :stability_and_allocs, nothing, lgetfield, (a=5.0, b=4), Val(2)),
+        (false, :stability_and_allocs, nothing, lgetfield, (a=5.0, b=4), Val(:a)),
+        (false, :stability_and_allocs, nothing, lgetfield, (a=5.0, b=4), Val(:b)),
+
+        # Literal replacement for setfield!.
+        (
+            false,
+            :stability_and_allocs,
+            nothing,
+            lsetfield!,
+            TestResources.MutableFoo(5.0, [1.0, 2.0]),
+            Val(:a),
+            4.0,
+        ),
+        (
+            false,
+            :stability,
+            nothing,
+            lsetfield!,
+            TestResources.FullyInitMutableStruct(5.0, [1.0, 2.0]),
+            Val(:y),
+            [1.0, 3.0, 4.0],
+        ),
     ]
     return test_cases, memory
 end

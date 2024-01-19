@@ -248,8 +248,8 @@ function __forwards_and_backwards(rule, x_x̄::Vararg{Any, N}) where {N}
 end
 
 function test_rrule_performance(
-    performance_checks_flag::Symbol, rule, f_f̄, x_x̄::Vararg{Any, N}
-) where {N}
+    performance_checks_flag::Symbol, rule::R, f_f̄::F, x_x̄::Vararg{Any, N}
+) where {R, F, N}
 
     # Verify that a valid performance flag has been passed.
     valid_flags = (:none, :stability, :allocs, :stability_and_allocs)
@@ -709,6 +709,15 @@ function Base.:(==)(a::TypeStableStruct, b::TypeStableStruct)
     return equal_field(a, b, :a) && equal_field(a, b, :b)
 end
 
+mutable struct FullyInitMutableStruct
+    x::Float64
+    y::Vector{Float64}
+end
+
+function Base.:(==)(a::FullyInitMutableStruct, b::FullyInitMutableStruct)
+    return equal_field(a, b, :x) && equal_field(a, b, :y)
+end
+
 
 
 #
@@ -958,8 +967,13 @@ inferred_const_tester(x::Int) = x == 5 ? x : 5x
 getfield_tester(x::Tuple) = x[1]
 getfield_tester_2(x::Tuple) = getfield(x, 1)
 
-function setfield_tester!(x::TypeStableMutableStruct, new_field)
-    x.b = new_field
+function setfield_tester_left!(x::FullyInitMutableStruct, new_field)
+    x.x = new_field
+    return new_field
+end
+
+function setfield_tester_right!(x::FullyInitMutableStruct, new_field)
+    x.y = new_field
     return new_field
 end
 
@@ -1167,19 +1181,19 @@ function generate_test_functions()
         (false, :allocs, (lb=1, ub=1_000), getfield_tester_2, (5.0, 5)),
         (
             false,
-            :none,
+            :allocs,
             (lb=1, ub=1_000),
-            setfield_tester!,
-            TypeStableMutableStruct{Symbol}(5.0, :hi),
-            :boo,
+            setfield_tester_left!,
+            FullyInitMutableStruct(5.0, randn(3)),
+            4.0,
         ),
         (
             false,
             :none,
             (lb=1, ub=1_000),
-            setfield_tester!,
-            TypeStableMutableStruct{Float64}(5.0,  1.0),
-            2.0,
+            setfield_tester_right!,
+            FullyInitMutableStruct(5.0, randn(3)),
+            randn(5),
         ),
         (
             false, :none, (lb=100, ub=1_000_000),
