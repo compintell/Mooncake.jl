@@ -104,7 +104,7 @@ function benchmark_derived_rrules!!(rng_ctor)
         :test_utils
     ]) do s
         test_cases, memory = generate_derived_rrule!!_test_cases(rng_ctor, Val(s))
-        ranges = map(x -> x[2], test_cases)
+        ranges = map(x -> x[3], test_cases)
         return test_cases, memory, ranges
     end
     test_cases = reduce(vcat, map(first, test_case_data))
@@ -119,7 +119,7 @@ function benchmark_derived_rrules!!(rng_ctor)
             @info "$n / $(length(test_cases))", Core.Typeof(args)
 
             # Generate CoDuals etc.
-            args = args[3:end]
+            args = args[4:end]
             primals = map(x -> x isa CoDual ? primal(x) : x, args)
             unrolled_primals = map(x -> x isa CoDual ? primal(x) : x, args)
             dargs = map(x -> x isa CoDual ? tangent(x) : randn_tangent(rng, x), args)
