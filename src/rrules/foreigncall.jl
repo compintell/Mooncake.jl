@@ -575,24 +575,25 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:foreigncall})
     end
 
     test_cases = [
-        Any[false, nothing, reshape, randn(5, 4), (4, 5)],
-        Any[false, nothing, reshape, randn(5, 4), (2, 10)],
-        Any[false, nothing, reshape, randn(5, 4), (10, 2)],
-        Any[false, nothing, reshape, randn(5, 4), (5, 4, 1)],
-        Any[false, nothing, reshape, randn(5, 4), (2, 10, 1)],
-        Any[false, nothing, unsafe_copyto_tester, randn(5), randn(3), 2],
-        Any[false, nothing, unsafe_copyto_tester, randn(5), randn(6), 4],
+        Any[false, :none, nothing, reshape, randn(5, 4), (4, 5)],
+        Any[false, :none, nothing, reshape, randn(5, 4), (2, 10)],
+        Any[false, :none, nothing, reshape, randn(5, 4), (10, 2)],
+        Any[false, :none, nothing, reshape, randn(5, 4), (5, 4, 1)],
+        Any[false, :none, nothing, reshape, randn(5, 4), (2, 10, 1)],
+        Any[false, :none, nothing, unsafe_copyto_tester, randn(5), randn(3), 2],
+        Any[false, :none, nothing, unsafe_copyto_tester, randn(5), randn(6), 4],
         [
             false,
+            :none,
             nothing,
             unsafe_copyto_tester,
             [randn(3) for _ in 1:5],
             [randn(4) for _ in 1:6],
             4,
         ],
-        Any[false, nothing, x -> unsafe_pointer_to_objref(pointer_from_objref(x)), _x],
-        Any[false, nothing, isassigned, randn(5), 4],
-        Any[false, nothing, x -> (Base._growbeg!(x, 2); x[1:2] .= 2.0), randn(5)],
+        Any[false, :none, nothing, x -> unsafe_pointer_to_objref(pointer_from_objref(x)), _x],
+        Any[false, :none, nothing, isassigned, randn(5), 4],
+        Any[false, :none, nothing, x -> (Base._growbeg!(x, 2); x[1:2] .= 2.0), randn(5)],
     ]
     memory = Any[_x]
     return test_cases, memory

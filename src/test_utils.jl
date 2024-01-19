@@ -542,9 +542,9 @@ end
 
 function run_derived_rrule!!_test_cases(rng_ctor, v::Val)
     test_cases, memory = Taped.generate_derived_rrule!!_test_cases(rng_ctor, v)
-    GC.@preserve memory @testset "$f, $(typeof(x))" for (interface_only, _, f, x...) in test_cases
-        test_interpreted_rrule!!(rng_ctor(123), f, x...; interface_only)
-        # test_taped_rrule!!(rng_ctor(123), f, x...; interface_only)
+    GC.@preserve memory @testset "$f, $(typeof(x))" for
+        (interface_only, perf_flag, _, f, x...) in test_cases
+        test_interpreted_rrule!!(rng_ctor(123), f, x...; interface_only, perf_flag)
     end
 end
 
@@ -1162,7 +1162,7 @@ function generate_test_functions()
         ),
         (
             false,
-            :allocs,
+            :none,
             (lb=100, ub=10_000),
             kron!, randn(400, 400), Diagonal(randn(20)), randn(20, 20),
         ),

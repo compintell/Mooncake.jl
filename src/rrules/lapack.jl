@@ -428,12 +428,12 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
 
         # getrf!
         [
-            Any[false, nothing, getrf_wrapper!, randn(5, 5), false],
-            Any[false, nothing, getrf_wrapper!, randn(5, 5), true],
-            Any[false, nothing, getrf_wrapper!, view(randn(10, 10), 1:5, 1:5), false],
-            Any[false, nothing, getrf_wrapper!, view(randn(10, 10), 1:5, 1:5), true],
-            Any[false, nothing, getrf_wrapper!, view(randn(10, 10), 2:7, 3:8), false],
-            Any[false, nothing, getrf_wrapper!, view(randn(10, 10), 3:8, 2:7), true],
+            Any[false, :none, nothing, getrf_wrapper!, randn(5, 5), false],
+            Any[false, :none, nothing, getrf_wrapper!, randn(5, 5), true],
+            Any[false, :none, nothing, getrf_wrapper!, view(randn(10, 10), 1:5, 1:5), false],
+            Any[false, :none, nothing, getrf_wrapper!, view(randn(10, 10), 1:5, 1:5), true],
+            Any[false, :none, nothing, getrf_wrapper!, view(randn(10, 10), 2:7, 3:8), false],
+            Any[false, :none, nothing, getrf_wrapper!, view(randn(10, 10), 3:8, 2:7), true],
         ],
 
         # trtrs
@@ -445,7 +445,7 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
                 As = [randn(N, N) + 10I, view(randn(15, 15) + 10I, 2:N+1, 2:N+1)]
                 Bs = [randn(N, Nrhs), view(randn(15, 15), 4:N+3, 3:N+2)]
                 return map(product(As, Bs)) do (A, B)
-                    Any[false, nothing, trtrs!, ul, tA, diag, A, B]
+                    Any[false, :none, nothing, trtrs!, ul, tA, diag, A, B]
                 end
             end,
         )),
@@ -460,7 +460,7 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
                 ])
                 Bs = [randn(N, Nrhs), view(randn(15, 15), 4:N+3, 3:Nrhs+2)]
                 return map(product(As, Bs)) do ((A, ipiv), B)
-                    Any[false, nothing, getrs!, trans, A, ipiv, B]
+                    Any[false, :none, nothing, getrs!, trans, A, ipiv, B]
                 end
             end,
         )),
@@ -472,7 +472,7 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
                 As = getrf!.([randn(N, N) + 5I, view(randn(15, 15) + I, 2:N+1, 2:N+1)])
                 As = getrf!.([randn(N, N) + 5I])
                 return map(As) do (A, ipiv)
-                    Any[false, nothing, getri!, A, ipiv]
+                    Any[false, :none, nothing, getri!, A, ipiv]
                 end
             end,
         )),
@@ -484,8 +484,8 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
                 X = randn(N, N)
                 A = X * X' + I
                 return [
-                    Any[false, nothing, potrf!, 'L', A],
-                    Any[false, nothing, potrf!, 'U', A],
+                    Any[false, :none, nothing, potrf!, 'L', A],
+                    Any[false, :none, nothing, potrf!, 'U', A],
                 ]
             end,
         )),
@@ -498,8 +498,8 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
                 A = X * X' + I
                 B = randn(N, Nrhs)
                 return [
-                    Any[false, nothing, potrs!, 'L', potrf!('L', copy(A))[1], copy(B)],
-                    Any[false, nothing, potrs!, 'U', potrf!('U', copy(A))[1], copy(B)],
+                    Any[false, :none, nothing, potrs!, 'L', potrf!('L', copy(A))[1], copy(B)],
+                    Any[false, :none, nothing, potrs!, 'U', potrf!('U', copy(A))[1], copy(B)],
                 ]
             end,
         )),
