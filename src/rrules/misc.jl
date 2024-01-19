@@ -72,6 +72,18 @@ function rrule!!(::CoDual{typeof(lgetfield)}, x::CoDual, ::CoDual{Val{f}}, ::CoD
     return y, lgetfield_pb!!
 end
 
+"""
+    lsetfield!(value, name::Val, x, [order::Val])
+
+This function is to `setfield!` what `lgetfield` is to `getfield`. It will always hold that
+```julia
+setfield!(copy(x), :f, v) == lsetfield!(copy(x), Val(:f), v)
+setfield!(copy(x), 2, v) == lsetfield(copy(x), Val(2), v)
+```
+"""
+lsetfield!(value, ::Val{name}, x) where {name} = setfield!(value, name, x)
+
+
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
 
     # Data which needs to not be GC'd.
