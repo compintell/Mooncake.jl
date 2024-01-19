@@ -566,17 +566,17 @@ end
 
 # replacefield!
 
-function _setfield!(value::MutableTangent, name::Symbol, x)
+@inline function _setfield!(value::MutableTangent, name::Symbol, x)
     fields = value.fields
     value.fields = @set fields.$name = fieldtype(typeof(fields), name)(x)
     return x
 end
-function _setfield!(value::T, ind::Int, x) where {T<:MutableTangent}
+@inline function _setfield!(value::T, ind::Int, x) where {T<:MutableTangent}
     value.fields = _setfield!(value.fields, ind, x)
     return x
 end
 
-function _setfield!(value::T, ind::Int, x) where {T<:NamedTuple}
+@inline function _setfield!(value::T, ind::Int, x) where {T<:NamedTuple}
     return T(ntuple(n -> n == ind ? fieldtype(T, ind)(x) : value[n], length(value)))
 end
 
