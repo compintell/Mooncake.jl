@@ -238,7 +238,7 @@ function build_coinsts(ir_inst::Expr, in_f, _rrule!!, n::Int, b::Int, is_blk_end
         old_vals = Stack{eltype(val_slot)}()
 
         return build_coinsts(
-            Val(:call), val_slot, arg_slots, evaluator, __rrule!!, old_vals, pb_stack, next_blk
+            Val(:call), val_slot, arg_slots, evaluator, __rrule!!, old_vals, pb_stack, next_blk, ir_inst,
         )
     elseif ir_inst.head in [
         :code_coverage_effect, :gc_preserve_begin, :gc_preserve_end, :loopinfo,
@@ -283,6 +283,7 @@ function build_coinsts(
     old_vals::Stack,
     pb_stack::Stack,
     next_blk::Int,
+    ir_inst,
 ) where {Teval, Trrule!!}
 
     function fwds_pass()
@@ -294,9 +295,6 @@ function build_coinsts(
         push!(pb_stack, pb!!)
         return nothing
     end
-    # display(InteractiveUtils.code_warntype(fwds_pass, Tuple{}))
-    # println()
-
     fwds_inst = @opaque function (p::Int)
         fwds_pass()
         return next_blk
@@ -305,15 +303,15 @@ function build_coinsts(
     function bwds_pass()
         dout = tangent(out[])
         dargs = tuple_map(set_immutable_to_zero ∘ tangent ∘ getindex, arg_slots)
-        _, new_dargs... = pop!(pb_stack)(dout, NoTangent(), dargs...)
+        pb!! = pop!(pb_stack)
+        tmp = pb!!(dout, NoTangent(), dargs...)
+        new_dargs = tmp[2:end]
         map(increment_tangent!, arg_slots, new_dargs)
         if !isempty(old_vals)
             out[] = pop!(old_vals) # restore old state.
         end
         return nothing
     end
-    # display(InteractiveUtils.code_warntype(bwds_pass, Tuple{}))
-    # println()
     bwds_inst = @opaque function (j::Int)
         bwds_pass()
         return j
