@@ -238,7 +238,7 @@ function build_coinsts(ir_inst::Expr, in_f, _rrule!!, n::Int, b::Int, is_blk_end
         old_vals = Stack{eltype(val_slot)}()
 
         return build_coinsts(
-            Val(:call), val_slot, arg_slots, evaluator, __rrule!!, old_vals, pb_stack, next_blk,
+            Val(:call), val_slot, arg_slots, evaluator, __rrule!!, old_vals, pb_stack, next_blk
         )
     elseif ir_inst.head in [
         :code_coverage_effect, :gc_preserve_begin, :gc_preserve_end, :loopinfo,
