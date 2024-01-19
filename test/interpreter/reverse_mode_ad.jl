@@ -292,7 +292,7 @@
     interp = Taped.TInterp()
 
     # nothings inserted for consistency with generate_test_functions.
-    @testset "$f, $(map(Core.Typeof, x))" for (a, b, f, x...) in
+    @testset "$f, $(map(Core.Typeof, x))" for (interface_only, perf_flag, bnds, f, x...) in
         TestResources.generate_test_functions()
 
         @info "$f, $(Core.Typeof(x))"
@@ -305,9 +305,10 @@
         x_cpy_2 = deepcopy(x)
         @test has_equal_data(in_f(f, x_cpy_1...), f(x_cpy_2...))
         @test has_equal_data(x_cpy_1, x_cpy_2)
+        rule = Taped.build_rrule!!(in_f);
         TestUtils.test_rrule!!(
             Xoshiro(123456), in_f, f, x...;
-            perf_flag=:none, interface_only=false, is_primitive=false,
+            perf_flag, interface_only, is_primitive=false, rule
         )
 
         # # Estimate primal performance.
@@ -332,5 +333,7 @@
         # println("overall")
         # display(overall_timing)
         # println()
+
+        # @profview run_many_times(10, TestUtils.to_benchmark, __rrule!!, df, codual_x)
     end
 end

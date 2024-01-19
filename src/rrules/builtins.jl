@@ -584,9 +584,9 @@ function rrule!!(::CoDual{typeof(setfield!)}, value, name, x)
     _name = primal(name)
     save = isdefined(primal(value), _name)
     old_x = save ? getfield(primal(value), _name) : nothing
-    old_dx = save ? getfield(tangent(value).fields, _name).tangent : nothing
+    old_dx = save ? val(getfield(tangent(value).fields, _name)) : nothing
     function setfield!_pullback(dy, df, dvalue, ::NoTangent, dx)
-        new_dx = increment!!(dx, getfield(dvalue.fields, _name).tangent)
+        new_dx = increment!!(dx, val(getfield(dvalue.fields, _name)))
         new_dx = increment!!(new_dx, dy)
         old_x !== nothing && setfield!(primal(value), _name, old_x)
         old_x !== nothing && _setfield!(tangent(value), _name, old_dx)

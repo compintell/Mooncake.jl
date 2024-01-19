@@ -8,6 +8,16 @@ You might need to use this for `primitive type`s though.
 """
 struct NoTangent end
 
+# 1. Look at `n_uninitialized` field of type to know number of uninit fields
+# 2. Use Core.Compiler.datatype_min_ninitialized to get a more stable version of this
+# 4. Make my tests much more thorough for performance and correctness of these kinds of
+#   methods. They're currently quite inadequate, and very hard to work with.
+#   I need to construct test-case types for all of the kinds of things that can happen that
+#   I am aware of, test their correctness, and test their performance.
+#   This is starting to become a problem now.
+# 5. Make much more minimal use of `PossiblyUninitTangent` -- it doesn't need to be used in
+#   all cases.
+
 """
     PossiblyUninitTangent{T}
 
@@ -27,19 +37,27 @@ const __PUT = PossiblyUninitTangent
 
 @inline is_init(t::PossiblyUninitTangent) = isdefined(t, :tangent)
 
+function val(x::PossiblyUninitTangent{T}) where {T}
+    if is_init(x)
+        return x.tangent
+    else
+        throw(error("Uninitialised"))
+    end
+end
+
 function Base.:(==)(t::PossiblyUninitTangent{T}, s::PossiblyUninitTangent{T}) where {T}
-    is_init(t) && is_init(s) && return t.tangent == s.tangent
+    is_init(t) && is_init(s) && return val(t) == val(s)
     is_init(t) && !is_init(s) && return false
     !is_init(t) && is_init(s) && return false
     return true
 end
 
-function Base.:+(t::PossiblyUninitTangent{T}, s::PossiblyUninitTangent{T}) where {T}
-    is_init(t) && is_init(s) && return PossiblyUninitTangent{T}(t.tangent + s.tangent)
-    is_init(t) && !is_init(s) && return t
-    !is_init(t) && is_init(s) && return s
-    return t
-end
+# function Base.:+(t::PossiblyUninitTangent{T}, s::PossiblyUninitTangent{T}) where {T}
+#     is_init(t) && is_init(s) && return PossiblyUninitTangent{T}(val(t) + val(s))
+#     is_init(t) && !is_init(s) && return t
+#     !is_init(t) && is_init(s) && return s
+#     return t
+# end
 
 _wrap_type(::Type{T}) where {T} = PossiblyUninitTangent{T}
 
@@ -75,7 +93,7 @@ function build_tangent(::Type{P}, fields::Vararg{Any, N}) where {P<:Union{Tuple,
     return tangent_type(P)(fields)
 end
 
-_value(v::PossiblyUninitTangent) = v.tangent
+_value(v::PossiblyUninitTangent) = val(v)
 _value(v) = v
 
 """
@@ -196,7 +214,7 @@ end
 Same as `map` but requires all elements of `x` to have equal length.
 The usual function `map` doesn't enforce this for `Array`s.
 """
-@inline function _map(f::F, x...) where {F}
+@inline function _map(f::F, x::Vararg{Any, N}) where {F, N}
     s = length(x[1])
     @assert all(map(x -> length(x) == s, x))
     return map(f, x...)
@@ -329,7 +347,7 @@ end
 increment!!(x::T, y::T) where {T<:Tuple} = _map(increment!!, x, y)
 increment!!(x::T, y::T) where {T<:NamedTuple} = _map(increment!!, x, y)
 function increment!!(x::T, y::T) where {T<:PossiblyUninitTangent}
-    is_init(x) && is_init(y) && return T(increment!!(x.tangent, y.tangent))
+    is_init(x) && is_init(y) && return T(increment!!(val(x), val(y)))
     is_init(x) && !is_init(y) && error("x is initialised, but y is not")
     !is_init(x) && is_init(y) && error("x is not initialised, but y is")
     return x
@@ -351,7 +369,7 @@ set_to_zero!!(x::Base.IEEEFloat) = zero(x)
 set_to_zero!!(x::Union{Tuple, NamedTuple}) = map(set_to_zero!!, x)
 set_to_zero!!(x::Array) = _map_if_assigned!(set_to_zero!!, x, x)
 function set_to_zero!!(x::T) where {T<:PossiblyUninitTangent}
-    return is_init(x) ? T(set_to_zero!!(x.tangent)) : x
+    return is_init(x) ? T(set_to_zero!!(val(x))) : x
 end
 set_to_zero!!(x::Tangent) = Tangent(set_to_zero!!(x.fields))
 function set_to_zero!!(x::MutableTangent)
@@ -370,7 +388,7 @@ set_immutable_to_zero(x::Base.IEEEFloat) = zero(x)
 set_immutable_to_zero(x::Union{Tuple, NamedTuple}) = map(set_immutable_to_zero, x)
 set_immutable_to_zero(x::Array) = x
 function set_immutable_to_zero(x::T) where {T<:PossiblyUninitTangent}
-    return is_init(x) ? T(set_immutable_to_zero(x.tangent)) : x
+    return is_init(x) ? T(set_immutable_to_zero(val(x))) : x
 end
 set_immutable_to_zero(x::Tangent) = Tangent(set_immutable_to_zero(x.fields))
 set_immutable_to_zero(x::MutableTangent) = x
@@ -428,7 +446,7 @@ end
 _scale(a::Float64, t::Union{Tuple, NamedTuple}) = map(Base.Fix1(_scale, a), t)
 function _scale(a::Float64, t::PossiblyUninitTangent{T}) where {T}
     return if is_init(t)
-        return PossiblyUninitTangent{T}(_scale(a, t.tangent))
+        return PossiblyUninitTangent{T}(_scale(a, val(t)))
     else
         return PossiblyUninitTangent{T}()
     end
@@ -459,7 +477,7 @@ function _dot(t::T, s::T) where {T<:Array}
 end
 _dot(t::T, s::T) where {T<:Union{Tuple, NamedTuple}} = sum(map(_dot, t, s); init=0.0)
 function _dot(t::T, s::T) where {T<:PossiblyUninitTangent}
-    is_init(t) && is_init(s) && return _dot(t.tangent, s.tangent)
+    is_init(t) && is_init(s) && return _dot(val(t), val(s))
     return 0.0
 end
 function _dot(t::T, s::T) where {T<:Union{Tangent, MutableTangent}}
@@ -496,7 +514,7 @@ function _add_to_primal(p::P, t::T) where {P, T<:Union{Tangent, MutableTangent}}
     end
     tmp = map(fieldnames(P)) do f
         tf = getfield(t.fields, f)
-        isdefined(p, f) && is_init(tf) && return _add_to_primal(getfield(p, f), tf.tangent) 
+        isdefined(p, f) && is_init(tf) && return _add_to_primal(getfield(p, f), val(tf)) 
         !isdefined(p, f) && !is_init(tf) && return FieldUndefined()
         throw(error("unable to handle undefined-ness"))
     end
