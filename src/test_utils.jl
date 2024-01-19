@@ -558,10 +558,86 @@ function to_benchmark(__rrule!!::R, df::F, dx::X) where {R, F, X}
     pb!!(tangent(out), tangent(df), map(tangent, dx)...)
 end
 
-function gradient(__rrule!!::R, df::F, dx::X) where {R, F, X}
-    out, pb!! = __rrule!!(df, dx...)
+"""
+    set_up_gradient_problem(fargs...)
+
+Constructs a `rule` and `InterpretedFunction` which can be passed to `value_and_gradient!!`.
+
+For example:
+```julia
+f(x) = sum(abs2, x)
+x = randn(25)
+rule, in_f = Taped.TestUtils.set_up_gradient_problem(f, x)
+y, dx = Taped.TestUtils.value_and_gradient!!(rule, in_f, f, x)
+```
+will yield the value and associated gradient for `f` and `x`.
+
+You only need to run this function once, and may then call `value_and_gradient!!` many times
+with the same `rule` and `in_f` arguments, but with different values of `x`.
+
+See also: `Taped.TestUtils.value_and_gradient!!`.
+"""
+function set_up_gradient_problem(fargs...)
+    in_f = Taped.InterpretedFunction(DefaultCtx(), Core.Typeof(fargs), Taped.TInterp())
+    return Taped.build_rrule!!(in_f), in_f
+end
+
+"""
+    value_and_gradient!!(rule, in_f::CoDual{<:InterpretedFunction}, f::CoDual, x::CoDual...)
+
+In-place version of `value_and_gradient!!` in which the arguments have been wrapped in
+`CoDual`s. Note that any mutable data in `f` and `x` will be incremented in-place. As such,
+if calling this function multiple times with different values of `x`, should be careful to
+ensure that you zero-out the tangent fields of `x` each time. See
+`Taped.TestUtils.zero_out_arguments!` for more details.
+"""
+function value_and_gradient!!(
+    rule::R, in_f::CoDual{<:Taped.InterpretedFunction}, codual_fargs::Vararg{CoDual, N}
+) where {R, N}
+    out, pb!! = rule(in_f, codual_fargs...)
     @assert out isa CoDual{Float64, Float64}
-    return pb!!(1.0, tangent(df), map(tangent, dx)...)
+    return primal(out), pb!!(1.0, NoTangent(), map(tangent, codual_fargs)...)[2:end]
+end
+
+"""
+    value_and_gradient!!(rule, in_f::InterpretedFunction, f, args...)
+
+Compute the value and gradient of `f(args...)`.
+
+`rule` and `in_f` should be constructed using `set_up_gradient_problem`.
+
+*Note:* If calling `value_and_gradient!!` multiple times for various values of `args`, you
+should use the same `rule` and `in_f` each time, as there is no need to re-build them each
+time.
+
+*Note:* It is your responsibility to ensure that there is no aliasing in `f` and `args`.
+For example,
+```julia
+X = randn(5, 5)
+rule, in_f = set_up_gradient_problem(*, X, X)
+value_and_gradient!!(rule, in_f, *, X, X)
+```
+will yield the wrong result.
+
+*Note:* This method of `value_and_gradient!!` has to first call `zero_codual` on all of its
+arguments. This may cause some additional allocations. If this is a problem in your
+use-case, consider pre-allocating the `CoDual`s and calling the other method of this
+function. See `Taped.TestUtils.zero_out_arguments!!` for a helper function that you may find
+useful if setting up your code this way.
+"""
+function value_and_gradient!!(
+    rule::R, in_f::Taped.InterpretedFunction, fargs::Vararg{Any, N}
+) where {R, N}
+    return value_and_gradient!!(rule, zero_codual(in_f), map(zero_codual, fargs)...)
+end
+
+"""
+    zero_out_arguments!!(codualed_fargs::CoDual...)
+
+Set the tangent component of a collection of `CoDuals` to zero. Mutates where possible.
+"""
+function zero_out_arguments!!(codualed_fargs::CoDual...)
+    return map(x -> CoDual(primal(x), Taped.set_to_zero!!(tangent(x))), codualed_fargs)
 end
 
 end

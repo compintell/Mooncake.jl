@@ -95,3 +95,9 @@ Notably, our broad experience at present is that as we continue to increase the 
 Please note that, since we have yet to enter phase 2 of the project, we have spent _no_ time whatsoever optimising for performance.
 We strongly believe that there is nothing in principle preventing us from achieving excellent performance.
 However, currently, you should expect to experience _amazingly_ poor performance.
+
+# Trying it out
+
+There is not presently a high-level interface to which we are commiting, but if you want to
+compute the gradient of a function, take a look at
+`Taped.TestUtils.set_up_gradient_problem` and `Taped.TestUtils.value_and_gradient!!`.
