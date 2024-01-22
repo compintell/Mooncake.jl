@@ -1,6 +1,13 @@
 using Turing
 
-# using ReverseDiff
+# using CSV, DataFrames, ReverseDiff
+# turing_bench_results = DataFrame(
+#     :name => String[],
+#     :primal => [],
+#     :interp => [],
+#     :gradient => [],
+#     :reversediff => [],
+# )
 
 @model function simple_model()
     y ~ Normal()
@@ -23,22 +30,17 @@ function build_turing_problem(rng, model)
     vi_linked = Turing.link(vi, model)
     ldp = Turing.LogDensityFunction(vi_linked, model, ctx)
     test_function = Base.Fix1(Turing.LogDensityProblems.logdensity, ldp)
-
-    m = model
-    v = Turing.SimpleVarInfo(m)
-    v_linked = Turing.link(v, m)
-    _ldp = Turing.LogDensityFunction(v_linked, m, Turing.DefaultContext())
-    d = Turing.LogDensityProblems.dimension(_ldp)
-
+    d = Turing.LogDensityProblems.dimension(ldp)
     return test_function, randn(rng, d)
 end
 
+
 @testset "turing" begin
     interp = Taped.TInterp()
-    @testset "$model" for (interface_only, model) in vcat(
+    @testset "$model" for (interface_only, name, model) in vcat(
         Any[
-            (false, simple_model()),
-            (false, demo()),
+            (false, "simple_model", simple_model()),
+            (false, "demo", demo()),
         ],
     )
         @info model
@@ -63,23 +65,29 @@ end
         # result = zeros(size(x));
         # ReverseDiff.gradient!(result, tape, x)
 
-        # __rrule = Taped.build_rrule!!(in_f);
+        # rule, in_f = TestUtils.set_up_gradient_problem(f, x);
         # codualed_args = map(zero_codual, (in_f, f, x));
-        # TestUtils.gradient(__rrule, codualed_args[1], codualed_args[2:end])[end]
+        # TestUtils.value_and_gradient!!(rule, codualed_args...)
 
-        # # @profview run_many_times(10, TestUtils.gradient, __rrule, codualed_args[1], codualed_args[2:end])
+        # @profview run_many_times(1_000, TestUtils.value_and_gradient!!, rule, codualed_args...)
 
-        # println("primal")
-        # display(@benchmark $f($x))
-        # println()
-        # println("interpreted")
-        # display(@benchmark $in_f($f, $x))
-        # println()
-        # println("gradient")
-        # display(@benchmark TestUtils.gradient($__rrule, $codualed_args[1], $(codualed_args[2:end])))
-        # println()
-        # println("gradient (ReverseDiff.jl)")
-        # display(@benchmark ReverseDiff.gradient!($result, $tape, $x))
-        # println()
+        # primal = @benchmark $f($x)
+        # interpreted = @benchmark $in_f($f, $x)
+        # gradient = @benchmark(TestUtils.value_and_gradient!!($rule, $codualed_args...))
+        # revdiff = @benchmark ReverseDiff.gradient!($result, $tape, $x)
+
+        # push!(turing_bench_results, (name, primal, interpreted, gradient, revdiff))
     end
 end
+
+# function process_turing_bench_results(df::DataFrame)
+#     out_df = DataFrame(
+#         :name => df.name,
+#         :primal => map(time, df.primal),
+#         :interp => map(time, df.interp),
+#         :gradient => map(time, df.gradient),
+#         :reversediff => map(time, df.reversediff),
+#     )
+#     CSV.write("turing_benchmarks.csv", out_df)
+# end
+# process_turing_bench_results(turing_bench_results)

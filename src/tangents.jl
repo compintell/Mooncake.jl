@@ -138,7 +138,7 @@ tangent_type(::Type{<:MersenneTwister}) = NoTangent
 
 tangent_type(::Type{Core.TypeName}) = NoTangent
 
-function tangent_type(::Type{T}) where {T<:Tuple}
+@generated function tangent_type(::Type{T}) where {T<:Tuple}
     if isconcretetype(T)
         return Tuple{map(tangent_type, fieldtypes(T))...}
     else
@@ -146,7 +146,7 @@ function tangent_type(::Type{T}) where {T<:Tuple}
     end
 end
 
-tangent_type(::Type{NamedTuple{N, T}}) where {N, T<:Tuple} = NamedTuple{N, tangent_type(T)}
+@generated tangent_type(::Type{NamedTuple{N, T}}) where {N, T<:Tuple} = NamedTuple{N, tangent_type(T)}
 
 @generated function tangent_type(::Type{P}) where {P}
 
