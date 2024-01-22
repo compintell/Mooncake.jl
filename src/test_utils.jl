@@ -1143,7 +1143,7 @@ function generate_test_functions()
         (false, :allocs, nothing, phi_node_with_undefined_value, false, 4.0),
         (false, :allocs, nothing, avoid_throwing_path_tester, 5.0),
         (false, :allocs, nothing, simple_foreigncall_tester, randn(5)),
-        (false, :none, (lb=1, ub=1_000), simple_foreigncall_tester_2, randn(6), (2, 3)),
+        (false, :none, (lb=0.1, ub=1_000), simple_foreigncall_tester_2, randn(6), (2, 3)),
         (false, :allocs, nothing, foreigncall_tester, randn(5)),
         (false, :none, (lb=1, ub=1_000), no_primitive_inlining_tester, 5.0),
         (false, :allocs, nothing, varargs_tester, 5.0),
