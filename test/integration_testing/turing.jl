@@ -23,13 +23,7 @@ function build_turing_problem(rng, model)
     vi_linked = Turing.link(vi, model)
     ldp = Turing.LogDensityFunction(vi_linked, model, ctx)
     test_function = Base.Fix1(Turing.LogDensityProblems.logdensity, ldp)
-
-    m = model
-    v = Turing.SimpleVarInfo(m)
-    v_linked = Turing.link(v, m)
-    _ldp = Turing.LogDensityFunction(v_linked, m, Turing.DefaultContext())
-    d = Turing.LogDensityProblems.dimension(_ldp)
-
+    d = Turing.LogDensityProblems.dimension(ldp)
     return test_function, randn(rng, d)
 end
 
@@ -66,8 +60,6 @@ end
         # __rrule = Taped.build_rrule!!(in_f);
         # codualed_args = map(zero_codual, (in_f, f, x));
         # TestUtils.gradient(__rrule, codualed_args[1], codualed_args[2:end])[end]
-
-        # # @profview run_many_times(10, TestUtils.gradient, __rrule, codualed_args[1], codualed_args[2:end])
 
         # println("primal")
         # display(@benchmark $f($x))
