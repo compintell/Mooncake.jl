@@ -28,3 +28,13 @@ Note that the types of all of the columns are very simple, so it is fine to writ
 ```julia
 CSV.write("file_name.csv", df)
 ```
+
+Additionally, the convenience function `plot_ratio_histogram!` can be used to produce
+histograms which summarise the distribution of the ratio of the time taken to compute the
+gradient vs the time taken to compute the primal. See the docstring for more info, call it
+as follows:
+```julia
+derived_results = benchmark_derived_rrules!!(Xoshiro)
+df = DataFrame(df)
+plot_ratio_histogram!(df)
+```
