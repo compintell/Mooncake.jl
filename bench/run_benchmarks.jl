@@ -1,7 +1,7 @@
 using Pkg
 Pkg.develop(path=joinpath(@__DIR__, ".."))
 
-using BenchmarkTools, CSV, DataFrames, Random, Taped, Test
+using BenchmarkTools, CSV, DataFrames, Plots, Random, Taped, Test
 
 using Taped:
     CoDual,
@@ -206,6 +206,27 @@ function identify_concerning_items!(df::DataFrame)
     # Compute whether each item is inside both ranges.
     df.in_all_ranges = map(&, df.in_forwards_range, df.in_pullback_range)
     return df
+end
+
+"""
+    plot_ratio_histogram!(df::DataFrame)
+
+Computes the fields fields `gradient_time` and `gradient_ratio` to `df`. The former is
+simply `forwards_time + pullbacktime`, which the latter is `gradient_time / primal_time`.
+
+Then displays the `gradient_ratio` field as a pair of histograms, one with a linear x-scale,
+and one with a log x-scale.
+"""
+function plot_ratio_histogram!(df::DataFrame)
+    df.gradient_time = df.forwards_time + df.pullback_time
+    df.gradient_ratio = df.gradient_time ./ df.primal_time
+    b = df.gradient_ratio
+    bins = 10.0 .^ (-1.0:0.1:7.0)
+    plot(
+        histogram(b; title="linear", label=""),
+        histogram(b; xscale=:log10, xlim=extrema(bins), bin=bins, title="log", label="");
+        layout=(2, 1),
+    )
 end
 
 function main()

@@ -1,3 +1,5 @@
 /Manifest.toml
 dev
-benchmarking/Manifest.toml
+bench/Manifest.toml
+analysis_results
+.vscode
