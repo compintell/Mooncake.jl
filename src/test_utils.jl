@@ -48,7 +48,6 @@ for n_fields in [0, 1, 2], is_mutable in [true, false]
         @eval $(struct_expr)
 
         # Add type name to list of names.
-        push!(TYPE_NAMES, name)
         t = @eval $name
         push!(TYPES, t)
 
