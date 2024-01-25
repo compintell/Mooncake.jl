@@ -1,3 +1,67 @@
+"""
+    module TestTypes
+
+A module containing types and associated utility functionality against which standardised
+functionality can be tested. The goal is to provide sufficiently broad coverage of different
+kinds of types to provide a high degree of confidence that correctness and performance
+of tangent operations generalises to new types found in the wild.
+"""
+module TestTypes
+
+using Base.Iterators: product
+
+using ..Taped: NoTangent, tangent_type
+
+using Core: svec
+
+const TYPES = Any[]
+
+# Generate all of the composite types against which we might wish to test.
+for n_fields in [0, 1, 2], is_mutable in [true, false]
+
+    # Generate all possible permutations of primitive fields types.
+    fields = (
+        (type=Float64, primal=1.0, tangent=1.0),
+        (type=Int64, primal=1, tangent=NoTangent()),
+        (type=Vector{Float64}, primal=ones(2), tangent=ones(2)),
+        (type=Vector{Int64}, primal=Int64[1, 1], tangent=fill(NoTangent(), 2)),
+    )
+    field_combinations = vec(collect(product(fill(fields, n_fields)...)))
+
+    # Generate struct for each combination of field types.
+    for fields in field_combinations
+        mutable_str = is_mutable ? "Mutable" : ""
+        field_types = map(x -> x.type, fields)
+        type_string = join(map(string, field_types), "_")
+        name = Symbol("$(mutable_str)Struct_$(type_string)")
+
+        # Create the specified type.
+        struct_expr = Expr(
+            :struct,
+            is_mutable,
+            name,
+            Expr(
+                :block,
+                map(n -> Expr(:(::), Symbol("x$n"), field_types[n]), 1:n_fields)...
+            ),
+        )
+        @eval $(struct_expr)
+
+        # Add type name to list of names.
+        push!(TYPE_NAMES, name)
+        t = @eval $name
+        push!(TYPES, t)
+
+        # Produce a function to build an instance of a primal.
+        @eval function build_primal(::Type{$name})
+            return $(name)($(map(x -> deepcopy(x.primal), fields))...)
+        end
+    end
+end
+
+end
+
+
 module TestUtils
 
 using JET, Random, Taped, Test, InteractiveUtils
@@ -418,6 +482,92 @@ function test_rule_and_type_interactions(rng::AbstractRNG, x::P) where {P}
 end
 
 """
+    test_tangent_consistency(rng::AbstractRNG, p::P) where {P}
+
+Like `test_tangent`, but relies on `zero_tangent` and `randn_tangent` to generate test
+cases. Consequently, it is not possible to verify that `increment!!` produces the correct
+numbers in an absolute sense, only that all operations are self-consistent and have the
+performance one would expect of them.
+"""
+function test_tangent_consistency(rng::AbstractRNG, p::P) where {P}
+
+    # Test that basic interface works.
+    T = tangent_type(P)
+    @test T isa Type
+    z = zero_tangent(p)
+    @test z isa T
+    t = randn_tangent(rng, p)
+    @test t isa T
+    test_equality_comparison(p)
+    test_equality_comparison(t)
+
+    # Check that ismutabletype(P) => ismutabletype(T)
+    if ismutabletype(P) && !(T == NoTangent)
+        @test ismutabletype(T)
+    end
+
+    # Check that zero_tangent infers.
+    @inferred Taped.zero_tangent(p)
+
+    # Verify z is zero via its action on t.
+    zc = deepcopy(z)
+    tc = deepcopy(t)
+    @test has_equal_data(@inferred(increment!!(zc, zc)), zc)
+    @test has_equal_data(increment!!(zc, tc), tc)
+    @test has_equal_data(increment!!(tc, zc), tc)
+
+    # increment!! preserves types.
+    @test increment!!(zc, zc) isa T
+    @test increment!!(zc, tc) isa T
+    @test increment!!(tc, zc) isa T
+
+    # The output of `increment!!` for a mutable type must have the property that the first
+    # argument === the returned value.
+    if ismutabletype(P)
+        @test increment!!(zc, zc) === zc
+        @test increment!!(tc, zc) === tc
+        @test increment!!(zc, tc) === zc
+        @test increment!!(tc, tc) === tc
+    end
+
+    # If t isn't the zero element, then adding it to itself must change its value.
+    if !has_equal_data(t, z) && !ismutabletype(P)
+        tc′ = increment!!(tc, tc)
+        @test tc === tc′ || !has_equal_data(tc′, tc)
+    end
+
+    # Setting to zero equals zero.
+    @test has_equal_data(set_to_zero!!(tc), z)
+    if ismutabletype(P)
+        @test set_to_zero!!(tc) === tc
+    end
+
+    z = zero_tangent(p)
+    r = randn_tangent(rng, p)
+
+    # Verify that operations required for finite difference testing to run, and produce the
+    # correct output type.
+    @test _add_to_primal(p, t) isa P
+    @test _diff(p, p) isa T
+    @test _dot(t, t) isa Float64
+    @test _scale(11.0, t) isa T
+    @test populate_address_map(p, t) isa AddressMap
+
+    # Run some basic numerical sanity checks on the output the functions required for finite
+    # difference testing. These are necessary but insufficient conditions.
+    @test has_equal_data(_add_to_primal(p, z), p)
+    if !has_equal_data(z, r)
+        @test !has_equal_data(_add_to_primal(p, r), p)
+    end
+    @test has_equal_data(_diff(p, p), zero_tangent(p))
+    @test _dot(t, t) >= 0.0
+    @test _dot(t, zero_tangent(p)) == 0.0
+    @test _dot(t, increment!!(deepcopy(t), t)) ≈ 2 * _dot(t, t)
+    @test has_equal_data(_scale(1.0, t), t)
+    @test has_equal_data(_scale(2.0, t), increment!!(deepcopy(t), t))
+end
+
+"""
     test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P, T}
 
 Verify that primal `p` with tangents `z_target`, `x`, and `y`, satisfies the tangent
@@ -641,7 +791,6 @@ function zero_out_arguments!!(codualed_fargs::CoDual...)
 end
 
 end
-
 
 
 module TestResources
