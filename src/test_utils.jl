@@ -746,7 +746,7 @@ end
 # Returns true if both `zero_tangent` and `randn_tangnet` should allocate when run on
 # an object of type `P`.
 function __tangent_generation_should_allocate(::Type{P}) where {P}
-    fieldcount(P) == 0 && return false
+    (fieldcount(P) == 0 && !ismutabletype(P)) && return false
     return ismutabletype(P) || any(__tangent_generation_should_allocate, fieldtypes(P))
 end
 
