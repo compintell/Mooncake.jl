@@ -97,6 +97,14 @@ function set_tangent_field!(t::MutableTangent{Tfields}, i::Int, x) where {Tfield
     return x
 end
 
+@inline function set_tangent_field!(t::MutableTangent{Tfields}, s::Symbol, x) where {Tfields}
+    return set_tangent_field!(t, _sym_to_int(Tfields, Val(s)), x)
+end
+
+@generated function _sym_to_int(::Type{Tfields}, ::Val{s}) where {Tfields, s}
+    return findfirst(==(s), fieldnames(Tfields))
+end
+
 @generated function build_tangent(::Type{P}, fields::Vararg{Any, N}) where {P, N}
     tangent_values_exprs = map(enumerate(fieldtypes(P))) do (n, field_type)
         if tangent_field_type(P, n) <: PossiblyUninitTangent

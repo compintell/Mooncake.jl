@@ -616,11 +616,20 @@ function test_tangent_consistency(rng::AbstractRNG, p::P; interface_only=false) 
 end
 
 function test_set_tangent_field!_correctness(t1::T, t2::T) where {T<:MutableTangent}
-    for n in 1:fieldcount(typeof(t1.fields))
+    Tfields = typeof(t1.fields)
+    for n in 1:fieldcount(Tfields)
         !Taped.is_init(t2.fields[n]) && continue
         v = get_tangent_field(t2, n)
+
+        # Int form.
         v′ = Taped.set_tangent_field!(t1, n, v)
         @test v′ === v
+        @test Taped.get_tangent_field(t1, n) === v
+
+        # Symbol form.
+        s = fieldname(Tfields, n)
+        g = Taped.set_tangent_field!(t1, s, v)
+        @test g === v
         @test Taped.get_tangent_field(t1, n) === v
     end
 end
@@ -684,11 +693,24 @@ function test_set_tangent_field!_performance(t1::T, t2::T) where {V, T<:MutableT
     for n in 1:fieldcount(V)
         !is_init(t2.fields[n]) && continue
         v = get_tangent_field(t2, n)
+
+        # Int mode.
         _set_tangent_field!(t1, Val(n), v)
         JET.@report_opt _set_tangent_field!(t1, Val(n), v)
 
         if all(n -> !(fieldtype(V, n) <: Taped.PossiblyUninitTangent), 1:fieldcount(V))
             i = Val(n)
+            _set_tangent_field!(t1, i, v)
+            @test count_allocs(_set_tangent_field!, t1, i, v) == 0
+        end
+
+        # Symbol mode.
+        s = fieldname(V, n)
+        @inferred _set_tangent_field!(t1, Val(s), v)
+        JET.@report_opt _set_tangent_field!(t1, Val(s), v)
+
+        if all(n -> !(fieldtype(V, n) <: Taped.PossiblyUninitTangent), 1:fieldcount(V))
+            i = Val(s)
             _set_tangent_field!(t1, i, v)
             @test count_allocs(_set_tangent_field!, t1, i, v) == 0
         end
