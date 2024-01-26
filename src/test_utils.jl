@@ -1586,7 +1586,7 @@ function generate_test_functions()
         (false, :none, (lb=100, ub=10_000), test_diagonal_to_matrix, Diagonal(randn(30))),
         (
             false,
-            :none,
+            :allocs,
             (lb=100, ub=10_000),
             ldiv!, randn(20, 20), Diagonal(rand(20) .+ 1), randn(20, 20),
         ),
@@ -1598,7 +1598,7 @@ function generate_test_functions()
         ),
         (
             false,
-            :none,
+            :allocs,
             (lb=100, ub=10_000),
             kron!, randn(400, 400), Diagonal(randn(20)), randn(20, 20),
         ),
