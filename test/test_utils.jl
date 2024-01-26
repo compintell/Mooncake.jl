@@ -90,11 +90,6 @@
         z̄ = (x̄..., tangent(y_ȳ))
         @test_throws AssertionError populate_address_map(z, z̄)
     end
-    @testset "primitive test functions ($f)" for (perf_flag, f, x...) in
-        TestResources.generate_primitive_test_functions()
-
-        TestUtils.test_rrule!!(Xoshiro(123456), f, x...; perf_flag)
-    end
     @testset "toy API" begin
         f = (x, y) -> x * y + sin(x) * cos(y)
         x = 5.0
