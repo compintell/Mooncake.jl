@@ -1,4 +1,11 @@
 @testset "test_utils" begin
+    struct TesterStruct
+        x
+        y::Float64
+        TesterStruct() = new()
+        TesterStruct(x) = new(x)
+        TesterStruct(x, y) = new(x, y)
+    end
     @testset "has_equal_data" begin
         @test !has_equal_data(5.0, 4.0)
         @test has_equal_data(5.0, 5.0)
@@ -15,6 +22,9 @@
         @test has_equal_data(Diagonal(ones(5)), Diagonal(ones(5)))
         @test has_equal_data("hello", "hello")
         @test !has_equal_data("hello", "goodbye")
+        @test has_equal_data(TesterStruct(), TesterStruct())
+        @test has_equal_data(TesterStruct(5, 4.0), TesterStruct(5, 4.0))
+        @test !has_equal_data(TesterStruct(), TesterStruct(5))
     end
     @testset "populate_address_map" begin
         @testset "primitive types" begin
