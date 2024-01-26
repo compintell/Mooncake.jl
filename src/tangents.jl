@@ -505,7 +505,8 @@ function increment_field!!(x::Tangent{T}, y, f::Val{F}) where {T, F}
 end
 function increment_field!!(x::MutableTangent{T}, y, f::V) where {T, F, V<:Val{F}}
     y isa NoTangent && return x
-    setfield!(x, :fields, increment_field!!(x.fields, fieldtype(T, F)(y), f))
+    new_val = fieldtype(T, F) <: PossiblyUninitTangent ? fieldtype(T, F)(y) : y
+    setfield!(x, :fields, increment_field!!(x.fields, new_val, f))
     return x
 end
 
