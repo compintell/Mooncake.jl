@@ -61,8 +61,10 @@ end
 
 Base.:(==)(x::MutableTangent, y::MutableTangent) = x.fields == y.fields
 
+const PossiblyMutableTangent{T} = Union{MutableTangent{T}, Tangent{T}}
+
 """
-    get_tangent_field(t::MutableTangent{Tfields}, i::Int) where {Tfields}
+    get_tangent_field(t::Union{MutableTangent, Tangent}, i::Int)
 
 Gets the `i`th field of data in `t`.
 
@@ -70,13 +72,13 @@ Has the same semantics that `setfield!` would have if the data in the `fields` f
 were actually fields of `t`. This is the moral equivalent of `getfield` for
 `MutableTangent`.
 """
-function get_tangent_field(t::MutableTangent{Tfields}, i::Int) where {Tfields}
+function get_tangent_field(t::PossiblyMutableTangent{Tfields}, i::Int) where {Tfields}
     v = getfield(t.fields, i)
     return fieldtype(Tfields, i) <: PossiblyUninitTangent ? val(v) : v
 end
-function get_tangent_field(t::Tangent{Tfields}, i::Int) where {Tfields}
-    v = getfield(t.fields, i)
-    return fieldtype(Tfields, i) <: PossiblyUninitTangent ? val(v) : v
+
+@inline function get_tangent_field(t::PossiblyMutableTangent{F}, s::Symbol) where {F}
+    return get_tangent_field(t, _sym_to_int(F, Val(s)))
 end
 
 """

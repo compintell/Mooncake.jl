@@ -705,14 +705,13 @@ function test_set_tangent_field!_performance(t1::T, t2::T) where {V, T<:MutableT
         end
 
         # Symbol mode.
-        s = fieldname(V, n)
-        @inferred _set_tangent_field!(t1, Val(s), v)
-        JET.@report_opt _set_tangent_field!(t1, Val(s), v)
+        s = Val(fieldname(V, n))
+        @inferred _set_tangent_field!(t1, s, v)
+        JET.@report_opt _set_tangent_field!(t1, s, v)
 
         if all(n -> !(fieldtype(V, n) <: Taped.PossiblyUninitTangent), 1:fieldcount(V))
-            i = Val(s)
-            _set_tangent_field!(t1, i, v)
-            @test count_allocs(_set_tangent_field!, t1, i, v) == 0
+            _set_tangent_field!(t1, s, v)
+            @test count_allocs(_set_tangent_field!, t1, s, v) == 0
         end
     end
 end
@@ -721,10 +720,18 @@ function test_get_tangent_field_performance(t::Union{MutableTangent, Tangent})
     V = Core.Typeof(t.fields)
     for n in 1:fieldcount(V)
         !is_init(t.fields[n]) && continue
-        JET.@report_opt _get_tangent_field(t, Val(n))
+
+        # Int mode.
         i = Val(n)
+        JET.@report_opt _get_tangent_field(t, i)
         @inferred _get_tangent_field(t, i)
         @test count_allocs(_get_tangent_field, t, i) == 0
+
+        # Symbol mode.
+        s = Val(fieldname(V, n))
+        JET.@report_opt _get_tangent_field(t, s)
+        @inferred _get_tangent_field(t, s)
+        @test count_allocs(_get_tangent_field, t, s) == 0
     end
 end
 
