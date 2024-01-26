@@ -61,6 +61,11 @@ const test_group = get(ENV, "TEST_GROUP", "basic")
 
 sr(n::Int) = StableRNG(n)
 
+# This is annoying and hacky and should be improved.
+if isempty(Taped.TestTypes.PRIMALS)
+    Taped.TestTypes.generate_primals()
+end
+
 @testset "Taped.jl" begin
     if test_group == "basic"
         include("tangents.jl")

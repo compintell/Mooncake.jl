@@ -26,6 +26,7 @@ end
 const __PUT = PossiblyUninitTangent
 
 @inline is_init(t::PossiblyUninitTangent) = isdefined(t, :tangent)
+is_init(t) = true
 
 function val(x::PossiblyUninitTangent{T}) where {T}
     if is_init(x)
@@ -34,6 +35,7 @@ function val(x::PossiblyUninitTangent{T}) where {T}
         throw(error("Uninitialised"))
     end
 end
+val(x) = x
 
 function Base.:(==)(t::PossiblyUninitTangent{T}, s::PossiblyUninitTangent{T}) where {T}
     is_init(t) && is_init(s) && return val(t) == val(s)
@@ -59,17 +61,60 @@ end
 
 Base.:(==)(x::MutableTangent, y::MutableTangent) = x.fields == y.fields
 
+"""
+    get_tangent_field(t::MutableTangent{Tfields}, i::Int) where {Tfields}
+
+Gets the `i`th field of data in `t`.
+
+Has the same semantics that `setfield!` would have if the data in the `fields` field of `t`
+were actually fields of `t`. This is the moral equivalent of `getfield` for
+`MutableTangent`.
+"""
+function get_tangent_field(t::MutableTangent{Tfields}, i::Int) where {Tfields}
+    v = getfield(t.fields, i)
+    return fieldtype(Tfields, i) <: PossiblyUninitTangent ? val(v) : v
+end
+function get_tangent_field(t::Tangent{Tfields}, i::Int) where {Tfields}
+    v = getfield(t.fields, i)
+    return fieldtype(Tfields, i) <: PossiblyUninitTangent ? val(v) : v
+end
+
+"""
+    set_tangent_field!(t::MutableTangent{Tfields}, i::Int, x) where {Tfields}
+
+Sets the value of the `i`th field of the data in `t` to value `x`.
+
+Has the same semantics that `setfield!` would have if the data in the `fields` field of `t`
+were actually fields of `t`. This is the moral equivalent of `setfield!` for
+`MutableTangent`.
+"""
+function set_tangent_field!(t::MutableTangent{Tfields}, i::Int, x) where {Tfields}
+    fields = t.fields
+    Ti = fieldtype(Tfields, i)
+    new_val = Ti <: PossiblyUninitTangent ? Ti(x) : x
+    new_fields = Tfields(ntuple(n -> n == i ? new_val : fields[n], fieldcount(Tfields)))
+    t.fields = new_fields
+    return x
+end
+
 @generated function build_tangent(::Type{P}, fields::Vararg{Any, N}) where {P, N}
-    tangent_types = map(P -> PossiblyUninitTangent{tangent_type(P)}, fieldtypes(P))
-    tangent_values_exprs = ntuple(length(tangent_types)) do n
-        if n <= N
-            return Expr(:call, tangent_types[n], :(fields[$n]))
+    tangent_values_exprs = map(enumerate(fieldtypes(P))) do (n, field_type)
+        if tangent_field_type(P, n) <: PossiblyUninitTangent
+            tt = PossiblyUninitTangent{tangent_type(field_type)}
+            if n <= N
+                return Expr(:call, tt, :(fields[$n]))
+            else
+                return Expr(:call, tt)
+            end
         else
-            return Expr(:call, tangent_types[n])
+            return :(fields[$n])
         end
     end
-    T = tangent_type(P)
-    return Expr(:call, T, Expr(:call, NamedTuple{fieldnames(P)}, Expr(:tuple, tangent_values_exprs...)))
+    return Expr(
+        :call,
+        tangent_type(P),
+        Expr(:call, NamedTuple{fieldnames(P)}, Expr(:tuple, tangent_values_exprs...)),
+    )
 end
 
 function build_tangent(::Type{P}, fields::Vararg{Any, N}) where {P<:Union{Tuple, NamedTuple}, N}
@@ -146,7 +191,9 @@ tangent_type(::Type{Core.TypeName}) = NoTangent
     end
 end
 
-@generated tangent_type(::Type{NamedTuple{N, T}}) where {N, T<:Tuple} = NamedTuple{N, tangent_type(T)}
+@generated function tangent_type(::Type{NamedTuple{N, T}}) where {N, T<:Tuple}
+    return NamedTuple{N, tangent_type(T)}
+end
 
 @generated function tangent_type(::Type{P}) where {P}
 
@@ -164,10 +211,49 @@ end
     (isabstracttype(P) || !isconcretetype(P)) && return Any
 
     # Derive tangent type.
-    tangent_field_names = fieldnames(P)
-    tangent_field_types = map(t -> _wrap_type(tangent_type(t)), fieldtypes(P))
-    T = ismutabletype(P) ? MutableTangent : Tangent
-    return T{NamedTuple{tangent_field_names, Tuple{tangent_field_types...}}}
+    T = (ismutabletype(P) ? MutableTangent : Tangent)
+    return T{backing_type(P)}
+end
+
+function backing_type(::Type{P}) where {P}
+    tangent_field_types = map(n -> tangent_field_type(P, n), 1:fieldcount(P))
+    return NamedTuple{fieldnames(P), Tuple{tangent_field_types...}}
+end
+
+"""
+    tangent_field_type(::Type{P}, n::Int) where {P}
+
+Returns the type that lives in the nth elements of `fields` in a `Tangent` /
+`MutableTangent`. Will either be the `tangent_type` of the nth fieldtype of `P`, or the
+`tangent_type` wrapped in a `PossiblyUninitTangent`. The latter case only occurs if it is
+possible for the field to be undefined.
+"""
+function tangent_field_type(::Type{P}, n::Int) where {P}
+    p = fieldtype(P, n)
+    t = tangent_type(p)
+    return is_always_initialised(P, n) ? t : _wrap_type(t)
+end
+
+"""
+    is_always_initialised(::Type{P}, n::Int)
+
+True if the `n`th field of `P` is always initialised. If the `n`th fieldtype of `P`
+`isbitstype`, then this is distinct from asking whether the `n`th field is always defined.
+An isbits field is always defined, but is not always explicitly initialised.
+"""
+function is_always_initialised(::Type{P}, n::Int) where {P}
+    m = Core.Compiler.datatype_min_ninitialized(P)
+    return n <= m
+end
+
+"""
+    is_always_fully_initialised(::Type{P}) where {P}
+
+True if all fields in `P` are always initialised. Put differently, there are no inner
+constructors which permit partial initialisation.
+"""
+function is_always_fully_initialised(::Type{P}) where {P}
+    return Core.Compiler.datatype_min_ninitialized(P) == fieldcount(P)
 end
 
 function _map_if_assigned!(f::F, y::Array, x::Array{P}) where {F, P}
@@ -225,7 +311,7 @@ end
     return v
 end
 @inline zero_tangent(x::Union{Tuple, NamedTuple}) = map(zero_tangent, x)
-@noinline function zero_tangent(x::P) where {P}
+@generated function zero_tangent(x::P) where {P}
 
     tangent_type(P) == NoTangent && return NoTangent()
 
@@ -237,20 +323,23 @@ end
 
     # Derive zero tangent. Tangent types of fields, and types of zeros need only agree
     # if field types are concrete.
-    tangent_field_names = fieldnames(P)
-    tangent_field_types = map(tangent_type, fieldtypes(P))
-    tangent_field_zeros = _map(tangent_field_names, tangent_field_types) do field_name, T
-        if isdefined(x, field_name)
-            return PossiblyUninitTangent{T}(zero_tangent(getfield(x, field_name)))
+    tangent_field_zeros_exprs = ntuple(fieldcount(P)) do n
+        if tangent_field_type(P, n) <: PossiblyUninitTangent
+            T = tangent_type(fieldtype(P, n))
+            return quote
+                if isdefined(x, $n)
+                    PossiblyUninitTangent{$T}(zero_tangent(getfield(x, $n)))
+                else
+                    PossiblyUninitTangent{$T}()
+                end
+            end
         else
-            return PossiblyUninitTangent{T}()
+            return :(zero_tangent(getfield(x, $n)))
         end
     end
-    wrapped_tangent_field_types = map(_wrap_type, tangent_field_types)
-    Tbacking = NamedTuple{tangent_field_names, Tuple{wrapped_tangent_field_types...}}
-    backing = Tbacking(tangent_field_zeros)
-    T = ismutabletype(P) ? MutableTangent : Tangent
-    return T{Tbacking}(backing)
+    backing_data_expr = Expr(:call, :tuple, tangent_field_zeros_exprs...)
+    backing_expr = :($(backing_type(P))($backing_data_expr))
+    return :($(tangent_type(P))($backing_expr))
 end
 
 """
@@ -285,7 +374,7 @@ end
 function randn_tangent(rng::AbstractRNG, x::T) where {T<:Union{Tangent, MutableTangent}}
     return T(randn_tangent(rng, x.fields))
 end
-function randn_tangent(rng::AbstractRNG, x::P) where {P}
+@generated function randn_tangent(rng::AbstractRNG, x::P) where {P}
 
     # If `P` doesn't have a tangent space, always return `NoTangent()`.
     tangent_type(P) === NoTangent && return NoTangent()
@@ -297,20 +386,23 @@ function randn_tangent(rng::AbstractRNG, x::P) where {P}
     ))
 
     # Assume `P` is a generic struct type, and derive the tangent recursively.
-    tangent_field_names = fieldnames(P)
-    tangent_field_types = map(tangent_type, fieldtypes(P))
-    tangent_field_vals = _map(tangent_field_names, tangent_field_types) do field_name, T
-        if isdefined(x, field_name)
-            return PossiblyUninitTangent{T}(randn_tangent(rng, getfield(x, field_name)))
+    tangent_field_exprs = map(1:fieldcount(P)) do n
+        if tangent_field_type(P, n) <: PossiblyUninitTangent
+            T = tangent_type(fieldtype(P, n))
+            return quote
+                if isdefined(x, $n)
+                    PossiblyUninitTangent{$T}(randn_tangent(rng, getfield(x, $n)))
+                else
+                    PossiblyUninitTangent{$T}()
+                end
+            end
         else
-            return PossiblyUninitTangent{T}()
+            return :(randn_tangent(rng, getfield(x, $n)))
         end
     end
-    wrapped_tangent_field_types = map(_wrap_type, tangent_field_types)
-    Tbacking = NamedTuple{tangent_field_names, Tuple{wrapped_tangent_field_types...}}
-    backing = Tbacking(tangent_field_vals)
-    T = ismutabletype(P) ? MutableTangent : Tangent
-    return T{Tbacking}(backing)
+
+    tangent_fields_expr = Expr(:call, :tuple, tangent_field_exprs...)
+    return :($(tangent_type(P))($(backing_type(P))($tangent_fields_expr)))
 end
 
 """
@@ -328,7 +420,7 @@ function increment!!(x::T, y::T) where {P, N, T<:Array{P, N}}
     return _map_if_assigned!(increment!!, x, x, y)
 end
 increment!!(x::T, y::T) where {T<:Tuple} = _map(increment!!, x, y)
-increment!!(x::T, y::T) where {T<:NamedTuple} = _map(increment!!, x, y)
+increment!!(x::T, y::T) where {T<:NamedTuple} = T(increment!!(Tuple(x), Tuple(y)))
 function increment!!(x::T, y::T) where {T<:PossiblyUninitTangent}
     is_init(x) && is_init(y) && return T(increment!!(val(x), val(y)))
     is_init(x) && !is_init(y) && error("x is initialised, but y is not")
@@ -354,7 +446,7 @@ set_to_zero!!(x::Array) = _map_if_assigned!(set_to_zero!!, x, x)
 function set_to_zero!!(x::T) where {T<:PossiblyUninitTangent}
     return is_init(x) ? T(set_to_zero!!(val(x))) : x
 end
-set_to_zero!!(x::Tangent) = Tangent(set_to_zero!!(x.fields))
+set_to_zero!!(x::T) where {T<:Tangent} = T(set_to_zero!!(x.fields))
 function set_to_zero!!(x::MutableTangent)
     x.fields = set_to_zero!!(x.fields)
     return x
@@ -501,7 +593,12 @@ function _add_to_primal(p::P, t::T) where {P, T<:Union{Tangent, MutableTangent}}
         !isdefined(p, f) && !is_init(tf) && return FieldUndefined()
         throw(error("unable to handle undefined-ness"))
     end
-    return P(filter(!=(FieldUndefined()), tmp)...)
+    i = findfirst(==(FieldUndefined()), tmp)
+    if i === nothing
+        return P(tmp...)
+    else
+        return P(tmp[1:i-1]...)
+    end
 end
 
 """
@@ -531,10 +628,11 @@ _diff(p::P, q::P) where {P<:Union{Tuple, NamedTuple}} = _map(_diff, p, q)
 function _containerlike_diff(p::P, q::P) where {P}
     diffed_fields = map(fieldnames(P)) do f
         isdefined(p, f) && isdefined(q, f) && return _diff(getfield(p, f), getfield(q, f))
-        !isdefined(p, f) && !isdefined(q, f) && return nothing
+        !isdefined(p, f) && !isdefined(q, f) && return FieldUndefined()
         throw(error("Unhandleable undefinedness"))
     end
-    diffed_fields = filter(!=(nothing), diffed_fields)
+    i = findfirst(==(FieldUndefined()), diffed_fields)
+    diffed_fields = i === nothing ? diffed_fields : diffed_fields[1:i-1]
     return build_tangent(P, diffed_fields...)
 end
 
