@@ -90,7 +90,7 @@ Has the same semantics that `setfield!` would have if the data in the `fields` f
 were actually fields of `t`. This is the moral equivalent of `setfield!` for
 `MutableTangent`.
 """
-function set_tangent_field!(t::MutableTangent{Tfields}, i::Int, x) where {Tfields}
+@inline function set_tangent_field!(t::MutableTangent{Tfields}, i::Int, x) where {Tfields}
     fields = t.fields
     Ti = fieldtype(Tfields, i)
     new_val = Ti <: PossiblyUninitTangent ? Ti(x) : x
@@ -495,9 +495,13 @@ end
     return Expr(:call, T, new_fields)
 end
 
-function increment_field!!(x::Tangent{T}, y, f::V) where {T, F, V<:Val{F}}
+function increment_field!!(x::Tangent{T}, y, f::Val{F}) where {T, F}
     y isa NoTangent && return x
-    return Tangent(increment_field!!(x.fields, fieldtype(T, F)(y), f))
+    if fieldtype(T, F) <: PossiblyUninitTangent
+        return Tangent(increment_field!!(x.fields, fieldtype(T, F)(y), f))
+    else
+        return Tangent(increment_field!!(x.fields, y, f))
+    end
 end
 function increment_field!!(x::MutableTangent{T}, y, f::V) where {T, F, V<:Val{F}}
     y isa NoTangent && return x
