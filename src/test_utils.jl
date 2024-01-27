@@ -102,7 +102,9 @@ function has_equal_data(x::T, y::T; equal_undefs=true) where {T<:Array}
     end
     return all(equality)
 end
-has_equal_data(x::Float64, y::Float64; equal_undefs=true) = isapprox(x, y)
+function has_equal_data(x::Float64, y::Float64; equal_undefs=true)
+    return (isapprox(x, y) && !isnan(x)) || (isnan(x) && isnan(y))
+end
 function has_equal_data(x::T, y::T; equal_undefs=true) where {T<:Core.SimpleVector}
     return all(map((a, b) -> has_equal_data(a, b; equal_undefs), x, y))
 end

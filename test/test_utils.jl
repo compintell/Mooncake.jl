@@ -9,6 +9,8 @@
     @testset "has_equal_data" begin
         @test !has_equal_data(5.0, 4.0)
         @test has_equal_data(5.0, 5.0)
+        @test has_equal_data(Float64(NaN), Float64(NaN))
+        @test !has_equal_data(5.0, NaN)
         @test has_equal_data(Float64, Float64)
         @test !has_equal_data(Float64, Float32)
         @test has_equal_data(Float64.name, Float64.name)
