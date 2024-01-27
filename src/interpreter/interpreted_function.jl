@@ -24,10 +24,7 @@ mutable struct SlotRef{T} <: AbstractSlot{T}
 end
 
 Base.getindex(x::SlotRef) = getfield(x, :x)
-function Base.setindex!(x::SlotRef, val)
-    setfield!(x, :x, val)
-    return x.x
-end
+Base.setindex!(x::SlotRef, val) = setfield!(x, :x, val)
 Base.isassigned(x::SlotRef) = isdefined(x, :x)
 Base.eltype(::SlotRef{T}) where {T} = T
 Base.copy(x::SlotRef{T}) where {T} = isassigned(x) ? SlotRef{T}(x[]) : SlotRef{T}()
@@ -78,9 +75,7 @@ Returns either a `ConstSlot` or a `TypedGlobalRef`, both of which are `AbstractS
 In particular, a `ConstSlot` is returned only if the `ex` is declared to be constant.
 =#
 function _globalref_to_slot(ex::GlobalRef)
-    val = getglobal(ex.mod, ex.name)
-    isconst(ex) && return ConstSlot(val)
-    return TypedGlobalRef(ex)
+    return isconst(ex) ? ConstSlot(getglobal(ex.mod, ex.name)) : TypedGlobalRef(ex)
 end
 
 # Utility functionality used through instruction construction.

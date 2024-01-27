@@ -165,7 +165,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
         ),
         (
             false,
-            :stability,
+            :stability_and_allocs,
             nothing,
             lsetfield!,
             TestResources.FullyInitMutableStruct(5.0, [1.0, 2.0]),
