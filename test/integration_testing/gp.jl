@@ -2,15 +2,23 @@ using AbstractGPs, KernelFunctions
 
 @testset "gp" begin
     interp = Taped.TInterp()
-    @testset "kernelmatrix_diag $k, $(typeof(x))" for (k, x1) in Iterators.product(
+    simple_kernels = Any[SEKernel(), Matern12Kernel(), Matern32Kernel(), Matern52Kernel()]
+    simple_xs = Any[
+        randn(10), randn(1), ColVecs(randn(2, 11)), RowVecs(randn(9, 4)),
+        range(0.0; step=0.1, length=11),
+    ]
+    d_2_xs = Any[ColVecs(randn(2, 11)), RowVecs(randn(9, 2))]
+    @testset "kernelmatrix_diag $k, $(typeof(x1))" for (k, x1) in vcat(
+        Any[(k, x) for k in simple_kernels for x in simple_xs],
+        Any[(with_lengthscale(k, 1.1), x) for k in simple_kernels for x in simple_xs],
+        Any[(with_lengthscale(k, rand(2)), x) for k in simple_kernels for x in d_2_xs],
+        Any[(k ∘ LinearTransform(randn(2, 2)), x) for k in simple_kernels for x in d_2_xs],
         Any[
-            SEKernel(), Matern12Kernel(), Matern32Kernel(), Matern52Kernel()
-        ],
-        Any[
-            randn(10), randn(1), ColVecs(randn(2, 11)), RowVecs(randn(9, 4)),
-            range(0.0; step=0.1, length=11),
+            (k ∘ LinearTransform(Diagonal(randn(2))), x) for
+                k in simple_kernels for x in d_2_xs
         ],
     )
+        @info typeof(k), typeof(x1)
         @testset "ternary kernelmatrix" begin
             f = kernelmatrix
             x = (k, x1, x1)
