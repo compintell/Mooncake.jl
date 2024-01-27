@@ -25,6 +25,7 @@ jobs:
           - 'integration_testing/misc'
           - 'integration_testing/diff_tests'
           - 'integration_testing/distributions'
+          - 'integration_testing/gp'
           - 'integration_testing/special_functions'
           - 'integration_testing/array'
           - 'integration_testing/turing'
