@@ -2,12 +2,17 @@ using AbstractGPs, KernelFunctions
 
 @testset "gp" begin
     interp = Taped.TInterp()
-    simple_kernels = Any[
+    base_kernels = Any[
+        ZeroKernel(),
+        ConstantKernel(; c=1.0),
+        CosineKernel(),
         SEKernel(),
         Matern12Kernel(),
         Matern32Kernel(),
         Matern52Kernel(),
         LinearKernel(),
+        gaborkernel(),
+        PolynomialKernel(; degree=2, c=0.5),
     ]
     simple_xs = Any[
         randn(10),
@@ -18,13 +23,13 @@ using AbstractGPs, KernelFunctions
     ]
     d_2_xs = Any[ColVecs(randn(2, 11)), RowVecs(randn(9, 2))]
     @testset "kernelmatrix_diag $k, $(typeof(x1))" for (k, x1) in vcat(
-        Any[(k, x) for k in simple_kernels for x in simple_xs],
-        Any[(with_lengthscale(k, 1.1), x) for k in simple_kernels for x in simple_xs],
-        Any[(with_lengthscale(k, rand(2)), x) for k in simple_kernels for x in d_2_xs],
-        Any[(k ∘ LinearTransform(randn(2, 2)), x) for k in simple_kernels for x in d_2_xs],
+        Any[(k, x) for k in base_kernels for x in simple_xs],
+        Any[(with_lengthscale(k, 1.1), x) for k in base_kernels for x in simple_xs],
+        Any[(with_lengthscale(k, rand(2)), x) for k in base_kernels for x in d_2_xs],
+        Any[(k ∘ LinearTransform(randn(2, 2)), x) for k in base_kernels for x in d_2_xs],
         Any[
             (k ∘ LinearTransform(Diagonal(randn(2))), x) for
-                k in simple_kernels for x in d_2_xs
+                k in base_kernels for x in d_2_xs
         ],
     )
         @info typeof(k), typeof(x1)
