@@ -2,10 +2,19 @@ using AbstractGPs, KernelFunctions
 
 @testset "gp" begin
     interp = Taped.TInterp()
-    simple_kernels = Any[SEKernel(), Matern12Kernel(), Matern32Kernel(), Matern52Kernel()]
+    simple_kernels = Any[
+        SEKernel(),
+        Matern12Kernel(),
+        Matern32Kernel(),
+        Matern52Kernel(),
+        LinearKernel(),
+    ]
     simple_xs = Any[
-        randn(10), randn(1), ColVecs(randn(2, 11)), RowVecs(randn(9, 4)),
+        randn(10),
+        randn(1),
         range(0.0; step=0.1, length=11),
+        ColVecs(randn(2, 11)),
+        RowVecs(randn(9, 4)),
     ]
     d_2_xs = Any[ColVecs(randn(2, 11)), RowVecs(randn(9, 2))]
     @testset "kernelmatrix_diag $k, $(typeof(x1))" for (k, x1) in vcat(
