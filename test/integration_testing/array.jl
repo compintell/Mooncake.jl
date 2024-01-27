@@ -446,7 +446,7 @@ _getter = () -> 5.0
             (false, reverse!, randn(sr(5), 3)),
             (false, reverseind, randn(sr(6), 5), 3),
             (false, selectdim, randn(sr(7), 3), 1, 2),
-            # (false, setdiff!, randn(sr(8), 3), randn(sr(9), 2)), # weird control flow problem
+            (false, setdiff!, randn(sr(8), 3), randn(sr(9), 2)),
             (false, setindex!, randn(sr(0), 3), randn(sr(1)), 1),
             (false, setindex!, randn(sr(2), 3), randn(sr(3), 2), 1:2),
             (false, setindex!, randn(sr(4), 3), randn(sr(5)), CartesianIndex(2)),
