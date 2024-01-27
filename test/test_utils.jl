@@ -1,7 +1,16 @@
 @testset "test_utils" begin
+    struct TesterStruct
+        x
+        y::Float64
+        TesterStruct() = new()
+        TesterStruct(x) = new(x)
+        TesterStruct(x, y) = new(x, y)
+    end
     @testset "has_equal_data" begin
         @test !has_equal_data(5.0, 4.0)
         @test has_equal_data(5.0, 5.0)
+        @test has_equal_data(Float64(NaN), Float64(NaN))
+        @test !has_equal_data(5.0, NaN)
         @test has_equal_data(Float64, Float64)
         @test !has_equal_data(Float64, Float32)
         @test has_equal_data(Float64.name, Float64.name)
@@ -15,6 +24,9 @@
         @test has_equal_data(Diagonal(ones(5)), Diagonal(ones(5)))
         @test has_equal_data("hello", "hello")
         @test !has_equal_data("hello", "goodbye")
+        @test has_equal_data(TesterStruct(), TesterStruct())
+        @test has_equal_data(TesterStruct(5, 4.0), TesterStruct(5, 4.0))
+        @test !has_equal_data(TesterStruct(), TesterStruct(5))
     end
     @testset "populate_address_map" begin
         @testset "primitive types" begin
@@ -79,11 +91,6 @@
         z = (x..., primal(y_ȳ))
         z̄ = (x̄..., tangent(y_ȳ))
         @test_throws AssertionError populate_address_map(z, z̄)
-    end
-    @testset "primitive test functions ($f)" for (perf_flag, f, x...) in
-        TestResources.generate_primitive_test_functions()
-
-        TestUtils.test_rrule!!(Xoshiro(123456), f, x...; perf_flag)
     end
     @testset "toy API" begin
         f = (x, y) -> x * y + sin(x) * cos(y)

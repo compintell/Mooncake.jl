@@ -1,7 +1,94 @@
+"""
+    module TestTypes
+
+A module containing types and associated utility functionality against which standardised
+functionality can be tested. The goal is to provide sufficiently broad coverage of different
+kinds of types to provide a high degree of confidence that correctness and performance
+of tangent operations generalises to new types found in the wild.
+"""
+module TestTypes
+
+using Base.Iterators: product
+using Core: svec
+using ExprTools: combinedef
+using ..Taped: NoTangent, tangent_type
+
+const PRIMALS = Tuple{Bool, Any}[]
+
+# Generate all of the composite types against which we might wish to test.
+function generate_primals()
+    empty!(PRIMALS)
+    for n_fields in [0, 1, 2], is_mutable in [true, false]
+
+        # Generate all possible permutations of primitive fields types.
+        fields = (
+            (type=Float64, primal=1.0, tangent=1.0),
+            (type=Int64, primal=1, tangent=NoTangent()),
+            (type=Vector{Float64}, primal=ones(2), tangent=ones(2)),
+            (type=Vector{Int64}, primal=Int64[1, 1], tangent=fill(NoTangent(), 2)),
+        )
+        field_combinations = vec(collect(product(fill(fields, n_fields)...)))
+
+        ns_always_def = 0:n_fields
+
+        for fields in field_combinations, n_always_def in ns_always_def
+
+            mutable_str = is_mutable ? "Mutable" : ""
+            field_types = map(x -> x.type, fields)
+            type_string = join(map(string, field_types), "_")
+            name = Symbol("$(mutable_str)Struct_$(type_string)_$(n_always_def)")
+            field_names = map(n -> Symbol("x$n"), 1:n_fields)
+
+            # Create the specified type.
+            struct_expr = Expr(
+                :struct,
+                is_mutable,
+                name,
+                Expr(
+                    :block,
+
+                    # Specify fields.
+                    map(n -> Expr(:(::), field_names[n], field_types[n]), 1:n_fields)...,
+
+                    # Specify inner constructors.
+                    map(n_always_def:n_fields) do n
+                        return combinedef(Dict(
+                            :head => :function,
+                            :name => name,
+                            :args => field_names[1:n],
+                            :body => Expr(:call, :new, field_names[1:n]...),
+                        ))
+                    end...,
+                ),
+            )
+            @eval $(struct_expr)
+
+            t = @eval $name
+            for n in n_always_def:n_fields
+                interface_only = any(x -> isbitstype(x.type), fields[n+1:end])
+                p = invokelatest(t, map(x -> deepcopy(x.primal), fields[1:n])...)
+                push!(PRIMALS, (interface_only, p))
+            end
+        end
+    end
+    return nothing
+end
+
+end
+
+"""
+    module TestUtils
+
+A collection of functions comprising collections of unit tests which check to see if the
+interfaces that this package defines have been implemented correctly.
+"""
 module TestUtils
 
 using JET, Random, Taped, Test, InteractiveUtils
-using Taped: CoDual, NoTangent, rrule!!, is_init, zero_codual, DefaultCtx, @is_primitive, val
+using Taped:
+    CoDual, NoTangent, rrule!!, is_init, zero_codual, DefaultCtx, @is_primitive, val,
+    is_always_fully_initialised, get_tangent_field, set_tangent_field!, MutableTangent,
+    Tangent
 
 has_equal_data(x::T, y::T; equal_undefs=true) where {T<:String} = x == y
 has_equal_data(x::Type, y::Type; equal_undefs=true) = x == y
@@ -15,16 +102,33 @@ function has_equal_data(x::T, y::T; equal_undefs=true) where {T<:Array}
     end
     return all(equality)
 end
-has_equal_data(x::Float64, y::Float64; equal_undefs=true) = isapprox(x, y)
+function has_equal_data(x::Float64, y::Float64; equal_undefs=true)
+    return (isapprox(x, y) && !isnan(x)) || (isnan(x) && isnan(y))
+end
 function has_equal_data(x::T, y::T; equal_undefs=true) where {T<:Core.SimpleVector}
     return all(map((a, b) -> has_equal_data(a, b; equal_undefs), x, y))
 end
 function has_equal_data(x::T, y::T; equal_undefs=true) where {T}
     isprimitivetype(T) && return isequal(x, y)
-    return all(map(
-        n -> isdefined(x, n) ? has_equal_data(getfield(x, n), getfield(y, n)) : true,
-        fieldnames(T),
-    ))
+    if ismutabletype(x)
+        return all(map(
+            n -> isdefined(x, n) ? has_equal_data(getfield(x, n), getfield(y, n)) : true,
+            fieldnames(T),
+        ))
+    else
+        for n in fieldnames(T)
+            if isdefined(x, n)
+                if isdefined(y, n) && has_equal_data(getfield(x, n), getfield(y, n))
+                    continue
+                else
+                    return false
+                end
+            else
+                return isdefined(y, n) ? false : true
+            end
+        end
+        return true
+    end
 end
 function has_equal_data(x::GlobalRef, y::GlobalRef; equal_undefs=true)
     return x.mod == y.mod && x.name == y.name
@@ -418,6 +522,245 @@ function test_rule_and_type_interactions(rng::AbstractRNG, x::P) where {P}
 end
 
 """
+    test_tangent_consistency(rng::AbstractRNG, p::P; interface_only=false) where {P}
+
+Like `test_tangent`, but relies on `zero_tangent` and `randn_tangent` to generate test
+cases. Consequently, it is not possible to verify that `increment!!` produces the correct
+numbers in an absolute sense, only that all operations are self-consistent and have the
+performance one would expect of them.
+
+Setting `interface_only` to `true` turns off all numerical correctness checks. This is
+useful when `p` contains uninitialised isbits data, whose value is non-deterministic.
+This happens for `Array`s of isbits data, and in composite types with uninitialised isbits
+fields. In such situations, it still makes sense to test the performance of tangent
+generation and incrementation operations, but owing to the non-determinism it makes no sense
+to check their numerical correctness. 
+"""
+function test_tangent_consistency(rng::AbstractRNG, p::P; interface_only=false) where {P}
+    @nospecialize rng p
+
+    # Test that basic interface works.
+    T = tangent_type(P)
+    @test T isa Type
+    z = zero_tangent(p)
+    @test z isa T
+    t = randn_tangent(rng, p)
+    @test t isa T
+    test_equality_comparison(p)
+    test_equality_comparison(t)
+
+    # Check that ismutabletype(P) => ismutabletype(T)
+    if ismutabletype(P) && !(T == NoTangent)
+        @test ismutabletype(T)
+    end
+
+    # Verify z is zero via its action on t.
+    zc = deepcopy(z)
+    tc = deepcopy(t)
+    @test has_equal_data(@inferred(increment!!(zc, zc)), zc)
+    @test has_equal_data(increment!!(zc, tc), tc)
+    @test has_equal_data(increment!!(tc, zc), tc)
+
+    # increment!! preserves types.
+    @test increment!!(zc, zc) isa T
+    @test increment!!(zc, tc) isa T
+    @test increment!!(tc, zc) isa T
+
+    # The output of `increment!!` for a mutable type must have the property that the first
+    # argument === the returned value.
+    if ismutabletype(P)
+        @test increment!!(zc, zc) === zc
+        @test increment!!(tc, zc) === tc
+        @test increment!!(zc, tc) === zc
+        @test increment!!(tc, tc) === tc
+    end
+
+    # If t isn't the zero element, then adding it to itself must change its value.
+    if !has_equal_data(t, z) && !ismutabletype(P)
+        tc′ = increment!!(tc, tc)
+        @test tc === tc′ || !has_equal_data(tc′, tc)
+    end
+
+    # Setting to zero equals zero.
+    @test has_equal_data(set_to_zero!!(tc), z)
+    if ismutabletype(P)
+        @test set_to_zero!!(tc) === tc
+    end
+
+    z = zero_tangent(p)
+    r = randn_tangent(rng, p)
+
+    # Check set_tangent_field if mutable.
+    t isa MutableTangent && test_set_tangent_field!_correctness(t, z)
+
+    # Verify that operations required for finite difference testing to run, and produce the
+    # correct output type.
+    @test _add_to_primal(p, t) isa P
+    @test _diff(p, p) isa T
+    @test _dot(t, t) isa Float64
+    @test _scale(11.0, t) isa T
+    @test populate_address_map(p, t) isa AddressMap
+
+    # Run some basic numerical sanity checks on the output the functions required for finite
+    # difference testing. These are necessary but insufficient conditions.
+    if !interface_only
+        @test has_equal_data(_add_to_primal(p, z), p)
+        if !has_equal_data(z, r)
+            @test !has_equal_data(_add_to_primal(p, r), p)
+        end
+        @test has_equal_data(_diff(p, p), zero_tangent(p))
+    end
+    @test _dot(t, t) >= 0.0
+    @test _dot(t, zero_tangent(p)) == 0.0
+    @test _dot(t, increment!!(deepcopy(t), t)) ≈ 2 * _dot(t, t)
+    @test has_equal_data(_scale(1.0, t), t)
+    @test has_equal_data(_scale(2.0, t), increment!!(deepcopy(t), t))
+end
+
+function test_set_tangent_field!_correctness(t1::T, t2::T) where {T<:MutableTangent}
+    Tfields = typeof(t1.fields)
+    for n in 1:fieldcount(Tfields)
+        !Taped.is_init(t2.fields[n]) && continue
+        v = get_tangent_field(t2, n)
+
+        # Int form.
+        v′ = Taped.set_tangent_field!(t1, n, v)
+        @test v′ === v
+        @test Taped.get_tangent_field(t1, n) === v
+
+        # Symbol form.
+        s = fieldname(Tfields, n)
+        g = Taped.set_tangent_field!(t1, s, v)
+        @test g === v
+        @test Taped.get_tangent_field(t1, n) === v
+    end
+end
+
+"""
+    test_tangent_performance(rng::AbstractRNG, p::P) where {P}
+
+Runs a variety of performance-related tests on tangents. These tests constitute a set of
+necessary conditions for good overall performance.
+
+The performance model in a few cases is a little bit complicated, because it depends on
+various properties of the type in question (is it mutable, are its fields mutable, are all
+of its fields necessarily defined, etc), so the source code should be consulted for precise
+details.
+
+*Note:* this function assumes that the tangent interface is implemented correctly for `p`.
+To verify that this is the case, ensure that all tests in either `test_tangent` or
+`test_tangent_consistency` pass.
+"""
+function test_tangent_performance(rng::AbstractRNG, p::P) where {P}
+    @nospecialize rng, p
+
+    # Should definitely infer, because tangent type must be known statically from primal.
+    z = @inferred zero_tangent(p)
+    t = @inferred randn_tangent(rng, p)
+
+    # Computing the tangent type must always be type stable and allocation-free.
+    @inferred tangent_type(P)
+    @test (@allocations tangent_type(P)) == 0
+
+    # Check there are no allocations when there ought not to be.
+    if !__tangent_generation_should_allocate(P)
+        @test (@allocations zero_tangent_wrapper(p)) == 0
+        @test (@allocations randn_tangent_wrapper(rng, p)) == 0
+    end
+
+    # `increment!!` should always infer.
+    @inferred increment!!(t, z)
+    @inferred increment!!(z, t)
+    @inferred increment!!(t, t)
+    @inferred increment!!(z, z)
+
+    # Unfortunately, `increment!!` does occassionally allocate at the minute due to the
+    # way we're handling partial initialisation. Hopefully this will change in the future.
+    if !__increment_should_allocate(P)
+        @test (@allocations increment!!(t, t)) == 0
+        @test (@allocations increment!!(z, t)) == 0
+        @test (@allocations increment!!(t, z)) == 0
+        @test (@allocations increment!!(z, z)) == 0
+    end
+
+    # set_tangent_field! should never allocate.
+    t isa MutableTangent && test_set_tangent_field!_performance(t, z)
+    t isa Union{MutableTangent, Tangent} && test_get_tangent_field_performance(t)
+end
+
+_set_tangent_field!(x, ::Val{i}, v) where {i} = set_tangent_field!(x, i, v)
+_get_tangent_field(x, ::Val{i}) where {i} = get_tangent_field(x, i)
+
+function test_set_tangent_field!_performance(t1::T, t2::T) where {V, T<:MutableTangent{V}}
+    for n in 1:fieldcount(V)
+        !is_init(t2.fields[n]) && continue
+        v = get_tangent_field(t2, n)
+
+        # Int mode.
+        _set_tangent_field!(t1, Val(n), v)
+        JET.@report_opt _set_tangent_field!(t1, Val(n), v)
+
+        if all(n -> !(fieldtype(V, n) <: Taped.PossiblyUninitTangent), 1:fieldcount(V))
+            i = Val(n)
+            _set_tangent_field!(t1, i, v)
+            @test count_allocs(_set_tangent_field!, t1, i, v) == 0
+        end
+
+        # Symbol mode.
+        s = Val(fieldname(V, n))
+        @inferred _set_tangent_field!(t1, s, v)
+        JET.@report_opt _set_tangent_field!(t1, s, v)
+
+        if all(n -> !(fieldtype(V, n) <: Taped.PossiblyUninitTangent), 1:fieldcount(V))
+            _set_tangent_field!(t1, s, v)
+            @test count_allocs(_set_tangent_field!, t1, s, v) == 0
+        end
+    end
+end
+
+function test_get_tangent_field_performance(t::Union{MutableTangent, Tangent})
+    V = Core.Typeof(t.fields)
+    for n in 1:fieldcount(V)
+        !is_init(t.fields[n]) && continue
+
+        # Int mode.
+        i = Val(n)
+        JET.@report_opt _get_tangent_field(t, i)
+        @inferred _get_tangent_field(t, i)
+        @test count_allocs(_get_tangent_field, t, i) == 0
+
+        # Symbol mode.
+        s = Val(fieldname(V, n))
+        JET.@report_opt _get_tangent_field(t, s)
+        @inferred _get_tangent_field(t, s)
+        @test count_allocs(_get_tangent_field, t, s) == 0
+    end
+end
+
+# Function barrier to ensure inference in value types.
+function count_allocs(f::F, x::Vararg{Any, N}) where {F, N}
+    @allocations f(x...)
+end
+
+@noinline zero_tangent_wrapper(p) = zero_tangent(p)
+@noinline randn_tangent_wrapper(rng, p) = randn_tangent(rng, p)
+
+# Returns true if both `zero_tangent` and `randn_tangnet` should allocate when run on
+# an object of type `P`.
+function __tangent_generation_should_allocate(::Type{P}) where {P}
+    (fieldcount(P) == 0 && !ismutabletype(P)) && return false
+    return ismutabletype(P) || any(__tangent_generation_should_allocate, fieldtypes(P))
+end
+
+__tangent_generation_should_allocate(::Type{P}) where {P<:Array} = true
+
+function __increment_should_allocate(::Type{P}) where {P}
+    return any(eachindex(fieldtypes(P))) do n
+        Taped.tangent_field_type(P, n) <: PossiblyUninitTangent
+    end
+end
+
+"""
     test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P, T}
 
 Verify that primal `p` with tangents `z_target`, `x`, and `y`, satisfies the tangent
@@ -642,8 +985,13 @@ end
 
 end
 
+"""
+    module TestResources
 
-
+A collection of functions and types which should be tested. The intent is to get this module
+to a state in which if we can successfully AD everything in it, we know we can successfully
+AD anything.
+"""
 module TestResources
 
 using ..Taped
@@ -716,106 +1064,6 @@ end
 
 function Base.:(==)(a::FullyInitMutableStruct, b::FullyInitMutableStruct)
     return equal_field(a, b, :x) && equal_field(a, b, :y)
-end
-
-
-
-#
-# Functions for which rules are implemented. Useful for testing basic test infrastructure,
-# and ensuring that any modifications to the interface do not prevent certain functions from
-# having rules written for them. If a function is found for which the design of `rrule!!`
-# doesn't permit a rule to be written, it should be added here to prevent future
-# regressions. For example, `primitive_setfield!` was added because a particular iteration
-# of the design did not allow the implementation of a correct rule.
-# The hope is that this list of functions catches any issues early, before a large-scale
-# re-write of the rules begins.
-#
-
-p_sin(x::Float64) = sin(x)
-@is_primitive MinimalCtx Tuple{typeof(p_sin), Float64}
-function Taped.rrule!!(::CoDual{typeof(p_sin)}, x::CoDual{Float64, Float64})
-    p_sin_pb!!(ȳ::Float64, df, dx) = df, dx + ȳ * cos(primal(x))
-    return CoDual(sin(primal(x)), zero(Float64)), p_sin_pb!!
-end
-
-p_mul(x::Float64, y::Float64) = x * y
-@is_primitive MinimalCtx Tuple{typeof(p_mul), Float64, Float64}
-function Taped.rrule!!(::CoDual{typeof(p_mul)}, x::CoDual{Float64}, y::CoDual{Float64})
-    p_mul_pb!!(z̄, df, dx, dy) = df, dx + z̄ * primal(y), dy + z̄ * primal(x)
-    return CoDual(primal(x) * primal(y), zero(Float64)), p_mul_pb!!
-end
-
-p_mat_mul!(C, A, B) = mul!(C, A, B)
-@is_primitive(
-    MinimalCtx, Tuple{typeof(p_mat_mul!), Matrix{Float64}, Matrix{Float64}, Matrix{Float64}}
-)
-function Taped.rrule!!(
-    ::CoDual{typeof(p_mat_mul!)}, C::T, A::T, B::T
-) where {T<:CoDual{Matrix{Float64}}}
-    C_old = copy(C)
-    function p_mat_mul_pb!!(C̄::Matrix{Float64}, df, _, Ā, B̄)
-        Ā .+= C̄ * primal(B)'
-        B̄ .+= primal(A)' * C̄
-        primal(C) .= primal(C_old)
-        tangent(C) .= tangent(C_old)
-        return df, C̄, Ā, B̄
-    end
-    mul!(primal(C), primal(A), primal(B))
-    tangent(C) .= 0
-    return C, p_mat_mul_pb!!
-end
-
-p_setfield!(value, name::Symbol, x) = setfield!(value, name, x)
-@is_primitive MinimalCtx Tuple{typeof(p_setfield!), Any, Symbol, Any}
-
-__replace_value(::T, v) where {T<:PossiblyUninitTangent} = T(v)
-
-function __setfield!(value::MutableTangent, name, x)
-    fields = value.fields
-    new_fields = @set fields.$name = __replace_value(getfield(fields, name), x)
-    value.fields = new_fields
-    return x
-end
-
-function Taped.rrule!!(::CoDual{typeof(p_setfield!)}, value, name::CoDual{Symbol}, x)
-    _name = primal(name)
-    _value = primal(value)
-    _dvalue = tangent(value)
-    old_x = getfield(_value, _name)
-    old_dx = val(getfield(_dvalue.fields, _name))
-
-    function p_setfield!_pb!!(dy, df, dvalue, dname, dx)
-
-        # Add all increments to dx.
-        dx = increment!!(dx, val(getfield(dvalue.fields, _name)))
-        dx = increment!!(dx, dy)
-
-        # Restore old values.
-        setfield!(primal(value), _name, old_x)
-        __setfield!(tangent(value), _name, old_dx)
-
-        return df, dvalue, dname, dx
-    end
-
-    y = CoDual(
-        setfield!(_value, _name, primal(x)),
-        __setfield!(_dvalue, _name, tangent(x)),
-    )
-    return y, p_setfield!_pb!!
-end
-
-const __A = randn(3, 3)
-
-function generate_primitive_test_functions()
-    return Any[
-        (:stability, p_sin, 5.0),
-        (:stability, p_mul, 5.0, 4.0),
-        (:stability, p_mat_mul!, randn(4, 5), randn(4, 3), randn(3, 5)),
-        (:stability, p_mat_mul!, randn(3, 3), __A, __A),
-        (:none, p_setfield!, Foo(5.0), :x, 4.0),
-        (:none, p_setfield!, MutableFoo(5.0, randn(5)), :b, randn(6)),
-        (:none, p_setfield!, MutableFoo(5.0), :a, 5.0),
-    ]
 end
 
 #
@@ -1240,7 +1488,7 @@ function generate_test_functions()
         (false, :none, (lb=100, ub=10_000), test_diagonal_to_matrix, Diagonal(randn(30))),
         (
             false,
-            :none,
+            :allocs,
             (lb=100, ub=10_000),
             ldiv!, randn(20, 20), Diagonal(rand(20) .+ 1), randn(20, 20),
         ),
@@ -1252,7 +1500,7 @@ function generate_test_functions()
         ),
         (
             false,
-            :none,
+            :allocs,
             (lb=100, ub=10_000),
             kron!, randn(400, 400), Diagonal(randn(20)), randn(20, 20),
         ),

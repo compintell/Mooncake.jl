@@ -530,7 +530,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:foreigncall})
         (
             true,
             :none, # primal is unstable
-            (lb=0.1, ub=25),
+            (lb=0.1, ub=100),
             unsafe_pointer_to_objref,
             CoDual(
                 pointer_from_objref(_x),

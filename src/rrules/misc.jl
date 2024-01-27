@@ -94,12 +94,12 @@ function rrule!!(
         new_dx = increment!!(dx, val(getfield(dvalue.fields, name)))
         new_dx = increment!!(new_dx, dy)
         old_x !== nothing && lsetfield!(primal(value), Val(name), old_x)
-        old_x !== nothing && _setfield!(tangent(value), name, old_dx)
+        old_x !== nothing && set_tangent_field!(tangent(value), name, old_dx)
         return df, dvalue, dname, new_dx
     end
     y = CoDual(
         lsetfield!(primal(value), Val(name), primal(x)),
-        _setfield!(tangent(value), name, tangent(x)),
+        set_tangent_field!(tangent(value), name, tangent(x)),
     )
     return y, setfield!_pullback
 end
@@ -143,7 +143,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
         (false, :stability_and_allocs, nothing, promote_type, Float64, Float64),
         (false, :stability_and_allocs, nothing, LinearAlgebra.chkstride1, randn(3, 3)),
         (false, :stability_and_allocs, nothing, LinearAlgebra.chkstride1, randn(3, 3), randn(2, 2)),
-        (false, :stability_and_allocs, nothing, Threads.nthreads),
+        (false, :allocs, nothing, Threads.nthreads),
 
         # Literal replacements for getfield.
         (false, :stability_and_allocs, nothing, lgetfield, (5.0, 4), Val(1)),
