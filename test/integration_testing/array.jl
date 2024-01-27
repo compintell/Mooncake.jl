@@ -244,7 +244,7 @@ _getter = () -> 5.0
             (false, circshift!, randn(sr(6), 3), randn(sr(7), 3), 1),
             (false, clamp!, randn(sr(8), 3), 0.0, 0.5),
             (false, collect, randn(sr(9), 3)),
-            # (false, complex, randn(sr(1), 2)), # Hits non-determinism in https://github.com/JuliaLang/julia/blob/bed2cd540a11544ed4be381d471bbf590f0b745e/base/array.jl#L244
+            (false, complex, randn(sr(1), 2)),
             (false, conj, randn(sr(2), 3)),
             (false, copy!, randn(sr(3), 2), randn(sr(4), 2)),
             (
@@ -256,9 +256,9 @@ _getter = () -> 5.0
                 CartesianIndices(1:2),
             ),
             (false, copyto!, randn(sr(7), 3), 2, randn(sr(8), 2), 1, 2),
-            # (false, copyto!, randn(sr(1), ComplexF64, 3), 2, randn(sr(12), 2), 1, 2), # Hits non-determinism in https://github.com/JuliaLang/julia/blob/bed2cd540a11544ed4be381d471bbf590f0b745e/base/array.jl#L244
+            (false, copyto!, randn(sr(1), ComplexF64, 3), 2, randn(sr(12), 2), 1, 2),
             (false, copyto!, randn(sr(1), 3), randn(sr(2), 3)),
-            # (false, copyto!, randn(sr(4), ComplexF64, 1, 3), randn(sr(5), 1, 3)), # Hits non-determinism in https://github.com/JuliaLang/julia/blob/bed2cd540a11544ed4be381d471bbf590f0b745e/base/array.jl#L244
+            (false, copyto!, randn(sr(4), ComplexF64, 1, 3), randn(sr(5), 1, 3)),
             (
                 false,
                 copyto!,
