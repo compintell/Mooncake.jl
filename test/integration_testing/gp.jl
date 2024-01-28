@@ -71,15 +71,22 @@ using AbstractGPs, KernelFunctions
                 perf_flag=:none, interface_only=true, is_primitive=false,
             )
         end
-        @testset "logpdf" begin
-            f = logpdf
-            fx = GP(k)(x1, 1.1)
-            y = rand(fx)
-            x = (fx, y)
-            sig = Tuple{typeof(logpdf), typeof(fx), typeof(y)}
+        @testset "rand" begin
+            x = (Xoshiro(123546), GP(k)(x1, 1.1))
+            sig = Tuple{typeof(rand), map(typeof, x)...}
             in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp)
             TestUtils.test_rrule!!(
-                sr(123456), in_f, logpdf, fx, y;
+                sr(123456), in_f, rand, x...;
+                perf_flag=:none, interface_only=true, is_primitive=false,
+            )
+        end
+        @testset "logpdf" begin
+            fx = GP(k)(x1, 1.1)
+            x = (fx, rand(fx))
+            sig = Tuple{typeof(logpdf), map(typeof, x)...}
+            in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp)
+            TestUtils.test_rrule!!(
+                sr(123456), in_f, logpdf, x...;
                 perf_flag=:none, interface_only=true, is_primitive=false,
             )
         end
