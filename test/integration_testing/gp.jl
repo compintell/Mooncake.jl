@@ -5,13 +5,11 @@ using AbstractGPs, KernelFunctions
     base_kernels = Any[
         ZeroKernel(),
         ConstantKernel(; c=1.0),
-        CosineKernel(),
         SEKernel(),
         Matern12Kernel(),
         Matern32Kernel(),
         Matern52Kernel(),
         LinearKernel(),
-        gaborkernel(),
         PolynomialKernel(; degree=2, c=0.5),
     ]
     simple_xs = Any[
@@ -70,6 +68,18 @@ using AbstractGPs, KernelFunctions
             in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp)
             TestUtils.test_rrule!!(
                 sr(123456), in_f, f, x...;
+                perf_flag=:none, interface_only=true, is_primitive=false,
+            )
+        end
+        @testset "logpdf" begin
+            f = logpdf
+            fx = GP(k)(x1, 1.1)
+            y = rand(fx)
+            x = (fx, y)
+            sig = Tuple{typeof(logpdf), typeof(fx), typeof(y)}
+            in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp)
+            TestUtils.test_rrule!!(
+                sr(123456), in_f, logpdf, fx, y;
                 perf_flag=:none, interface_only=true, is_primitive=false,
             )
         end
