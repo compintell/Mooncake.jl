@@ -6,6 +6,12 @@ function rrule!!(::CoDual{typeof(Base.:(+))}, x::CoDual{<:Ptr}, y::CoDual{<:Inte
     return CoDual(primal(x) + primal(y), tangent(x) + primal(y)), NoPullback()
 end
 
+@is_primitive MinimalCtx Tuple{typeof(randn), Xoshiro, Vararg}
+function rrule!!(::CoDual{typeof(randn)}, rng::CoDual{Xoshiro}, args::CoDual...)
+    x = randn(primal(rng), map(primal, args)...)
+    return CoDual(x, zero(x)), NoPullback()
+end
+
 function generate_hand_written_rrule!!_test_cases(
     rng_ctor, ::Val{:avoiding_non_differentiable_code}
 )
@@ -24,6 +30,11 @@ function generate_hand_written_rrule!!_test_cases(
             ),
             2,
         ),
+
+        # Rule to avoid llvmcall
+        (true, :stability, nothing, randn, Xoshiro(1)),
+        (true, :stability, nothing, randn, Xoshiro(1), 2),
+        (true, :stability, nothing, randn, Xoshiro(1), 3, 2),
     ]
     memory = Any[_x, _dx]
     return test_cases, memory
