@@ -53,19 +53,16 @@ using AbstractGPs, KernelFunctions
                 perf_flag=:none, interface_only=true, is_primitive=false,
             )
         end
-        # Missing syrk rule in BLAS, which is preventing this from running. Need to fix this
-        # before GPs could conceivably work. Should not be a hard rule to implement -- it is
-        # conceptually more straightforward than gemm.
-        # @testset "binary kernelmatrix" begin
-        #     f = kernelmatrix
-        #     x = (k, x1)
-        #     sig = Tuple{typeof(f), map(typeof, x)...}
-        #     in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp)
-        #     TestUtils.test_rrule!!(
-        #         sr(123456), in_f, f, x...;
-        #         perf_flag=:none, interface_only=true, is_primitive=false,
-        #     )
-        # end
+        @testset "binary kernelmatrix" begin
+            f = kernelmatrix
+            x = (k, x1)
+            sig = Tuple{typeof(f), map(typeof, x)...}
+            in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp)
+            TestUtils.test_rrule!!(
+                sr(123456), in_f, f, x...;
+                perf_flag=:none, interface_only=true, is_primitive=false,
+            )
+        end
         @testset "binary kernelmatrix_diag" begin
             f = kernelmatrix_diag
             x = (k, x1)
