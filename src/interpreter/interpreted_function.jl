@@ -215,10 +215,12 @@ function build_inst(x::Expr, @nospecialize(in_f), n::Int, b::Int, is_blk_end::Bo
     val_slot = in_f.slots[n]
     if Meta.isexpr(x, :boundscheck)
         return build_inst(Val(:boundscheck), val_slot, next_blk)
-    elseif Meta.isexpr(x, :call)
-        arg_refs = map(arg -> _get_slot(arg, in_f), (x.args..., ))
+    elseif Meta.isexpr(x, :invoke) || Meta.isexpr(x, :call)
+        is_invoke = Meta.isexpr(x, :invoke)
+        __args = is_invoke ? x.args[2:end] : x.args
+        arg_refs = map(arg -> _get_slot(arg, in_f), (__args..., ))
         sig = Tuple{map(eltype, arg_refs)...}
-        evaluator = get_evaluator(in_f.ctx, sig, x.args, in_f.interp)
+        evaluator = get_evaluator(in_f.ctx, sig, in_f.interp, is_invoke)
         return build_inst(Val(:call), arg_refs, evaluator, val_slot, next_blk)
     elseif x.head in [
         :code_coverage_effect, :gc_preserve_begin, :gc_preserve_end, :loopinfo, :leave,
@@ -233,9 +235,9 @@ function build_inst(x::Expr, @nospecialize(in_f), n::Int, b::Int, is_blk_end::Bo
     end
 end
 
-function get_evaluator(ctx::T, sig, _, interp) where {T}
+function get_evaluator(ctx::T, sig, interp, is_invoke::Bool) where {T}
     is_primitive(ctx, sig) && return _eval
-    all(Base.isconcretetype, sig.parameters) && return InterpretedFunction(ctx, sig, interp)
+    is_invoke && return InterpretedFunction(ctx, sig, interp)
     return DelayedInterpretedFunction(ctx, Dict(), interp)
 end
 
