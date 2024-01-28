@@ -39,10 +39,12 @@ Turing = "0.29"
 julia = "1"
 
 [extras]
+AbstractGPs = "99985d1d-32ba-4be9-9821-2ec096f28918"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 DiffTests = "de460e47-3fe3-5279-bb4a-814414816d5d"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 FillArrays = "1a297f60-69ca-5386-bcde-b61e274b549b"
+KernelFunctions = "ec8451be-7e33-11e9-00cf-bbf324bd1392"
 PDMats = "90014a1f-27ba-587c-ab20-58faa44d9150"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 StableRNGs = "860ef19b-820b-49d6-a774-d7a799459cd3"
@@ -50,4 +52,4 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
 
 [targets]
-test = ["BenchmarkTools", "DiffTests", "Distributions", "FillArrays", "PDMats", "SpecialFunctions", "StableRNGs", "Test", "Turing"]
+test = ["AbstractGPs", "BenchmarkTools", "DiffTests", "Distributions", "FillArrays", "KernelFunctions", "PDMats", "SpecialFunctions", "StableRNGs", "Test", "Turing"]

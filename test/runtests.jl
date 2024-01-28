@@ -105,6 +105,8 @@ end
         include(joinpath("integration_testing", "diff_tests.jl"))
     elseif test_group == "integration_testing/distributions"
         include(joinpath("integration_testing", "distributions.jl"))
+    elseif test_group == "integration_testing/gp"
+        include(joinpath("integration_testing", "gp.jl"))
     elseif test_group == "integration_testing/special_functions"
         include(joinpath("integration_testing", "special_functions.jl"))
     elseif test_group == "integration_testing/array"
