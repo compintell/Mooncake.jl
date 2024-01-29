@@ -221,10 +221,17 @@ function plot_ratio_histogram!(df::DataFrame)
     df.gradient_time = df.forwards_time + df.pullback_time
     df.gradient_ratio = df.gradient_time ./ df.primal_time
     b = df.gradient_ratio
-    bins = 10.0 .^ (-1.0:0.1:7.0)
+    bins = 10.0 .^ (0.0:0.05:7.0)
     plot(
         histogram(b; title="linear", label=""),
-        histogram(b; xscale=:log10, xlim=extrema(bins), bin=bins, title="log", label="");
+        histogram(b;
+            xscale=:log10,
+            xlim=extrema(bins),
+            bin=bins,
+            title="log",
+            label="",
+            xticks=10.0.^(0.0:1.0:7.0),
+        ),
         layout=(2, 1),
     )
 end
