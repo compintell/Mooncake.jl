@@ -25,6 +25,7 @@ for name in [
     :(Base.datatype_fielddesc_type),
     :(LinearAlgebra.chkstride1),
     :(Threads.nthreads),
+    :(Base.depwarn),
 ]
     @eval @is_primitive DefaultCtx Tuple{typeof($name), Vararg}
     @eval function rrule!!(::CoDual{Core.Typeof($name)}, args::CoDual...)

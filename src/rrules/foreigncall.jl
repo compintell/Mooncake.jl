@@ -459,6 +459,20 @@ function rrule!!(::CoDual{<:Type{UnionAll}}, x::CoDual{<:TypeVar}, y::CoDual{<:T
     return CoDual(UnionAll(primal(x), primal(y)), NoTangent()), NoPullback()
 end
 
+function rrule!!(
+    ::CoDual{typeof(_foreigncall_)}, ::CoDual{Val{:jl_string_ptr}}, args::Vararg{CoDual, N}
+) where {N}
+    x = tuple_map(primal, args)
+    return uninit_codual(_foreigncall_(Val(:jl_string_ptr), x...)), NoPullback()
+end
+
+@is_primitive MinimalCtx Tuple{typeof(hash), Union{String, SubString{String}}, UInt}
+function rrule!!(
+    ::CoDual{typeof(hash)}, s::CoDual{P}, h::CoDual{UInt}
+) where {P<:Union{String, SubString{String}}}
+    return zero_codual(hash(primal(s), primal(h))), NoPullback()
+end
+
 function unexepcted_foreigncall_error(name)
     throw(error(
         "AD has hit a :($name) ccall. This should not happen. " *
@@ -477,6 +491,7 @@ for name in [
     :(:jl_type_intersection), :(:memset), :(:jl_get_tls_world_age), :(:memmove),
     :(:jl_array_sizehint), :(:jl_array_del_at), :(:jl_array_grow_at), :(:jl_array_del_beg),
     :(:jl_array_grow_beg), :(:jl_value_ptr), :(:jl_type_unionall), :(:jl_threadid),
+    :(:memhash_seed), :(:memhash32_seed),
 ]
     @eval function _foreigncall_(
         ::Val{$name}, ::Val{RT}, AT::Tuple, ::Val{nreq}, ::Val{calling_convention}, x...,
@@ -560,6 +575,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:foreigncall})
         (false, :stability, nothing, deepcopy, (5.0, randn(5))),
         (false, :stability, nothing, deepcopy, (a=5.0, b=randn(5))),
         (false, :none, nothing, UnionAll, TypeVar(:a), Real),
+        (false, :none, nothing, hash, "5", UInt(3)),
     ]
     memory = Any[_x, _dx, _a, _da, _b, _db]
     return test_cases, memory
@@ -591,7 +607,13 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:foreigncall})
             [randn(4) for _ in 1:6],
             4,
         ],
-        Any[false, :none, nothing, x -> unsafe_pointer_to_objref(pointer_from_objref(x)), _x],
+        Any[
+            false,
+            :none,
+            (lb=0.1, ub=150),
+            x -> unsafe_pointer_to_objref(pointer_from_objref(x)),
+            _x,
+        ],
         Any[false, :none, nothing, isassigned, randn(5), 4],
         Any[false, :none, nothing, x -> (Base._growbeg!(x, 2); x[1:2] .= 2.0), randn(5)],
     ]
