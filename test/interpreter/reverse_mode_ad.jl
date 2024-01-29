@@ -236,7 +236,7 @@
     ]
         sig = Tuple{map(Core.Typeof ∘ primal ∘ getindex, arg_slots)...}
         interp = Taped.TInterp()
-        evaluator = Taped.get_evaluator(Taped.MinimalCtx(), sig, nothing, interp)
+        evaluator = Taped.get_evaluator(Taped.MinimalCtx(), sig, interp, false)
         __rrule!! = Taped.get_rrule!!_evaluator(evaluator)
         old_vals = Vector{eltype(out)}(undef, 0)
         old_vals = Stack{eltype(out)}()

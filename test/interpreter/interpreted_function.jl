@@ -167,8 +167,8 @@
                 Taped.get_evaluator(
                     Taped.MinimalCtx(),
                     Tuple{typeof(getfield), Tuple{Float64, Int}, Int},
-                    Expr(:call, ConstSlot(:getfield), SlotRef((5.0, 5)), ConstSlot(1)).args,
                     nothing,
+                    false,
                 ),
                 SlotRef{Float64}(),
                 3,

@@ -228,7 +228,7 @@ function build_coinsts(ir_inst::Expr, in_f, _rrule!!, n::Int, b::Int, is_blk_end
 
         # Construct signature, and determine how the rrule is to be computed.
         primal_sig = Tuple{map(Core.Typeof ∘ primal ∘ getindex, arg_slots)...}
-        evaluator = get_evaluator(in_f.ctx, primal_sig, __args, in_f.interp)
+        evaluator = get_evaluator(in_f.ctx, primal_sig, in_f.interp, is_invoke)
         __rrule!! = get_rrule!!_evaluator(evaluator)
 
         # Create stack for storing pullbacks.

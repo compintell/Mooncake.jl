@@ -21,7 +21,6 @@ provides a convenient way to do this.
 function normalise!(ir::IRCode, spnames::Vector{Symbol})
     sp_map = Dict{Symbol, CC.VarState}(zip(spnames, ir.sptypes))
     for (n, inst) in enumerate(ir.stmts.inst)
-        inst = invoke_to_call(inst)
         inst = foreigncall_to_call(inst, sp_map)
         inst = new_to_call(inst)
         inst = intrinsic_to_function(inst)
@@ -30,16 +29,6 @@ function normalise!(ir::IRCode, spnames::Vector{Symbol})
     end
     return ir
 end
-
-"""
-    invoke_to_call(inst)
-
-If `inst` is an `:invoke` expression, return an equivalent `:call` expression. If anything
-else just return `inst`.
-
-Warning: this function does *not* check whether this transformation is safe to perform.
-"""
-invoke_to_call(inst) = Meta.isexpr(inst, :invoke) ? Expr(:call, inst.args[2:end]...) : inst
 
 """
     foreigncall_to_call(inst, sp_map::Dict{Symbol, CC.VarState})

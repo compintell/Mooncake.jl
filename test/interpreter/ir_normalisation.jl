@@ -1,11 +1,4 @@
 @testset "ir_normalisation" begin
-    @testset "invoke_to_call" begin
-        mi = which(Tuple{typeof(sin), Float64}).specializations
-        invoke_inst = Expr(:invoke, mi, sin, 5.0)
-        call_inst = Taped.invoke_to_call(invoke_inst)
-        @test call_inst.head == :call
-        @test call_inst.args == invoke_inst.args[2:end]
-    end
     @testset "foreigncall_to_call" begin
         foreigncall = Expr(
             :foreigncall,
