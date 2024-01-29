@@ -607,7 +607,13 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:foreigncall})
             [randn(4) for _ in 1:6],
             4,
         ],
-        Any[false, :none, nothing, x -> unsafe_pointer_to_objref(pointer_from_objref(x)), _x],
+        Any[
+            false,
+            :none,
+            (lb=0.1, ub=150),
+            x -> unsafe_pointer_to_objref(pointer_from_objref(x)),
+            _x,
+        ],
         Any[false, :none, nothing, isassigned, randn(5), 4],
         Any[false, :none, nothing, x -> (Base._growbeg!(x, 2); x[1:2] .= 2.0), randn(5)],
     ]
