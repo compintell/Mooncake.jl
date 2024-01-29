@@ -24,6 +24,13 @@ end
     y ~ Normal(μ, σ)
 end
 
+@model broadcast_demo(x) = begin
+    μ ~ TruncatedNormal(1, 2, 0.1, 10)
+    σ ~ TruncatedNormal(1, 2, 0.1, 10)
+    
+    x .~ LogNormal(μ, σ)   
+end
+
 function build_turing_problem(rng, model)
     ctx = Turing.DefaultContext()
     vi = Turing.SimpleVarInfo(model)
@@ -37,13 +44,14 @@ end
 
 @testset "turing" begin
     interp = Taped.TInterp()
-    @testset "$model" for (interface_only, name, model) in vcat(
+    @testset "$(typeof(model))" for (interface_only, name, model) in vcat(
         Any[
             (false, "simple_model", simple_model()),
             (false, "demo", demo()),
+            (false, "broadcast_demo", broadcast_demo(rand(LogNormal(1.5, 0.5), 1_000))),
         ],
     )
-        @info model
+        @info typeof(model)
         rng = sr(123)
         f, x = build_turing_problem(rng, model)
 
@@ -52,6 +60,8 @@ end
         if interface_only
             in_f(f, deepcopy(x))
         else
+            @show in_f(f, deepcopy(x))
+            @show f(deepcopy(x))
             @test has_equal_data(in_f(f, deepcopy(x)), f(deepcopy(x)))
         end
 
@@ -69,13 +79,29 @@ end
         # codualed_args = map(zero_codual, (in_f, f, x));
         # TestUtils.value_and_gradient!!(rule, codualed_args...)
 
-        # @profview run_many_times(1_000, TestUtils.value_and_gradient!!, rule, codualed_args...)
+        # # @profview run_many_times(1_000, TestUtils.value_and_gradient!!, rule, codualed_args...)
 
         # primal = @benchmark $f($x)
         # interpreted = @benchmark $in_f($f, $x)
         # gradient = @benchmark(TestUtils.value_and_gradient!!($rule, $codualed_args...))
         # revdiff = @benchmark ReverseDiff.gradient!($result, $tape, $x)
 
+        # println("primal")
+        # display(primal)
+        # println()
+
+        # println("interpreted")
+        # display(interpreted)
+        # println()
+
+        # println("gradient")
+        # display(gradient)
+        # println()
+
+        # println("revdiff")
+        # display(revdiff)
+        # println()
+    
         # push!(turing_bench_results, (name, primal, interpreted, gradient, revdiff))
     end
 end
