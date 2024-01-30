@@ -605,14 +605,11 @@ compute_oc_type(::Type{sig}) where {sig<:Tuple} = OpaqueClosure{sig, CC.return_t
     sig_id = objectid(sig)
     oc_type = compute_oc_type(sig)
     return quote
-        ctx = din_f.ctx
         local_cache = din_f.local_cache
-        interp = din_f.interp
-        has_key = in($sig_id, keys(local_cache))
-        _evaluator = if has_key
+        _evaluator = if in($sig_id, keys(local_cache))
             local_cache[$sig_id]::$oc_type
         else
-            derive_function!(ctx, local_cache, interp, $sig)::$oc_type
+            derive_function!(din_f.ctx, local_cache, din_f.interp, $sig)::$oc_type
         end
         return _evaluator(fargs...)
     end
