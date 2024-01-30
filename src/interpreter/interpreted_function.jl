@@ -252,10 +252,11 @@ function build_inst(
     val_slot::AbstractSlot,
     next_blk::Int,
 )::Inst where {Teval, Targ_slots}
-    return @opaque function (prev_blk::Int)
+    inst = @opaque function (prev_blk::Int)
         val_slot[] = ev(tuple_map(getindex, arg_slots)...)
         return next_blk
     end
+    return inst
 end
 
 build_inst(::Val{:skipped_expression}, next_blk::Int)::Inst = @opaque (prev_blk::Int) -> next_blk
@@ -597,17 +598,33 @@ struct DelayedInterpretedFunction{C, Tlocal_cache, T<:TapedInterpreter}
     interp::T
 end
 
-function (din_f::DelayedInterpretedFunction)(fargs::Vararg{Any, N}) where {N}
-    k = map(Core.Typeof, fargs)
-    _evaluator = get(din_f.local_cache, k, nothing)
-    if _evaluator === nothing
-        sig = Tuple{map(Core.Typeof, fargs)...}
-        _evaluator = if is_primitive(din_f.ctx, sig)
-            _eval
+compute_oc_type(::Type{sig}) where {sig<:Tuple} = OpaqueClosure{sig, CC.return_type(sig)}
+
+@generated function (din_f::DelayedInterpretedFunction)(fargs::Vararg{Any, N}) where {N}
+    sig = Tuple{fargs...}
+    sig_id = objectid(sig)
+    oc_type = compute_oc_type(sig)
+    return quote
+        ctx = din_f.ctx
+        local_cache = din_f.local_cache
+        interp = din_f.interp
+        has_key = in($sig_id, keys(local_cache))
+        _evaluator = if has_key
+            local_cache[$sig_id]::$oc_type
         else
-            InterpretedFunction(din_f.ctx, sig, din_f.interp)
+            derive_function!(ctx, local_cache, interp, $sig)::$oc_type
         end
-        din_f.local_cache[k] = _evaluator
+        return _evaluator(fargs...)
     end
-    return _evaluator(fargs...)
+end
+
+function derive_function!(ctx, local_cache, interp, sig)
+    _evaluator = if is_primitive(ctx, sig)
+        _eval
+    else
+        InterpretedFunction(ctx, sig, interp)
+    end
+    oc_eval = @opaque sig (x...) -> _evaluator(x...)
+    local_cache[objectid(sig)] = oc_eval
+    return oc_eval
 end
