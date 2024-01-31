@@ -297,7 +297,7 @@ end
 
 # Data structure to handle arguments to functions. Comprises a collection of slots, and
 # knows whether or not it represents the arguments of a varargs function.
-struct ArgInfo{Targ_slots<:NTuple{N, Any} where {N}, is_vararg}
+struct ArgInfo{Targ_slots<:NTuple{N, SlotRef} where {N}, is_vararg}
     arg_slots::Targ_slots
 end
 
