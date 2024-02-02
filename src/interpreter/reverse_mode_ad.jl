@@ -556,7 +556,7 @@ function (if_pb!!::InterpretedFunctionPb)(dout, ::NoTangent, dargs::Vararg{Any, 
     replace_tangent!(if_pb!!.return_slot, dout)
     load_tangents!(if_pb!!.arg_info, dargs)
 
-    # Run the instructions in reverse. Present assumes linear instruction ordering.
+    # Run the instructions in reverse.
     n_stack = if_pb!!.n_stack
     bwds_instructions = if_pb!!.bwds_instructions
     while length(n_stack) > if_pb!!.j
