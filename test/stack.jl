@@ -3,6 +3,7 @@
     push!(s, 5.0)
     @test s.position == 1
     @test s.memory[1] == 5.0
+    @test peek(s) == 5.0
     @test length(s) == 1
     @test !isempty(s)
     @test pop!(s) == 5.0

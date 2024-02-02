@@ -34,3 +34,5 @@ end
 Base.isempty(x::Stack) = x.position == 0
 
 Base.length(x::Stack) = x.position
+
+Base.peek(x::Stack) = x.memory[x.position]
