@@ -61,20 +61,13 @@ end
 function build_coinsts(ir_insts::Vector{PhiNode}, _, _rrule!!, n_first::Int, b::Int, is_blk_end::Bool)
     nodes = (build_typed_phi_nodes(ir_insts, _rrule!!, n_first)..., )
     next_blk = _standard_next_block(is_blk_end, b)
-    return build_coinsts(Vector{PhiNode}, nodes, next_blk, make_stacks(nodes)...)
-end
-
-function make_stacks(nodes::NTuple{N, TypedPhiNode}) where {N}
-    ret_stacks = map(n -> Stack{eltype(n.ret_slot)}(), nodes)
-    prev_blks = Stack{Int}()
-    return ret_stacks, prev_blks
+    return build_coinsts(Vector{PhiNode}, nodes, next_blk, Stack{Int}())
 end
 
 function build_coinsts(
     ::Type{Vector{PhiNode}},
     nodes::NTuple{N, TypedPhiNode},
     next_blk::Int,
-    ret_stacks,
     prev_stack::Stack{Int},
 ) where {N}
 
@@ -86,14 +79,13 @@ function build_coinsts(
     fwds_inst = @opaque function (p::Int)
         push!(prev_stack, p) # record the preceding block
         map(Base.Fix2(store_tmp_value!, p), nodes) # transfer new value into tmp slots
-        map(log_ret_value!, nodes, ret_stacks) # log old value
         map(transfer_tmp_value!, nodes) # transfer new value from tmp slots into ret slots
         return next_blk
     end
     bwds_inst = @opaque function (j::Int)
-        p = pop!(prev_stack) # get the index of the previous block
+        p = pop!(prev_stack)
         map(replace_tmp_tangent_from_ret!, nodes) # transfer data from ret slots to tmp
-        map((n, r) -> (!isempty(r)) && (n.ret_slot[] = pop!(r)), nodes, ret_stacks) # restore ret slots to previous state
+        !isempty(prev_stack) && map(Base.Fix2(reset_tangent!, peek(prev_stack)), nodes)
         map(Base.Fix2(increment_predecessor_from_tmp!, p), nodes)
         return j
     end
@@ -113,6 +105,15 @@ end
 function increment_predecessor_from_tmp!(x::TypedPhiNode{<:CoDualSlot}, prev_blk::Int)
     map(x.edges, x.values) do edge, v
         (edge == prev_blk) && isassigned(v) && increment_tangent!(v, x.tmp_slot)
+    end
+    return nothing
+end
+
+function reset_tangent!(x::TypedPhiNode{<:CoDualSlot}, prev_blk::Int)
+    map(x.edges, x.values) do edge, v
+        if (edge == prev_blk) && isassigned(v)
+            replace_tangent!(x.ret_slot, set_immutable_to_zero(tangent(v[])))
+        end
     end
     return nothing
 end

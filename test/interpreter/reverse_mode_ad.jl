@@ -113,7 +113,7 @@
             next_blk = 0
             prev_blk = 1
             fwds_inst, bwds_inst = build_coinsts(
-                Vector{PhiNode}, nodes, next_blk, Taped.make_stacks(nodes)...
+                Vector{PhiNode}, nodes, next_blk, Taped.Stack{Int}()
             )
 
             # Test forwards instructions.
