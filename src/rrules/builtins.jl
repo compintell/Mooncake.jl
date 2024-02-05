@@ -28,7 +28,7 @@ end
 macro intrinsic(name)
     expr = quote
         $name(x...) = Intrinsics.$name(x...)
-        (is_primitive)(::MinimalCtx, ::Type{<:Tuple{typeof($name), Vararg}}) = true
+        (is_primitive)(::Type{MinimalCtx}, ::Type{<:Tuple{typeof($name), Vararg}}) = true
         translate(::Val{Intrinsics.$name}) = $name
     end
     return esc(expr)
@@ -37,7 +37,7 @@ end
 macro inactive_intrinsic(name)
     expr = quote
         $name(x...) = Intrinsics.$name(x...)
-        (is_primitive)(::MinimalCtx, ::Type{<:Tuple{typeof($name), Vararg}}) = true
+        (is_primitive)(::Type{MinimalCtx}, ::Type{<:Tuple{typeof($name), Vararg}}) = true
         translate(::Val{Intrinsics.$name}) = $name
         function rrule!!(::CoDual{typeof($name)}, args...)
             y = $name(map(primal, args)...)

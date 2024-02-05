@@ -33,7 +33,7 @@ particular context depends only on static information, not any run-time informat
 might live in a particular instance of `Ctx`.
 """
 is_primitive(::Type{MinimalCtx}, ::Any) = false
-is_primitive(::Type{DefaultCtx}, sig) = is_primitive(MinimalCtx(), sig)
+is_primitive(::Type{DefaultCtx}, sig) = is_primitive(MinimalCtx, sig)
 
 """
     @is_primitive context_type signature
