@@ -75,18 +75,7 @@ function benchmark_hand_written_rrules!!(rng_ctor)
 end
 
 function benchmark_derived_rrules!!(rng_ctor)
-    # Only testing a subset of the cases because there are still problems in the subset of
-    # the cases.
     test_case_data = map([
-        # :avoiding_non_differentiable_code,
-        # :blas,
-        # :builtins,
-        # :foreigncall,
-        # :iddict,
-        # :lapack,
-        # :low_level_maths,
-        # :misc,
-        # :new,
         :test_utils
     ]) do s
         test_cases, memory = generate_derived_rrule!!_test_cases(rng_ctor, Val(s))
