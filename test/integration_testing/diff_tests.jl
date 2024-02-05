@@ -8,7 +8,7 @@
     )
         @info "$(map(typeof, (f, x...)))"
         TestUtils.test_interpreted_rrule!!(
-            sr(123456), in_f, f, x...;
+            sr(123456), f, x...;
             interp, perf_flag=:none, interface_only=false, is_primitive=false,
         )
     end
