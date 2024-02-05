@@ -88,13 +88,13 @@ We aim to reach the maintenance phase of the project before 01/06/2024.
 Phase 2 is now well underway. We now make use of a much faster approach to interpreting / executing Julia code, which yields performance that is comparable with ReverseDiff (when things go well). The current focus is on ironing out performance issues, and simplifying the implementation.
 
 *Update: (06/11/2023)*
-We are mostly through the first phase.
-Correctness testing is proceeding well, and we are ironing out known issues.
-Notably, our broad experience at present is that as we continue to increase the amount of Julia code on which the package is tested, things fail for known, predictable, straightforwardly-fixable reasons (largely missing rrules for `ccall`s), rather than unanticipated problems.
+~~We are mostly through the first phase.~~
+~~Correctness testing is proceeding well, and we are ironing out known issues.~~
+~~Notably, our broad experience at present is that as we continue to increase the amount of Julia code on which the package is tested, things fail for known, predictable, straightforwardly-fixable reasons (largely missing rrules for `ccall`s), rather than unanticipated problems.~~
 
-Please note that, since we have yet to enter phase 2 of the project, we have spent _no_ time whatsoever optimising for performance.
-We strongly believe that there is nothing in principle preventing us from achieving excellent performance.
-However, currently, you should expect to experience _amazingly_ poor performance.
+~~Please note that, since we have yet to enter phase 2 of the project, we have spent _no_ time whatsoever optimising for performance.~~
+~~We strongly believe that there is nothing in principle preventing us from achieving excellent performance.~~
+~~However, currently, you should expect to experience _amazingly_ poor performance.~~
 
 # Trying it out
 
