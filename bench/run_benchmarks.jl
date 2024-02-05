@@ -97,10 +97,9 @@ function benchmark_derived_rrules!!(rng_ctor)
 end
 
 function flag_concerning_performance(ratios)
-    between(x, (lb, ub)) = lb < x && x < ub
     @testset "detect concerning performance" begin
         @testset for ratio in ratios
-            @test between(ratio.value_and_pb_ratio, ratio.range)
+            @test ratio.range.lb < ratio.value_and_pb_ratio < ratio.range.ub
         end
     end
 end
