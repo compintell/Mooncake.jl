@@ -896,9 +896,9 @@ function run_rrule!!_test_cases(rng_ctor, v::Val)
     run_derived_rrule!!_test_cases(rng_ctor, v)
 end
 
-function to_benchmark(__rrule!!::R, df::F, dx::X) where {R, F, X}
-    out, pb!! = __rrule!!(df, dx...)
-    pb!!(tangent(out), tangent(df), map(tangent, dx)...)
+function to_benchmark(__rrule!!::R, dx::Vararg{CoDual, N}) where {R, N}
+    out, pb!! = __rrule!!(dx...)
+    return pb!!(tangent(out), map(tangent, dx)...)
 end
 
 """
@@ -921,8 +921,15 @@ with the same `rule` and `in_f` arguments, but with different values of `x`.
 See also: `Taped.TestUtils.value_and_gradient!!`.
 """
 function set_up_gradient_problem(fargs...)
-    in_f = Taped.InterpretedFunction(DefaultCtx(), Core.Typeof(fargs), Taped.TInterp())
-    return Taped.build_rrule!!(in_f), in_f
+    ctx = DefaultCtx()
+    primals = map(x -> x isa CoDual ? primal(x) : x, fargs)
+    sig = Tuple{map(Core.Typeof, primals)...}
+    if Taped.is_primitive(ctx, sig)
+        return rrule!!, Taped._eval
+    else
+        in_f = Taped.InterpretedFunction(ctx, sig, Taped.TInterp())
+        return Taped.build_rrule!!(in_f), in_f
+    end
 end
 
 """
@@ -1371,8 +1378,8 @@ function generate_test_functions()
         (false, :none, (lb=1, ub=500), pi_node_tester, Ref{Any}(5)),
         (false, :allocs, nothing, intrinsic_tester, 5.0),
         (false, :allocs, nothing, goto_tester, 5.0),
-        (false, :allocs, (lb=1, ub=500), new_tester, 5.0, :hello),
-        (false, :allocs, (lb=1, ub=500), new_tester_2, 4.0),
+        (false, :allocs, nothing, new_tester, 5.0, :hello),
+        (false, :allocs, nothing, new_tester_2, 4.0),
         (false, :none, nothing, new_tester_3, Ref{Any}(Tuple{Float64})),
         (false, :allocs, nothing, type_stable_getfield_tester_1, StableFoo(5.0, :hi)),
         (false, :allocs, nothing, type_stable_getfield_tester_2, StableFoo(5.0, :hi)),
@@ -1391,7 +1398,7 @@ function generate_test_functions()
         (false, :allocs, nothing, phi_node_with_undefined_value, false, 4.0),
         (false, :allocs, nothing, avoid_throwing_path_tester, 5.0),
         (false, :allocs, nothing, simple_foreigncall_tester, randn(5)),
-        (false, :none, (lb=0.1, ub=1_000), simple_foreigncall_tester_2, randn(6), (2, 3)),
+        (false, :none, nothing, simple_foreigncall_tester_2, randn(6), (2, 3)),
         (false, :allocs, nothing, foreigncall_tester, randn(5)),
         (false, :none, (lb=1, ub=1_000), no_primitive_inlining_tester, 5.0),
         (false, :allocs, nothing, varargs_tester, 5.0),
@@ -1425,12 +1432,12 @@ function generate_test_functions()
             randn(5, 4),
             (5, 4),
         ), # for Bool comma,
-        (false, :allocs, (lb=1, ub=1_000), getfield_tester, (5.0, 5)),
-        (false, :allocs, (lb=1, ub=1_000), getfield_tester_2, (5.0, 5)),
+        (false, :allocs, nothing, getfield_tester, (5.0, 5)),
+        (false, :allocs, nothing, getfield_tester_2, (5.0, 5)),
         (
             false,
             :allocs,
-            (lb=1, ub=1_000),
+            nothing,
             setfield_tester_left!,
             FullyInitMutableStruct(5.0, randn(3)),
             4.0,
@@ -1438,24 +1445,24 @@ function generate_test_functions()
         (
             false,
             :none,
-            (lb=1, ub=1_000),
+            nothing,
             setfield_tester_right!,
             FullyInitMutableStruct(5.0, randn(3)),
             randn(5),
         ),
         (
-            false, :none, (lb=100, ub=1_000_000),
+            false, :none, (lb=100, ub=100_000_000),
             mul!, transpose(randn(3, 5)), randn(5, 5), randn(5, 3), 4.0, 3.0,
         ), # static_parameter,
-        (false, :none, (lb=100, ub=10_000_000), Xoshiro, 123456),
-        (false, :none, (lb=1, ub=10_000), *, randn(250, 500), randn(500, 250)),
+        (false, :none, (lb=100, ub=100_000_000), Xoshiro, 123456),
+        (false, :none, (lb=1, ub=100_000), *, randn(250, 500), randn(500, 250)),
         (false, :allocs, nothing, test_sin, 1.0),
         (false, :allocs, nothing, test_cos_sin, 2.0),
         (false, :allocs, nothing, test_isbits_multiple_usage, 5.0),
-        (false, :allocs, (lb=1, ub=500), test_isbits_multiple_usage_2, 5.0),
-        (false, :allocs, (lb=1, ub=500), test_isbits_multiple_usage_3, 4.1),
-        (false, :allocs, (lb=1, ub=500), test_isbits_multiple_usage_4, 5.0),
-        (false, :allocs, (lb=1, ub=500), test_isbits_multiple_usage_5, 4.1),
+        (false, :allocs, nothing, test_isbits_multiple_usage_2, 5.0),
+        (false, :allocs, nothing, test_isbits_multiple_usage_3, 4.1),
+        (false, :allocs, nothing, test_isbits_multiple_usage_4, 5.0),
+        (false, :allocs, nothing, test_isbits_multiple_usage_5, 4.1),
         (false, :allocs, nothing, test_isbits_multiple_usage_phi, false, 1.1),
         (false, :allocs, nothing, test_isbits_multiple_usage_phi, true, 1.1),
         (false, :allocs, nothing, test_multiple_call_non_primitive, 5.0),
@@ -1469,7 +1476,7 @@ function generate_test_functions()
         (false, :none, nothing, test_mutable_struct_basic, 5.0),
         (false, :none, nothing, test_mutable_struct_basic_sin, 5.0),
         (false, :none, nothing, test_mutable_struct_setfield, 4.0),
-        (false, :none, (lb=1.0, ub=500.0), test_mutable_struct, 5.0),
+        (false, :none, (lb=1, ub=1_000), test_mutable_struct, 5.0),
         (false, :none, nothing, test_struct_partial_init, 3.5),
         (false, :none, nothing, test_mutable_partial_init, 3.3),
         (
@@ -1481,15 +1488,15 @@ function generate_test_functions()
         (
             false,
             :allocs,
-            (lb=100, ub=10_000),
+            (lb=100, ub=1_000),
             (A, C) -> test_naive_mat_mul!(C, A, A), randn(100, 100), randn(100, 100),
         ),
-        (false, :allocs, (lb=10, ub=10_000_000), sum, randn(30)),
+        (false, :allocs, (lb=10, ub=1_000), sum, randn(30)),
         (false, :none, (lb=100, ub=10_000), test_diagonal_to_matrix, Diagonal(randn(30))),
         (
             false,
             :allocs,
-            (lb=100, ub=10_000),
+            (lb=100, ub=5_000),
             ldiv!, randn(20, 20), Diagonal(rand(20) .+ 1), randn(20, 20),
         ),
         (

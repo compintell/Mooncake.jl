@@ -6,54 +6,56 @@ using BenchmarkTools, CSV, DataFrames, Plots, Random, Taped, Test
 using Taped:
     CoDual,
     generate_hand_written_rrule!!_test_cases,
-    generate_derived_rrule!!_test_cases
+    generate_derived_rrule!!_test_cases,
+    InterpretedFunction,
+    TestUtils,
+    TInterp
 
-using Taped.TestUtils: _deepcopy
+using Taped.TestUtils: _deepcopy, to_benchmark
 
-function generate_rrule!!_benchmarks(rng::AbstractRNG, args)
+function benchmark_rules!!(test_case_data, default_ratios)
+    test_cases = reduce(vcat, map(first, test_case_data))
+    memory = map(x -> x[2], test_case_data)
+    ranges = reduce(vcat, map(x -> x[3], test_case_data))
+    GC.@preserve memory begin
+        results = map(enumerate(test_cases)) do (n, args)
+            @info "$n / $(length(test_cases))", Core.Typeof(args)
+            suite = BenchmarkGroup()
 
-    # Generate CoDuals etc.
-    primals = map(x -> x isa CoDual ? primal(x) : x, args)
-    dargs = map(x -> x isa CoDual ? tangent(x) : randn_tangent(rng, x), args)
-    cd_args = map(CoDual, primals, dargs)
-    suite = BenchmarkGroup()
+            # Benchmark primal.
+            primals = map(x -> x isa CoDual ? primal(x) : x, args)
+            suite["primal"] = @benchmarkable(
+                (a[1])((a[2:end])...);
+                setup=(a = ($primals[1], _deepcopy($primals[2:end])...)),
+            )
 
-    # Benchmark primal.
-    suite["primal"] = @benchmarkable(
-        (a[1])((a[2:end])...);
-        setup=(a = ($primals[1], _deepcopy($primals[2:end])...)),
-        evals=1,    
-    )
+            # Benchmark pullback.
+            rule, in_f = TestUtils.set_up_gradient_problem(args...)
+            coduals = map(x -> x isa CoDual ? x : zero_codual(x), args)
+            suite["value_and_pb"] = @benchmarkable(
+                to_benchmark($rule, zero_codual($in_f), $coduals...);
+            )
 
-    # Benchmark forwards-pass.
-    suite["forwards"] = @benchmarkable(
-        Taped.rrule!!(ca...);
-        setup=(ca = ($cd_args[1], _deepcopy($(cd_args)[2:end])...)),
-        evals=1,
-    )
-
-    # Benchmark pullback.
-    suite["pullback"] = @benchmarkable(
-        x[2]((tangent(x[1])), map(tangent, ca)...),
-        setup=(ca = ($cd_args[1], _deepcopy($cd_args[2:end])...); x = Taped.rrule!!(ca...)),
-        evals=1,
-    )
-
-    return suite
+            return (args, BenchmarkTools.run(suite, verbose=true))
+        end
+    end
+    return combine_results.(results, ranges, Ref(default_ratios))
 end
 
-function generate_hand_written_cases(rng_ctor, v::Val)
-    test_cases, memory = generate_hand_written_rrule!!_test_cases(rng_ctor, v)
-    ranges = map(x -> x[3], test_cases)
-    return map(x -> x[4:end], test_cases), memory, ranges
+function combine_results(result, _range, default_range)
+    result_dict = result[2]
+    primal_time = time(minimum(result_dict["primal"]))
+    value_and_pb_time = time(minimum(result_dict["value_and_pb"]))
+    return (
+        tag=string(Core.Typeof((result[1]..., ))),
+        primal_time=primal_time,
+        value_and_pb_time=value_and_pb_time,
+        value_and_pb_ratio=value_and_pb_time / primal_time,
+        range=_range === nothing ? default_range : _range,
+    )
 end
-
-default_hand_written_ratios() = (lb=1e-3, ub=25.0)
 
 function benchmark_hand_written_rrules!!(rng_ctor)
-    rng = rng_ctor(123)
-
-    # Benchmark the performance of all benchmarks.
     test_case_data = map([
         :avoiding_non_differentiable_code,
         :blas,
@@ -65,32 +67,16 @@ function benchmark_hand_written_rrules!!(rng_ctor)
         :misc,
         :new,
     ]) do s
-        generate_hand_written_cases(Xoshiro, Val(s))
+        test_cases, memory = generate_hand_written_rrule!!_test_cases(rng_ctor, Val(s))
+        ranges = map(x -> x[3], test_cases)
+        return map(x -> x[4:end], test_cases), memory, ranges
     end
-    test_cases = reduce(vcat, map(first, test_case_data))
-    memory = map(x -> x[2], test_case_data)
-    ranges = reduce(vcat, map(x -> x[3], test_case_data))
-
-    GC.@preserve memory begin
-        results = map(enumerate(test_cases)) do (n, x)
-            @info "$n / $(length(test_cases))", x
-            suite = generate_rrule!!_benchmarks(rng, x)
-            return (x, BenchmarkTools.run(suite; verbose=true, seconds=3))
-        end
-    end
-
-    # Compute performance ratio for all cases.
-    return combine_results.(results, ranges, Ref(default_hand_written_ratios()))
+    return benchmark_rules!!(test_case_data, (lb=1e-3, ub=25.0))
 end
 
-default_derived_ratios() = (lb=0.1, ub=150)
-
 function benchmark_derived_rrules!!(rng_ctor)
-    rng = rng_ctor(123)
-
-    # We only run a subset of the test cases, because it will take far too long to run
-    # then all. Moreover, it seems unlikely that there is presently a need for all tests,
-    # and that the :unrolled_function tests will be sufficient.
+    # Only testing a subset of the cases because there are still problems in the subset of
+    # the cases.
     test_case_data = map([
         # :avoiding_non_differentiable_code,
         # :blas,
@@ -105,144 +91,38 @@ function benchmark_derived_rrules!!(rng_ctor)
     ]) do s
         test_cases, memory = generate_derived_rrule!!_test_cases(rng_ctor, Val(s))
         ranges = map(x -> x[3], test_cases)
-        return test_cases, memory, ranges
+        return map(x -> x[4:end], test_cases), memory, ranges
     end
-    test_cases = reduce(vcat, map(first, test_case_data))
-    memory = map(x -> x[2], test_case_data)
-    ranges = reduce(vcat, map(x -> x[3], test_case_data))
-
-
-    ctx = Taped.DefaultCtx()
-    interp = Taped.TInterp()
-    GC.@preserve memory begin
-        results = map(enumerate(test_cases)) do (n, args)
-            @info "$n / $(length(test_cases))", Core.Typeof(args)
-
-            # Generate CoDuals etc.
-            args = args[4:end]
-            primals = map(x -> x isa CoDual ? primal(x) : x, args)
-            unrolled_primals = map(x -> x isa CoDual ? primal(x) : x, args)
-            dargs = map(x -> x isa CoDual ? tangent(x) : randn_tangent(rng, x), args)
-            cd_args = map(CoDual, unrolled_primals, dargs)
-            suite = BenchmarkGroup()
-
-            # Benchmark primal.
-            suite["primal"] = @benchmarkable(
-                (a[1])((a[2:end])...);
-                setup=(a = ($primals[1], _deepcopy($primals[2:end])...)),
-                evals=1,    
-            )
-
-            # Benchmark forwards-pass.
-            sig = Tuple{map(Core.Typeof, args)...}
-            in_f = Taped.InterpretedFunction(ctx, sig, interp)
-            cd_in_f = zero_codual(in_f)
-            __rrule!! = Taped.build_rrule!!(in_f)
-            suite["forwards"] = @benchmarkable(
-                $__rrule!!(ca...);
-                setup=(ca = ($cd_in_f, _deepcopy($(cd_args))...)),
-                evals=1,
-            )
-
-            # Benchmark pullback.
-            suite["pullback"] = @benchmarkable(
-                x[2]((tangent(x[1])), map(tangent, ca)...),
-                setup=(ca = ($cd_in_f, _deepcopy($cd_args)...); x = Taped.rrule!!(ca...)),
-                evals=1,
-            )
-
-            return (args, BenchmarkTools.run(suite; verbose=true, seconds=3))
-        end
-    end
-
-    # Compute performance ratio for all cases.
-    return combine_results.(results, ranges, Ref(default_derived_ratios()))
+    return benchmark_rules!!(test_case_data, (lb=0.1, ub=150))
 end
-
-function combine_results(result, _range, default_range)
-    result_dict = result[2]
-    primal_time = time(minimum(result_dict["primal"]))
-    forwards_time = time(minimum(result_dict["forwards"]))
-    pullback_time = time(minimum(result_dict["pullback"]))
-    return (
-        tag=string(Core.Typeof((result[1]..., ))),
-        primal_time=primal_time,
-        forwards_time=forwards_time,
-        pullback_time=pullback_time,
-        forwards_ratio=forwards_time / primal_time,
-        pullback_ratio=pullback_time / primal_time,
-        forwards_lb=_range === nothing ? default_range.lb : _range.lb,
-        forwards_ub=_range === nothing ? default_range.ub : _range.ub,
-        pullback_lb=_range === nothing ? default_range.lb : _range.lb,
-        pullback_ub=_range === nothing ? default_range.ub : _range.ub,
-    )
-end
-
-between(x, (lb, ub)) = lb < x && x < ub
 
 function flag_concerning_performance(ratios)
+    between(x, (lb, ub)) = lb < x && x < ub
     @testset "detect concerning performance" begin
         @testset for ratio in ratios
-            forwards_range = (lb=ratio.forwards_lb, ub=ratio.forwards_ub)
-            @test between(ratio.forwards_ratio, forwards_range)
-            pullback_range = (lb=ratio.pullback_lb, ub=ratio.pullback_ub)
-            @test between(ratio.pullback_ratio, pullback_range)
+            @test between(ratio.value_and_pb_ratio, ratio.range)
         end
     end
-end
-
-const perf_group = get(ENV, "PERF_GROUP", "hand_written")
-
-function identify_concerning_items!(df::DataFrame)
-
-    # Compute whether each item is in its specified forwards range.
-    df.forwards_range = map((l, u) -> (lb=l, ub=u), df.forwards_lb, df.forwards_ub)
-    df.in_forwards_range = map(between, df.forwards_ratio, df.forwards_range)
-
-    # Compute whether each item is in its specified pullback range.
-    df.pullback_range = map((l, u) -> (lb=l, ub=u), df.pullback_lb, df.pullback_ub)
-    df.in_pullback_range = map(between, df.pullback_ratio, df.pullback_range)
-
-    # Compute whether each item is inside both ranges.
-    df.in_all_ranges = map(&, df.in_forwards_range, df.in_pullback_range)
-    return df
 end
 
 """
     plot_ratio_histogram!(df::DataFrame)
 
-Computes the fields fields `gradient_time` and `gradient_ratio` to `df`. The former is
-simply `forwards_time + pullbacktime`, which the latter is `gradient_time / primal_time`.
-
-Then displays the `gradient_ratio` field as a pair of histograms, one with a linear x-scale,
-and one with a log x-scale.
+Constructs a histogram of the `value_and_pb_ratio` field of `df`, with formatting that is
+well-suited to the numbers typically found in this field.
 """
 function plot_ratio_histogram!(df::DataFrame)
-    df.gradient_time = df.forwards_time + df.pullback_time
-    df.gradient_ratio = df.gradient_time ./ df.primal_time
-    b = df.gradient_ratio
-    bins = 10.0 .^ (0.0:0.05:7.0)
-    plot(
-        histogram(b; title="linear", label=""),
-        histogram(b;
-            xscale=:log10,
-            xlim=extrema(bins),
-            bin=bins,
-            title="log",
-            label="",
-            xticks=10.0.^(0.0:1.0:7.0),
-        ),
-        layout=(2, 1),
-    )
+    bin = 10.0 .^ (0.0:0.05:6.0)
+    xlim = extrema(bin)
+    histogram(df.value_and_pb_ratio; xscale=:log10, xlim, bin, title="log", label="")
 end
 
 function main()
+    perf_group = get(ENV, "PERF_GROUP", "hand_written")
     if perf_group == "hand_written"
-        hand_written_results = benchmark_hand_written_rrules!!(Xoshiro)
-        flag_concerning_performance(hand_written_results)
+        flag_concerning_performance(benchmark_hand_written_rrules!!(Xoshiro))
     elseif perf_group == "derived"
-        derived_results = benchmark_derived_rrules!!(Xoshiro)
-        flag_concerning_performance(derived_results)
+        flag_concerning_performance(benchmark_derived_rrules!!(Xoshiro))
     else
         throw(error("perf_group=$(perf_group) is not recognised"))
     end

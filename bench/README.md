@@ -14,12 +14,10 @@ df = DataFrame(benchmark_derived_rrules!!(Xoshiro))
 to run the benchmarks which test the performance of AD. This will produce a `DataFrame`
 containing a run-down of the results. It has the following columns:
 1. `tag`: a `String` with an automatically generated name for the test
-2. `primal_time`: the time taken to run the original code
-3. `forwards_time`: the time taken to run the forwards-pass
-4. `pullback_time`: the time taken to run the pullback
-5. `forwards_ratio`: `forwards_time / primal_time`
-6. `pullback_ratio`: `pullback_time / primal_time`
-7. `forwards_lb` / `forwards_ub` / `pullback_lb` / `pullback_ub`: required lower / upper bounds on the above ratios
+1. `primal_time`: the time taken to run the original code
+1. `value_and_pb_time`: the time taken to run the forwards and reverse passes
+1. `value_and_pb_ratio`: `value_and_pb_time / primal_time`
+1. `range`: a named tuple with fields `lb` and `ub` specifying the acceptable range of values for `value_and_pb_ratio`.
 
 From here you can look at whatever properties of the results you are interested in.
 
@@ -29,10 +27,7 @@ Note that the types of all of the columns are very simple, so it is fine to writ
 CSV.write("file_name.csv", df)
 ```
 
-Additionally, the convenience function `plot_ratio_histogram!` can be used to produce
-histograms which summarise the distribution of the ratio of the time taken to compute the
-gradient vs the time taken to compute the primal. See the docstring for more info, call it
-as follows:
+Additionally, the convenience function `plot_ratio_histogram!` can be used to produce a histogram of `value_and_pb_ratio` with formatting which is suited to this field. Call it as follows:
 ```julia
 derived_results = benchmark_derived_rrules!!(Xoshiro)
 df = DataFrame(df)
