@@ -84,7 +84,7 @@ The plan is to proceed in three phases:
 You should take this with a pinch of salt, as it seems highly likely that we will have to revisit some design choices when optimising performance -- we do not, however, anticipate requiring major re-writes to the design as part of performance optimisation.
 We aim to reach the maintenance phase of the project before 01/06/2024.
 
-*Update: (16/01/2023)*
+*Update: (16/01/2024)*
 Phase 2 is now well underway. We now make use of a much faster approach to interpreting / executing Julia code, which yields performance that is comparable with ReverseDiff (when things go well). The current focus is on ironing out performance issues, and simplifying the implementation.
 
 *Update: (06/11/2023)*
