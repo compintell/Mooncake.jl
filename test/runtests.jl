@@ -79,6 +79,7 @@ end
             include(joinpath("interpreter", "interpreted_function.jl"))
             include(joinpath("interpreter", "reverse_mode_ad.jl"))
         end
+    elseif test_group == "rrules"
         include("test_utils.jl")
         @testset "rrules" begin
             @info "avoiding_non_differentiable_code"
