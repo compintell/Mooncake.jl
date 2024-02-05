@@ -1,8 +1,8 @@
 a_primitive(x) = sin(x)
 non_primitive(x) = sin(x)
 
-Taped.is_primitive(::DefaultCtx, ::Type{<:Tuple{typeof(a_primitive), Any}}) = true
-Taped.is_primitive(::DefaultCtx, ::Type{<:Tuple{typeof(non_primitive), Any}}) = false
+Taped.is_primitive(::Type{DefaultCtx}, ::Type{<:Tuple{typeof(a_primitive), Any}}) = true
+Taped.is_primitive(::Type{DefaultCtx}, ::Type{<:Tuple{typeof(non_primitive), Any}}) = false
 
 contains_primitive(x) = @inline a_primitive(x)
 contains_non_primitive(x) = @inline non_primitive(x)

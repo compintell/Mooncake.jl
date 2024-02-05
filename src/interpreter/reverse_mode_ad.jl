@@ -344,7 +344,7 @@ end
 function rrule!!(_f::CoDual{<:DelayedInterpretedFunction{C, F}}, args::CoDual...) where {C, F}
     f = primal(_f)
     s = Tuple{map(Core.Typeof ∘ primal, args)...}
-    if is_primitive(f.ctx, s)
+    if is_primitive(C, s)
         return rrule!!(zero_codual(f.f), args...)
     else
         in_f = InterpretedFunction(f.ctx, s, f.interp)
