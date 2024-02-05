@@ -11,7 +11,7 @@ using Taped:
     TestUtils,
     TInterp
 
-using Taped.TestUtils: _deepcopy, to_benchmark
+using Taped.TestUtils: _deepcopy, to_benchmark, set_up_gradient_problem
 
 function benchmark_rules!!(test_case_data, default_ratios)
     test_cases = reduce(vcat, map(first, test_case_data))
@@ -30,7 +30,7 @@ function benchmark_rules!!(test_case_data, default_ratios)
             )
 
             # Benchmark pullback.
-            rule, in_f = TestUtils.set_up_gradient_problem(args...)
+            rule, in_f = set_up_gradient_problem(args...)
             coduals = map(x -> x isa CoDual ? x : zero_codual(x), args)
             suite["value_and_pb"] = @benchmarkable(
                 to_benchmark($rule, zero_codual($in_f), $coduals...);
@@ -75,18 +75,7 @@ function benchmark_hand_written_rrules!!(rng_ctor)
 end
 
 function benchmark_derived_rrules!!(rng_ctor)
-    # Only testing a subset of the cases because there are still problems in the subset of
-    # the cases.
     test_case_data = map([
-        # :avoiding_non_differentiable_code,
-        # :blas,
-        # :builtins,
-        # :foreigncall,
-        # :iddict,
-        # :lapack,
-        # :low_level_maths,
-        # :misc,
-        # :new,
         :test_utils
     ]) do s
         test_cases, memory = generate_derived_rrule!!_test_cases(rng_ctor, Val(s))
@@ -100,7 +89,7 @@ function flag_concerning_performance(ratios)
     between(x, (lb, ub)) = lb < x && x < ub
     @testset "detect concerning performance" begin
         @testset for ratio in ratios
-            @test between(ratio.value_and_pb_ratio, ratio.range)
+            @test ratio.range.lb < ratio.value_and_pb_ratio < ratio.range.ub
         end
     end
 end

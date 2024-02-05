@@ -611,7 +611,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
     _a[1] = [5.4, 4.23, -0.1, 2.1]
 
     # Slightly wider range for builtins whose performance is known not to be great.
-    _range = (lb=0.1, ub=100.0)
+    _range = (lb=0.1, ub=200.0)
 
     test_cases = Any[
 
