@@ -278,7 +278,7 @@ rrule_output_type(::Type{Ty}) where {Ty} = Tuple{CoDual{Ty, tangent_type(Ty)}, A
 # Central definition of _typeof in case I need to specalise it for particular types.
 _typeof(x::T) where {T} = Core.Typeof(x)
 
-function test_rrule_interface(f_f̄, x_x̄...; is_primitive, ctx, rule)
+function test_rrule_interface(f_f̄, x_x̄...; is_primitive, ctx::C, rule) where {C}
     @nospecialize f_f̄ x_x̄
 
     # Pull out primals and run primal computation.
@@ -291,7 +291,7 @@ function test_rrule_interface(f_f̄, x_x̄...; is_primitive, ctx, rule)
     # Verify that the function to which the rrule applies is considered a primitive.
     # It is not clear that this really belongs here to be frank.
     if is_primitive
-        @test Taped.is_primitive(ctx, Tuple{Core.Typeof(f), map(Core.Typeof, x)...})
+        @test Taped.is_primitive(C, Tuple{Core.Typeof(f), map(Core.Typeof, x)...})
     end
 
     # Run the primal programme. Bail out early if this doesn't work.
@@ -921,13 +921,12 @@ with the same `rule` and `in_f` arguments, but with different values of `x`.
 See also: `Taped.TestUtils.value_and_gradient!!`.
 """
 function set_up_gradient_problem(fargs...)
-    ctx = DefaultCtx()
     primals = map(x -> x isa CoDual ? primal(x) : x, fargs)
     sig = Tuple{map(Core.Typeof, primals)...}
-    if Taped.is_primitive(ctx, sig)
+    if Taped.is_primitive(DefaultCtx, sig)
         return rrule!!, Taped._eval
     else
-        in_f = Taped.InterpretedFunction(ctx, sig, Taped.TInterp())
+        in_f = Taped.InterpretedFunction(DefaultCtx(), sig, Taped.TInterp())
         return Taped.build_rrule!!(in_f), in_f
     end
 end

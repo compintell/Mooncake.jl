@@ -118,7 +118,7 @@ special handling of `cglobal` is used.
 __cglobal(::Val{s}, x::Vararg{Any, N}) where {s, N} = cglobal(s, x...)
 
 translate(::Val{Intrinsics.cglobal}) = __cglobal
-Taped.is_primitive(::MinimalCtx, ::Type{<:Tuple{typeof(__cglobal), Vararg}}) = true
+Taped.is_primitive(::Type{MinimalCtx}, ::Type{<:Tuple{typeof(__cglobal), Vararg}}) = true
 function rrule!!(::CoDual{typeof(__cglobal)}, args...)
     return Taped.uninit_codual(__cglobal(map(primal, args)...)), NoPullback()
 end

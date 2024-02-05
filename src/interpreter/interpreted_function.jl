@@ -236,7 +236,7 @@ function build_inst(x::Expr, @nospecialize(in_f), n::Int, b::Int, is_blk_end::Bo
 end
 
 function get_evaluator(ctx::T, sig, interp, is_invoke::Bool) where {T}
-    is_primitive(ctx, sig) && return _eval
+    is_primitive(T, sig) && return _eval
     is_invoke && return InterpretedFunction(ctx, sig, interp)
     return DelayedInterpretedFunction(ctx, Dict(), interp)
 end
@@ -597,12 +597,12 @@ struct DelayedInterpretedFunction{C, Tlocal_cache, T<:TapedInterpreter}
     interp::T
 end
 
-function (din_f::DelayedInterpretedFunction)(fargs::Vararg{Any, N}) where {N}
+function (din_f::DelayedInterpretedFunction{C})(fargs::Vararg{Any, N}) where {C, N}
     k = map(Core.Typeof, fargs)
     _evaluator = get(din_f.local_cache, k, nothing)
     if _evaluator === nothing
         sig = Tuple{map(Core.Typeof, fargs)...}
-        _evaluator = if is_primitive(din_f.ctx, sig)
+        _evaluator = if is_primitive(C, sig)
             _eval
         else
             InterpretedFunction(din_f.ctx, sig, din_f.interp)

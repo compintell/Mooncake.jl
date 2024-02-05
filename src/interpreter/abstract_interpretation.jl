@@ -76,7 +76,7 @@ function CC.inlining_policy(
 
     # Do not inline away primitives.
     argtype_tuple = Tuple{map(_type, argtypes)...}
-    is_primitive(interp.ctx, argtype_tuple) && return nothing
+    is_primitive(C, argtype_tuple) && return nothing
 
     # If not a primitive, AD doesn't care about it. Use the usual inlining strategy.
     return @invoke CC.inlining_policy(
