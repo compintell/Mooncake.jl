@@ -6,7 +6,10 @@ using BenchmarkTools, CSV, DataFrames, Plots, Random, Taped, Test
 using Taped:
     CoDual,
     generate_hand_written_rrule!!_test_cases,
-    generate_derived_rrule!!_test_cases
+    generate_derived_rrule!!_test_cases,
+    InterpretedFunction,
+    TestUtils,
+    TInterp
 
 using Taped.TestUtils: _deepcopy, to_benchmark, set_up_gradient_problem
 
@@ -83,6 +86,7 @@ function benchmark_derived_rrules!!(rng_ctor)
 end
 
 function flag_concerning_performance(ratios)
+    between(x, (lb, ub)) = lb < x && x < ub
     @testset "detect concerning performance" begin
         @testset for ratio in ratios
             @test ratio.range.lb < ratio.value_and_pb_ratio < ratio.range.ub
