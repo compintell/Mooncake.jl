@@ -1451,11 +1451,11 @@ function generate_test_functions()
             randn(5),
         ),
         (
-            false, :none, (lb=100, ub=1_000_000),
+            false, :none, (lb=100, ub=100_000_000),
             mul!, transpose(randn(3, 5)), randn(5, 5), randn(5, 3), 4.0, 3.0,
         ), # static_parameter,
-        (false, :none, (lb=100, ub=10_000), Xoshiro, 123456),
-        (false, :none, nothing, *, randn(250, 500), randn(500, 250)),
+        (false, :none, (lb=100, ub=100_000_000), Xoshiro, 123456),
+        (false, :none, (lb=1, ub=100_000), *, randn(250, 500), randn(500, 250)),
         (false, :allocs, nothing, test_sin, 1.0),
         (false, :allocs, nothing, test_cos_sin, 2.0),
         (false, :allocs, nothing, test_isbits_multiple_usage, 5.0),
@@ -1476,7 +1476,7 @@ function generate_test_functions()
         (false, :none, nothing, test_mutable_struct_basic, 5.0),
         (false, :none, nothing, test_mutable_struct_basic_sin, 5.0),
         (false, :none, nothing, test_mutable_struct_setfield, 4.0),
-        (false, :none, (lb=1.0, ub=500.0), test_mutable_struct, 5.0),
+        (false, :none, (lb=1, ub=1_000), test_mutable_struct, 5.0),
         (false, :none, nothing, test_struct_partial_init, 3.5),
         (false, :none, nothing, test_mutable_partial_init, 3.3),
         (
