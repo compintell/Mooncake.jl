@@ -216,22 +216,9 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
         (false, LKJ(5, 1.1), rand(sr(123456), LKJ(5, 1.1))),
     ]
         @info "$(map(typeof, (d, x)))"
-        rng = StableRNG(123456)
-        f = logpdf
-        x = (d, x)
-        sig = Tuple{Core.Typeof(f), map(Core.Typeof, x)...}
-        in_f = Taped.InterpretedFunction(Taped.DefaultCtx(), sig, interp)
-        if interface_only
-            in_f(f, deepcopy(x)...)
-        else
-            x_cpy_1 = deepcopy(x)
-            x_cpy_2 = deepcopy(x)
-            @test has_equal_data(in_f(f, x_cpy_1...), f(x_cpy_2...))
-            @test has_equal_data(x_cpy_1, x_cpy_2)
-        end
-        TestUtils.test_rrule!!(
-            sr(123456), in_f, f, x...;
-            perf_flag=:none, interface_only, is_primitive=false,
+        TestUtils.test_interpreted_rrule!!(
+            sr(123456), logpdf, d, x;
+            interp, perf_flag=:none, interface_only, is_primitive=false,
         )
     end
     @testset "$name" for (interface_only, name, f, x) in Any[
@@ -276,12 +263,9 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
         ),
     ]
         @info "$name"
-        rng = StableRNG(123456)
-        sig = Tuple{Core.Typeof(f), map(Core.Typeof, x)...}
-        in_f = Taped.InterpretedFunction(Taped.DefaultCtx(), sig, interp)
-        TestUtils.test_rrule!!(
-            sr(123456), in_f, f, x...;
-            perf_flag=:none, interface_only, is_primitive=false,
+        TestUtils.test_interpreted_rrule!!(
+            sr(123456), f, x...;
+            interp, perf_flag=:none, interface_only, is_primitive=false,
         )
     end
 end
