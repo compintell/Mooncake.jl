@@ -36,7 +36,7 @@ function benchmark_rules!!(test_case_data, default_ratios)
                 to_benchmark($rule, zero_codual($in_f), $coduals...);
             )
 
-            return (args, BenchmarkTools.run(suite, verbose=true, seconds=3))
+            return (args, BenchmarkTools.run(suite, verbose=true))
         end
     end
     return combine_results.(results, ranges, Ref(default_ratios))
