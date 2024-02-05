@@ -26,14 +26,14 @@ function benchmark_rules!!(test_case_data, default_ratios)
             primals = map(x -> x isa CoDual ? primal(x) : x, args)
             suite["primal"] = @benchmarkable(
                 (a[1])((a[2:end])...);
-                setup=(a = ($primals[1], _deepcopy($primals[2:end])...)), evals=1,
+                setup=(a = ($primals[1], _deepcopy($primals[2:end])...)),
             )
 
             # Benchmark pullback.
             rule, in_f = TestUtils.set_up_gradient_problem(args...)
             coduals = map(x -> x isa CoDual ? x : zero_codual(x), args)
             suite["value_and_pb"] = @benchmarkable(
-                to_benchmark($rule, zero_codual($in_f), $coduals...); evals=1,
+                to_benchmark($rule, zero_codual($in_f), $coduals...);
             )
 
             return (args, BenchmarkTools.run(suite, verbose=true, seconds=3))
@@ -42,10 +42,17 @@ function benchmark_rules!!(test_case_data, default_ratios)
     return combine_results.(results, ranges, Ref(default_ratios))
 end
 
-function generate_hand_written_cases(rng_ctor, v::Val)
-    test_cases, memory = generate_hand_written_rrule!!_test_cases(rng_ctor, v)
-    ranges = map(x -> x[3], test_cases)
-    return map(x -> x[4:end], test_cases), memory, ranges
+function combine_results(result, _range, default_range)
+    result_dict = result[2]
+    primal_time = time(minimum(result_dict["primal"]))
+    value_and_pb_time = time(minimum(result_dict["value_and_pb"]))
+    return (
+        tag=string(Core.Typeof((result[1]..., ))),
+        primal_time=primal_time,
+        value_and_pb_time=value_and_pb_time,
+        value_and_pb_ratio=value_and_pb_time / primal_time,
+        range=_range === nothing ? default_range : _range,
+    )
 end
 
 function benchmark_hand_written_rrules!!(rng_ctor)
@@ -60,15 +67,11 @@ function benchmark_hand_written_rrules!!(rng_ctor)
         :misc,
         :new,
     ]) do s
-        generate_hand_written_cases(rng_ctor, Val(s))
+        test_cases, memory = generate_hand_written_rrule!!_test_cases(rng_ctor, Val(s))
+        ranges = map(x -> x[3], test_cases)
+        return map(x -> x[4:end], test_cases), memory, ranges
     end
     return benchmark_rules!!(test_case_data, (lb=1e-3, ub=25.0))
-end
-
-function generate_derived_cases(rng_ctor, v::Val)
-    test_cases, memory = generate_derived_rrule!!_test_cases(rng_ctor, v)
-    ranges = map(x -> x[3], test_cases)
-    return map(x -> x[4:end], test_cases), memory, ranges
 end
 
 function benchmark_derived_rrules!!(rng_ctor)
@@ -86,22 +89,11 @@ function benchmark_derived_rrules!!(rng_ctor)
         # :new,
         :test_utils
     ]) do s
-        generate_derived_cases(rng_ctor, Val(s))
+        test_cases, memory = generate_derived_rrule!!_test_cases(rng_ctor, Val(s))
+        ranges = map(x -> x[3], test_cases)
+        return map(x -> x[4:end], test_cases), memory, ranges
     end
     return benchmark_rules!!(test_case_data, (lb=0.1, ub=150))
-end
-
-function combine_results(result, _range, default_range)
-    result_dict = result[2]
-    primal_time = time(minimum(result_dict["primal"]))
-    value_and_pb_time = time(minimum(result_dict["value_and_pb"]))
-    return (
-        tag=string(Core.Typeof((result[1]..., ))),
-        primal_time=primal_time,
-        value_and_pb_time=value_and_pb_time,
-        value_and_pb_ratio=value_and_pb_time / primal_time,
-        ratio=_range === nothing ? default_range : _range,
-    )
 end
 
 function flag_concerning_performance(ratios)
