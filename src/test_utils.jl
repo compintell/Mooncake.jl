@@ -882,10 +882,13 @@ function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)
 end
 
 function run_derived_rrule!!_test_cases(rng_ctor, v::Val)
+    interp = Taped.TInterp()
     test_cases, memory = Taped.generate_derived_rrule!!_test_cases(rng_ctor, v)
     GC.@preserve memory @testset "$f, $(typeof(x))" for
         (interface_only, perf_flag, _, f, x...) in test_cases
-        test_interpreted_rrule!!(rng_ctor(123), f, x...; interface_only, perf_flag)
+        test_interpreted_rrule!!(
+            rng_ctor(123), f, x...; interp, interface_only, perf_flag, is_primitive=false
+        )
     end
 end
 
