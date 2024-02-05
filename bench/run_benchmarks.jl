@@ -108,11 +108,8 @@ end
 """
     plot_ratio_histogram!(df::DataFrame)
 
-Computes the fields fields `gradient_time` and `gradient_ratio` to `df`. The former is
-simply `forwards_time + pullbacktime`, which the latter is `gradient_time / primal_time`.
-
-Then displays the `gradient_ratio` field as a pair of histograms, one with a linear x-scale,
-and one with a log x-scale.
+Constructs a histogram of the `value_and_pb_ratio` field of `df`, with formatting that is
+well-suited to the numbers typically found in this field.
 """
 function plot_ratio_histogram!(df::DataFrame)
     bin = 10.0 .^ (0.0:0.05:6.0)
