@@ -896,9 +896,9 @@ function run_rrule!!_test_cases(rng_ctor, v::Val)
     run_derived_rrule!!_test_cases(rng_ctor, v)
 end
 
-function to_benchmark(__rrule!!::R, df::F, dx::X) where {R, F, X}
-    out, pb!! = __rrule!!(df, dx...)
-    pb!!(tangent(out), tangent(df), map(tangent, dx)...)
+function to_benchmark(__rrule!!::R, dx::Vararg{CoDual, N}) where {R, N}
+    out, pb!! = __rrule!!(dx...)
+    return pb!!(tangent(out), map(tangent, dx)...)
 end
 
 """
@@ -921,8 +921,15 @@ with the same `rule` and `in_f` arguments, but with different values of `x`.
 See also: `Taped.TestUtils.value_and_gradient!!`.
 """
 function set_up_gradient_problem(fargs...)
-    in_f = Taped.InterpretedFunction(DefaultCtx(), Core.Typeof(fargs), Taped.TInterp())
-    return Taped.build_rrule!!(in_f), in_f
+    ctx = DefaultCtx()
+    primals = map(x -> x isa CoDual ? primal(x) : x, fargs)
+    sig = Tuple{map(Core.Typeof, primals)...}
+    if Taped.is_primitive(ctx, sig)
+        return rrule!!, Taped._eval
+    else
+        in_f = Taped.InterpretedFunction(ctx, sig, Taped.TInterp())
+        return Taped.build_rrule!!(in_f), in_f
+    end
 end
 
 """
