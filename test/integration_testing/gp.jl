@@ -31,63 +31,18 @@ using AbstractGPs, KernelFunctions
         ],
     )
         @info typeof(k), typeof(x1)
-        @testset "ternary kernelmatrix" begin
-            f = kernelmatrix
-            x = (k, x1, x1)
-            sig = Tuple{typeof(f), map(typeof, x)...}
-            in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp)
-            TestUtils.test_rrule!!(
-                sr(123456), in_f, f, x...;
-                perf_flag=:none, interface_only=true, is_primitive=false,
-            )
-        end
-        @testset "ternary kernelmatrix_diag" begin
-            f = kernelmatrix_diag
-            x = (k, x1, x1)
-            sig = Tuple{typeof(f), map(typeof, x)...}
-            in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp)
-            TestUtils.test_rrule!!(
-                sr(123456), in_f, f, x...;
-                perf_flag=:none, interface_only=true, is_primitive=false,
-            )
-        end
-        @testset "binary kernelmatrix" begin
-            f = kernelmatrix
-            x = (k, x1)
-            sig = Tuple{typeof(f), map(typeof, x)...}
-            in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp)
-            TestUtils.test_rrule!!(
-                sr(123456), in_f, f, x...;
-                perf_flag=:none, interface_only=true, is_primitive=false,
-            )
-        end
-        @testset "binary kernelmatrix_diag" begin
-            f = kernelmatrix_diag
-            x = (k, x1)
-            sig = Tuple{typeof(f), map(typeof, x)...}
-            in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp)
-            TestUtils.test_rrule!!(
-                sr(123456), in_f, f, x...;
-                perf_flag=:none, interface_only=true, is_primitive=false,
-            )
-        end
-        @testset "rand" begin
-            x = (Xoshiro(123546), GP(k)(x1, 1.1))
-            sig = Tuple{typeof(rand), map(typeof, x)...}
-            in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp)
-            TestUtils.test_rrule!!(
-                sr(123456), in_f, rand, x...;
-                perf_flag=:none, interface_only=true, is_primitive=false,
-            )
-        end
-        @testset "logpdf" begin
-            fx = GP(k)(x1, 1.1)
-            x = (fx, rand(fx))
-            sig = Tuple{typeof(logpdf), map(typeof, x)...}
-            in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp)
-            TestUtils.test_rrule!!(
-                sr(123456), in_f, logpdf, x...;
-                perf_flag=:none, interface_only=true, is_primitive=false,
+        fx = GP(k)(x1, 1.1)
+        @testset "$(Core.Typeof(x))" for x in Any[
+            (kernelmatrix, k, x1, x1),
+            (kernelmatrix_diag, k, x1, x1),
+            (kernelmatrix, x1),
+            (kernelmatrix_diag, x1),
+            (rand, Xoshiro(123456), fx),
+            (logpdf, fx, rand(fx)),
+        ]
+            TestUtils.test_interpreted_rrule!!(
+                sr(123456), rand, Xoshiro(123456), GP(k)(x1, 1.1);
+                interp, perf_flag=:none, interface_only=true, is_primitive=false,
             )
         end
     end
