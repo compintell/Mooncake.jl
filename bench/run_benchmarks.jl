@@ -6,12 +6,9 @@ using BenchmarkTools, CSV, DataFrames, Plots, Random, Taped, Test
 using Taped:
     CoDual,
     generate_hand_written_rrule!!_test_cases,
-    generate_derived_rrule!!_test_cases,
-    InterpretedFunction,
-    TestUtils,
-    TInterp
+    generate_derived_rrule!!_test_cases
 
-using Taped.TestUtils: _deepcopy, to_benchmark
+using Taped.TestUtils: _deepcopy, to_benchmark, set_up_gradient_problem
 
 function benchmark_rules!!(test_case_data, default_ratios)
     test_cases = reduce(vcat, map(first, test_case_data))
@@ -30,7 +27,7 @@ function benchmark_rules!!(test_case_data, default_ratios)
             )
 
             # Benchmark pullback.
-            rule, in_f = TestUtils.set_up_gradient_problem(args...)
+            rule, in_f = set_up_gradient_problem(args...)
             coduals = map(x -> x isa CoDual ? x : zero_codual(x), args)
             suite["value_and_pb"] = @benchmarkable(
                 to_benchmark($rule, zero_codual($in_f), $coduals...);
