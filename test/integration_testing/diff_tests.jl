@@ -7,21 +7,9 @@
         TestResources.DIFFTESTS_FUNCTIONS[91:end], # SKIPPING SPARSE_LDIV
     )
         @info "$(map(typeof, (f, x...)))"
-        interp = Taped.TInterp()
-        rng = sr(123456)
-        sig = Tuple{Core.Typeof(f), map(Core.Typeof, x)...}
-        in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp);
-        if interface_only
-            in_f(f, deepcopy(x)...)
-        else
-            x_cpy_1 = deepcopy(x)
-            x_cpy_2 = deepcopy(x)
-            @test has_equal_data(in_f(f, x_cpy_1...), f(x_cpy_2...))
-            @test has_equal_data(x_cpy_1, x_cpy_2)
-        end
-        TestUtils.test_rrule!!(
-            sr(123456), in_f, f, x...;
-            perf_flag=:none, interface_only=false, is_primitive=false,
+        TestUtils.test_interpreted_rrule!!(
+            sr(123456), f, x...;
+            interp, perf_flag=:none, interface_only=false, is_primitive=false,
         )
     end
 end

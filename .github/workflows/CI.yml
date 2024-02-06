@@ -22,6 +22,7 @@ jobs:
       matrix:
         test_group:
           - 'basic'
+          - 'rrules'
           - 'integration_testing/misc'
           - 'integration_testing/diff_tests'
           - 'integration_testing/distributions'

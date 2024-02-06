@@ -500,25 +500,14 @@ _getter = () -> 5.0
         ]
     )
     for (interface_only, f, x...) in test_cases
-        f(deepcopy(x)...) # maybe running everything before moving forwards is a good way to get stuff to work?
+        f(deepcopy(x)...)
     end
     interp = Taped.TInterp()
     @testset for (interface_only, f, x...) in test_cases
-        rng = StableRNG(123456)
         @info map(Core.Typeof, (f, x...))
-        sig = Tuple{Core.Typeof(f), map(Core.Typeof, x)...}
-        in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp);
-        if interface_only
-            Core.Typeof(in_f(f, deepcopy(x)...)) == Core.Typeof(f(deepcopy(x)...))
-        else
-            x_cpy_1 = deepcopy(x)
-            x_cpy_2 = deepcopy(x)
-            @test has_equal_data(in_f(f, x_cpy_1...), f(x_cpy_2...))
-            @test has_equal_data(x_cpy_1, x_cpy_2)
-        end
-        TestUtils.test_rrule!!(
-            sr(123456), in_f, f, x...;
-            perf_flag=:none, interface_only, is_primitive=false,
+        TestUtils.test_interpreted_rrule!!(
+            sr(123456), f, x...;
+            interp, perf_flag=:none, interface_only, is_primitive=false,
         )
     end
 end

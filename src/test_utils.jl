@@ -436,18 +436,16 @@ function test_rrule!!(
     test_rrule_performance(perf_flag, rule, x_x̄...)
 end
 
-function test_interpreted_rrule!!(rng::AbstractRNG, f, x...; interface_only=false, kwargs...)
-    sig = Tuple{Core.Typeof(f), map(Core.Typeof, x)...}
-    in_f = Taped.InterpretedFunction(DefaultCtx(), sig, Taped.TInterp())
-    test_rrule!!(
-        rng, in_f, f, x...; is_primitive=false, interface_only, perf_flag=:none, kwargs...
-    )
-    return nothing
+"""
+    test_interpreted_rrule!!(rng::AbstractRNG, x...; interp, kwargs...)
+
+A thin wrapper around a call to `set_up_gradient_problem` and `test_rrule!!`.
+Does not require that the method being called is a primitive.
+"""
+function test_interpreted_rrule!!(rng::AbstractRNG, x...; interp, kwargs...)
+    rule, in_f = set_up_gradient_problem(x...; interp)
+    test_rrule!!(rng, in_f, x...; rule, kwargs...)
 end
-
-
-
-
 
 #
 # Test that some basic operations work on a given type.
@@ -884,10 +882,13 @@ function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)
 end
 
 function run_derived_rrule!!_test_cases(rng_ctor, v::Val)
+    interp = Taped.TInterp()
     test_cases, memory = Taped.generate_derived_rrule!!_test_cases(rng_ctor, v)
     GC.@preserve memory @testset "$f, $(typeof(x))" for
         (interface_only, perf_flag, _, f, x...) in test_cases
-        test_interpreted_rrule!!(rng_ctor(123), f, x...; interface_only, perf_flag)
+        test_interpreted_rrule!!(
+            rng_ctor(123), f, x...; interp, interface_only, perf_flag, is_primitive=false
+        )
     end
 end
 
@@ -902,7 +903,7 @@ function to_benchmark(__rrule!!::R, dx::Vararg{CoDual, N}) where {R, N}
 end
 
 """
-    set_up_gradient_problem(fargs...)
+    set_up_gradient_problem(fargs...; interp=Taped.TInterp())
 
 Constructs a `rule` and `InterpretedFunction` which can be passed to `value_and_gradient!!`.
 
@@ -918,15 +919,17 @@ will yield the value and associated gradient for `f` and `x`.
 You only need to run this function once, and may then call `value_and_gradient!!` many times
 with the same `rule` and `in_f` arguments, but with different values of `x`.
 
+Optionally, an interpreter may be provided via the `interp` kwarg.
+
 See also: `Taped.TestUtils.value_and_gradient!!`.
 """
-function set_up_gradient_problem(fargs...)
+function set_up_gradient_problem(fargs...; interp=Taped.TInterp())
     primals = map(x -> x isa CoDual ? primal(x) : x, fargs)
     sig = Tuple{map(Core.Typeof, primals)...}
     if Taped.is_primitive(DefaultCtx, sig)
         return rrule!!, Taped._eval
     else
-        in_f = Taped.InterpretedFunction(DefaultCtx(), sig, Taped.TInterp())
+        in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp)
         return Taped.build_rrule!!(in_f), in_f
     end
 end
