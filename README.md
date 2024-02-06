@@ -106,3 +106,20 @@ compute the gradient of a function, take a look at
 `PProf` provides complete type information on its flame graphs, which is important for figuring out what is getting called, but it doesn't highilght type-instabilities.
 Conversely, `@profview` does highlight type-instabilities, but fails to provide complete type information.
 So if you use both at the same time, you can get all of the information needed.
+
+### What things should work well
+
+Noteworthy things which should be work and be performant include:
+1. value-dependent control flow
+1. mutation of arrays and mutable structs
+
+These are noteworthy in the sense that they are different from ReverseDiff / Zygote. Enzyme is also able to do these things.
+
+Please be aware that "performant" we mean similar performance to ReverseDiff with a compiled tape.
+
+### What won't work
+
+While Taped should now work on a very large subset of the language, there remain things that you should expect not to work. A non-exhaustive list includes:
+1. It is always necessary to produce hand-written for `ccall`s (and, more generally, foreigncall nodes). We have rules for many `ccall`s, but not all. If you encounter a foreigncall without a hand-written rule, you should get an informative error message which tells you what is going on and how to deal with it.
+1. Builtins which require rules. The vast majority of them have rules now, but some don't. Notably, `apply_iterate` does not have a rule, so Taped cannot currently AD through type-unstable splatting -- this should be resolved at some point.
+1. Anything involving tasks / threading -- we have no thread safety guarantees and, at the time of writing, I'm not entirely sure what error you will find if you attempt to AD through code which uses Julia's task / thread system. The same applies to distributed computing. These limitations ought to be possible to resolve.
