@@ -121,12 +121,11 @@ end
 function build_coinsts(x::PiNode, _, _rrule!!, n::Int, b::Int, is_blk_end::Bool)
     val = _get_slot(x.val, _rrule!!)
     ret = _rrule!!.slots[n]
-    old_vals = Vector{eltype(ret)}(undef, 0)
-    sizehint!(old_vals, 10)
+    old_vals = Stack{eltype(ret)}()
     return build_coinsts(PiNode, val, ret, old_vals, _standard_next_block(is_blk_end, b))
 end
 function build_coinsts(
-    ::Type{PiNode}, val::CoDualSlot{V}, ret::CoDualSlot{R}, old_vals::Vector, next_blk::Int,
+    ::Type{PiNode}, val::CoDualSlot{V}, ret::CoDualSlot{R}, old_vals::Stack, next_blk::Int,
 ) where {V, R}
     make_fwds(v) = R(primal(v), tangent(v))
     fwds_inst = @opaque function (p::Int)

@@ -136,7 +136,7 @@
     @testset "PiNode" begin
         val = SlotRef{CoDual{Any, Any}}(CoDual{Any, Any}(5.0, 0.0))
         ret = SlotRef{CoDual{Float64, Float64}}(CoDual(-1.0, -1.0))
-        old_vals = Vector{CoDual{Float64, Float64}}(undef, 0)
+        old_vals = Stack{CoDual{Float64, Float64}}()
         next_blk = 5
         fwds_inst, bwds_inst = build_coinsts(PiNode, val, ret, old_vals, next_blk)
 
