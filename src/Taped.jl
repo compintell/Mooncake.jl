@@ -26,7 +26,6 @@ using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!, potrf!, potrs!
 
 # Needs to be defined before various other things.
 function _foreigncall_ end
-const Tforeigncall = Union{typeof(_foreigncall_)}
 
 include("utils.jl")
 include("tangents.jl")
