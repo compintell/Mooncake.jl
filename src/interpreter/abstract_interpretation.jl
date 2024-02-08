@@ -61,7 +61,7 @@ function CC.setindex!(
 end
 
 _type(x) = x
-_type(x::CC.Const) = Core.Typeof(x.val)
+_type(x::CC.Const) = _typeof(x.val)
 _type(x::CC.PartialStruct) = x.typ
 _type(x::CC.Conditional) = Union{x.thentype, x.elsetype}
 

@@ -9,7 +9,8 @@ using Taped:
     generate_derived_rrule!!_test_cases,
     InterpretedFunction,
     TestUtils,
-    TInterp
+    TInterp,
+    _typeof
 
 using Taped.TestUtils: _deepcopy, to_benchmark, set_up_gradient_problem
 
@@ -19,7 +20,7 @@ function benchmark_rules!!(test_case_data, default_ratios)
     ranges = reduce(vcat, map(x -> x[3], test_case_data))
     GC.@preserve memory begin
         results = map(enumerate(test_cases)) do (n, args)
-            @info "$n / $(length(test_cases))", Core.Typeof(args)
+            @info "$n / $(length(test_cases))", _typeof(args)
             suite = BenchmarkGroup()
 
             # Benchmark primal.
@@ -47,7 +48,7 @@ function combine_results(result, _range, default_range)
     primal_time = time(minimum(result_dict["primal"]))
     value_and_pb_time = time(minimum(result_dict["value_and_pb"]))
     return (
-        tag=string(Core.Typeof((result[1]..., ))),
+        tag=string(Taped._typeof((result[1]..., ))),
         primal_time=primal_time,
         value_and_pb_time=value_and_pb_time,
         value_and_pb_ratio=value_and_pb_time / primal_time,

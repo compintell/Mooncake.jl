@@ -504,7 +504,7 @@ _getter = () -> 5.0
     end
     interp = Taped.TInterp()
     @testset for (interface_only, f, x...) in test_cases
-        @info map(Core.Typeof, (f, x...))
+        @info _typeof((f, x...))
         TestUtils.test_interpreted_rrule!!(
             sr(123456), f, x...;
             interp, perf_flag=:none, interface_only, is_primitive=false,

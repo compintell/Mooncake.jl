@@ -108,7 +108,7 @@
 
     __x = randn(10)
     p = pointer(__x, 3)
-    @testset "set_immutable_to_zero($(Core.Typeof(x)))" for x in Any[
+    @testset "set_immutable_to_zero($(Taped._typeof(x)))" for x in Any[
         NoTangent(),
         5.0,
         5f0,
@@ -120,7 +120,7 @@
         randn_tangent(Xoshiro(1), TestResources.MutableFoo(5.0, randn(3))),
         p,
     ]
-        @test Taped.set_immutable_to_zero(x) isa Core.Typeof(x)
+        @test Taped.set_immutable_to_zero(x) isa Taped._typeof(x)
     end
 
     # Bulk test auto-generated tangents.

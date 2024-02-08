@@ -11,7 +11,7 @@ module TestTypes
 using Base.Iterators: product
 using Core: svec
 using ExprTools: combinedef
-using ..Taped: NoTangent, tangent_type
+using ..Taped: NoTangent, tangent_type, _typeof
 
 const PRIMALS = Tuple{Bool, Any}[]
 
@@ -88,7 +88,7 @@ using JET, Random, Taped, Test, InteractiveUtils
 using Taped:
     CoDual, NoTangent, rrule!!, is_init, zero_codual, DefaultCtx, @is_primitive, val,
     is_always_fully_initialised, get_tangent_field, set_tangent_field!, MutableTangent,
-    Tangent
+    Tangent, _typeof
 
 has_equal_data(x::T, y::T; equal_undefs=true) where {T<:String} = x == y
 has_equal_data(x::Type, y::Type; equal_undefs=true) = x == y
@@ -275,9 +275,6 @@ _deepcopy(x::Module) = x
 
 rrule_output_type(::Type{Ty}) where {Ty} = Tuple{CoDual{Ty, tangent_type(Ty)}, Any}
 
-# Central definition of _typeof in case I need to specalise it for particular types.
-_typeof(x::T) where {T} = Core.Typeof(x)
-
 function test_rrule_interface(f_f̄, x_x̄...; is_primitive, ctx::C, rule) where {C}
     @nospecialize f_f̄ x_x̄
 
@@ -291,7 +288,7 @@ function test_rrule_interface(f_f̄, x_x̄...; is_primitive, ctx::C, rule) where
     # Verify that the function to which the rrule applies is considered a primitive.
     # It is not clear that this really belongs here to be frank.
     if is_primitive
-        @test Taped.is_primitive(C, Tuple{Core.Typeof(f), map(Core.Typeof, x)...})
+        @test Taped.is_primitive(C, _typeof((f, x...)))
     end
 
     # Run the primal programme. Bail out early if this doesn't work.
@@ -717,7 +714,7 @@ function test_set_tangent_field!_performance(t1::T, t2::T) where {V, T<:MutableT
 end
 
 function test_get_tangent_field_performance(t::Union{MutableTangent, Tangent})
-    V = Core.Typeof(t.fields)
+    V = Taped._typeof(t.fields)
     for n in 1:fieldcount(V)
         !is_init(t.fields[n]) && continue
 
@@ -925,7 +922,7 @@ See also: `Taped.TestUtils.value_and_gradient!!`.
 """
 function set_up_gradient_problem(fargs...; interp=Taped.TInterp())
     primals = map(x -> x isa CoDual ? primal(x) : x, fargs)
-    sig = Tuple{map(Core.Typeof, primals)...}
+    sig = _typeof(primals)
     if Taped.is_primitive(DefaultCtx, sig)
         return rrule!!, Taped._eval
     else

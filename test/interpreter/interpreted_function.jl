@@ -74,7 +74,7 @@
         global __y_for_gref::Float64 = 4.0
 
         @testset "ReturnNode" begin
-            @testset "build_instruction: ReturnNode, $(Core.Typeof(args))" for args in Any[
+            @testset "build_instruction: ReturnNode, $(_typeof(args))" for args in Any[
                 (SlotRef(5.0), SlotRef{Float64}()),
                 (SlotRef(4), SlotRef{Any}()),
                 (ConstSlot(5), SlotRef{Int}()),
@@ -213,11 +213,11 @@
 
     # Check that a suite of test cases run and give the correct answer.
     interp = Taped.TInterp()
-    @testset "$f, $(map(Core.Typeof, x))" for (a, b, c, f, x...) in 
+    @testset "$(_typeof((f, x...)))" for (a, b, c, f, x...) in 
         TestResources.generate_test_functions()
 
-        @info "$f, $(Core.Typeof(x))"
-        sig = Tuple{Core.Typeof(f), map(Core.Typeof, x)...}
+        sig = _typeof((f, x...))
+        @info "$sig"
         in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp)
 
         # Verify correctness.

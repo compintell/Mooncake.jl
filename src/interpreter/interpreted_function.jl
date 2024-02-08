@@ -375,7 +375,7 @@ function sparam_names(m::Core.Method)::Vector{Symbol}
 end
 
 make_slot(x::Type{T}) where {T} = (@isdefined T) ? SlotRef{T}() : SlotRef{DataType}()
-make_slot(x::CC.Const) = ConstSlot{Core.Typeof(x.val)}(x.val)
+make_slot(x::CC.Const) = ConstSlot{_typeof(x.val)}(x.val)
 make_slot(x::CC.PartialStruct) = SlotRef{x.typ}()
 make_slot(::CC.PartialTypeVar) = SlotRef{TypeVar}()
 
@@ -516,7 +516,7 @@ function InterpretedFunction(ctx::C, sig::Type{<:Tuple}, interp) where {C}
     bb_ends = vcat(ir.cfg.index .- 1, length(slots))
 
     # Extract the starting location of each basic block from the CFG and build IF.
-    in_f = InterpretedFunction{sig, C, Treturn, Core.Typeof(arg_info)}(
+    in_f = InterpretedFunction{sig, C, Treturn, _typeof(arg_info)}(
         ctx, return_slot, arg_info, slots, insts, bb_starts, bb_ends, ir, interp, spnames,
     )
 
@@ -598,10 +598,10 @@ struct DelayedInterpretedFunction{C, Tlocal_cache, T<:TapedInterpreter}
 end
 
 function (din_f::DelayedInterpretedFunction{C})(fargs::Vararg{Any, N}) where {C, N}
-    k = map(Core.Typeof, fargs)
+    k = map(_typeof, fargs)
     _evaluator = get(din_f.local_cache, k, nothing)
     if _evaluator === nothing
-        sig = Tuple{map(Core.Typeof, fargs)...}
+        sig = _typeof(fargs)
         _evaluator = if is_primitive(C, sig)
             _eval
         else
