@@ -1,9 +1,5 @@
 # Special types to represent data in an IRCode and a InterpretedFunction.
 
-abstract type AbstractSlot{T} end
-
-Base.eltype(::AbstractSlot{T}) where {T} = T
-
 """
     SlotRef{T}()
 
@@ -120,8 +116,8 @@ end
 
 ## PhiNode
 
-struct TypedPhiNode{Tr<:AbstractSlot, Te<:Tuple, Tv<:Tuple}
-    tmp_slot::Tr
+struct TypedPhiNode{Tr<:AbstractSlot, Tt<:AbstractSlot, Te<:Tuple, Tv<:Tuple}
+    tmp_slot::Tt
     ret_slot::Tr
     edges::Te
     values::Tv
@@ -152,7 +148,7 @@ function build_typed_phi_nodes(ir_insts::Vector{PhiNode}, in_f, n_first::Int)
         end
         T = eltype(ret_slot)
         values_vec = map(n -> _init[n] isa UndefRef ? SlotRef{T}() : _init[n], eachindex(_init))
-        return TypedPhiNode(copy(ret_slot), ret_slot, edges, (values_vec..., ))
+        return TypedPhiNode(SlotRef{T}(), ret_slot, edges, (values_vec..., ))
     end
 end
 

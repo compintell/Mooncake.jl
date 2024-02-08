@@ -1,3 +1,7 @@
+abstract type AbstractSlot{T} end
+
+Base.eltype(::AbstractSlot{T}) where {T} = T
+
 """
     Stack{T}()
 
@@ -5,10 +9,16 @@ A stack specialised for reverse-mode AD.
 
 Semantically equivalent to a usual stack, but never de-allocates memory once allocated.
 """
-mutable struct Stack{T}
+mutable struct Stack{T} <: AbstractSlot{T}
     memory::Vector{T}
     position::Int
     Stack{T}() where {T} = new{T}(Vector{T}(undef, 0), 0)
+end
+
+function Stack(x::T) where {T}
+    stack = Stack{T}()
+    push!(stack, x)
+    return stack
 end
 
 function Base.push!(x::Stack{T}, val::T) where {T}
@@ -51,3 +61,5 @@ function Base.setindex!(x::Stack, v)
     x.memory[x.position] = v
     return v
 end
+
+Base.isassigned(x::Stack) = length(x) > 0
