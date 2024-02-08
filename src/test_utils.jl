@@ -367,7 +367,7 @@ function test_rrule_performance(
         JET.test_opt(primal(f_f̄), map(_typeof ∘ primal, x_x̄))
 
         # Test forwards-pass stability.
-        JET.test_opt(rule, (typeof(f_f̄), map(_typeof, x_x̄)...))
+        JET.test_opt(rule, (_typeof(f_f̄), map(_typeof, x_x̄)...))
 
         # Test reverse-pass stability.
         y_ȳ, pb!! = rule(f_f̄, _deepcopy(x_x̄)...)
