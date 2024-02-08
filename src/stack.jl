@@ -34,3 +34,20 @@ end
 Base.isempty(x::Stack) = x.position == 0
 
 Base.length(x::Stack) = x.position
+
+"""
+    Base.getindex(x::Stack)
+
+Return the value at the top of `x` without popping it.
+"""
+Base.getindex(x::Stack) = x.memory[x.position]
+
+"""
+    Base.setindex!(x::Stack, v)
+
+Set the value of the element at the top of the `x` to `v`.
+"""
+function Base.setindex!(x::Stack, v)
+    x.memory[x.position] = v
+    return v
+end
