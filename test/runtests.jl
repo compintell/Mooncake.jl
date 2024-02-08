@@ -36,7 +36,8 @@ using Taped:
     build_inst,
     TypedPhiNode,
     build_coinsts,
-    Stack
+    Stack,
+    _typeof
 
 using .TestUtils:
     test_rrule!!,
@@ -68,6 +69,7 @@ end
 
 @testset "Taped.jl" begin
     if test_group == "basic"
+        include("utils.jl")
         include("tangents.jl")
         include("codual.jl")
         include("stack.jl")
