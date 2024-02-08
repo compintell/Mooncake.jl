@@ -8,7 +8,7 @@ Base.showerror(io::IO, err::MissingForeigncallRuleError) = print(io, err.msg)
 # Fallback foreigncall rrule. This is a sufficiently common special case, that it's worth
 # creating an informative error message, so that users have some chance of knowing why
 # they're not able to differentiate a piece of code.
-function rrule!!(::CoDual{<:Tforeigncall}, args...)
+function rrule!!(::CoDual{typeof(_foreigncall_)}, args...)
     throw(MissingForeigncallRuleError(
         "No rrule!! available for foreigncall with primal argument types " *
         "$(typeof(map(primal, args))). " *
@@ -382,7 +382,7 @@ end
 #
 
 function rrule!!(
-    ::CoDual{<:Tforeigncall},
+    ::CoDual{typeof(_foreigncall_)},
     ::CoDual{Val{:jl_array_ptr}},
     ::CoDual{Val{Ptr{T}}},
     ::CoDual{Tuple{Val{Any}}},
@@ -398,7 +398,7 @@ function rrule!!(
 end
 
 # function rrule!!(
-#     ::CoDual{<:Tforeigncall},
+#     ::CoDual{typeof(_foreigncall_)},
 #     ::CoDual{Val{:jl_value_ptr}},
 #     ::CoDual{Val{Ptr{Cvoid}}},
 #     ::CoDual,
@@ -414,7 +414,7 @@ end
 # end
 
 function rrule!!(
-    ::CoDual{<:Tforeigncall},
+    ::CoDual{typeof(_foreigncall_)},
     ::CoDual{Val{:jl_reshape_array}},
     ::CoDual{Val{Array{P, M}}},
     ::CoDual{Tuple{Val{Any}, Val{Any}, Val{Any}}},
@@ -433,7 +433,7 @@ function rrule!!(
 end
 
 function rrule!!(
-    ::CoDual{<:Tforeigncall},
+    ::CoDual{typeof(_foreigncall_)},
     ::CoDual{Val{:jl_array_isassigned}},
     ::CoDual, # return type is Int32
     ::CoDual, # arg types are (Any, UInt64)
@@ -498,7 +498,7 @@ for name in [
     ) where {RT, nreq, calling_convention}
         unexepcted_foreigncall_error($name)
     end
-    @eval function rrule!!(::CoDual{<:Tforeigncall}, ::CoDual{Val{$name}}, args...)
+    @eval function rrule!!(::CoDual{typeof(_foreigncall_)}, ::CoDual{Val{$name}}, args...)
         unexepcted_foreigncall_error($name)
     end
 end

@@ -114,8 +114,7 @@ end
         rng = sr(123)
         f, x = build_turing_problem(rng, model, ex)
 
-        sig = Tuple{Core.Typeof(f), Core.Typeof(x)}
-        in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp);
+        in_f = Taped.InterpretedFunction(DefaultCtx(), _typeof((f, x)), interp);
         if interface_only
             in_f(f, deepcopy(x))
         else

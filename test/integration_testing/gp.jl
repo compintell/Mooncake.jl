@@ -32,7 +32,7 @@ using AbstractGPs, KernelFunctions
     )
         @info typeof(k), typeof(x1)
         fx = GP(k)(x1, 1.1)
-        @testset "$(Core.Typeof(x))" for x in Any[
+        @testset "$(_typeof(x))" for x in Any[
             (kernelmatrix, k, x1, x1),
             (kernelmatrix_diag, k, x1, x1),
             (kernelmatrix, x1),

@@ -234,7 +234,7 @@
             3,
         ),
     ]
-        sig = Tuple{map(Core.Typeof ∘ primal ∘ getindex, arg_slots)...}
+        sig = _typeof(map(primal ∘ getindex, arg_slots))
         interp = Taped.TInterp()
         evaluator = Taped.get_evaluator(Taped.MinimalCtx(), sig, interp, false)
         __rrule!! = Taped.get_rrule!!_evaluator(evaluator)
@@ -292,11 +292,11 @@
     interp = Taped.TInterp()
 
     # nothings inserted for consistency with generate_test_functions.
-    @testset "$f, $(map(Core.Typeof, x))" for (interface_only, perf_flag, bnds, f, x...) in
+    @testset "$(_typeof((f, x...)))" for (interface_only, perf_flag, bnds, f, x...) in
         TestResources.generate_test_functions()
 
-        @info "$f, $(Core.Typeof(x))"
-        sig = Tuple{Core.Typeof(f), map(Core.Typeof, x)...}
+        sig = _typeof((f, x...))
+        @info "$sig"
         in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp);
 
         # Verify correctness.

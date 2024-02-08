@@ -4,10 +4,10 @@
     ]
         # Construct a vector of instructions from known function.
         f, args... = fargs
-        insts = only(code_typed(f, Tuple{map(Core.Typeof, args)...}))[1].code
+        insts = only(code_typed(f, _typeof(args)))[1].code
     
         # Use Taped.ircode to build an `IRCode`.
-        argtypes = Any[map(Core.Typeof, fargs)...]
+        argtypes = Any[map(_typeof, fargs)...]
         ir = Taped.ircode(insts, argtypes)
 
         # Check the validity of the `IRCode`, and that an OpaqueClosure constructed using it

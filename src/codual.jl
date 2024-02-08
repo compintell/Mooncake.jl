@@ -42,4 +42,4 @@ struct NoPullback end
 
 @inline (::NoPullback)(dy, dx...) = dx
 
-might_be_active(args) = any(might_be_active ∘ typeof, args)
+might_be_active(args) = any(might_be_active ∘ _typeof, args)

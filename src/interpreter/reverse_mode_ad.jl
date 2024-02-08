@@ -178,7 +178,7 @@ get_rrule!!_evaluator(::DelayedInterpretedFunction) = rrule!!
 # we fallback to `Any`.
 function build_pb_stack(__rrule!!, evaluator, arg_slots)
     deval = zero_codual(evaluator)
-    codual_sig = Tuple{Core.Typeof(deval), map(eltype, arg_slots)...}
+    codual_sig = Tuple{_typeof(deval), map(eltype, arg_slots)...}
     possible_output_types = Base.return_types(__rrule!!, codual_sig)
     if length(possible_output_types) == 0
         throw(error("No return type inferred for __rrule!! with sig $codual_sig"))
@@ -211,7 +211,7 @@ function build_coinsts(ir_inst::Expr, in_f, _rrule!!, n::Int, b::Int, is_blk_end
 
         # if primal(arg_slots[1][]) isa typeof(_new_)
         #     println("in new")
-        #     display(Core.Typeof(arg_slots))
+        #     display(_typeof(arg_slots))
         #     println()
         #     display(map(getindex, arg_slots))
         #     println()
@@ -226,7 +226,7 @@ function build_coinsts(ir_inst::Expr, in_f, _rrule!!, n::Int, b::Int, is_blk_end
         # end
 
         # Construct signature, and determine how the rrule is to be computed.
-        primal_sig = Tuple{map(Core.Typeof ∘ primal ∘ getindex, arg_slots)...}
+        primal_sig = _typeof(map(primal ∘ getindex, arg_slots))
         evaluator = get_evaluator(in_f.ctx, primal_sig, in_f.interp, is_invoke)
         __rrule!! = get_rrule!!_evaluator(evaluator)
 
@@ -342,7 +342,7 @@ end
 
 function rrule!!(_f::CoDual{<:DelayedInterpretedFunction{C, F}}, args::CoDual...) where {C, F}
     f = primal(_f)
-    s = Tuple{map(Core.Typeof ∘ primal, args)...}
+    s = _typeof(map(primal, args))
     if is_primitive(C, s)
         return rrule!!(zero_codual(f.f), args...)
     else
@@ -364,7 +364,7 @@ make_codual_slot(x::ConstSlot{P}) where {P} = ConstSlot{codual_type(P)}(uninit_c
 
 function make_codual_arginfo(ai::ArgInfo{T, is_vararg}) where {T, is_vararg}
     codual_arg_slots = map(make_codual_slot, ai.arg_slots)
-    return ArgInfo{Core.Typeof(codual_arg_slots), is_vararg}(codual_arg_slots)
+    return ArgInfo{_typeof(codual_arg_slots), is_vararg}(codual_arg_slots)
 end
 
 function load_rrule_args!(ai::ArgInfo{T, is_vararg}, args::Tuple) where {T, is_vararg}
@@ -456,7 +456,7 @@ function build_rrule!!(in_f::InterpretedFunction{sig}) where {sig}
     arg_info = make_codual_arginfo(in_f.arg_info)
 
     # Construct rrule!! for in_f.
-    __rrule!! =  InterpretedFunctionRRule{sig, eltype(return_slot), Core.Typeof(arg_info)}(
+    __rrule!! =  InterpretedFunctionRRule{sig, eltype(return_slot), _typeof(arg_info)}(
         return_slot,
         arg_info,
         map(make_codual_slot, in_f.slots), # SlotRefs

@@ -97,7 +97,7 @@ end
 # an `IRCode` is a `Core.Const` containing the function to be called. `_get_type` recovers
 # the type in such situations.
 _get_type(x::Core.PartialStruct) = x.typ
-_get_type(x::Core.Const) = Core.Typeof(x.val)
+_get_type(x::Core.Const) = _typeof(x.val)
 _get_type(T) = T
 
 # Given some IR, generates a MethodInstance suitable for passing to infer_ir!, if you don't

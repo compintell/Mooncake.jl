@@ -11,7 +11,7 @@ module TestTypes
 using Base.Iterators: product
 using Core: svec
 using ExprTools: combinedef
-using ..Taped: NoTangent, tangent_type
+using ..Taped: NoTangent, tangent_type, _typeof
 
 const PRIMALS = Tuple{Bool, Any}[]
 
@@ -88,7 +88,7 @@ using JET, Random, Taped, Test, InteractiveUtils
 using Taped:
     CoDual, NoTangent, rrule!!, is_init, zero_codual, DefaultCtx, @is_primitive, val,
     is_always_fully_initialised, get_tangent_field, set_tangent_field!, MutableTangent,
-    Tangent
+    Tangent, _typeof
 
 has_equal_data(x::T, y::T; equal_undefs=true) where {T<:String} = x == y
 has_equal_data(x::Type, y::Type; equal_undefs=true) = x == y
@@ -275,9 +275,6 @@ _deepcopy(x::Module) = x
 
 rrule_output_type(::Type{Ty}) where {Ty} = Tuple{CoDual{Ty, tangent_type(Ty)}, Any}
 
-# Central definition of _typeof in case I need to specalise it for particular types.
-_typeof(x::T) where {T} = Core.Typeof(x)
-
 function test_rrule_interface(f_f̄, x_x̄...; is_primitive, ctx::C, rule) where {C}
     @nospecialize f_f̄ x_x̄
 
@@ -291,7 +288,7 @@ function test_rrule_interface(f_f̄, x_x̄...; is_primitive, ctx::C, rule) where
     # Verify that the function to which the rrule applies is considered a primitive.
     # It is not clear that this really belongs here to be frank.
     if is_primitive
-        @test Taped.is_primitive(C, Tuple{Core.Typeof(f), map(Core.Typeof, x)...})
+        @test Taped.is_primitive(C, _typeof((f, x...)))
     end
 
     # Run the primal programme. Bail out early if this doesn't work.
@@ -370,7 +367,7 @@ function test_rrule_performance(
         JET.test_opt(primal(f_f̄), map(_typeof ∘ primal, x_x̄))
 
         # Test forwards-pass stability.
-        JET.test_opt(rule, (typeof(f_f̄), map(_typeof, x_x̄)...))
+        JET.test_opt(rule, (_typeof(f_f̄), map(_typeof, x_x̄)...))
 
         # Test reverse-pass stability.
         y_ȳ, pb!! = rule(f_f̄, _deepcopy(x_x̄)...)
@@ -458,16 +455,16 @@ end
 generate_args(::typeof(Core.sizeof), x) = [(x, )]
 generate_args(::typeof(Core.svec), x) = [(x, ), (x, x)]
 function generate_args(::typeof(getfield), x)
-    names = filter(f -> isdefined(x, f), fieldnames(typeof(x)))
+    names = filter(f -> isdefined(x, f), fieldnames(_typeof(x)))
     return map(n -> (x, n), vcat(names..., eachindex(names)...))
 end
-generate_args(::typeof(isa), x) = [(x, Float64), (x, Int), (x, typeof(x))]
+generate_args(::typeof(isa), x) = [(x, Float64), (x, Int), (x, _typeof(x))]
 function generate_args(::typeof(setfield!), x)
-    names = filter(f -> isdefined(x, f), fieldnames(typeof(x)))
+    names = filter(f -> isdefined(x, f), fieldnames(_typeof(x)))
     return map(n -> (x, n, getfield(x, n)), vcat(names..., eachindex(names)...))
 end
 generate_args(::typeof(tuple), x) = [(x, ), (x, x), (x, x, x)]
-generate_args(::typeof(typeassert), x) = [(x, typeof(x))]
+generate_args(::typeof(typeassert), x) = [(x, _typeof(x))]
 generate_args(::typeof(typeof), x) = [(x, )]
 
 function functions_for_all_types()
@@ -616,7 +613,7 @@ function test_tangent_consistency(rng::AbstractRNG, p::P; interface_only=false) 
 end
 
 function test_set_tangent_field!_correctness(t1::T, t2::T) where {T<:MutableTangent}
-    Tfields = typeof(t1.fields)
+    Tfields = _typeof(t1.fields)
     for n in 1:fieldcount(Tfields)
         !Taped.is_init(t2.fields[n]) && continue
         v = get_tangent_field(t2, n)
@@ -717,7 +714,7 @@ function test_set_tangent_field!_performance(t1::T, t2::T) where {V, T<:MutableT
 end
 
 function test_get_tangent_field_performance(t::Union{MutableTangent, Tangent})
-    V = Core.Typeof(t.fields)
+    V = Taped._typeof(t.fields)
     for n in 1:fieldcount(V)
         !is_init(t.fields[n]) && continue
 
@@ -793,8 +790,8 @@ function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P,
     end
 
     # Check that tangents are of the correct type.
-    @test Tt == typeof(t)
-    @test Tt == typeof(z)
+    @test Tt == _typeof(t)
+    @test Tt == _typeof(z)
 
     # Check that zero_tangent is deterministic.
     @test has_equal_data(z, Taped.zero_tangent(p))
@@ -876,7 +873,7 @@ end
 
 function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)
     test_cases, memory = Taped.generate_hand_written_rrule!!_test_cases(rng_ctor, v)
-    GC.@preserve memory @testset "$f, $(typeof(x))" for (interface_only, perf_flag, _, f, x...) in test_cases
+    GC.@preserve memory @testset "$f, $(_typeof(x))" for (interface_only, perf_flag, _, f, x...) in test_cases
         test_rrule!!(rng_ctor(123), f, x...; interface_only, perf_flag)
     end
 end
@@ -925,7 +922,7 @@ See also: `Taped.TestUtils.value_and_gradient!!`.
 """
 function set_up_gradient_problem(fargs...; interp=Taped.TInterp())
     primals = map(x -> x isa CoDual ? primal(x) : x, fargs)
-    sig = Tuple{map(Core.Typeof, primals)...}
+    sig = _typeof(primals)
     if Taped.is_primitive(DefaultCtx, sig)
         return rrule!!, Taped._eval
     else

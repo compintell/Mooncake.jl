@@ -28,7 +28,7 @@ for name in [
     :(Base.depwarn),
 ]
     @eval @is_primitive DefaultCtx Tuple{typeof($name), Vararg}
-    @eval function rrule!!(::CoDual{Core.Typeof($name)}, args::CoDual...)
+    @eval function rrule!!(::CoDual{_typeof($name)}, args::CoDual...)
         v = $name(map(primal, args)...)
         return CoDual(v, zero_tangent(v)), NoPullback()
     end

@@ -1,7 +1,7 @@
 for (fname, elty) in ((:dgetrf_, :Float64), (:sgetrf_, :Float32))
     TInt = :(Ptr{BLAS.BlasInt})
     @eval function rrule!!(
-        ::CoDual{<:Tforeigncall},
+        ::CoDual{typeof(_foreigncall_)},
         ::CoDual{Val{$(blas_name(fname))}},
         ::CoDual, # return type
         ::CoDual, # argument types
@@ -66,7 +66,7 @@ for (fname, elty) in ((:dtrtrs_, :Float64), (:strtrs_, :Float32))
 
     TInt = :(Ptr{BLAS.BlasInt})
     @eval function rrule!!(
-        ::CoDual{<:Tforeigncall},
+        ::CoDual{typeof(_foreigncall_)},
         ::CoDual{Val{$(blas_name(fname))}},
         ::CoDual, # return type
         ::CoDual, # argument types
@@ -136,7 +136,7 @@ end
 
 for (fname, elty) in ((:dgetrs_, :Float64), (:sgetrs_, :Float32))
     @eval function rrule!!(
-        ::CoDual{<:Tforeigncall},
+        ::CoDual{typeof(_foreigncall_)},
         ::CoDual{Val{$(blas_name(fname))}},
         ::CoDual, # return type
         ::CoDual, # argument types
@@ -237,7 +237,7 @@ end
 
 for (fname, elty) in ((:dgetri_, :Float64), (:sgetri_, :Float32))
     @eval function rrule!!(
-        ::CoDual{<:Tforeigncall},
+        ::CoDual{typeof(_foreigncall_)},
         ::CoDual{Val{$(blas_name(fname))}},
         ::CoDual, # return type
         ::CoDual, # argument types
@@ -299,7 +299,7 @@ __sym(X) = 0.5 * (X + X')
 
 for (fname, elty) in ((:dpotrf_, :Float64), (:spotrf_, :Float32))
     @eval function rrule!!(
-        ::CoDual{<:Tforeigncall},
+        ::CoDual{typeof(_foreigncall_)},
         ::CoDual{Val{$(blas_name(fname))}},
         ::CoDual, # return type
         ::CoDual, # argument types
@@ -357,7 +357,7 @@ end
 
 for (fname, elty) in ((:dpotrs_, :Float64), (:spotrs_, :Float32))
     @eval function rrule!!(
-        ::CoDual{<:Tforeigncall},
+        ::CoDual{typeof(_foreigncall_)},
         ::CoDual{Val{$(blas_name(fname))}},
         ::CoDual, # return type
         ::CoDual, # argument types
