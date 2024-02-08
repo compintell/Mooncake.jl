@@ -5,7 +5,10 @@
     @test s.memory[1] == 5.0
     @test length(s) == 1
     @test !isempty(s)
-    @test pop!(s) == 5.0
+
+    s[] = 6.0
+    @test s[] == 6.0
+    @test pop!(s) == 6.0
     @test s.position == 0
     @test length(s) == 0
     @test isempty(s)
