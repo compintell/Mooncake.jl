@@ -23,9 +23,6 @@ function increment_tangent!(x::CoDualSlot{C}, y::CoDualSlot) where {C}
     return nothing
 end
 
-# increment_tangent!(x::ConstSlot{<:CoDual}, new_tangent) = nothing
-
-# Non slot version of increment_tangent!
 function increment_tangent!(x::CoDualSlot{C}, t) where {C}
     x_val = x[]
     x[] = C(primal(x_val), increment!!(tangent(x_val), t))
@@ -78,14 +75,10 @@ function build_coinsts(
     @assert all(x -> all(y -> isa(y, CoDualSlot), x.values), nodes)
 
     # Construct instructions.
-    function run_fwds(p)
+    fwds_inst = @opaque function (p::Int)
         push!(prev_stack, p) # record the preceding block
         map(Base.Fix2(store_tmp_value!, p), nodes) # transfer new value into tmp slots
         map(Base.Fix2(transfer_tmp_value!, p), nodes) # transfer new value from tmp slots into ret slots
-        return nothing
-    end
-    fwds_inst = @opaque function (p::Int)
-        run_fwds(p)
         return next_blk
     end
     bwds_inst = @opaque function (j::Int)
@@ -345,10 +338,6 @@ end
 tangent_type(::Type{<:InterpretedFunction}) = NoTangent
 tangent_type(::Type{<:DelayedInterpretedFunction}) = NoTangent
 
-# Pre-allocate for AD-related instructions and quantities.
-make_codual_slot(::SlotRef{P}) where {P} = SlotRef{codual_type(P)}()
-make_codual_slot(x::ConstSlot{P}) where {P} = ConstSlot{codual_type(P)}(uninit_codual(x[]))
-
 make_codual_stack(::SlotRef{P}) where {P} = Stack{codual_type(P)}()
 function make_codual_stack(x::ConstSlot{P}) where {P}
     stack = Stack{codual_type(P)}()
@@ -389,9 +378,7 @@ end
 
 @generated function __push_args!(arg_slots::Tuple, args::Tuple)
     Ts = args.parameters
-    # ns = filter(n -> !Base.issingletontype(Ts[n]), eachindex(Ts))
-    ns = eachindex(Ts)
-    loaders = map(n -> :(push!(arg_slots[$n], args[$n])), ns)
+    loaders = map(n -> :(push!(arg_slots[$n], args[$n])), eachindex(Ts))
     return Expr(:block, loaders..., :(return nothing))
 end
 
@@ -455,7 +442,7 @@ end
 
 function build_rrule!!(in_f::InterpretedFunction{sig}) where {sig}
 
-    return_slot = make_codual_slot(in_f.return_slot)
+    return_slot = SlotRef{codual_type(eltype(in_f.return_slot))}()
     arg_info = make_codual_arginfo(in_f.arg_info)
 
     # Construct rrule!! for in_f.
@@ -547,9 +534,7 @@ end
 
 @generated function __load_tangents!(arg_slots::Tuple, dargs::Tuple)
     Ts = dargs.parameters
-    # ns = filter(n -> !Base.issingletontype(Ts[n]), eachindex(Ts))
-    ns = eachindex(Ts)
-    loaders = map(n -> :(replace_tangent!(arg_slots[$n], dargs[$n])), ns)
+    loaders = map(n -> :(replace_tangent!(arg_slots[$n], dargs[$n])), eachindex(Ts))
     return Expr(:block, loaders..., :(return nothing))
 end
 
