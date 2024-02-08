@@ -2,6 +2,8 @@
 
 abstract type AbstractSlot{T} end
 
+Base.eltype(::AbstractSlot{T}) where {T} = T
+
 """
     SlotRef{T}()
 
@@ -26,7 +28,6 @@ end
 Base.getindex(x::SlotRef) = getfield(x, :x)
 Base.setindex!(x::SlotRef, val) = setfield!(x, :x, val)
 Base.isassigned(x::SlotRef) = isdefined(x, :x)
-Base.eltype(::SlotRef{T}) where {T} = T
 Base.copy(x::SlotRef{T}) where {T} = isassigned(x) ? SlotRef{T}(x[]) : SlotRef{T}()
 
 """
@@ -44,7 +45,6 @@ end
 Base.getindex(x::ConstSlot) = getfield(x, :x)
 Base.setindex!(::ConstSlot, val) = nothing
 Base.isassigned(::ConstSlot) = true
-Base.eltype(::ConstSlot{T}) where {T} = T
 Base.copy(x::ConstSlot{T}) where {T} = ConstSlot{T}(x[])
 
 """
@@ -68,7 +68,6 @@ TypedGlobalRef(mod::Module, name::Symbol) = TypedGlobalRef(GlobalRef(mod, name))
 Base.getindex(x::TypedGlobalRef{T}) where {T} = getglobal(x.mod, x.name)::T
 Base.setindex!(x::TypedGlobalRef, val) = setglobal!(x.mod, x.name, val)
 Base.isassigned(::TypedGlobalRef) = true
-Base.eltype(::TypedGlobalRef{T}) where {T} = T
 
 #=
 Returns either a `ConstSlot` or a `TypedGlobalRef`, both of which are `AbstractSlot`s.
