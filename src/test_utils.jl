@@ -1437,7 +1437,7 @@ function generate_test_functions()
         (false, :none, nothing, inferred_const_tester, Ref{Any}(nothing)),
         (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 1),
         (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 2),
-        (false, :none, nothing, test_union_of_arrays, randn(5), true),
+        (false, :none, (lb=1, ub=100_000_000), test_union_of_arrays, randn(5), true),
         (
             false,
             :none,
