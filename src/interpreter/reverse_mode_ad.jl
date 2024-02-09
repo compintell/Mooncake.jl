@@ -25,7 +25,7 @@ struct FwdStack{V<:CoDual, Pslot<:SlotRef, Tstack<:Stack} <: AbstractSlot{V}
     FwdStack(::Pslot) where {P, Pslot<:SlotRef{P}} = FwdStack{codual_type(P)}()
 end
 
-Base.isassigned(x::FwdStack) = isassigned(x.primal_slot)
+Base.isassigned(x::FwdStack) = isassigned(x.tangent_stack)
 
 const CoDualStack{V} = Union{ConstSlot{V}, FwdStack{V}} where {V<:CoDual}
 
