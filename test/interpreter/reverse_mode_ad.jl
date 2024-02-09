@@ -307,28 +307,28 @@
             perf_flag, interface_only, is_primitive=false, rule
         )
 
-        # Estimate primal performance.
-        original = @benchmark $(Ref(f))[]($(Ref(deepcopy(x)))[]...);
+        # # Estimate primal performance.
+        # original = @benchmark $(Ref(f))[]($(Ref(deepcopy(x)))[]...);
 
-        # Estimate interpretered function performance.
-        r = @benchmark $(Ref(in_f))[]($(Ref(f))[], $(Ref(deepcopy(x)))[]...);
+        # # Estimate interpretered function performance.
+        # r = @benchmark $(Ref(in_f))[]($(Ref(f))[], $(Ref(deepcopy(x)))[]...);
 
-        # Estimate overal forwards-pass and pullback performance.
-        __rrule!! = Taped.build_rrule!!(in_f);
-        df = zero_codual(in_f);
-        codual_x = map(zero_codual, (f, x...));
-        overall_timing = @benchmark TestUtils.to_benchmark($__rrule!!, $df, $codual_x...);
+        # # Estimate overal forwards-pass and pullback performance.
+        # __rrule!! = Taped.build_rrule!!(in_f);
+        # df = zero_codual(in_f);
+        # codual_x = map(zero_codual, (f, x...));
+        # overall_timing = @benchmark TestUtils.to_benchmark($__rrule!!, $df, $codual_x...);
 
-        # Print the results.
-        println("original")
-        display(original)
-        println()
-        println("taped")
-        display(r)
-        println()
-        println("overall")
-        display(overall_timing)
-        println()
+        # # Print the results.
+        # println("original")
+        # display(original)
+        # println()
+        # println("taped")
+        # display(r)
+        # println()
+        # println("overall")
+        # display(overall_timing)
+        # println()
 
         # @profview run_many_times(10, TestUtils.to_benchmark, __rrule!!, df, codual_x)
     end
