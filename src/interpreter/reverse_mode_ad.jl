@@ -18,14 +18,11 @@ struct FwdStack{V<:CoDual, Pslot<:SlotRef, Tstack<:Stack} <: AbstractSlot{V}
     tangent_stack::Tstack
     function FwdStack{CoDual{P, T}}() where {P, T}
         Pslot = SlotRef{P}
-        Tstack = Stack{tangent_type(P)}
+        Tstack = Stack{T}
         return new{codual_type(P), Pslot, Tstack}(Pslot(), Tstack())
     end
     FwdStack{CoDual}() = FwdStack{CoDual{Any, Any}}()
-    function FwdStack(::Pslot) where {P, Pslot<:SlotRef{P}}
-        Tstack = Stack{tangent_type(P)}
-        return new{codual_type(P), Pslot, Tstack}(Pslot(), Tstack())
-    end
+    FwdStack(::Pslot) where {P, Pslot<:SlotRef{P}} = FwdStack{codual_type(P)}()
 end
 
 Base.isassigned(x::FwdStack) = isassigned(x.primal_slot)
