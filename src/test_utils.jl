@@ -1364,6 +1364,12 @@ function test_multi_use_pi_node(x::Base.RefValue{Any})
     return v
 end
 
+function test_union_of_arrays(x::Vector{Float64}, b::Bool)
+    y = randn(Xoshiro(1), Float32, 4)
+    z = b ? x : y
+    return 2z
+end
+
 sr(n) = Xoshiro(n)
 
 function generate_test_functions()
@@ -1421,6 +1427,7 @@ function generate_test_functions()
         (false, :none, nothing, inferred_const_tester, Ref{Any}(nothing)),
         (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 1),
         (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 2),
+        (false, :none, nothing, test_union_of_arrays, randn(5), true),
         (
             false,
             :none,
