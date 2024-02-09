@@ -1401,6 +1401,16 @@ function generate_test_functions()
         (false, :allocs, nothing, phi_const_bool_tester, -5.0),
         (false, :allocs, nothing, phi_node_with_undefined_value, true, 4.0),
         (false, :allocs, nothing, phi_node_with_undefined_value, false, 4.0),
+        (
+            false,
+            :none,
+            nothing,
+            Base._unsafe_getindex,
+            IndexLinear(),
+            randn(5),
+            1,
+            Base.Slice(Base.OneTo(1)),
+        ), # fun PhiNode example to do with not assigning values
         (false, :allocs, nothing, avoid_throwing_path_tester, 5.0),
         (false, :allocs, nothing, simple_foreigncall_tester, randn(5)),
         (false, :none, nothing, simple_foreigncall_tester_2, randn(6), (2, 3)),
