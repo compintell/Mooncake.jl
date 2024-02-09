@@ -4,7 +4,7 @@
     @testset "ReturnNode" begin
         @testset "SlotRefs" begin
             ret_slot = SlotRef{CoDual{Float64, Float64}}()
-            val_stack = Stack(CoDual(5.0, 1.0))
+            val_stack = FwdStack(CoDual(5.0, 1.0))
             fwds_inst, bwds_inst = build_coinsts(ReturnNode, ret_slot, val_stack)
 
             # Test forwards instruction.
@@ -55,14 +55,14 @@
         @testset "SlotRef cond" begin
             dest = 5
             next_blk = 3
-            cond = Stack(zero_codual(true))
+            cond = FwdStack(zero_codual(true))
             fwds_inst, bwds_inst = build_coinsts(GotoIfNot, dest, next_blk, cond)
 
             # Test forwards instructions.
             @test fwds_inst isa Taped.FwdsInst
             @test fwds_inst(1) == next_blk
             @test (@allocations fwds_inst(1)) == 0
-            cond[] = zero_codual(false)
+            cond.primal_slot[] = false
             @test fwds_inst(1) == dest
             @test (@allocations fwds_inst(1)) == 0
 
@@ -93,28 +93,27 @@
             nodes = (
                 TypedPhiNode(
                     SlotRef{CoDual{Float64, Float64}}(),
-                    Stack{CoDual{Float64, Float64}}(),
+                    FwdStack{CoDual{Float64, Float64}}(),
                     (1, 2),
-                    (ConstSlot(CoDual(5.0, 1.0)), Stack(CoDual(4.0, 1.2))),
+                    (ConstSlot(CoDual(5.0, 1.0)), FwdStack(CoDual(4.0, 1.2))),
                 ),
                 TypedPhiNode(
                     SlotRef{CoDual{Union{}, NoTangent}}(),
-                    Stack{CoDual{Union{}, NoTangent}}(),
+                    FwdStack{CoDual{Union{}, NoTangent}}(),
                     (),
                     (),
                 ),
                 TypedPhiNode(
                     SlotRef{CoDual{Int, NoTangent}}(),
-                    Stack{CoDual{Int, NoTangent}}(),
+                    FwdStack{CoDual{Int, NoTangent}}(),
                     (1, ),
-                    (SlotRef{CoDual{Int, NoTangent}}(),),
+                    (SlotRef{CoDual{Int, NoTangent}}(),), # stands for undefined currently
                 ),
             )
             next_blk = 0
             prev_blk = 1
-            fwds_inst, bwds_inst = build_coinsts(
-                Vector{PhiNode}, nodes, next_blk, Stack{Int}(),
-            )
+            stack = Stack{Int}()
+            fwds_inst, bwds_inst = build_coinsts(Vector{PhiNode}, nodes, next_blk, stack)
 
             # Test forwards instructions.
             @test fwds_inst isa Taped.FwdsInst
@@ -134,8 +133,8 @@
         end
     end
     @testset "PiNode" begin
-        val = Stack(CoDual{Any, Any}(5.0, 0.0))
-        ret = Stack(CoDual(-1.0, -1.0))
+        val = FwdStack(CoDual{Any, Any}(5.0, 0.0))
+        ret = FwdStack(CoDual(-1.0, -1.0))
         next_blk = 5
         fwds_inst, bwds_inst = build_coinsts(PiNode, val, ret, next_blk)
 
@@ -147,20 +146,20 @@
 
         # Increment tangent associated to `val`. This is done in order to check that the
         # tangent to `val` is incremented on the reverse-pass, not replaced.
-        val[] = CoDual{Any, Any}(primal(val[]), tangent(val[]) + 0.1)
+        Taped.increment_tangent!(val, 0.1)
 
         # Test backwards instruction.
         @test bwds_inst isa Taped.BwdsInst
-        ret[] = CoDual(5.0, 1.6)
+        Taped.increment_tangent!(ret, 1.6)
         @test bwds_inst(3) == 3
-        @test primal(ret[]) == -1.0
+        @test primal(ret[]) == 5.0
         @test tangent(ret[]) == -1.0
         @test tangent(val[]) == 1.6 + 0.1 # check increment has happened.
     end
     global __x_for_gref = 5.0
     @testset "GlobalRef" for (out, x, next_blk) in Any[
-        (Stack{CoDual{Float64, Float64}}(), TypedGlobalRef(Main, :__x_for_gref), 5),
-        (Stack{CoDual{typeof(sin), tangent_type(typeof(sin))}}(), ConstSlot(sin), 4),
+        (FwdStack{CoDual{Float64, Float64}}(), TypedGlobalRef(Main, :__x_for_gref), 5),
+        (FwdStack{CoDual{typeof(sin), tangent_type(typeof(sin))}}(), ConstSlot(sin), 4),
     ]
         fwds_inst, bwds_inst = build_coinsts(GlobalRef, x, out, next_blk)
 
@@ -174,7 +173,7 @@
         @test bwds_inst(10) == 10
     end
     @testset "QuoteNode and literals" for (x, out, next_blk) in Any[
-        (ConstSlot(CoDual(5, NoTangent())), Stack{CoDual{Int, NoTangent}}(), 5),
+        (ConstSlot(CoDual(5, NoTangent())), FwdStack{CoDual{Int, NoTangent}}(), 5),
     ]
         fwds_inst, bwds_inst = build_coinsts(nothing, x, out, next_blk)
 
@@ -187,7 +186,7 @@
     end
 
     @testset "Expr(:boundscheck)" begin
-        val_ref = Stack{codual_type(Bool)}()
+        val_ref = FwdStack{codual_type(Bool)}()
         next_blk = 3
         fwds_inst, bwds_inst = build_coinsts(Val(:boundscheck), val_ref, next_blk)
 
@@ -201,21 +200,21 @@
     global __int_output = 5
     @testset "Expr(:call)" for (out, arg_slots, next_blk) in Any[
         (
-            Stack{codual_type(Float64)}(),
-            (ConstSlot(zero_codual(sin)), Stack(zero_codual(5.0))),
+            FwdStack{codual_type(Float64)}(),
+            (ConstSlot(zero_codual(sin)), FwdStack(zero_codual(5.0))),
             3,
         ),
         (
-            Stack{CoDual}(),
+            FwdStack{CoDual}(),
             (
                 ConstSlot(zero_codual(*)),
-                Stack(zero_codual(4.0)),
+                FwdStack(zero_codual(4.0)),
                 ConstSlot(zero_codual(4.0)),
             ),
             3,
         ),
         (
-            Stack{codual_type(Int)}(),
+            FwdStack{codual_type(Int)}(),
             (
                 ConstSlot(zero_codual(+)),
                 ConstSlot(zero_codual(4)),
@@ -224,10 +223,10 @@
             2,
         ),
         (
-            Stack{codual_type(Float64)}(),    
+            FwdStack{codual_type(Float64)}(),    
             (
                 ConstSlot(zero_codual(getfield)),
-                Stack(zero_codual((5.0, 5))),
+                FwdStack(zero_codual((5.0, 5))),
                 ConstSlot(zero_codual(1)),
             ),
             3,

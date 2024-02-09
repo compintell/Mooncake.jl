@@ -11,21 +11,55 @@ const BwdsInst = Core.OpaqueClosure{Tuple{Int}, Int}
 
 const CoDualSlot{V} = AbstractSlot{V} where {V<:CoDual}
 
-const CoDualStack{V} = Union{ConstSlot{V}, Stack{V}} where {V<:CoDual}
-
 primal_eltype(::CoDualSlot{CoDual{P, T}}) where {P, T} = P
 
-# Operations on Slots involving CoDuals
+struct FwdStack{V<:CoDual, Pslot<:SlotRef, Tstack<:Stack} <: AbstractSlot{V}
+    primal_slot::Pslot
+    tangent_stack::Tstack
+    function FwdStack{CoDual{P, T}}() where {P, T}
+        Pslot = SlotRef{P}
+        Tstack = Stack{T}
+        return new{codual_type(P), Pslot, Tstack}(Pslot(), Tstack())
+    end
+    FwdStack{CoDual}() = FwdStack{CoDual{Any, Any}}()
+    FwdStack(::Pslot) where {P, Pslot<:SlotRef{P}} = FwdStack{codual_type(P)}()
+end
 
-function increment_tangent!(x::CoDualSlot{C}, y::CoDualSlot) where {C}
-    x_val = x[]
-    x[] = C(primal(x_val), increment!!(tangent(x_val), tangent(y[])))
+Base.isassigned(x::FwdStack) = isassigned(x.tangent_stack)
+
+const CoDualStack{V} = Union{ConstSlot{V}, FwdStack{V}} where {V<:CoDual}
+
+function FwdStack(x::C) where {C<:CoDual}
+    stack = FwdStack{C}()
+    push!(stack, x)
+    return stack
+end
+
+Base.getindex(x::FwdStack{V}) where {V<:CoDual} = V(x.primal_slot[], x.tangent_stack[])
+
+function Base.push!(x::FwdStack{V}, v::V) where {V<:CoDual}
+    x.primal_slot[] = primal(v)
+    push!(x.tangent_stack, tangent(v))
     return nothing
 end
+
+make_codual_stack(x::SlotRef{P}) where {P} = FwdStack(x)
+function make_codual_stack(x::ConstSlot{P}) where {P} # REVISIT THIS TO USE CONSTSLOT AGAIN
+    stack = FwdStack{codual_type(P)}()
+    push!(stack, uninit_codual(x[]))
+    return stack
+end
+
+# Operations on Slots involving CoDuals
 
 function increment_tangent!(x::CoDualSlot{C}, t) where {C}
     x_val = x[]
     x[] = C(primal(x_val), increment!!(tangent(x_val), t))
+    return nothing
+end
+
+function increment_tangent!(x::FwdStack{V}, t) where {V}
+    x.tangent_stack[] = increment!!(x.tangent_stack[], t)
     return nothing
 end
 
@@ -35,7 +69,7 @@ function build_coinsts(node::ReturnNode, _, _rrule!!, ::Int, ::Int, ::Bool)
 end
 function build_coinsts(::Type{ReturnNode}, ret_slot::SlotRef{<:CoDual}, val::CoDualStack)
     fwds_inst = build_inst(ReturnNode, ret_slot, val)
-    bwds_inst = @opaque (j::Int) -> (increment_tangent!(val, ret_slot); return j)
+    bwds_inst = @opaque (j::Int) -> (increment_tangent!(val, tangent(ret_slot[])); return j)
     return fwds_inst::FwdsInst, bwds_inst::BwdsInst
 end
 
@@ -90,7 +124,7 @@ function build_coinsts(
     return fwds_inst::FwdsInst, bwds_inst::BwdsInst
 end
 
-function transfer_tmp_value!(x::TypedPhiNode{<:Stack}, prev_blk::Int)
+function transfer_tmp_value!(x::TypedPhiNode{<:FwdStack}, prev_blk::Int)
     map(x.edges, x.values) do edge, v
         (edge == prev_blk) && isassigned(v) && (push!(x.ret_slot, x.tmp_slot[]))
     end
@@ -100,7 +134,7 @@ end
 function replace_tmp_tangent_from_ret!(x::TypedPhiNode{<:CoDualSlot}, prev_blk::Int)
     map(x.edges, x.values) do edge, v
         if (edge == prev_blk) && isassigned(v)
-            replace_tangent!(x.tmp_slot, tangent(pop!(x.ret_slot)))
+            replace_tangent!(x.tmp_slot, pop!(x.ret_slot.tangent_stack))
         end
     end
     return nothing
@@ -108,7 +142,7 @@ end
 
 function increment_predecessor_from_tmp!(x::TypedPhiNode{<:CoDualSlot}, prev_blk::Int)
     map(x.edges, x.values) do edge, v
-        (edge == prev_blk) && isassigned(v) && increment_tangent!(v, x.tmp_slot)
+        (edge == prev_blk) && isassigned(v) && increment_tangent!(v, tangent(x.tmp_slot[]))
     end
     return nothing
 end
@@ -128,7 +162,7 @@ function build_coinsts(
         return next_blk
     end
     bwds_inst = @opaque function (j::Int)
-        increment_tangent!(val, tangent(pop!(ret)))
+        increment_tangent!(val, pop!(ret.tangent_stack))
         return j
     end
     return fwds_inst::FwdsInst, bwds_inst::BwdsInst
@@ -141,7 +175,7 @@ function build_coinsts(x::GlobalRef, _, _rrule!!, n::Int, b::Int, is_blk_end::Bo
 end
 function build_coinsts(::Type{GlobalRef}, x::AbstractSlot, out::CoDualStack, next_blk::Int)
     fwds_inst = @opaque (p::Int) -> (push!(out, uninit_codual(x[])); return next_blk)
-    bwds_inst = @opaque (j::Int) -> (pop!(out); return j)
+    bwds_inst = @opaque (j::Int) -> (pop!(out.tangent_stack); return j)
     return fwds_inst::FwdsInst, bwds_inst::BwdsInst
 end
 
@@ -153,7 +187,7 @@ function build_coinsts(node, _, _rrule!!, n::Int, b::Int, is_blk_end::Bool)
 end
 function build_coinsts(::Nothing, x::ConstSlot, out::CoDualStack, next_blk::Int)
     fwds_inst = @opaque (p::Int) -> (push!(out, x[]); return next_blk)
-    bwds_inst = @opaque (j::Int) -> (pop!(out); return j)
+    bwds_inst = @opaque (j::Int) -> (pop!(out.tangent_stack); return j)
     return fwds_inst::FwdsInst, bwds_inst::BwdsInst
 end
 
@@ -224,9 +258,6 @@ function build_coinsts(ir_inst::Expr, in_f, _rrule!!, n::Int, b::Int, is_blk_end
         # Create stack for storing pullbacks.
         pb_stack = build_pb_stack(__rrule!!, evaluator, arg_slots)
 
-        # Create stack for storing values.
-        old_vals = Stack{eltype(val_slot)}()
-
         return build_coinsts(
             Val(:call), val_slot, arg_slots, evaluator, __rrule!!, pb_stack, next_blk
         )
@@ -243,26 +274,29 @@ function build_coinsts(ir_inst::Expr, in_f, _rrule!!, n::Int, b::Int, is_blk_end
     end
 end
 
-function build_coinsts(::Val{:boundscheck}, out::CoDualSlot, next_blk::Int)
+function build_coinsts(::Val{:boundscheck}, out::CoDualStack, next_blk::Int)
     @assert primal_eltype(out) == Bool
-    fwds_inst::FwdsInst = @opaque (p::Int) -> (push!(out, zero_codual(true)); return next_blk)
-    bwds_inst::BwdsInst = @opaque (j::Int) -> (pop!(out); return j)
-    return fwds_inst, bwds_inst
+    fwds_inst = @opaque (p::Int) -> (push!(out, zero_codual(true)); return next_blk)
+    bwds_inst = @opaque (j::Int) -> (pop!(out.tangent_stack); return j)
+    return fwds_inst::FwdsInst, bwds_inst::BwdsInst
 end
 
 function replace_tangent!(x::AbstractSlot{<:CoDual{Tx, Tdx}}, new_tangent::Tdx) where {Tx, Tdx}
-    x_val = x[]
-    x[] = CoDual(primal(x_val), new_tangent)
+    x[] = CoDual(primal(x[]), new_tangent)
     return nothing
 end
 
 function replace_tangent!(x::AbstractSlot{<:CoDual}, new_tangent)
-    x_val = x[]
-    x[] = CoDual(primal(x_val), new_tangent)
+    x[] = CoDual(primal(x[]), new_tangent)
     return nothing
 end
 
 replace_tangent!(::ConstSlot{<:CoDual}, new_tangent) = nothing
+
+function replace_tangent!(x::FwdStack, new_tangent)
+    x.tangent_stack[] = new_tangent
+    return nothing
+end
 
 function build_coinsts(
     ::Val{:call},
@@ -288,7 +322,7 @@ function build_coinsts(
 
     function bwds_pass()
         pb!! = pop!(pb_stack)
-        dout = tangent(pop!(out))
+        dout = pop!(out.tangent_stack)
         dargs = tuple_map(set_immutable_to_zero ∘ tangent ∘ getindex, arg_slots)
         new_dargs = pb!!(dout, NoTangent(), dargs...)
         map(increment_tangent!, arg_slots, new_dargs[2:end])
@@ -338,13 +372,6 @@ end
 tangent_type(::Type{<:InterpretedFunction}) = NoTangent
 tangent_type(::Type{<:DelayedInterpretedFunction}) = NoTangent
 
-make_codual_stack(::SlotRef{P}) where {P} = Stack{codual_type(P)}()
-function make_codual_stack(x::ConstSlot{P}) where {P}
-    stack = Stack{codual_type(P)}()
-    push!(stack, uninit_codual(x[]))
-    return stack
-end
-
 function make_codual_arginfo(ai::ArgInfo{T, is_vararg}) where {T, is_vararg}
     codual_arg_slots = map(make_codual_stack, ai.arg_slots)
     return ArgInfo{_typeof(codual_arg_slots), is_vararg}(codual_arg_slots)
@@ -386,7 +413,7 @@ end
 struct InterpretedFunctionRRule{sig<:Tuple, Treturn, Targ_info<:ArgInfo}
     return_slot::SlotRef{Treturn}
     arg_info::Targ_info
-    slots::Vector{Stack}
+    slots::Vector{CoDualStack}
     fwds_instructions::Vector{FwdsInst}
     bwds_instructions::Vector{BwdsInst}
     n_stack::Stack{Int}
