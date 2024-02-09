@@ -37,7 +37,8 @@ using Taped:
     TypedPhiNode,
     build_coinsts,
     Stack,
-    _typeof
+    _typeof,
+    FwdStack
 
 using .TestUtils:
     test_rrule!!,
