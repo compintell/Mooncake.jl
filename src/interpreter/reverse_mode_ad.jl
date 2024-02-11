@@ -13,13 +13,11 @@ const CoDualSlot{V} = AbstractSlot{V} where {V<:CoDual}
 
 primal_eltype(::CoDualSlot{CoDual{P, T}}) where {P, T} = P
 
-struct FwdStack{V<:CoDual, Pslot<:SlotRef, Tstack<:Stack} <: AbstractSlot{V}
-    primal_slot::Pslot
+mutable struct FwdStack{V<:CoDual, P, Tstack<:Stack} <: AbstractSlot{V}
+    primal_slot::P
     tangent_stack::Tstack
     function FwdStack{CoDual{P, T}}() where {P, T}
-        Pslot = SlotRef{P}
-        Tstack = Stack{T}
-        return new{codual_type(P), Pslot, Tstack}(Pslot(), Tstack())
+        return new{codual_type(P), P, Stack{T}}(P(), Stack{T}())
     end
     FwdStack{CoDual}() = FwdStack{CoDual{Any, Any}}()
     FwdStack(::Pslot) where {P, Pslot<:SlotRef{P}} = FwdStack{codual_type(P)}()
@@ -98,10 +96,7 @@ function build_coinsts(ir_insts::Vector{PhiNode}, _, _rrule!!, n_first::Int, b::
 end
 
 function build_coinsts(
-    ::Type{Vector{PhiNode}},
-    nodes::NTuple{N, TypedPhiNode},
-    next_blk::Int,
-    prev_stack::Stack{Int},
+    ::Type{Vector{PhiNode}}, nodes::NTuple{N, TypedPhiNode}, next_blk::Int,
 ) where {N}
 
     # Check that we're operating on CoDuals.
@@ -110,39 +105,17 @@ function build_coinsts(
 
     # Construct instructions.
     fwds_inst = @opaque function (p::Int)
-        push!(prev_stack, p) # record the preceding block
         map(Base.Fix2(store_tmp_value!, p), nodes) # transfer new value into tmp slots
         map(Base.Fix2(transfer_tmp_value!, p), nodes) # transfer new value from tmp slots into ret slots
         return next_blk
     end
-    bwds_inst = @opaque function (j::Int)
-        p = pop!(prev_stack) # get the index of the previous block
-        map(Base.Fix2(replace_tmp_tangent_from_ret!, p), nodes) # transfer data from ret slots to tmp
-        map(Base.Fix2(increment_predecessor_from_tmp!, p), nodes) # inc tangents
-        return j
-    end
+    bwds_inst = @opaque (j::Int) -> j
     return fwds_inst::FwdsInst, bwds_inst::BwdsInst
 end
 
 function transfer_tmp_value!(x::TypedPhiNode{<:FwdStack}, prev_blk::Int)
     map(x.edges, x.values) do edge, v
         (edge == prev_blk) && isassigned(v) && (push!(x.ret_slot, x.tmp_slot[]))
-    end
-    return nothing
-end
-
-function replace_tmp_tangent_from_ret!(x::TypedPhiNode{<:CoDualSlot}, prev_blk::Int)
-    map(x.edges, x.values) do edge, v
-        if (edge == prev_blk) && isassigned(v)
-            replace_tangent!(x.tmp_slot, pop!(x.ret_slot.tangent_stack))
-        end
-    end
-    return nothing
-end
-
-function increment_predecessor_from_tmp!(x::TypedPhiNode{<:CoDualSlot}, prev_blk::Int)
-    map(x.edges, x.values) do edge, v
-        (edge == prev_blk) && isassigned(v) && increment_tangent!(v, tangent(x.tmp_slot[]))
     end
     return nothing
 end
