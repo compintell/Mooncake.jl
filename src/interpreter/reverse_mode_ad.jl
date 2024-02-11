@@ -98,17 +98,12 @@ end
 function build_coinsts(
     ::Type{Vector{PhiNode}}, nodes::NTuple{N, TypedPhiNode}, next_blk::Int,
 ) where {N}
-
     # Check that we're operating on CoDuals.
     @assert all(x -> x.ret_slot isa CoDualSlot, nodes)
     @assert all(x -> all(y -> isa(y, CoDualSlot), x.values), nodes)
 
     # Construct instructions.
-    fwds_inst = @opaque function (p::Int)
-        map(Base.Fix2(store_tmp_value!, p), nodes) # transfer new value into tmp slots
-        map(Base.Fix2(transfer_tmp_value!, p), nodes) # transfer new value from tmp slots into ret slots
-        return next_blk
-    end
+    fwds_inst = build_inst(Vector{PhiNode}, nodes, next_blk)
     bwds_inst = @opaque (j::Int) -> j
     return fwds_inst::FwdsInst, bwds_inst::BwdsInst
 end
