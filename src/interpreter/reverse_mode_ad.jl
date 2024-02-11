@@ -9,12 +9,8 @@ const FwdsInst = Core.OpaqueClosure{Tuple{Int}, Int}
 # does no other work.
 const BwdsInst = Core.OpaqueClosure{Tuple{Int}, Int}
 
-const CoDualSlot{V} = AbstractSlot{V} where {V<:CoDual}
-
-primal_eltype(::CoDualSlot{CoDual{P, T}}) where {P, T} = P
-
 mutable struct FwdStack{V<:CoDual, P, Tstack<:Stack} <: AbstractSlot{V}
-    primal_slot::P
+    primal::P
     tangent_stack::Tstack
     function FwdStack{CoDual{P, T}}() where {P, T}
         return new{codual_type(P), P, Stack{T}}(P(), Stack{T}())
@@ -23,15 +19,7 @@ mutable struct FwdStack{V<:CoDual, P, Tstack<:Stack} <: AbstractSlot{V}
     FwdStack(::Pslot) where {P, Pslot<:SlotRef{P}} = FwdStack{codual_type(P)}()
 end
 
-Base.isassigned(x::FwdStack) = isassigned(x.tangent_stack)
-
-const CoDualStack{V} = Union{ConstSlot{V}, FwdStack{V}} where {V<:CoDual}
-
-function FwdStack(x::C) where {C<:CoDual}
-    stack = FwdStack{C}()
-    push!(stack, x)
-    return stack
-end
+Base.isassigned(x::FwdStack) = isdefined(x, :primal)
 
 Base.getindex(x::FwdStack{V}) where {V<:CoDual} = V(x.primal_slot[], x.tangent_stack[])
 
@@ -41,6 +29,14 @@ function Base.push!(x::FwdStack{V}, v::V) where {V<:CoDual}
     return nothing
 end
 
+function FwdStack(x::C) where {C<:CoDual}
+    stack = FwdStack{C}()
+    push!(stack, x)
+    return stack
+end
+
+const CoDualStack{V} = Union{ConstSlot{V}, FwdStack{V}} where {V<:CoDual}
+
 make_codual_stack(x::SlotRef{P}) where {P} = FwdStack(x)
 function make_codual_stack(x::ConstSlot{P}) where {P} # REVISIT THIS TO USE CONSTSLOT AGAIN
     stack = FwdStack{codual_type(P)}()
@@ -49,12 +45,6 @@ function make_codual_stack(x::ConstSlot{P}) where {P} # REVISIT THIS TO USE CONS
 end
 
 # Operations on Slots involving CoDuals
-
-function increment_tangent!(x::CoDualSlot{C}, t) where {C}
-    x_val = x[]
-    x[] = C(primal(x_val), increment!!(tangent(x_val), t))
-    return nothing
-end
 
 function increment_tangent!(x::FwdStack{V}, t) where {V}
     x.tangent_stack[] = increment!!(x.tangent_stack[], t)
@@ -99,8 +89,8 @@ function build_coinsts(
     ::Type{Vector{PhiNode}}, nodes::NTuple{N, TypedPhiNode}, next_blk::Int,
 ) where {N}
     # Check that we're operating on CoDuals.
-    @assert all(x -> x.ret_slot isa CoDualSlot, nodes)
-    @assert all(x -> all(y -> isa(y, CoDualSlot), x.values), nodes)
+    @assert all(x -> x.ret_slot isa CoDualStack, nodes)
+    @assert all(x -> all(y -> isa(y, CoDualStack), x.values), nodes)
 
     # Construct instructions.
     fwds_inst = build_inst(Vector{PhiNode}, nodes, next_blk)
@@ -392,7 +382,7 @@ function _get_slot(x, in_f::InterpretedFunctionRRule)
     return _wrap_codual_slot(_get_slot(x, in_f.slots, in_f.arg_info, in_f.ir))
 end
 
-_wrap_codual_slot(x::CoDualSlot) = x
+_wrap_codual_slot(x::CoDualStack) = x
 _wrap_codual_slot(x::ConstSlot{<:CoDual}) = x
 _wrap_codual_slot(x::ConstSlot{P}) where {P} = ConstSlot{codual_type(P)}(zero_codual(x[]))
 
