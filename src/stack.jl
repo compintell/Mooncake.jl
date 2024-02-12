@@ -65,7 +65,7 @@ Base.eltype(::Stack{T}) where {T} = T
 top_ref(x::Stack) = Ref(x.memory, x.position)
 
 function tangent_stack_type_ub(::Type{P}) where {P}
-    P === DataType && return Stack{NoTangent}
+    P === DataType && return Stack
     return isconcretetype(P) ? Stack{P} : Stack
 end
 
@@ -76,7 +76,7 @@ tangent_stack_type(::Type{P}) where {P} = Stack{tangent_type(P)}
 __array_ref_type(::Type{P}) where {P} = Base.RefArray{P, Vector{P}, Nothing}
 
 function tangent_ref_type_ub(::Type{P}) where {P}
-    P === DataType && return __array_ref_type(NoTangent)
+    P === DataType && return Base.RefArray
     return isconcretetype(P) ? __array_ref_type(tangent_type(P)) : Base.RefArray
 end
 

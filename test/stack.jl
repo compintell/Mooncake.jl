@@ -17,7 +17,7 @@
     @testset "tangent_stack_type" begin
         @test Taped.tangent_stack_type_ub(Float64) == Stack{Float64}
         @test Taped.tangent_stack_type_ub(Any) == Stack
-        @test Taped.tangent_stack_type_ub(DataType) == Stack{NoTangent}
+        @test Taped.tangent_stack_type_ub(DataType) == Stack
         @test Taped.tangent_stack_type_ub(Type{Float64}) == Stack{NoTangent}
 
         @test Taped.tangent_stack_type(Float64) == Stack{Float64}
@@ -27,12 +27,7 @@
 
         @test Taped.tangent_ref_type_ub(Float64) == Taped.__array_ref_type(Float64)
         @test Taped.tangent_ref_type_ub(Any) == Base.RefArray
-        @test Taped.tangent_ref_type_ub(DataType) == Taped.__array_ref_type(NoTangent)
+        @test Taped.tangent_ref_type_ub(DataType) == Base.RefArray
         @test Taped.tangent_ref_type_ub(Type{Float64}) == Taped.__array_ref_type(NoTangent)
-
-        @test Taped.tangent_ref_type(Float64) == Taped.__array_ref_type(Float64)
-        @test Taped.tangent_ref_type(Any) == Taped.__array_ref_type(Any)
-        @test Taped.tangent_ref_type(DataType) == Taped.__array_ref_type(NoTangent)
-        @test Taped.tangent_ref_type(Type{Float64}) == Taped.__array_ref_type(NoTangent)
     end
 end
