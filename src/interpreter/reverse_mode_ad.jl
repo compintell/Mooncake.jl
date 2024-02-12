@@ -14,11 +14,11 @@ const RuleSlot{V} = Union{SlotRef{V}, ConstSlot{V}} where {V<:Tuple{CoDual, Ref}
 __codual_type(::Type{<:Tuple{C, <:Ref}}) where {C<:CoDual} = @isdefined(C) ? C : CoDual
 __codual_type(::Type{<:RuleSlot{V}}) where {V} = @isdefined(V) ? __codual_type(V) : CoDual
 
-function tangent_ref_type(::Type{<:Tuple{Any, Tref}}) where {Tref}
+function __tangent_ref_type(::Type{<:Tuple{Any, Tref}}) where {Tref}
     return @isdefined(Tref) ? Tref : Ref
 end
-function tangent_ref_type(::Type{<:RuleSlot{V}}) where {V}
-    return @isdefined(V) ? tangent_ref_type(V) : Ref
+function __tangent_ref_type(::Type{<:RuleSlot{V}}) where {V}
+    return @isdefined(V) ? __tangent_ref_type(V) : Ref
 end
 
 function tangent_stack_type(::Type{<:AbstractSlot{<:Tuple{<:CoDual, <:Union{Ref{T}, Stack{T}}}}}) where {T}
@@ -29,16 +29,10 @@ function tangent_stack_type(::Type{<:AbstractSlot{<:Tuple{CoDual, <:Union{Ref, S
 end
 
 function make_rule_slot(::SlotRef{P}, ::Any) where {P}
-    T = tangent_type(P)
-    return SlotRef{Tuple{codual_type(P), Base.RefArray{T, Vector{T}, Nothing}}}()
+    return SlotRef{Tuple{codual_type(P), tangent_ref_type(P)}}()
 end
 function make_rule_slot(::SlotRef{P}, ::PhiNode) where {P}
-    if isconcretetype(P) || P === DataType
-        T = tangent_type(P)
-        return SlotRef{Tuple{codual_type(P), Base.RefArray{T, Vector{T}, Nothing}}}()
-    else
-        return SlotRef{Tuple{CoDual, Base.RefArray}}()
-    end
+    return SlotRef{Tuple{codual_type(P), tangent_ref_type_ub(P)}}()
 end
 function make_rule_slot(x::ConstSlot, ::Any)
     cd = uninit_codual(x[])
@@ -62,7 +56,7 @@ end
 function build_coinsts(
     ::Type{ReturnNode}, ret::SlotRef{<:CoDual}, ret_tangent::SlotRef, val::RuleSlot
 )
-    tangent_stack_stack = Stack{tangent_ref_type(_typeof(val))}()
+    tangent_stack_stack = Stack{__tangent_ref_type(_typeof(val))}()
     fwds_inst = @opaque function (p::Int)
         push!(tangent_stack_stack, get_tangent_stack(val))
         ret[] = get_codual(val)
@@ -121,7 +115,7 @@ function build_coinsts(
 ) where {R}
 
     my_tangent_stack = tangent_stack_type(_typeof(ret))()
-    tangent_stack_stack = Stack{tangent_ref_type(_typeof(val))}()
+    tangent_stack_stack = Stack{__tangent_ref_type(_typeof(val))}()
 
     make_fwds(v) = R(primal(v), tangent(v))
     fwds_inst = @opaque function (p::Int)
@@ -267,7 +261,7 @@ function build_coinsts(
     my_tangent_stack = tangent_stack_type(_typeof(out))()
 
     tangent_stack_stacks = map(arg_slots) do arg_slot
-        Stack{tangent_ref_type(_typeof(arg_slot))}()
+        Stack{__tangent_ref_type(_typeof(arg_slot))}()
     end
 
     function fwds_pass()
@@ -456,6 +450,13 @@ function build_rrule!!(in_f::InterpretedFunction{sig}) where {sig}
     # Construct rrule!! for in_f.
     Tret = eltype(return_slot)
     Tret_tangent = eltype(return_tangent_slot)
+    # display(in_f.ir)
+    # println()
+    # display([
+    #     make_rule_slot(primal_slot, inst) for 
+    #         (primal_slot, inst) in zip(in_f.slots, in_f.ir.stmts.inst)
+    # ])
+
     __rrule!! =  InterpretedFunctionRRule{
         sig, Tret, Tret_tangent, _typeof(arg_info), _typeof(arg_tangent_stacks)
     }(
