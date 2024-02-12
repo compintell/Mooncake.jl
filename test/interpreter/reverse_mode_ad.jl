@@ -142,7 +142,7 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
         val = SlotRef((CoDual{Any, Any}(5.0, 0.0), top_ref(Stack{Any}(0.0))))
         ret = SlotRef{Tuple{CoDual{Float64, Float64}, Base.RefArray{Float64, Vector{Float64}, Nothing}}}()
         next_blk = 5
-        fwds_inst, bwds_inst = build_coinsts(PiNode, val, ret, next_blk)
+        fwds_inst, bwds_inst = build_coinsts(PiNode, Float64, val, ret, next_blk)
 
         # Test forwards instruction.
         @test fwds_inst isa Taped.FwdsInst
@@ -163,19 +163,21 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
         @test get_tangent_stack(val)[] == 1.6 + 0.1 # check increment has happened.
     end
     global __x_for_gref = 5.0
-    @testset "GlobalRef" for (out, gref, next_blk) in Any[
+    @testset "GlobalRef" for (P, out, gref, next_blk) in Any[
         (
+            Float64,
             SlotRef{Tuple{CoDual{Float64, Float64}, array_ref_type(Float64)}}(),
             TypedGlobalRef(Main, :__x_for_gref),
             5,
         ),
         (
+            typeof(sin),
             SlotRef{Tuple{codual_type(typeof(sin)), array_ref_type(tangent_type(typeof(sin)))}}(),
             ConstSlot(sin),
             4,
         ),
     ]
-        fwds_inst, bwds_inst = build_coinsts(GlobalRef, gref, out, next_blk)
+        fwds_inst, bwds_inst = build_coinsts(GlobalRef, P, gref, out, next_blk)
 
         # Forwards pass.
         @test fwds_inst isa Taped.FwdsInst
@@ -219,8 +221,9 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
     end
 
     global __int_output = 5
-    @testset "Expr(:call)" for (out, arg_slots, next_blk) in Any[
+    @testset "Expr(:call)" for (P, out, arg_slots, next_blk) in Any[
         (
+            Float64,
             SlotRef{Tuple{codual_type(Float64), array_ref_type(Float64)}}(),
             (
                 ConstSlot((zero_codual(sin), top_ref(Stack(zero_tangent(sin))))),
@@ -229,6 +232,7 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
             3,
         ),
         (
+            Any,
             SlotRef{Tuple{CoDual, array_ref_type(Any)}}(),
             (
                 ConstSlot((zero_codual(*), top_ref(Stack(zero_tangent(*))))),
@@ -238,6 +242,7 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
             3,
         ),
         (
+            Int,
             SlotRef{Tuple{codual_type(Int), NoTangentRef}}(),
             (
                 ConstSlot((zero_codual(+), top_ref(Stack(zero_tangent(+))))),
@@ -247,6 +252,7 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
             2,
         ),
         (
+            Float64,
             SlotRef{Tuple{codual_type(Float64), array_ref_type(Float64)}}(),    
             (
                 ConstSlot((zero_codual(getfield), NoTangentRef())),
@@ -262,7 +268,7 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
         __rrule!! = Taped.get_rrule!!_evaluator(evaluator)
         pb_stack = Taped.build_pb_stack(__rrule!!, evaluator, arg_slots)
         fwds_inst, bwds_inst = build_coinsts(
-            Val(:call), out, arg_slots, evaluator, __rrule!!, pb_stack, next_blk
+            Val(:call), P, out, arg_slots, evaluator, __rrule!!, pb_stack, next_blk
         )
 
         # Test forwards-pass.

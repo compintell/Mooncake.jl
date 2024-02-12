@@ -38,7 +38,7 @@ get_tangent_stack(x::RuleSlot) = x[][2]
 increment_ref!(x::Ref, t) = setindex!(x, increment!!(x[], t))
 
 ## ReturnNode
-function build_coinsts(node::ReturnNode, _, _rrule!!, ::Int, ::Int, ::Bool)
+function build_coinsts(node::ReturnNode, _, _, _rrule!!, ::Int, ::Int, ::Bool)
     return build_coinsts(
         ReturnNode, _rrule!!.ret, _rrule!!.ret_tangent, _get_slot(node.val, _rrule!!),
     )
@@ -60,13 +60,13 @@ function build_coinsts(
 end
 
 ## GotoNode
-build_coinsts(x::GotoNode, _, _, ::Int, ::Int, ::Bool) = build_coinsts(GotoNode, x.label)
+build_coinsts(x::GotoNode, _, _, _, ::Int, ::Int, ::Bool) = build_coinsts(GotoNode, x.label)
 function build_coinsts(::Type{GotoNode}, dest::Int)
     return build_inst(GotoNode, dest)::FwdsInst, (@opaque (j::Int) -> j)::BwdsInst
 end
 
 ## GotoIfNot
-function build_coinsts(x::GotoIfNot, _, _rrule!!, ::Int, b::Int, is_blk_end::Bool)
+function build_coinsts(x::GotoIfNot, _, _, _rrule!!, ::Int, b::Int, is_blk_end::Bool)
     return build_coinsts(GotoIfNot, x.dest, b + 1, _get_slot(x.cond, _rrule!!))
 end
 function build_coinsts(::Type{GotoIfNot}, dest::Int, next_blk::Int, cond::RuleSlot)
@@ -95,19 +95,20 @@ function build_coinsts(
 end
 
 ## PiNode
-function build_coinsts(x::PiNode, _, _rrule!!, n::Int, b::Int, is_blk_end::Bool)
+function build_coinsts(x::PiNode, P, _, _rrule!!, n::Int, b::Int, is_blk_end::Bool)
     val = _get_slot(x.val, _rrule!!)
     ret = _rrule!!.slots[n]
-    return build_coinsts(PiNode, val, ret, _standard_next_block(is_blk_end, b))
+    return build_coinsts(PiNode, P, val, ret, _standard_next_block(is_blk_end, b))
 end
 function build_coinsts(
     ::Type{PiNode},
+    ::Type{P},
     val::RuleSlot,
     ret::RuleSlot{<:Tuple{R, <:Any}},
     next_blk::Int,
-) where {R}
+) where {R, P}
 
-    my_tangent_stack = make_tangent_stack(primal_type(ret))
+    my_tangent_stack = make_tangent_stack(P)
     tangent_stack_stack = make_tangent_ref_stack(tangent_ref_type_ub(primal_type(val)))
 
     make_fwds(v) = R(primal(v), tangent(v))
@@ -126,14 +127,14 @@ function build_coinsts(
 end
 
 ## GlobalRef
-function build_coinsts(x::GlobalRef, _, _rrule!!, n::Int, b::Int, is_blk_end::Bool)
+function build_coinsts(x::GlobalRef, P, _, _rrule!!, n::Int, b::Int, is_blk_end::Bool)
     next_blk = _standard_next_block(is_blk_end, b)
-    return build_coinsts(GlobalRef, _globalref_to_slot(x), _rrule!!.slots[n], next_blk)
+    return build_coinsts(GlobalRef, P, _globalref_to_slot(x), _rrule!!.slots[n], next_blk)
 end
 function build_coinsts(
-    ::Type{GlobalRef}, global_ref::AbstractSlot, out::RuleSlot, next_blk::Int
-)
-    my_tangent_stack = make_tangent_stack(primal_type(out))
+    ::Type{GlobalRef}, ::Type{P}, global_ref::AbstractSlot, out::RuleSlot, next_blk::Int
+) where {P}
+    my_tangent_stack = make_tangent_stack(P)
     fwds_inst = @opaque function (p::Int)
         v = uninit_codual(global_ref[])
         push!(my_tangent_stack, tangent(v))
@@ -148,7 +149,7 @@ function build_coinsts(
 end
 
 ## QuoteNode and literals
-function build_coinsts(node, _, _rrule!!, n::Int, b::Int, is_blk_end::Bool)
+function build_coinsts(node, _, _, _rrule!!, n::Int, b::Int, is_blk_end::Bool)
     x = ConstSlot(zero_codual(node isa QuoteNode ? node.value : node))
     next_blk = _standard_next_block(is_blk_end, b)
     return build_coinsts(nothing, x, _rrule!!.slots[n], next_blk)
@@ -195,7 +196,7 @@ function build_pb_stack(__rrule!!, evaluator, arg_slots)
     return pb_stack
 end
 
-function build_coinsts(ir_inst::Expr, in_f, _rrule!!, n::Int, b::Int, is_blk_end::Bool)
+function build_coinsts(ir_inst::Expr, P, in_f, _rrule!!, n::Int, b::Int, is_blk_end::Bool)
     is_invoke = Meta.isexpr(ir_inst, :invoke)
     next_blk = _standard_next_block(is_blk_end, b)
     val_slot = _rrule!!.slots[n]
@@ -216,7 +217,7 @@ function build_coinsts(ir_inst::Expr, in_f, _rrule!!, n::Int, b::Int, is_blk_end
         pb_stack = build_pb_stack(__rrule!!, evaluator, arg_slots)
 
         return build_coinsts(
-            Val(:call), val_slot, arg_slots, evaluator, __rrule!!, pb_stack, next_blk
+            Val(:call), P, val_slot, arg_slots, evaluator, __rrule!!, pb_stack, next_blk
         )
     elseif ir_inst.head in [
         :code_coverage_effect, :gc_preserve_begin, :gc_preserve_end, :loopinfo,
@@ -243,15 +244,16 @@ end
 
 function build_coinsts(
     ::Val{:call},
+    ::Type{P},
     out::RuleSlot,
     arg_slots::NTuple{N, RuleSlot} where {N},
     evaluator::Teval,
     __rrule!!::Trrule!!,
     pb_stack::Stack,
     next_blk::Int,
-) where {Teval, Trrule!!}
+) where {P, Teval, Trrule!!}
 
-    my_tangent_stack = make_tangent_stack(primal_type(out))
+    my_tangent_stack = make_tangent_stack(P)
 
     tangent_stack_stacks = map(arg_slots) do arg_slot
         make_tangent_ref_stack(tangent_ref_type_ub(primal_type(arg_slot)))
@@ -286,6 +288,8 @@ function build_coinsts(
         bwds_pass()
         return j
     end
+    # display(Base.code_ircode(fwds_pass, Tuple{}))
+    # display(Base.code_ircode(bwds_pass, Tuple{}))
     return fwds_inst::FwdsInst, bwds_inst::BwdsInst
 end
 
@@ -561,9 +565,10 @@ end
 
 function generate_coinstructions(in_f, in_f_rrule!!, n)
     ir_inst = in_f.ir.stmts.inst[n]
+    ir_type = _get_type(in_f.ir.stmts.type[n])
     b = block_map(in_f.ir.cfg)[n]
     is_blk_end = n in in_f.bb_ends
-    return build_coinsts(ir_inst, in_f, in_f_rrule!!, n, b, is_blk_end)
+    return build_coinsts(ir_inst, ir_type, in_f, in_f_rrule!!, n, b, is_blk_end)
 end
 
 # Slow implementation, but useful for testing correctness.
