@@ -440,7 +440,6 @@ function build_rrule!!(in_f::InterpretedFunction{sig}) where {sig}
     # Construct rrule!! for in_f.
     Tret = eltype(return_slot)
     Tret_tangent = eltype(return_tangent_slot)
-
     __rrule!! =  InterpretedFunctionRRule{
         sig, Tret, Tret_tangent, _typeof(arg_info), _typeof(arg_tangent_stacks)
     }(
