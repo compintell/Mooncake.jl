@@ -20,9 +20,11 @@ end
 function make_rule_slot(::SlotRef{P}, ::PhiNode) where {P}
     return SlotRef{Tuple{codual_type(P), tangent_ref_type_ub(P)}}()
 end
-function make_rule_slot(x::ConstSlot, ::Any)
+function make_rule_slot(x::ConstSlot{P}, ::Any) where {P}
     cd = uninit_codual(x[])
-    return ConstSlot((cd, Ref([tangent(cd)], 1)))
+    stack = make_tangent_stack(P)
+    push!(stack, tangent(cd))
+    return ConstSlot((cd, top_ref(stack)))
 end
 
 make_tangent_stack(::Type{P}) where {P} = tangent_stack_type(P)()
@@ -41,14 +43,14 @@ end
 function build_coinsts(
     ::Type{ReturnNode}, ret::SlotRef{<:CoDual}, ret_tangent::SlotRef, val::RuleSlot
 )
-    tangent_stack_stack = Stack{tangent_ref_type_ub(primal_type(val))}()
+    tangent_ref_stack = Stack{tangent_ref_type_ub(primal_type(val))}()
     fwds_inst = @opaque function (p::Int)
-        push!(tangent_stack_stack, get_tangent_stack(val))
+        push!(tangent_ref_stack, get_tangent_stack(val))
         ret[] = get_codual(val)
         return -1
     end
     bwds_inst = @opaque function (j::Int)
-        increment_ref!(pop!(tangent_stack_stack), ret_tangent[])
+        increment_ref!(pop!(tangent_ref_stack), ret_tangent[])
         return j
     end
     return fwds_inst::FwdsInst, bwds_inst::BwdsInst
@@ -149,7 +151,7 @@ function build_coinsts(node, _, _rrule!!, n::Int, b::Int, is_blk_end::Bool)
     return build_coinsts(nothing, x, _rrule!!.slots[n], next_blk)
 end
 function build_coinsts(::Nothing, x::ConstSlot, out::RuleSlot, next_blk::Int)
-    my_tangent_stack = tangent_stack_type(primal_type(out))(tangent(x[]))
+    my_tangent_stack = make_tangent_stack(primal_type(out))
     push!(my_tangent_stack, tangent(x[]))
     fwds_inst = @opaque function (p::Int)
         out[] = (x[], top_ref(my_tangent_stack))
@@ -227,10 +229,9 @@ function build_coinsts(ir_inst::Expr, in_f, _rrule!!, n::Int, b::Int, is_blk_end
 end
 
 function build_coinsts(::Val{:boundscheck}, out::RuleSlot, next_blk::Int)
-    @assert eltype(out) == Tuple{CoDual{Bool, NoTangent}, Base.RefArray{NoTangent, Vector{NoTangent}, Nothing}}
-    my_tangent_stack = Stack{NoTangent}(NoTangent())
+    @assert eltype(out) == Tuple{CoDual{Bool, NoTangent}, NoTangentRef}
     fwds_inst = @opaque function (p::Int)
-        out[] = (zero_codual(true), top_ref(my_tangent_stack))
+        out[] = (zero_codual(true), NoTangentRef())
         return next_blk
     end
     bwds_inst = @opaque (j::Int) -> j
@@ -382,12 +383,17 @@ function _get_slot(x, in_f::InterpretedFunctionRRule)
 end
 
 _wrap_rule_slot(x::RuleSlot) = x
-_wrap_rule_slot(x::ConstSlot{<:CoDual}) = ConstSlot((x[], top_ref(Stack(tangent(x[])))))
+function _wrap_rule_slot(x::ConstSlot{<:CoDual})
+    stack = make_tangent_stack(primal_type(x))
+    push!(stack, tangent(x[]))
+    return ConstSlot((x[], top_ref(stack)))
+end
 function _wrap_rule_slot(x::ConstSlot{P}) where {P}
     T = tangent_type(P)
-    return ConstSlot{Tuple{codual_type(P), Base.RefArray{T, Vector{T}, Nothing}}}(
-        (zero_codual(x[]), top_ref(Stack(zero_tangent(x[]))))
-    )
+    Tref = tangent_ref_type_ub(P)
+    stack = make_tangent_stack(P)
+    push!(stack, zero_tangent(x[]))
+    return ConstSlot{Tuple{codual_type(P), Tref}}((zero_codual(x[]), top_ref(stack)))
 end
 
 # Special handling is required for PhiNodes, because their semantics require that when

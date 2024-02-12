@@ -64,20 +64,40 @@ Base.eltype(::Stack{T}) where {T} = T
 
 top_ref(x::Stack) = Ref(x.memory, x.position)
 
-function tangent_stack_type_ub(::Type{P}) where {P}
-    P === DataType && return Stack
-    return isconcretetype(P) ? Stack{P} : Stack
+"""
+    NoTangentStack()
+
+If a type has `NoTangent` as its tangent type, it should use one of these stacks.
+Probably needs to be generalised to an inactive-tangent stack in future, as we also need to
+handle constants, which aren't always active.
+"""
+struct NoTangentStack end
+
+Base.push!(::NoTangentStack, ::Any) = nothing
+Base.getindex(::NoTangentStack) = NoTangent()
+Base.setindex!(::NoTangentStack, ::NoTangent) = nothing
+Base.pop!(::NoTangentStack) = NoTangent()
+
+struct NoTangentRef <: Ref{NoTangent} end
+
+Base.getindex(::NoTangentRef) = NoTangent()
+Base.setindex!(::NoTangentRef, ::NoTangent) = nothing
+
+top_ref(::NoTangentStack) = NoTangentRef()
+
+function tangent_stack_type(::Type{P}) where {P}
+    P === DataType && return Stack{Any}
+    T = tangent_type(P)
+    return T === NoTangent ? NoTangentStack : Stack{T}
 end
-
-tangent_stack_type_ub(::Type{Type{P}}) where {P} = Stack{NoTangent}
-
-tangent_stack_type(::Type{P}) where {P} = Stack{tangent_type(P)}
 
 __array_ref_type(::Type{P}) where {P} = Base.RefArray{P, Vector{P}, Nothing}
 
 function tangent_ref_type_ub(::Type{P}) where {P}
-    P === DataType && return Base.RefArray
-    return isconcretetype(P) ? __array_ref_type(tangent_type(P)) : Base.RefArray
+    P === DataType && return Ref
+    T = tangent_type(P)
+    T === NoTangent && return NoTangentRef
+    return isconcretetype(P) ? __array_ref_type(T) : Ref
 end
 
-tangent_ref_type_ub(::Type{Type{P}}) where {P} = __array_ref_type(NoTangent)
+tangent_ref_type_ub(::Type{Type{P}}) where {P} = NoTangentRef

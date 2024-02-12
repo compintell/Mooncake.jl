@@ -59,7 +59,7 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
         @testset "SlotRef cond" begin
             dest = 5
             next_blk = 3
-            cond = SlotRef((zero_codual(true), top_ref(Stack(NoTangent()))))
+            cond = SlotRef((zero_codual(true), NoTangentRef()))
             fwds_inst, bwds_inst = build_coinsts(GotoIfNot, dest, next_blk, cond)
 
             # Test forwards instructions.
@@ -78,7 +78,7 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
         @testset "ConstSlot" begin
             dest = 5
             next_blk = 3
-            cond = ConstSlot((zero_codual(true), top_ref(Stack(NoTangent()))))
+            cond = ConstSlot((zero_codual(true), NoTangentRef()))
             fwds_inst, bwds_inst = build_coinsts(GotoIfNot, dest, next_blk, cond)
 
             # Test forwards instructions.
@@ -105,16 +105,16 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
                     ),
                 ),
                 TypedPhiNode(
-                    SlotRef{Tuple{CoDual{Union{}, NoTangent}, Base.RefValue{NoTangent}}}(),
-                    SlotRef{Tuple{CoDual{Union{}, NoTangent}, Base.RefValue{NoTangent}}}(),
+                    SlotRef{Tuple{CoDual{Union{}, NoTangent}, NoTangentRef}}(),
+                    SlotRef{Tuple{CoDual{Union{}, NoTangent}, NoTangentRef}}(),
                     (),
                     (),
                 ),
                 TypedPhiNode(
-                    SlotRef{Tuple{CoDual{Int, NoTangent}, Base.RefValue{NoTangent}}}(),
-                    SlotRef{Tuple{CoDual{Int, NoTangent}, Base.RefValue{NoTangent}}}(),
+                    SlotRef{Tuple{CoDual{Int, NoTangent}, NoTangentRef}}(),
+                    SlotRef{Tuple{CoDual{Int, NoTangent}, NoTangentRef}}(),
                     (1, ),
-                    (SlotRef{Tuple{CoDual{Int, NoTangent}, Base.RefValue{NoTangent}}}(),), # undef element
+                    (SlotRef{Tuple{CoDual{Int, NoTangent}, NoTangentRef}}(),), # undef element
                 ),
             )
             next_blk = 0
@@ -129,8 +129,8 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
             @test nodes[1].ret_slot[] == nodes[1].tmp_slot[]
             @test !isassigned(nodes[2].tmp_slot)
             @test !isassigned(nodes[2].ret_slot)
-            @test !isassigned(nodes[3].tmp_slot)
-            @test !isassigned(nodes[3].ret_slot)
+            @test nodes[3].tmp_slot[] == nodes[3].values[1][]
+            @test nodes[3].ret_slot[] == nodes[3].tmp_slot[]
 
             # Test backwards instructions.
             @test bwds_inst isa Taped.BwdsInst
@@ -189,7 +189,7 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
     @testset "QuoteNode and literals" for (x, out, next_blk) in Any[
         (
             ConstSlot(CoDual(5, NoTangent())),
-            SlotRef{Tuple{CoDual{Int, NoTangent}, array_ref_type(NoTangent)}}(),
+            SlotRef{Tuple{CoDual{Int, NoTangent}, NoTangentRef}}(),
             5,
         ),
     ]
@@ -206,7 +206,7 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
     end
 
     @testset "Expr(:boundscheck)" begin
-        val_ref = SlotRef{Tuple{codual_type(Bool), array_ref_type(NoTangent)}}()
+        val_ref = SlotRef{Tuple{codual_type(Bool), NoTangentRef}}()
         next_blk = 3
         fwds_inst, bwds_inst = build_coinsts(Val(:boundscheck), val_ref, next_blk)
 
@@ -238,20 +238,20 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
             3,
         ),
         (
-            SlotRef{Tuple{codual_type(Int), array_ref_type(NoTangent)}}(),
+            SlotRef{Tuple{codual_type(Int), NoTangentRef}}(),
             (
                 ConstSlot((zero_codual(+), top_ref(Stack(zero_tangent(+))))),
-                ConstSlot((zero_codual(4), top_ref(Stack(NoTangent())))),
-                ConstSlot((zero_codual(5), top_ref(Stack(NoTangent())))),
+                ConstSlot((zero_codual(4), NoTangentRef())),
+                ConstSlot((zero_codual(5), NoTangentRef())),
             ),
             2,
         ),
         (
             SlotRef{Tuple{codual_type(Float64), array_ref_type(Float64)}}(),    
             (
-                ConstSlot((zero_codual(getfield), top_ref(Stack(zero_tangent(getfield))))),
+                ConstSlot((zero_codual(getfield), NoTangentRef())),
                 SlotRef((zero_codual((5.0, 5)), top_ref(Stack(zero_tangent((5.0, 5)))))),
-                ConstSlot((zero_codual(1), top_ref(Stack(NoTangent())))),
+                ConstSlot((zero_codual(1), NoTangentRef())),
             ),
             3,
         ),
