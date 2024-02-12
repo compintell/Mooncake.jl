@@ -18,7 +18,7 @@
         @test Taped.tangent_stack_type(Float64) == Stack{Float64}
         @test Taped.tangent_stack_type(Int) == Taped.NoTangentStack
         @test Taped.tangent_stack_type(Any) == Stack{Any}
-        @test Taped.tangent_stack_type(DataType) == Taped.NoTangentStack
+        @test Taped.tangent_stack_type(DataType) == Stack{Any}
         @test Taped.tangent_stack_type(Type{Float64}) == Taped.NoTangentStack
 
         @test Taped.tangent_ref_type_ub(Float64) == Taped.__array_ref_type(Float64)
