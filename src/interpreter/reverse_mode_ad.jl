@@ -339,8 +339,7 @@ function make_codual_arginfo(ai::ArgInfo{T, is_vararg}) where {T, is_vararg}
 end
 
 function make_arg_tangent_stacks(argtypes::Vector{Any})
-    arg_types = (map(_get_type, argtypes)...,)
-    return map(a -> tangent_stack_type(a)(), arg_types)
+    return map(a -> tangent_stack_type(a)(), (map(_get_type, argtypes)...,))
 end
 
 function load_rrule_args!(
