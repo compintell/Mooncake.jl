@@ -11,9 +11,6 @@ const BwdsInst = Core.OpaqueClosure{Tuple{Int}, Int}
 
 const RuleSlot{V} = Union{SlotRef{V}, ConstSlot{V}} where {V<:Tuple{CoDual, Ref}}
 
-__codual_type(::Type{<:Tuple{C, <:Ref}}) where {C<:CoDual} = @isdefined(C) ? C : CoDual
-__codual_type(::Type{<:RuleSlot{V}}) where {V} = @isdefined(V) ? __codual_type(V) : CoDual
-
 primal_type(::AbstractSlot{<:Tuple{<:CoDual{P}, <:Any}}) where {P} = @isdefined(P) ? P : Any
 primal_type(::AbstractSlot{<:Tuple{<:CoDual, <:Any}}) = Any
 
