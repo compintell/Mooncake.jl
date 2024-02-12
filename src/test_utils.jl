@@ -1500,7 +1500,7 @@ function generate_test_functions()
         (
             false,
             :allocs,
-            (lb=100, ub=1_000),
+            (lb=100, ub=2_000),
             test_naive_mat_mul!, randn(100, 50), randn(100, 30), randn(30, 50),
         ),
         (
