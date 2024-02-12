@@ -88,7 +88,7 @@ function build_coinsts(
 end
 
 ## PiNode
-function build_coinsts(x::PiNode, in_f, _rrule!!, n::Int, b::Int, is_blk_end::Bool)
+function build_coinsts(x::PiNode, _, _rrule!!, n::Int, b::Int, is_blk_end::Bool)
     val = _get_slot(x.val, _rrule!!)
     ret = _rrule!!.slots[n]
     return build_coinsts(PiNode, val, ret, _standard_next_block(is_blk_end, b))
