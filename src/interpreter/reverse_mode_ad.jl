@@ -29,6 +29,9 @@ end
 
 make_tangent_stack(::Type{P}) where {P} = tangent_stack_type(P)()
 
+make_tangent_ref_stack(::Type{P}) where {P} = Stack{P}()
+make_tangent_ref_stack(::Type{NoTangentRef}) = NoTangentRefStack()
+
 get_codual(x::RuleSlot) = x[][1]
 get_tangent_stack(x::RuleSlot) = x[][2]
 
@@ -105,7 +108,7 @@ function build_coinsts(
 ) where {R}
 
     my_tangent_stack = make_tangent_stack(primal_type(ret))
-    tangent_stack_stack = Stack{tangent_ref_type_ub(primal_type(val))}()
+    tangent_stack_stack = make_tangent_ref_stack(tangent_ref_type_ub(primal_type(val)))
 
     make_fwds(v) = R(primal(v), tangent(v))
     fwds_inst = @opaque function (p::Int)
@@ -251,7 +254,7 @@ function build_coinsts(
     my_tangent_stack = make_tangent_stack(primal_type(out))
 
     tangent_stack_stacks = map(arg_slots) do arg_slot
-        Stack{tangent_ref_type_ub(primal_type(arg_slot))}()
+        make_tangent_ref_stack(tangent_ref_type_ub(primal_type(arg_slot)))
     end
 
     function fwds_pass()
