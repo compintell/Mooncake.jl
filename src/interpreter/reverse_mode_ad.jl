@@ -28,8 +28,7 @@ end
 get_codual(x::RuleSlot) = x[][1]
 get_tangent_stack(x::RuleSlot) = x[][2]
 
-increment_ref!(x::Base.RefArray, t) = setindex!(x, increment!!(x[], t))
-increment_ref!(x::Base.RefValue, t) = setindex!(x, increment!!(x[], t))
+increment_ref!(x::Ref, t) = setindex!(x, increment!!(x[], t))
 
 ## ReturnNode
 function build_coinsts(node::ReturnNode, _, _rrule!!, ::Int, ::Int, ::Bool)
