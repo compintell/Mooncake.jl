@@ -1,5 +1,9 @@
 # Special types to represent data in an IRCode and a InterpretedFunction.
 
+abstract type AbstractSlot{T} end
+
+Base.eltype(::AbstractSlot{T}) where {T} = T
+
 """
     SlotRef{T}()
 
@@ -300,6 +304,10 @@ function ArgInfo(::Type{T}, is_vararg::Bool) where {T<:Tuple}
     return ArgInfo{Targ_slots, is_vararg}((map(t -> SlotRef{t}(), T.parameters)..., ))
 end
 
+function unflatten_vararg(::Val{is_va}, args::Tuple, ::Val{nargs}) where {is_va, nargs}
+    return is_va ? (args[1:nargs]..., (args[nargs+1:end]..., )) : args
+end
+
 function load_args!(ai::ArgInfo{T, is_vararg}, args::Tuple) where {T, is_vararg}
     # There is a difference between the varargs that we recieve, and the varargs of the
     # original function. This section sorts that out.
@@ -311,12 +319,7 @@ function load_args!(ai::ArgInfo{T, is_vararg}, args::Tuple) where {T, is_vararg}
     # Therefore, the `args` field of this function will be a `Tuple{typeof(f), Float64}`.
     # We must therefore transform it into a `Tuple` of type
     # `Tuple{typeof(f), Tuple{Float64}}` before attempting to load it into `ai.arg_slots`.
-    if is_vararg
-        num_args = length(ai.arg_slots) - 1 # once for vararg
-        refined_args = (args[1:num_args]..., (args[num_args+1:end]..., ))
-    else
-        refined_args = args
-    end
+    refined_args = unflatten_vararg(Val(is_vararg), args, Val(length(ai.arg_slots) - 1))
     return __load_args!(ai.arg_slots, refined_args)
 end
 

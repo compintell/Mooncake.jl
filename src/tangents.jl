@@ -187,7 +187,7 @@ tangent_type(::Type{String}) = NoTangent
 
 tangent_type(::Type{<:Array{P, N}}) where {P, N} = Array{tangent_type(P), N}
 
-tangent_type(::Type{<:Array{P, N} where {P}}) where {N} = Array{Any, N}
+tangent_type(::Type{<:Array{P, N} where {P}}) where {N} = Array
 
 tangent_type(::Type{<:MersenneTwister}) = NoTangent
 

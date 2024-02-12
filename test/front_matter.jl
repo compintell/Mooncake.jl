@@ -38,7 +38,9 @@ using Taped:
     build_coinsts,
     Stack,
     _typeof,
-    FwdStack
+    get_codual,
+    get_tangent_stack,
+    top_ref
 
 using .TestUtils:
     test_rrule!!,

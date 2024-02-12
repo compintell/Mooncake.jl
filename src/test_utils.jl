@@ -1305,10 +1305,12 @@ end
 function test_multiple_phinode_block(x::Float64)
     a = 1.0
     b = x
-    for i in 1:2
+    i = 1
+    while i < 3
         temp = a
         a = b
         b = 2temp
+        i += 1
     end
     return (a, b)
 end
@@ -1401,6 +1403,7 @@ function generate_test_functions()
         (false, :allocs, nothing, phi_const_bool_tester, -5.0),
         (false, :allocs, nothing, phi_node_with_undefined_value, true, 4.0),
         (false, :allocs, nothing, phi_node_with_undefined_value, false, 4.0),
+        (false, :allocs, nothing, test_multiple_phinode_block, 3.0),
         (
             false,
             :none,
@@ -1488,7 +1491,6 @@ function generate_test_functions()
         (false, :allocs, nothing, test_mutation!, [1.0, 2.0]),
         (false, :allocs, nothing, test_while_loop, 2.0),
         (false, :allocs, nothing, test_for_loop, 3.0),
-        (false, :allocs, nothing, test_multiple_phinode_block, 3.0),
         (false, :none, nothing, test_mutable_struct_basic, 5.0),
         (false, :none, nothing, test_mutable_struct_basic_sin, 5.0),
         (false, :none, nothing, test_mutable_struct_setfield, 4.0),
