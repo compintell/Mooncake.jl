@@ -95,6 +95,13 @@ struct NoTangentRefStack end
 Base.push!(::NoTangentRefStack, ::Any) = nothing
 Base.pop!(::NoTangentRefStack) = NoTangentRef()
 
+
+struct SingletonStack{T} end
+
+Base.push!(::SingletonStack, ::Any) = nothing
+@generated Base.pop!(::SingletonStack{T}) where {T} = T.instance
+
+
 function tangent_stack_type(::Type{P}) where {P}
     P === DataType && return Stack{Any}
     T = tangent_type(P)

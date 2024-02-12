@@ -219,6 +219,9 @@ end
     # The same goes for if the type has any undetermined type parameters.
     (isabstracttype(P) || !isconcretetype(P)) && return Any
 
+    # If the type has no fields, then it's a `NoTangent`.
+    Base.issingletontype(P) && return NoTangent
+
     # Derive tangent type.
     return  (ismutabletype(P) ? MutableTangent : Tangent){backing_type(P)}
 end

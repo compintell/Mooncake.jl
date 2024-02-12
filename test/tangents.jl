@@ -3,7 +3,7 @@
     # Each tuple is of the form (primal, t1, t2, increment!!(t1, t2)).
     @testset "$(typeof(p))" for (p, x, y, z) in vcat(
         [
-            (sin, Tangent((;)), Tangent((;)), Tangent((;))),
+            (sin, NoTangent(), NoTangent(), NoTangent()),
             map(Float16, (5.0, 4.0, 3.1, 7.1)),
             (5f0, 4f0, 3f0, 7f0),
             (5.1, 4.0, 3.0, 7.0),

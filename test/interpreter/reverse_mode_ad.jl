@@ -172,7 +172,7 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
         ),
         (
             typeof(sin),
-            SlotRef{Tuple{codual_type(typeof(sin)), array_ref_type(tangent_type(typeof(sin)))}}(),
+            SlotRef{Tuple{codual_type(typeof(sin)), NoTangentRef}}(),
             ConstSlot(sin),
             4,
         ),
@@ -264,7 +264,7 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
     ]
         sig = _typeof(map(primal ∘ get_codual, arg_slots))
         interp = Taped.TInterp()
-        evaluator = Taped.get_evaluator(Taped.MinimalCtx(), sig, interp, false)
+        evaluator = Taped.get_evaluator(Taped.MinimalCtx(), sig, interp, true)
         __rrule!! = Taped.get_rrule!!_evaluator(evaluator)
         pb_stack = Taped.build_pb_stack(__rrule!!, evaluator, arg_slots)
         fwds_inst, bwds_inst = build_coinsts(

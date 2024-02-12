@@ -189,11 +189,11 @@ function build_pb_stack(__rrule!!, evaluator, arg_slots)
     end
     T_pb!! = only(possible_output_types)
     if T_pb!! <: Tuple && T_pb!! !== Union{}
-        pb_stack = Stack{T_pb!!.parameters[2]}()
+        F = T_pb!!.parameters[2]
+        return Base.issingletontype(F) ? SingletonStack{F}() : Stack{F}()
     else
-        pb_stack = Stack{Any}()
+        return Stack{Any}()
     end
-    return pb_stack
 end
 
 function build_coinsts(ir_inst::Expr, P, in_f, _rrule!!, n::Int, b::Int, is_blk_end::Bool)
@@ -249,7 +249,7 @@ function build_coinsts(
     arg_slots::NTuple{N, RuleSlot} where {N},
     evaluator::Teval,
     __rrule!!::Trrule!!,
-    pb_stack::Stack,
+    pb_stack,
     next_blk::Int,
 ) where {P, Teval, Trrule!!}
 
