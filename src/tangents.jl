@@ -212,11 +212,15 @@ end
     ))
 
     # If the type is a Union, then take the union type of its arguments.
-    P isa Union && return Union{tangent_type(P.a), tangent_type(P.b)}
+    # P isa Union && return Union{tangent_type(P.a), tangent_type(P.b)}
+    P isa Union && return Any
 
     # If the type is itself abstract, it's tangent could be anything.
     # The same goes for if the type has any undetermined type parameters.
     (isabstracttype(P) || !isconcretetype(P)) && return Any
+
+    # If the type has no fields, then it's a `NoTangent`.
+    Base.issingletontype(P) && return NoTangent
 
     # Derive tangent type.
     return  (ismutabletype(P) ? MutableTangent : Tangent){backing_type(P)}

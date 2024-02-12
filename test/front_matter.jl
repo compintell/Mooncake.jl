@@ -40,7 +40,8 @@ using Taped:
     _typeof,
     get_codual,
     get_tangent_stack,
-    top_ref
+    top_ref,
+    NoTangentRef
 
 using .TestUtils:
     test_rrule!!,

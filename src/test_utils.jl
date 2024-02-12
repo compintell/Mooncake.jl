@@ -1372,6 +1372,10 @@ function test_union_of_arrays(x::Vector{Float64}, b::Bool)
     return 2z
 end
 
+function test_union_of_types(x::Ref{Union{Type{Float64}, Type{Int}}})
+    return x[]
+end
+
 sr(n) = Xoshiro(n)
 
 function generate_test_functions()
@@ -1441,6 +1445,13 @@ function generate_test_functions()
         (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 1),
         (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 2),
         (false, :none, (lb=1, ub=100_000_000), test_union_of_arrays, randn(5), true),
+        (
+            false,
+            :none,
+            nothing,
+            test_union_of_types,
+            Ref{Union{Type{Float64}, Type{Int}}}(Float64),
+        ),
         (
             false,
             :none,
