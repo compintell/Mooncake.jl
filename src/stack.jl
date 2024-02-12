@@ -81,5 +81,3 @@ function tangent_ref_type_ub(::Type{P}) where {P}
 end
 
 tangent_ref_type_ub(::Type{Type{P}}) where {P} = __array_ref_type(NoTangent)
-
-tangent_ref_type(::Type{P}) where {P} = __array_ref_type(tangent_type(P))
