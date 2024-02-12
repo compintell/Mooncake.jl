@@ -338,10 +338,6 @@ function make_codual_arginfo(ai::ArgInfo{T, is_vararg}) where {T, is_vararg}
     return ArgInfo{_typeof(arg_slots), is_vararg}(arg_slots)
 end
 
-# function make_arg_tangent_stacks(ai::ArgInfo)
-#     return map(a -> __tangent_stack_type(_typeof(a))(), ai.arg_slots)
-# end
-
 function make_arg_tangent_stacks(argtypes::Vector{Any})
     arg_types = (map(_get_type, argtypes)...,)
     return map(a -> tangent_stack_type(a)(), arg_types)
