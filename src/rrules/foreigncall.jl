@@ -447,6 +447,22 @@ function rrule!!(
     return zero_codual(y), NoPullback()
 end
 
+function rrule!!(
+    ::CoDual{typeof(_foreigncall_)}, ::CoDual{Val{:jl_alloc_string}}, args::CoDual...
+)
+    y = _foreigncall_(Val{:jl_alloc_string}(), map(primal, args)...)
+    return zero_codual(y), NoPullback()
+end
+
+function rrule!!(
+    ::CoDual{typeof(_foreigncall_)},
+    ::CoDual{Val{:jl_string_to_array}},
+    args::CoDual...
+)
+    y = _foreigncall_(Val{:jl_alloc_string}(), map(primal, args)...)
+    return zero_codual(y), NoPullback()
+end
+
 @is_primitive MinimalCtx Tuple{typeof(deepcopy), Any}
 function rrule!!(::CoDual{typeof(deepcopy)}, x::CoDual)
     deepcopy_pb!!(dy, df, dx) = df, increment!!(dx, dy)

@@ -586,7 +586,11 @@ function rrule!!(::CoDual{typeof(setfield!)}, value, name, x)
 end
 
 # swapfield!
-# throw
+
+function rrule!!(::CoDual{typeof(throw)}, args...)
+    println("Attempting to throw an error")
+    return zero_codual(nothing), NoPullback()
+end
 
 function rrule!!(::CoDual{typeof(tuple)}, args...)
     y = CoDual(tuple(map(primal, args)...), tuple(map(tangent, args)...))

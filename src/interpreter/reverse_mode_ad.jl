@@ -39,6 +39,7 @@ increment_ref!(x::Ref, t) = setindex!(x, increment!!(x[], t))
 
 ## ReturnNode
 function build_coinsts(node::ReturnNode, _, _, _rrule!!, ::Int, ::Int, ::Bool)
+    !isdefined(node, :val) && return build_coinsts(ReturnNode)
     return build_coinsts(
         ReturnNode, _rrule!!.ret, _rrule!!.ret_tangent, _get_slot(node.val, _rrule!!),
     )
@@ -57,6 +58,9 @@ function build_coinsts(
         return j
     end
     return fwds_inst::FwdsInst, bwds_inst::BwdsInst
+end
+function build_coinsts(::Type{ReturnNode})
+    return @opaque((p::Int) -> -1), @opaque((j::Int) -> j)
 end
 
 ## GotoNode
@@ -209,7 +213,8 @@ function build_coinsts(ir_inst::Expr, P, in_f, _rrule!!, n::Int, b::Int, is_blk_
         arg_slots = map(arg -> _get_slot(arg, _rrule!!), (__args..., ))
 
         # Construct signature, and determine how the rrule is to be computed.
-        primal_sig = _typeof(map(primal ∘ get_codual, arg_slots))
+        primal_arg_slots = map(arg -> _get_slot(arg, in_f), (__args..., ))
+        primal_sig = Tuple{map(eltype, primal_arg_slots)...}
         evaluator = get_evaluator(in_f.ctx, primal_sig, in_f.interp, is_invoke)
         __rrule!! = get_rrule!!_evaluator(evaluator)
 
@@ -221,7 +226,7 @@ function build_coinsts(ir_inst::Expr, P, in_f, _rrule!!, n::Int, b::Int, is_blk_
         )
     elseif ir_inst.head in [
         :code_coverage_effect, :gc_preserve_begin, :gc_preserve_end, :loopinfo,
-        :leave, :pop_exception,
+        :leave, :pop_exception, :enter, :leave,
     ]
         return build_coinsts(Val(:skipped_expression), next_blk)
     elseif Meta.isexpr(ir_inst, :throw_undef_if_not)
@@ -320,7 +325,7 @@ function rrule!!(_f::CoDual{<:DelayedInterpretedFunction{C, F}}, args::CoDual...
     f = primal(_f)
     s = _typeof(map(primal, args))
     if is_primitive(C, s)
-        return rrule!!(zero_codual(f.f), args...)
+        return rrule!!(zero_codual(_eval), args...)
     else
         in_f = InterpretedFunction(f.ctx, s, f.interp)
         return build_rrule!!(in_f)(zero_codual(in_f), args...)
@@ -444,6 +449,10 @@ end
 
 function build_rrule!!(in_f::InterpretedFunction{sig}) where {sig}
 
+    # display(sig)
+    # display(in_f.ir)
+    # println()
+
     return_slot = SlotRef{codual_type(eltype(in_f.return_slot))}()
     return_tangent_slot = SlotRef{tangent_type(eltype(in_f.return_slot))}()
     arg_info = make_codual_arginfo(in_f.arg_info)
@@ -471,6 +480,15 @@ function build_rrule!!(in_f::InterpretedFunction{sig}) where {sig}
 
     # Set PhiNodes.
     make_phi_instructions!(in_f, __rrule!!)
+
+    # Assign all of the phi nodes.
+    for n in eachindex(in_f.instructions)
+        if !isassigned(__rrule!!.fwds_instructions, n)
+            fwds, bwds = generate_coinstructions(in_f, __rrule!!, n)
+            __rrule!!.fwds_instructions[n] = fwds
+            __rrule!!.bwds_instructions[n] = bwds
+        end
+    end
 
     return __rrule!!
 end
@@ -506,11 +524,6 @@ function (in_f_rrule!!::InterpretedFunctionRRule{sig})(
     # Run instructions until done.
     while next_block != -1
         push!(n_stack, n)
-        if !isassigned(in_f_rrule!!.fwds_instructions, n)
-            fwds, bwds = generate_coinstructions(in_f, in_f_rrule!!, n)
-            in_f_rrule!!.fwds_instructions[n] = fwds
-            in_f_rrule!!.bwds_instructions[n] = bwds
-        end
         next_block = in_f_rrule!!.fwds_instructions[n](prev_block)
         if next_block == 0
             n += 1
