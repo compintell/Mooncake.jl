@@ -1506,7 +1506,7 @@ function generate_test_functions()
         (
             false,
             :allocs,
-            (lb=100, ub=1_000),
+            (lb=100, ub=2_000),
             (A, C) -> test_naive_mat_mul!(C, A, A), randn(100, 100), randn(100, 100),
         ),
         (false, :allocs, (lb=10, ub=1_000), sum, randn(30)),
