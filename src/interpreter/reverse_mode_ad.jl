@@ -25,6 +25,8 @@ function make_rule_slot(x::ConstSlot, ::Any)
     return ConstSlot((cd, Ref([tangent(cd)], 1)))
 end
 
+make_tangent_stack(::Type{P}) where {P} = tangent_stack_type(P)()
+
 get_codual(x::RuleSlot) = x[][1]
 get_tangent_stack(x::RuleSlot) = x[][2]
 
@@ -100,7 +102,7 @@ function build_coinsts(
     next_blk::Int,
 ) where {R}
 
-    my_tangent_stack = tangent_stack_type(primal_type(ret))()
+    my_tangent_stack = make_tangent_stack(primal_type(ret))
     tangent_stack_stack = Stack{tangent_ref_type_ub(primal_type(val))}()
 
     make_fwds(v) = R(primal(v), tangent(v))
@@ -126,7 +128,7 @@ end
 function build_coinsts(
     ::Type{GlobalRef}, global_ref::AbstractSlot, out::RuleSlot, next_blk::Int
 )
-    my_tangent_stack = tangent_stack_type(primal_type(out))()
+    my_tangent_stack = make_tangent_stack(primal_type(out))
     fwds_inst = @opaque function (p::Int)
         v = uninit_codual(global_ref[])
         push!(my_tangent_stack, tangent(v))
@@ -148,6 +150,7 @@ function build_coinsts(node, _, _rrule!!, n::Int, b::Int, is_blk_end::Bool)
 end
 function build_coinsts(::Nothing, x::ConstSlot, out::RuleSlot, next_blk::Int)
     my_tangent_stack = tangent_stack_type(primal_type(out))(tangent(x[]))
+    push!(my_tangent_stack, tangent(x[]))
     fwds_inst = @opaque function (p::Int)
         out[] = (x[], top_ref(my_tangent_stack))
         return next_blk
@@ -244,7 +247,7 @@ function build_coinsts(
     next_blk::Int,
 ) where {Teval, Trrule!!}
 
-    my_tangent_stack = tangent_stack_type(primal_type(out))()
+    my_tangent_stack = make_tangent_stack(primal_type(out))
 
     tangent_stack_stacks = map(arg_slots) do arg_slot
         Stack{tangent_ref_type_ub(primal_type(arg_slot))}()
