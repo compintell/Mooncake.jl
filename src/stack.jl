@@ -85,6 +85,16 @@ Base.setindex!(::NoTangentRef, ::NoTangent) = nothing
 
 top_ref(::NoTangentStack) = NoTangentRef()
 
+"""
+    NoTangentRefStack
+
+Stack for `NoTangentRef`s.
+"""
+struct NoTangentRefStack end
+
+Base.push!(::NoTangentRefStack, ::Any) = nothing
+Base.pop!(::NoTangentRefStack) = NoTangentRef()
+
 function tangent_stack_type(::Type{P}) where {P}
     P === DataType && return Stack{Any}
     T = tangent_type(P)
