@@ -72,3 +72,14 @@ end
 tangent_stack_type_ub(::Type{Type{P}}) where {P} = Stack{NoTangent}
 
 tangent_stack_type(::Type{P}) where {P} = Stack{tangent_type(P)}
+
+__array_ref_type(::Type{P}) where {P} = Base.RefArray{P, Vector{P}, Nothing}
+
+function tangent_ref_type_ub(::Type{P}) where {P}
+    P === DataType && return __array_ref_type(NoTangent)
+    return isconcretetype(P) ? __array_ref_type(tangent_type(P)) : Base.RefArray
+end
+
+tangent_ref_type_ub(::Type{Type{P}}) where {P} = __array_ref_type(NoTangent)
+
+tangent_ref_type(::Type{P}) where {P} = __array_ref_type(tangent_type(P))
