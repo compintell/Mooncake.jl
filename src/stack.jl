@@ -63,3 +63,12 @@ end
 Base.eltype(::Stack{T}) where {T} = T
 
 top_ref(x::Stack) = Ref(x.memory, x.position)
+
+function tangent_stack_type_ub(::Type{P}) where {P}
+    P === DataType && return Stack{NoTangent}
+    return isconcretetype(P) ? Stack{P} : Stack
+end
+
+tangent_stack_type_ub(::Type{Type{P}}) where {P} = Stack{NoTangent}
+
+tangent_stack_type(::Type{P}) where {P} = Stack{tangent_type(P)}
