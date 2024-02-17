@@ -1376,6 +1376,30 @@ function test_union_of_types(x::Ref{Union{Type{Float64}, Type{Int}}})
     return x[]
 end
 
+# Only one of these is a primitive. Lots of methods to prevent the compiler from
+# over-specialising.
+@noinline edge_case_tester(x::Float64) = 5x
+@noinline edge_case_tester(x::Any) = 5.0
+@noinline edge_case_tester(x::Float32) = 6.0
+@noinline edge_case_tester(x::Int) = 10
+@noinline edge_case_tester(x::String) = "hi"
+@is_primitive MinimalCtx Tuple{typeof(edge_case_tester), Float64}
+function Taped.rrule!!(::CoDual{typeof(edge_case_tester)}, x::CoDual{Float64})
+    edge_case_tester_pb!!(dy, df, dx) = df, dx + 5 * dy
+    return CoDual(5 * primal(x), 0.0), edge_case_tester_pb!!
+end
+
+# To test the edge case properly, call this with x = Any[5.0, false]
+function test_primitive_dynamic_dispatch(x::Vector{Any})
+    i = 0
+    y = 0.0
+    while i < 2
+        i += 1
+        y += edge_case_tester(x[i])
+    end
+    return y
+end
+
 sr(n) = Xoshiro(n)
 
 function generate_test_functions()
@@ -1402,6 +1426,7 @@ function generate_test_functions()
         (false, :none, nothing, type_unstable_tester, Ref{Any}(5.0)),
         (false, :none, nothing, type_unstable_tester_2, Ref{Real}(5.0)),
         (false, :none, (lb=1, ub=1000), type_unstable_tester_3, Ref{Any}(5.0)),
+        (false, :none, (lb=1, ub=1000), test_primitive_dynamic_dispatch, Any[5.0, false]),
         (false, :none, nothing, type_unstable_function_eval, Ref{Any}(sin), 5.0),
         (false, :allocs, nothing, phi_const_bool_tester, 5.0),
         (false, :allocs, nothing, phi_const_bool_tester, -5.0),
