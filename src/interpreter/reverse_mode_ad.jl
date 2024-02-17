@@ -209,7 +209,7 @@ function build_coinsts(ir_inst::Expr, P, in_f, _rrule!!, n::Int, b::Int, is_blk_
         arg_slots = map(arg -> _get_slot(arg, _rrule!!), (__args..., ))
 
         # Construct signature, and determine how the rrule is to be computed.
-        primal_sig = _typeof(map(primal ∘ get_codual, arg_slots))
+        primal_sig = Tuple{map(arg -> eltype(_get_slot(arg, in_f)), (__args..., ))...}
         evaluator = get_evaluator(in_f.ctx, primal_sig, in_f.interp, is_invoke)
         __rrule!! = get_rrule!!_evaluator(evaluator)
 
@@ -320,7 +320,7 @@ function rrule!!(_f::CoDual{<:DelayedInterpretedFunction{C, F}}, args::CoDual...
     f = primal(_f)
     s = _typeof(map(primal, args))
     if is_primitive(C, s)
-        return rrule!!(zero_codual(f.f), args...)
+        return rrule!!(zero_codual(_eval), args...)
     else
         in_f = InterpretedFunction(f.ctx, s, f.interp)
         return build_rrule!!(in_f)(zero_codual(in_f), args...)
