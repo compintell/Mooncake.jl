@@ -480,13 +480,14 @@ function build_rrule!!(in_f::InterpretedFunction{sig}) where {sig}
     return __rrule!!
 end
 
-struct InterpretedFunctionPb{Tret_tangent<:SlotRef, Targ_info, Tbwds_f, V}
+struct InterpretedFunctionPb{Tret_tangent<:SlotRef, Targ_info, Tbwds_f, V, Q}
     j::Int
     bwds_instructions::Tbwds_f
     ret_tangent::Tret_tangent
     n_stack::Stack{Int}
     arg_info::Targ_info
     arg_tangent_stacks::V
+    arg_tangent_stack_refs::Q
 end
 
 function (in_f_rrule!!::InterpretedFunctionRRule{sig})(
@@ -508,15 +509,18 @@ function (in_f_rrule!!::InterpretedFunctionRRule{sig})(
     n = 1
     j = length(n_stack)
 
+    # Get references to top of tangent stacks for use on reverse-pass.
+    arg_tangent_stack_refs = map(top_ref, arg_tangent_stacks)
+
     # Run instructions until done.
     while next_block != -1
-        push!(n_stack, n)
         if !isassigned(in_f_rrule!!.fwds_instructions, n)
             fwds, bwds = generate_coinstructions(in_f, in_f_rrule!!, n)
             in_f_rrule!!.fwds_instructions[n] = fwds
             in_f_rrule!!.bwds_instructions[n] = bwds
         end
         next_block = in_f_rrule!!.fwds_instructions[n](prev_block)
+        push!(n_stack, n)
         if next_block == 0
             n += 1
         elseif next_block > 0
@@ -535,6 +539,7 @@ function (in_f_rrule!!::InterpretedFunctionRRule{sig})(
         n_stack,
         arg_info,
         arg_tangent_stacks,
+        arg_tangent_stack_refs,
     )
     return return_val, interpreted_function_pb!!
 end
@@ -543,8 +548,8 @@ function (if_pb!!::InterpretedFunctionPb)(dout, ::NoTangent, dargs::Vararg{Any, 
 
     # Update the output cotangent value to whatever is provided.
     if_pb!!.ret_tangent[] = dout
-    tangent_stacks = if_pb!!.arg_tangent_stacks
-    set_tangent_stacks!(tangent_stacks, dargs, if_pb!!.arg_info)
+    tangent_stack_refs = if_pb!!.arg_tangent_stack_refs # this can go when we refactor
+    set_tangent_stacks!(tangent_stack_refs, dargs, if_pb!!.arg_info)
 
     # Run the instructions in reverse. Present assumes linear instruction ordering.
     n_stack = if_pb!!.n_stack
@@ -555,7 +560,7 @@ function (if_pb!!::InterpretedFunctionPb)(dout, ::NoTangent, dargs::Vararg{Any, 
     end
 
     # Return resulting tangents from slots.
-    return NoTangent(), assemble_dout(tangent_stacks, if_pb!!.arg_info)...
+    return NoTangent(), assemble_dout(if_pb!!.arg_tangent_stacks, if_pb!!.arg_info)...
 end
 
 function set_tangent_stacks!(tangent_stacks, dargs, ai::ArgInfo{<:Any, is_va}) where {is_va}
