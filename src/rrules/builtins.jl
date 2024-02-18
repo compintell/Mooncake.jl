@@ -588,6 +588,8 @@ end
 # swapfield!
 # throw
 
+Taped._eval(::typeof(throw), args...) = println("throwing :(")
+
 function rrule!!(::CoDual{typeof(tuple)}, args...)
     y = CoDual(tuple(map(primal, args)...), tuple(map(tangent, args)...))
     tuple_pullback(dy, ::NoTangent, dargs...) = NoTangent(), map(increment!!, dargs, dy)...

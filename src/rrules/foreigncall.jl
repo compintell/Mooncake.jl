@@ -473,6 +473,12 @@ function rrule!!(
     return zero_codual(hash(primal(s), primal(h))), NoPullback()
 end
 
+@is_primitive MinimalCtx Tuple{typeof(rethrow)}
+Taped._eval(::typeof(rethrow)) = println("rethrowing")
+
+@is_primitive MinimalCtx Tuple{typeof(rethrow), Any}
+Taped._eval(::typeof(rethrow), x) = println("rethrowing $x")
+
 function unexepcted_foreigncall_error(name)
     throw(error(
         "AD has hit a :($name) ccall. This should not happen. " *

@@ -95,11 +95,14 @@ _standard_next_block(is_blk_end::Bool, current_blk::Int) = is_blk_end ? current_
 
 ## ReturnNode
 function build_inst(inst::ReturnNode, @nospecialize(in_f), ::Int, ::Int, ::Bool)::Inst
+    !isdefined(inst, :val) && return build_inst(ReturnNode)
     return build_inst(ReturnNode, in_f.return_slot, _get_slot(inst.val, in_f))
 end
 function build_inst(::Type{ReturnNode}, ret_slot::SlotRef, val_slot::AbstractSlot)
-    return @opaque (prev_block::Int) -> (ret_slot[] = val_slot[]; return -1)
+    inst = @opaque (prev_block::Int) -> (ret_slot[] = val_slot[]; return -1)
+    return inst::Inst
 end
+build_inst(::Type{ReturnNode}) = @opaque (prev_block::Int) -> -1
 
 ## GotoNode
 function build_inst(inst::GotoNode, @nospecialize(in_f), ::Int, ::Int, ::Bool)::Inst
@@ -223,7 +226,7 @@ function build_inst(x::Expr, @nospecialize(in_f), n::Int, b::Int, is_blk_end::Bo
         return build_inst(Val(:call), arg_refs, evaluator, val_slot, next_blk)
     elseif x.head in [
         :code_coverage_effect, :gc_preserve_begin, :gc_preserve_end, :loopinfo, :leave,
-        :pop_exception,
+        :pop_exception, :enter, :leave,
     ]
         return build_inst(Val(:skipped_expression), next_blk)
     elseif Meta.isexpr(x, :throw_undef_if_not)
@@ -251,8 +254,11 @@ function build_inst(
     val_slot::AbstractSlot,
     next_blk::Int,
 )::Inst where {Teval, Targ_slots}
+    fwds() = ev(tuple_map(getindex, arg_slots)...)
+    # display(Base.code_ircode(fwds, Tuple{}))
+    # println()
     return @opaque function (prev_blk::Int)
-        val_slot[] = ev(tuple_map(getindex, arg_slots)...)
+        val_slot[] = fwds()
         return next_blk
     end
 end
@@ -372,7 +378,13 @@ function sparam_names(m::Core.Method)::Vector{Symbol}
     end
 end
 
-make_slot(x::Type{T}) where {T} = (@isdefined T) ? SlotRef{T}() : SlotRef{DataType}()
+function make_slot(x::Type{T}) where {T}
+    if @isdefined T
+        return T == Union{} ? ConstSlot{Nothing}(nothing) : SlotRef{T}()
+    else
+        return SlotRef{DataType}()
+    end
+end
 make_slot(x::CC.Const) = ConstSlot{_typeof(x.val)}(x.val)
 make_slot(x::CC.PartialStruct) = SlotRef{x.typ}()
 make_slot(::CC.PartialTypeVar) = SlotRef{TypeVar}()
@@ -488,7 +500,10 @@ function InterpretedFunction(ctx::C, sig::Type{<:Tuple}, interp) where {C}
     end
     ir, Treturn = only(output)
 
-    # Slot into which the output of this function will be placed.
+    # Slot into which the output of this function will be placed. It is safe to replace this
+    # with Nothing when the return type is Union, because a return type of Union indicates
+    # that the return node is unreachable, so will never run in practice.
+    Treturn = Treturn == Union{} ? Nothing : Treturn
     return_slot = SlotRef{Treturn}()
 
     # Construct argument reference references.
@@ -518,11 +533,19 @@ function InterpretedFunction(ctx::C, sig::Type{<:Tuple}, interp) where {C}
         ctx, return_slot, arg_info, slots, insts, bb_starts, bb_ends, ir, interp, spnames,
     )
 
+    # Cache this InterpretedFunction so that we can use it in recursive settings.
+    interp.in_f_cache[sig] = in_f
+
     # Eagerly create PhiNode instructions, as this requires special handling.
     make_phi_instructions!(in_f)
 
-    # Cache this InterpretedFunction so that we don't have tobuild it again.
-    interp.in_f_cache[sig] = in_f
+    # Eagerly create the rest of the instructions.
+    for n in eachindex(slots)
+        if !isassigned(insts, n)
+            insts[n] = build_inst(in_f, n)
+        end
+    end
+
     return in_f
 end
 
@@ -541,9 +564,6 @@ function __barrier(in_f::Tf) where {Tf<:InterpretedFunction}
     n = 1
     instructions = in_f.instructions
     while next_block != -1
-        if !isassigned(instructions, n)
-            instructions[n] = build_inst(in_f, n)
-        end
         next_block = instructions[n](prev_block)
         if next_block == 0
             n += 1
