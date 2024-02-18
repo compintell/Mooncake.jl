@@ -1402,6 +1402,10 @@ end
 
 sr(n) = Xoshiro(n)
 
+@noinline function test_self_reference(a, b)
+    return a < b ? a * b : test_self_reference(b, a)
+end
+
 function generate_test_functions()
     return Any[
         (false, :allocs, nothing, const_tester),
@@ -1477,6 +1481,8 @@ function generate_test_functions()
             test_union_of_types,
             Ref{Union{Type{Float64}, Type{Int}}}(Float64),
         ),
+        (false, :allocs, nothing, test_self_reference, 1.1, 1.5),
+        (false, :allocs, nothing, test_self_reference, 1.5, 1.1),
         (
             false,
             :none,
