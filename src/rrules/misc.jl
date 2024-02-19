@@ -26,6 +26,10 @@ for name in [
     :(LinearAlgebra.chkstride1),
     :(Threads.nthreads),
     :(Base.depwarn),
+    :(Base.is_root_module),
+    :print,
+    :(Base.compile),
+    :(Base.PCRE.exec)
 ]
     @eval @is_primitive DefaultCtx Tuple{typeof($name), Vararg}
     @eval function rrule!!(::CoDual{_typeof($name)}, args::CoDual...)
