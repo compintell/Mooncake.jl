@@ -237,7 +237,7 @@ end
 function flag_concerning_performance(ratios)
     @testset "detect concerning performance" begin
         @testset for ratio in ratios
-            @test ratio.range.lb < ratio.value_and_pb_ratio < ratio.range.ub
+            @test ratio.range.lb < ratio.taped_ratio < ratio.range.ub
         end
     end
 end
@@ -245,13 +245,13 @@ end
 """
     plot_ratio_histogram!(df::DataFrame)
 
-Constructs a histogram of the `value_and_pb_ratio` field of `df`, with formatting that is
+Constructs a histogram of the `taped_ratio` field of `df`, with formatting that is
 well-suited to the numbers typically found in this field.
 """
 function plot_ratio_histogram!(df::DataFrame)
     bin = 10.0 .^ (0.0:0.05:6.0)
     xlim = extrema(bin)
-    histogram(df.value_and_pb_ratio; xscale=:log10, xlim, bin, title="log", label="")
+    histogram(df.taped_ratio; xscale=:log10, xlim, bin, title="log", label="")
 end
 
 function main()
