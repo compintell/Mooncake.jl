@@ -51,6 +51,7 @@ jobs:
         perf_group:
           - 'hand_written'
           - 'derived'
+          - 'comparison'
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v1
