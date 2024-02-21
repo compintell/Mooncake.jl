@@ -268,49 +268,50 @@ function plot_ratio_histogram!(df::DataFrame)
 end
 
 function create_inter_ad_benchmarks()
-    results = benchmark_inter_framework_rules()
-    df = DataFrame(results)[:, [:tag, :taped_ratio, :zygote_ratio, :rd_ratio, :enzyme_ratio]]
+    # results = benchmark_inter_framework_rules()
+    # df = DataFrame(results)[:, [:tag, :taped_ratio, :zygote_ratio, :rd_ratio, :enzyme_ratio]]
 
-    tag_map = Dict{String, String}(
-        "(sum, Vector{Float64})" => "sum",
-        "(_sum, Vector{Float64})" => "_sum",
-        "(_kron_sum, Matrix{Float64}, Matrix{Float64})" => "kron",
-        "(_kron_view_sum, Matrix{Float64}, Matrix{Float64})" => "kron types",
-        "(_naive_map_sin_cos_exp, Matrix{Float64})" => "naive map",
-        "(_map_sin_cos_exp, Matrix{Float64})" => "map",
-        "(_broadcast_sin_cos_exp, Matrix{Float64})" => "broadcast",
-        "(_simple_mlp, Matrix{Float64}, Matrix{Float64}, Matrix{Float64}, Matrix{Float64})" => "mlp",
-        "(_gp_lml, Vector{Float64}, Vector{Float64}, Float64)" => "gp",
-    )
+    # tag_map = Dict{String, String}(
+    #     "(sum, Vector{Float64})" => "sum",
+    #     "(_sum, Vector{Float64})" => "_sum",
+    #     "(_kron_sum, Matrix{Float64}, Matrix{Float64})" => "kron",
+    #     "(_kron_view_sum, Matrix{Float64}, Matrix{Float64})" => "kron types",
+    #     "(_naive_map_sin_cos_exp, Matrix{Float64})" => "naive map",
+    #     "(_map_sin_cos_exp, Matrix{Float64})" => "map",
+    #     "(_broadcast_sin_cos_exp, Matrix{Float64})" => "broadcast",
+    #     "(_simple_mlp, Matrix{Float64}, Matrix{Float64}, Matrix{Float64}, Matrix{Float64})" => "mlp",
+    #     "(_gp_lml, Vector{Float64}, Vector{Float64}, Float64)" => "gp",
+    # )
 
-    df.label = map(t -> tag_map[t], df.tag)
+    # df.label = map(t -> tag_map[t], df.tag)
 
-    tool_map = Dict{Symbol, String}(
-        :taped_ratio => "Taped",
-        :zygote_ratio => "Zygote",
-        :rd_ratio => "ReverseDiff",
-        :enzyme_ratio => "Enzyme",
-    )
+    # tool_map = Dict{Symbol, String}(
+    #     :taped_ratio => "Taped",
+    #     :zygote_ratio => "Zygote",
+    #     :rd_ratio => "ReverseDiff",
+    #     :enzyme_ratio => "Enzyme",
+    # )
 
-    mkdir("bench")
+    !isdir("bench") && mkdir("bench")
     plt = plot(
         yscale=:log10,
         legend=:topright,
         title="Ratio of AD Time to Primal Time (Log Scale)",
     )
-    for key in keys(tool_map)
-        plot!(plt, df.label, df[:, key]; label=tool_map[key], marker=:circle, xrotation=45)
-    end
+    scatter!(plt, randn(10), randn(10))
+    # for key in keys(tool_map)
+    #     plot!(plt, df.label, df[:, key]; label=tool_map[key], marker=:circle, xrotation=45)
+    # end
     savefig(plt, "bench/benchmarking_results.png")
 
-    df_formatted = DataFrame(
-        label = df.label,
-        taped = string.(round.(df.taped_ratio; sigdigits=3)),
-        zygote = string.(round.(df.zygote_ratio; sigdigits=3)),
-        reverse_diff = string.(round.(df.rd_ratio; sigdigits=3)),
-        enzyme = string.(round.(df.enzyme_ratio; sigdigits=3)),
-    )
-    CSV.write("bench/benchmarking_results.csv", df_formatted)
+    # df_formatted = DataFrame(
+    #     label = df.label,
+    #     taped = string.(round.(df.taped_ratio; sigdigits=3)),
+    #     zygote = string.(round.(df.zygote_ratio; sigdigits=3)),
+    #     reverse_diff = string.(round.(df.rd_ratio; sigdigits=3)),
+    #     enzyme = string.(round.(df.enzyme_ratio; sigdigits=3)),
+    # )
+    # CSV.write("bench/benchmarking_results.csv", df_formatted)
 end
 
 function main()
