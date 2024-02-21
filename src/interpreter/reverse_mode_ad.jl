@@ -11,14 +11,21 @@ const BwdsInst = Core.OpaqueClosure{Tuple{Int}, Int}
 
 const RuleSlot{V} = Union{SlotRef{V}, ConstSlot{V}} where {V<:Tuple{CoDual, Ref}}
 
-primal_type(::AbstractSlot{<:Tuple{<:CoDual{P}, <:Any}}) where {P} = @isdefined(P) ? P : Any
-primal_type(::AbstractSlot{<:Tuple{<:CoDual, <:Any}}) = Any
+__primal_type(::Type{<:Tuple{<:CoDual{P}, <:Any}}) where {P} = @isdefined(P) ? P : Any
+function __primal_type(::Type{P}) where {P<:Tuple{<:CoDual, <:Any}}
+    P isa Union && return Union{__primal_type(P.a), __primal_type(P.b)}
+    return Any
+end
+
+primal_type(::AbstractSlot{P}) where {P} = __primal_type(P)
+
+function rule_slot_type(::Type{P}) where {P}
+    P isa Union && return Union{rule_slot_type(P.a), rule_slot_type(P.b)}
+    return Tuple{codual_type(P), tangent_ref_type_ub(P)}
+end
 
 function make_rule_slot(::SlotRef{P}, ::Any) where {P}
-    return SlotRef{Tuple{codual_type(P), tangent_ref_type_ub(P)}}()
-end
-function make_rule_slot(::SlotRef{P}, ::PhiNode) where {P}
-    return SlotRef{Tuple{codual_type(P), tangent_ref_type_ub(P)}}()
+    return SlotRef{rule_slot_type(P)}()
 end
 function make_rule_slot(x::ConstSlot{P}, ::Any) where {P}
     cd = uninit_codual(x[])
@@ -112,17 +119,18 @@ function build_coinsts(
     tangent_stack_stack = make_tangent_ref_stack(tangent_ref_type_ub(primal_type(val)))
 
     make_fwds(v) = R(primal(v), tangent(v))
-    fwds_inst = @opaque function (p::Int)
+    function fwds_run()
         v, tangent_stack = val[]
         push!(my_tangent_stack, tangent(v))
         push!(tangent_stack_stack, tangent_stack)
         ret[] = (make_fwds(v), top_ref(my_tangent_stack))
         return next_blk
     end
-    bwds_inst = @opaque function (j::Int)
+    fwds_inst = @opaque (p::Int) -> fwds_run()
+    function bwds_run()
         increment_ref!(pop!(tangent_stack_stack), pop!(my_tangent_stack))
-        return j
     end
+    bwds_inst = @opaque (j::Int) -> (bwds_run(); return j)
     return fwds_inst::FwdsInst, bwds_inst::BwdsInst
 end
 

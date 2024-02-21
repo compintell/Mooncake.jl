@@ -113,6 +113,7 @@ __array_ref_type(::Type{P}) where {P} = Base.RefArray{P, Vector{P}, Nothing}
 function tangent_ref_type_ub(::Type{P}) where {P}
     P === DataType && return Ref
     T = tangent_type(P)
+    T isa Union && return Union{tangent_ref_type_ub(T.a), tangent_ref_type_ub(T.b)}
     T === NoTangent && return NoTangentRef
     return isconcretetype(P) ? __array_ref_type(T) : Ref
 end
