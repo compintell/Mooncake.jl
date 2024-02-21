@@ -292,7 +292,6 @@ function create_inter_ad_benchmarks()
     #     :enzyme_ratio => "Enzyme",
     # )
 
-    !isdir("bench") && mkdir("bench")
     plt = plot(
         yscale=:log10,
         legend=:topright,
@@ -302,7 +301,7 @@ function create_inter_ad_benchmarks()
     # for key in keys(tool_map)
     #     plot!(plt, df.label, df[:, key]; label=tool_map[key], marker=:circle, xrotation=45)
     # end
-    savefig(plt, "bench/benchmarking_results.png")
+    savefig(plt, "bench_results/benchmarking_results.png")
 
     # df_formatted = DataFrame(
     #     label = df.label,

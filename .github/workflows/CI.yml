@@ -76,6 +76,7 @@ jobs:
           include-all-prereleases: true
       - uses: julia-actions/cache@v1
       - uses: julia-actions/julia-buildpkg@v1
+      - run: mkdir bench_results
       - run: julia --project=bench --eval 'include("bench/run_benchmarks.jl"); main()'
         env:
           PERF_GROUP: comparison
@@ -83,4 +84,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: benchmarking-results
-          path: bench/
+          path: bench_results/
