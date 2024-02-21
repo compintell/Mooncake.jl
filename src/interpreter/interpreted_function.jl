@@ -476,9 +476,6 @@ explosion of types. Moreover, type-stability it maintained.
 """
 function InterpretedFunction(ctx::C, sig::Type{<:Tuple}, interp) where {C}
 
-    # If we've already constructed this interpreted function, just return it.
-    sig in keys(interp.in_f_cache) && return interp.in_f_cache[sig]
-
     # Grab code associated to this function.
     output = Base.code_ircode_by_type(sig; interp)
     if isempty(output)
@@ -522,7 +519,6 @@ function InterpretedFunction(ctx::C, sig::Type{<:Tuple}, interp) where {C}
     make_phi_instructions!(in_f)
 
     # Cache this InterpretedFunction so that we don't have tobuild it again.
-    interp.in_f_cache[sig] = in_f
     return in_f
 end
 

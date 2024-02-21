@@ -1403,7 +1403,12 @@ end
 sr(n) = Xoshiro(n)
 
 @noinline function test_self_reference(a, b)
-    return a < b ? a * b : test_self_reference(b, a)
+    return a < b ? a * b : test_self_reference(b, a) + a
+end
+
+@noinline function test_recursive_sum(x::Vector{Float64})
+    isempty(x) && return 0.0
+    return @inbounds x[1] + test_recursive_sum(x[2:end])
 end
 
 function generate_test_functions()
@@ -1483,6 +1488,7 @@ function generate_test_functions()
         ),
         (false, :allocs, nothing, test_self_reference, 1.1, 1.5),
         (false, :allocs, nothing, test_self_reference, 1.5, 1.1),
+        (false, :none, nothing, test_recursive_sum, randn(2)),
         (
             false,
             :none,
