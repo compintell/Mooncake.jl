@@ -280,7 +280,8 @@ function main()
         # println()
         plt = plot()
         plot!(plt, randn(10), randn(10))
-        savefig(plt, "benchmarking_results.png")
+        mkdir("foo")
+        savefig(plt, "foo/benchmarking_results.png")
     else
         throw(error("perf_group=$(perf_group) is not recognised"))
     end
