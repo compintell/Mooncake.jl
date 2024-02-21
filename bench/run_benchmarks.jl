@@ -120,7 +120,12 @@ function generate_inter_framework_tests()
     ]
 end
 
-function benchmark_rules!!(test_case_data, default_ratios, include_other_frameworks::Bool)
+function benchmark_rules!!(
+    test_case_data,
+    default_ratios,
+    include_other_frameworks::Bool,
+    tune_benchmarks::Bool,
+)
     test_cases = reduce(vcat, map(first, test_case_data))
     memory = map(x -> x[2], test_case_data)
     ranges = reduce(vcat, map(x -> x[3], test_case_data))
@@ -168,8 +173,10 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
                 end
             end
 
-            @info "tuning"
-            tune!(suite)
+            if tune_benchmarks
+                @info "tuning"
+                tune!(suite)
+            end
             @info "running"
             return (args, run(suite; verbose=true))
         end
@@ -215,7 +222,7 @@ function benchmark_hand_written_rrules!!(rng_ctor)
         ranges = map(x -> x[3], test_cases)
         return map(x -> x[4:end], test_cases), memory, ranges
     end
-    return benchmark_rules!!(test_case_data, (lb=1e-3, ub=25.0), false)
+    return benchmark_rules!!(test_case_data, (lb=1e-3, ub=25.0), false, false)
 end
 
 function benchmark_derived_rrules!!(rng_ctor)
@@ -226,14 +233,14 @@ function benchmark_derived_rrules!!(rng_ctor)
         ranges = map(x -> x[3], test_cases)
         return map(x -> x[4:end], test_cases), memory, ranges
     end
-    return benchmark_rules!!(test_case_data, (lb=0.1, ub=150), false)
+    return benchmark_rules!!(test_case_data, (lb=0.1, ub=150), false, false)
 end
 
 function benchmark_inter_framework_rules()
     test_cases = generate_inter_framework_tests()
     memory = []
     ranges = fill(nothing, length(test_cases))
-    return benchmark_rules!!([(test_cases, memory, ranges)], (lb=0.1, ub=150), true)
+    return benchmark_rules!!([(test_cases, memory, ranges)], (lb=0.1, ub=150), true, true)
 end
 
 function flag_concerning_performance(ratios)
