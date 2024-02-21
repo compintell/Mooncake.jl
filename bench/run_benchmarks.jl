@@ -36,6 +36,8 @@ function rd_to_benchmark!(result, tape, x)
     return ReverseDiff.gradient!(result, tape, x)
 end
 
+should_run_benchmark(args...) = true
+
 # Test out the performance of a hand-written sum function, so we can be confident that there
 # is no rule. Note that ReverseDiff has a (seemingly not fantastic) hand-written rule for
 # sum.
@@ -68,6 +70,8 @@ function _naive_map_sin_cos_exp(x::AbstractArray{<:Real})
     return sum(y)
 end
 
+should_run_benchmark(::Val{:zygote}, ::typeof(_naive_map_sin_cos_exp), x) = false
+
 # RD and Zygote have a rule for this.
 _map_sin_cos_exp(x::AbstractArray{<:Real}) = sum(map(x -> sin(cos(exp(x))), x))
 
@@ -81,6 +85,9 @@ _simple_mlp(W2, W1, Y, X) = sum(abs2, Y - W2 * map(x -> x * (0 <= x), W1 * X))
 # and LAPACK stuff, not explicit rules for things like the squared euclidean distance.
 # Consequently, Zygote is at a major advantage.
 _gp_lml(x, y, s) = logpdf(GP(SEKernel())(x, s), y)
+
+should_run_benchmark(::Val{:reverse_diff}, ::typeof(_gp_lml), x...) = false
+should_run_benchmark(::Val{:enzyme}, ::typeof(_gp_lml), x...) = false
 
 function _generate_gp_inputs()
     x = collect(range(0.0; step=0.2, length=128))
@@ -120,56 +127,48 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
     GC.@preserve memory begin
         results = map(enumerate(test_cases)) do (n, args)
             @info "$n / $(length(test_cases))", _typeof(args)
-            suite = Dict()
+            suite = BenchmarkGroup()
 
             # Benchmark primal.
-            @info "primal"
             primals = map(x -> x isa CoDual ? primal(x) : x, args)
-            suite["primal"] = @benchmark(
+            suite["primal"] = @benchmarkable(
                 (a[1][])((a[2][])...);
                 setup=(a = (Ref($primals[1]), Ref(_deepcopy($primals[2:end])))),
             )
 
             # Benchmark AD via Taped.
-            @info "taped"
             rule, in_f = set_up_gradient_problem(args...)
             coduals = map(x -> x isa CoDual ? x : zero_codual(x), args)
-            suite["taped"] = @benchmark(
+            suite["taped"] = @benchmarkable(
                 to_benchmark($rule, zero_codual($in_f), $coduals...);
             )
 
             if include_other_frameworks
 
-                try
-                    @info "zygote"
-                    suite["zygote"] = @benchmark(
+                if should_run_benchmark(Val(:zygote), args...)
+                    suite["zygote"] = @benchmarkable(
                         zygote_to_benchmark($(Zygote.Context()), $primals...)
                     )
-                catch
                 end
 
-                try
-                    @info "reverse diff"
+                if should_run_benchmark(Val(:reverse_diff), args...)
                     tape = ReverseDiff.GradientTape(primals[1], primals[2:end])
                     compiled_tape = ReverseDiff.compile(tape)
                     result = map(x -> randn(size(x)), primals[2:end])
-                    suite["rd"] = @benchmark(
+                    suite["rd"] = @benchmarkable(
                         rd_to_benchmark!($result, $compiled_tape, $primals[2:end])
                     )
-                catch
                 end
 
-                try
-                    @info "enzyme"
+                if should_run_benchmark(Val(:enzyme), args...)
                     dup_args = map(x -> Duplicated(x, randn(size(x))), primals[2:end])
-                    suite["enzyme"] = @benchmark(
+                    suite["enzyme"] = @benchmarkable(
                         autodiff(Reverse, $primals[1], Active, $dup_args...)
                     )
-                catch
                 end
             end
 
-            return (args, suite)
+            return (args, run(suite; verbose=true))
         end
     end
     return combine_results.(results, ranges, Ref(default_ratios))
