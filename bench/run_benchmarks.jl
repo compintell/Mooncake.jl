@@ -78,7 +78,8 @@ _map_sin_cos_exp(x::AbstractArray{<:Real}) = sum(map(x -> sin(cos(exp(x))), x))
 # Only Zygote has a rule for this.
 _broadcast_sin_cos_exp(x::AbstractArray{<:Real}) = sum(sin.(cos.(exp.(x))))
 
-# Different frameworks have rules for this to differing degrees.
+# Different frameworks have rules for this to differing degrees. Zygote has rules for just
+# about all of the operations.
 _simple_mlp(W2, W1, Y, X) = sum(abs2, Y - W2 * map(x -> x * (0 <= x), W1 * X))
 
 # Only Zygote and Taped can actually handle this. Note that Taped only has rules for BLAS
