@@ -1542,7 +1542,7 @@ function generate_test_functions()
         (false, :none, nothing, test_mutable_struct_basic, 5.0),
         (false, :none, nothing, test_mutable_struct_basic_sin, 5.0),
         (false, :none, nothing, test_mutable_struct_setfield, 4.0),
-        (false, :none, (lb=1, ub=1_000), test_mutable_struct, 5.0),
+        (false, :none, (lb=1, ub=2_000), test_mutable_struct, 5.0),
         (false, :none, nothing, test_struct_partial_init, 3.5),
         (false, :none, nothing, test_mutable_partial_init, 3.3),
         (
