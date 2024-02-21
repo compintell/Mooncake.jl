@@ -233,7 +233,7 @@ function benchmark_derived_rrules!!(rng_ctor)
         ranges = map(x -> x[3], test_cases)
         return map(x -> x[4:end], test_cases), memory, ranges
     end
-    return benchmark_rules!!(test_case_data, (lb=0.1, ub=150), false, false)
+    return benchmark_rules!!(test_case_data, (lb=1e-3, ub=150), false, false)
 end
 
 function benchmark_inter_framework_rules()

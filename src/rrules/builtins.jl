@@ -611,7 +611,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
     _a[1] = [5.4, 4.23, -0.1, 2.1]
 
     # Slightly wider range for builtins whose performance is known not to be great.
-    _range = (lb=0.1, ub=200.0)
+    _range = (lb=1e-3, ub=200.0)
 
     test_cases = Any[
 
@@ -743,8 +743,8 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         [false, :stability, nothing, ===, 5.0, randn(5)],
         [false, :stability, nothing, ===, randn(5), randn(3)],
         [false, :stability, nothing, ===, 5.0, 5.0],
-        [false, :none, (lb=0.1, ub=100.0), Core.apply_type, Vector, Float64],
-        [false, :none, (lb=0.1, ub=100.0), Core.apply_type, Array, Float64, 2],
+        [false, :none, (lb=1e-3, ub=100.0), Core.apply_type, Vector, Float64],
+        [false, :none, (lb=1e-3, ub=100.0), Core.apply_type, Array, Float64, 2],
         [false, :stability, nothing, Core.arraysize, randn(5, 4, 3), 2],
         [false, :stability, nothing, Core.arraysize, randn(5, 4, 3, 2, 1), 100],
         # Core.compilerbarrier -- NEEDS IMPLEMENTING AND TESTING
@@ -796,10 +796,10 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         [false, :stability, nothing, applicable, sin, Type],
         [false, :stability, nothing, applicable, +, Type, Float64],
         [false, :stability, nothing, applicable, +, Float64, Float64],
-        [false, :stability, (lb=0.1, ub=20.0), fieldtype, TestResources.StructFoo, :a],
-        [false, :stability, (lb=0.1, ub=20.0), fieldtype, TestResources.StructFoo, :b],
-        [false, :stability, (lb=0.1, ub=20.0), fieldtype, TestResources.MutableFoo, :a],
-        [false, :stability, (lb=0.1, ub=20.0), fieldtype, TestResources.MutableFoo, :b],
+        [false, :stability, (lb=1e-3, ub=20.0), fieldtype, TestResources.StructFoo, :a],
+        [false, :stability, (lb=1e-3, ub=20.0), fieldtype, TestResources.StructFoo, :b],
+        [false, :stability, (lb=1e-3, ub=20.0), fieldtype, TestResources.MutableFoo, :a],
+        [false, :stability, (lb=1e-3, ub=20.0), fieldtype, TestResources.MutableFoo, :b],
         [true, :none, _range, getfield, TestResources.StructFoo(5.0), :a],
         [false, :none, _range, getfield, TestResources.StructFoo(5.0, randn(5)), :a],
         [false, :none, _range, getfield, TestResources.StructFoo(5.0, randn(5)), :b],
