@@ -1,6 +1,9 @@
 using Pkg
 Pkg.develop(path=joinpath(@__DIR__, ".."))
 
+# Run in headless mode.
+ENV["GKSwstype"] = "100"
+
 using
     AbstractGPs,
     BenchmarkTools,
@@ -271,10 +274,13 @@ function main()
     elseif perf_group == "derived"
         flag_concerning_performance(benchmark_derived_rrules!!(Xoshiro))
     elseif perf_group == "comparison"
-        results = benchmark_inter_framework_rules()
-        df = DataFrame(results)[:, [:tag, :taped_ratio, :zygote_ratio, :rd_ratio, :enzyme_ratio]]
-        display(df)
-        println()
+        # results = benchmark_inter_framework_rules()
+        # df = DataFrame(results)[:, [:tag, :taped_ratio, :zygote_ratio, :rd_ratio, :enzyme_ratio]]
+        # display(df)
+        # println()
+        plt = plot()
+        plot!(plt, randn(10), randn(10))
+        savefig(plt, "benchmarking_results.png")
     else
         throw(error("perf_group=$(perf_group) is not recognised"))
     end
