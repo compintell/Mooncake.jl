@@ -168,6 +168,9 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
                 end
             end
 
+            @info "tuning"
+            tune!(suite)
+            @info "running"
             return (args, run(suite; verbose=true))
         end
     end
