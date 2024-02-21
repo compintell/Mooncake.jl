@@ -269,6 +269,7 @@ end
 
 function main()
     perf_group = get(ENV, "PERF_GROUP", "hand_written")
+    @show perf_group
     if perf_group == "hand_written"
         flag_concerning_performance(benchmark_hand_written_rrules!!(Xoshiro))
     elseif perf_group == "derived"
@@ -280,8 +281,7 @@ function main()
         # println()
         plt = plot()
         plot!(plt, randn(10), randn(10))
-        mkdir("foo")
-        savefig(plt, "foo/benchmarking_results.png")
+        savefig(plt, "benchmarking_results.png")
     else
         throw(error("perf_group=$(perf_group) is not recognised"))
     end

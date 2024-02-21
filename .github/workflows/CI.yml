@@ -65,7 +65,7 @@ jobs:
           PERF_GROUP: ${{ matrix.perf_group }}
         shell: bash
   compperf:
-    name: "Comparative Performance Test"
+    name: "Performance (inter-AD)"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -83,4 +83,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: benchmarking-results
-          path: foo/benchmarking_results.png
+          path: benchmarking_results.png
