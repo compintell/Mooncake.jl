@@ -28,9 +28,7 @@ struct TapedInterpreter{C} <: CC.AbstractInterpreter
         inf_cache::Vector{CC.InferenceResult}=CC.InferenceResult[], 
         code_cache::TICache=TICache(),
     ) where {C}
-        return new{C}(
-            ctx, meta, world, inf_params, opt_params, inf_cache, code_cache
-        )
+        return new{C}(ctx, meta, world, inf_params, opt_params, inf_cache, code_cache)
     end
 end
 
