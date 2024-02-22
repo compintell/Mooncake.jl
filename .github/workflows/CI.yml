@@ -99,7 +99,7 @@ jobs:
           {
             echo "table<<EOF"
             cat benchmark_results.txt
-            cat benchmark_results_plot.txt
+            cat benchmark_results.txt
             echo "EOF"
           } >> $GITHUB_OUTPUT
       - id: post-report-as-pr-comment
