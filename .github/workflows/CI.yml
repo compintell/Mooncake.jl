@@ -103,8 +103,9 @@ jobs:
           } >> $GITHUB_OUTPUT
       - id: post-report-as-pr-comment
         name: Post Report as Pull Request Comment
-        uses: peter-evans/commit-comment@v2
+        uses: peter-evans/peter-evans/create-or-update-comment@v4
         with:
+          issue-number: ${{ github.event.number }}
           body: "```\n${{ steps.read-file.outputs.table }}\n```"
       # - name: Post table to PR
       #   uses: actions/github-script@v4
