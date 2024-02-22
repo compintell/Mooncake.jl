@@ -92,13 +92,13 @@ jobs:
           text="this is line one
           this is line two
           this is line three"
-          echo "$text" > bench/benchmark_results.txt
+          echo "$text" > benchmark_results.txt
       - name: Read file content
         id: read-file
         run: |
           {
             echo "table<<EOF"
-            cat bench/benchmark_results.txt
+            cat benchmark_results.txt
             echo "EOF"
           } >> $GITHUB_OUTPUT
       - name: Find Comment
