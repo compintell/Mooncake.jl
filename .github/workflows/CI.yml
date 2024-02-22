@@ -93,6 +93,7 @@ jobs:
         run: |
           file_content=$(cat benchmark_results.txt)
           echo "::set-output name=content::$file_content"
+          echo file_content >> $GITHUB_OUTPUT
       - name: Post table to PR
         uses: actions/github-script@v4
         with:
@@ -102,5 +103,5 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `${{steps.read-file.outputs.content}}`
+              body: `$GITHUB_OUTPUT`
             })
