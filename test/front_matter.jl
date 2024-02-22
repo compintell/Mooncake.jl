@@ -11,6 +11,8 @@ using
     Taped,
     Test
 
+import ChainRulesCore
+
 using Base: unsafe_load, pointer_from_objref
 using Base.Iterators: product
 using Core:

@@ -11,6 +11,8 @@ using
     Random,
     Setfield
 
+import ChainRulesCore
+
 using Base:
     IEEEFloat, unsafe_convert, unsafe_pointer_to_objref, pointer_from_objref, arrayref,
     arrayset
@@ -50,6 +52,8 @@ include(joinpath("rrules", "lapack.jl"))
 include(joinpath("rrules", "low_level_maths.jl"))
 include(joinpath("rrules", "misc.jl"))
 include(joinpath("rrules", "new.jl"))
+
+include("chain_rules_macro.jl")
 
 export
     primal,
