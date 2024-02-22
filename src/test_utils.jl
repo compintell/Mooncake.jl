@@ -1403,7 +1403,13 @@ end
 sr(n) = Xoshiro(n)
 
 @noinline function test_self_reference(a, b)
-    return a < b ? a * b : test_self_reference(b, a)
+    return a < b ? a * b : test_self_reference(b, a) + a
+end
+
+# See https://github.com/withbayes/Taped.jl/pull/84 for info
+@noinline function test_recursive_sum(x::Vector{Float64})
+    isempty(x) && return 0.0
+    return @inbounds x[1] + test_recursive_sum(x[2:end])
 end
 
 # Copied over from https://github.com/TuringLang/Turing.jl/issues/1140
@@ -1492,6 +1498,7 @@ function generate_test_functions()
         ),
         (false, :allocs, nothing, test_self_reference, 1.1, 1.5),
         (false, :allocs, nothing, test_self_reference, 1.5, 1.1),
+        (false, :none, nothing, test_recursive_sum, randn(2)),
         (
             false,
             :none,
@@ -1545,7 +1552,7 @@ function generate_test_functions()
         (false, :none, nothing, test_mutable_struct_basic, 5.0),
         (false, :none, nothing, test_mutable_struct_basic_sin, 5.0),
         (false, :none, nothing, test_mutable_struct_setfield, 4.0),
-        (false, :none, (lb=1, ub=1_000), test_mutable_struct, 5.0),
+        (false, :none, (lb=1, ub=2_000), test_mutable_struct, 5.0),
         (false, :none, nothing, test_struct_partial_init, 3.5),
         (false, :none, nothing, test_mutable_partial_init, 3.3),
         (

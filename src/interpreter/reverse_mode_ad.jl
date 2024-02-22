@@ -452,9 +452,6 @@ end
 
 function build_rrule!!(in_f::InterpretedFunction{sig}) where {sig}
 
-    # If we've already constructed this interpreted function, just return it.
-    sig in keys(in_f.interp.in_f_rrule_cache) && return in_f.interp.in_f_rrule_cache[sig]
-
     return_slot = SlotRef{codual_type(eltype(in_f.return_slot))}()
     return_tangent_slot = SlotRef{tangent_type(eltype(in_f.return_slot))}()
     arg_info = make_codual_arginfo(in_f.arg_info)
@@ -482,8 +479,6 @@ function build_rrule!!(in_f::InterpretedFunction{sig}) where {sig}
 
     # Set PhiNodes.
     make_phi_instructions!(in_f, __rrule!!)
-
-    in_f.interp.in_f_rrule_cache[sig] = __rrule!!
 
     return __rrule!!
 end
