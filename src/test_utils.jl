@@ -1406,6 +1406,7 @@ sr(n) = Xoshiro(n)
     return a < b ? a * b : test_self_reference(b, a) + a
 end
 
+# See https://github.com/withbayes/Taped.jl/pull/84 for info
 @noinline function test_recursive_sum(x::Vector{Float64})
     isempty(x) && return 0.0
     return @inbounds x[1] + test_recursive_sum(x[2:end])
