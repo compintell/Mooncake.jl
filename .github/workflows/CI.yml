@@ -70,34 +70,35 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@v1
-        with:
-          version: '1'
-          arch: x64
-          include-all-prereleases: true
-      - uses: julia-actions/cache@v1
-      - uses: julia-actions/julia-buildpkg@v1
-      - run: mkdir bench_results
-      - run: julia --project=bench --eval 'include("bench/run_benchmarks.jl"); main()'
-        env:
-          PERF_GROUP: 'comparison'
-          GKSwstype: '100'
-        shell: bash
-      - uses: actions/upload-artifact@v4
-        with:
-          name: benchmarking-results
-          path: bench_results/
-      # - run: |
-      #     text="this is line one
-      #     this is line two
-      #     this is line three"
-      #     echo "$text" > benchmark_results.txt
+      # - uses: actions/checkout@v4
+      # - uses: julia-actions/setup-julia@v1
+      #   with:
+      #     version: '1'
+      #     arch: x64
+      #     include-all-prereleases: true
+      # - uses: julia-actions/cache@v1
+      # - uses: julia-actions/julia-buildpkg@v1
+      # - run: mkdir bench_results
+      # - run: julia --project=bench --eval 'include("bench/run_benchmarks.jl"); main()'
+      #   env:
+      #     PERF_GROUP: 'comparison'
+      #     GKSwstype: '100'
+      #   shell: bash
+      # - uses: actions/upload-artifact@v4
+      #   with:
+      #     name: benchmarking-results
+      #     path: bench_results/
+      - run: |
+          text="this is line one
+          this is line two
+          this is line three"
+          echo "$text" > benchmark_results.txt
       - name: Read file content
         id: read-file
         run: |
           {
             echo "table<<EOF"
+            cat benchmark_results.txt
             cat benchmark_results.txt
             echo "EOF"
           } >> $GITHUB_OUTPUT
