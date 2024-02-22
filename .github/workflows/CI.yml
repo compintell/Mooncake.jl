@@ -70,29 +70,30 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@v1
-        with:
-          version: '1'
-          arch: x64
-          include-all-prereleases: true
-      - uses: julia-actions/cache@v1
-      - uses: julia-actions/julia-buildpkg@v1
-      - run: mkdir bench_results
-      - run: julia --project=bench --eval 'include("bench/run_benchmarks.jl"); main()'
-        env:
-          PERF_GROUP: 'comparison'
-          GKSwstype: '100'
-        shell: bash
-      - uses: actions/upload-artifact@v4
-        with:
-          name: benchmarking-results
-          path: bench_results/
+      # - uses: actions/checkout@v4
+      # - uses: julia-actions/setup-julia@v1
+      #   with:
+      #     version: '1'
+      #     arch: x64
+      #     include-all-prereleases: true
+      # - uses: julia-actions/cache@v1
+      # - uses: julia-actions/julia-buildpkg@v1
+      # - run: mkdir bench_results
+      # - run: julia --project=bench --eval 'include("bench/run_benchmarks.jl"); main()'
+      #   env:
+      #     PERF_GROUP: 'comparison'
+      #     GKSwstype: '100'
+      #   shell: bash
+      # - uses: actions/upload-artifact@v4
+      #   with:
+      #     name: benchmarking-results
+      #     path: bench_results/
+      - run: echo hello > benchmark_results.txt
       - name: Read file content
         id: read-file
         run: |
           file_content=$(cat benchmark_results.txt)
-          echo $file_content >> $GITHUB_OUTPUT
+          echo "table=$file_content" >> $GITHUB_OUTPUT
       - name: Post table to PR
         uses: actions/github-script@v4
         with:
@@ -102,5 +103,5 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `$GITHUB_OUTPUT`
+              body: `$table`
             })
