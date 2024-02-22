@@ -20,7 +20,6 @@ end
 primal_type(::AbstractSlot{P}) where {P} = __primal_type(P)
 
 function rule_slot_type(::Type{P}) where {P}
-    P isa Union && return Union{rule_slot_type(P.a), rule_slot_type(P.b)}
     return Tuple{codual_type(P), tangent_ref_type_ub(P)}
 end
 
