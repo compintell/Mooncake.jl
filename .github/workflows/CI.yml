@@ -88,18 +88,12 @@ jobs:
         with:
           name: benchmarking-results
           path: bench_results/
-      # - run: |
-      #     text="this is line one
-      #     this is line two
-      #     this is line three"
-      #     echo "$text" > benchmark_results.txt
       - name: Read file content
         id: read-file
         run: |
           {
             echo "table<<EOF"
-            cat benchmark_results.txt
-            cat benchmark_results.txt
+            cat bench/benchmark_results.txt
             echo "EOF"
           } >> $GITHUB_OUTPUT
       - id: post-report-as-pr-comment
