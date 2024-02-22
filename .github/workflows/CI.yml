@@ -107,13 +107,12 @@ jobs:
         with:
           issue-number: ${{ github.event.pull_request.number }}
           comment-author: github-actions[bot]
-          body-includes: Build output
       - id: post-report-as-pr-comment
         name: Post Report as Pull Request Comment
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
-          body: "```\n${{ steps.read-file.outputs.table }}\n```"
+          body: "Performance Ratio:\n```\n${{ steps.read-file.outputs.table }}\n```"
           comment-id: ${{ steps.fc.outputs.comment-id }}
           edit-mode: replace
       - run: echo This is ${{ steps.fc.outputs.comment-id }}
