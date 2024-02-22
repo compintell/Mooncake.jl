@@ -99,7 +99,7 @@ jobs:
           file_content=$(cat benchmark_results.txt)
           {
             echo "table<<EOF"
-            echo ${{ file_content }}
+            echo $file_content
             echo "EOF"
           } >> $GITHUB_OUTPUT
       - name: Post table to PR
