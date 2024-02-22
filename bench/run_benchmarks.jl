@@ -319,7 +319,7 @@ function create_inter_ad_benchmarks()
 
     # Write table to text file.
     df_formatted = DataFrame(x=randn(5), y=randn(5))
-    open("benchmarking_results.txt"; write=true) do io
+    open("benchmark_results.txt"; write=true) do io
         pretty_table(io, df_formatted)
     end
 end
