@@ -16,7 +16,8 @@ Pkg.develop(path=joinpath(@__DIR__, ".."))
 #     Test,
 #     Zygote
 
-using BenchmarkTools, DataFrames, Plots, Test
+using BenchmarkTools, DataFrames, Plots, Test, UnicodePlots, PrettyTables
+unicodeplots()
 
 using Taped:
     CoDual,
@@ -303,8 +304,9 @@ function create_inter_ad_benchmarks()
     @show "doing scatter"
     scatter!(plt, rand(10), rand(10))
     @show "saving scatter"
-    savefig(plt, "benchmarking_results.png")
-    @show "done"
+    display(plt)
+    Plots.savefig(plt, "benchmarking_results.txt")
+    # @show "done"
 
     # df_formatted = DataFrame(
     #     label = df.label,
@@ -314,6 +316,12 @@ function create_inter_ad_benchmarks()
     #     enzyme = string.(round.(df.enzyme_ratio; sigdigits=3)),
     # )
     # CSV.write("bench/benchmarking_results.csv", df_formatted)
+
+    # Write table to text file.
+    df_formatted = DataFrame(x=randn(5), y=randn(5))
+    open("benchmarking_results.txt"; write=true) do io
+        pretty_table(io, df_formatted)
+    end
 end
 
 function main()
