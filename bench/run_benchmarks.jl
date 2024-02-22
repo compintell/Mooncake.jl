@@ -112,13 +112,13 @@ function generate_inter_framework_tests()
     return Any[
         (sum, randn(100)),
         (_sum, randn(100)),
-        # (_kron_sum, randn(20, 20), randn(40, 40)),
-        # (_kron_view_sum, randn(40, 30), randn(40, 40)),
-        # (_naive_map_sin_cos_exp, randn(10, 10)),
-        # (_map_sin_cos_exp, randn(10, 10)),
-        # (_broadcast_sin_cos_exp, randn(10, 10)),
-        # (_simple_mlp, randn(128, 256), randn(256, 128), randn(128, 70), randn(128, 70)),
-        # (_gp_lml, _generate_gp_inputs()...),
+        (_kron_sum, randn(20, 20), randn(40, 40)),
+        (_kron_view_sum, randn(40, 30), randn(40, 40)),
+        (_naive_map_sin_cos_exp, randn(10, 10)),
+        (_map_sin_cos_exp, randn(10, 10)),
+        (_broadcast_sin_cos_exp, randn(10, 10)),
+        (_simple_mlp, randn(128, 256), randn(256, 128), randn(128, 70), randn(128, 70)),
+        (_gp_lml, _generate_gp_inputs()...),
     ]
 end
 
