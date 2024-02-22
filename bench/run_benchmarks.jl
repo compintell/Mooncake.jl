@@ -301,7 +301,7 @@ function create_inter_ad_benchmarks()
     #     plot!(plt, df.label, df[:, key]; label=tool_map[key], marker=:circle, xrotation=45)
     # end
     scatter!(plt, rand(10), rand(10))
-    savefig(plt, "bench_results/benchmarking_results.png")
+    savefig(plt, "benchmarking_results.png")
 
     # df_formatted = DataFrame(
     #     label = df.label,

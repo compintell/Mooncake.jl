@@ -87,10 +87,10 @@ jobs:
           path: bench_results/
       - name: Convert graph to Base64
         run: |
-          base64 bench_results/benchmarking_results.png > bench_results/benchmarking_results_base64.txt
+          base64 benchmarking_results.png > benchmarking_results_base64.txt
       - name: Read graph
         id: read-image
-        run: echo "::set-output name=image_data::$(cat $GITHUB_WORKSPACE/artifacts/benchmarking_results_base64.txt)"
+        run: echo "::set-output name=image_data::$(cat benchmarking_results_base64.txt)"
       - name: Post graph to PR
         uses: actions/github-script@v4
         with:
