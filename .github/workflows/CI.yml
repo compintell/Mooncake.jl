@@ -116,4 +116,4 @@ jobs:
           body: "```\n${{ steps.read-file.outputs.table }}\n```"
           comment-id: ${{ steps.fc.outputs.comment-id }}
           edit-mode: replace
-      - run: ${{ steps.fc.outputs.comment-id }}
+      - run: echo ${{ steps.fc.outputs.comment-id }}
