@@ -318,7 +318,8 @@ end
 
 function main()
     perf_group = get(ENV, "PERF_GROUP", "hand_written")
-    @show perf_group
+    @info perf_group
+    println(perf_group)
     if perf_group == "hand_written"
         flag_concerning_performance(benchmark_hand_written_rrules!!(Xoshiro))
     elseif perf_group == "derived"
