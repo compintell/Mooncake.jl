@@ -85,3 +85,20 @@ jobs:
         with:
           name: benchmarking-results
           path: bench_results/
+      - name: Convert graph to Base64
+        run: |
+          base64 bench_results/benchmarking_results.png > bench_results/benchmarking_results_base64.txt
+      - name: Read graph
+        id: read-image
+        run: echo "::set-output name=image_data::$(cat $GITHUB_WORKSPACE/artifacts/benchmarking_results_base64.txt)"
+      - name: Post graph to PR
+        uses: actions/github-script@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '![Image](data:image/jpg;base64, ${{ steps.read-image.outputs.image_data }})'
+            })
