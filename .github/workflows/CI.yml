@@ -91,7 +91,7 @@ jobs:
       - name: Upload performance results
         uses: edunad/actions-image@v2.0.0
         with:
-            path: 'benchmarking_results.png'
+            path: './benchmarking_results.png'
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
             title: 'Performance'
       # - name: Convert graph to Base64
