@@ -34,6 +34,7 @@ include("front_matter.jl")
             @info "new"
             include(joinpath("rrules", "new.jl"))
         end
+        include("chain_rules_macro.jl")
     elseif test_group == "integration_testing/misc"
         include(joinpath("integration_testing/", "misc.jl"))
         include(joinpath("integration_testing", "battery_tests.jl"))
