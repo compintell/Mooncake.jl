@@ -1,9 +1,6 @@
 using Pkg
 Pkg.develop(path=joinpath(@__DIR__, ".."))
 
-# Run in headless mode.
-ENV["GKSwstype"] = "100"
-
 using
     AbstractGPs,
     BenchmarkTools,
@@ -292,6 +289,7 @@ function create_inter_ad_benchmarks()
     #     :enzyme_ratio => "Enzyme",
     # )
 
+    @show "starting to plot"
     plt = plot(
         yscale=:log10,
         legend=:topright,
@@ -300,8 +298,11 @@ function create_inter_ad_benchmarks()
     # for key in keys(tool_map)
     #     plot!(plt, df.label, df[:, key]; label=tool_map[key], marker=:circle, xrotation=45)
     # end
+    @show "doing scatter"
     scatter!(plt, rand(10), rand(10))
+    @show "saving scatter"
     savefig(plt, "benchmarking_results.png")
+    @show "done"
 
     # df_formatted = DataFrame(
     #     label = df.label,
