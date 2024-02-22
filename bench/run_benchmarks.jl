@@ -305,7 +305,7 @@ function create_inter_ad_benchmarks()
     scatter!(plt, rand(10), rand(10))
     @show "saving scatter"
     display(plt)
-    Plots.savefig(plt, "benchmarking_results.txt")
+    Plots.savefig(plt, "benchmark_results_plot.txt")
     # @show "done"
 
     # df_formatted = DataFrame(
