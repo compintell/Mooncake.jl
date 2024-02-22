@@ -1412,6 +1412,15 @@ end
     return @inbounds x[1] + test_recursive_sum(x[2:end])
 end
 
+# Copied over from https://github.com/TuringLang/Turing.jl/issues/1140
+function _sum(x)
+    z = 0
+    for i in eachindex(x)
+        z += x[i]
+    end
+    return z
+end
+
 function generate_test_functions()
     return Any[
         (false, :allocs, nothing, const_tester),
@@ -1587,6 +1596,7 @@ function generate_test_functions()
             randn(sr(2), 700, 500),
             randn(sr(3), 300, 700),
         ),
+        (false, :none, nothing, _sum, randn(1024)),
     ]
 end
 
