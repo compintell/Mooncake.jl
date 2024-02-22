@@ -89,10 +89,10 @@ jobs:
       #     name: benchmarking-results
       #     path: bench_results/
       - run: |
-        text="this is line one
-        this is line two
-        this is line three"
-        echo "$text" > benchmark_results.txt
+          text="this is line one
+          this is line two
+          this is line three"
+          echo "$text" > benchmark_results.txt
       - name: Read file content
         id: read-file
         run: |
