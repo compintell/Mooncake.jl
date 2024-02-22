@@ -16,7 +16,7 @@ Pkg.develop(path=joinpath(@__DIR__, ".."))
 #     Test,
 #     Zygote
 
-using BenchmarkTools, Plots
+using BenchmarkTools, Plots, Test
 
 using Taped:
     CoDual,
