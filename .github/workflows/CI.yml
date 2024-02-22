@@ -70,24 +70,29 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@v1
-        with:
-          version: '1'
-          arch: x64
-          include-all-prereleases: true
-      - uses: julia-actions/cache@v1
-      - uses: julia-actions/julia-buildpkg@v1
-      - run: mkdir bench_results
-      - run: julia --project=bench --eval 'include("bench/run_benchmarks.jl"); main()'
-        env:
-          PERF_GROUP: 'comparison'
-          GKSwstype: '100'
-        shell: bash
-      - uses: actions/upload-artifact@v4
-        with:
-          name: benchmarking-results
-          path: bench_results/
+      # - uses: actions/checkout@v4
+      # - uses: julia-actions/setup-julia@v1
+      #   with:
+      #     version: '1'
+      #     arch: x64
+      #     include-all-prereleases: true
+      # - uses: julia-actions/cache@v1
+      # - uses: julia-actions/julia-buildpkg@v1
+      # - run: mkdir bench_results
+      # - run: julia --project=bench --eval 'include("bench/run_benchmarks.jl"); main()'
+      #   env:
+      #     PERF_GROUP: 'comparison'
+      #     GKSwstype: '100'
+      #   shell: bash
+      # - uses: actions/upload-artifact@v4
+      #   with:
+      #     name: benchmarking-results
+      #     path: bench_results/
+      - run: |
+          text="this is line one
+          this is line two
+          this is line three"
+          echo "$text" > bench/benchmark_results.txt
       - name: Read file content
         id: read-file
         run: |
@@ -96,9 +101,18 @@ jobs:
             cat bench/benchmark_results.txt
             echo "EOF"
           } >> $GITHUB_OUTPUT
+      - name: Find Comment
+        uses: peter-evans/find-comment@v3
+        id: fc
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: 'github-actions[bot]'
+          body-includes: Build output
       - id: post-report-as-pr-comment
         name: Post Report as Pull Request Comment
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.number }}
           body: "```\n${{ steps.read-file.outputs.table }}\n```"
+          comment-id: ${{ steps.fc.outputs.comment-id }}
+          edit-mode: replace
