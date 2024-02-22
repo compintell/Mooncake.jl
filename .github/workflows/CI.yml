@@ -106,7 +106,7 @@ jobs:
         id: fc
         with:
           issue-number: ${{ github.event.pull_request.number }}
-          comment-author: 'github-actions[bot]'
+          comment-author: github-actions[bot]
           body-includes: Build output
       - id: post-report-as-pr-comment
         name: Post Report as Pull Request Comment
