@@ -545,7 +545,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:foreigncall})
         (
             true,
             :none, # primal is unstable
-            (lb=0.1, ub=100),
+            (lb=1e-3, ub=100),
             unsafe_pointer_to_objref,
             CoDual(
                 pointer_from_objref(_x),
@@ -554,7 +554,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:foreigncall})
         ),
         (false, :none, nothing, Core.Compiler.return_type, sin, Tuple{Float64}),
         (
-            false, :none, (lb=0.1, ub=100.0),
+            false, :none, (lb=1e-3, ub=100.0),
             Core.Compiler.return_type, Tuple{typeof(sin), Float64},
         ),
         (false, :stability, nothing, Threads.threadid),
