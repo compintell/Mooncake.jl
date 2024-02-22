@@ -1,23 +1,21 @@
 using Pkg
 Pkg.develop(path=joinpath(@__DIR__, ".."))
 
-# using
-#     AbstractGPs,
-#     BenchmarkTools,
-#     CSV,
-#     DataFrames,
-#     Enzyme,
-#     KernelFunctions,
-#     LinearAlgebra,
-#     Plots,
-#     Random,
-#     ReverseDiff,
-#     Taped,
-#     Test,
-#     Zygote
-
-using BenchmarkTools, DataFrames, Plots, Test, UnicodePlots, PrettyTables
-unicodeplots()
+using
+    AbstractGPs,
+    BenchmarkTools,
+    CSV,
+    DataFrames,
+    Enzyme,
+    KernelFunctions,
+    LinearAlgebra,
+    Plots,
+    PrettyTables,
+    Random,
+    ReverseDiff,
+    Taped,
+    Test,
+    Zygote
 
 using Taped:
     CoDual,
