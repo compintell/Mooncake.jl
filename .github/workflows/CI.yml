@@ -96,10 +96,9 @@ jobs:
       - name: Read file content
         id: read-file
         run: |
-          file_content=$(cat benchmark_results.txt)
           {
             echo "table<<EOF"
-            echo $file_content
+            cat ${{ benchmark_results.txt }}
             echo "EOF"
           } >> $GITHUB_OUTPUT
       - name: Post table to PR
