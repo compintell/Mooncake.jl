@@ -477,13 +477,7 @@ explosion of types. Moreover, type-stability it maintained.
 function InterpretedFunction(ctx::C, sig::Type{<:Tuple}, interp) where {C}
 
     # Grab code associated to this function.
-    output = Base.code_ircode_by_type(sig; interp)
-    if isempty(output)
-        throw(ArgumentError("No methods found for signature $sig"))
-    elseif length(output) > 1
-        throw(ArgumentError("$(length(output)) methods found for signature $sig"))
-    end
-    ir, Treturn = only(output)
+    ir, Treturn = lookup_ir(interp, sig)
 
     # Slot into which the output of this function will be placed.
     return_slot = SlotRef{Treturn}()

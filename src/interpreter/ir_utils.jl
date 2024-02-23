@@ -210,3 +210,21 @@ end
 
 # Return new_value if val equals current_val.
 _replace(val::SSAValue, new_val, current_val) = val == current_val ? new_val : current_val
+
+"""
+    lookup_ir(interp::AbstractInterpreter, sig::Type{<:Tuple})::Tuple{IRCode, T}
+
+Get the IR unique IR associated to `sig` under `interp`. Throws `ArgumentError`s if there is
+no code found, or if more than one `IRCode` instance returned.
+
+Returns a tuple containing the `IRCode` and its return type.
+"""
+function lookup_ir(interp::CC.AbstractInterpreter, sig::Type{<:Tuple})
+    output = Base.code_ircode_by_type(sig; interp)
+    if isempty(output)
+        throw(ArgumentError("No methods found for signature $sig"))
+    elseif length(output) > 1
+        throw(ArgumentError("$(length(output)) methods found for signature $sig"))
+    end
+    return only(output)
+end
