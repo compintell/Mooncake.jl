@@ -231,13 +231,13 @@ function combine_results(result, tag, _range, default_range)
         tag=tag === nothing ? fallback_tag : tag,
         primal_time=primal_time,
         taped_time=taped_time,
-        taped_ratio=taped_time / primal_time,
+        Taped=taped_time / primal_time,
         zygote_time=zygote_time,
-        zygote_ratio=zygote_time / primal_time,
+        Zygote=zygote_time / primal_time,
         rd_time=rd_time,
-        rd_ratio=rd_time / primal_time,
+        ReverseDiff=rd_time / primal_time,
         enzyme_time=ez_time,
-        enzyme_ratio=ez_time / primal_time,
+        Enzyme=ez_time / primal_time,
         range=_range === nothing ? default_range : _range,
     )
 end
@@ -286,7 +286,7 @@ end
 function flag_concerning_performance(ratios)
     @testset "detect concerning performance" begin
         @testset for ratio in ratios
-            @test ratio.range.lb < ratio.taped_ratio < ratio.range.ub
+            @test ratio.range.lb < ratio.Taped < ratio.range.ub
         end
     end
 end
@@ -300,57 +300,25 @@ well-suited to the numbers typically found in this field.
 function plot_ratio_histogram!(df::DataFrame)
     bin = 10.0 .^ (0.0:0.05:6.0)
     xlim = extrema(bin)
-    histogram(df.taped_ratio; xscale=:log10, xlim, bin, title="log", label="")
+    histogram(df.Taped; xscale=:log10, xlim, bin, title="log", label="")
 end
 
 function create_inter_ad_benchmarks()
     results = benchmark_inter_framework_rules()
-    df = DataFrame(results)[:, [:tag, :taped_ratio, :zygote_ratio, :rd_ratio, :enzyme_ratio]]
+    tools = [:Taped, :Zygote, :ReverseDiff, :Enzyme]
+    df = DataFrame(results)[:, [:tag, tools...]]
 
-    # tag_map = Dict{String, String}(
-    #     "(sum, Vector{Float64})" => "sum",
-    #     "(_sum, Vector{Float64})" => "_sum",
-    #     "(_kron_sum, Matrix{Float64}, Matrix{Float64})" => "kron",
-    #     "(_kron_view_sum, Matrix{Float64}, Matrix{Float64})" => "kron types",
-    #     "(_naive_map_sin_cos_exp, Matrix{Float64})" => "naive map",
-    #     "(_map_sin_cos_exp, Matrix{Float64})" => "map",
-    #     "(_broadcast_sin_cos_exp, Matrix{Float64})" => "broadcast",
-    #     "(_simple_mlp, Matrix{Float64}, Matrix{Float64}, Matrix{Float64}, Matrix{Float64})" => "mlp",
-    #     "(_gp_lml, Vector{Float64}, Vector{Float64}, Float64)" => "gp",
-    # )
-
-    df.label = df.tag
-    # df.label = map(t -> tag_map[t], df.tag)
-
-    tool_map = Dict{Symbol, String}(
-        :taped_ratio => "Taped",
-        :zygote_ratio => "Zygote",
-        :rd_ratio => "ReverseDiff",
-        :enzyme_ratio => "Enzyme",
-    )
-
-    plt = plot(
-        yscale=:log10,
-        legend=:topright,
-        title="Ratio of AD Time to Primal Time (Log Scale)",
-    )
-    for key in keys(tool_map)
-        plot!(plt, df.label, df[:, key]; label=tool_map[key], marker=:circle, xrotation=45)
+    # Plot graph of results.
+    plt = plot(yscale=:log10, legend=:topright, title="AD Time / Primal Time (Log Scale)")
+    for label in string.(tools)
+        plot!(plt, df.tag, df[:, label]; label, marker=:circle, xrotation=45)
     end
     Plots.savefig(plt, "bench/benchmark_results.png")
 
-    df_formatted = DataFrame(
-        label = df.label,
-        taped = string.(round.(df.taped_ratio; sigdigits=3)),
-        zygote = string.(round.(df.zygote_ratio; sigdigits=3)),
-        reverse_diff = string.(round.(df.rd_ratio; sigdigits=3)),
-        enzyme = string.(round.(df.enzyme_ratio; sigdigits=3)),
-    )
-
-    # Write table to text file.
-    open("bench/benchmark_results.txt"; write=true) do io
-        pretty_table(io, df_formatted)
-    end
+    # Write table of results.
+    formatted_cols = map(t -> t => string.(round.(df[:, t]; sigdigits=3)), tools)
+    df_formatted = DataFrame(:Label => df.tag, formatted_cols...)
+    open(io -> pretty_table(io, df_formatted), "bench/benchmark_results.txt"; write=true)
 end
 
 function main()
