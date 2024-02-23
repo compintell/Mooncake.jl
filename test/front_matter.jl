@@ -43,7 +43,11 @@ using Taped:
     get_codual,
     get_tangent_stack,
     top_ref,
-    NoTangentRef
+    NoTangentRef,
+    BBCode,
+    ID,
+    IDPhiNode,
+    BBlock
 
 using .TestUtils:
     test_rrule!!,

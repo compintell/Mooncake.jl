@@ -13,6 +13,7 @@ include("front_matter.jl")
             include(joinpath("interpreter", "abstract_interpretation.jl"))
             include(joinpath("interpreter", "interpreted_function.jl"))
             include(joinpath("interpreter", "reverse_mode_ad.jl"))
+            include(joinpath("interpreter", "bbcode.jl"))
         end
     elseif test_group == "rrules"
         include("test_utils.jl")
