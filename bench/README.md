@@ -1,4 +1,10 @@
-# Taped-Only Benchmarking
+# Benchmarking
+
+There are two flavours of benchmarks implemented in `run_benchmarks.jl`.
+One is a set of pass / fail tests designed to check that large performance regressions are avoided in Taped.
+The other is a set of comparisons between a variety of frameworks -- this set is designed to give a rough sense of where Taped stands in comparison to other AD frameworks, and the results should not be thought of as pass / fail tests.
+
+## Taped-Only Benchmarking
 
 The benchmarking runs as part of CI, and evaluates a sequence of pass / fail tests.
 
