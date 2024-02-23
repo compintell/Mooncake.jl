@@ -125,6 +125,43 @@ function __infer_ir!(ir, interp::CC.AbstractInterpreter, mi::CC.MethodInstance)
 end
 
 """
+    optimise_ir!(ir::IRCode, show_ir=false)
+
+Run a fairly standard optimisation pass on `ir`. If `show_ir` is `true`, displays the IR
+to `stdout` at various points in the pipeline -- this is sometimes useful for debugging.
+"""
+function optimise_ir!(ir::IRCode, show_ir=false)
+    if show_ir
+        println("Pre-optimization")
+        display(ir)
+        println()
+    end
+    CC.verify_ir(ir)
+    ir = CC.compact!(ir)
+    local_interp = CC.NativeInterpreter()
+    mi = get_toplevel_mi_from_ir(ir, @__MODULE__);
+    ir = __infer_ir!(ir, local_interp, mi)
+    if show_ir
+        println("Post-inference")
+        display(ir)
+        println()
+    end
+    inline_state = CC.InliningState(local_interp)
+    ir = CC.ssa_inlining_pass!(ir, inline_state, #=propagate_inbounds=#true)
+    ir = CC.compact!(ir)
+    ir = CC.sroa_pass!(ir, inline_state)
+    ir = CC.adce_pass!(ir, inline_state)
+    ir = CC.compact!(ir)
+    CC.verify_ir(ir)
+    if show_ir
+        println("Post-optimization")
+        display(ir)
+        println()
+    end
+    return ir
+end
+
+"""
     replace_all_uses_with!(ir::IRCode, value::SSAValue, new_value::Any) -> IRCode
 
 Wherever `value` appears in `ir`, replace it with `new_value`.
