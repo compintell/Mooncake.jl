@@ -15,6 +15,7 @@ using
     ReverseDiff,
     Taped,
     Test,
+    Turing,
     Zygote
 
 using Taped:
@@ -98,6 +99,33 @@ function _generate_gp_inputs()
     return x, y, s
 end
 
+@model broadcast_demo(x) = begin
+    μ ~ TruncatedNormal(1, 2, 0.1, 10)
+    σ ~ TruncatedNormal(1, 2, 0.1, 10)
+    x .~ LogNormal(μ, σ)   
+end
+
+function build_turing_problem()
+    rng = Xoshiro(123)
+    model = broadcast_demo(rand(LogNormal(1.5, 0.5), 100_000))
+    ctx = Turing.DefaultContext()
+    vi = Turing.SimpleVarInfo(model)
+    vi_linked = Turing.link(vi, model)
+    ldp = Turing.LogDensityFunction(vi_linked, model, ctx)
+    test_function = Base.Fix1(Turing.LogDensityProblems.logdensity, ldp)
+    d = Turing.LogDensityProblems.dimension(ldp)
+    return test_function, randn(rng, d)
+end
+
+run_turing_problem(f::F, x::X) where {F, X} = f(x)
+
+should_run_benchmark(
+    ::Val{:zygote}, ::Base.Fix1{<:typeof(Turing.LogDensityProblems.logdensity)}, x...
+) = false
+should_run_benchmark(
+    ::Val{:enzyme}, ::Base.Fix1{<:typeof(Turing.LogDensityProblems.logdensity)}, x...
+) = false
+
 """
     generate_inter_framework_tests()
 
@@ -110,15 +138,19 @@ an array.
 """
 function generate_inter_framework_tests()
     return Any[
-        (sum, randn(100)),
-        (_sum, randn(100)),
-        (_kron_sum, randn(20, 20), randn(40, 40)),
-        (_kron_view_sum, randn(40, 30), randn(40, 40)),
-        (_naive_map_sin_cos_exp, randn(10, 10)),
-        (_map_sin_cos_exp, randn(10, 10)),
-        (_broadcast_sin_cos_exp, randn(10, 10)),
-        (_simple_mlp, randn(128, 256), randn(256, 128), randn(128, 70), randn(128, 70)),
-        (_gp_lml, _generate_gp_inputs()...),
+        ("sum", (sum, randn(100))),
+        ("_sum", (_sum, randn(100))),
+        ("kron_sum", (_kron_sum, randn(20, 20), randn(40, 40))),
+        ("kron_view_sum", (_kron_view_sum, randn(40, 30), randn(40, 40))),
+        ("naive_map_sin_cos_exp", (_naive_map_sin_cos_exp, randn(10, 10))),
+        ("map_sin_cos_exp", (_map_sin_cos_exp, randn(10, 10))),
+        ("broadcast_sin_cos_exp", (_broadcast_sin_cos_exp, randn(10, 10))),
+        (
+            "simple_mlp",
+            (_simple_mlp, randn(128, 256), randn(256, 128), randn(128, 70), randn(128, 70)),
+        ),
+        ("gp_lml", (_gp_lml, _generate_gp_inputs()...)),
+        ("turing_broadcast_benchmark", build_turing_problem()),
     ]
 end
 
@@ -131,6 +163,7 @@ function benchmark_rules!!(
     test_cases = reduce(vcat, map(first, test_case_data))
     memory = map(x -> x[2], test_case_data)
     ranges = reduce(vcat, map(x -> x[3], test_case_data))
+    tags = reduce(vcat, map(x -> x[4], test_case_data))
     GC.@preserve memory begin
         results = map(enumerate(test_cases)) do (n, args)
             @info "$n / $(length(test_cases))", _typeof(args)
@@ -183,27 +216,28 @@ function benchmark_rules!!(
             return (args, run(suite; verbose=true))
         end
     end
-    return combine_results.(results, ranges, Ref(default_ratios))
+    return combine_results.(results, tags, ranges, Ref(default_ratios))
 end
 
-function combine_results(result, _range, default_range)
+function combine_results(result, tag, _range, default_range)
     d = result[2]
     primal_time = time(minimum(d["primal"]))
     taped_time = time(minimum(d["taped"]))
     zygote_time = in("zygote", keys(d)) ? time(minimum(d["zygote"])) : missing
     rd_time = in("rd", keys(d)) ? time(minimum(d["rd"])) : missing
     ez_time = in("enzyme", keys(d)) ? time(minimum(d["enzyme"])) : missing
+    fallback_tag = string((result[1][1], map(Taped._typeof, result[1][2:end])...))
     return (
-        tag=string((result[1][1], map(Taped._typeof, result[1][2:end])...)),
+        tag=tag === nothing ? fallback_tag : tag,
         primal_time=primal_time,
         taped_time=taped_time,
-        taped_ratio=taped_time / primal_time,
+        Taped=taped_time / primal_time,
         zygote_time=zygote_time,
-        zygote_ratio=zygote_time / primal_time,
+        Zygote=zygote_time / primal_time,
         rd_time=rd_time,
-        rd_ratio=rd_time / primal_time,
+        ReverseDiff=rd_time / primal_time,
         enzyme_time=ez_time,
-        enzyme_ratio=ez_time / primal_time,
+        Enzyme=ez_time / primal_time,
         range=_range === nothing ? default_range : _range,
     )
 end
@@ -222,7 +256,8 @@ function benchmark_hand_written_rrules!!(rng_ctor)
     ]) do s
         test_cases, memory = generate_hand_written_rrule!!_test_cases(rng_ctor, Val(s))
         ranges = map(x -> x[3], test_cases)
-        return map(x -> x[4:end], test_cases), memory, ranges
+        tags = fill(nothing, length(test_cases))
+        return map(x -> x[4:end], test_cases), memory, ranges, tags
     end
     return benchmark_rules!!(test_case_data, (lb=1e-3, ub=25.0), false, false)
 end
@@ -233,22 +268,25 @@ function benchmark_derived_rrules!!(rng_ctor)
     ]) do s
         test_cases, memory = generate_derived_rrule!!_test_cases(rng_ctor, Val(s))
         ranges = map(x -> x[3], test_cases)
-        return map(x -> x[4:end], test_cases), memory, ranges
+        tags = fill(nothing, length(test_cases))
+        return map(x -> x[4:end], test_cases), memory, ranges, tags
     end
     return benchmark_rules!!(test_case_data, (lb=1e-3, ub=150), false, false)
 end
 
 function benchmark_inter_framework_rules()
-    test_cases = generate_inter_framework_tests()
+    test_case_data = generate_inter_framework_tests()
+    tags = map(first, test_case_data)
+    test_cases = map(last, test_case_data)
     memory = []
     ranges = fill(nothing, length(test_cases))
-    return benchmark_rules!!([(test_cases, memory, ranges)], (lb=0.1, ub=150), true, true)
+    return benchmark_rules!!([(test_cases, memory, ranges, tags)], (lb=0.1, ub=150), true, true)
 end
 
 function flag_concerning_performance(ratios)
     @testset "detect concerning performance" begin
         @testset for ratio in ratios
-            @test ratio.range.lb < ratio.taped_ratio < ratio.range.ub
+            @test ratio.range.lb < ratio.Taped < ratio.range.ub
         end
     end
 end
@@ -262,56 +300,25 @@ well-suited to the numbers typically found in this field.
 function plot_ratio_histogram!(df::DataFrame)
     bin = 10.0 .^ (0.0:0.05:6.0)
     xlim = extrema(bin)
-    histogram(df.taped_ratio; xscale=:log10, xlim, bin, title="log", label="")
+    histogram(df.Taped; xscale=:log10, xlim, bin, title="log", label="")
 end
 
 function create_inter_ad_benchmarks()
     results = benchmark_inter_framework_rules()
-    df = DataFrame(results)[:, [:tag, :taped_ratio, :zygote_ratio, :rd_ratio, :enzyme_ratio]]
+    tools = [:Taped, :Zygote, :ReverseDiff, :Enzyme]
+    df = DataFrame(results)[:, [:tag, tools...]]
 
-    tag_map = Dict{String, String}(
-        "(sum, Vector{Float64})" => "sum",
-        "(_sum, Vector{Float64})" => "_sum",
-        "(_kron_sum, Matrix{Float64}, Matrix{Float64})" => "kron",
-        "(_kron_view_sum, Matrix{Float64}, Matrix{Float64})" => "kron types",
-        "(_naive_map_sin_cos_exp, Matrix{Float64})" => "naive map",
-        "(_map_sin_cos_exp, Matrix{Float64})" => "map",
-        "(_broadcast_sin_cos_exp, Matrix{Float64})" => "broadcast",
-        "(_simple_mlp, Matrix{Float64}, Matrix{Float64}, Matrix{Float64}, Matrix{Float64})" => "mlp",
-        "(_gp_lml, Vector{Float64}, Vector{Float64}, Float64)" => "gp",
-    )
-
-    df.label = map(t -> tag_map[t], df.tag)
-
-    tool_map = Dict{Symbol, String}(
-        :taped_ratio => "Taped",
-        :zygote_ratio => "Zygote",
-        :rd_ratio => "ReverseDiff",
-        :enzyme_ratio => "Enzyme",
-    )
-
-    plt = plot(
-        yscale=:log10,
-        legend=:topright,
-        title="Ratio of AD Time to Primal Time (Log Scale)",
-    )
-    for key in keys(tool_map)
-        plot!(plt, df.label, df[:, key]; label=tool_map[key], marker=:circle, xrotation=45)
+    # Plot graph of results.
+    plt = plot(yscale=:log10, legend=:topright, title="AD Time / Primal Time (Log Scale)")
+    for label in string.(tools)
+        plot!(plt, df.tag, df[:, label]; label, marker=:circle, xrotation=45)
     end
     Plots.savefig(plt, "bench/benchmark_results.png")
 
-    df_formatted = DataFrame(
-        label = df.label,
-        taped = string.(round.(df.taped_ratio; sigdigits=3)),
-        zygote = string.(round.(df.zygote_ratio; sigdigits=3)),
-        reverse_diff = string.(round.(df.rd_ratio; sigdigits=3)),
-        enzyme = string.(round.(df.enzyme_ratio; sigdigits=3)),
-    )
-
-    # Write table to text file.
-    open("bench/benchmark_results.txt"; write=true) do io
-        pretty_table(io, df_formatted)
-    end
+    # Write table of results.
+    formatted_cols = map(t -> t => string.(round.(df[:, t]; sigdigits=3)), tools)
+    df_formatted = DataFrame(:Label => df.tag, formatted_cols...)
+    open(io -> pretty_table(io, df_formatted), "bench/benchmark_results.txt"; write=true)
 end
 
 function main()
