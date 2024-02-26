@@ -519,13 +519,3 @@ function remove_double_edges(ir::BBCode)
     end
     return BBCode(ir, new_blks)
 end
-
-function invoke_to_call(ir::BBCode)
-    new_blocks = map(ir.blocks) do blk
-        new_stmts = map(blk.stmts) do stmt
-            stmt[2] isa Expr ? (stmt[1], normalise(stmt[2])) : stmt
-        end
-        return BBlock(blk.id, blk.phi_nodes, new_stmts, blk.terminator)
-    end
-    return BBCode(ir, new_blocks)
-end
