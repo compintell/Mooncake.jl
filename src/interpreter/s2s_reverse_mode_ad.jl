@@ -135,6 +135,8 @@ function make_ad_stmts!(stmt, ::ID, ::ADInfo)
     return ADStmtInfo(QuoteNode(zero_codual(stmt)), nothing, nothing)
 end
 
+# There are quite a number of possible `Expr`s that can be encountered. Each case has its
+# own comment, explaining what is going on.
 function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
     if Meta.isexpr(stmt, :call)
 
@@ -155,7 +157,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         :leave,
         :pop_exception,
     ]
-        # Identity expressions.
+        # Expressions which do not require any special treatment.
         return ADStmtInfo(stmt, nothing, nothing)
 
     else
