@@ -287,6 +287,9 @@ concatenate_stmts(bb_code::BBCode) = reduce(vcat, map(concatenate_stmts, bb_code
 const SSAToIdDict = Dict{SSAValue, ID}
 const BlockNumToIdDict = Dict{Integer, ID}
 
+# Assigns an ID to each line in `stmts`, and replaces each instance of an `SSAValue` in each
+# line with the corresponding `ID`. For example, a call statement of the form
+# `Expr(:call, :f, %4)` is be replaced with `Expr(:call, :f, id_assigned_to_%4)`.
 function _ssas_to_ids(stmts::Vector{Any})
     ids = map(_ -> ID(), stmts)
     val_id_map = SSAToIdDict(zip(SSAValue.(eachindex(stmts)), ids))
