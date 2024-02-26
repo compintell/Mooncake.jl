@@ -130,6 +130,7 @@ end
 
 # Literal statement. Replace with zero `CoDual`. For example, `5` becomes a quote node
 # containing `CoDual(5, NoTangent())`, and `5.0` becomes a quote node `CoDual(5.0, 0.0)`.
+# No shared data.
 function make_ad_stmts!(stmt, ::ID, ::ADInfo)
     return ADStmtInfo(QuoteNode(zero_codual(stmt)), nothing, nothing)
 end
