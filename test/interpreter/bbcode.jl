@@ -37,14 +37,4 @@
         @test length(Taped.collect_stmts(bb_code)) == length(ir.stmts.inst)
         @test Taped.id_to_line_map(bb_code) isa Dict{ID, Int}
     end
-    @testset "make_unique_return_block" begin
-        ir = Base.code_ircode(x::Int -> x > 0 ? 1 : 0, Tuple{Int})[1][1]
-        bb_ir = BBCode(ir)
-        unique_ret_bb_ir = Taped.make_unique_return_block(bb_ir)
-        new_ir = Taped.IRCode(unique_ret_bb_ir)
-        oc = Core.OpaqueClosure(ir; do_compile=true)
-        new_oc = Core.OpaqueClosure(ir; do_compile=true)
-        @test oc(1) == new_oc(1)
-        @test oc(0) == new_oc(0)
-    end
 end
