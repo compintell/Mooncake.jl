@@ -41,6 +41,7 @@ include(joinpath("interpreter", "abstract_interpretation.jl"))
 include(joinpath("interpreter", "interpreted_function.jl"))
 include(joinpath("interpreter", "reverse_mode_ad.jl"))
 include(joinpath("interpreter", "bbcode.jl"))
+include(joinpath("interpreter", "s2s_reverse_mode_ad.jl"))
 
 include("test_utils.jl")
 
