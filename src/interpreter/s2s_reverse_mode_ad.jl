@@ -82,9 +82,8 @@ what should happen for this statement in the forwards- and reverse-passes of AD,
 data should be shared between the forwards- and reverse-passes. Returns this in the form of
 an `ADStmtInfo`.
 
-`info` is a data structure containing various bits of information often required 
-
-Every type of node in the Julia SSAIR has its own method of `make_ad_stmts!`.
+`info` is a data structure containing various bits of global information that certain types
+of nodes need access to.
 =#
 function make_ad_stmts! end
 
