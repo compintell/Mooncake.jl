@@ -105,25 +105,25 @@ function make_ad_stmts!(stmt::ReturnNode, ::ID, info::ADInfo)
     end
 end
 
-# Identity forwards-pass, no-op reverse, no shared data.
+# Identity forwards-pass, no-op reverse. No shared data.
 make_ad_stmts!(stmt::IDGotoNode, ::ID, ::ADInfo) = ADStmtInfo(stmt, nothing, nothing)
 
-# Identity forwards-pass, no-op reverse, no shared data.
+# Identity forwards-pass, no-op reverse. No shared data.
 make_ad_stmts!(stmt::IDGotoIfNot, ::ID, ::ADInfo) = ADStmtInfo(stmt, nothing, nothing)
 
-# Identity forwards-pass, no-op reverse, no shared data.
+# Identity forwards-pass, no-op reverse. No shared data.
 make_ad_stmts!(stmt::IDPhiNode, ::ID, ::ADInfo) = ADStmtInfo(stmt, nothing, nothing)
 
 function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
 
 end
 
-# Replace statement with construction of zero `CoDual`.
+# Replace statement with construction of zero `CoDual`. No shared data.
 function make_ad_stmts!(stmt::GlobalRef, ::ID, ::ADInfo)
     return ADStmtInfo(Expr(:call, Taped.zero_codual, stmt), nothing, nothing)
 end
 
-# Replace statement with quote node for zero `CoDual`.
+# Replace statement with quote node for zero `CoDual`. No shared data.
 function make_ad_stmts!(stmt::QuoteNode, ::ID, ::ADInfo)
     return ADStmtInfo(QuoteNode(zero_codual(stmt.value)), nothing, nothing)
 end
