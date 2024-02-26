@@ -28,9 +28,7 @@ associated to line `line`. If `m` does not already have an entry for `line`,
 create one, insert it into `m`, and return it.
 =#
 function get_storage_location!(m::LineToADDataMap, line::ID)
-    if !(line in keys(m.m))
-        m.m[line] = maximum(keys(m.m)) + 1
-    end
+    (line in keys(m.m)) || setindex!(m.m, length(m.m) + 1, line)
     return m.m[line]
 end
 
@@ -40,13 +38,28 @@ end
 This data structure is used to hold global information which gets passed around, in
 particular to `make_ad_stmts!`.
 
+- `interp`: a `TapedInterpreter`.
 - `terminator_block_id`: the ID of the block inserted to provide a unique exit point on the
-    forwards-pass
+    forwards-pass.
 - `line_map`: a `LineToADDataMap`.
+- `arg_types`: a map from `Argument` to its static type.
+- `ssa_types`: a map from `ID` associated to lines to their static type.
 =#
 struct ADInfo
+    interp::TInterp
     terminator_block_id::ID
     line_map::LineToADDataMap
+    arg_types::Dict{Argument, Any}
+    ssa_types::Dict{ID, Any}
+end
+
+# Returns the statically-inferred type associated to `x`.
+get_primal_type(info::ADInfo, x::Argument) = info.arg_types[x]
+get_primal_type(info::ADInfo, x::ID) = info.ssa_types[x]
+get_primal_type(::ADInfo, x::QuoteNode) = _typeof(x.value)
+get_primal_type(::ADInfo, x) = _typeof(x)
+function get_primal_type(::ADInfo, x::GlobalRef)
+    return isconst(x) ? _typeof(getglobal(x.mod, x.name)) : x.binding.ty
 end
 
 #=
@@ -148,9 +161,36 @@ end
 # There are quite a number of possible `Expr`s that can be encountered. Each case has its
 # own comment, explaining what is going on.
 function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
-    if Meta.isexpr(stmt, :call)
+    is_invoke = Meta.isexpr(stmt, :invoke)
+    if Meta.isexpr(stmt, :call) || is_invoke
 
-    elseif Meta.isexpr(stmt, :invoke)
+        # Find the types of all arguments to this call / invoke.
+        args = is_invoke ? stmt.args[2:end] : stmt.args
+        arg_types = map(arg -> get_primal_type(info, arg), (args..., ))
+
+        # Construct signature, and determine how the rrule is to be computed.
+        rule = if is_invoke
+            build_rrule(info.interp, Tuple{arg_types...})
+        else
+            error("Booo dynamic dispatch")
+        end
+
+        # Create data shared between the forwards- and reverse-passes.
+        data = (
+            rule=rule,
+            pb_stack=build_pb_stack(rule, arg_types),
+            my_tangent_stack=make_tangent_stack(get_primal_type(info, line)),
+            arg_tangent_stacks=map(make_tangent_ref_stack ∘ tangent_ref_type_ub, arg_types),
+        )
+
+        # Get a location in the global captures in which `data` can live.
+        capture_index = get_storage_location!(info.line_map, line)
+
+        # Create a call to `fwds_pass!`, which runs the forwards-pass. `Argument(1)` always
+        # contains the global collection of captures.
+        fwds = Expr(:call, Taped.fwds_pass!, Argument(1), capture_index, args...)
+        rvs = Expr(:call, Taped.rvs_pass!, Argument(1), capture_index)
+        return ADStmtInfo(fwds, rvs, data)
 
     elseif Meta.isexpr(stmt, :throw_undef_if_not)
         # Expr(:throw_undef_if_not, name, cond) raises an error if `cond` evaluates to
@@ -176,20 +216,94 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
     end
 end
 
+function build_pb_stack(rule, arg_types)
+    codual_sig = Tuple{map(codual_type, arg_types)...}
+    possible_output_types = Base.return_types(rule, codual_sig)
+    if length(possible_output_types) == 0
+        throw(error("No return type inferred for rule with sig $codual_sig"))
+    elseif length(possible_output_types) > 1
+        @warn "Too many output types inferred"
+        display(possible_output_types)
+        println()
+        throw(error("> 1 return type inferred for rule with sig $codual_sig "))
+    end
+    T_pb!! = only(possible_output_types)
+    if T_pb!! <: Tuple && T_pb!! !== Union{}
+        F = T_pb!!.parameters[2]
+        return Base.issingletontype(F) ? SingletonStack{F}() : Stack{F}()
+    else
+        return Stack{Any}()
+    end
+end
+
+# Used in `make_ad_stmts!` method for `Expr(:call, ...)` and `Expr(:invoke, ...)`.
+#
+# Executes the fowards-pass. `data` is the data shared between the forwards-pass and
+# pullback. It must be a `NamedTuple` with fields `arg_tangent_stacks`, `rule`,
+# `my_tangent_stack`, and `pb_stack`.
+@inline function fwds_pass!(captures, capture_index::Int, raw_args...)
+
+    # Extract this rules data from the global collection of captures.
+    data = captures[capture_index]
+
+    # Make anything that is not already a `CoDual` into one.
+    args = tuple_map(x -> isa(x, CoDual) ? x : uninit_codual(x), raw_args)
+
+    # Log the location of the tangents associated to each argument.
+    tuple_map(data.arg_tangent_stacks, arg_slots) do tangent_stack_stack, arg
+        push!(tangent_stack_stack, get_tangent_stack(arg))
+    end
+
+    # Run the rule.
+    out, pb!! = data.rule(zero_codual(evaluator), args...)
+
+    # Log the results and return.
+    my_tangent_stack = data.my_tangent_stack
+    push!(my_tangent_stack, tangent(out))
+    push!(data.pb_stack, pb!!)
+    return (out, top_ref(my_tangent_stack))
+end
+
+# Used in `make_ad_stmts!` method for `Expr(:call, ...)` and `Expr(:invoke, ...)`.
+#
+# Executes the reverse-pass. `data` is the `NamedTuple` shared with `fwds_pass!`.
+# Much of this pass will be optimised away in practice.
+@inline function rvs_pass!(captures, capture_index::Int)
+
+    # Extract this rules data from the global collection of captures.
+    data = captures[capture_index]
+
+    # Get the tangent w.r.t. output, and the pullback, from this instructions' stacks.
+    dout = pop!(data.my_tangent_stack)
+    pb!! = pop!(data.pb_stack)
+
+    # Get the tangent w.r.t. each argument of the primal.
+    tangent_stacks = tuple_map(pop!, data.arg_tangent_stacks)
+
+    # Run the pullback and increment the argument tangents.
+    new_dargs = pb!!(dout, tuple_map(set_immutable_to_zero ∘ getindex, tangent_stacks)...)
+    tuple_map(increment_ref!, tangent_stacks, new_dargs)
+
+    return nothing
+end
+
+# Used in `make_ad_stmts!` method for `Expr(:throw_undef_if_not, ...)`.
 @inline function __throw_undef_if_not(slotname::Symbol, cond_codual::CoDual)
     primal(cond_codual) || throw(UndefVarError(slotname))
     return nothing
 end
 
 """
-    build_rrule(::Type{C}, sig::Type{<:Tuple}) where {C}
+    build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
 
 Returns and `OpaqueClosure` which is an `rrule!!` for `sig` in context `C`.
 """
-function build_rrule(::Type{C}, sig::Type{<:Tuple}) where {C}
+function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
+
+    # If we have a hand-coded rule, always use that.
+    is_primitive(C, sig) && return rrule!!
 
     # Grab code associated to the primal.
-    interp = TapedInterpreter(C)
     ir, Treturn = lookup_ir(interp, sig)
 
     # Normalise the IR.
