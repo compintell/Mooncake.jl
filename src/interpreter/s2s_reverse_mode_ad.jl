@@ -88,7 +88,7 @@ of nodes need access to.
 function make_ad_stmts! end
 
 # `nothing` as a statement in Julia IR indicates the presence of a line which will later be
-# removed. We emit a no-op on both the forwards- and reverse-passes.
+# removed. We emit a no-op on both the forwards- and reverse-passes. No shared data.
 make_ad_stmts!(::Nothing, ::ID, ::ADInfo) = ADStmtInfo(nothing, nothing, nothing)
 
 # If stmt.val is defined, then we have a regular return node, and should replace it with a
@@ -96,7 +96,7 @@ make_ad_stmts!(::Nothing, ::ID, ::ADInfo) = ADStmtInfo(nothing, nothing, nothing
 # stmts.val is not defined, then we have an unreachable node, and it should be left alone on
 # the forwards-pass, and be a no-op on the reverse-pass. An unreachable node can occur, for
 # example, immediately after a throw statement, because the compiler can be certain that
-# execution will end at the throw statement.
+# execution will end at the throw statement. No shared data.
 function make_ad_stmts!(stmt::ReturnNode, ::ID, info::ADInfo)
     if isdefined(stmt, :val)
         return ADStmtInfo(IDGotoNode(info.terminator_block_id), nothing, nothing)
