@@ -106,33 +106,14 @@ function make_ad_stmts!(stmt::ReturnNode, ::ID, info::ADInfo)
     end
 end
 
+# Identity forwards-pass, no-op reverse, no shared data.
 make_ad_stmts!(stmt::IDGotoNode, ::ID, ::ADInfo) = ADStmtInfo(stmt, nothing, nothing)
 
+# Identity forwards-pass, no-op reverse, no shared data.
 make_ad_stmts!(stmt::IDGotoIfNot, ::ID, ::ADInfo) = ADStmtInfo(stmt, nothing, nothing)
 
+# Identity forwards-pass, no-op reverse, no shared data.
 make_ad_stmts!(stmt::IDPhiNode, ::ID, ::ADInfo) = ADStmtInfo(stmt, nothing, nothing)
-
-function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
-    if Meta.isexpr(stmt, :call)
-
-    elseif Meta.isexpr(stmt, :invoke)
-
-    elseif Meta.isexpr(stmt, :throw_undef_if_not)
-
-    elseif stmt.head in [
-        :boundscheck,
-        :code_coverage_effect,
-        :gc_preserve_begin,
-        :gc_preserve_end,
-        :loopinfo,
-        :leave,
-        :pop_exception,
-    ]
-
-    else
-        throw(error("Unrecognised expression $stmt"))
-    end
-end
 
 function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
 
@@ -152,6 +133,40 @@ end
 # containing `CoDual(5, NoTangent())`, and `5.0` becomes a quote node `CoDual(5.0, 0.0)`.
 function make_ad_stmts!(stmt, ::ID, ::ADInfo)
     return ADStmtInfo(QuoteNode(zero_codual(stmt)), nothing, nothing)
+end
+
+function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
+    if Meta.isexpr(stmt, :call)
+
+    elseif Meta.isexpr(stmt, :invoke)
+
+    elseif Meta.isexpr(stmt, :throw_undef_if_not)
+        # Expr(:throw_undef_if_not, name, cond) raises an error if `cond` evaluates to
+        # false. `cond` will be a codual on the forwards-pass, so have to get its primal.
+        fwds = Expr(:call, Taped.__throw_undef_if_not, stmt.args...)
+        return ADStmtInfo(fwds, nothing, nothing)
+
+    elseif stmt.head in [
+        :boundscheck,
+        :code_coverage_effect,
+        :gc_preserve_begin,
+        :gc_preserve_end,
+        :loopinfo,
+        :leave,
+        :pop_exception,
+    ]
+        # Identity expressions.
+        return ADStmtInfo(stmt, nothing, nothing)
+
+    else
+        # Encountered an expression that we've not seen before.
+        throw(error("Unrecognised expression $stmt"))
+    end
+end
+
+@inline function __throw_undef_if_not(slotname::Symbol, cond_codual::CoDual)
+    primal(cond_codual) || throw(UndefVarError(slotname))
+    return nothing
 end
 
 """

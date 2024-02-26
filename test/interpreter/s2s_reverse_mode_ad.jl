@@ -59,6 +59,23 @@
                 ADStmtInfo(QuoteNode(CoDual(0.0, 0.0)), nothing, nothing),
             )
         end
+        @testset "Expr" begin
+            @testset "throw_undef_if_not" begin
+                cond_id = ID()
+                expected_fwds = Expr(:call, Taped.__throw_undef_if_not, :x, cond_id)
+                @test TestUtils.has_equal_data(
+                    make_ad_stmts!(Expr(:throw_undef_if_not, :x, cond_id), ID(), info),
+                    ADStmtInfo(expected_fwds, nothing, nothing),
+                )
+            end
+            @testset "$stmt" for stmt in [
+                Expr(:boundscheck),
+            ]
+                @test TestUtils.has_equal_data(
+                    make_ad_stmts!(stmt, ID(), info), ADStmtInfo(stmt, nothing, nothing)
+                )
+            end
+        end
     end
 
 end
