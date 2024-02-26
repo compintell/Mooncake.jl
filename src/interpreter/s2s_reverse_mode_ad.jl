@@ -1,19 +1,19 @@
 #=
     LineToADDataMap
 
-The "AD data associated to line n" is all of the data that is shared between the forwards-
-and reverse-passes associated to line number `n` in an `IRCode`.
+The "AD data associated to line id" is all of the data that is shared between the forwards-
+and reverse-passes associated to line `id` in an `BBCode`.
 
-An `LineToADDataMap` is characterised by a `Dict{Int, Int}`. Each `key` is a line number in
-the primal `IRCode`, and each `value` is the unique position associated to it in a `Tuple`
-which gets shared between the forwards- and reverse-passes.
+An `LineToADDataMap` is characterised by a `Dict{ID, Int}`. Each `key` the `ID` of a line
+number in the primal `BBCode`, and each `value` is the unique position associated to it in a
+`Tuple` which gets shared between the forwards- and reverse-passes.
 
-It is important to maintain this map, rather than simply assuming that the identity function
-maps between the two, because many of the lines in primal `IRCode` do not have anything that
-they need to share between the forwards- and reverse-passes. This means that we can keep the
-size of the `Tuple` that must be shared between the forwards- and reverse-passes as small as
-possible. For example, `PhiNode`s and terminators never need to share information, nor do
-`:invoke` expressions which provably have the `NoPullback` pullback.
+This map will generally only have keys for a subset of the `ID`s in the primal `BBCode`
+because many of the lines in primal `BBCode` do not need to share between the forwards- and
+reverse-passes. This means that we can keep the size of the `Tuple` that must be shared
+between the forwards- and reverse-passes as small as possible. For example, `PhiNode`s and
+terminators never need to share information, nor do `:invoke` expressions which provably
+have the `NoPullback` pullback.
 =#
 struct LineToADDataMap
     m::Dict{ID, Int}
