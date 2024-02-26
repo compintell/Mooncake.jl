@@ -47,7 +47,13 @@ using Taped:
     BBCode,
     ID,
     IDPhiNode,
-    BBlock
+    IDGotoNode,
+    IDGotoIfNot,
+    BBlock,
+    make_ad_stmts!,
+    ADStmtInfo,
+    ADInfo,
+    LineToADDataMap
 
 using .TestUtils:
     test_rrule!!,
