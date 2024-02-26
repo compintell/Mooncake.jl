@@ -59,6 +59,9 @@
                 ADStmtInfo(QuoteNode(CoDual(0.0, 0.0)), nothing, nothing),
             )
         end
+        @testset "PhiCNode" begin
+            @test_throws ErrorException make_ad_stmts!(Core.PhiCNode(Any[]), ID(), info)
+        end
         @testset "Expr" begin
             @testset "throw_undef_if_not" begin
                 cond_id = ID()

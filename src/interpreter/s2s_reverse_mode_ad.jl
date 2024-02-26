@@ -135,6 +135,11 @@ function make_ad_stmts!(stmt, ::ID, ::ADInfo)
     return ADStmtInfo(QuoteNode(zero_codual(stmt)), nothing, nothing)
 end
 
+# We do not yet handle `PhiC` nodes. To be safe, throw an error if one is encountered.
+function make_ad_stmts!(stmt::Core.PhiCNode, ::ID, ::ADInfo)
+    throw(error("Encountered PhiCNode: $stmt. Taped cannot yet handle such nodes."))
+end
+
 # There are quite a number of possible `Expr`s that can be encountered. Each case has its
 # own comment, explaining what is going on.
 function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
