@@ -443,69 +443,6 @@ function __lines_to_blocks(cfg::CC.CFG, stmt::Expr)
 end
 __lines_to_blocks(cfg::CC.CFG, stmt) = stmt
 
-#
-# Non AD-related Compiler passes
-#
-
-"""
-    make_unique_return_block(bb_ir::BBCode)
-
-Transforms the code to have a single `ReturnNode` without changing the semantics. Achieves
-this by creating a new `BBCode` with an additional block at the end with a phi node and a
-return node.
-The return nodes in each other block are replaced with goto nodes pointing towards this new
-block. The PhiNode evaluates to whichever value the predecessor block would have returned.
-
-For example, the function `foo(x::Int) = x > 0 ? 1 : 0` has IR
-```julia
-1 1 ─ %1 = Base.slt_int(0, _2)
-  └──      goto #3 if not %1
-  2 ─      return 1
-  3 ─      return 0   
-```
-This function translates this into something equivalent to
-```julia
-1 1 ─ %1 = Base.slt_int(0, _2)
-  └──      goto #3 if not %1
-  2 ─      goto #4
-  3 ─      goto #4
-  4 ─ %5 = φ (#2 => 1, #3 => 0)
-  └──      return %5
-```
-"""
-function make_unique_return_block(ir::BBCode)
-
-    # Declare the ID of the block that we will add at the end of the BBCode.
-    return_block_id = ID()
-
-    # For each return node, log its block and what it returns, then replace it with a goto.
-    edges = Vector{ID}(undef, 0)
-    values = Vector{Any}(undef, 0)
-    goto_return_block = IDGotoNode(return_block_id)
-    new_blocks = map(ir.blocks) do block
-        terminator = block.terminator
-        if terminator isa ReturnNode && isdefined(terminator, :val)
-            push!(edges, block.id)
-            push!(values, terminator.val)
-            return BBlock(block.id, block.phi_nodes, block.stmts, goto_return_block)
-        else
-            return copy(block)
-        end
-    end
-
-    # Add an additional block to the end of the ir. The PhiNode chooses the value to be
-    # returned based on which return node we would have hit in the original ir.
-    phi_id = ID()
-    ident_id = ID()
-    return_block = BBlock(
-        return_block_id,
-        [(phi_id, IDPhiNode(edges, values))],
-        Tuple{ID, Any}[(ident_id, Expr(:call, GlobalRef(Base, :identity), phi_id))],
-        ReturnNode(ident_id),
-    )
-    return BBCode(ir, vcat(new_blocks, return_block))
-end
-
 # If the `dest` field of a `GotoIfNot` node points towards the next block, replace it with
 # a `GotoNode`.
 function remove_double_edges(ir::BBCode)
