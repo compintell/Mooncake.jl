@@ -62,6 +62,9 @@
         @testset "PhiCNode" begin
             @test_throws ErrorException make_ad_stmts!(Core.PhiCNode(Any[]), ID(), info)
         end
+        @testset "UpsilonNode" begin
+            @test_throws ErrorException make_ad_stmts!(Core.UpsilonNode(5), ID(), info)
+        end
         @testset "Expr" begin
             @testset "throw_undef_if_not" begin
                 cond_id = ID()
