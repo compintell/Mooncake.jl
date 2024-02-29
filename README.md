@@ -39,7 +39,7 @@ Consequently, there is in principle nothing to prevent `Taped.jl` from operating
 
 ### Correctness and Testing
 
-Mutation support enables writing `rrule!!`s at a low-level (`Core.InstrincFunction`s, `build-in function`s, `ccall`s to e.g. `BLAS` and `LAPACK` and the bits of Base Julia which are implemented in C).
+Mutation support enables writing `rrule!!`s at a low-level (`Core.InstrincFunction`s, `built-in function`s, `ccall`s to e.g. `BLAS` and `LAPACK` and the bits of Base Julia which are implemented in C).
 The simplicity of this low-level functionality makes implementing correct `rrule!!`s for it a simple task.
 In conjunction with being strict about the types used internally to represent (co)tangents, we have found this leads to `rrule!!`s composing very well, and AD being correct in practice as a consequence.
 
@@ -48,12 +48,13 @@ All of our testing is implemented via this (or via another function which calls 
 
 This contrasts with `Zygote.jl` / `ChainRules.jl`, where the permissive (co)tangent type system complicates both composition of `rrule`s and testing.
 
-Additionally, we augment the tape that we construct with additional instructions which throw an error if control flow differs from when the tape was constructed.
-This contrasts with `ReverseDiff.jl`, which silently fails in this scenario.
+Additionally, our approach to AD naturally handles control flow which differs between calls of a function. This contrasts with e.g. `ReverseDiff.jl`'s compiled tape, which can give silent numerical errors if control flow ought to differ between gradient evaluations at different arguments.
+~~Additionally, we augment the tape that we construct with additional instructions which throw an error if control flow differs from when the tape was constructed.
+This contrasts with `ReverseDiff.jl`, which silently fails in this scenario.~~
 
 ### Performance
 
-Hand-written `rrule!!`s have excellent performance, provided that they have been written well.
+Hand-written `rrule!!`s have excellent performance, provided that they have been written well (most of the hand-written rules in Taped have excellent performance, but some require optimisation. Doing this just requires investing some time).
 Consequently, whether or not the overall AD system has good performance is largely a question of how much overhead is associated to the mechanism by which hand-written `rrules!!`s are algorithmically composed.
 
 ~~At present (11/2023), we do _not_ do this in a performant way, but this will change.~~
