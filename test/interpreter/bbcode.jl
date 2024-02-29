@@ -8,12 +8,12 @@
     @testset "BBlock" begin
         bb = BBlock(
             ID(),
-            [(ID(), IDPhiNode([ID(), ID()], Any[true, false]))],
-            [(ID(), :(println("hello")))],
-            nothing,
+            [
+                (ID(), IDPhiNode([ID(), ID()], Any[true, false])),
+                (ID(), :(println("hello"))),
+            ],
         )
         @test bb isa BBlock
-        @test !Taped.has_terminator(bb)
         @test length(bb) == 2
 
         @testset "concatenate_ids" begin
@@ -24,7 +24,7 @@
             @test Taped.concatenate_stmts(bb) isa Vector{Any}
             @test length(Taped.concatenate_stmts(bb)) == length(bb)
         end
-        @test Taped.first_id(bb) == bb.phi_nodes[1][1]
+        @test Taped.first_id(bb) == bb.stmts[1][1]
     end
     @testset "BBCode $f" for f in [TestResources.test_while_loop, sin]
         ir = Base.code_ircode(f, Tuple{Float64})[1][1]

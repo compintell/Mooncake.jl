@@ -10,11 +10,10 @@
         arg_types = Dict{Argument, Any}(Argument(1) => Float64, Argument(2) => Int)
         id_ssa_1 = ID()
         ssa_types = Dict{ID, Any}(id_ssa_1 => Float64, ID() => Any)
-        info = ADInfo(Taped.TInterp(), ID(), LineToADDataMap(), arg_types, ssa_types)
+        info = ADInfo(Taped.TInterp(), arg_types, ssa_types)
 
         # Verify that we can access the interpreter and terminator block ID.
         @test info.interp isa Taped.TInterp
-        @test info.terminator_block_id isa ID
 
         # Verify that we can get the type associated to Arguments, IDs, and others.
         global ___x = 5.0
@@ -36,8 +35,6 @@
         id_line_2 = ID()
         info = ADInfo(
             Taped.TInterp(),
-            ID(),
-            LineToADDataMap(),
             Dict{Argument, Any}(Argument(1) => typeof(sin), Argument(2) => Float64),
             Dict{ID, Any}(id_line_1 => Float64, id_line_2 => Any),
         )
@@ -55,7 +52,7 @@
             )
             @test TestUtils.has_equal_data(
                 make_ad_stmts!(ReturnNode(5.0), ID(), info),
-                ADStmtInfo(IDGotoNode(info.terminator_block_id), nothing, nothing),
+                ADStmtInfo(ReturnNode(5.0), nothing, nothing),
             )
         end
         @testset "IDGotoNode" begin
@@ -111,9 +108,9 @@
                 stmt = Expr(:invoke, nothing, cos, Argument(2))
                 ad_stmts = make_ad_stmts!(stmt, id_line_1, info)
                 @test Meta.isexpr(ad_stmts.fwds, :call)
-                @test ad_stmts.fwds.args[1] == Taped.fwds_pass!
+                @test ad_stmts.fwds.args[1] == Taped.__fwds_pass!
                 @test Meta.isexpr(ad_stmts.rvs, :call)
-                @test ad_stmts.rvs.args[1] == Taped.rvs_pass!
+                @test ad_stmts.rvs.args[1] == Taped.__rvs_pass!
                 @test hasproperty(ad_stmts.data, :arg_tangent_stacks)
                 @test hasproperty(ad_stmts.data, :my_tangent_stack)
                 @test hasproperty(ad_stmts.data, :pb_stack)
@@ -137,4 +134,15 @@
         end
     end
 
+    interp = Taped.TInterp()
+    @testset "$(_typeof((f, x...)))" for (interface_only, perf_flag, bnds, f, x...) in
+        TestResources.generate_test_functions()[1:1]
+
+        sig = _typeof((f, x...))
+        @info "$sig"
+        rule = build_rrule(interp, sig)
+
+        @show rule
+
+    end
 end

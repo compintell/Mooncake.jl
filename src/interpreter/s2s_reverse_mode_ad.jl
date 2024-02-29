@@ -33,24 +33,37 @@ function get_storage_location!(m::LineToADDataMap, line::ID)
 end
 
 #=
-    ADInfo(terminator_block_id::ID, line_map::LineToADDataMap)
+    ADInfo
 
 This data structure is used to hold global information which gets passed around, in
 particular to `make_ad_stmts!`.
 
 - `interp`: a `TapedInterpreter`.
-- `terminator_block_id`: the ID of the block inserted to provide a unique exit point on the
-    forwards-pass.
+- `block_stack_id`: the ID associated to the block stack -- the stack which keeps track of
+    which blocks we visited during the forwards-pass, and which is used on the reverse-pass
+    to determine which blocks to visit. The location in the shared data storage associated
+    to this can be retrieved using `block_stack_index`.
 - `line_map`: a `LineToADDataMap`.
 - `arg_types`: a map from `Argument` to its static type.
 - `ssa_types`: a map from `ID` associated to lines to their static type.
 =#
 struct ADInfo
     interp::TInterp
-    terminator_block_id::ID
+    block_stack_id::ID
     line_map::LineToADDataMap
     arg_types::Dict{Argument, Any}
     ssa_types::Dict{ID, Any}
+end
+
+# The construct that you should use for ADInfo -- the fields that you don't need to provide
+# to this constructor can be automatically generated.
+function ADInfo(interp::TInterp, arg_types::Dict{Argument, Any}, ssa_types::Dict{ID, Any})
+    return ADInfo(interp, ID(), LineToADDataMap(), arg_types, ssa_types)
+end
+
+# Returns the index in the shared data tuple which contains the block stack.
+function block_stack_index(info::ADInfo)
+    return get_storage_location!(info.line_map, info.block_stack_id)
 end
 
 # Returns the statically-inferred type associated to `x`.
@@ -104,19 +117,8 @@ function make_ad_stmts! end
 # removed. We emit a no-op on both the forwards- and reverse-passes. No shared data.
 make_ad_stmts!(::Nothing, ::ID, ::ADInfo) = ADStmtInfo(nothing, nothing, nothing)
 
-# If stmt.val is defined, then we have a regular return node, and should replace it with a
-# goto to the exit block on the forwards pass, and a no-op on the reverse-pass. If
-# stmts.val is not defined, then we have an unreachable node, and it should be left alone on
-# the forwards-pass, and be a no-op on the reverse-pass. An unreachable node can occur, for
-# example, immediately after a throw statement, because the compiler can be certain that
-# execution will end at the throw statement. No shared data.
-function make_ad_stmts!(stmt::ReturnNode, ::ID, info::ADInfo)
-    if isdefined(stmt, :val)
-        return ADStmtInfo(IDGotoNode(info.terminator_block_id), nothing, nothing)
-    else
-        return ADStmtInfo(stmt, nothing, nothing)
-    end
-end
+# Identity forwards-pass, no-op reverse. No shared data.
+make_ad_stmts!(stmt::ReturnNode, ::ID, info::ADInfo) = ADStmtInfo(stmt, nothing, nothing)
 
 # Identity forwards-pass, no-op reverse. No shared data.
 make_ad_stmts!(stmt::IDGotoNode, ::ID, ::ADInfo) = ADStmtInfo(stmt, nothing, nothing)
@@ -178,7 +180,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         # Create data shared between the forwards- and reverse-passes.
         data = (
             rule=rule,
-            pb_stack=build_pb_stack(rule, arg_types),
+            pb_stack=build_pb_stack(_typeof(rule), arg_types),
             my_tangent_stack=make_tangent_stack(get_primal_type(info, line)),
             arg_tangent_stacks=map(make_tangent_ref_stack ∘ tangent_ref_type_ub, arg_types),
         )
@@ -188,8 +190,8 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
 
         # Create a call to `fwds_pass!`, which runs the forwards-pass. `Argument(1)` always
         # contains the global collection of captures.
-        fwds = Expr(:call, Taped.fwds_pass!, Argument(1), capture_index, args...)
-        rvs = Expr(:call, Taped.rvs_pass!, Argument(1), capture_index)
+        fwds = Expr(:call, __fwds_pass!, Argument(1), capture_index, args...)
+        rvs = Expr(:call, __rvs_pass!, Argument(1), capture_index)
         return ADStmtInfo(fwds, rvs, data)
 
     elseif Meta.isexpr(stmt, :throw_undef_if_not)
@@ -216,18 +218,8 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
     end
 end
 
-function build_pb_stack(rule, arg_types)
-    codual_sig = Tuple{map(codual_type, arg_types)...}
-    possible_output_types = Base.return_types(rule, codual_sig)
-    if length(possible_output_types) == 0
-        throw(error("No return type inferred for rule with sig $codual_sig"))
-    elseif length(possible_output_types) > 1
-        @warn "Too many output types inferred"
-        display(possible_output_types)
-        println()
-        throw(error("> 1 return type inferred for rule with sig $codual_sig "))
-    end
-    T_pb!! = only(possible_output_types)
+function build_pb_stack(Trule, arg_types)
+    T_pb!! = Core.Compiler.return_type(Tuple{Trule, map(codual_type, arg_types)...})
     if T_pb!! <: Tuple && T_pb!! !== Union{}
         F = T_pb!!.parameters[2]
         return Base.issingletontype(F) ? SingletonStack{F}() : Stack{F}()
@@ -241,7 +233,7 @@ end
 # Executes the fowards-pass. `data` is the data shared between the forwards-pass and
 # pullback. It must be a `NamedTuple` with fields `arg_tangent_stacks`, `rule`,
 # `my_tangent_stack`, and `pb_stack`.
-@inline function fwds_pass!(captures, capture_index::Int, raw_args...)
+@inline function __fwds_pass!(captures, capture_index::Int, raw_args...)
 
     # Extract this rules data from the global collection of captures.
     data = captures[capture_index]
@@ -268,7 +260,7 @@ end
 #
 # Executes the reverse-pass. `data` is the `NamedTuple` shared with `fwds_pass!`.
 # Much of this pass will be optimised away in practice.
-@inline function rvs_pass!(captures, capture_index::Int)
+@inline function __rvs_pass!(captures, capture_index::Int)
 
     # Extract this rules data from the global collection of captures.
     data = captures[capture_index]
@@ -293,6 +285,30 @@ end
     return nothing
 end
 
+#
+# Runners for generated code.
+#
+
+struct Pullback{Tpb, Tret_ref}
+    pb::Tpb
+    ret_ref::Tret_ref
+end
+
+@inline function (pb::Pullback{P, Q})(dy, dargs::Vararg{Any, N}) where {P, Q, N}
+    increment_ref!(pb.ret_ref, dy)
+    return pb.pb(dargs...)
+end
+
+struct ForwardsPass{Tfwds_oc, Targ_tangent_stacks, Tpb}
+    fwds_oc::Tfwds_oc
+    arg_tangent_stacks::Targ_tangent_stacks
+    pb::Tpb
+end
+
+@inline function (fwds::ForwardsPass{P, Q, S})(args::Vararg{Any, N}) where {P, Q, S, N}
+    return fwds.fwds_oc(args...)[1], fwds.pb
+end
+
 """
     build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
 
@@ -310,6 +326,112 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
     is_vararg, spnames = is_vararg_sig_and_sparam_names(sig)
     ir = normalise!(ir, spnames)
 
+    # Convert IR to BBCode.
+    primal_ir = BBCode(ir)
 
+    # Compute global info.
+    arg_types = Dict{Argument, Any}(
+        map(((n, t),) -> (Argument(n) => _get_type(t)), enumerate(ir.argtypes))
+    )
+    ssa_types = Dict{ID, Any}(map(t -> (ID(), _get_type(t)), ir.stmts.type))
+    info = ADInfo(interp, arg_types, ssa_types)
+
+    # For each block in the fwds and pullback BBCode, translate all statements.
+    ad_stmts_blocks = map(primal_ir.blocks) do primal_blk
+        ids = concatenate_ids(primal_blk)
+        primal_stmts = concatenate_stmts(primal_blk)
+        return (primal_blk.id, tuple.(ids, make_ad_stmts!.(primal_stmts, ids, Ref(info))))
+    end
+
+    # Construct captures for forwards-pass and pullback.
+    shared_data_type = compute_shared_data_types(info, ad_stmts_blocks, Stack{Int})
+    display(shared_data_type)
+
+    # Construct BBCode for forwards-pass and pullback.
+    fwds_ir = forwards_pass_ir(primal_ir, ad_stmts_blocks, info, shared_data_type)
+    pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, shared_data_type)
+    display(IRCode(fwds_ir))
+    display(optimise_ir!(IRCode(fwds_ir)))
+
+    arg_tangent_stacks = (map(make_tangent_stack ∘ _get_type, primal_ir.argtypes)..., )
+
+    # Construct + return OpaqueClosures.
+    return nothing
 end
 
+const ADStmts = Vector{Tuple{ID, Vector{Tuple{ID, ADStmtInfo}}}}
+
+# Compute the type of the captured variables in the forwards-pass and pullback.
+function compute_shared_data_types(info::ADInfo, ad_stmts_blocks::ADStmts, Tblock_stack)
+
+    # Build map from ID to type.
+    tmp = map(ad_stmts -> map(x -> (x[1], x[2].data), ad_stmts[2]), ad_stmts_blocks)
+    id_to_type = Dict{ID, Any}([(info.block_stack_id, Tblock_stack), reduce(vcat, tmp)...])
+    id_to_type = filter(p -> p.second !== nothing, id_to_type)
+
+    # Build map from index to type.
+    index_to_type = Dict(
+        (get_storage_location!(info.line_map, id), id_to_type[id]) for id in keys(id_to_type)
+    )
+
+    # Compute Tuple type.
+    return Tuple{map(last, sort(collect(index_to_type); by=x->x.first))...}
+end
+
+# Compute the type of the OpaqueClosure which runs the pullback.
+function compute_pb_type(primal_arg_types, primal_return_type)
+    arg_tangent_types = map(tangent_type ∘ _get_type, primal_arg_types)
+    pb_arg_types = Tuple{tangent_type(primal_return_type), arg_tangent_types...}
+    pb_ret_type = Tuple{arg_tangent_types...}
+    return OpaqueClosure{pb_arg_types, pb_ret_type}
+end
+
+function forwards_pass_ir(ir::BBCode, ad_stmts_blocks::ADStmts, info::ADInfo, Tshared_data)
+
+    # Construct augmented version of each basic block from the primal. For each block:
+    # 1. pull the translated basic block statements from ad_stmts_blocks.
+    # 2. insert a statement which logs the ID of the current block to the block stack.
+    # 3. construct and return a BBlock.
+    n = block_stack_index(info)
+    blocks = map(ad_stmts_blocks) do (block_id, ad_stmts)
+        fwds_stmts = Tuple{ID, Any}[(x[1], x[2].fwds) for x in ad_stmts]
+        ins_loc = length(fwds_stmts) + (isa(fwds_stmts[end][2], Terminator) ? 0 : 1)
+        ins_stmt = (ID(), Expr(:call, __push_block_stack!, Argument(1), n, block_id.id))
+        return BBlock(block_id, insert!(fwds_stmts, ins_loc, ins_stmt))
+    end
+
+    # Create and return the `BBCode` for the forwards-pass.
+    arg_types = vcat(Tshared_data, map(fwds_pass_arg_type ∘ _get_type, ir.argtypes))
+    return BBCode(blocks, arg_types, ir.sptypes, ir.linetable, ir.meta)
+end
+
+# push a block index `id` onto the block_stack, which is found in `captures[n]`.
+@inline __push_block_stack!(captures, n::Int, id::Int) = push!(captures[n], id)
+
+fwds_pass_arg_type(P) = Tuple{codual_type(P), tangent_stack_type(P)}
+
+function pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, Tshared_data)
+
+    # Create entry block, which pops the block_stack, and switches to whichever block we
+    # were in at the end of the forwards-pass.
+    entry_block = nothing
+
+    # For each basic block in the primal:
+    # 1. pull the translated basic block statements from ad_stmts_blocks
+    # 2. reverse the statements
+    # 3. pop block stack to get the predecessor block
+    # 4. insert a switch statement to determine which block to jump to. Restrict blocks
+    #   considered to only those which are predecessors of this one. If in the first block,
+    #   check whether or not the block stack is empty. If empty, jump to the exit block.
+    exit_block_id = ID()
+    main_blocks = nothing
+
+    # Create an exit block. Simply returns.
+    exit_block = BBlock(exit_block_id, Tuple{ID, Any}[(ID(), ReturnNode(nothing))])
+
+    # Create and return `BBCode` for the pullback.
+    blocks = vcat(entry_block, main_blocks, exit_block)
+    darg_types = map(tangent_type ∘ _get_type, ir.argtypes)
+    arg_types = vcat(Tshared_data, tangent_type(Tret), darg_types)
+    return BBCode(blocks, arg_types, ir.sptypes, ir.linetable, ir.meta)
+end

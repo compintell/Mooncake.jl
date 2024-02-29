@@ -139,7 +139,7 @@ function optimise_ir!(ir::IRCode, show_ir=false)
     CC.verify_ir(ir)
     ir = CC.compact!(ir)
     local_interp = CC.NativeInterpreter()
-    mi = get_toplevel_mi_from_ir(ir, @__MODULE__);
+    mi = __get_toplevel_mi_from_ir(ir, @__MODULE__);
     ir = __infer_ir!(ir, local_interp, mi)
     if show_ir
         println("Post-inference")
@@ -147,7 +147,7 @@ function optimise_ir!(ir::IRCode, show_ir=false)
         println()
     end
     inline_state = CC.InliningState(local_interp)
-    ir = CC.ssa_inlining_pass!(ir, inline_state, #=propagate_inbounds=#true)
+    # ir = CC.ssa_inlining_pass!(ir, inline_state, #=propagate_inbounds=#true)
     ir = CC.compact!(ir)
     ir = CC.sroa_pass!(ir, inline_state)
     ir = CC.adce_pass!(ir, inline_state)
@@ -228,3 +228,11 @@ function lookup_ir(interp::CC.AbstractInterpreter, sig::Type{<:Tuple})
     end
     return only(output)
 end
+
+"""
+    is_reachable(x::ReturnNode)
+
+Determine whether `x` is reachable. This is purely a function of whether or not its `val`
+field is defined or not.
+"""
+is_reachable(x::ReturnNode) = isdefined(x, :val)

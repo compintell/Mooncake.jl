@@ -86,18 +86,10 @@ A Union of the possible types of a terminator node.
 const Terminator = Union{Switch, IDGotoIfNot, IDGotoNode, ReturnNode}
 
 """
-    BBlock(
-        id::ID,
-        phi_nodes::Vector{Tuple{ID, IDPhiNode}},
-        stmts::Vector{<:Tuple{ID, Any}},
-        terminator::Union{Nothing, Terminator},
-    )
+    BBlock(id::ID, stmts::Vector{<:Tuple{ID, Any}})
 
 A basic block data structure (not called `BasicBlock` to avoid accidental confusion with
-`CC.BasicBlock`). Forms a single basic block from a sequence of `phi_nodes`, followed by
-a sequence of `stmts` (none of which are permitted to be either a `PhiNode` or a
-`Terminator`), and finally a `terminator`. If `terminator` is `Nothing`, then there is no
-terminator, and this block always falls through to the next block.
+`CC.BasicBlock`). Forms a single basic block from a sequence of `stmts`.
 
 Each `BBlock` has an `ID` (a unique name). This makes it possible to refer to blocks in a
 way that does not change when additional `BBlocks` are inserted into a `BBCode`.
@@ -107,42 +99,22 @@ associated to a basic block changes when new blocks are inserted.
 Note that `PhiNode`s, `GotoIfNot`s, and `GotoNode`s should all be replaced with their
 `IDPhiNode`, `IDGotoIfNot`, and `IDGotoNode` equivalents.
 """
-struct BBlock
+mutable struct BBlock
     id::ID
-    phi_nodes::Vector{Tuple{ID, IDPhiNode}}
     stmts::Vector{Tuple{ID, Any}}
-    terminator::Union{Nothing, Terminator}
-    function BBlock(
-        id::ID,
-        phi_nodes::Vector{Tuple{ID, IDPhiNode}},
-        stmts::Vector{<:Tuple{ID, Any}},
-        terminator::Union{Nothing, Terminator},
-    )
-        @assert all(x -> !isa(x[2], Union{PhiNode, Terminator}), stmts)
-        return new(id, phi_nodes, stmts, terminator)
-    end
 end
 
-has_terminator(bb::BBlock) = bb.terminator !== nothing
+Base.length(bb::BBlock) = length(bb.stmts)
 
-Base.length(bb::BBlock) = length(bb.phi_nodes) + length(bb.stmts) + Int(has_terminator(bb))
+Base.copy(bb::BBlock) = BBlock(bb.id, copy(bb.stmts))
 
-function Base.copy(bb::BBlock)
-    new_terminator = has_terminator(bb) ? copy(bb.terminator) : nothing
-    return BBlock(bb.id, copy(bb.phi_nodes), copy(bb.stmts), new_terminator)
-end
+concatenate_ids(bb::BBlock) = first.(bb.stmts)
 
-function concatenate_ids(bb::BBlock)
-    terminator_id = has_terminator(bb) ? [ID()] : ID[] 
-    return vcat(first.(bb.phi_nodes), first.(bb.stmts), terminator_id)
-end
-
-function concatenate_stmts(bb::BBlock)
-    terminator = has_terminator(bb) ? [bb.terminator] : Any[]
-    return vcat(last.(bb.phi_nodes), last.(bb.stmts), terminator)
-end
+concatenate_stmts(bb::BBlock) = last.(bb.stmts)
 
 first_id(bb::BBlock) = first(concatenate_ids(bb))
+
+terminator(bb::BBlock) = isa(bb.stmts[end][2], Terminator) ? bb.stmts[end][2] : nothing
 
 """
     BBCode(
@@ -179,6 +151,8 @@ function BBCode(ir::Union{IRCode, BBCode}, new_blocks::Vector{BBlock})
     )
 end
 
+Base.copy(ir::BBCode) = BBCode(ir, copy(ir.blocks))
+
 function predecessors(block::BBlock, ir::BBCode)
     return reduce(
         vcat,
@@ -192,9 +166,9 @@ end
 
 location(block::BBlock, ir::BBCode) = findfirst(b -> b.id == block.id, ir.blocks)
 
-is_successor(b::BBlock, id::ID, is_next::Bool) = is_successor(b.terminator, id, is_next)
+is_successor(b::BBlock, id::ID, is_next::Bool) = is_successor(terminator(b), id, is_next)
 is_successor(::Nothing, ::ID, is_next::Bool) = is_next
-is_successor(x::IDGotoNode, id::ID, is_next::Bool) = x.label == id
+is_successor(x::IDGotoNode, id::ID, ::Bool) = x.label == id
 is_successor(x::IDGotoIfNot, id::ID, is_next::Bool) = is_next || x.dest == id
 is_successor(::ReturnNode, ::ID, ::Bool) = false
 is_successor(x::Switch, id::ID, is_next::Bool) = is_next || any(==(id), x.conds)
@@ -202,23 +176,14 @@ is_successor(x::Switch, id::ID, is_next::Bool) = is_next || any(==(id), x.conds)
 find_block_ind(ir::BBCode, id::ID) = findfirst(b -> b.id == id, ir.blocks)
 
 """
-    collect_stmts(ir::BBCode)
+    collect_stmts(ir::BBCode)::Vector{Tuple{ID, Any}}
 
 Produce a `Vector{Any}` containing all of the statements in `ir`. These are returned in
 order, so it is safe to assume that element `n` refers to the `nth` element of the `IRCode`
-associated to `ir`.
+associated to `ir`. 
 """
-function collect_stmts(ir::BBCode)::Vector{Any}
-    return reduce(
-        vcat,
-        map(ir.blocks) do b
-            if has_terminator(b)
-                return vcat(b.phi_nodes, b.stmts, b.terminator)
-            else
-                vcat(b.phi_nodes, b.stmts)
-            end
-        end,
-    )
+function collect_stmts(ir::BBCode)::Vector{Tuple{ID, Any}}
+    return reduce(vcat, map(blk -> blk.stmts, ir.blocks))
 end
 
 """
@@ -230,9 +195,7 @@ associated to them, so not every line in the original `IRCode` is mapped to.
 """
 function id_to_line_map(ir::BBCode)
     lines = collect_stmts(ir)
-    lines_and_line_numbers = filter(
-        x -> isa(x[1], Tuple) && x[1] !== nothing, collect(zip(lines, eachindex(lines)))
-    )
+    lines_and_line_numbers = collect(zip(lines, eachindex(lines)))
     ids_and_line_numbers = map(x -> (x[1][1], x[2]), lines_and_line_numbers)
     return Dict(ids_and_line_numbers)
 end
@@ -244,8 +207,8 @@ end
 """
     BBCode(ir::IRCode)
 
-Convert an `ir` into a `BBCode`. Creates a completely inependent data structure, so mutating
-the `BBCode` returned will not mutate `ir`.
+Convert an `ir` into a `BBCode`. Creates a completely independent data structure, so
+mutating the `BBCode` returned will not mutate `ir`.
 
 All `PhiNode`s, `GotoIfNot`s, and `GotoNode`s will be replaced with the `IDPhiNode`s,
 `IDGotoIfNot`s, and `IDGotoNode`s respectively.
@@ -258,24 +221,7 @@ function BBCode(ir::IRCode)
 
     # Chop up the new statements into `BBlocks`, according to the `CFG` in `ir`.
     blocks = map(zip(ir.cfg.blocks, block_ids)) do (bb, id)
-        all_ids = ssa_ids[bb.stmts]
-        all_stmts = stmts[bb.stmts]
-
-        has_terminator = all_stmts[end] isa Terminator
-        terminator_stmt = has_terminator ? all_stmts[end] : nothing
-
-        first_stmt_ind = findfirst(stmt -> !isa(stmt, PhiNode), all_stmts)
-        last_stmt_ind = has_terminator ? length(all_stmts) - 1 : length(all_stmts)
-        phi_inds = 1:(first_stmt_ind - 1)
-        stmt_inds = first_stmt_ind:last_stmt_ind
-
-        phi_iterator = zip(all_ids[phi_inds], all_stmts[phi_inds])
-        return BBlock(
-            id,
-            Tuple{ID, IDPhiNode}[(id, stmt) for (id, stmt) in phi_iterator],
-            collect(zip(all_ids[stmt_inds], all_stmts[stmt_inds])),
-            terminator_stmt,
-        )
+        return BBlock(id, collect(zip(ssa_ids[bb.stmts], stmts[bb.stmts])))
     end
     return BBCode(ir, blocks)
 end
@@ -370,29 +316,22 @@ end
 function _lower_switch_statements(bb_code::BBCode)
     new_blocks = Vector{BBlock}(undef, 0)
     for block in bb_code.blocks
-        terminator = block.terminator
-        if terminator isa Switch
+        t = terminator(block)
+        if t isa Switch
 
             # Create new block without the `Switch`.
-            push!(new_blocks, BBlock(block.id, block.phi_nodes, block.stmts, nothing))
+            push!(new_blocks, BBlock(block.id, block.stmts[1:end-1]))
 
             # Create new blocks for each `GotoIfNot` from the `Switch`.
-            foreach(terminator.conds, terminator.dests) do cond, dest
-                gotoifnot = IDGotoIfNot(cond, dest)
-                blk = BBlock(ID(), Tuple{ID, IDPhiNode}[], Tuple{ID, Any}[], gotoifnot)
+            foreach(t.conds, t.dests) do cond, dest
+                blk = BBlock(ID(), Tuple{ID, Any}[(ID(), IDGotoIfNot(cond, dest))])
                 push!(new_blocks, blk)
             end
         else
             push!(new_blocks, block)
         end
     end
-    return BBCode(
-        new_blocks,
-        CC.copy(bb_code.argtypes),
-        CC.copy(bb_code.sptypes),
-        CC.copy(bb_code.linetable),
-        CC.copy(bb_code.meta),
-    )
+    return BBCode(bb_code, new_blocks)
 end
 
 # Returns a `Vector{Any}` of statements in which each `ID` has been replaced by either an
@@ -450,9 +389,10 @@ __lines_to_blocks(cfg::CC.CFG, stmt) = stmt
 # a `GotoNode`.
 function remove_double_edges(ir::BBCode)
     new_blks = map(enumerate(ir.blocks)) do (n, blk)
-        t = blk.terminator
+        t = terminator(blk)
         if t isa IDGotoIfNot && t.dest == ir.blocks[n+1].id
-            return BBlock(blk.id, blk.phi_nodes, blk.stmts, IDGotoNode(t.dest))
+            t_id = blk.stmts[end][1]
+            return BBlock(blk.id, vcat(blk.stmts[1:end-1], (t_id, IDGotoNode(t.dest))))
         else
             return blk
         end

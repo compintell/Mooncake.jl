@@ -20,7 +20,7 @@ using Base.Experimental: @opaque
 using Base.Iterators: product
 using Core:
     Intrinsics, bitcast, SimpleVector, svec, ReturnNode, GotoNode, GotoIfNot, PhiNode,
-    PiNode, SSAValue, Argument
+    PiNode, SSAValue, Argument, OpaqueClosure
 using Core.Compiler: IRCode
 using Core.Intrinsics: pointerref, pointerset
 using LinearAlgebra.BLAS: @blasfunc, BlasInt, trsm!
@@ -76,6 +76,7 @@ export
     _dot,
     zero_codual,
     codual_type,
-    rrule!!
+    rrule!!,
+    build_rrule
 
 end
