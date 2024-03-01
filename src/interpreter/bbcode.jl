@@ -52,7 +52,7 @@ end
 Base.copy(node::IDGotoIfNot) = IDGotoIfNot(copy(node.cond), copy(node.dest))
 
 """
-    Switch(conds::Vector{Any}, dests::Vector{ID})
+    Switch(conds::Vector{Any}, dests::Vector{ID}, fallthrough_dest::ID)
 
 A switch-statement node. This can be placed (temporarily) in Julia IR. Has the following
 semantics:
@@ -61,10 +61,11 @@ goto dests[1] if not conds[1]
 goto dests[2] if not conds[2]
 ...
 goto dests[N] if not conds[N]
+goto fallthrough_dest
 ```
 where the value associated to each element of `conds` is a `Bool`, and `dests` indicate
-which block to jump to. If none of the conditions are met, then it falls through to the
-next block.
+which block to jump to. If none of the conditions are met, then we go to whichever block is
+specified by `fallthrough_dest`.
 
 `Switch` statements are lowered into the above sequence of `GotoIfNot` statements before
 converting `BBCode` back into `IRCode`.
@@ -72,9 +73,10 @@ converting `BBCode` back into `IRCode`.
 struct Switch
     conds::Vector{Any}
     dests::Vector{ID}
-    function Switch(conds::Vector{Any}, dests::Vector{ID})
+    fallthrough_dest::ID
+    function Switch(conds::Vector{Any}, dests::Vector{ID}, fallthrough_dest::ID)
         @assert length(conds) == length(dests)
-        return new(conds, dests)
+        return new(conds, dests, fallthrough_dest)
     end
 end
 
@@ -153,11 +155,9 @@ end
 
 Base.copy(ir::BBCode) = BBCode(ir, copy(ir.blocks))
 
-function predecessors(block::BBlock, ir::BBCode)
-    return reduce(
-        vcat,
-        map(b -> is_successor(b, block.id, is_next(b, block, ir)) ? [b.id] : [], ir.blocks),
-    )
+function predecessors(blk::BBlock, ir::BBCode)
+    tmp = map(b -> is_successor(b, blk.id, is_next(b, blk, ir)) ? [b.id] : ID[], ir.blocks)
+    return reduce(vcat, tmp)
 end
 
 function is_next(block::BBlock, other_block::BBlock, ir::BBCode)
@@ -171,7 +171,7 @@ is_successor(::Nothing, ::ID, is_next::Bool) = is_next
 is_successor(x::IDGotoNode, id::ID, ::Bool) = x.label == id
 is_successor(x::IDGotoIfNot, id::ID, is_next::Bool) = is_next || x.dest == id
 is_successor(::ReturnNode, ::ID, ::Bool) = false
-is_successor(x::Switch, id::ID, is_next::Bool) = is_next || any(==(id), x.conds)
+is_successor(x::Switch, id::ID, ::Bool) = any(==(id), x.dests) || id == x.fallthrough_dest
 
 find_block_ind(ir::BBCode, id::ID) = findfirst(b -> b.id == id, ir.blocks)
 
@@ -327,6 +327,10 @@ function _lower_switch_statements(bb_code::BBCode)
                 blk = BBlock(ID(), Tuple{ID, Any}[(ID(), IDGotoIfNot(cond, dest))])
                 push!(new_blocks, blk)
             end
+
+            # Create a new block for the fallthrough dest.
+            blk = BBlock(ID(), Tuple{ID, Any}[(ID(), IDGotoNode(t.fallthrough_dest))])
+            push!(new_blocks, blk)
         else
             push!(new_blocks, block)
         end
@@ -398,4 +402,35 @@ function remove_double_edges(ir::BBCode)
         end
     end
     return BBCode(ir, new_blks)
+end
+
+#=
+    _sort_blocks!(ir::BBCode)
+
+Ensure that blocks appear in order of distance-from-entry-point, where distance the
+distance from block b to the entry point is defined to be the minimum number of basic
+blocks that must be passed through in order to reach b.
+
+For reasons unknown (to me, Will), the compiler / optimiser needs this for inference to
+succeed. Since we do quite a lot of re-ordering on the reverse-pass of AD, this is a problem
+there.
+
+WARNING: use with care. Only use if you are confident that arbitrary re-ordering of basic
+blocks in `ir` is valid. Notably, this does not hold if you have any `IDGotoIfNot` nodes in
+`ir`.
+=#
+function _sort_blocks!(ir::BBCode)
+
+    node_ints = collect(eachindex(ir.blocks))
+    id_to_int = Dict(zip(map(blk -> blk.id, ir.blocks), node_ints))
+
+    direct_predecessors = map(ir.blocks) do blk
+        return map(b -> Edge(id_to_int[b], id_to_int[blk.id]), predecessors(blk, ir))
+    end
+    g = SimpleDiGraph(reduce(vcat, direct_predecessors))
+
+    d = dijkstra_shortest_paths(g, id_to_int[ir.blocks[1].id]).dists
+    I = sortperm(d)
+    ir.blocks .= ir.blocks[I]
+    return ir
 end

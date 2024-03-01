@@ -147,7 +147,7 @@ function optimise_ir!(ir::IRCode, show_ir=false)
         println()
     end
     inline_state = CC.InliningState(local_interp)
-    # ir = CC.ssa_inlining_pass!(ir, inline_state, #=propagate_inbounds=#true)
+    ir = CC.ssa_inlining_pass!(ir, inline_state, #=propagate_inbounds=#true)
     ir = CC.compact!(ir)
     ir = CC.sroa_pass!(ir, inline_state)
     ir = CC.adce_pass!(ir, inline_state)
@@ -232,7 +232,8 @@ end
 """
     is_reachable(x::ReturnNode)
 
-Determine whether `x` is reachable. This is purely a function of whether or not its `val`
-field is defined or not.
+Determine whether `x` is a `ReturnNode`, and if it is, if it is also reachable. This is
+purely a function of whether or not its `val` field is defined or not.
 """
-is_reachable(x::ReturnNode) = isdefined(x, :val)
+is_reachable_return_node(x::ReturnNode) = isdefined(x, :val)
+is_reachable_return_node(x) = false

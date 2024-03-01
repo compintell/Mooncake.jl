@@ -19,7 +19,7 @@ end
 
 Stack(x::T) where {T} = Stack{T}(x)
 
-function Base.push!(x::Stack{T}, val::T) where {T}
+@inline function Base.push!(x::Stack{T}, val::T) where {T}
     position = x.position + 1
     memory = x.memory
     x.position = position
@@ -118,3 +118,17 @@ function tangent_ref_type_ub(::Type{P}) where {P}
 end
 
 tangent_ref_type_ub(::Type{Type{P}}) where {P} = NoTangentRef
+
+struct InactiveStack{T}
+    zero_tangent::T
+end
+
+Base.pop!(s::InactiveStack{T}) where {T} = s.zero_tangent
+
+struct InactiveRef{T}
+    x::T
+end
+
+Base.getindex(x::InactiveRef{T}) where {T} = x.x
+
+increment_ref!(::InactiveRef{T}, ::T) where {T} = nothing

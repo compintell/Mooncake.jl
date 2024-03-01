@@ -6,6 +6,7 @@ using
     BenchmarkTools,
     DiffRules,
     ExprTools,
+    Graphs,
     InteractiveUtils,
     LinearAlgebra,
     Random,

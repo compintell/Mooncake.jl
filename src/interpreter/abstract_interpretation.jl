@@ -83,3 +83,5 @@ function CC.inlining_policy(
         argtypes::Vector{Any},
     )
 end
+
+context_type(::TInterp{C}) where {C} = C

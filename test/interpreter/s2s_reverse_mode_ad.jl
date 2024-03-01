@@ -136,13 +136,34 @@
 
     interp = Taped.TInterp()
     @testset "$(_typeof((f, x...)))" for (interface_only, perf_flag, bnds, f, x...) in
-        TestResources.generate_test_functions()[1:1]
+        TestResources.generate_test_functions()
 
         sig = _typeof((f, x...))
         @info "$sig"
         rule = build_rrule(interp, sig)
+        TestUtils.test_rrule!!(
+            Xoshiro(123456), f, x...; perf_flag, interface_only, is_primitive=false, rule
+        )
 
-        @show rule
+        # codual_args = map(zero_codual, (f, x...))
+        # out, pb!! = rule(codual_args...)
+        # # @code_warntype optimize=true rule(codual_args...)
+        # # @code_warntype optimize=true pb!!(tangent(out), map(tangent, codual_args)...)
 
+        # display(@benchmark $f($(Ref(x))[]...))
+        # display(@benchmark $rule($codual_args...)[2]($(tangent(out)), $(map(tangent, codual_args))...))
+        # in_f = in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp);
+        # __rrule!! = Taped.build_rrule!!(in_f);
+        # df = zero_codual(in_f);
+        # codual_x = map(zero_codual, (f, x...));
+        # display(@benchmark TestUtils.to_benchmark($__rrule!!, $df, $codual_x...))
+
+        # @profview(run_many_times(
+        #     100,
+        #     (rule, codual_args, out) -> rule(codual_args...)[2](tangent(out), map(tangent, codual_args)...),
+        #     rule,
+        #     codual_args,
+        #     out,
+        # ))
     end
 end
