@@ -392,10 +392,12 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
     pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, _typeof(shared_data))
 
     # Construct opaque closures and arg tangent stacks, and build the rule.
-    # println("ir")
-    # display(ir)
-    # println("fwds")
-    # display(optimise_ir!(IRCode(fwds_ir)))
+    println("ir")
+    display(ir)
+    println("fwds")
+    display(IRCode(fwds_ir))
+    display("fwds_optimised")
+    display(optimise_ir!(IRCode(fwds_ir)))
     # println("pb")
     # display(optimise_ir!(IRCode(pb_ir)))
     fwds_oc = OpaqueClosure(optimise_ir!(IRCode(fwds_ir)), shared_data...; do_compile=true)

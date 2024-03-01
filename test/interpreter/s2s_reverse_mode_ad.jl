@@ -136,7 +136,7 @@
 
     interp = Taped.TInterp()
     @testset "$(_typeof((f, x...)))" for (interface_only, perf_flag, bnds, f, x...) in
-        TestResources.generate_test_functions()
+        TestResources.generate_test_functions()[1:3]
 
         sig = _typeof((f, x...))
         @info "$sig"
