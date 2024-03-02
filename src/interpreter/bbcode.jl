@@ -254,7 +254,13 @@ _ssa_to_ids(d::SSAToIdDict, x::PiNode) = throw(error("Unhandled node"))
 _ssa_to_ids(d::SSAToIdDict, x::QuoteNode) = x
 _ssa_to_ids(d::SSAToIdDict, x) = x
 function _ssa_to_ids(d::SSAToIdDict, x::PhiNode)
-    return PhiNode(x.edges, Any[get(d, a, a) for a in x.values])
+    new_values = Vector{Any}(undef, length(x.values))
+    for n in eachindex(x.values)
+        if isassigned(x.values, n)
+            new_values[n] = get(d, x.values[n], x.values[n])
+        end
+    end
+    return PhiNode(x.edges, new_values)
 end
 _ssa_to_ids(d::SSAToIdDict, x::GotoNode) = x
 _ssa_to_ids(d::SSAToIdDict, x::GotoIfNot) = GotoIfNot(get(d, x.cond, x.cond), x.dest)
@@ -361,10 +367,13 @@ _to_ssas(d::Dict, x::PiNode) = throw(error("Unhandled node"))
 _to_ssas(d::Dict, x::QuoteNode) = x
 _to_ssas(d::Dict, x) = x
 function _to_ssas(d::Dict, x::IDPhiNode)
-    return PhiNode(
-        map(e -> Int32(getindex(d, e).id), x.edges),
-        Any[get(d, a, a) for a in x.values],
-    )
+    new_values = Vector{Any}(undef, length(x.values))
+    for n in eachindex(x.values)
+        if isassigned(x.values, n)
+            new_values[n] = get(d, x.values[n], x.values[n])
+        end
+    end
+    return PhiNode(map(e -> Int32(getindex(d, e).id), x.edges), new_values)
 end
 _to_ssas(d::Dict, x::IDGotoNode) = GotoNode(d[x.label].id)
 _to_ssas(d::Dict, x::IDGotoIfNot) = GotoIfNot(get(d, x.cond, x.cond), d[x.dest].id)

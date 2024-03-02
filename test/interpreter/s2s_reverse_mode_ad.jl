@@ -118,7 +118,9 @@
             end
             @testset "throw_undef_if_not" begin
                 cond_id = ID()
-                expected_fwds = Expr(:call, Taped.__throw_undef_if_not, :x, cond_id)
+                expected_fwds = Expr(
+                    :call, Taped.__throw_undef_if_not, QuoteNode(:x), cond_id
+                )
                 @test TestUtils.has_equal_data(
                     make_ad_stmts!(Expr(:throw_undef_if_not, :x, cond_id), ID(), info),
                     ADStmtInfo(expected_fwds, nothing, nothing),

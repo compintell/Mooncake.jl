@@ -207,7 +207,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
     elseif Meta.isexpr(stmt, :throw_undef_if_not)
         # Expr(:throw_undef_if_not, name, cond) raises an error if `cond` evaluates to
         # false. `cond` will be a codual on the forwards-pass, so have to get its primal.
-        fwds = Expr(:call, Taped.__throw_undef_if_not, stmt.args...)
+        fwds = Expr(:call, Taped.__throw_undef_if_not, QuoteNode(stmt.args[1]), stmt.args[2])
         return ADStmtInfo(fwds, nothing, nothing)
 
     elseif stmt.head in [
@@ -308,8 +308,8 @@ function __rvs_pass!(captures, ::Val{capture_index})::Nothing where {capture_ind
 end
 
 # Used in `make_ad_stmts!` method for `Expr(:throw_undef_if_not, ...)`.
-@inline function __throw_undef_if_not(slotname::Symbol, cond_codual::CoDual)
-    primal(cond_codual) || throw(UndefVarError(slotname))
+@inline function __throw_undef_if_not(slotname::Symbol, cond::Bool)
+    cond || throw(UndefVarError(slotname))
     return nothing
 end
 
@@ -343,7 +343,7 @@ function (fwds::DerivedRule{P, Q, S})(args::Vararg{CoDual, N}) where {P, Q, S, N
     # Load arguments in to stacks, and create tuples.
     args_with_tangent_stacks = map(args, fwds.arg_tangent_stacks) do arg, arg_tangent_stack
         push!(arg_tangent_stack, tangent(arg))
-        return (arg, arg_tangent_stack)
+        return make_oc_arg(arg, arg_tangent_stack)
     end
 
     push!(fwds.block_stack, fwds.entry_id.id)
@@ -355,6 +355,9 @@ function (fwds::DerivedRule{P, Q, S})(args::Vararg{CoDual, N}) where {P, Q, S, N
         return zero_codual(raw_out), Pullback(fwds.pb_oc, nothing, fwds.arg_tangent_stacks)
     end
 end
+
+make_oc_arg(arg, arg_tangent_stack) = (arg, arg_tangent_stack)
+make_oc_arg(arg, ::NoTangentStack) = primal(arg)
 
 """
     build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
@@ -402,9 +405,10 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
     # println("ir")
     # display(ir)
     # println("fwds")
+    # display(fwds_ir.argtypes)
     # display(IRCode(fwds_ir))
     # display("fwds_optimised")
-    # display(optimise_ir!(IRCode(fwds_ir)))
+    # display(optimise_ir!(IRCode(fwds_ir); do_inline=true))
     # println("pb")
     # display(IRCode(pb_ir))
     # println("pb optimised")
@@ -457,11 +461,13 @@ end
 # push a block index `id` onto the block_stack, which is found in `captures[n]`.
 @inline __push_block_stack!(captures, ::Val{n}, id::Int) where {n} = push!(captures[n], id)
 
-fwds_pass_arg_type(P) = Tuple{codual_type(P), tangent_stack_type(P)}
+function fwds_pass_arg_type(P)
+    return tangent_type(P) == NoTangent ? P : Tuple{codual_type(P), tangent_stack_type(P)}
+end
 
 __inc_arg_number(x::Expr) = Expr(x.head, map(__inc, x.args)...)
 __inc_arg_number(x::ReturnNode) = isdefined(x, :val) ? ReturnNode(__inc(x.val)) : x
-__inc_arg_number(x::IDGotoIfNot) = IDGotoIfNot(x.cond, __inc(x.dest))
+__inc_arg_number(x::IDGotoIfNot) = IDGotoIfNot(__inc(x.cond), x.dest)
 __inc_arg_number(x::IDGotoNode) = x
 function __inc_arg_number(x::IDPhiNode)
     new_values = Vector{Any}(undef, length(x.values))

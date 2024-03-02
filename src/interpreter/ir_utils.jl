@@ -130,7 +130,7 @@ end
 Run a fairly standard optimisation pass on `ir`. If `show_ir` is `true`, displays the IR
 to `stdout` at various points in the pipeline -- this is sometimes useful for debugging.
 """
-function optimise_ir!(ir::IRCode, show_ir=false)
+function optimise_ir!(ir::IRCode; show_ir=false, do_inline=true)
     if show_ir
         println("Pre-optimization")
         display(ir)
@@ -147,7 +147,9 @@ function optimise_ir!(ir::IRCode, show_ir=false)
         println()
     end
     inline_state = CC.InliningState(local_interp)
-    ir = CC.ssa_inlining_pass!(ir, inline_state, #=propagate_inbounds=#true)
+    if do_inline
+        ir = CC.ssa_inlining_pass!(ir, inline_state, #=propagate_inbounds=#true)
+    end
     ir = CC.compact!(ir)
     ir = CC.sroa_pass!(ir, inline_state)
     ir = CC.adce_pass!(ir, inline_state)
