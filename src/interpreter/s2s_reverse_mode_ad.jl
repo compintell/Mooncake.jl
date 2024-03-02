@@ -200,6 +200,10 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         rvs = Expr(:call, __rvs_pass!, Argument(1), Val(capture_index))
         return ADStmtInfo(fwds, rvs, data)
 
+    elseif Meta.isexpr(stmt, :code_coverage_effect)
+        # Code coverage irrelevant for derived code.
+        return ADStmtInfo(nothing, nothing, nothing)
+
     elseif Meta.isexpr(stmt, :throw_undef_if_not)
         # Expr(:throw_undef_if_not, name, cond) raises an error if `cond` evaluates to
         # false. `cond` will be a codual on the forwards-pass, so have to get its primal.
@@ -208,7 +212,6 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
 
     elseif stmt.head in [
         :boundscheck,
-        :code_coverage_effect,
         :gc_preserve_begin,
         :gc_preserve_end,
         :loopinfo,
@@ -217,7 +220,6 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
     ]
         # Expressions which do not require any special treatment.
         return ADStmtInfo(stmt, nothing, nothing)
-
     else
         # Encountered an expression that we've not seen before.
         throw(error("Unrecognised expression $stmt"))
