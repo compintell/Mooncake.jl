@@ -132,3 +132,7 @@ end
 Base.getindex(x::InactiveRef{T}) where {T} = x.x
 
 increment_ref!(::InactiveRef{T}, ::T) where {T} = nothing
+
+top_ref(::Nothing) = InactiveRef(nothing)
+
+increment_ref!(::InactiveRef{Nothing}, ::T) where {T} = nothing

@@ -347,8 +347,13 @@ function (fwds::DerivedRule{P, Q, S})(args::Vararg{CoDual, N}) where {P, Q, S, N
     end
 
     push!(fwds.block_stack, fwds.entry_id.id)
-    out, ret_ref = fwds.fwds_oc(args_with_tangent_stacks...)
-    return out, Pullback(fwds.pb_oc, ret_ref, fwds.arg_tangent_stacks)
+    raw_out = fwds.fwds_oc(args_with_tangent_stacks...)
+    if raw_out isa Tuple
+        out, ret_ref = raw_out
+        return out, Pullback(fwds.pb_oc, ret_ref, fwds.arg_tangent_stacks)
+    else
+        return zero_codual(raw_out), Pullback(fwds.pb_oc, nothing, fwds.arg_tangent_stacks)
+    end
 end
 
 """

@@ -1432,7 +1432,7 @@ end
 
 function generate_test_functions()
     return Any[
-        # (false, :allocs, nothing, const_tester),
+        (false, :allocs, nothing, const_tester),
         (false, :allocs, nothing, identity, 5.0),
         (false, :allocs, nothing, foo, 5.0),
         # (false, :allocs, nothing, bar, 5.0, 4.0),
