@@ -150,14 +150,16 @@
         # # @code_warntype optimize=true rule(codual_args...)
         # # @code_warntype optimize=true pb!!(tangent(out), map(tangent, codual_args)...)
 
-        # display(@benchmark $f($(Ref(x))[]...))
-        # display(@benchmark $rule($codual_args...)[2]($(tangent(out)), $(map(tangent, codual_args))...))
+        # primal_time = @benchmark $f($(Ref(x))[]...)
+        # s2s_time = @benchmark $rule($codual_args...)[2]($(tangent(out)), $(map(tangent, codual_args))...)
         # in_f = in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp);
         # __rrule!! = Taped.build_rrule!!(in_f);
         # df = zero_codual(in_f);
         # codual_x = map(zero_codual, (f, x...));
-        # display(@benchmark TestUtils.to_benchmark($__rrule!!, $df, $codual_x...))
+        # interp_time = @benchmark TestUtils.to_benchmark($__rrule!!, $df, $codual_x...)
 
+        # println("s2s ratio ratio: $(time(s2s_time) / time(primal_time))")
+        # println("interp ratio: $(time(interp_time) / time(primal_time))")
         # @profview(run_many_times(
         #     100,
         #     (rule, codual_args, out) -> rule(codual_args...)[2](tangent(out), map(tangent, codual_args)...),
