@@ -1609,7 +1609,7 @@ function generate_test_functions()
         #     randn(sr(2), 700, 500),
         #     randn(sr(3), 300, 700),
         # ),
-        (false, :none, nothing, test_handwritten_sum, randn(1024), 0.0),
+        (false, :none, (1.0, 250), test_handwritten_sum, randn(1024), 0.0),
         # (false, :none, nothing, _sum, randn(1024), 0.0),
     ]
 end
