@@ -76,9 +76,7 @@
         @testset "GlobalRef" begin
             @test TestUtils.has_equal_data(
                 make_ad_stmts!(GlobalRef(Base, :sin), ID(), info),
-                ADStmtInfo(
-                    Expr(:call, Taped.zero_codual, GlobalRef(Base, :sin)), nothing, nothing,
-                ),
+                ADStmtInfo(GlobalRef(Base, :sin), nothing, nothing),
             )
         end
         @testset "QuoteNode" begin
@@ -118,12 +116,9 @@
             end
             @testset "throw_undef_if_not" begin
                 cond_id = ID()
-                expected_fwds = Expr(
-                    :call, Taped.__throw_undef_if_not, QuoteNode(:x), cond_id
-                )
                 @test TestUtils.has_equal_data(
                     make_ad_stmts!(Expr(:throw_undef_if_not, :x, cond_id), ID(), info),
-                    ADStmtInfo(expected_fwds, nothing, nothing),
+                    ADStmtInfo(Expr(:throw_undef_if_not, :x, cond_id), nothing, nothing),
                 )
             end
             @testset "$stmt" for stmt in [
@@ -137,11 +132,11 @@
     end
 
     interp = Taped.TInterp()
-    @testset "$(_typeof((f, x...)))" for (interface_only, perf_flag, bnds, f, x...) in
-        TestResources.generate_test_functions()
+    @testset "$(_typeof((f, x...)))" for (n, (interface_only, perf_flag, bnds, f, x...)) in
+        collect(enumerate(TestResources.generate_test_functions()))
 
         sig = _typeof((f, x...))
-        @info "$sig"
+        @info "$n: $sig"
         rule = build_rrule(interp, sig)
         TestUtils.test_rrule!!(
             Xoshiro(123456), f, x...; perf_flag, interface_only, is_primitive=false, rule
@@ -160,10 +155,16 @@
         # codual_x = map(zero_codual, (f, x...));
         # interp_time = @benchmark TestUtils.to_benchmark($__rrule!!, $df, $codual_x...)
 
-        # println("s2s ratio ratio: $(time(s2s_time) / time(primal_time))")
-        # println("interp ratio: $(time(interp_time) / time(primal_time))")
+        # display(primal_time)
+        # display(s2s_time)
+        # display(interp_time)
+        # s2s_ratio = time(s2s_time) / time(primal_time)
+        # interp_ratio = time(interp_time) / time(primal_time)
+        # println("s2s ratio ratio: $(s2s_ratio)")
+        # println("interp ratio: $(interp_ratio)")
+        # push!(ratios, (s2s_ratio, interp_ratio))
         # @profview(run_many_times(
-        #     100,
+        #     10_000_000,
         #     (rule, codual_args, out) -> rule(codual_args...)[2](tangent(out), map(tangent, codual_args)...),
         #     rule,
         #     codual_args,
