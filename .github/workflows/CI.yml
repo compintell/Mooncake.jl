@@ -36,7 +36,7 @@ jobs:
         with:
           version: '1'
           arch: x64
-          include-all-prereleases: true
+          include-all-prereleases: false
       - uses: julia-actions/cache@v1
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
@@ -57,7 +57,7 @@ jobs:
         with:
           version: '1'
           arch: x64
-          include-all-prereleases: true
+          include-all-prereleases: false
       - uses: julia-actions/cache@v1
       - uses: julia-actions/julia-buildpkg@v1
       - run: julia --project=bench --eval 'include("bench/run_benchmarks.jl"); main()'
@@ -76,7 +76,7 @@ jobs:
         with:
           version: '1'
           arch: x64
-          include-all-prereleases: true
+          include-all-prereleases: false
       - uses: julia-actions/cache@v1
       - uses: julia-actions/julia-buildpkg@v1
       - run: mkdir bench_results
