@@ -67,8 +67,8 @@ where the value associated to each element of `conds` is a `Bool`, and `dests` i
 which block to jump to. If none of the conditions are met, then we go to whichever block is
 specified by `fallthrough_dest`.
 
-`Switch` statements are lowered into the above sequence of `GotoIfNot` statements before
-converting `BBCode` back into `IRCode`.
+`Switch` statements are lowered into the above sequence of `GotoIfNot`s and `GotoNode`s
+before converting `BBCode` back into `IRCode`.
 """
 struct Switch
     conds::Vector{Any}
@@ -127,7 +127,29 @@ terminator(bb::BBlock) = isa(bb.stmts[end][2], Terminator) ? bb.stmts[end][2] : 
         meta::Vector{Expr}
     )
 
-TODO: WRITE THIS DOCSTRING
+A `BBCode` is a data structure which is similar to `IRCode`, but adds additional structure.
+
+In particular, a `BBCode` comprises a sequence of basic blocks (`BBlock`s), each of which
+comprise a sequence of statements. Moreover, each `BBlock` has its own unique `ID`, as does
+each statment.
+
+The consequence of this is that new basic blocks can be inserted into a `BBCode`. This is
+distinct from `IRCode`, in which to create a new basic block, one must insert additional
+statments which you know will create a new basic block -- this is generally quite an
+unreliable process, while inserting a new `BBlock` into `BBCode` is entirely predictable.
+Furthermore, inserting a new `BBlock` does not change the `ID` associated to the other
+blocks, meaning that you can safely assume that references from existing basic block
+terminators / phi nodes to other blocks will not be modified by inserting a new basic block.
+
+Additionally, since each statment in each basic block has its own unique `ID`, new
+statments can be inserted without changing references between other blocks. `IRCode` also
+has some support for this via its `new_nodes` field, but eventually all statements will be
+renamed upon `compact!`ing the `IRCode`, meaning that the name of any given statement will
+eventually change.
+
+Finally, note that the basic blocks in a `BBCode` support the custom `Switch` statement.
+This statement is not valid in `IRCode`, and is therefore lowered into a collection of
+`GotoIfNot`s and `GotoNode`s when a `BBCode` is converted back into an `IRCode`.
 """
 struct BBCode
     blocks::Vector{BBlock}
@@ -212,6 +234,10 @@ mutating the `BBCode` returned will not mutate `ir`.
 
 All `PhiNode`s, `GotoIfNot`s, and `GotoNode`s will be replaced with the `IDPhiNode`s,
 `IDGotoIfNot`s, and `IDGotoNode`s respectively.
+
+See `IRCode` for conversion back to `IRCode`.
+
+Note that `IRCode(BBCode(ir))` should be equal to the identity function.
 """
 function BBCode(ir::IRCode)
 
