@@ -204,12 +204,6 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         # Code coverage irrelevant for derived code.
         return ADStmtInfo(nothing, nothing, nothing)
 
-    elseif Meta.isexpr(stmt, :throw_undef_if_not)
-        # Expr(:throw_undef_if_not, name, cond) raises an error if `cond` evaluates to
-        # false. `cond` will be a codual on the forwards-pass, so have to get its primal.
-        fwds = Expr(:call, Taped.__throw_undef_if_not, QuoteNode(stmt.args[1]), stmt.args[2])
-        return ADStmtInfo(fwds, nothing, nothing)
-
     elseif stmt.head in [
         :boundscheck,
         :gc_preserve_begin,
@@ -217,6 +211,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         :loopinfo,
         :leave,
         :pop_exception,
+        :throw_undef_if_not
     ]
         # Expressions which do not require any special treatment.
         return ADStmtInfo(stmt, nothing, nothing)
