@@ -135,7 +135,7 @@ end
 
 # Replace statement with construction of zero `CoDual`. No shared data.
 function make_ad_stmts!(stmt::GlobalRef, ::ID, ::ADInfo)
-    return ADStmtInfo(Expr(:call, Taped.zero_codual, stmt), nothing, nothing)
+    return ADStmtInfo(stmt, nothing, nothing)
 end
 
 # Replace statement with quote node for zero `CoDual`. No shared data.
@@ -408,11 +408,11 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
     # display(fwds_ir.argtypes)
     # display(IRCode(fwds_ir))
     # display("fwds_optimised")
-    # display(optimise_ir!(IRCode(fwds_ir); do_inline=true))
+    # display(optimise_ir!(IRCode(fwds_ir); do_inline=false))
     # println("pb")
     # display(IRCode(pb_ir))
     # println("pb optimised")
-    # display(optimise_ir!(IRCode(pb_ir)))
+    # display(optimise_ir!(IRCode(pb_ir); do_inline=false))
     fwds_oc = OpaqueClosure(optimise_ir!(IRCode(fwds_ir)), shared_data...; do_compile=true)
     pb_ir = optimise_ir!(IRCode(pb_ir))
     pb_oc = OpaqueClosure(pb_ir, shared_data...; do_compile=true)
@@ -479,6 +479,7 @@ function __inc_arg_number(x::IDPhiNode)
     return IDPhiNode(x.edges, new_values)
 end
 __inc_arg_number(::Nothing) = nothing
+__inc_arg_number(x::GlobalRef) = x
 
 __inc(x::Argument) = Argument(x.n + 1)
 __inc(x) = x
