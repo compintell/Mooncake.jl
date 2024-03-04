@@ -1125,6 +1125,9 @@ type_stable_getfield_tester_2(x::StableFoo) = x.y
 __x_for_gref_test = 5.0
 @eval globalref_tester() = $(GlobalRef(@__MODULE__, :__x_for_gref_test))
 
+__y_for_gref_test = false
+@eval globalref_tester_bool() = $(GlobalRef(@__MODULE__, :__y_for_gref_test))
+
 function globalref_tester_2(use_gref::Bool)
     v = use_gref ? __x_for_gref_test : 1
     return sin(v)
@@ -1447,10 +1450,11 @@ function generate_test_functions()
         (false, :allocs, nothing, type_stable_getfield_tester_1, StableFoo(5.0, :hi)),
         (false, :allocs, nothing, type_stable_getfield_tester_2, StableFoo(5.0, :hi)),
         # (false, :none, nothing, globalref_tester),
+        (false, :none, nothing, globalref_tester_bool),
         # # (false, :stability, nothing, globalref_tester_2, true),
         # # (false, :stability, nothing, globalref_tester_2, false),
         # (false, :allocs, nothing, globalref_tester_3),
-        # (false, :allocs, nothing, globalref_tester_4),
+        # (false, :allocs, nothing, globalref_tester_4), # type inference issues
         # (false, :none, nothing, type_unstable_tester, Ref{Any}(5.0)),
         # (false, :none, nothing, type_unstable_tester_2, Ref{Real}(5.0)),
         # (false, :none, (lb=1, ub=1000), type_unstable_tester_3, Ref{Any}(5.0)),
