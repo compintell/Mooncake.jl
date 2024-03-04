@@ -403,8 +403,7 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
     # println("pb optimised")
     # display(optimise_ir!(IRCode(pb_ir); do_inline=false))
     fwds_oc = OpaqueClosure(optimise_ir!(IRCode(fwds_ir)), shared_data...; do_compile=true)
-    pb_ir = optimise_ir!(IRCode(pb_ir))
-    pb_oc = OpaqueClosure(pb_ir, shared_data...; do_compile=true)
+    pb_oc = OpaqueClosure(optimise_ir!(IRCode(pb_ir)), shared_data...; do_compile=true)
     arg_tangent_stacks = (map(make_tangent_stack ∘ _get_type, primal_ir.argtypes)..., )
     return DerivedRule(fwds_oc, pb_oc, arg_tangent_stacks, block_stack, info.entry_id)
 end
