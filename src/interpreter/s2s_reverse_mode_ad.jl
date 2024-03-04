@@ -302,12 +302,6 @@ function __rvs_pass!(captures, ::Val{capture_index})::Nothing where {capture_ind
     return nothing
 end
 
-# Used in `make_ad_stmts!` method for `Expr(:throw_undef_if_not, ...)`.
-@inline function __throw_undef_if_not(slotname::Symbol, cond::Bool)
-    cond || throw(UndefVarError(slotname))
-    return nothing
-end
-
 #
 # Runners for generated code.
 #
