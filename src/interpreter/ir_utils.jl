@@ -239,3 +239,24 @@ purely a function of whether or not its `val` field is defined or not.
 """
 is_reachable_return_node(x::ReturnNode) = isdefined(x, :val)
 is_reachable_return_node(x) = false
+
+"""
+    globalref_type(x::GlobaRef)
+
+Returns the static type of the value referred to by `x`.
+"""
+function globalref_type(x::GlobalRef)
+    return isconst(x) ? _typeof(getglobal(x.mod, x.name)) : x.binding.ty
+end
+
+"""
+    UnhandledLanguageFeatureException(message::String)
+
+An exception used to indicate that some aspect of the Julia language which AD cannot handle
+has been encountered.
+"""
+struct UnhandledLanguageFeatureException <: Exception
+    msg::String
+end
+
+unhandled_feature(msg::String) = throw(UnhandledLanguageFeatureException(msg))

@@ -1,3 +1,10 @@
+module IRUtilsGlobalRefs
+    __x_1 = 5.0
+    const __x_2 = 5.0
+    __x_3::Float64 = 5.0
+    const __x_4::Float64 = 5.0
+end
+
 @testset "ir_utils" begin
     @testset "ircode $(typeof(fargs))" for fargs in Any[
         (sin, 5.0), (cos, 1.0),
@@ -71,5 +78,14 @@
             @test result.values[2] == SSAValue(2)
             @test !isassigned(result.values, 1)
         end
+    end
+    @testset "globalref_type" begin
+        @test Taped.globalref_type(GlobalRef(IRUtilsGlobalRefs, :__x_1)) == Any
+        @test Taped.globalref_type(GlobalRef(IRUtilsGlobalRefs, :__x_2)) == Float64
+        @test Taped.globalref_type(GlobalRef(IRUtilsGlobalRefs, :__x_3)) == Float64
+        @test Taped.globalref_type(GlobalRef(IRUtilsGlobalRefs, :__x_4)) == Float64
+    end
+    @testset "unhandled_feature" begin
+        @test_throws Taped.UnhandledLanguageFeatureException Taped.unhandled_feature("foo")
     end
 end
