@@ -133,9 +133,26 @@ function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
 
 end
 
-# Replace statement with construction of zero `CoDual`. No shared data.
-function make_ad_stmts!(stmt::GlobalRef, ::ID, ::ADInfo)
-    return ADStmtInfo(stmt, nothing, nothing)
+# If tangent type of GlobalRef stmt is provably NoTangent, we just return the stmt.
+# Otherwise, create a stack, put it in the shared data, and add functionality to construct
+# an AugmentedRegister with the correct tangent stack.
+function make_ad_stmts!(stmt::GlobalRef, line::ID, info::ADInfo)
+    isconst(stmt) || unhandled_feature("Non-constant GlobalRef not supported")
+    primal_type = globalref_type(stmt)
+    if tangent_type(primal_type) == NoTangent
+        fwds = stmt
+        shared_data = nothing
+    else
+        capture_index = get_storage_location!(info.line_map, line)
+        fwds = Expr(:call, __assemble_register, Argument(0), Val(capture_index), stmt)
+        shared_data = make_tangent_stack(primal_type)
+    end
+    return ADStmtInfo(fwds, nothing, shared_data)
+end
+
+@inline function __assemble_register(captures, ::Val{n}, x::P) where {n, P}
+    is_inactive = tangent_type(P) == NoTangent
+    return is_inactive ? x : AugmentedRegister(zero_codual(x), captures[n])
 end
 
 # Replace statement with quote node for zero `CoDual`. No shared data.
@@ -152,12 +169,12 @@ end
 
 # Taped does not yet handle `PhiCNode`s. Throw an error if one is encountered.
 function make_ad_stmts!(stmt::Core.PhiCNode, ::ID, ::ADInfo)
-    throw(error("Encountered PhiCNode: $stmt. Taped cannot yet handle such nodes."))
+    unhandled_feature("Encountered PhiCNode: $stmt")
 end
 
 # Taped does not yet handle `UpsilonNode`s. Throw an error if one is encountered.
 function make_ad_stmts!(stmt::Core.UpsilonNode, ::ID, ::ADInfo)
-    throw(error("Encountered UpsilonNode: $stmt. Taped cannot yet handle such nodes."))
+    unhandled_feature("Encountered UpsilonNode: $stmt")
 end
 
 # There are quite a number of possible `Expr`s that can be encountered. Each case has its

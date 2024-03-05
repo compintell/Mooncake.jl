@@ -1,3 +1,10 @@
+module S2SGlobals
+    non_const_global = 5.0
+    const const_float = 5.0
+    const const_int = 5
+    const const_bool = true
+end
+
 @testset "s2s_reverse_mode_ad" begin
     @testset "LineToADDataMap" begin
         m = LineToADDataMap()
@@ -74,10 +81,28 @@
             )
         end
         @testset "GlobalRef" begin
-            @test TestUtils.has_equal_data(
-                make_ad_stmts!(GlobalRef(Base, :sin), ID(), info),
-                ADStmtInfo(GlobalRef(Base, :sin), nothing, nothing),
-            )
+            @testset "non-const" begin
+                @test_throws(
+                    Taped.UnhandledLanguageFeatureException,
+                    make_ad_stmts!(GlobalRef(S2SGlobals, :non_const_global), ID(), info),
+                )
+            end
+            @testset "non-differentiable globals" begin
+                @test TestUtils.has_equal_data(
+                    make_ad_stmts!(GlobalRef(S2SGlobals, :const_int), ID(), info),
+                    ADStmtInfo(GlobalRef(S2SGlobals, :const_int), nothing, nothing),
+                )
+                @test TestUtils.has_equal_data(
+                    make_ad_stmts!(GlobalRef(S2SGlobals, :const_bool), ID(), info),
+                    ADStmtInfo(GlobalRef(S2SGlobals, :const_bool), nothing, nothing),
+                )
+            end
+            @testset "differentiable const globals" begin
+                stmt_info = make_ad_stmts!(GlobalRef(S2SGlobals, :const_float), ID(), info)
+                @test stmt_info isa Taped.ADStmtInfo
+                @test Meta.isexpr(stmt_info.fwds, :call)
+                @test stmt_info.fwds.args[1] == Taped.__assemble_register
+            end
         end
         @testset "QuoteNode" begin
             @test TestUtils.has_equal_data(
@@ -96,10 +121,16 @@
             )
         end
         @testset "PhiCNode" begin
-            @test_throws ErrorException make_ad_stmts!(Core.PhiCNode(Any[]), ID(), info)
+            @test_throws(
+                Taped.UnhandledLanguageFeatureException,
+                make_ad_stmts!(Core.PhiCNode(Any[]), ID(), info),
+            )
         end
         @testset "UpsilonNode" begin
-            @test_throws ErrorException make_ad_stmts!(Core.UpsilonNode(5), ID(), info)
+            @test_throws(
+                Taped.UnhandledLanguageFeatureException,
+                make_ad_stmts!(Core.UpsilonNode(5), ID(), info),
+            )
         end
         @testset "Expr" begin
             @testset "invoke" begin
@@ -162,9 +193,8 @@
         # interp_ratio = time(interp_time) / time(primal_time)
         # println("s2s ratio ratio: $(s2s_ratio)")
         # println("interp ratio: $(interp_ratio)")
-        # push!(ratios, (s2s_ratio, interp_ratio))
         # @profview(run_many_times(
-        #     10_000_000,
+        #     100_000_000,
         #     (rule, codual_args, out) -> rule(codual_args...)[2](tangent(out), map(tangent, codual_args)...),
         #     rule,
         #     codual_args,
