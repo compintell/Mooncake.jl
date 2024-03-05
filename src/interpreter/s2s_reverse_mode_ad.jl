@@ -133,38 +133,40 @@ function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
 
 end
 
-# If tangent type of GlobalRef stmt is provably NoTangent, we just return the stmt.
-# Otherwise, create a stack, put it in the shared data, and add functionality to construct
-# an AugmentedRegister with the correct tangent stack.
+# Constant GlobalRefs are handled. See const_register. Non-constant
+# GlobalRefs are not handled by Taped -- an appropriate error is thrown.
 function make_ad_stmts!(stmt::GlobalRef, line::ID, info::ADInfo)
     isconst(stmt) || unhandled_feature("Non-constant GlobalRef not supported")
-    primal_type = globalref_type(stmt)
+    return const_register(globalref_type(stmt), stmt, line, info)
+end
+
+# See make_const_register for details.
+function make_ad_stmts!(stmt::QuoteNode, line::ID, info::ADInfo)
+    return const_register(_typeof(stmt.value), stmt, line, info)
+end
+
+# Literal constant. See const_register for details.
+function make_ad_stmts!(stmt, line::ID, info::ADInfo)
+    return const_register(_typeof(stmt), stmt, line, info)
+end
+
+# If `primal_type` is provably non-differentiable, return statement with no tangent stack.
+# Otherwise return an AugmentedRegister whose tangent_stack is stored in shared data.
+function const_register(primal_type, stmt, line::ID, info::ADInfo)
     if tangent_type(primal_type) == NoTangent
-        fwds = stmt
-        shared_data = nothing
+        return ADStmtInfo(stmt, nothing, nothing)
     else
         capture_index = get_storage_location!(info.line_map, line)
         fwds = Expr(:call, __assemble_register, Argument(0), Val(capture_index), stmt)
         shared_data = make_tangent_stack(primal_type)
+        return ADStmtInfo(fwds, nothing, shared_data)
     end
-    return ADStmtInfo(fwds, nothing, shared_data)
 end
 
+# Helper function, emitted from `make_const_augmented_register`.
 @inline function __assemble_register(captures, ::Val{n}, x::P) where {n, P}
     is_inactive = tangent_type(P) == NoTangent
     return is_inactive ? x : AugmentedRegister(zero_codual(x), captures[n])
-end
-
-# Replace statement with quote node for zero `CoDual`. No shared data.
-function make_ad_stmts!(stmt::QuoteNode, ::ID, ::ADInfo)
-    return ADStmtInfo(QuoteNode(zero_codual(stmt.value)), nothing, nothing)
-end
-
-# Literal statement. Replace with zero `CoDual`. For example, `5` becomes a quote node
-# containing `CoDual(5, NoTangent())`, and `5.0` becomes a quote node `CoDual(5.0, 0.0)`.
-# No shared data.
-function make_ad_stmts!(stmt, ::ID, ::ADInfo)
-    return ADStmtInfo(QuoteNode(zero_codual(stmt)), nothing, nothing)
 end
 
 # Taped does not yet handle `PhiCNode`s. Throw an error if one is encountered.

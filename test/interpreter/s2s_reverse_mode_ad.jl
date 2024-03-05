@@ -107,18 +107,22 @@ end
         @testset "QuoteNode" begin
             @test TestUtils.has_equal_data(
                 make_ad_stmts!(QuoteNode("hi"), ID(), info),
-                ADStmtInfo(QuoteNode(CoDual("hi", NoTangent())), nothing, nothing),
+                ADStmtInfo(QuoteNode("hi"), nothing, nothing),
             )
         end
         @testset "literal" begin
-            @test TestUtils.has_equal_data(
-                make_ad_stmts!(5, ID(), info),
-                ADStmtInfo(QuoteNode(CoDual(5, NoTangent())), nothing, nothing),
-            )
-            @test TestUtils.has_equal_data(
-                make_ad_stmts!(0.0, ID(), info),
-                ADStmtInfo(QuoteNode(CoDual(0.0, 0.0)), nothing, nothing),
-            )
+            @testset "non-differentiable" begin
+                @test TestUtils.has_equal_data(
+                    make_ad_stmts!(5, ID(), info),
+                    ADStmtInfo(5, nothing, nothing),
+                )
+            end
+            @testset "differentiable" begin
+                stmt_info = make_ad_stmts!(0.0, ID(), info)
+                @test stmt_info isa ADStmtInfo
+                @test Meta.isexpr(stmt_info.fwds, :call)
+                @test stmt_info.fwds.args[1] == Taped.__assemble_register
+            end
         end
         @testset "PhiCNode" begin
             @test_throws(
