@@ -28,9 +28,8 @@ function register_type(::Type{P}) where {P}
     P == DataType && return Any
     P isa Union && return Union{register_type(P.a), register_type(P.b)}
     if isconcretetype(P)
-        is_inactive = tangent_type(P) == NoTangent
-        return is_inactive ? P : AugmentedRegister{codual_type(P), tangent_stack_type(P)}
+        return AugmentedRegister{codual_type(P), tangent_stack_type(P)}
     else
-        return Any
+        return AugmentedRegister
     end
 end
