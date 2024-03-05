@@ -181,14 +181,12 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         end
 
         # Create data shared between the forwards- and reverse-passes.
-        P = get_primal_type(info, line)
-        fwds_ret_type = tangent_type(P) === NoTangent ? P : Any
         data = (
             rule=rule,
             pb_stack=build_pb_stack(_typeof(rule), arg_types),
             my_tangent_stack=make_tangent_stack(get_primal_type(info, line)),
             arg_tangent_stacks=map(__make_arg_tangent_stack, arg_types, args),
-            fwds_ret_type=fwds_ret_type, # helpful hint for the compiler to make inference work
+            fwds_ret_type=register_type(get_primal_type(info, line)),
         )
 
         # Get a location in the global captures in which `data` can live.
@@ -258,11 +256,11 @@ end
     data = getfield(captures, capture_index)
 
     # Log the location of the tangents associated to each argument.
-    tangent_stacks = map(x -> isa(x, Tuple{CoDual, Any}) ? x[2] : nothing, raw_args)
+    tangent_stacks = map(x -> isa(x, AugmentedRegister) ? x.tangent_stack : nothing, raw_args)
     map(__push_ref_stack, data.arg_tangent_stacks, tangent_stacks)
 
     # Run the rule.
-    args = map(x -> isa(x, Tuple{CoDual, Any}) ? x[1] : uninit_codual(x), raw_args)
+    args = map(x -> isa(x, AugmentedRegister) ? x.codual : uninit_codual(x), raw_args)
     out, pb!! = data.rule(args...)
 
     # Log the results and return.
@@ -271,7 +269,7 @@ end
     return assemble_output(out, data.my_tangent_stack)::data.fwds_ret_type
 end
 
-@inline assemble_output(out, my_tangent_stack) = (out, my_tangent_stack)
+@inline assemble_output(out, my_tangent_stack) = AugmentedRegister(out, my_tangent_stack)
 @inline assemble_output(out, ::NoTangentStack) = primal(out)
 
 @inline __push_ref_stack(tangent_ref_stack, stack) = push!(tangent_ref_stack, top_ref(stack))
@@ -282,7 +280,7 @@ end
 #
 # Executes the reverse-pass. `data` is the `NamedTuple` shared with `fwds_pass!`.
 # Much of this pass will be optimised away in practice.
-function __rvs_pass!(captures, ::Val{capture_index})::Nothing where {capture_index}
+@inline function __rvs_pass!(captures, ::Val{capture_index})::Nothing where {capture_index}
 
     # Extract this rules data from the global collection of captures.
     data = captures[capture_index]
@@ -336,16 +334,15 @@ function (fwds::DerivedRule{P, Q, S})(args::Vararg{CoDual, N}) where {P, Q, S, N
     end
 
     push!(fwds.block_stack, fwds.entry_id.id)
-    raw_out = fwds.fwds_oc(args_with_tangent_stacks...)
-    if raw_out isa Tuple
-        out, ret_ref = raw_out
-        return out, Pullback(fwds.pb_oc, ret_ref, fwds.arg_tangent_stacks)
+    out = fwds.fwds_oc(args_with_tangent_stacks...)
+    if out isa AugmentedRegister
+        return out.codual, Pullback(fwds.pb_oc, out.tangent_stack, fwds.arg_tangent_stacks)
     else
-        return zero_codual(raw_out), Pullback(fwds.pb_oc, nothing, fwds.arg_tangent_stacks)
+        return zero_codual(out), Pullback(fwds.pb_oc, nothing, fwds.arg_tangent_stacks)
     end
 end
 
-make_oc_arg(arg, arg_tangent_stack) = (arg, arg_tangent_stack)
+make_oc_arg(arg, arg_tangent_stack) = AugmentedRegister(arg, arg_tangent_stack)
 make_oc_arg(arg, ::NoTangentStack) = primal(arg)
 
 """
@@ -442,16 +439,12 @@ function forwards_pass_ir(ir::BBCode, ad_stmts_blocks::ADStmts, info::ADInfo, Ts
     end
 
     # Create and return the `BBCode` for the forwards-pass.
-    arg_types = vcat(Tshared_data, map(fwds_pass_arg_type ∘ _get_type, ir.argtypes))
+    arg_types = vcat(Tshared_data, map(register_type ∘ _get_type, ir.argtypes))
     return BBCode(blocks, arg_types, ir.sptypes, ir.linetable, ir.meta)
 end
 
 # push a block index `id` onto the block_stack, which is found in `captures[n]`.
 @inline __push_block_stack!(captures, ::Val{n}, id::Int) where {n} = push!(captures[n], id)
-
-function fwds_pass_arg_type(P)
-    return tangent_type(P) == NoTangent ? P : Tuple{codual_type(P), tangent_stack_type(P)}
-end
 
 __inc_arg_number(x::Expr) = Expr(x.head, map(__inc, x.args)...)
 __inc_arg_number(x::ReturnNode) = isdefined(x, :val) ? ReturnNode(__inc(x.val)) : x
