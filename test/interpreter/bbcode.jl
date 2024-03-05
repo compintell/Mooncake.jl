@@ -1,3 +1,7 @@
+module BBCodeTestCases
+    test_phi_node(x::Ref{Union{Float32, Float64}}) = sin(x[])
+end
+
 @testset "bbcode" begin
     @testset "ID" begin
         id1 = ID()
@@ -26,8 +30,12 @@
         end
         @test Taped.first_id(bb) == bb.stmts[1][1]
     end
-    @testset "BBCode $f" for f in [TestResources.test_while_loop, sin]
-        ir = Base.code_ircode(f, Tuple{Float64})[1][1]
+    @testset "BBCode $f" for (f, P) in [
+        (TestResources.test_while_loop, Tuple{Float64}),
+        (sin, Tuple{Float64}),
+        (BBCodeTestCases.test_phi_node, Tuple{Ref{Union{Float32, Float64}}}),
+    ]
+        ir = Base.code_ircode(f, P)[1][1]
         bb_code = BBCode(ir)
         @test bb_code isa BBCode
         @test length(bb_code.blocks) == length(ir.cfg.blocks)

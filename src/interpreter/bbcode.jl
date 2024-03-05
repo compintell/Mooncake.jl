@@ -276,7 +276,7 @@ function _ssa_to_ids(d::SSAToIdDict, x::ReturnNode)
     return isdefined(x, :val) ? ReturnNode(get(d, x.val, x.val)) : x
 end
 _ssa_to_ids(d::SSAToIdDict, x::Expr) = Expr(x.head, map(a -> get(d, a, a), x.args)...)
-_ssa_to_ids(d::SSAToIdDict, x::PiNode) = throw(error("Unhandled node"))
+_ssa_to_ids(d::SSAToIdDict, x::PiNode) = PiNode(get(d, x.val, x.val), get(d, x.typ, x.typ))
 _ssa_to_ids(d::SSAToIdDict, x::QuoteNode) = x
 _ssa_to_ids(d::SSAToIdDict, x) = x
 function _ssa_to_ids(d::SSAToIdDict, x::PhiNode)
@@ -389,7 +389,7 @@ end
 # Like `_to_ids`, but converts IDs to SSAValues / (integers corresponding to ssas).
 _to_ssas(d::Dict, x::ReturnNode) = isdefined(x, :val) ? ReturnNode(get(d, x.val, x.val)) : x
 _to_ssas(d::Dict, x::Expr) = Expr(x.head, map(a -> get(d, a, a), x.args)...)
-_to_ssas(d::Dict, x::PiNode) = throw(error("Unhandled node"))
+_to_ssas(d::Dict, x::PiNode) = PiNode(get(d, x.val, x.val), get(d, x.typ, x.typ))
 _to_ssas(d::Dict, x::QuoteNode) = x
 _to_ssas(d::Dict, x) = x
 function _to_ssas(d::Dict, x::IDPhiNode)
