@@ -1440,8 +1440,8 @@ function generate_test_functions()
         (false, :allocs, nothing, foo, 5.0),
         (false, :allocs, nothing, bar, 5.0, 4.0),
         (false, :none, nothing, type_unstable_argument_eval, sin, 5.0),
-        # (false, :none, (lb=1, ub=500), pi_node_tester, Ref{Any}(5.0)),
-        # (false, :none, (lb=1, ub=500), pi_node_tester, Ref{Any}(5)),
+        (false, :none, (lb=1, ub=500), pi_node_tester, Ref{Any}(5.0)),
+        (false, :none, (lb=1, ub=500), pi_node_tester, Ref{Any}(5)),
         (false, :allocs, nothing, intrinsic_tester, 5.0),
         (false, :allocs, nothing, goto_tester, 5.0),
         (false, :allocs, nothing, new_tester, 5.0, :hello),
@@ -1451,10 +1451,10 @@ function generate_test_functions()
         (false, :allocs, nothing, type_stable_getfield_tester_2, StableFoo(5.0, :hi)),
         (false, :none, nothing, globalref_tester),
         (false, :none, nothing, globalref_tester_bool),
-        # (false, :stability, nothing, globalref_tester_2, true), # needs PiNode handled
-        # (false, :stability, nothing, globalref_tester_2, false), # needs PiNode handled
+        # (false, :stability, nothing, globalref_tester_2, true), # needs PhiNodes working properly with constants
+        # (false, :stability, nothing, globalref_tester_2, false), # needs PhiNodes working properly with constants
         (false, :allocs, nothing, globalref_tester_3),
-        (false, :allocs, nothing, globalref_tester_4), # type inference issues
+        (false, :allocs, nothing, globalref_tester_4),
         # (false, :none, nothing, type_unstable_tester, Ref{Any}(5.0)),
         # (false, :none, nothing, type_unstable_tester_2, Ref{Real}(5.0)),
         # (false, :none, (lb=1, ub=1000), type_unstable_tester_3, Ref{Any}(5.0)),
@@ -1556,7 +1556,7 @@ function generate_test_functions()
         # (false, :allocs, nothing, test_isbits_multiple_usage_phi, false, 1.1),
         # (false, :allocs, nothing, test_isbits_multiple_usage_phi, true, 1.1),
         (false, :allocs, nothing, test_multiple_call_non_primitive, 5.0),
-        # (false, :none, (lb=1, ub=500), test_multiple_pi_nodes, Ref{Any}(5.0)),
+        (false, :none, (lb=1, ub=500), test_multiple_pi_nodes, Ref{Any}(5.0)),
         # (false, :none, (lb=1, ub=500), test_multi_use_pi_node, Ref{Any}(5.0)),
         (false, :allocs, nothing, test_getindex, [1.0, 2.0]),
         (false, :allocs, nothing, test_mutation!, [1.0, 2.0]),
@@ -1609,7 +1609,7 @@ function generate_test_functions()
         #     randn(sr(2), 700, 500),
         #     randn(sr(3), 300, 700),
         # ),
-        (false, :none, (1.0, 250), test_handwritten_sum, randn(1024), 0.0),
+        (false, :none, (1.0, 250), test_handwritten_sum, randn(1024 * 1024), 0.0),
         # (false, :none, nothing, _sum, randn(1024), 0.0),
     ]
 end
