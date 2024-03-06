@@ -17,6 +17,8 @@ struct AugmentedRegister{T<:CoDual, V}
     tangent_stack::V
 end
 
+@inline primal(reg::AugmentedRegister) = primal(reg.codual)
+
 """
     register_type(::Type{P}) where {P}
 
