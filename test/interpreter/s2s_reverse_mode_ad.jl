@@ -6,12 +6,12 @@ module S2SGlobals
 end
 
 @testset "s2s_reverse_mode_ad" begin
-    @testset "LineToADDataMap" begin
-        m = LineToADDataMap()
-        id = ID()
-        n = Taped.get_storage_location!(m, id)
-        @test Taped.get_storage_location!(m, id) == n
-        @test maximum(values(m.m)) == 1
+    @testset "SharedDataPairs" begin
+        m = SharedDataPairs()
+        id = Taped.add_data!(m, 5.0)
+        @test length(m.pairs) == 1
+        @test m.pairs[1][1] == id
+        @test m.pairs[1][2] == 5.0
     end
     @testset "ADInfo" begin
         arg_types = Dict{Argument, Any}(Argument(1) => Float64, Argument(2) => Int)
@@ -50,7 +50,7 @@ end
             line = ID()
             @test TestUtils.has_equal_data(
                 make_ad_stmts!(nothing, line, info),
-                ad_stmt_info(line, nothing, nothing, nothing),
+                ad_stmt_info(line, nothing, nothing),
             )
         end
         @testset "ReturnNode" begin
@@ -58,14 +58,14 @@ end
             @testset "unreachable" begin
                 @test TestUtils.has_equal_data(
                     make_ad_stmts!(ReturnNode(), line, info),
-                    ad_stmt_info(line, ReturnNode(), nothing, nothing),
+                    ad_stmt_info(line, ReturnNode(), nothing),
                 )
             end
             @testset "Argument" begin
                 val = Argument(4)
                 @test TestUtils.has_equal_data(
                     make_ad_stmts!(ReturnNode(Argument(2)), line, info),
-                    ad_stmt_info(line, ReturnNode(Argument(3)), nothing, nothing),
+                    ad_stmt_info(line, ReturnNode(Argument(3)), nothing),
                 )
             end
             @testset "literal" begin
@@ -86,8 +86,7 @@ end
             line = ID()
             stmt = IDGotoNode(ID())
             @test TestUtils.has_equal_data(
-                make_ad_stmts!(stmt, line, info),
-                ad_stmt_info(line, stmt, nothing, nothing),
+                make_ad_stmts!(stmt, line, info), ad_stmt_info(line, stmt, nothing)
             )
         end
         @testset "IDGotoIfNot" begin
@@ -97,7 +96,6 @@ end
             ad_stmts = make_ad_stmts!(stmt, line, info)
             @test ad_stmts isa ADStmtInfo
             @test ad_stmts.rvs === nothing
-            @test ad_stmts.data === nothing
             fwds = ad_stmts.fwds
             @test fwds[1][1] == fwds[2][2].cond
             @test Meta.isexpr(fwds[1][2], :call)
@@ -108,8 +106,7 @@ end
             line = ID()
             stmt = IDPhiNode(ID[ID(), ID()], Any[ID(), 5.0])
             @test TestUtils.has_equal_data(
-                make_ad_stmts!(stmt, line, info),
-                ad_stmt_info(line, stmt, nothing, nothing),
+                make_ad_stmts!(stmt, line, info), ad_stmt_info(line, stmt, nothing),
             )
         end
         @testset "PiNode" begin
@@ -161,17 +158,13 @@ end
                 @test fwds_stmt.args[1] == Taped.__fwds_pass!
                 @test Meta.isexpr(ad_stmts.rvs, :call)
                 @test ad_stmts.rvs.args[1] == Taped.__rvs_pass!
-                @test hasproperty(ad_stmts.data, :arg_tangent_stacks)
-                @test hasproperty(ad_stmts.data, :my_tangent_stack)
-                @test hasproperty(ad_stmts.data, :pb_stack)
-                @test hasproperty(ad_stmts.data, :rule)
             end
             @testset "throw_undef_if_not" begin
                 cond_id = ID()
                 line = ID()
                 @test TestUtils.has_equal_data(
                     make_ad_stmts!(Expr(:throw_undef_if_not, :x, cond_id), line, info),
-                    ad_stmt_info(line, Expr(:throw_undef_if_not, :x, cond_id), nothing, nothing),
+                    ad_stmt_info(line, Expr(:throw_undef_if_not, :x, cond_id), nothing),
                 )
             end
             @testset "$stmt" for stmt in [
@@ -180,7 +173,7 @@ end
                 line = ID()
                 @test TestUtils.has_equal_data(
                     make_ad_stmts!(stmt, line, info),
-                    ad_stmt_info(line, stmt, nothing, nothing),
+                    ad_stmt_info(line, stmt, nothing),
                 )
             end
         end

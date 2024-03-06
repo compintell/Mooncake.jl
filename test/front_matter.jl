@@ -54,7 +54,7 @@ using Taped:
     ADStmtInfo,
     ad_stmt_info,
     ADInfo,
-    LineToADDataMap
+    SharedDataPairs
 
 using .TestUtils:
     test_rrule!!,
