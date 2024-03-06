@@ -1475,7 +1475,7 @@ function generate_test_functions()
         #     randn(5),
         #     1,
         #     Base.Slice(Base.OneTo(1)),
-        # ), # fun PhiNode example to do with not assigning values
+        # ), # fun PhiNode example
         # (false, :allocs, nothing, avoid_throwing_path_tester, 5.0),
         (false, :allocs, nothing, simple_foreigncall_tester, randn(5)),
         (false, :none, nothing, simple_foreigncall_tester_2, randn(6), (2, 3)),
