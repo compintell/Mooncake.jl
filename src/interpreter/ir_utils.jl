@@ -260,3 +260,27 @@ struct UnhandledLanguageFeatureException <: Exception
 end
 
 unhandled_feature(msg::String) = throw(UnhandledLanguageFeatureException(msg))
+
+"""
+    inc_arg_numbers(stmt)
+
+Increment by `1` the `n` field of any `Argument`s present in `stmt`.
+"""
+inc_arg_numbers(x::Expr) = Expr(x.head, map(__inc, x.args)...)
+inc_arg_numbers(x::ReturnNode) = isdefined(x, :val) ? ReturnNode(__inc(x.val)) : x
+inc_arg_numbers(x::IDGotoIfNot) = IDGotoIfNot(__inc(x.cond), x.dest)
+inc_arg_numbers(x::IDGotoNode) = x
+function inc_arg_numbers(x::IDPhiNode)
+    new_values = Vector{Any}(undef, length(x.values))
+    for n in eachindex(x.values)
+        if isassigned(x.values, n)
+            new_values[n] = __inc(x.values[n])
+        end
+    end
+    return IDPhiNode(x.edges, new_values)
+end
+inc_arg_numbers(::Nothing) = nothing
+inc_arg_numbers(x::GlobalRef) = x
+
+__inc(x::Argument) = Argument(x.n + 1)
+__inc(x) = x

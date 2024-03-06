@@ -88,4 +88,17 @@ end
     @testset "unhandled_feature" begin
         @test_throws Taped.UnhandledLanguageFeatureException Taped.unhandled_feature("foo")
     end
+    @testset "inc_arg_numbers" begin
+        @test ==(
+            Taped.inc_arg_numbers(Expr(:call, sin, Argument(4))),
+            Expr(:call, sin, Argument(5)),
+        )
+        @test Taped.inc_arg_numbers(ReturnNode(Argument(2))) == ReturnNode(Argument(3))
+        id = ID()
+        @test ==(
+            Taped.inc_arg_numbers(IDGotoIfNot(Argument(1), id)),
+            IDGotoIfNot(Argument(2), id),
+        )
+        @test Taped.inc_arg_numbers(IDGotoNode(id)) == IDGotoNode(id)
+    end
 end
