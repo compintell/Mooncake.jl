@@ -47,38 +47,84 @@ end
         )
 
         @testset "Nothing" begin
+            line = ID()
             @test TestUtils.has_equal_data(
-                make_ad_stmts!(nothing, ID(), info),
-                ADStmtInfo(nothing, nothing, nothing),
+                make_ad_stmts!(nothing, line, info),
+                ad_stmt_info(line, nothing, nothing, nothing),
             )
         end
         @testset "ReturnNode" begin
-            @test TestUtils.has_equal_data(
-                make_ad_stmts!(ReturnNode(), ID(), info),
-                ADStmtInfo(ReturnNode(), nothing, nothing),
-            )
-            @test TestUtils.has_equal_data(
-                make_ad_stmts!(ReturnNode(5.0), ID(), info),
-                ADStmtInfo(ReturnNode(5.0), nothing, nothing),
-            )
+            line = ID()
+            @testset "unreachable" begin
+                @test TestUtils.has_equal_data(
+                    make_ad_stmts!(ReturnNode(), line, info),
+                    ad_stmt_info(line, ReturnNode(), nothing, nothing),
+                )
+            end
+            @testset "Argument" begin
+                val = Argument(4)
+                @test TestUtils.has_equal_data(
+                    make_ad_stmts!(ReturnNode(Argument(2)), line, info),
+                    ad_stmt_info(line, ReturnNode(Argument(3)), nothing, nothing),
+                )
+            end
+            @testset "literal" begin
+                stmt_info = make_ad_stmts!(ReturnNode(5.0), line, info)
+                @test stmt_info isa ADStmtInfo
+                @test stmt_info.fwds[2][2] isa ReturnNode
+                @test stmt_info.fwds[1][1] == stmt_info.fwds[2][2].val
+            end
+            @testset "GlobalRef" begin
+                node = ReturnNode(GlobalRef(S2SGlobals, :const_float))
+                stmt_info = make_ad_stmts!(node, line, info)
+                @test stmt_info isa ADStmtInfo
+                @test stmt_info.fwds[2][2] isa ReturnNode
+                @test stmt_info.fwds[1][1] == stmt_info.fwds[2][2].val
+            end
         end
         @testset "IDGotoNode" begin
+            line = ID()
             stmt = IDGotoNode(ID())
             @test TestUtils.has_equal_data(
-                make_ad_stmts!(stmt, ID(), info), ADStmtInfo(stmt, nothing, nothing),
+                make_ad_stmts!(stmt, line, info),
+                ad_stmt_info(line, stmt, nothing, nothing),
             )
         end
         @testset "IDGotoIfNot" begin
-            stmt = IDGotoIfNot(ID(), ID())
-            @test TestUtils.has_equal_data(
-                make_ad_stmts!(stmt, ID(), info), ADStmtInfo(stmt, nothing, nothing),
-            )
+            line = ID()
+            cond_id = ID()
+            stmt = IDGotoIfNot(cond_id, ID())
+            ad_stmts = make_ad_stmts!(stmt, line, info)
+            @test ad_stmts isa ADStmtInfo
+            @test ad_stmts.rvs === nothing
+            @test ad_stmts.data === nothing
+            fwds = ad_stmts.fwds
+            @test fwds[1][1] == fwds[2][2].cond
+            @test Meta.isexpr(fwds[1][2], :call)
+            @test fwds[2][2] isa IDGotoIfNot
+            @test fwds[2][2].dest == stmt.dest
         end
         @testset "IDPhiNode" begin
+            line = ID()
             stmt = IDPhiNode(ID[ID(), ID()], Any[ID(), 5.0])
             @test TestUtils.has_equal_data(
-                make_ad_stmts!(stmt, ID(), info), ADStmtInfo(stmt, nothing, nothing),
+                make_ad_stmts!(stmt, line, info),
+                ad_stmt_info(line, stmt, nothing, nothing),
             )
+        end
+        @testset "PiNode" begin
+            @testset "unhandled case" begin
+                @test_throws(
+                    Taped.UnhandledLanguageFeatureException,
+                    make_ad_stmts!(PiNode(5.0, Float64), ID(), info),
+                )
+            end
+            @testset "sharpen type of ID" begin
+                line = ID()
+                val = id_line_2
+                stmt_info = make_ad_stmts!(PiNode(val, Float64), line, info)
+                @test stmt_info isa ADStmtInfo
+            end
         end
         @testset "GlobalRef" begin
             @testset "non-const" begin
@@ -87,41 +133,11 @@ end
                     make_ad_stmts!(GlobalRef(S2SGlobals, :non_const_global), ID(), info),
                 )
             end
-            @testset "non-differentiable globals" begin
-                @test TestUtils.has_equal_data(
-                    make_ad_stmts!(GlobalRef(S2SGlobals, :const_int), ID(), info),
-                    ADStmtInfo(GlobalRef(S2SGlobals, :const_int), nothing, nothing),
-                )
-                @test TestUtils.has_equal_data(
-                    make_ad_stmts!(GlobalRef(S2SGlobals, :const_bool), ID(), info),
-                    ADStmtInfo(GlobalRef(S2SGlobals, :const_bool), nothing, nothing),
-                )
-            end
             @testset "differentiable const globals" begin
                 stmt_info = make_ad_stmts!(GlobalRef(S2SGlobals, :const_float), ID(), info)
                 @test stmt_info isa Taped.ADStmtInfo
-                @test Meta.isexpr(stmt_info.fwds, :call)
-                @test stmt_info.fwds.args[1] == Taped.__assemble_register
-            end
-        end
-        @testset "QuoteNode" begin
-            @test TestUtils.has_equal_data(
-                make_ad_stmts!(QuoteNode("hi"), ID(), info),
-                ADStmtInfo(QuoteNode("hi"), nothing, nothing),
-            )
-        end
-        @testset "literal" begin
-            @testset "non-differentiable" begin
-                @test TestUtils.has_equal_data(
-                    make_ad_stmts!(5, ID(), info),
-                    ADStmtInfo(5, nothing, nothing),
-                )
-            end
-            @testset "differentiable" begin
-                stmt_info = make_ad_stmts!(0.0, ID(), info)
-                @test stmt_info isa ADStmtInfo
-                @test Meta.isexpr(stmt_info.fwds, :call)
-                @test stmt_info.fwds.args[1] == Taped.__assemble_register
+                @test Meta.isexpr(only(stmt_info.fwds)[2], :call)
+                @test only(stmt_info.fwds)[2].args[1] == Taped.__assemble_register
             end
         end
         @testset "PhiCNode" begin
@@ -140,8 +156,9 @@ end
             @testset "invoke" begin
                 stmt = Expr(:invoke, nothing, cos, Argument(2))
                 ad_stmts = make_ad_stmts!(stmt, id_line_1, info)
-                @test Meta.isexpr(ad_stmts.fwds, :call)
-                @test ad_stmts.fwds.args[1] == Taped.__fwds_pass!
+                fwds_stmt = only(ad_stmts.fwds)[2]
+                @test Meta.isexpr(fwds_stmt, :call)
+                @test fwds_stmt.args[1] == Taped.__fwds_pass!
                 @test Meta.isexpr(ad_stmts.rvs, :call)
                 @test ad_stmts.rvs.args[1] == Taped.__rvs_pass!
                 @test hasproperty(ad_stmts.data, :arg_tangent_stacks)
@@ -151,16 +168,19 @@ end
             end
             @testset "throw_undef_if_not" begin
                 cond_id = ID()
+                line = ID()
                 @test TestUtils.has_equal_data(
-                    make_ad_stmts!(Expr(:throw_undef_if_not, :x, cond_id), ID(), info),
-                    ADStmtInfo(Expr(:throw_undef_if_not, :x, cond_id), nothing, nothing),
+                    make_ad_stmts!(Expr(:throw_undef_if_not, :x, cond_id), line, info),
+                    ad_stmt_info(line, Expr(:throw_undef_if_not, :x, cond_id), nothing, nothing),
                 )
             end
             @testset "$stmt" for stmt in [
                 Expr(:boundscheck),
             ]
+                line = ID()
                 @test TestUtils.has_equal_data(
-                    make_ad_stmts!(stmt, ID(), info), ADStmtInfo(stmt, nothing, nothing)
+                    make_ad_stmts!(stmt, line, info),
+                    ad_stmt_info(line, stmt, nothing, nothing),
                 )
             end
         end
