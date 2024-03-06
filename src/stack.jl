@@ -27,7 +27,7 @@ Stack(x::T) where {T} = Stack{T}(x)
         @inbounds memory[position] = val
         return nothing
     else
-        push!(memory, val)
+        @noinline push!(memory, val)
         return nothing
     end
 end

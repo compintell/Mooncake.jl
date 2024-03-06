@@ -1465,7 +1465,7 @@ function generate_test_functions()
         (false, :allocs, nothing, phi_const_bool_tester, -5.0),
         (false, :allocs, nothing, phi_node_with_undefined_value, true, 4.0),
         (false, :allocs, nothing, phi_node_with_undefined_value, false, 4.0),
-        # (false, :allocs, nothing, test_multiple_phinode_block, 3.0), # correctness error -- super weird
+        (false, :allocs, nothing, test_multiple_phinode_block, 3.0),
         # (
         #     false,
         #     :none,

@@ -14,7 +14,7 @@ primal type is `Float64`.
 """
 struct AugmentedRegister{T<:CoDual, V}
     codual::T
-    tangent_stack::V
+    tangent_ref::V
 end
 
 @inline primal(reg::AugmentedRegister) = primal(reg.codual)
@@ -30,7 +30,7 @@ function register_type(::Type{P}) where {P}
     P == DataType && return Any
     P isa Union && return Union{register_type(P.a), register_type(P.b)}
     if isconcretetype(P)
-        return AugmentedRegister{codual_type(P), tangent_stack_type(P)}
+        return AugmentedRegister{codual_type(P), tangent_ref_type_ub(P)}
     else
         return AugmentedRegister
     end

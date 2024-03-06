@@ -232,9 +232,9 @@ function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
 end
 
 @inline function __pi_fwds!(tangent_stack, tangent_ref_stack, reg::AugmentedRegister)
-    push!(tangent_ref_stack, top_ref(reg.tangent_stack))
+    push!(tangent_ref_stack, reg.tangent_ref)
     push!(tangent_stack, tangent(reg.codual))
-    return AugmentedRegister(reg.codual, tangent_stack)
+    return AugmentedRegister(reg.codual, top_ref(tangent_stack))
 end
 
 @inline function __pi_rvs!(tangent_stack, tangent_ref_stack)
@@ -264,7 +264,7 @@ function augmented_const_components(stmt, info::ADInfo)
     primal_value = get_primal_value(stmt)
     tangent_stack = make_tangent_stack(_typeof(primal_value))
     push!(tangent_stack, zero_tangent(primal_value))
-    const_reg = AugmentedRegister(zero_codual(primal_value), tangent_stack)
+    const_reg = AugmentedRegister(zero_codual(primal_value), top_ref(tangent_stack))
     const_reg_id = add_data!(info.shared_data_pairs, const_reg)
     return const_reg_id
 end
@@ -275,11 +275,6 @@ function get_primal_value(x::GlobalRef)
 end
 get_primal_value(x::QuoteNode) = x.value
 get_primal_value(x) = x
-
-# Helper function, emitted from `make_const_augmented_register`.
-@inline function __assemble_register(tangent_stack, x)
-    return AugmentedRegister(zero_codual(x), tangent_stack)
-end
 
 # Taped does not yet handle `PhiCNode`s. Throw an error if one is encountered.
 function make_ad_stmts!(stmt::Core.PhiCNode, ::ID, ::ADInfo)
@@ -316,7 +311,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
             rule=rule,
             pb_stack=build_pb_stack(_typeof(rule), arg_types),
             my_tangent_stack=make_tangent_stack(get_primal_type(info, line)),
-            arg_tangent_stacks=map(__make_arg_tangent_stack, arg_types, args),
+            arg_tangent_ref_stacks=map(__make_arg_tangent_ref_stack, arg_types, args),
             fwds_ret_type=register_type(get_primal_type(info, line)),
         )
 
@@ -351,7 +346,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
     end
 end
 
-function __make_arg_tangent_stack(arg_type, arg)
+function __make_arg_tangent_ref_stack(arg_type, arg)
     is_active(arg) || return InactiveStack(InactiveRef(__zero_tangent(arg)))
     return make_tangent_ref_stack(tangent_ref_type_ub(arg_type))
 end
@@ -383,8 +378,8 @@ end
     raw_args = (f, raw_args...)
 
     # Log the location of the tangents associated to each argument.
-    tangent_stacks = map(x -> isa(x, AugmentedRegister) ? x.tangent_stack : nothing, raw_args)
-    map(__push_ref_stack, data.arg_tangent_stacks, tangent_stacks)
+    tangent_refs = map(x -> isa(x, AugmentedRegister) ? x.tangent_ref : nothing, raw_args)
+    map(__push_ref_stack, data.arg_tangent_ref_stacks, tangent_refs)
 
     # Run the rule.
     args = map(x -> isa(x, AugmentedRegister) ? x.codual : uninit_codual(x), raw_args)
@@ -393,12 +388,12 @@ end
     # Log the results and return.
     push!(data.my_tangent_stack, tangent(out))
     push!(data.pb_stack, pb!!)
-    return AugmentedRegister(out, data.my_tangent_stack)::data.fwds_ret_type
+    return AugmentedRegister(out, top_ref(data.my_tangent_stack))::data.fwds_ret_type
 end
 
-@inline __push_ref_stack(tangent_ref_stack, stack) = push!(tangent_ref_stack, top_ref(stack))
-@inline __push_ref_stack(::InactiveStack, stack) = nothing
-@inline __push_ref_stack(::NoTangentRefStack, stack) = nothing
+@inline __push_ref_stack(tangent_ref_stack, ref) = push!(tangent_ref_stack, ref)
+@inline __push_ref_stack(::InactiveStack, ref) = nothing
+@inline __push_ref_stack(::NoTangentRefStack, ref) = nothing
 
 # Used in `make_ad_stmts!` method for `Expr(:call, ...)` and `Expr(:invoke, ...)`.
 #
@@ -411,7 +406,7 @@ end
     pb!! = pop!(data.pb_stack)
 
     # Get the tangent w.r.t. each argument of the primal.
-    tangent_stacks = tuple_map(pop!, data.arg_tangent_stacks)
+    tangent_stacks = tuple_map(pop!, data.arg_tangent_ref_stacks)
 
     # Run the pullback and increment the argument tangents.
     dargs = tuple_map(set_immutable_to_zero ∘ getindex, tangent_stacks)
@@ -433,7 +428,7 @@ end
 
 function (pb::Pullback{P, Q})(dy, dargs::Vararg{Any, N}) where {P, Q, N}
     map(setindex!, map(top_ref, pb.arg_tangent_stacks), dargs)
-    increment_ref!(top_ref(pb.ret_ref), dy)
+    increment_ref!(pb.ret_ref, dy)
     pb.pb_oc(dy, dargs...)
     return map(pop!, pb.arg_tangent_stacks)
 end
@@ -451,14 +446,14 @@ function (fwds::DerivedRule{P, Q, S})(args::Vararg{CoDual, N}) where {P, Q, S, N
     # Load arguments in to stacks, and create tuples.
     args_with_tangent_stacks = map(args, fwds.arg_tangent_stacks) do arg, arg_tangent_stack
         push!(arg_tangent_stack, tangent(arg))
-        return AugmentedRegister(arg, arg_tangent_stack)
+        return AugmentedRegister(arg, top_ref(arg_tangent_stack))
     end
 
     # Run forwards-pass.
     reg = fwds.fwds_oc(args_with_tangent_stacks...)::AugmentedRegister
 
     # Extract result and assemble pullback.
-    return reg.codual, Pullback(fwds.pb_oc, reg.tangent_stack, fwds.arg_tangent_stacks)
+    return reg.codual, Pullback(fwds.pb_oc, reg.tangent_ref, fwds.arg_tangent_stacks)
 end
 
 """
