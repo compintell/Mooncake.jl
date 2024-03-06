@@ -1476,7 +1476,7 @@ function generate_test_functions()
         #     1,
         #     Base.Slice(Base.OneTo(1)),
         # ), # fun PhiNode example
-        # (false, :allocs, nothing, avoid_throwing_path_tester, 5.0),
+        # (false, :allocs, nothing, avoid_throwing_path_tester, 5.0), # weird annoying zero-index bug
         (false, :allocs, nothing, simple_foreigncall_tester, randn(5)),
         (false, :none, nothing, simple_foreigncall_tester_2, randn(6), (2, 3)),
         (false, :allocs, nothing, foreigncall_tester, randn(5)),
@@ -1502,14 +1502,14 @@ function generate_test_functions()
         # (false, :none, nothing, inferred_const_tester, Ref{Any}(nothing)), # dynamic dispatch
         (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 1),
         (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 2),
-        # (false, :none, (lb=1, ub=100_000_000), test_union_of_arrays, randn(5), true),
-        # (
-        #     false,
-        #     :none,
-        #     nothing,
-        #     test_union_of_types,
-        #     Ref{Union{Type{Float64}, Type{Int}}}(Float64),
-        # ),
+        # (false, :none, (lb=1, ub=100_000_000), test_union_of_arrays, randn(5), true), # dynamic dispatch
+        (
+            false,
+            :none,
+            nothing,
+            test_union_of_types,
+            Ref{Union{Type{Float64}, Type{Int}}}(Float64),
+        ),
         # (false, :allocs, nothing, test_self_reference, 1.1, 1.5),
         # (false, :allocs, nothing, test_self_reference, 1.5, 1.1),
         # (false, :none, nothing, test_recursive_sum, randn(2)),
@@ -1566,7 +1566,7 @@ function generate_test_functions()
         (false, :none, nothing, test_mutable_struct_basic, 5.0),
         (false, :none, nothing, test_mutable_struct_basic_sin, 5.0),
         (false, :none, nothing, test_mutable_struct_setfield, 4.0),
-        # (false, :none, (lb=1, ub=2_000), test_mutable_struct, 5.0),
+        # (false, :none, (lb=1, ub=2_000), test_mutable_struct, 5.0), dynamic dispatch
         (false, :none, nothing, test_struct_partial_init, 3.5),
         (false, :none, nothing, test_mutable_partial_init, 3.3),
         (
@@ -1588,7 +1588,7 @@ function generate_test_functions()
         #     :allocs,
         #     (lb=100, ub=5_000),
         #     ldiv!, randn(20, 20), Diagonal(rand(20) .+ 1), randn(20, 20),
-        # ),
+        # ), dynamic dispatch
         # (
         #     false,
         #     :allocs,
