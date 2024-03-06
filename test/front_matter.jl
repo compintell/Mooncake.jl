@@ -52,6 +52,7 @@ using Taped:
     BBlock,
     make_ad_stmts!,
     ADStmtInfo,
+    ad_stmt_info,
     ADInfo,
     LineToADDataMap
 
