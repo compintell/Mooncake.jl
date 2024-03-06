@@ -1424,7 +1424,8 @@ function _sum(x)
     return z
 end
 
-function test_handwritten_sum(x::AbstractArray{<:Real}, y)
+function test_handwritten_sum(x::AbstractArray{<:Real})
+    y = 0.0
     n = 0
     while n < length(x)
         n += 1
@@ -1451,8 +1452,8 @@ function generate_test_functions()
         (false, :allocs, nothing, type_stable_getfield_tester_2, StableFoo(5.0, :hi)),
         (false, :none, nothing, globalref_tester),
         (false, :none, nothing, globalref_tester_bool),
-        # (false, :stability, nothing, globalref_tester_2, true), # needs PhiNodes working properly with constants
-        # (false, :stability, nothing, globalref_tester_2, false), # needs PhiNodes working properly with constants
+        (false, :none, nothing, globalref_tester_2, true),
+        (false, :none, nothing, globalref_tester_2, false),
         (false, :allocs, nothing, globalref_tester_3),
         (false, :allocs, nothing, globalref_tester_4),
         # (false, :none, nothing, type_unstable_tester, Ref{Any}(5.0)),
@@ -1464,7 +1465,7 @@ function generate_test_functions()
         (false, :allocs, nothing, phi_const_bool_tester, -5.0),
         (false, :allocs, nothing, phi_node_with_undefined_value, true, 4.0),
         (false, :allocs, nothing, phi_node_with_undefined_value, false, 4.0),
-        # (false, :allocs, nothing, test_multiple_phinode_block, 3.0),
+        # (false, :allocs, nothing, test_multiple_phinode_block, 3.0), # correctness error -- super weird
         # (
         #     false,
         #     :none,
@@ -1498,7 +1499,7 @@ function generate_test_functions()
         # # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}(5.0)), # known failure case -- no rrule for _apply_iterate
         # # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}((5.0, 4.0))), # known failure case -- no rrule for _apply_iterate
         # # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}((5.0, 4.0, 3.0))), # known failure case -- no rrule for _apply_iterate
-        # (false, :none, nothing, inferred_const_tester, Ref{Any}(nothing)),
+        # (false, :none, nothing, inferred_const_tester, Ref{Any}(nothing)), # dynamic dispatch
         (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 1),
         (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 2),
         # (false, :none, (lb=1, ub=100_000_000), test_union_of_arrays, randn(5), true),
@@ -1521,7 +1522,7 @@ function generate_test_functions()
         #     5.0,
         #     randn(5, 4),
         #     (5, 4),
-        # ), # for Bool comma,
+        # ), # for Bool comma, # odd error
         (false, :allocs, nothing, getfield_tester, (5.0, 5)),
         (false, :allocs, nothing, getfield_tester_2, (5.0, 5)),
         (
@@ -1543,7 +1544,7 @@ function generate_test_functions()
         # (
         #     false, :none, (lb=100, ub=100_000_000),
         #     mul!, transpose(randn(3, 5)), randn(5, 5), randn(5, 3), 4.0, 3.0,
-        # ), # static_parameter,
+        # ), # static_parameter, dynamic dispatch
         # (false, :none, (lb=100, ub=100_000_000), Xoshiro, 123456),
         # (false, :none, (lb=1, ub=100_000), *, randn(250, 500), randn(500, 250)),
         (false, :allocs, nothing, test_sin, 1.0),
@@ -1553,11 +1554,11 @@ function generate_test_functions()
         (false, :allocs, nothing, test_isbits_multiple_usage_3, 4.1),
         (false, :allocs, nothing, test_isbits_multiple_usage_4, 5.0),
         (false, :allocs, nothing, test_isbits_multiple_usage_5, 4.1),
-        # (false, :allocs, nothing, test_isbits_multiple_usage_phi, false, 1.1),
-        # (false, :allocs, nothing, test_isbits_multiple_usage_phi, true, 1.1),
+        (false, :allocs, nothing, test_isbits_multiple_usage_phi, false, 1.1),
+        (false, :allocs, nothing, test_isbits_multiple_usage_phi, true, 1.1),
         (false, :allocs, nothing, test_multiple_call_non_primitive, 5.0),
         (false, :none, (lb=1, ub=500), test_multiple_pi_nodes, Ref{Any}(5.0)),
-        # (false, :none, (lb=1, ub=500), test_multi_use_pi_node, Ref{Any}(5.0)),
+        # (false, :none, (lb=1, ub=500), test_multi_use_pi_node, Ref{Any}(5.0)), # dynamic dispatch
         (false, :allocs, nothing, test_getindex, [1.0, 2.0]),
         (false, :allocs, nothing, test_mutation!, [1.0, 2.0]),
         (false, :allocs, nothing, test_while_loop, 2.0),
@@ -1580,7 +1581,7 @@ function generate_test_functions()
             (lb=100, ub=2_000),
             (A, C) -> test_naive_mat_mul!(C, A, A), randn(100, 100), randn(100, 100),
         ),
-        # (false, :allocs, (lb=10, ub=1_000), sum, randn(30)),
+        # (false, :allocs, (lb=10, ub=1_000), sum, randn(30)), weird zero-element Vector{ID} bug
         (false, :none, (lb=100, ub=10_000), test_diagonal_to_matrix, Diagonal(randn(30))),
         # (
         #     false,
@@ -1593,13 +1594,13 @@ function generate_test_functions()
         #     :allocs,
         #     (lb=100, ub=10_000),
         #     LinearAlgebra._kron!, randn(400, 400), randn(20, 20), randn(20, 20),
-        # ),
+        # ), runs with poor performance
         # (
         #     false,
         #     :allocs,
         #     (lb=100, ub=10_000),
         #     kron!, randn(400, 400), Diagonal(randn(20)), randn(20, 20),
-        # ),
+        # ), runs with poor performance
         # (
         #     false,
         #     :none,
@@ -1609,8 +1610,8 @@ function generate_test_functions()
         #     randn(sr(2), 700, 500),
         #     randn(sr(3), 300, 700),
         # ),
-        (false, :none, (1.0, 250), test_handwritten_sum, randn(1024 * 1024), 0.0),
-        # (false, :none, nothing, _sum, randn(1024), 0.0),
+        (false, :none, (1.0, 250), test_handwritten_sum, randn(1024 * 1024)),
+        (false, :none, nothing, _sum, randn(1024)),
     ]
 end
 

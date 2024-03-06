@@ -71,15 +71,13 @@ end
             @testset "literal" begin
                 stmt_info = make_ad_stmts!(ReturnNode(5.0), line, info)
                 @test stmt_info isa ADStmtInfo
-                @test stmt_info.fwds[2][2] isa ReturnNode
-                @test stmt_info.fwds[1][1] == stmt_info.fwds[2][2].val
+                @test stmt_info.fwds[1][2] isa ReturnNode
             end
             @testset "GlobalRef" begin
                 node = ReturnNode(GlobalRef(S2SGlobals, :const_float))
                 stmt_info = make_ad_stmts!(node, line, info)
                 @test stmt_info isa ADStmtInfo
-                @test stmt_info.fwds[2][2] isa ReturnNode
-                @test stmt_info.fwds[1][1] == stmt_info.fwds[2][2].val
+                @test stmt_info.fwds[1][2] isa ReturnNode
             end
         end
         @testset "IDGotoNode" begin
@@ -105,9 +103,8 @@ end
         @testset "IDPhiNode" begin
             line = ID()
             stmt = IDPhiNode(ID[ID(), ID()], Any[ID(), 5.0])
-            @test TestUtils.has_equal_data(
-                make_ad_stmts!(stmt, line, info), ad_stmt_info(line, stmt, nothing),
-            )
+            ad_stmts = make_ad_stmts!(stmt, line, info)
+            @test ad_stmts isa ADStmtInfo
         end
         @testset "PiNode" begin
             @testset "unhandled case" begin
@@ -134,7 +131,7 @@ end
                 stmt_info = make_ad_stmts!(GlobalRef(S2SGlobals, :const_float), ID(), info)
                 @test stmt_info isa Taped.ADStmtInfo
                 @test Meta.isexpr(only(stmt_info.fwds)[2], :call)
-                @test only(stmt_info.fwds)[2].args[1] == Taped.__assemble_register
+                @test only(stmt_info.fwds)[2].args[1] == identity
             end
         end
         @testset "PhiCNode" begin

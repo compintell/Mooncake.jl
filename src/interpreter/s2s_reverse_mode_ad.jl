@@ -140,13 +140,13 @@ ad_stmt_info(line::ID, fwds::Vector{Tuple{ID, Any}}, rvs) = ADStmtInfo(line, fwd
 ad_stmt_info(line::ID, fwds, rvs) = ADStmtInfo(line, Tuple{ID, Any}[(line, fwds)], rvs)
 
 #=
-    make_ad_stmts(stmt, id::ID, info::ADInfo)::ADStmtInfo
+    make_ad_stmts(stmt, line::ID, info::ADInfo)::ADStmtInfo
 
 Every line in the primal code is associated to exactly one line in the forwards-pass of AD,
 and either one or zero lines in the pullback (many nodes do not need to appear in the
 pullback at all). This function specifies this translation for every type of node.
 
-Translates the statement `stmt`, associated to `id` in the primal, into a specification of
+Translates the statement `stmt`, associated to `line` in the primal, into a specification of
 what should happen for this statement in the forwards- and reverse-passes of AD, and what
 data should be shared between the forwards- and reverse-passes. Returns this in the form of
 an `ADStmtInfo`.
@@ -165,10 +165,8 @@ function make_ad_stmts!(stmt::ReturnNode, line::ID, info::ADInfo)
     if !isdefined(stmt, :val) || isa(stmt.val, Union{Argument, ID})
         return ad_stmt_info(line, inc_arg_numbers(stmt), nothing)
     else
-        val_id = ID()
-        val = augmented_const_components(stmt.val, info)
-        fwds = Tuple{ID, Any}[(val_id, val), (line, ReturnNode(val_id))]
-        return ad_stmt_info(line, fwds, nothing)
+        aug_reg = augmented_const_components(stmt.val, info)
+        return ad_stmt_info(line, ReturnNode(aug_reg), nothing)
     end
 end
 
@@ -193,8 +191,18 @@ function make_ad_stmts!(stmt::IDGotoIfNot, line::ID, ::ADInfo)
 end
 
 # Identity forwards-pass, no-op reverse. No shared data.
-function make_ad_stmts!(stmt::IDPhiNode, line::ID, ::ADInfo)
-    return ad_stmt_info(line, inc_arg_numbers(stmt), nothing)
+function make_ad_stmts!(stmt::IDPhiNode, line::ID, info::ADInfo)
+    values = stmt.values
+    new_values = Vector{Any}(undef, length(values))
+    for n in eachindex(values)
+        isassigned(values, n) || continue
+        if values[n] isa Union{Argument, ID}
+            new_values[n] = __inc(values[n])
+        else
+            new_values[n] = augmented_const_components(values[n], info)
+        end
+    end
+    return ad_stmt_info(line, IDPhiNode(stmt.edges, new_values), nothing)
 end
 
 function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
@@ -236,10 +244,7 @@ end
 
 # Constant GlobalRefs are handled. See const_register. Non-constant
 # GlobalRefs are not handled by Taped -- an appropriate error is thrown.
-function make_ad_stmts!(stmt::GlobalRef, line::ID, info::ADInfo)
-    isconst(stmt) || unhandled_feature("Non-constant GlobalRef not supported")
-    return const_register(stmt, line, info)
-end
+make_ad_stmts!(stmt::GlobalRef, line::ID, info::ADInfo) = const_register(stmt, line, info)
 
 # QuoteNodes are constant. See make_const_register for details.
 make_ad_stmts!(stmt::QuoteNode, line::ID, info::ADInfo) = const_register(stmt, line, info)
@@ -250,7 +255,8 @@ make_ad_stmts!(stmt, line::ID, info::ADInfo) = const_register(stmt, line, info)
 # If `primal_type` is provably non-differentiable, return statement with no tangent stack.
 # Otherwise return an AugmentedRegister whose tangent_stack is stored in shared data.
 function const_register(primal_value, line::ID, info::ADInfo)
-    return ad_stmt_info(line, augmented_const_components(primal_value, info), nothing)
+    const_reg_id = augmented_const_components(primal_value, info)
+    return ad_stmt_info(line, Expr(:call, identity, const_reg_id), nothing)
 end
 
 # line should always be the primal line associated to the instruction you are producing.
@@ -258,11 +264,15 @@ function augmented_const_components(stmt, info::ADInfo)
     primal_value = get_primal_value(stmt)
     tangent_stack = make_tangent_stack(_typeof(primal_value))
     push!(tangent_stack, zero_tangent(primal_value))
-    tangent_stack_id = add_data!(info.shared_data_pairs, tangent_stack)
-    return Expr(:call, __assemble_register, tangent_stack_id, primal_value)
+    const_reg = AugmentedRegister(zero_codual(primal_value), tangent_stack)
+    const_reg_id = add_data!(info.shared_data_pairs, const_reg)
+    return const_reg_id
 end
 
-get_primal_value(x::GlobalRef) = getglobal(x.mod, x.name)
+function get_primal_value(x::GlobalRef)
+    isconst(x) || unhandled_feature("Non-constant GlobalRef not supported")
+    return getglobal(x.mod, x.name)
+end
 get_primal_value(x::QuoteNode) = x.value
 get_primal_value(x) = x
 
@@ -497,11 +507,11 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
     # display(fwds_ir.argtypes)
     # display(IRCode(fwds_ir))
     # display("fwds_optimised")
-    # display(optimise_ir!(IRCode(fwds_ir); do_inline=true))
+    # display(optimise_ir!(IRCode(fwds_ir); do_inline=false))
     # println("pb")
     # display(IRCode(pb_ir))
     # println("pb optimised")
-    # display(optimise_ir!(IRCode(pb_ir); do_inline=true))
+    # display(optimise_ir!(IRCode(pb_ir); do_inline=false))
     fwds_oc = OpaqueClosure(optimise_ir!(IRCode(fwds_ir)), shared_data...; do_compile=true)
     pb_oc = OpaqueClosure(optimise_ir!(IRCode(pb_ir)), shared_data...; do_compile=true)
     arg_tangent_stacks = (map(make_tangent_stack ∘ _get_type, primal_ir.argtypes)..., )
