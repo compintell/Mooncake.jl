@@ -177,11 +177,10 @@ function benchmark_rules!!(
             )
 
             # Benchmark AD via Taped.
-            rule, in_f = set_up_gradient_problem(args...)
+            rule = Taped.build_rrule(args...)
             coduals = map(x -> x isa CoDual ? x : zero_codual(x), args)
-            suite["taped"] = @benchmarkable(
-                to_benchmark($rule, zero_codual($in_f), $coduals...);
-            )
+            to_benchmark(rule, coduals...)
+            suite["taped"] = @benchmarkable(to_benchmark($rule, $coduals...))
 
             if include_other_frameworks
 
