@@ -1475,30 +1475,30 @@ function generate_test_functions()
         #     randn(5),
         #     1,
         #     Base.Slice(Base.OneTo(1)),
-        # ), # fun PhiNode example
-        # (false, :allocs, nothing, avoid_throwing_path_tester, 5.0), # weird annoying zero-index bug
+        # ), # fun PhiNode example -- still falling over. # needs lazy rule derivation
+        (false, :allocs, nothing, avoid_throwing_path_tester, 5.0),
         (false, :allocs, nothing, simple_foreigncall_tester, randn(5)),
         (false, :none, nothing, simple_foreigncall_tester_2, randn(6), (2, 3)),
         (false, :allocs, nothing, foreigncall_tester, randn(5)),
         (false, :none, (lb=1, ub=1_000), no_primitive_inlining_tester, 5.0),
-        # (false, :allocs, nothing, varargs_tester, 5.0),
-        # (false, :allocs, nothing, varargs_tester, 5.0, 4),
-        # (false, :allocs, nothing, varargs_tester, 5.0, 4, 3.0),
-        # (false, :allocs, nothing, varargs_tester_2, 5.0),
-        # (false, :allocs, nothing, varargs_tester_2, 5.0, 4),
-        # (false, :allocs, nothing, varargs_tester_2, 5.0, 4, 3.0),
-        # (false, :allocs, nothing, varargs_tester_3, 5.0),
-        # (false, :allocs, nothing, varargs_tester_3, 5.0, 4),
-        # (false, :allocs, nothing, varargs_tester_3, 5.0, 4, 3.0),
-        # (false, :allocs, nothing, varargs_tester_4, 5.0),
-        # (false, :allocs, nothing, varargs_tester_4, 5.0, 4),
-        # (false, :allocs, nothing, varargs_tester_4, 5.0, 4, 3.0),
-        # (false, :allocs, nothing, splatting_tester, 5.0),
-        # (false, :allocs, nothing, splatting_tester, (5.0, 4.0)),
-        # (false, :allocs, nothing, splatting_tester, (5.0, 4.0, 3.0)),
-        # # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}(5.0)), # known failure case -- no rrule for _apply_iterate
-        # # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}((5.0, 4.0))), # known failure case -- no rrule for _apply_iterate
-        # # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}((5.0, 4.0, 3.0))), # known failure case -- no rrule for _apply_iterate
+        (false, :allocs, nothing, varargs_tester, 5.0),
+        (false, :allocs, nothing, varargs_tester, 5.0, 4),
+        (false, :allocs, nothing, varargs_tester, 5.0, 4, 3.0),
+        (false, :allocs, nothing, varargs_tester_2, 5.0),
+        (false, :allocs, nothing, varargs_tester_2, 5.0, 4),
+        (false, :allocs, nothing, varargs_tester_2, 5.0, 4, 3.0),
+        (false, :allocs, nothing, varargs_tester_3, 5.0),
+        (false, :allocs, nothing, varargs_tester_3, 5.0, 4),
+        (false, :allocs, nothing, varargs_tester_3, 5.0, 4, 3.0),
+        (false, :allocs, nothing, varargs_tester_4, 5.0),
+        (false, :allocs, nothing, varargs_tester_4, 5.0, 4),
+        (false, :allocs, nothing, varargs_tester_4, 5.0, 4, 3.0),
+        (false, :allocs, nothing, splatting_tester, 5.0),
+        (false, :allocs, nothing, splatting_tester, (5.0, 4.0)),
+        (false, :allocs, nothing, splatting_tester, (5.0, 4.0, 3.0)),
+        # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}(5.0)), # known failure case -- no rrule for _apply_iterate
+        # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}((5.0, 4.0))), # known failure case -- no rrule for _apply_iterate
+        # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}((5.0, 4.0, 3.0))), # known failure case -- no rrule for _apply_iterate
         # (false, :none, nothing, inferred_const_tester, Ref{Any}(nothing)), # dynamic dispatch
         (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 1),
         (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 2),
@@ -1510,9 +1510,9 @@ function generate_test_functions()
             test_union_of_types,
             Ref{Union{Type{Float64}, Type{Int}}}(Float64),
         ),
-        # (false, :allocs, nothing, test_self_reference, 1.1, 1.5),
-        # (false, :allocs, nothing, test_self_reference, 1.5, 1.1),
-        # (false, :none, nothing, test_recursive_sum, randn(2)),
+        # (false, :allocs, nothing, test_self_reference, 1.1, 1.5), # needs lazy rule derivation
+        # (false, :allocs, nothing, test_self_reference, 1.5, 1.1), # needs lazy rule derivation
+        # (false, :none, nothing, test_recursive_sum, randn(2)), # needs lazy rule derivation
         # (
         #     false,
         #     :none,
@@ -1522,7 +1522,7 @@ function generate_test_functions()
         #     5.0,
         #     randn(5, 4),
         #     (5, 4),
-        # ), # for Bool comma, # odd error
+        # ), # for Bool comma, # odd error, doesn't fall into any of the other patterns I've seen
         (false, :allocs, nothing, getfield_tester, (5.0, 5)),
         (false, :allocs, nothing, getfield_tester_2, (5.0, 5)),
         (
@@ -1545,8 +1545,8 @@ function generate_test_functions()
         #     false, :none, (lb=100, ub=100_000_000),
         #     mul!, transpose(randn(3, 5)), randn(5, 5), randn(5, 3), 4.0, 3.0,
         # ), # static_parameter, dynamic dispatch
-        # (false, :none, (lb=100, ub=100_000_000), Xoshiro, 123456),
-        # (false, :none, (lb=1, ub=100_000), *, randn(250, 500), randn(500, 250)),
+        # (false, :none, (lb=100, ub=100_000_000), Xoshiro, 123456), # dynamic dispatch
+        # (false, :none, (lb=1, ub=100_000), *, randn(250, 500), randn(500, 250)), # dynamic dispatch
         (false, :allocs, nothing, test_sin, 1.0),
         (false, :allocs, nothing, test_cos_sin, 2.0),
         (false, :allocs, nothing, test_isbits_multiple_usage, 5.0),
@@ -1581,7 +1581,7 @@ function generate_test_functions()
             (lb=100, ub=2_000),
             (A, C) -> test_naive_mat_mul!(C, A, A), randn(100, 100), randn(100, 100),
         ),
-        # (false, :allocs, (lb=10, ub=1_000), sum, randn(30)), weird zero-element Vector{ID} bug
+        # (false, :allocs, (lb=10, ub=1_000), sum, randn(30)), # needs lazy rule derivation
         (false, :none, (lb=100, ub=10_000), test_diagonal_to_matrix, Diagonal(randn(30))),
         # (
         #     false,
@@ -1609,7 +1609,7 @@ function generate_test_functions()
         #     randn(sr(1), 500, 200),
         #     randn(sr(2), 700, 500),
         #     randn(sr(3), 300, 700),
-        # ),
+        # ), # dynamic dispatch
         (false, :none, (1.0, 250), test_handwritten_sum, randn(1024 * 1024)),
         (false, :none, nothing, _sum, randn(1024)),
     ]

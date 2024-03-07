@@ -101,8 +101,7 @@ struct ADInfo
     ssa_types::Dict{ID, Any}
 end
 
-# The constructor that you should use for ADInfo -- the fields that you don't need to
-# provide to this constructor can be automatically generated.
+# The constructor that you should use for ADInfo.
 function ADInfo(interp::TInterp, arg_types::Dict{Argument, Any}, ssa_types::Dict{ID, Any})
     shared_data_pairs = SharedDataPairs()
     bs = Stack{Int}()
@@ -263,8 +262,9 @@ end
 function augmented_const_components(stmt, info::ADInfo)
     primal_value = get_primal_value(stmt)
     tangent_stack = make_tangent_stack(_typeof(primal_value))
-    push!(tangent_stack, zero_tangent(primal_value))
-    const_reg = AugmentedRegister(zero_codual(primal_value), top_ref(tangent_stack))
+    tangent = uninit_tangent(primal_value)
+    push!(tangent_stack, tangent)
+    const_reg = AugmentedRegister(CoDual(primal_value, tangent), top_ref(tangent_stack))
     const_reg_id = add_data!(info.shared_data_pairs, const_reg)
     return const_reg_id
 end
@@ -334,6 +334,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         :gc_preserve_begin,
         :gc_preserve_end,
         :loopinfo,
+        :enter,
         :leave,
         :pop_exception,
         :throw_undef_if_not
@@ -420,30 +421,36 @@ end
 # Runners for generated code.
 #
 
-struct Pullback{Tpb, Tret_ref, Targ_tangent_stacks}
+struct Pullback{Tpb, Tret_ref, Targ_tangent_stacks, Tisva, Tnargs}
     pb_oc::Tpb
     ret_ref::Tret_ref
     arg_tangent_stacks::Targ_tangent_stacks
+    isva::Tisva
+    nargs::Tnargs
 end
 
 function (pb::Pullback{P, Q})(dy, dargs::Vararg{Any, N}) where {P, Q, N}
+    dargs = __unflatten_varargs(pb.isva, dargs, pb.nargs)
     map(setindex!, map(top_ref, pb.arg_tangent_stacks), dargs)
     increment_ref!(pb.ret_ref, dy)
     pb.pb_oc(dy, dargs...)
-    return map(pop!, pb.arg_tangent_stacks)
+    return __flatten_varargs(pb.isva, map(pop!, pb.arg_tangent_stacks))
 end
 
-struct DerivedRule{Tfwds_oc, Targ_tangent_stacks, Tpb_oc}
+struct DerivedRule{Tfwds_oc, Targ_tangent_stacks, Tpb_oc, Tisva<:Val, Tnargs<:Val}
     fwds_oc::Tfwds_oc
     pb_oc::Tpb_oc
     arg_tangent_stacks::Targ_tangent_stacks
     block_stack::Stack{Int}
     entry_id::ID
+    isva::Tisva
+    nargs::Tnargs
 end
 
 function (fwds::DerivedRule{P, Q, S})(args::Vararg{CoDual, N}) where {P, Q, S, N}
 
     # Load arguments in to stacks, and create tuples.
+    args = __unflatten_codual_varargs(fwds.isva, args, fwds.nargs)
     args_with_tangent_stacks = map(args, fwds.arg_tangent_stacks) do arg, arg_tangent_stack
         push!(arg_tangent_stack, tangent(arg))
         return AugmentedRegister(arg, top_ref(arg_tangent_stack))
@@ -453,7 +460,25 @@ function (fwds::DerivedRule{P, Q, S})(args::Vararg{CoDual, N}) where {P, Q, S, N
     reg = fwds.fwds_oc(args_with_tangent_stacks...)::AugmentedRegister
 
     # Extract result and assemble pullback.
-    return reg.codual, Pullback(fwds.pb_oc, reg.tangent_ref, fwds.arg_tangent_stacks)
+    return reg.codual, Pullback(fwds.pb_oc, reg.tangent_ref, fwds.arg_tangent_stacks, fwds.isva, fwds.nargs)
+end
+
+# if isva and nargs=2, then inputs (5.0, 4.0, 3.0) are transformed into (5.0, (4.0, 3.0)).
+function __unflatten_varargs(::Val{isva}, args, ::Val{nargs}) where {isva, nargs}
+    return isva ? (args[1:nargs-1]..., args[nargs:end]) : args
+end
+
+# If isva, inputs (5.0, (4.0, 3.0)) are transformed into (5.0, 4.0, 3.0).
+function __flatten_varargs(::Val{isva}, args) where {isva}
+    return isva ? (args[1:end-1]..., args[end]...) : args
+end
+
+# If isva and nargs=2, then inputs `(CoDual(5.0, 0.0), CoDual(4.0, 0.0), CoDual(3.0, 0.0))`
+# are transformed into `(CoDual(5.0, 0.0), CoDual((5.0, 4.0), (0.0, 0.0)))`.
+function __unflatten_codual_varargs(::Val{isva}, args, ::Val{nargs}) where {isva, nargs}
+    isva || return args
+    grouped_args = CoDual(map(primal, args[nargs:end]), map(tangent, args[nargs:end]))
+    return (args[1:nargs-1]..., grouped_args)
 end
 
 """
@@ -470,7 +495,7 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
     ir, Treturn = lookup_ir(interp, sig)
 
     # Normalise the IR, and generated BBCode version of it.
-    is_vararg, spnames = is_vararg_sig_and_sparam_names(sig)
+    isva, spnames = is_vararg_sig_and_sparam_names(sig)
     ir = normalise!(ir, spnames)
     primal_ir = BBCode(ir)
 
@@ -510,7 +535,15 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
     fwds_oc = OpaqueClosure(optimise_ir!(IRCode(fwds_ir)), shared_data...; do_compile=true)
     pb_oc = OpaqueClosure(optimise_ir!(IRCode(pb_ir)), shared_data...; do_compile=true)
     arg_tangent_stacks = (map(make_tangent_stack ∘ _get_type, primal_ir.argtypes)..., )
-    return DerivedRule(fwds_oc, pb_oc, arg_tangent_stacks, info.block_stack, info.entry_id)
+    return DerivedRule(
+        fwds_oc,
+        pb_oc,
+        arg_tangent_stacks,
+        info.block_stack,
+        info.entry_id,
+        Val(isva),
+        Val(length(ir.argtypes)),
+    )
 end
 
 const ADStmts = Vector{Tuple{ID, Vector{ADStmtInfo}}}
@@ -555,9 +588,23 @@ Produce the IR associated to the `OpaqueClosure` which runs most of the pullback
 =#
 function pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, Tshared_data)
 
+    # Compute the argument types associated to the reverse-pass.
+    darg_types = map(tangent_type ∘ _get_type, ir.argtypes)
+    arg_types = vcat(Tshared_data, tangent_type(Tret), darg_types)
+
+    # Compute the blocks which return in the primal.
+    primal_exit_blocks_inds = findall(is_reachable_return_node ∘ terminator, ir.blocks)
+
+    # If there are blocks which successfully return in the primal, then the primal never
+    # terminates without throwing, meaning that if AD hits this function, it definitely
+    # won't succeed on the forwards-pass. As such, the reverse-pass can just be a no-op.
+    if isempty(primal_exit_blocks_inds)
+        blocks = [BBlock(ID(), Tuple{ID, Any}[(ID(), ReturnNode(nothing))])]
+        return BBCode(blocks, arg_types, ir.sptypes, ir.linetable, ir.meta)
+    end
+
     # Create entry block, which pops the block_stack, and switches to whichever block we
     # were in at the end of the forwards-pass.
-    primal_exit_blocks_inds = findall(is_reachable_return_node ∘ terminator, ir.blocks)
     exit_blocks_ids = map(n -> ir.blocks[n].id, primal_exit_blocks_inds)
     data_stmts = shared_data_stmts(info.shared_data_pairs)
     switch_stmts = make_switch_stmts(exit_blocks_ids, info)
@@ -582,8 +629,6 @@ function pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, T
 
     # Create and return `BBCode` for the pullback.
     blks = vcat(entry_block, main_blocks, exit_block)
-    darg_types = map(tangent_type ∘ _get_type, ir.argtypes)
-    arg_types = vcat(Tshared_data, tangent_type(Tret), darg_types)
     return _sort_blocks!(BBCode(blks, arg_types, ir.sptypes, ir.linetable, ir.meta))
 end
 
