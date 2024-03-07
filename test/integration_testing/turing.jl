@@ -1,5 +1,6 @@
 using Turing
 
+using ReverseDiff
 # using CSV, DataFrames, ReverseDiff
 # turing_bench_results = DataFrame(
 #     :name => String[],
@@ -113,40 +114,38 @@ end
         @info name
         rng = sr(123)
         f, x = build_turing_problem(rng, model, ex)
-
-        in_f = Taped.InterpretedFunction(DefaultCtx(), _typeof((f, x)), interp);
-        if interface_only
-            in_f(f, deepcopy(x))
-        else
-            @test has_equal_data(in_f(f, deepcopy(x)), f(deepcopy(x)))
-        end
-
-        TestUtils.test_rrule!!(
-            sr(123456), in_f, f, x;
-            perf_flag=:none, interface_only=true, is_primitive=false,
+        TestUtils.test_derived_rule(
+            sr(123456), f, x;
+            perf_flag=:none, interface_only=true, is_primitive=false, interp
         )
 
-        rule, in_f = TestUtils.set_up_gradient_problem(f, x);
-        codualed_args = map(zero_codual, (in_f, f, x));
-        TestUtils.value_and_gradient!!(rule, codualed_args...)
+        # rule = build_rrule(interp, _typeof((f, x)))
+        # interp_rule, in_f = TestUtils.set_up_gradient_problem(f, x);
+        # interp_codualed_args = map(zero_codual, (in_f, f, x));
+        # codualed_args = map(zero_codual, (f, x))
+        # TestUtils.value_and_gradient!!(rule, codualed_args...)
 
-        # @profview run_many_times(1_000, TestUtils.value_and_gradient!!, rule, codualed_args...)
+        # # @profview run_many_times(1_000, TestUtils.value_and_gradient!!, rule, codualed_args...)
 
         # primal = @benchmark $f($x)
-        # interpreted = @benchmark $in_f($f, $x)
+        # # interpreted = @benchmark $in_f($f, $x)
+        # interp_gradient = @benchmark(TestUtils.value_and_gradient!!($interp_rule, $interp_codualed_args...))
         # gradient = @benchmark(TestUtils.value_and_gradient!!($rule, $codualed_args...))
 
         # println("primal")
         # display(primal)
         # println()
 
-        # println("interpreted")
-        # display(interpreted)
+        # println("interpreted gradient")
+        # display(interp_gradient)
         # println()
 
         # println("gradient")
         # display(gradient)
         # println()
+
+        # @show time(interp_gradient) / time(primal)
+        # @show time(gradient) / time(primal)
 
         # try
         #     tape = ReverseDiff.GradientTape(f, x);
@@ -158,6 +157,7 @@ end
         #     println("ReverseDiff")
         #     display(revdiff)
         #     println()
+        #     @show time(revdiff) / time(primal)
         # catch
         #     display("revdiff failed")
         # end
