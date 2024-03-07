@@ -299,11 +299,11 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         # Construct signature, and determine how the rrule is to be computed.
         sig = Tuple{arg_types...}
         rule = if is_invoke
-            build_rrule(info.interp, sig)
+            LazyDerivedRule(info.interp, sig) # Static dispatch
         elseif is_primitive(context_type(info.interp), sig)
-            rrule!!
+            rrule!! # intrinsic / builtin
         else
-            error("Booo dynamic dispatch")
+            DynamicDerivedRule(info.interp)  # Dynamic dispatch
         end
 
         # Create data shared between the forwards- and reverse-passes.
@@ -325,15 +325,22 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         rvs = Expr(:call, __rvs_pass!, data_id)
         return ad_stmt_info(line, fwds, rvs)
 
+    elseif Meta.isexpr(stmt, :boundscheck)
+        tmp = AugmentedRegister(zero_codual(true), NoTangentStack())
+        return ad_stmt_info(line, tmp, nothing)
+
     elseif Meta.isexpr(stmt, :code_coverage_effect)
         # Code coverage irrelevant for derived code.
         return ad_stmt_info(line, nothing, nothing)
 
+    elseif Meta.isexpr(stmt, :loopinfo)
+        # Cannot pass loopinfo back through the optimiser for some reason.
+        # At the time of writing, I am unclear why this is not possible.
+        return ad_stmt_info(line, nothing, nothing)
+
     elseif stmt.head in [
-        :boundscheck,
         :gc_preserve_begin,
         :gc_preserve_end,
-        :loopinfo,
         :enter,
         :leave,
         :pop_exception,
@@ -463,6 +470,26 @@ function (fwds::DerivedRule{P, Q, S})(args::Vararg{CoDual, N}) where {P, Q, S, N
     return reg.codual, Pullback(fwds.pb_oc, reg.tangent_ref, fwds.arg_tangent_stacks, fwds.isva, fwds.nargs)
 end
 
+# Compute the concrete type of the rule that will be returned from `build_rrule`. This is
+# important for performance in dynamic dispatch, and to ensure that recursion works
+# properly.
+function rule_type(interp::TapedInterpreter{C}, ::Type{sig}) where {C, sig}
+    is_primitive(C, sig) && return typeof(rrule!!)
+
+    ir, Treturn = lookup_ir(interp, sig)
+    isva, _ = is_vararg_sig_and_sparam_names(sig)
+
+    arg_types = map(_get_type, ir.argtypes)
+    arg_tangent_types = map(tangent_type, arg_types)
+    return DerivedRule{
+        Core.OpaqueClosure{Tuple{map(register_type, arg_types)...}, register_type(Treturn)},
+        Tuple{map(tangent_stack_type ∘ _get_type, ir.argtypes)...},
+        Core.OpaqueClosure{Tuple{tangent_type(Treturn), arg_tangent_types...}, Nothing},
+        Val{isva},
+        Val{length(ir.argtypes)},
+    }
+end
+
 # if isva and nargs=2, then inputs (5.0, 4.0, 3.0) are transformed into (5.0, (4.0, 3.0)).
 function __unflatten_varargs(::Val{isva}, args, ::Val{nargs}) where {isva, nargs}
     return isva ? (args[1:nargs-1]..., args[nargs:end]) : args
@@ -524,7 +551,6 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
     # println("ir")
     # display(ir)
     # println("fwds")
-    # display(fwds_ir.argtypes)
     # display(IRCode(fwds_ir))
     # display("fwds_optimised")
     # display(optimise_ir!(IRCode(fwds_ir); do_inline=false))
@@ -655,6 +681,14 @@ block during the forwards-pass.
 =#
 function make_switch_stmts(pred_ids::Vector{ID}, info::ADInfo)
 
+    # If there are no predecessors, then we can't possible have hit this block. This can
+    # happen when all of the statements in a block have been eliminated, but the Julia
+    # optimiser has not removed the block entirely from the `IRCode`. This often presents as
+    # a block containing only a single `nothing` statement.
+    # Consequently, we just direct this block back towards the entry node. This is safe, as
+    # this block will never get hit, and ensures that the block is safe under re-ordering.
+    isempty(pred_ids) && return Tuple{ID, Any}[(ID(), IDGotoNode(info.entry_id))]
+
     # Get the predecessor that we actually had in the primal.
     prev_blk_id = ID()
     prev_blk = Expr(:call, pop!, info.block_stack_id)
@@ -672,3 +706,58 @@ end
 
 # Helper function emitted by `make_switch_stmts`.
 __switch_case(id::Int, predecessor_id::Int) = !(id === predecessor_id)
+
+
+#=
+    DynamicDerivedRule(interp::TapedInterpreter)
+
+For internal use only.
+
+A callable data structure which, when invoked, calls an rrule specific to the dynamic types
+of its arguments. Stores rules in an internal cache to avoid re-deriving.
+
+This is used to implement dynamic dispatch.
+=#
+struct DynamicDerivedRule{T, V}
+    interp::T
+    cache::V
+end
+
+DynamicDerivedRule(interp::TapedInterpreter) = DynamicDerivedRule(interp, Dict{Any, Any}())
+
+function (dynamic_rule::DynamicDerivedRule)(args::Vararg{Any, N}) where {N}
+    sig = Tuple{map(_typeof, map(primal, args))...}
+    is_primitive(context_type(dynamic_rule.interp), sig) && return rrule!!(args...)
+    rule = get(dynamic_rule.cache, sig, nothing)
+    if rule === nothing
+        rule = build_rrule(dynamic_rule.interp, sig)
+        dynamic_rule.cache[sig] = rule
+    end
+    rule = rule::rule_type(dynamic_rule.interp, sig)
+    return rule(args...)
+end
+
+#=
+    LazyDerivedRule(interp, sig)
+
+For internal use only.
+
+A type-stable wrapper around a `DerivedRule`, which only instantiates the `DerivedRule`
+when it is first called. This is useful, as it means that if a rule does not get run, it
+does not have to be derived.
+=#
+mutable struct LazyDerivedRule{Trule, T, V}
+    interp::T
+    sig::V
+    rule::Trule
+    function LazyDerivedRule(interp::T, sig::V) where {T<:TInterp, V<:Type{<:Tuple}}
+        return new{rule_type(interp, sig), T, V}(interp, sig)
+    end
+end
+
+function (rule::LazyDerivedRule)(args::Vararg{Any, N}) where {N}
+    if !isdefined(rule, :rule)
+        rule.rule = build_rrule(rule.interp, rule.sig)
+    end
+    return rule.rule(args...)
+end

@@ -165,7 +165,7 @@ end
                 )
             end
             @testset "$stmt" for stmt in [
-                Expr(:boundscheck),
+                Expr(:gc_preserve_begin),
             ]
                 line = ID()
                 @test TestUtils.has_equal_data(
@@ -182,9 +182,8 @@ end
 
         sig = _typeof((f, x...))
         @info "$n: $sig"
-        rule = build_rrule(interp, sig)
-        TestUtils.test_rrule!!(
-            Xoshiro(123456), f, x...; perf_flag, interface_only, is_primitive=false, rule
+        TestUtils.test_derived_rule(
+            Xoshiro(123456), f, x...; interp, perf_flag, interface_only, is_primitive=false
         )
 
         # codual_args = map(zero_codual, (f, x...))

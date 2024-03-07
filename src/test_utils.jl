@@ -444,6 +444,11 @@ function test_interpreted_rrule!!(rng::AbstractRNG, x...; interp, kwargs...)
     test_rrule!!(rng, in_f, x...; rule, kwargs...)
 end
 
+function test_derived_rule(rng::AbstractRNG, x...; interp, kwargs...)
+    rule = Taped.build_rrule(interp, Tuple{map(Taped._typeof, x)...})
+    test_rrule!!(rng, x...; rule, kwargs...)
+end
+
 #
 # Test that some basic operations work on a given type.
 #
@@ -948,6 +953,12 @@ function value_and_gradient!!(
     return primal(out), pb!!(1.0, NoTangent(), map(tangent, codual_fargs)...)[2:end]
 end
 
+function value_and_gradient!!(rule::R, codual_fargs::Vararg{CoDual, N}) where {R, N}
+    out, pb!! = rule(codual_fargs...)
+    @assert out isa CoDual{Float64, Float64}
+    return primal(out), pb!!(1.0, map(tangent, codual_fargs)...)
+end
+
 """
     value_and_gradient!!(rule, in_f::InterpretedFunction, f, args...)
 
@@ -978,6 +989,10 @@ function value_and_gradient!!(
     rule::R, in_f::Taped.InterpretedFunction, fargs::Vararg{Any, N}
 ) where {R, N}
     return value_and_gradient!!(rule, zero_codual(in_f), map(zero_codual, fargs)...)
+end
+
+function value_and_gradient!!(rule::R, fargs::Vararg{Any, N}) where {R, N}
+    return value_and_gradient!!(rule, map(zero_codual, fargs)...)
 end
 
 """
@@ -1456,26 +1471,26 @@ function generate_test_functions()
         (false, :none, nothing, globalref_tester_2, false),
         (false, :allocs, nothing, globalref_tester_3),
         (false, :allocs, nothing, globalref_tester_4),
-        # (false, :none, nothing, type_unstable_tester, Ref{Any}(5.0)),
-        # (false, :none, nothing, type_unstable_tester_2, Ref{Real}(5.0)),
-        # (false, :none, (lb=1, ub=1000), type_unstable_tester_3, Ref{Any}(5.0)),
-        # (false, :none, (lb=1, ub=1000), test_primitive_dynamic_dispatch, Any[5.0, false]),
-        # (false, :none, nothing, type_unstable_function_eval, Ref{Any}(sin), 5.0),
+        (false, :none, nothing, type_unstable_tester, Ref{Any}(5.0)),
+        (false, :none, nothing, type_unstable_tester_2, Ref{Real}(5.0)),
+        (false, :none, (lb=1, ub=1000), type_unstable_tester_3, Ref{Any}(5.0)),
+        (false, :none, (lb=1, ub=1000), test_primitive_dynamic_dispatch, Any[5.0, false]),
+        (false, :none, nothing, type_unstable_function_eval, Ref{Any}(sin), 5.0),
         (false, :allocs, nothing, phi_const_bool_tester, 5.0),
         (false, :allocs, nothing, phi_const_bool_tester, -5.0),
         (false, :allocs, nothing, phi_node_with_undefined_value, true, 4.0),
         (false, :allocs, nothing, phi_node_with_undefined_value, false, 4.0),
         (false, :allocs, nothing, test_multiple_phinode_block, 3.0),
-        # (
-        #     false,
-        #     :none,
-        #     nothing,
-        #     Base._unsafe_getindex,
-        #     IndexLinear(),
-        #     randn(5),
-        #     1,
-        #     Base.Slice(Base.OneTo(1)),
-        # ), # fun PhiNode example -- still falling over. # needs lazy rule derivation
+        (
+            false,
+            :none,
+            nothing,
+            Base._unsafe_getindex,
+            IndexLinear(),
+            randn(5),
+            1,
+            Base.Slice(Base.OneTo(1)),
+        ), # fun PhiNode example
         (false, :allocs, nothing, avoid_throwing_path_tester, 5.0),
         (false, :allocs, nothing, simple_foreigncall_tester, randn(5)),
         (false, :none, nothing, simple_foreigncall_tester_2, randn(6), (2, 3)),
@@ -1499,10 +1514,10 @@ function generate_test_functions()
         # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}(5.0)), # known failure case -- no rrule for _apply_iterate
         # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}((5.0, 4.0))), # known failure case -- no rrule for _apply_iterate
         # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}((5.0, 4.0, 3.0))), # known failure case -- no rrule for _apply_iterate
-        # (false, :none, nothing, inferred_const_tester, Ref{Any}(nothing)), # dynamic dispatch
+        (false, :none, nothing, inferred_const_tester, Ref{Any}(nothing)),
         (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 1),
         (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 2),
-        # (false, :none, (lb=1, ub=100_000_000), test_union_of_arrays, randn(5), true), # dynamic dispatch
+        # (false, :none, (lb=1, ub=100_000_000), test_union_of_arrays, randn(5), true), # union splitting with types issue
         (
             false,
             :none,
@@ -1510,19 +1525,19 @@ function generate_test_functions()
             test_union_of_types,
             Ref{Union{Type{Float64}, Type{Int}}}(Float64),
         ),
-        # (false, :allocs, nothing, test_self_reference, 1.1, 1.5), # needs lazy rule derivation
-        # (false, :allocs, nothing, test_self_reference, 1.5, 1.1), # needs lazy rule derivation
-        # (false, :none, nothing, test_recursive_sum, randn(2)), # needs lazy rule derivation
-        # (
-        #     false,
-        #     :none,
-        #     (lb=1, ub=1_000),
-        #     LinearAlgebra._modify!,
-        #     LinearAlgebra.MulAddMul(5.0, 4.0),
-        #     5.0,
-        #     randn(5, 4),
-        #     (5, 4),
-        # ), # for Bool comma, # odd error, doesn't fall into any of the other patterns I've seen
+        (false, :allocs, nothing, test_self_reference, 1.1, 1.5),
+        (false, :allocs, nothing, test_self_reference, 1.5, 1.1),
+        (false, :none, nothing, test_recursive_sum, randn(2)),
+        (
+            false,
+            :none,
+            (lb=1, ub=1_000),
+            LinearAlgebra._modify!,
+            LinearAlgebra.MulAddMul(5.0, 4.0),
+            5.0,
+            randn(5, 4),
+            (5, 4),
+        ), # for Bool comma,
         (false, :allocs, nothing, getfield_tester, (5.0, 5)),
         (false, :allocs, nothing, getfield_tester_2, (5.0, 5)),
         (
@@ -1541,12 +1556,12 @@ function generate_test_functions()
             FullyInitMutableStruct(5.0, randn(3)),
             randn(5),
         ),
-        # (
-        #     false, :none, (lb=100, ub=100_000_000),
-        #     mul!, transpose(randn(3, 5)), randn(5, 5), randn(5, 3), 4.0, 3.0,
-        # ), # static_parameter, dynamic dispatch
-        # (false, :none, (lb=100, ub=100_000_000), Xoshiro, 123456), # dynamic dispatch
-        # (false, :none, (lb=1, ub=100_000), *, randn(250, 500), randn(500, 250)), # dynamic dispatch
+        (
+            false, :none, (lb=100, ub=100_000_000),
+            mul!, transpose(randn(3, 5)), randn(5, 5), randn(5, 3), 4.0, 3.0,
+        ), # static_parameter
+        (false, :none, (lb=100, ub=100_000_000), Xoshiro, 123456),
+        (false, :none, (lb=1, ub=100_000), *, randn(250, 500), randn(500, 250)),
         (false, :allocs, nothing, test_sin, 1.0),
         (false, :allocs, nothing, test_cos_sin, 2.0),
         (false, :allocs, nothing, test_isbits_multiple_usage, 5.0),
@@ -1558,7 +1573,7 @@ function generate_test_functions()
         (false, :allocs, nothing, test_isbits_multiple_usage_phi, true, 1.1),
         (false, :allocs, nothing, test_multiple_call_non_primitive, 5.0),
         (false, :none, (lb=1, ub=500), test_multiple_pi_nodes, Ref{Any}(5.0)),
-        # (false, :none, (lb=1, ub=500), test_multi_use_pi_node, Ref{Any}(5.0)), # dynamic dispatch
+        (false, :none, (lb=1, ub=500), test_multi_use_pi_node, Ref{Any}(5.0)),
         (false, :allocs, nothing, test_getindex, [1.0, 2.0]),
         (false, :allocs, nothing, test_mutation!, [1.0, 2.0]),
         (false, :allocs, nothing, test_while_loop, 2.0),
@@ -1566,7 +1581,7 @@ function generate_test_functions()
         (false, :none, nothing, test_mutable_struct_basic, 5.0),
         (false, :none, nothing, test_mutable_struct_basic_sin, 5.0),
         (false, :none, nothing, test_mutable_struct_setfield, 4.0),
-        # (false, :none, (lb=1, ub=2_000), test_mutable_struct, 5.0), dynamic dispatch
+        (false, :none, (lb=1, ub=2_000), test_mutable_struct, 5.0),
         (false, :none, nothing, test_struct_partial_init, 3.5),
         (false, :none, nothing, test_mutable_partial_init, 3.3),
         (
@@ -1581,35 +1596,35 @@ function generate_test_functions()
             (lb=100, ub=2_000),
             (A, C) -> test_naive_mat_mul!(C, A, A), randn(100, 100), randn(100, 100),
         ),
-        # (false, :allocs, (lb=10, ub=1_000), sum, randn(30)), # needs lazy rule derivation
+        (false, :allocs, (lb=10, ub=1_000), sum, randn(30)),
         (false, :none, (lb=100, ub=10_000), test_diagonal_to_matrix, Diagonal(randn(30))),
-        # (
-        #     false,
-        #     :allocs,
-        #     (lb=100, ub=5_000),
-        #     ldiv!, randn(20, 20), Diagonal(rand(20) .+ 1), randn(20, 20),
-        # ), dynamic dispatch
-        # (
-        #     false,
-        #     :allocs,
-        #     (lb=100, ub=10_000),
-        #     LinearAlgebra._kron!, randn(400, 400), randn(20, 20), randn(20, 20),
-        # ), runs with poor performance
-        # (
-        #     false,
-        #     :allocs,
-        #     (lb=100, ub=10_000),
-        #     kron!, randn(400, 400), Diagonal(randn(20)), randn(20, 20),
-        # ), runs with poor performance
-        # (
-        #     false,
-        #     :none,
-        #     nothing,
-        #     test_mlp,
-        #     randn(sr(1), 500, 200),
-        #     randn(sr(2), 700, 500),
-        #     randn(sr(3), 300, 700),
-        # ), # dynamic dispatch
+        (
+            false,
+            :allocs,
+            (lb=100, ub=5_000),
+            ldiv!, randn(20, 20), Diagonal(rand(20) .+ 1), randn(20, 20),
+        ),
+        (
+            false,
+            :allocs,
+            (lb=100, ub=10_000),
+            LinearAlgebra._kron!, randn(400, 400), randn(20, 20), randn(20, 20),
+        ), # runs with poor performance
+        (
+            false,
+            :allocs,
+            (lb=100, ub=10_000),
+            kron!, randn(400, 400), Diagonal(randn(20)), randn(20, 20),
+        ), # runs with poor performance
+        (
+            false,
+            :none,
+            nothing,
+            test_mlp,
+            randn(sr(1), 500, 200),
+            randn(sr(2), 700, 500),
+            randn(sr(3), 300, 700),
+        ),
         (false, :none, (1.0, 250), test_handwritten_sum, randn(1024 * 1024)),
         (false, :none, nothing, _sum, randn(1024)),
     ]
