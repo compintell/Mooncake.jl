@@ -112,7 +112,7 @@ Base.copy(bb::BBlock) = BBlock(bb.id, copy(bb.stmts))
 
 concatenate_ids(bb::BBlock) = first.(bb.stmts)
 
-concatenate_stmts(bb::BBlock) = last.(bb.stmts)
+concatenate_stmts(bb::BBlock) = Any[last(stmt) for stmt in bb.stmts]
 
 first_id(bb::BBlock) = first(concatenate_ids(bb))
 
@@ -383,7 +383,7 @@ function _ids_to_line_positions(bb_code::BBCode)
     id_to_ssa_map = Dict(zip(vcat(block_ids, line_ids), vcat(block_start_ssas, line_ssas)))
 
     # Apply map.
-    return map(Base.Fix1(_to_ssas, id_to_ssa_map), concatenate_stmts(bb_code))
+    return Any[_to_ssas(id_to_ssa_map, stmt) for stmt in concatenate_stmts(bb_code)]
 end
 
 # Like `_to_ids`, but converts IDs to SSAValues / (integers corresponding to ssas).
