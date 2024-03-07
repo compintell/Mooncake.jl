@@ -509,6 +509,13 @@ function __unflatten_codual_varargs(::Val{isva}, args, ::Val{nargs}) where {isva
 end
 
 """
+    build_rrule(args...)
+
+Helper method. Only uses static information from `args`.
+"""
+build_rrule(args...) = build_rrule(TapedInterpreter(), Tuple{map(_typeof, args)...})
+
+"""
     build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
 
 Returns a `DerivedRule` which is an `rrule!!` for `sig` in context `C`.
