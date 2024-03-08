@@ -817,10 +817,7 @@ end
 
 function (rule::LazyDerivedRule)(args::Vararg{Any, N}) where {N}
     if !isdefined(rule, :rule)
-        rule = build_rrule(rule.interp, rule.sig)
-        output = rule(args...)
-        rule.rule = rule
-        return output
+        rule.rule = build_rrule(rule.interp, rule.sig)
     end
     return rule.rule(args...)
 end
