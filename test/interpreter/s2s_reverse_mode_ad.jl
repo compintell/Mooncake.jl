@@ -187,6 +187,7 @@ end
         )
 
         # codual_args = map(zero_codual, (f, x...))
+        # rule = Taped.build_rrule(interp, sig)
         # out, pb!! = rule(codual_args...)
         # # @code_warntype optimize=true rule(codual_args...)
         # # @code_warntype optimize=true pb!!(tangent(out), map(tangent, codual_args)...)

@@ -28,7 +28,11 @@ simply be `P`. Otherwise, it will be an `AugmentedRegister`.
 """
 function register_type(::Type{P}) where {P}
     P == DataType && return Any
-    P isa Union && return Union{register_type(P.a), register_type(P.b)}
+    if P isa Union
+        return Union{
+            AugmentedRegister{codual_type(P.a)}, AugmentedRegister{codual_type(P.b)}
+        }
+    end
     if isconcretetype(P)
         return AugmentedRegister{codual_type(P), tangent_ref_type_ub(P)}
     else

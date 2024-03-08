@@ -527,13 +527,24 @@ function rule_type(interp::TapedInterpreter{C}, ::Type{sig}) where {C, sig}
 
     arg_types = map(_get_type, ir.argtypes)
     arg_tangent_types = map(tangent_type, arg_types)
-    return DerivedRule{
-        Core.OpaqueClosure{Tuple{map(register_type, arg_types)...}, register_type(Treturn)},
-        Tuple{map(tangent_stack_type ∘ _get_type, ir.argtypes)...},
-        Core.OpaqueClosure{Tuple{tangent_type(Treturn), arg_tangent_types...}, Nothing},
-        Val{isva},
-        Val{length(ir.argtypes)},
-    }
+    Treturn_register = register_type(Treturn)
+    if isconcretetype(Treturn_register)
+        return DerivedRule{
+            Core.OpaqueClosure{Tuple{map(register_type, arg_types)...}, Treturn_register},
+            Tuple{map(tangent_stack_type ∘ _get_type, ir.argtypes)...},
+            Core.OpaqueClosure{Tuple{tangent_type(Treturn), arg_tangent_types...}, Nothing},
+            Val{isva},
+            Val{length(ir.argtypes)},
+        }
+    else
+        return DerivedRule{
+            Core.OpaqueClosure{Tuple{map(register_type, arg_types)...}, T},
+            Tuple{map(tangent_stack_type ∘ _get_type, ir.argtypes)...},
+            Core.OpaqueClosure{Tuple{tangent_type(Treturn), arg_tangent_types...}, Nothing},
+            Val{isva},
+            Val{length(ir.argtypes)},
+        } where {T<:Treturn_register}
+    end
 end
 
 # if isva and nargs=2, then inputs (5.0, 4.0, 3.0) are transformed into (5.0, (4.0, 3.0)).
