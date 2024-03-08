@@ -317,23 +317,46 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
             DynamicDerivedRule(info.interp)  # Dynamic dispatch
         end
 
-        # Create data shared between the forwards- and reverse-passes.
-        data = (
-            rule=rule,
-            pb_stack=build_pb_stack(_typeof(rule), arg_types),
-            my_tangent_stack=make_tangent_stack(get_primal_type(info, line)),
-            arg_tangent_ref_stacks=map(__make_arg_tangent_ref_stack, arg_types, args),
-        )
+        rule_ref = rule == rrule!! ? rrule!! : add_data!(info.shared_data_pairs, rule)
 
-        # Get a location in the global captures in which `data` can live.
-        data_id = add_data!(info.shared_data_pairs, data)
+        my_tangent_stack = make_tangent_stack(get_primal_type(info, line))
+        if Base.issingletontype(_typeof(my_tangent_stack))
+            my_tangent_stack_id = my_tangent_stack
+        else
+            my_tangent_stack_id = add_data!(info.shared_data_pairs, my_tangent_stack)
+        end
+
+        pb_stack = build_pb_stack(_typeof(rule), arg_types)
+        if Base.issingletontype(_typeof(pb_stack))
+            pb_stack_id = pb_stack
+        else
+            pb_stack_id = add_data!(info.shared_data_pairs, pb_stack)
+        end
+
+        if pb_stack isa SingletonStack{NoPullback}
+            arg_tangent_ref_stacks_id = nothing
+        else
+            ref_stacks = map(__make_arg_tangent_ref_stack, arg_types, args)
+            arg_tangent_ref_stacks_id = add_data!(info.shared_data_pairs, ref_stacks)
+        end
 
         # Create a call to `fwds_pass!`, which runs the forwards-pass. `Argument(0)` always
         # contains the global collection of captures.
         inc_args = map(__inc, args)
         return_type = register_type(get_primal_type(info, line))
-        fwds = Expr(:call, __fwds_pass!, data_id, return_type, inc_args...)
-        rvs = Expr(:call, __rvs_pass!, data_id)
+        fwds = Expr(
+            :call,
+            __fwds_pass!,
+            arg_tangent_ref_stacks_id,
+            rule_ref,
+            my_tangent_stack_id,
+            pb_stack_id,
+            return_type,
+            inc_args...,
+        )
+        rvs = Expr(
+            :call, __rvs_pass!, arg_tangent_ref_stacks_id, my_tangent_stack_id, pb_stack_id
+        )
         return ad_stmt_info(line, fwds, rvs)
 
     elseif Meta.isexpr(stmt, :boundscheck)
@@ -392,23 +415,35 @@ end
 # Executes the fowards-pass. `data` is the data shared between the forwards-pass and
 # pullback. It must be a `NamedTuple` with fields `arg_tangent_stacks`, `rule`,
 # `my_tangent_stack`, and `pb_stack`.
-@inline function __fwds_pass!(data, ::Type{R}, f::F, raw_args::Vararg{Any, N}) where {R, F, N}
+@inline function __fwds_pass!(
+    arg_tangent_ref_stacks,
+    rule,
+    my_tangent_stack,
+    pb_stack,
+    ::Type{R},
+    f::F,
+    raw_args::Vararg{Any, N},
+) where {R, F, N}
 
     raw_args = (f, raw_args...)
-
-    # Log the location of the tangents associated to each argument.
-    tangent_refs = map(x -> isa(x, AugmentedRegister) ? x.tangent_ref : nothing, raw_args)
-    map(__push_ref_stack, data.arg_tangent_ref_stacks, tangent_refs)
+    __log_tangent_refs!(pb_stack, raw_args, arg_tangent_ref_stacks)
 
     # Run the rule.
     args = map(x -> isa(x, AugmentedRegister) ? x.codual : uninit_codual(x), raw_args)
-    out, pb!! = data.rule(args...)
+    out, pb!! = rule(args...)
 
     # Log the results and return.
-    push!(data.my_tangent_stack, tangent(out))
-    push!(data.pb_stack, pb!!)
-    return AugmentedRegister(out, top_ref(data.my_tangent_stack))::R
+    push!(my_tangent_stack, tangent(out))
+    push!(pb_stack, pb!!)
+    return AugmentedRegister(out, top_ref(my_tangent_stack))::R
 end
+
+@inline function __log_tangent_refs!(::Any, raw_args, arg_tangent_ref_stacks)
+    tangent_refs = map(x -> isa(x, AugmentedRegister) ? x.tangent_ref : nothing, raw_args)
+    map(__push_ref_stack, arg_tangent_ref_stacks, tangent_refs)
+end
+
+@inline __log_tangent_refs!(::SingletonStack{NoPullback}, ::Any, ::Any) = nothing
 
 @inline __push_ref_stack(tangent_ref_stack, ref) = push!(tangent_ref_stack, ref)
 @inline __push_ref_stack(::InactiveStack, ref) = nothing
@@ -418,22 +453,22 @@ end
 #
 # Executes the reverse-pass. `data` is the `NamedTuple` shared with `fwds_pass!`.
 # Much of this pass will be optimised away in practice.
-@inline function __rvs_pass!(data)::Nothing
+@inline function __rvs_pass!(arg_tangent_ref_stacks, my_tangent_stack, pb_stack)::Nothing
+    __execute_reverse_pass!(pop!(pb_stack), pop!(my_tangent_stack), arg_tangent_ref_stacks)
+end
 
-    # Get the tangent w.r.t. output, and the pullback, from this instructions' stacks.
-    dout = pop!(data.my_tangent_stack)
-    pb!! = pop!(data.pb_stack)
-
+@inline function __execute_reverse_pass!(pb!!, dout, arg_tangent_ref_stacks)
     # Get the tangent w.r.t. each argument of the primal.
-    tangent_stacks = tuple_map(pop!, data.arg_tangent_ref_stacks)
+    tangent_stacks = tuple_map(pop!, arg_tangent_ref_stacks)
 
     # Run the pullback and increment the argument tangents.
     dargs = tuple_map(set_immutable_to_zero ∘ getindex, tangent_stacks)
     new_dargs = pb!!(dout, dargs...)
     map(increment_ref!, tangent_stacks, new_dargs)
-
     return nothing
 end
+
+@inline __execute_reverse_pass!(::NoPullback, ::Any, ::Any) = nothing
 
 #
 # Runners for generated code.
@@ -562,20 +597,27 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
 
     # Make shared data, and construct BBCode for forwards-pass and pullback.
     shared_data = shared_data_tuple(info.shared_data_pairs)
+    # @show length(shared_data)
     fwds_ir = forwards_pass_ir(primal_ir, ad_stmts_blocks, info, _typeof(shared_data))
     pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, _typeof(shared_data))
 
     # Construct opaque closures and arg tangent stacks, and build the rule.
     # println("ir")
-    # display(ir)
-    # println("fwds")
-    # display(IRCode(fwds_ir))
+    # @show length(ir.stmts)
+    # # display(ir)
+    # # println("fwds")
+    # # display(IRCode(fwds_ir))
     # display("fwds_optimised")
-    # display(optimise_ir!(IRCode(fwds_ir); do_inline=false))
-    # println("pb")
-    # display(IRCode(pb_ir))
+    # @time opt_fwds_ir = optimise_ir!(IRCode(fwds_ir); do_inline=true)
+    # display(opt_fwds_ir)
+    # @show length(opt_fwds_ir.stmts)
+    # # println("pb")
+    # # display(IRCode(pb_ir))
     # println("pb optimised")
-    # display(optimise_ir!(IRCode(pb_ir); do_inline=false))
+    # @time opt_pb_ir = optimise_ir!(IRCode(pb_ir); do_inline=true)
+    # @show length(opt_pb_ir.stmts)
+    # # display(opt_pb_ir)
+    # @show "compiling closures for $sig"
     fwds_oc = OpaqueClosure(optimise_ir!(IRCode(fwds_ir)), shared_data...; do_compile=true)
     pb_oc = OpaqueClosure(optimise_ir!(IRCode(pb_ir)), shared_data...; do_compile=true)
     arg_tangent_stacks = (map(make_tangent_stack ∘ _get_type, primal_ir.argtypes)..., )
@@ -775,7 +817,10 @@ end
 
 function (rule::LazyDerivedRule)(args::Vararg{Any, N}) where {N}
     if !isdefined(rule, :rule)
-        rule.rule = build_rrule(rule.interp, rule.sig)
+        rule = build_rrule(rule.interp, rule.sig)
+        output = rule(args...)
+        rule.rule = rule
+        return output
     end
     return rule.rule(args...)
 end
