@@ -19,7 +19,7 @@ end
 
 Stack(x::T) where {T} = Stack{T}(x)
 
-@inline function Base.push!(x::Stack{T}, val::T) where {T}
+@noinline function Base.push!(x::Stack{T}, val::T) where {T}
     position = x.position + 1
     memory = x.memory
     x.position = position
@@ -32,7 +32,7 @@ Stack(x::T) where {T} = Stack{T}(x)
     end
 end
 
-function Base.pop!(x::Stack)
+@noinline function Base.pop!(x::Stack)
     position = x.position
     val = x.memory[position]
     x.position = position - 1
