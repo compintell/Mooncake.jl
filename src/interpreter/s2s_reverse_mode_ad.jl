@@ -628,7 +628,7 @@ function pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, T
     # Compute the blocks which return in the primal.
     primal_exit_blocks_inds = findall(is_reachable_return_node ∘ terminator, ir.blocks)
 
-    # If there are blocks which successfully return in the primal, then the primal never
+    # If there are no blocks which successfully return in the primal, then the primal never
     # terminates without throwing, meaning that if AD hits this function, it definitely
     # won't succeed on the forwards-pass. As such, the reverse-pass can just be a no-op.
     if isempty(primal_exit_blocks_inds)
