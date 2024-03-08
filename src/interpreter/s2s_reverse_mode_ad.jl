@@ -281,7 +281,7 @@ function build_const_reg(stmt)
 end
 
 function get_primal_value(x::GlobalRef)
-    isconst(x) || unhandled_feature("Non-constant GlobalRef not supported")
+    isconst(x) || unhandled_feature("Non-constant GlobalRef not supported: $x")
     return getglobal(x.mod, x.name)
 end
 get_primal_value(x::QuoteNode) = x.value

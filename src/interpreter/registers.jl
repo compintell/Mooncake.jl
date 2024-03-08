@@ -23,8 +23,7 @@ end
     register_type(::Type{P}) where {P}
 
 If `P` is the type associated to a primal register, the corresponding register in the
-forwards-pass must be `register_type(P)`. If `tangent_type(P)` is `NoTangent`, this must
-simply be `P`. Otherwise, it will be an `AugmentedRegister`.
+forwards-pass must be a `register_type(P)`.
 """
 function register_type(::Type{P}) where {P}
     P == DataType && return Any
