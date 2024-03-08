@@ -198,7 +198,11 @@ function make_ad_stmts!(stmt::IDPhiNode, line::ID, info::ADInfo)
         if values[n] isa Union{Argument, ID}
             new_values[n] = __inc(values[n])
         else
-            new_values[n] = augmented_const_components(values[n], info)
+            if tangent_type(_typeof(get_primal_value(values[n]))) == NoTangent
+                new_values[n] = build_const_reg(values[n])
+            else
+                new_values[n] = augmented_const_components(values[n], info)
+            end
         end
     end
     return ad_stmt_info(line, IDPhiNode(stmt.edges, new_values), nothing)
@@ -253,20 +257,27 @@ make_ad_stmts!(stmt, line::ID, info::ADInfo) = const_register(stmt, line, info)
 
 # If `primal_type` is provably non-differentiable, return statement with no tangent stack.
 # Otherwise return an AugmentedRegister whose tangent_stack is stored in shared data.
-function const_register(primal_value, line::ID, info::ADInfo)
-    const_reg_id = augmented_const_components(primal_value, info)
-    return ad_stmt_info(line, Expr(:call, identity, const_reg_id), nothing)
+function const_register(stmt, line::ID, info::ADInfo)
+    primal_value = get_primal_value(stmt)
+    if tangent_type(_typeof(primal_value)) == NoTangent
+        return ad_stmt_info(line, build_const_reg(primal_value), nothing)
+    else
+        const_reg_id = augmented_const_components(stmt, info)
+        return ad_stmt_info(line, Expr(:call, identity, const_reg_id), nothing)
+    end
 end
 
 # line should always be the primal line associated to the instruction you are producing.
 function augmented_const_components(stmt, info::ADInfo)
+    return add_data!(info.shared_data_pairs, build_const_reg(stmt))
+end
+
+function build_const_reg(stmt)
     primal_value = get_primal_value(stmt)
     tangent_stack = make_tangent_stack(_typeof(primal_value))
     tangent = uninit_tangent(primal_value)
     push!(tangent_stack, tangent)
-    const_reg = AugmentedRegister(CoDual(primal_value, tangent), top_ref(tangent_stack))
-    const_reg_id = add_data!(info.shared_data_pairs, const_reg)
-    return const_reg_id
+    return AugmentedRegister(CoDual(primal_value, tangent), top_ref(tangent_stack))
 end
 
 function get_primal_value(x::GlobalRef)
@@ -298,10 +309,10 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
 
         # Construct signature, and determine how the rrule is to be computed.
         sig = Tuple{arg_types...}
-        rule = if is_invoke
+        rule = if is_primitive(context_type(info.interp), sig)
+            rrule!! # intrinsic / builtin / thing we provably have rule for
+        elseif is_invoke
             LazyDerivedRule(info.interp, sig) # Static dispatch
-        elseif is_primitive(context_type(info.interp), sig)
-            rrule!! # intrinsic / builtin
         else
             DynamicDerivedRule(info.interp)  # Dynamic dispatch
         end
@@ -312,7 +323,6 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
             pb_stack=build_pb_stack(_typeof(rule), arg_types),
             my_tangent_stack=make_tangent_stack(get_primal_type(info, line)),
             arg_tangent_ref_stacks=map(__make_arg_tangent_ref_stack, arg_types, args),
-            fwds_ret_type=register_type(get_primal_type(info, line)),
         )
 
         # Get a location in the global captures in which `data` can live.
@@ -321,7 +331,8 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         # Create a call to `fwds_pass!`, which runs the forwards-pass. `Argument(0)` always
         # contains the global collection of captures.
         inc_args = map(__inc, args)
-        fwds = Expr(:call, __fwds_pass!, data_id, inc_args...)
+        return_type = register_type(get_primal_type(info, line))
+        fwds = Expr(:call, __fwds_pass!, data_id, return_type, inc_args...)
         rvs = Expr(:call, __rvs_pass!, data_id)
         return ad_stmt_info(line, fwds, rvs)
 
@@ -381,7 +392,7 @@ end
 # Executes the fowards-pass. `data` is the data shared between the forwards-pass and
 # pullback. It must be a `NamedTuple` with fields `arg_tangent_stacks`, `rule`,
 # `my_tangent_stack`, and `pb_stack`.
-@inline function __fwds_pass!(data, f::F, raw_args::Vararg{Any, N}) where {F, N}
+@inline function __fwds_pass!(data, ::Type{R}, f::F, raw_args::Vararg{Any, N}) where {R, F, N}
 
     raw_args = (f, raw_args...)
 
@@ -396,7 +407,7 @@ end
     # Log the results and return.
     push!(data.my_tangent_stack, tangent(out))
     push!(data.pb_stack, pb!!)
-    return AugmentedRegister(out, top_ref(data.my_tangent_stack))::data.fwds_ret_type
+    return AugmentedRegister(out, top_ref(data.my_tangent_stack))::R
 end
 
 @inline __push_ref_stack(tangent_ref_stack, ref) = push!(tangent_ref_stack, ref)
