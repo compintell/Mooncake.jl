@@ -124,6 +124,18 @@ function __infer_ir!(ir, interp::CC.AbstractInterpreter, mi::CC.MethodInstance)
     return ir
 end
 
+# In automatically generated code, it is meaningless to include code coverage effects.
+# Moreover, it seems to cause some serious inference probems. Consequently, it makes sense
+# to remove such effects before optimising IRCode.
+function __strip_coverage!(ir::IRCode)
+    for n in eachindex(ir.stmts.inst)
+        if Meta.isexpr(ir.stmts.inst[n], :code_coverage_effect)
+            ir.stmts.inst[n] = nothing
+        end
+    end
+    return ir
+end
+
 """
     optimise_ir!(ir::IRCode, show_ir=false)
 
@@ -137,6 +149,7 @@ function optimise_ir!(ir::IRCode; show_ir=false, do_inline=true)
         println()
     end
     CC.verify_ir(ir)
+    ir = __strip_coverage!(ir)
     ir = CC.compact!(ir)
     local_interp = CC.NativeInterpreter()
     mi = __get_toplevel_mi_from_ir(ir, @__MODULE__);
@@ -150,6 +163,7 @@ function optimise_ir!(ir::IRCode; show_ir=false, do_inline=true)
     if do_inline
         ir = CC.ssa_inlining_pass!(ir, inline_state, #=propagate_inbounds=#true)
     end
+    ir = __strip_coverage!(ir)
     ir = CC.compact!(ir)
     ir = CC.sroa_pass!(ir, inline_state)
     ir = CC.adce_pass!(ir, inline_state)
