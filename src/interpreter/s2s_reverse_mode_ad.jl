@@ -608,9 +608,6 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
 
     # Make shared data, and construct BBCode for forwards-pass and pullback.
     shared_data = shared_data_tuple(info.shared_data_pairs)
-    # @show length(shared_data)
-    fwds_ir = forwards_pass_ir(primal_ir, ad_stmts_blocks, info, _typeof(shared_data))
-    pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, _typeof(shared_data))
 
     # Construct opaque closures and arg tangent stacks, and build the rule.
     # println("ir")
@@ -629,8 +626,23 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
     # @show length(opt_pb_ir.stmts)
     # # display(opt_pb_ir)
     # @show "compiling closures for $sig"
-    fwds_oc = OpaqueClosure(optimise_ir!(IRCode(fwds_ir)), shared_data...; do_compile=true)
-    pb_oc = OpaqueClosure(optimise_ir!(IRCode(pb_ir)), shared_data...; do_compile=true)
+
+    # If we've already derived the OpaqueClosures and info, do not re-derive, just create a
+    # copy and pass in new shared data.
+    if !haskey(interp.oc_cache, sig)
+        fwds_ir = forwards_pass_ir(primal_ir, ad_stmts_blocks, info, _typeof(shared_data))
+        pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, _typeof(shared_data))
+        optimised_fwds_ir = optimise_ir!(IRCode(fwds_ir))
+        optimised_pb_ir = optimise_ir!(IRCode(pb_ir))
+        fwds_oc = OpaqueClosure(optimised_fwds_ir, shared_data...; do_compile=true)
+        pb_oc = OpaqueClosure(optimised_pb_ir, shared_data...; do_compile=true)
+        interp.oc_cache[sig] = (fwds_oc, pb_oc)
+    else
+        existing_fwds_oc, existing_pb_oc = interp.oc_cache[sig]
+        fwds_oc = replace_captures(existing_fwds_oc, shared_data)
+        pb_oc = replace_captures(existing_pb_oc, shared_data)
+    end
+
     arg_tangent_stacks = (map(make_tangent_stack ∘ _get_type, primal_ir.argtypes)..., )
     return DerivedRule(
         fwds_oc,
@@ -642,6 +654,13 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
         Val(length(ir.argtypes)),
     )
 end
+
+@eval function replace_captures(oc::Toc, new_captures) where {Toc<:Core.OpaqueClosure}
+    return $(Expr(
+        :new, :(Toc), :new_captures, :(oc.world), :(oc.source), :(oc.invoke), :(oc.specptr)
+    ))
+end
+
 
 const ADStmts = Vector{Tuple{ID, Vector{ADStmtInfo}}}
 
