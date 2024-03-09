@@ -26,6 +26,7 @@ for name in [
     :(LinearAlgebra.chkstride1),
     :(Threads.nthreads),
     :(Base.depwarn),
+    :(Base.reduced_indices),
 ]
     @eval @is_primitive DefaultCtx Tuple{typeof($name), Vararg}
     @eval function rrule!!(::CoDual{_typeof($name)}, args::CoDual...)
