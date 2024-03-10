@@ -176,6 +176,7 @@ function populate_address_map!(m::AddressMap, primal::P, tangent::T) where {P, T
 end
 
 function populate_address_map!(m::AddressMap, p::P, t) where {P<:Union{Tuple, NamedTuple}}
+    t isa NoTangent && return m
     foreach(n -> populate_address_map!(m, getfield(p, n), getfield(t, n)), fieldnames(P))
     return m
 end
@@ -227,12 +228,13 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...; rul
     y_primal = f(x_primal...)
 
     # Use finite differences to estimate vjps
-    ẋ = randn_tangent(rng, x)
+    # ẋ = randn_tangent(rng, x)
+    ẋ = map(_x -> randn_tangent(rng, _x), x)
     ε = 1e-7
     x′ = _add_to_primal(x, _scale(ε, ẋ))
     y′ = f(x′...)
     ẏ = _scale(1 / ε, _diff(y′, y_primal))
-    ẋ_post = _scale(1 / ε, _diff(x′, x_primal))
+    ẋ_post = map((_x′, _x_p) -> _scale(1 / ε, _diff(_x′, _x_p)), x′, x_primal)
 
     # Run `rrule!!` on copies of `f` and `x`. We use randomly generated tangents so that we
     # can later verify that non-zero values do not get propagated by the rule.
@@ -888,9 +890,12 @@ function run_derived_rrule!!_test_cases(rng_ctor, v::Val)
     test_cases, memory = Taped.generate_derived_rrule!!_test_cases(rng_ctor, v)
     GC.@preserve memory @testset "$f, $(typeof(x))" for
         (interface_only, perf_flag, _, f, x...) in test_cases
-        test_interpreted_rrule!!(
+        test_derived_rule(
             rng_ctor(123), f, x...; interp, interface_only, perf_flag, is_primitive=false
         )
+        # test_interpreted_rrule!!(
+        #     rng_ctor(123), f, x...; interp, interface_only, perf_flag, is_primitive=false
+        # )
     end
 end
 

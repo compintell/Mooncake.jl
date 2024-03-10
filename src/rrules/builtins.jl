@@ -519,6 +519,10 @@ function rrule!!(::CoDual{typeof(getfield)}, value::CoDual, name::CoDual)
     return y, getfield_pullback
 end
 
+function rrule!!(::CoDual{typeof(getfield)}, value::CoDual{<:Any, NoTangent}, name::CoDual)
+    return uninit_codual(getfield(primal(value), primal(name))), NoPullback()
+end
+
 function rrule!!(::CoDual{typeof(getfield)}, value::CoDual, name::CoDual, order::CoDual)
     _name = primal(name)
     _order = primal(order)
@@ -532,6 +536,12 @@ function rrule!!(::CoDual{typeof(getfield)}, value::CoDual, name::CoDual, order:
         _get_tangent_field(primal(value), tangent(value), _name, _order),
     )
     return y, getfield_pullback
+end
+
+function rrule!!(
+    ::CoDual{typeof(getfield)}, value::CoDual{<:Any, NoTangent}, name::CoDual, order::CoDual
+)
+    return uninit_codual(getfield(primal(value), primal(name), primal(order))), NoPullback()
 end
 
 _get_tangent_field(_, tangent, f...) = getfield(tangent, f...)
@@ -588,10 +598,15 @@ end
 # swapfield!
 # throw
 
-function rrule!!(::CoDual{typeof(tuple)}, args...)
-    y = CoDual(tuple(map(primal, args)...), tuple(map(tangent, args)...))
-    tuple_pullback(dy, ::NoTangent, dargs...) = NoTangent(), map(increment!!, dargs, dy)...
-    return y, tuple_pullback
+function rrule!!(::CoDual{typeof(tuple)}, args::Vararg{Any, N}) where {N}
+    primal_output = tuple(map(primal, args)...)
+    if tangent_type(_typeof(primal_output)) == NoTangent
+        return zero_codual(primal_output), NoPullback()
+    else
+        y = CoDual(primal_output, tuple(map(tangent, args)...))
+        tuple_pullback(dy, ::NoTangent, dargs...) = NoTangent(), map(increment!!, dargs, dy)...
+        return y, tuple_pullback
+    end
 end
 
 function rrule!!(::CoDual{typeof(typeassert)}, x, type)
@@ -811,6 +826,8 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         [false, :none, _range, getfield, UnitRange{Int}(5:9), :start],
         [false, :none, _range, getfield, UnitRange{Int}(5:9), :stop],
         [false, :none, _range, getfield, (5.0, ), 1, false],
+        (false, :none, _range, getfield, (1, ), 1, false),
+        (false, :none, _range, getfield, (1, 2), 1),
         [false, :none, _range, getfield, UInt8, :name],
         [false, :none, _range, getfield, UInt8, :super],
         [true, :none, _range, getfield, UInt8, :layout],
@@ -848,10 +865,13 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         ],
         # swapfield! -- NEEDS IMPLEMENTING AND TESTING
         # throw -- NEEDS IMPLEMENTING AND TESTING
-        [false, :stability, nothing, tuple, 5.0, 4.0],
-        [false, :stability, nothing, tuple, randn(5), 5.0],
-        [false, :stability, nothing, tuple, randn(5), randn(4)],
-        [false, :stability, nothing, tuple, 5.0, randn(1)],
+        [false, :stability_and_allocs, nothing, tuple, 5.0, 4.0],
+        [false, :stability_and_allocs, nothing, tuple, randn(5), 5.0],
+        [false, :stability_and_allocs, nothing, tuple, randn(5), randn(4)],
+        [false, :stability_and_allocs, nothing, tuple, 5.0, randn(1)],
+        (false, :stability_and_allocs, nothing, tuple),
+        (false, :stability_and_allocs, nothing, tuple, 1),
+        (false, :stability_and_allocs, nothing, tuple, 1, 5),
         [false, :stability, nothing, typeassert, 5.0, Float64],
         [false, :stability, nothing, typeassert, randn(5), Vector{Float64}],
         [false, :stability, nothing, typeof, 5.0],

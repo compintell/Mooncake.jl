@@ -65,6 +65,11 @@ function rrule!!(::CoDual{typeof(lgetfield)}, x::CoDual, ::CoDual{Val{f}}) where
     return y, lgetfield_pb!!
 end
 
+# Specialise for non-differentiable arguments.
+function rrule!!(::CoDual{typeof(lgetfield)}, x::CoDual{<:Any, NoTangent}, ::CoDual{Val{f}}) where {f}
+    return uninit_codual(getfield(primal(x), f)), NoPullback()
+end
+
 lgetfield(x, ::Val{f}, ::Val{order}) where {f, order} = getfield(x, f, order)
 
 @is_primitive MinimalCtx Tuple{typeof(lgetfield), Any, Any, Any}
@@ -72,6 +77,10 @@ function rrule!!(::CoDual{typeof(lgetfield)}, x::CoDual, ::CoDual{Val{f}}, ::CoD
     lgetfield_pb!!(dy, df, dx, dsym, dorder) = df, increment_field!!(dx, dy, Val{f}()), dsym, dorder
     y = CoDual(getfield(primal(x), f), _get_tangent_field(primal(x), tangent(x), f))
     return y, lgetfield_pb!!
+end
+
+function rrule!!(::CoDual{typeof(lgetfield)}, x::CoDual{<:Any, NoTangent}, ::CoDual{Val{f}}, ::CoDual{Val{order}}) where {f, order}
+    return uninit_codual(getfield(primal(x), f)), NoPullback()
 end
 
 """
@@ -150,6 +159,8 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
         # Literal replacements for getfield.
         (false, :stability_and_allocs, nothing, lgetfield, (5.0, 4), Val(1)),
         (false, :stability_and_allocs, nothing, lgetfield, (5.0, 4), Val(2)),
+        (false, :stability_and_allocs, nothing, lgetfield, (1, 4), Val(2)),
+        (false, :stability_and_allocs, nothing, lgetfield, ((), 4), Val(2)),
         (false, :stability_and_allocs, nothing, lgetfield, (a=5.0, b=4), Val(1)),
         (false, :stability_and_allocs, nothing, lgetfield, (a=5.0, b=4), Val(2)),
         (false, :stability_and_allocs, nothing, lgetfield, (a=5.0, b=4), Val(:a)),

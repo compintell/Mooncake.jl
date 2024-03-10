@@ -435,6 +435,7 @@ end
     out, pb!! = rule(args...)
 
     # Log the results and return.
+    t = tangent(out)::tangent_type(_typeof(primal(out)))
     push!(my_tangent_stack, tangent(out))
     push!(pb_stack, pb!!)
     return AugmentedRegister(out, top_ref(my_tangent_stack))::R
@@ -455,7 +456,7 @@ end
 #
 # Executes the reverse-pass. `data` is the `NamedTuple` shared with `fwds_pass!`.
 # Much of this pass will be optimised away in practice.
-@inline function __rvs_pass!(arg_tangent_ref_stacks, my_tangent_stack, pb_stack)::Nothing
+@noinline function __rvs_pass!(arg_tangent_ref_stacks, my_tangent_stack, pb_stack)::Nothing
     __execute_reverse_pass!(pop!(pb_stack), pop!(my_tangent_stack), arg_tangent_ref_stacks)
 end
 
@@ -485,12 +486,15 @@ struct Pullback{Tpb, Tret_ref, Targ_tangent_stacks, Tisva, Tnargs}
 end
 
 function (pb::Pullback{P, Q})(dy, dargs::Vararg{Any, N}) where {P, Q, N}
-    dargs = __unflatten_varargs(pb.isva, dargs, pb.nargs)
-    map(setindex!, map(top_ref, pb.arg_tangent_stacks), dargs)
+    unflattened_dargs = __unflatten_varargs(pb.isva, dargs, pb.nargs)
+    map(setindex!, map(top_ref, pb.arg_tangent_stacks), unflattened_dargs)
     increment_ref!(pb.ret_ref, dy)
-    pb.pb_oc(dy, dargs...)
-    return __flatten_varargs(pb.isva, map(pop!, pb.arg_tangent_stacks))
+    pb.pb_oc(dy, unflattened_dargs...)
+    out = __flatten_varargs(pb.isva, map(pop!, pb.arg_tangent_stacks), nvargs(length(dargs), pb.nargs))
+    return out::_typeof(dargs)
 end
+
+@inline nvargs(n_flat, ::Val{nargs}) where {nargs} = Val(n_flat - nargs + 1)
 
 struct DerivedRule{Tfwds_oc, Targ_tangent_stacks, Tpb_oc, Tisva<:Val, Tnargs<:Val}
     fwds_oc::Tfwds_oc
@@ -551,19 +555,34 @@ end
 
 # if isva and nargs=2, then inputs (5.0, 4.0, 3.0) are transformed into (5.0, (4.0, 3.0)).
 function __unflatten_varargs(::Val{isva}, args, ::Val{nargs}) where {isva, nargs}
-    return isva ? (args[1:nargs-1]..., args[nargs:end]) : args
+    isva || return args
+    if all(t -> t isa NoTangent, args[nargs:end])
+        return (args[1:nargs-1]..., NoTangent())
+    else
+        return (args[1:nargs-1]..., args[nargs:end])
+    end
 end
 
 # If isva, inputs (5.0, (4.0, 3.0)) are transformed into (5.0, 4.0, 3.0).
-function __flatten_varargs(::Val{isva}, args) where {isva}
-    return isva ? (args[1:end-1]..., args[end]...) : args
+function __flatten_varargs(::Val{isva}, args, ::Val{nvargs}) where {isva, nvargs}
+    isva || return args
+    if args[end] isa NoTangent
+        return (args[1:end-1]..., ntuple(n -> NoTangent(), nvargs)...)
+    else
+        return (args[1:end-1]..., args[end]...)
+    end
 end
 
 # If isva and nargs=2, then inputs `(CoDual(5.0, 0.0), CoDual(4.0, 0.0), CoDual(3.0, 0.0))`
 # are transformed into `(CoDual(5.0, 0.0), CoDual((5.0, 4.0), (0.0, 0.0)))`.
 function __unflatten_codual_varargs(::Val{isva}, args, ::Val{nargs}) where {isva, nargs}
     isva || return args
-    grouped_args = CoDual(map(primal, args[nargs:end]), map(tangent, args[nargs:end]))
+    group_primal = map(primal, args[nargs:end])
+    if tangent_type(_typeof(group_primal)) == NoTangent
+        grouped_args = zero_codual(group_primal)
+    else
+        grouped_args = CoDual(group_primal, map(tangent, args[nargs:end]))
+    end
     return (args[1:nargs-1]..., grouped_args)
 end
 
@@ -610,8 +629,9 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
 
     # Make shared data, and construct BBCode for forwards-pass and pullback.
     shared_data = shared_data_tuple(info.shared_data_pairs)
-    # display(sig)
-    # @show length(shared_data)
+    display(sig)
+    @show length(shared_data)
+    @show length(ir.stmts.inst)
 
     # Construct opaque closures and arg tangent stacks, and build the rule.
     # println("ir")
@@ -638,8 +658,8 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
         pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, _typeof(shared_data))
         optimised_fwds_ir = optimise_ir!(IRCode(fwds_ir))
         optimised_pb_ir = optimise_ir!(IRCode(pb_ir))
-        # @show length(optimised_fwds_ir.stmts.inst)
-        # @show length(optimised_pb_ir.stmts.inst)
+        @show length(optimised_fwds_ir.stmts.inst)
+        @show length(optimised_pb_ir.stmts.inst)
         # display(optimised_fwds_ir)
         # display(optimised_pb_ir)
         fwds_oc = OpaqueClosure(optimised_fwds_ir, shared_data...; do_compile=true)

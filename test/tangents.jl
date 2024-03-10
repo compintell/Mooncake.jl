@@ -39,6 +39,9 @@
                 (4.0, [4.0, 3.0]),
                 (9.0, [7.0, 7.0]),
             ),
+            ((), NoTangent(), NoTangent(), NoTangent()),
+            ((1,), NoTangent(), NoTangent(), NoTangent()),
+            ((2, 3), NoTangent(), NoTangent(), NoTangent()),
             (
                 (a=6.0, b=[1.0, 2.0]),
                 (a=5.0, b=[3.0, 4.0]),

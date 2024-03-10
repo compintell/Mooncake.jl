@@ -195,8 +195,16 @@ tangent_type(::Type{Core.TypeName}) = NoTangent
 
 tangent_type(::Type{Core.MethodTable}) = NoTangent
 
-@generated function tangent_type(::Type{T}) where {T<:Tuple}
-    return isconcretetype(T) ? Tuple{map(tangent_type, fieldtypes(T))...} : Tuple
+@generated function tangent_type(::Type{P}) where {P<:Tuple}
+    if isconcretetype(P)
+        if isempty(P.parameters) || all(p -> tangent_type(p) == NoTangent, P.parameters)
+            return NoTangent
+        else
+            return Tuple{map(tangent_type, fieldtypes(P))...}
+        end
+    else
+        Tuple
+    end
 end
 
 @generated function tangent_type(::Type{NamedTuple{N, T}}) where {N, T<:Tuple}
@@ -312,7 +320,9 @@ end
 @inline function zero_tangent(x::Array{P, N}) where {P, N}
     return _map_if_assigned!(zero_tangent, Array{tangent_type(P), N}(undef, size(x)...), x)
 end
-@inline zero_tangent(x::Union{Tuple, NamedTuple}) = map(zero_tangent, x)
+@inline function zero_tangent(x::P) where {P<:Union{Tuple, NamedTuple}}
+    return tangent_type(P) == NoTangent ? NoTangent() : map(zero_tangent, x)
+end
 @generated function zero_tangent(x::P) where {P}
 
     tangent_type(P) == NoTangent && return NoTangent()
@@ -364,8 +374,8 @@ function randn_tangent(rng::AbstractRNG, x::SimpleVector)
         return randn_tangent(rng, x[n])
     end
 end
-function randn_tangent(rng::AbstractRNG, x::Union{Tuple, NamedTuple})
-    return map(x -> randn_tangent(rng, x), x)
+function randn_tangent(rng::AbstractRNG, x::P) where {P <: Union{Tuple, NamedTuple}}
+    return tangent_type(P) == NoTangent ? NoTangent() : map(x -> randn_tangent(rng, x), x)
 end
 function randn_tangent(rng::AbstractRNG, x::T) where {T<:Union{Tangent, MutableTangent}}
     return T(randn_tangent(rng, x.fields))
@@ -604,7 +614,9 @@ end
 function _diff(p::P, q::P) where {P<:SimpleVector}
     return Any[_diff(a, b) for (a, b) in zip(p, q)]
 end
-_diff(p::P, q::P) where {P<:Union{Tuple, NamedTuple}} = _map(_diff, p, q)
+function _diff(p::P, q::P) where {P<:Union{Tuple, NamedTuple}}
+    return tangent_type(P) == NoTangent ? NoTangent() : _map(_diff, p, q)
+end
 
 function _containerlike_diff(p::P, q::P) where {P}
     diffed_fields = map(fieldnames(P)) do f
