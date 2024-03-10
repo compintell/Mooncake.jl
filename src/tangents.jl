@@ -208,7 +208,7 @@ tangent_type(::Type{Core.MethodTable}) = NoTangent
 end
 
 @generated function tangent_type(::Type{NamedTuple{N, T}}) where {N, T<:Tuple}
-    return NamedTuple{N, tangent_type(T)}
+    return tangent_type(T) == NoTangent ? NoTangent : NamedTuple{N, tangent_type(T)}
 end
 
 @generated function tangent_type(::Type{P}) where {P}

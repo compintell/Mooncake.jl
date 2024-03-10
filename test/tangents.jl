@@ -48,7 +48,7 @@
                 (a=4.0, b=[4.0, 3.0]),
                 (a=9.0, b=[7.0, 7.0]),
             ),
-            ((;), (;), (;), (;)),
+            ((;), NoTangent(), NoTangent(), NoTangent()),
             (
                 TypeStableMutableStruct{Float64}(5.0, 3.0),
                 build_tangent(TypeStableMutableStruct{Float64}, 5.0, 4.0),
