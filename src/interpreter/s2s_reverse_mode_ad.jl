@@ -346,8 +346,6 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
 
         # Create a call to `fwds_pass!`, which runs the forwards-pass. `Argument(0)` always
         # contains the global collection of captures.
-        inc_args = map(__inc, args)
-        return_type = register_type(get_primal_type(info, line))
         fwds = Expr(
             :call,
             __fwds_pass!,
@@ -355,8 +353,8 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
             rule_ref,
             my_tangent_stack_id,
             pb_stack_id,
-            return_type,
-            inc_args...,
+            register_type(get_primal_type(info, line)),
+            map(__inc, args)...,
         )
         rvs = Expr(
             :call, __rvs_pass!, arg_tangent_ref_stacks_id, my_tangent_stack_id, pb_stack_id
