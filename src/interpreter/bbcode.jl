@@ -198,6 +198,51 @@ is_successor(x::Switch, id::ID, ::Bool) = any(==(id), x.dests) || id == x.fallth
 find_block_ind(ir::BBCode, id::ID) = findfirst(b -> b.id == id, ir.blocks)
 
 """
+    compute_all_successors(ir::BBCode)::Dict{ID, Vector{ID}}
+
+Compute a map from the `ID of each `BBlock` in `ir` to its possible successors.
+"""
+function compute_all_successors(ir::BBCode)::Dict{ID, Vector{ID}}
+    succs = map(enumerate(ir.blocks)) do (n, blk)
+        return successors(terminator(blk), n, ir, n == length(ir.blocks))
+    end
+    return Dict{ID, Vector{ID}}(zip(map(b -> b.id, ir.blocks), succs))
+end
+
+function successors(::Nothing, n::Int, ir::BBCode, is_final_block::Bool)
+    return is_final_block ? ID[] : ID[ir.blocks[n+1].id]
+end
+successors(t::IDGotoNode, ::Int, ::BBCode, ::Bool) = [t.label]
+function successors(t::IDGotoIfNot, n::Int, ir::BBCode, is_final_block::Bool)
+    return is_final_block ? ID[t.dest] : ID[t.dest, ir.blocks[n + 1].id]
+end
+successors(::ReturnNode, ::Int, ::BBCode, ::Bool) = ID[]
+successors(t::Switch, ::Int, ::BBCode, ::Bool) = vcat(t.dests, t.fallthrough_dest)
+
+"""
+    compute_all_predecessors(ir::BBCode)::Dict{ID, Vector{ID}}
+
+    Compute a map from the `ID of each `BBlock` in `ir` to its possible predecessors.
+"""
+function compute_all_predecessors(ir::BBCode)::Dict{ID, Vector{ID}}
+
+    successor_map = compute_all_successors(ir)
+
+    # Initialise predecessor map to be empty.
+    ks = collect(keys(successor_map))
+    predecessor_map = Dict{ID, Vector{ID}}(zip(ks, map(_ -> ID[], ks)))
+
+    # Find all predecessors by iterating through the successor map.
+    for (k, succs) in successor_map
+        for succ in succs
+            push!(predecessor_map[succ], k)
+        end
+    end
+
+    return predecessor_map
+end
+
+"""
     collect_stmts(ir::BBCode)::Vector{Tuple{ID, Any}}
 
 Produce a `Vector{Any}` containing all of the statements in `ir`. These are returned in
@@ -458,9 +503,9 @@ function _sort_blocks!(ir::BBCode)
 
     node_ints = collect(eachindex(ir.blocks))
     id_to_int = Dict(zip(map(blk -> blk.id, ir.blocks), node_ints))
-
+    ps = compute_all_predecessors(ir)
     direct_predecessors = map(ir.blocks) do blk
-        return map(b -> Edge(id_to_int[b], id_to_int[blk.id]), predecessors(blk, ir))
+        return map(b -> Edge(id_to_int[b], id_to_int[blk.id]), ps[blk.id])
     end
     g = SimpleDiGraph(reduce(vcat, direct_predecessors))
 

@@ -456,7 +456,7 @@ end
 #
 # Executes the reverse-pass. `data` is the `NamedTuple` shared with `fwds_pass!`.
 # Much of this pass will be optimised away in practice.
-@noinline function __rvs_pass!(arg_tangent_ref_stacks, my_tangent_stack, pb_stack)::Nothing
+@inline function __rvs_pass!(arg_tangent_ref_stacks, my_tangent_stack, pb_stack)::Nothing
     __execute_reverse_pass!(pop!(pb_stack), pop!(my_tangent_stack), arg_tangent_ref_stacks)
 end
 
@@ -761,9 +761,10 @@ function pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, T
     # 4. insert a switch statement to determine which block to jump to. Restrict blocks
     #   considered to only those which are predecessors of this one. If in the first block,
     #   check whether or not the block stack is empty. If empty, jump to the exit block.
+    ps = compute_all_predecessors(ir)
     main_blocks = map(ad_stmts_blocks, enumerate(ir.blocks)) do (blk_id, ad_stmts), (n, blk)
         rvs_stmts = reverse(Tuple{ID, Any}[(x.line, x.rvs) for x in ad_stmts])
-        pred_ids = vcat(predecessors(blk, ir), n == 1 ? [info.entry_id] : ID[])
+        pred_ids = vcat(ps[blk.id], n == 1 ? [info.entry_id] : ID[])
         switch_stmts = make_switch_stmts(pred_ids, info)
         return BBlock(blk_id, vcat(rvs_stmts, switch_stmts))
     end
