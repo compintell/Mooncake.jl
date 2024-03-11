@@ -1100,6 +1100,15 @@ end
     return z
 end
 
+# A function in which everything is non-differentiable and has no branching. Ideally, the
+# reverse-pass of this function would be a no-op, and there would be no use of the block
+# stack anywhere.
+function non_differentiable_foo(x::Int)
+    y = 5x
+    z = y + x
+    return 10z
+end
+
 function bar(x, y)
     x1 = sin(x)
     x2 = cos(y)
@@ -1456,6 +1465,7 @@ function generate_test_functions()
         (false, :allocs, nothing, const_tester),
         (false, :allocs, nothing, identity, 5.0),
         (false, :allocs, nothing, foo, 5.0),
+        (false, :allocs, nothing, non_differentiable_foo, 5),
         (false, :allocs, nothing, bar, 5.0, 4.0),
         (false, :none, nothing, type_unstable_argument_eval, sin, 5.0),
         (false, :none, (lb=1, ub=500), pi_node_tester, Ref{Any}(5.0)),
