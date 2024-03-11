@@ -27,6 +27,7 @@ for name in [
     :(Threads.nthreads),
     :(Base.depwarn),
     :(Base.reduced_indices),
+    :(Base.check_reducedims),
 ]
     @eval @is_primitive DefaultCtx Tuple{typeof($name), Vararg}
     @eval function rrule!!(::CoDual{_typeof($name)}, args::CoDual...)
