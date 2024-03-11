@@ -629,9 +629,9 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
 
     # Make shared data, and construct BBCode for forwards-pass and pullback.
     shared_data = shared_data_tuple(info.shared_data_pairs)
-    display(sig)
-    @show length(shared_data)
-    @show length(ir.stmts.inst)
+    # display(sig)
+    # @show length(shared_data)
+    # @show length(ir.stmts.inst)
 
     # Construct opaque closures and arg tangent stacks, and build the rule.
     # println("ir")
@@ -658,8 +658,8 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
         pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, _typeof(shared_data))
         optimised_fwds_ir = optimise_ir!(IRCode(fwds_ir))
         optimised_pb_ir = optimise_ir!(IRCode(pb_ir))
-        @show length(optimised_fwds_ir.stmts.inst)
-        @show length(optimised_pb_ir.stmts.inst)
+        # @show length(optimised_fwds_ir.stmts.inst)
+        # @show length(optimised_pb_ir.stmts.inst)
         # display(optimised_fwds_ir)
         # display(optimised_pb_ir)
         fwds_oc = OpaqueClosure(optimised_fwds_ir, shared_data...; do_compile=true)
