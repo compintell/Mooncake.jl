@@ -128,7 +128,19 @@ end
 end
 
 function build_tangent(::Type{P}, fields::Vararg{Any, N}) where {P<:Union{Tuple, NamedTuple}, N}
-    return tangent_type(P)(fields)
+    T = tangent_type(P)
+    if T == NoTangent
+        return NoTangent()
+    elseif isconcretetype(P)
+        return T(fields)
+    else
+        return __tangent_from_non_concrete(P, fields)
+    end
+end
+
+__tangent_from_non_concrete(::Type{P}, fields) where {P<:Tuple} = Tuple(fields)
+function __tangent_from_non_concrete(::Type{P}, fields) where {names, P<:NamedTuple{names}}
+    return NamedTuple{names}(fields)
 end
 
 _value(v::PossiblyUninitTangent) = val(v)
@@ -203,12 +215,18 @@ tangent_type(::Type{Core.MethodTable}) = NoTangent
             return Tuple{map(tangent_type, fieldtypes(P))...}
         end
     else
-        Tuple
+        return Any
     end
 end
 
 @generated function tangent_type(::Type{NamedTuple{N, T}}) where {N, T<:Tuple}
-    return tangent_type(T) == NoTangent ? NoTangent : NamedTuple{N, tangent_type(T)}
+    if tangent_type(T) == NoTangent
+        return NoTangent
+    elseif isconcretetype(tangent_type(T))
+        return NamedTuple{N, tangent_type(T)}
+    else
+        return Any
+    end
 end
 
 @generated function tangent_type(::Type{P}) where {P}
