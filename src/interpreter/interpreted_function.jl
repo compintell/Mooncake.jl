@@ -547,19 +547,6 @@ function __barrier(in_f::Tf) where {Tf<:InterpretedFunction}
     return in_f.return_slot[]
 end
 
-"""
-    tuple_map(f::F, x::Tuple) where {F}
-
-This function is semantically equivalent to `map(f, x)`, but always specialises on all of
-the element types of `x`, regardless the length of `x`. This contrasts with `map`, in which
-the number of element types specialised upon is a fixed constant in the compiler.
-
-As a consequence, if `x` is very long, this function may have very large compile times.
-"""
-@generated function tuple_map(f::F, x::Tuple) where {F}
-    return Expr(:call, :tuple, map(n -> :(f(x[$n])), eachindex(x.parameters))...)
-end
-
 # Produce a `Dict` mapping from block numbers to line number of their first statement.
 function block_map(cfg::CC.CFG)
     line_to_blk_maps = map(((n, blk),) -> tuple.(blk.stmts, n), enumerate(cfg.blocks))
