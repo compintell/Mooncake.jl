@@ -10,6 +10,9 @@ for N in 0:32
     )
         return d_new_, d_T, map(increment!!, dx, Tuple(dy))...
     end
+    @eval function _new_pullback!!(::NoTangent, d_new_, d_T, dx::Vararg{Any, $N})
+        return d_new_, NoTangent(), dx...
+    end
     @eval function rrule!!(
         ::CoDual{typeof(_new_)}, ::CoDual{Type{P}}, x::Vararg{CoDual, $N}
     ) where {P}
@@ -25,8 +28,10 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:new})
     test_cases = Any[
         (false, :stability, nothing, _new_, Tuple{Float64, Int}, 5.0, 4),
         (false, :stability, nothing, _new_, Tuple{Float64, Float64}, 5.0, 4.0),
+        (false, :stability, nothing, _new_, Tuple{Int, Int}, 5, 5),
         (false, :stability, nothing, _new_, @NamedTuple{y::Float64}, 5.0),
         (false, :stability, nothing, _new_, @NamedTuple{y::Float64, x::Int}, 5.0, 4),
+        (false, :stability, nothing, _new_, @NamedTuple{y::Int, x::Int}, 5, 4),
         (
             false, :stability, nothing,
             _new_, TestResources.TypeStableStruct{Float64}, 5, 4.0,
