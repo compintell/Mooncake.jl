@@ -598,14 +598,16 @@ end
 # swapfield!
 # throw
 
+@inline function tuple_pullback(dy, ::NoTangent, dargs...)
+    return NoTangent(), tuple_map(increment!!, dargs, dy)...
+end
+
 function rrule!!(::CoDual{typeof(tuple)}, args::Vararg{Any, N}) where {N}
     primal_output = tuple(map(primal, args)...)
     if tangent_type(_typeof(primal_output)) == NoTangent
         return zero_codual(primal_output), NoPullback()
     else
-        y = CoDual(primal_output, tuple(map(tangent, args)...))
-        tuple_pullback(dy, ::NoTangent, dargs...) = NoTangent(), map(increment!!, dargs, dy)...
-        return y, tuple_pullback
+        return CoDual(primal_output, tuple(map(tangent, args)...)), tuple_pullback
     end
 end
 
