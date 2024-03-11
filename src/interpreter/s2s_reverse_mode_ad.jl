@@ -431,7 +431,7 @@ end
     __log_tangent_refs!(pb_stack, raw_args, arg_tangent_ref_stacks)
 
     # Run the rule.
-    args = map(x -> isa(x, AugmentedRegister) ? x.codual : uninit_codual(x), raw_args)
+    args = tuple_map(x -> isa(x, AugmentedRegister) ? x.codual : uninit_codual(x), raw_args)
     out, pb!! = rule(args...)
 
     # Log the results and return.
@@ -467,7 +467,7 @@ end
     # Run the pullback and increment the argument tangents.
     dargs = tuple_map(set_immutable_to_zero ∘ getindex, tangent_stacks)
     new_dargs = pb!!(dout, dargs...)
-    map(increment_ref!, tangent_stacks, new_dargs)
+    tuple_map(increment_ref!, tangent_stacks, new_dargs)
     return nothing
 end
 
@@ -533,23 +533,24 @@ function rule_type(interp::TapedInterpreter{C}, ::Type{sig}) where {C, sig}
 
     arg_types = map(_get_type, ir.argtypes)
     arg_tangent_types = map(tangent_type, arg_types)
+    Targ_registers = Tuple{map(tangent_stack_type ∘ _get_type, ir.argtypes)...}
     Treturn_register = register_type(Treturn)
     if isconcretetype(Treturn_register)
         return DerivedRule{
             Core.OpaqueClosure{Tuple{map(register_type, arg_types)...}, Treturn_register},
-            Tuple{map(tangent_stack_type ∘ _get_type, ir.argtypes)...},
+            Targ_registers,
             Core.OpaqueClosure{Tuple{tangent_type(Treturn), arg_tangent_types...}, Nothing},
             Val{isva},
             Val{length(ir.argtypes)},
         }
     else
         return DerivedRule{
-            Core.OpaqueClosure{Tuple{map(register_type, arg_types)...}, T},
-            Tuple{map(tangent_stack_type ∘ _get_type, ir.argtypes)...},
+            Core.OpaqueClosure{Tuple{map(register_type, arg_types)...}, T} where {T<:Treturn_register},
+            Targ_registers,
             Core.OpaqueClosure{Tuple{tangent_type(Treturn), arg_tangent_types...}, Nothing},
             Val{isva},
             Val{length(ir.argtypes)},
-        } where {T<:Treturn_register}
+        }
     end
 end
 
@@ -672,7 +673,7 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
     end
 
     arg_tangent_stacks = (map(make_tangent_stack ∘ _get_type, primal_ir.argtypes)..., )
-    return DerivedRule(
+    return rule_type(interp, sig)(
         fwds_oc,
         pb_oc,
         arg_tangent_stacks,
