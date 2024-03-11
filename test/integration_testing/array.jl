@@ -1,4 +1,4 @@
-_getter = () -> 5.0
+_getter() = 5.0
 @testset "array" begin
     test_cases = vcat(
         Any[
