@@ -893,9 +893,6 @@ function run_derived_rrule!!_test_cases(rng_ctor, v::Val)
         test_derived_rule(
             rng_ctor(123), f, x...; interp, interface_only, perf_flag, is_primitive=false
         )
-        # test_interpreted_rrule!!(
-        #     rng_ctor(123), f, x...; interp, interface_only, perf_flag, is_primitive=false
-        # )
     end
 end
 
