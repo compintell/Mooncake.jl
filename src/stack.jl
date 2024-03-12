@@ -19,7 +19,7 @@ end
 
 Stack(x::T) where {T} = Stack{T}(x)
 
-@noinline function Base.push!(x::Stack{T}, val::T) where {T}
+@inline function Base.push!(x::Stack{T}, val::T) where {T}
     position = x.position + 1
     memory = x.memory
     x.position = position
@@ -32,7 +32,7 @@ Stack(x::T) where {T} = Stack{T}(x)
     end
 end
 
-@noinline function Base.pop!(x::Stack)
+@inline function Base.pop!(x::Stack)
     position = x.position
     val = x.memory[position]
     x.position = position - 1
@@ -62,7 +62,7 @@ end
 
 Base.eltype(::Stack{T}) where {T} = T
 
-top_ref(x::Stack) = Ref(x.memory, x.position)
+top_ref(x::Stack) = Ref(getfield(x, :memory), getfield(x, :position))
 
 """
     NoTangentStack()

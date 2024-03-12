@@ -500,7 +500,7 @@ end
 
 @inline function __log_tangent_refs!(::Any, raw_args, arg_tangent_ref_stacks)
     tangent_refs = map(x -> isa(x, AugmentedRegister) ? x.tangent_ref : nothing, raw_args)
-    map(__push_ref_stack, arg_tangent_ref_stacks, tangent_refs)
+    tuple_map(__push_ref_stack, arg_tangent_ref_stacks, tangent_refs)
 end
 
 @inline __log_tangent_refs!(::SingletonStack{NoPullback}, ::Any, ::Any) = nothing
