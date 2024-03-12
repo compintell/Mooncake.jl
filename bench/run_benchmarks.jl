@@ -167,11 +167,11 @@ function benchmark_rules!!(
     GC.@preserve memory begin
         results = map(enumerate(test_cases)) do (n, args)
             @info "$n / $(length(test_cases))", _typeof(args)
-            suite = BenchmarkGroup()
+            suite = Dict()
 
             # Benchmark primal.
             primals = map(x -> x isa CoDual ? primal(x) : x, args)
-            suite["primal"] = @benchmarkable(
+            suite["primal"] = @benchmark(
                 (a[1][])((a[2][])...);
                 setup=(a = (Ref($primals[1]), Ref(_deepcopy($primals[2:end])))),
             )
@@ -180,12 +180,12 @@ function benchmark_rules!!(
             rule = Taped.build_rrule(args...)
             coduals = map(x -> x isa CoDual ? x : zero_codual(x), args)
             to_benchmark(rule, coduals...)
-            suite["taped"] = @benchmarkable(to_benchmark($rule, $coduals...))
+            suite["taped"] = @benchmark(to_benchmark($rule, $coduals...))
 
             if include_other_frameworks
 
                 if should_run_benchmark(Val(:zygote), args...)
-                    suite["zygote"] = @benchmarkable(
+                    suite["zygote"] = @benchmark(
                         zygote_to_benchmark($(Zygote.Context()), $primals...)
                     )
                 end
@@ -194,25 +194,25 @@ function benchmark_rules!!(
                     tape = ReverseDiff.GradientTape(primals[1], primals[2:end])
                     compiled_tape = ReverseDiff.compile(tape)
                     result = map(x -> randn(size(x)), primals[2:end])
-                    suite["rd"] = @benchmarkable(
+                    suite["rd"] = @benchmark(
                         rd_to_benchmark!($result, $compiled_tape, $primals[2:end])
                     )
                 end
 
                 if should_run_benchmark(Val(:enzyme), args...)
                     dup_args = map(x -> Duplicated(x, randn(size(x))), primals[2:end])
-                    suite["enzyme"] = @benchmarkable(
+                    suite["enzyme"] = @benchmark(
                         autodiff(Reverse, $primals[1], Active, $dup_args...)
                     )
                 end
             end
 
-            if tune_benchmarks
-                @info "tuning"
-                tune!(suite)
-            end
+            # if tune_benchmarks
+            #     @info "tuning"
+            #     tune!(suite)
+            # end
             @info "running"
-            return (args, run(suite; verbose=true))
+            return (args, suite)
         end
     end
     return combine_results.(results, tags, ranges, Ref(default_ratios))
