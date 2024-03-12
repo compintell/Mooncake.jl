@@ -23,6 +23,8 @@ for (fname, elty) in ((:dgetrf_, :Float64), (:sgetrf_, :Float32))
         data_len = LDA_val * N_val
         A, dA = primal(_A), tangent(_A)
 
+        ipiv_vec = unsafe_wrap(Array, IPIV, N_val)
+
         @assert M_val === N_val
 
         # Store the initial state.
@@ -47,7 +49,7 @@ for (fname, elty) in ((:dgetrf_, :Float64), (:sgetrf_, :Float32))
             dL, dU = tril(dA_mat, -1), UpperTriangular(dA_mat)
 
             # Figure out the pivot matrix used.
-            p = LinearAlgebra.ipiv2perm(unsafe_wrap(Array, IPIV, N_val), N_val)
+            p = LinearAlgebra.ipiv2perm(ipiv_vec, N_val)
 
             # Compute pullback using Seth's method.
             __dF = tril(L'dL, -1) + UpperTriangular(dU * U')
