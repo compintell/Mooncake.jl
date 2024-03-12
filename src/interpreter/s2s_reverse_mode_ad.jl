@@ -252,8 +252,27 @@ end
 end
 
 # Constant GlobalRefs are handled. See const_register. Non-constant
-# GlobalRefs are not handled by Taped -- an appropriate error is thrown.
-make_ad_stmts!(stmt::GlobalRef, line::ID, info::ADInfo) = const_ad_stmt(stmt, line, info)
+# GlobalRefs are handled by assuming that they are constant, and creating a register with
+# the value. We then check at run-time that the value has not changed.
+function make_ad_stmts!(stmt::GlobalRef, line::ID, info::ADInfo)
+    if isconst(stmt)
+        return const_ad_stmt(stmt, line, info)
+    else
+        reg = const_register(getglobal(stmt.mod, stmt.name), info)
+        gref_id = ID()
+        fwds = Tuple{ID, Any}[
+            (gref_id, stmt),
+            (line, Expr(:call, __verify_const, gref_id, reg)),
+        ]
+        return ad_stmt_info(line, fwds, nothing)
+    end
+end
+
+# Helper used by `make_ad_stmts! ` for `GlobalRef`.
+@noinline function __verify_const(global_ref, stored_value)
+    @assert global_ref == primal(stored_value)
+    return stored_value
+end
 
 # QuoteNodes are constant. See make_const_register for details.
 make_ad_stmts!(stmt::QuoteNode, line::ID, info::ADInfo) = const_ad_stmt(stmt, line, info)

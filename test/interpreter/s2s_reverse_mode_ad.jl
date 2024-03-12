@@ -122,10 +122,11 @@ end
         end
         @testset "GlobalRef" begin
             @testset "non-const" begin
-                @test_throws(
-                    Taped.UnhandledLanguageFeatureException,
-                    make_ad_stmts!(GlobalRef(S2SGlobals, :non_const_global), ID(), info),
-                )
+                global_ref = GlobalRef(S2SGlobals, :non_const_global)
+                stmt_info = make_ad_stmts!(global_ref, ID(), info)
+                @test stmt_info isa Taped.ADStmtInfo
+                @test Meta.isexpr(last(stmt_info.fwds)[2], :call)
+                @test last(stmt_info.fwds)[2].args[1] == Taped.__verify_const
             end
             @testset "differentiable const globals" begin
                 stmt_info = make_ad_stmts!(GlobalRef(S2SGlobals, :const_float), ID(), info)
