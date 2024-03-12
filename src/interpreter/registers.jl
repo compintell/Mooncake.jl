@@ -27,14 +27,19 @@ forwards-pass must be a `register_type(P)`.
 """
 function register_type(::Type{P}) where {P}
     P == DataType && return Any
-    if P isa Union
-        return Union{
-            AugmentedRegister{codual_type(P.a)}, AugmentedRegister{codual_type(P.b)}
-        }
-    end
+    P isa Union && return __union_register_type(P)
     if isconcretetype(P)
         return AugmentedRegister{codual_type(P), tangent_ref_type_ub(P)}
     else
         return AugmentedRegister
+    end
+end
+
+# Specialised method for unions.
+function __union_register_type(::Type{P}) where {P}
+    if P isa Union
+        CC.tmerge(AugmentedRegister{codual_type(P.a)}, __union_register_type(P.b))
+    else
+        return AugmentedRegister{codual_type(P)}
     end
 end

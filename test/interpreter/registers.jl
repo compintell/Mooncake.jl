@@ -3,6 +3,6 @@
     @test Taped.register_type(Bool) <: Taped.AugmentedRegister{CoDual{Bool, NoTangent}}
     @test Taped.register_type(Any) == Taped.AugmentedRegister
     @test Taped.register_type(Real) == Taped.AugmentedRegister
-    @test Taped.register_type(Union{Float64, Float32}) <: Taped.AugmentedRegister
+    @test ==(Taped.register_type(Union{Float64, Float32}), Taped.AugmentedRegister)
     @test Taped.register_type(Union{Float64, Bool}) <: Union{Taped.AugmentedRegister, Bool}
 end
