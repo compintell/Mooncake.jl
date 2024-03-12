@@ -160,15 +160,17 @@ function optimise_ir!(ir::IRCode; show_ir=false, do_inline=true)
         println()
     end
     inline_state = CC.InliningState(local_interp)
+    CC.verify_ir(ir)
     if do_inline
         ir = CC.ssa_inlining_pass!(ir, inline_state, #=propagate_inbounds=#true)
+        ir = CC.compact!(ir)
     end
     ir = __strip_coverage!(ir)
-    ir = CC.compact!(ir)
     ir = CC.sroa_pass!(ir, inline_state)
     ir = CC.adce_pass!(ir, inline_state)
     ir = CC.compact!(ir)
-    CC.verify_ir(ir)
+    # CC.verify_ir(ir, true, false, CC.optimizer_lattice(local_interp))
+    CC.verify_linetable(ir.linetable, true)
     if show_ir
         println("Post-optimization")
         display(ir)
