@@ -585,7 +585,8 @@ end
 function rule_type(interp::TapedInterpreter{C}, ::Type{sig}) where {C, sig}
     is_primitive(C, sig) && return typeof(rrule!!)
 
-    ir, Treturn = lookup_ir(interp, sig)
+    ir, _ = lookup_ir(interp, sig)
+    Treturn = Base.Experimental.compute_ir_rettype(ir)
     isva, _ = is_vararg_sig_and_sparam_names(sig)
 
     arg_types = map(_get_type, ir.argtypes)
@@ -602,7 +603,7 @@ function rule_type(interp::TapedInterpreter{C}, ::Type{sig}) where {C, sig}
         }
     else
         return DerivedRule{
-            Core.OpaqueClosure{Tuple{map(register_type, arg_types)...}, T} where {T<:AugmentedRegister},
+            Core.OpaqueClosure{Tuple{map(register_type, arg_types)...}, T} where {T<:Treturn_register},
             Targ_registers,
             Core.OpaqueClosure{Tuple{tangent_type(Treturn), arg_tangent_types...}, Nothing},
             Val{isva},
@@ -662,7 +663,8 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
     is_primitive(C, sig) && return rrule!!
 
     # Grab code associated to the primal.
-    ir, Treturn = lookup_ir(interp, sig)
+    ir, _ = lookup_ir(interp, sig)
+    Treturn = Base.Experimental.compute_ir_rettype(ir)
 
     # Normalise the IR, and generated BBCode version of it.
     isva, spnames = is_vararg_sig_and_sparam_names(sig)
