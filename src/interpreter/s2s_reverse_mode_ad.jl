@@ -469,7 +469,6 @@ end
     out, pb!! = rule(args...)
 
     # Log the results and return.
-    t = tangent(out)::tangent_type(_typeof(primal(out)))
     push!(ret_tangent_stack, tangent(out))
     push!(pb_stack, pb!!)
     return AugmentedRegister(out, top_ref(ret_tangent_stack))::R
@@ -552,7 +551,8 @@ function (fwds::DerivedRule{P, Q, S})(args::Vararg{CoDual, N}) where {P, Q, S, N
     reg = fwds.fwds_oc(args_with_tangent_stacks...)::AugmentedRegister
 
     # Extract result and assemble pullback.
-    return reg.codual, Pullback(fwds.pb_oc, reg.tangent_ref, fwds.arg_tangent_stacks, fwds.isva, fwds.nargs)
+    pb!! = Pullback(fwds.pb_oc, reg.tangent_ref, fwds.arg_tangent_stacks, fwds.isva, fwds.nargs)
+    return reg.codual, pb!!
 end
 
 # Compute the concrete type of the rule that will be returned from `build_rrule`. This is
@@ -666,24 +666,6 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
     # display(sig)
     # @show length(shared_data)
     # @show length(ir.stmts.inst)
-
-    # Construct opaque closures and arg tangent stacks, and build the rule.
-    # println("ir")
-    # @show length(ir.stmts)
-    # # display(ir)
-    # # println("fwds")
-    # # display(IRCode(fwds_ir))
-    # display("fwds_optimised")
-    # @time opt_fwds_ir = optimise_ir!(IRCode(fwds_ir); do_inline=true)
-    # display(opt_fwds_ir)
-    # @show length(opt_fwds_ir.stmts)
-    # # println("pb")
-    # # display(IRCode(pb_ir))
-    # println("pb optimised")
-    # @time opt_pb_ir = optimise_ir!(IRCode(pb_ir); do_inline=true)
-    # @show length(opt_pb_ir.stmts)
-    # # display(opt_pb_ir)
-    # @show "compiling closures for $sig"
 
     # If we've already derived the OpaqueClosures and info, do not re-derive, just create a
     # copy and pass in new shared data.
