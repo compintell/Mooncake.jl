@@ -1118,6 +1118,8 @@ function bar(x, y)
     return x5
 end
 
+const_tester_non_differentiable() = 1
+
 const_tester() = cos(5.0)
 
 intrinsic_tester(x) = 5x
@@ -1463,6 +1465,7 @@ end
 function generate_test_functions()
     return Any[
         (false, :allocs, nothing, const_tester),
+        (false, :allocs, nothing, const_tester_non_differentiable),
         (false, :allocs, nothing, identity, 5.0),
         (false, :allocs, nothing, foo, 5.0),
         (false, :allocs, nothing, non_differentiable_foo, 5),
