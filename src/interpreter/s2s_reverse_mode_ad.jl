@@ -336,11 +336,11 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
 
         # If the tangent stack contains singletons (e.g. if it's a `NoTangentStack`)
         # then avoid putting it in the shared data, just interpolate directly into the IR.
-        my_tangent_stack = make_tangent_stack(get_primal_type(info, line))
-        if Base.issingletontype(_typeof(my_tangent_stack))
-            my_tangent_stack_id = my_tangent_stack
+        ret_tangent_stack = make_tangent_stack(get_primal_type(info, line))
+        if Base.issingletontype(_typeof(ret_tangent_stack))
+            ret_tangent_stack_id = ret_tangent_stack
         else
-            my_tangent_stack_id = add_data!(info, my_tangent_stack)
+            ret_tangent_stack_id = add_data!(info, ret_tangent_stack)
         end
 
         # If the type of the pullback is a singleton type, then there is no need to store it
@@ -376,13 +376,13 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
             __fwds_pass!,
             arg_tangent_ref_stacks_id,
             rule_ref,
-            my_tangent_stack_id,
+            ret_tangent_stack_id,
             pb_stack_id,
             register_type(get_primal_type(info, line)),
             map(__inc, args)...,
         )
         rvs = Expr(
-            :call, __rvs_pass!, arg_tangent_ref_stacks_id, my_tangent_stack_id, pb_stack_id
+            :call, __rvs_pass!, arg_tangent_ref_stacks_id, ret_tangent_stack_id, pb_stack_id
         )
         return ad_stmt_info(line, fwds, rvs)
 
@@ -450,11 +450,11 @@ end
 #
 # Executes the fowards-pass. `data` is the data shared between the forwards-pass and
 # pullback. It must be a `NamedTuple` with fields `arg_tangent_stacks`, `rule`,
-# `my_tangent_stack`, and `pb_stack`.
+# `ret_tangent_stack`, and `pb_stack`.
 @inline function __fwds_pass!(
     arg_tangent_ref_stacks,
     rule,
-    my_tangent_stack,
+    ret_tangent_stack,
     pb_stack,
     ::Type{R},
     f::F,
@@ -470,9 +470,9 @@ end
 
     # Log the results and return.
     t = tangent(out)::tangent_type(_typeof(primal(out)))
-    push!(my_tangent_stack, tangent(out))
+    push!(ret_tangent_stack, tangent(out))
     push!(pb_stack, pb!!)
-    return AugmentedRegister(out, top_ref(my_tangent_stack))::R
+    return AugmentedRegister(out, top_ref(ret_tangent_stack))::R
 end
 
 @inline function __log_tangent_refs!(::Any, raw_args, arg_tangent_ref_stacks)
@@ -490,8 +490,8 @@ end
 #
 # Executes the reverse-pass. `data` is the `NamedTuple` shared with `fwds_pass!`.
 # Much of this pass will be optimised away in practice.
-@inline function __rvs_pass!(arg_tangent_ref_stacks, my_tangent_stack, pb_stack)::Nothing
-    __execute_reverse_pass!(pop!(pb_stack), pop!(my_tangent_stack), arg_tangent_ref_stacks)
+@inline function __rvs_pass!(arg_tangent_ref_stacks, ret_tangent_stack, pb_stack)::Nothing
+    __execute_reverse_pass!(pop!(pb_stack), pop!(ret_tangent_stack), arg_tangent_ref_stacks)
 end
 
 @inline function __execute_reverse_pass!(pb!!, dout, arg_tangent_ref_stacks)
