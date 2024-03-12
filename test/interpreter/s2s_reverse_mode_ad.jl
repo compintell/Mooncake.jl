@@ -157,6 +157,13 @@ end
                 @test Meta.isexpr(ad_stmts.rvs, :call)
                 @test ad_stmts.rvs.args[1] == Taped.__rvs_pass!
             end
+            @testset "copyast" begin
+                stmt = Expr(:copyast, QuoteNode(:(hi)))
+                ad_stmts = make_ad_stmts!(stmt, ID(), info)
+                @test ad_stmts isa Taped.ADStmtInfo
+                @test Meta.isexpr(ad_stmts.fwds[1][2], :call)
+                @test ad_stmts.fwds[1][2].args[1] == identity
+            end
             @testset "throw_undef_if_not" begin
                 cond_id = ID()
                 line = ID()

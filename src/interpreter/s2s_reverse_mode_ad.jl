@@ -416,18 +416,23 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         # Code coverage irrelevant for derived code.
         return ad_stmt_info(line, nothing, nothing)
 
+    elseif Meta.isexpr(stmt, :copyast)
+        # Get constant out and shove it in shared storage.
+        reg = const_register(stmt.args[1], info)
+        return ad_stmt_info(line, Expr(:call, identity, reg), nothing)
+
     elseif Meta.isexpr(stmt, :loopinfo)
         # Cannot pass loopinfo back through the optimiser for some reason.
         # At the time of writing, I am unclear why this is not possible.
         return ad_stmt_info(line, nothing, nothing)
 
     elseif stmt.head in [
+        :enter,
         :gc_preserve_begin,
         :gc_preserve_end,
-        :enter,
         :leave,
         :pop_exception,
-        :throw_undef_if_not
+        :throw_undef_if_not,
     ]
         # Expressions which do not require any special treatment.
         return ad_stmt_info(line, stmt, nothing)
