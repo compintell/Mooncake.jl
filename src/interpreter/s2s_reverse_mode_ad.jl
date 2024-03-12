@@ -462,7 +462,7 @@ __zero_tangent(arg::QuoteNode) = zero_tangent(arg.value)
 # and whether we get to know the concrete type of the pullback or not.
 function build_pb_stack(Trule, arg_types)
     T_pb!! = Core.Compiler.return_type(Tuple{Trule, map(codual_type, arg_types)...})
-    if T_pb!! <: Tuple && T_pb!! !== Union{}
+    if T_pb!! <: Tuple && T_pb!! !== Union{} && !(T_pb!! isa Union)
         F = T_pb!!.parameters[2]
         return Base.issingletontype(F) ? SingletonStack{F}() : Stack{F}()
     else
@@ -602,7 +602,7 @@ function rule_type(interp::TapedInterpreter{C}, ::Type{sig}) where {C, sig}
         }
     else
         return DerivedRule{
-            Core.OpaqueClosure{Tuple{map(register_type, arg_types)...}, T} where {T<:Treturn_register},
+            Core.OpaqueClosure{Tuple{map(register_type, arg_types)...}, T} where {T<:AugmentedRegister},
             Targ_registers,
             Core.OpaqueClosure{Tuple{tangent_type(Treturn), arg_tangent_types...}, Nothing},
             Val{isva},
