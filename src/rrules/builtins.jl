@@ -595,6 +595,20 @@ function rrule!!(::CoDual{typeof(setfield!)}, value, name, x)
     return y, setfield!_pullback
 end
 
+function rrule!!(
+    ::CoDual{typeof(setfield!)}, value::CoDual{<:Any, NoTangent}, name, x
+)
+    _name = primal(name)
+    save = isdefined(primal(value), _name)
+    old_x = save ? getfield(primal(value), _name) : nothing
+    function setfield!_pullback(dy, df, dvalue, ::NoTangent, dx)
+        old_x !== nothing && setfield!(primal(value), _name, old_x)
+        return df, dvalue, NoTangent(), dx
+    end
+    y = CoDual(setfield!(primal(value), _name, primal(x)), NoTangent())
+    return y, setfield!_pullback
+end
+
 # swapfield!
 # throw
 

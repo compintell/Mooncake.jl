@@ -79,12 +79,7 @@
                 build_tangent(MutableFoo, 4.0),
                 build_tangent(MutableFoo, 9.0),
             ),
-            (
-                UnitRange{Int}(5, 7),
-                build_tangent(UnitRange{Int}, NoTangent(), NoTangent()),
-                build_tangent(UnitRange{Int}, NoTangent(), NoTangent()),
-                build_tangent(UnitRange{Int}, NoTangent(), NoTangent()),
-            ),
+            (UnitRange{Int}(5, 7), NoTangent(), NoTangent(), NoTangent()),
         ],
         map([
             LowerTriangular{Float64, Matrix{Float64}},

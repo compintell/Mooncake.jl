@@ -17,7 +17,8 @@ for N in 0:32
         ::CoDual{typeof(_new_)}, ::CoDual{Type{P}}, x::Vararg{CoDual, $N}
     ) where {P}
         y = $(Expr(:new, :P, map(n -> :(primal(x[$n])), 1:N)...))
-        dy = build_tangent(P, tuple_map(tangent, x)...)
+        T = tangent_type(P)
+        dy = T == NoTangent ? NoTangent() : build_tangent(P, tuple_map(tangent, x)...)
         return CoDual(y, dy), _new_pullback!!
     end
 end

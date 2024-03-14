@@ -229,6 +229,12 @@ end
     end
 end
 
+function backing_type(::Type{P}) where {P}
+    tangent_field_types = map(n -> tangent_field_type(P, n), 1:fieldcount(P))
+    all(==(NoTangent), tangent_field_types) && return NoTangent
+    return NamedTuple{fieldnames(P), Tuple{tangent_field_types...}}
+end
+
 @generated function tangent_type(::Type{P}) where {P}
 
     # This method can only handle struct types. Tell user to implement tangent type
@@ -248,12 +254,8 @@ end
     Base.issingletontype(P) && return NoTangent
 
     # Derive tangent type.
-    return  (ismutabletype(P) ? MutableTangent : Tangent){backing_type(P)}
-end
-
-function backing_type(::Type{P}) where {P}
-    tangent_field_types = map(n -> tangent_field_type(P, n), 1:fieldcount(P))
-    return NamedTuple{fieldnames(P), Tuple{tangent_field_types...}}
+    bt = backing_type(P)
+    return bt == NoTangent ? bt : (ismutabletype(P) ? MutableTangent : Tangent){bt}
 end
 
 """

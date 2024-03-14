@@ -127,6 +127,22 @@ function rrule!!(
     return y, setfield!_pullback
 end
 
+function rrule!!(
+    ::CoDual{typeof(lsetfield!)},
+    value::CoDual{<:Any, NoTangent},
+    ::CoDual{Val{name}},
+    x::CoDual,
+) where {name}
+    save = isdefined(primal(value), name)
+    old_x = save ? getfield(primal(value), name) : nothing
+    function setfield!_pullback(dy, df, dvalue, dname, dx)
+        old_x !== nothing && lsetfield!(primal(value), Val(name), old_x)
+        return df, dvalue, dname, dx
+    end
+    y = CoDual(lsetfield!(primal(value), Val(name), primal(x)), NoTangent())
+    return y, setfield!_pullback
+end
+
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
 
     # Data which needs to not be GC'd.
