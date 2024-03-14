@@ -199,6 +199,10 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
         (
             false, :stability_and_allocs, nothing,
             lsetfield!, NonDifferentiableFoo(5, false), Val(:x), 4,
+        ),
+        (
+            false, :stability_and_allocs, nothing,
+            lsetfield!, NonDifferentiableFoo(5, false), Val(:y), true,
         )
     ]
     return test_cases, memory
