@@ -26,24 +26,30 @@ end
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:new})
     test_cases = Any[
-        (false, :stability, nothing, _new_, Tuple{Float64, Int}, 5.0, 4),
-        (false, :stability, nothing, _new_, Tuple{Float64, Float64}, 5.0, 4.0),
-        (false, :stability, nothing, _new_, Tuple{Int, Int}, 5, 5),
-        (false, :stability, nothing, _new_, @NamedTuple{y::Float64}, 5.0),
-        (false, :stability, nothing, _new_, @NamedTuple{y::Float64, x::Int}, 5.0, 4),
-        (false, :stability, nothing, _new_, @NamedTuple{y::Int, x::Int}, 5, 4),
+        (false, :stability_and_allocs, nothing, _new_, Tuple{}),
+        (false, :stability_and_allocs, nothing, _new_, Tuple{Float64, Int}, 5.0, 4),
+        (false, :stability_and_allocs, nothing, _new_, Tuple{Float64, Float64}, 5.0, 4.0),
+        (false, :stability_and_allocs, nothing, _new_, Tuple{Int, Int}, 5, 5),
+        (false, :stability_and_allocs, nothing, _new_, @NamedTuple{}),
+        (false, :stability_and_allocs, nothing, _new_, @NamedTuple{y::Float64}, 5.0),
         (
-            false, :stability, nothing,
+            false, :stability_and_allocs, nothing,
+            _new_, @NamedTuple{y::Float64, x::Int}, 5.0, 4,
+        ),
+        (false, :stability_and_allocs, nothing, _new_, @NamedTuple{y::Int, x::Int}, 5, 4),
+        (
+            false, :stability_and_allocs, nothing,
             _new_, TestResources.TypeStableStruct{Float64}, 5, 4.0,
         ),
         (
-            false, :stability, nothing,
+            false, :stability_and_allocs, nothing,
             _new_, TestResources.TypeStableMutableStruct{Float64}, 5.0, 4.0,
         ),
         (
             false, :none, nothing,
             _new_, TestResources.TypeStableMutableStruct{Any}, 5.0, 4.0,
         ),
+        (false, :stability_and_allocs, nothing, _new_, UnitRange{Int64}, 5, 4),
     ]
     memory = Any[]
     return test_cases, memory

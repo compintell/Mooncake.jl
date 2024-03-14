@@ -1058,6 +1058,11 @@ end
 
 Base.:(==)(a::MutableFoo, b::MutableFoo) = equal_field(a, b, :a) && equal_field(a, b, :b)
 
+mutable struct NonDifferentiableFoo
+    x::Int
+    y::Bool
+end
+
 mutable struct TypeStableMutableStruct{T}
     a::Float64
     b::T
@@ -1751,6 +1756,8 @@ const DIFFTESTS_FUNCTIONS = vcat(
         [rand(_rng, 5, 5) .+ 1e-1 for _ in DiffTests.MATRIX_TO_MATRIX_FUNCS],
     ),
 )
+
+export MutableFoo, StructFoo, NonDifferentiableFoo, FullyInitMutableStruct
 
 end
 
