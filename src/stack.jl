@@ -6,7 +6,7 @@ A stack specialised for reverse-mode AD.
 Semantically equivalent to a usual stack, but never de-allocates memory once allocated.
 """
 mutable struct Stack{T}
-    memory::Vector{T}
+    const memory::Vector{T}
     position::Int
     Stack{T}() where {T} = new{T}(Vector{T}(undef, 0), 0)
 end
