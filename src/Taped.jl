@@ -27,8 +27,6 @@ using Core.Intrinsics: pointerref, pointerset
 using LinearAlgebra.BLAS: @blasfunc, BlasInt, trsm!
 using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!, potrf!, potrs!
 
-using .TestResources
-
 # Needs to be defined before various other things.
 function _foreigncall_ end
 
