@@ -489,6 +489,15 @@ function rrule!!(::CoDual{typeof(Core.ifelse)}, cond, a, b)
     return ifelse(_cond, a, b), ifelse_pullback!!
 end
 
+function rrule!!(
+    ::CoDual{typeof(Core.ifelse)},
+    cond,
+    a::CoDual{<:Any, NoTangent},
+    b::CoDual{<:Any, NoTangent},
+)
+    return ifelse(primal(cond), a, b), NoPullback()
+end
+
 # Core.set_binding_type!
 
 function rrule!!(::CoDual{typeof(Core.sizeof)}, x)
@@ -785,6 +794,8 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         # Core.get_binding_type -- NEEDS IMPLEMENTING AND TESTING
         [false, :none, nothing, Core.ifelse, true, randn(5), 1],
         [false, :none, nothing, Core.ifelse, false, randn(5), 2],
+        (false, :stability, nothing, Core.ifelse, true, 5, 4),
+        (false, :stability, nothing, Core.ifelse, false, true, false),
         [false, :stability, nothing, Core.ifelse, false, 1.0, 2.0],
         [false, :stability, nothing, Core.ifelse, true, 1.0, 2.0],
         [false, :stability, nothing, Core.ifelse, false, randn(5), randn(3)],
