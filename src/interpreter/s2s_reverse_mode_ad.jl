@@ -128,26 +128,27 @@ end
 Data structure which contains the result of `make_ad_stmts!`. Fields are
 - `line`: the ID associated to the primal line from which this is derived
 - `fwds`: the instructions which run the forwards-pass of AD
-- `rvs`: the instruction which runs the reverse-pass of AD / the pullback
+- `rvs`: the instructions which run the reverse-pass of AD / the pullback
 =#
 struct ADStmtInfo
     line::ID
     fwds::Vector{Tuple{ID, Any}}
-    rvs
+    rvs::Vector{Tuple{ID, Any}}
 end
 
 # Convenience function to construct an `ADStmtInfo`. The second method is particularly
 # useful, because often we only have a single instruction associated to the forwards-pass,
 # so it's helpful not to have to wrap it in a vector everywhere.
-ad_stmt_info(line::ID, fwds::Vector{Tuple{ID, Any}}, rvs) = ADStmtInfo(line, fwds, rvs)
-ad_stmt_info(line::ID, fwds, rvs) = ADStmtInfo(line, Tuple{ID, Any}[(line, fwds)], rvs)
+ad_stmt_info(line::ID, fwds, rvs) = ADStmtInfo(line, __vec(line, fwds), __vec(line, rvs))
+
+__vec(line::ID, x) = Tuple{ID, Any}[(line, x)]
+__vec(line::ID, x::Vector{Tuple{ID, Any}}) = x
 
 #=
     make_ad_stmts(stmt, line::ID, info::ADInfo)::ADStmtInfo
 
 Every line in the primal code is associated to one or more lines in the forwards-pass of AD,
-and one lines in the pullback (this can be `nothing`, indicating that there is nothing to be
-done on the reverse pass associated with `stmt`). This function has method specific to every
+and one or more lines in the pullback. This function has method specific to every
 node type in the Julia SSAIR.
 
 Translates the statement `stmt`, associated to `line` in the primal, into a specification of
@@ -233,7 +234,7 @@ function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
     new_line = Expr(:call, __pi_fwds!, tangent_stack_id, tangent_ref_stack_id, new_pi_line)
 
     # Assemble the above lines and construct reverse-pass.
-    return ADStmtInfo(
+    return ad_stmt_info(
         line,
         Tuple{ID, Any}[(new_pi_line, new_pi), (line, new_line)],
         Expr(:call, __pi_rvs!, tangent_stack_id, tangent_ref_stack_id),
@@ -380,6 +381,19 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         if pb_stack isa SingletonStack{NoPullback}
             arg_tangent_ref_stacks_id = nothing
         else
+            # ref_stacks = map(arg_types, args) do arg_type, arg
+            #     stack = __make_arg_tangent_ref_stack(arg_type, arg)
+            #     if Base.issingletontype(_typeof(stack))
+            #         return stack
+            #     else
+            #         return add_data!(info, stack)
+            #     end
+            # end
+
+            # arg_tangent_ref_stacks_id = ID()
+            # arg_tangent_ref_stacks = Expr(:call, tuple, ref_stacks...)
+
+
             ref_stacks = map(__make_arg_tangent_ref_stack, arg_types, args)
             if Base.issingletontype(_typeof(ref_stacks))
                 arg_tangent_ref_stacks_id = ref_stacks
@@ -816,7 +830,7 @@ function pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, T
     #   check whether or not the block stack is empty. If empty, jump to the exit block.
     ps = compute_all_predecessors(ir)
     main_blocks = map(ad_stmts_blocks, enumerate(ir.blocks)) do (blk_id, ad_stmts), (n, blk)
-        rvs_stmts = reverse(Tuple{ID, Any}[(x.line, x.rvs) for x in ad_stmts])
+        rvs_stmts = reduce(vcat, [x.rvs for x in reverse(ad_stmts)])
         pred_ids = vcat(ps[blk.id], n == 1 ? [info.entry_id] : ID[])
         switch_stmts = make_switch_stmts(pred_ids, info)
         return BBlock(blk_id, vcat(rvs_stmts, switch_stmts))
