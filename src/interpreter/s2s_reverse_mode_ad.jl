@@ -91,6 +91,10 @@ codegen which produces the forwards- and reverse-passes.
     to both the forwards- and reverse-passes..
 - `arg_types`: a map from `Argument` to its static type.
 - `ssa_types`: a map from `ID` associated to lines to their static / inferred type.
+- `tangent_stacks`: a map from `ID` to tangent stacks. If the tangent stack associated to
+    the `ID` is a bit type, then this will actually be the tangent stack. Otherwise it will
+    be the `ID` associated to the stack, and the stack itself will be put in the
+    `shared_data_pairs`.
 =#
 struct ADInfo
     interp::TInterp
@@ -100,14 +104,40 @@ struct ADInfo
     shared_data_pairs::SharedDataPairs
     arg_types::Dict{Argument, Any}
     ssa_types::Dict{ID, Any}
+    tangent_stacks::Dict{ID, Any}
 end
 
 # The constructor that you should use for ADInfo.
-function ADInfo(interp::TInterp, arg_types::Dict{Argument, Any}, ssa_types::Dict{ID, Any})
+function ADInfo(
+    interp::TInterp,
+    arg_types::Dict{Argument, Any},
+    ssa_types::Dict{ID, Any},
+    insts::Dict{ID, Any},
+)
     shared_data_pairs = SharedDataPairs()
     bs = Stack{Int}()
     bs_id = add_data!(shared_data_pairs, bs)
-    return ADInfo(interp, bs_id, bs, ID(), shared_data_pairs, arg_types, ssa_types)
+    tangent_stacks = make_tangent_stacks!(insts, ssa_types, shared_data_pairs)
+    return ADInfo(
+        interp, bs_id, bs, ID(), shared_data_pairs, arg_types, ssa_types, tangent_stacks
+    )
+end
+
+#=
+
+=#
+function make_tangent_stacks!(insts::Dict{ID, Any}, ssa_types::Dict{ID, Any}, shared_data)
+    tangent_stacks = Dict{ID, Any}()
+    for (k, typ) in ssa_types
+        Meta.isexpr(insts[k], :call) || Meta.isexpr(insts[k], :invoke) || continue
+        tangent_stack = make_tangent_stack(typ)
+        if Base.issingletontype(_typeof(tangent_stack))
+            tangent_stacks[k] = tangent_stack
+        else
+            tangent_stacks[k] = add_data!(shared_data, tangent_stack)
+        end
+    end
+    return tangent_stacks
 end
 
 # Shortcut for `add_data!(info.shared_data_pairs, data)`.
@@ -356,12 +386,15 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
 
         # If the tangent stack contains singletons (e.g. if it's a `NoTangentStack`)
         # then avoid putting it in the shared data, just interpolate directly into the IR.
-        ret_tangent_stack = make_tangent_stack(get_primal_type(info, line))
-        if Base.issingletontype(_typeof(ret_tangent_stack))
-            ret_tangent_stack_id = ret_tangent_stack
-        else
-            ret_tangent_stack_id = add_data!(info, ret_tangent_stack)
-        end
+        # ret_tangent_stack = make_tangent_stack(get_primal_type(info, line))
+        # if Base.issingletontype(_typeof(ret_tangent_stack))
+        #     ret_tangent_stack_id = ret_tangent_stack
+        # else
+        #     ret_tangent_stack_id = add_data!(info, ret_tangent_stack)
+        # end
+        # @show typeof(ret_tangent_stack_id), typeof(info.tangent_stacks[line])
+        ret_tangent_stack_id = info.tangent_stacks[line]
+        # @show ret_tangent_stack_id
 
         # If the type of the pullback is a singleton type, then there is no need to store it
         # in the shared data, it can be interpolated directly into the generated IR.
@@ -386,11 +419,13 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
                 stack = __make_arg_tangent_ref_stack(arg_type, arg)
                 if Base.issingletontype(_typeof(stack))
                     return stack
+                elseif haskey(info.tangent_stacks, arg)
+                    return info.tangent_stacks[arg]
                 else
                     return add_data!(info, stack)
                 end
             end
-            arg_tangent_ref_stacks = Expr(:call, tuple, ref_stacks...)
+            arg_tangent_ref_stacks = Expr(:call, __tangent_ref_stacks, ref_stacks...)
         end
 
         # Create calls to `__fwds_pass!` and `__rvs_pass!`, which run the forwards pass and
@@ -466,6 +501,14 @@ function __make_arg_tangent_ref_stack(arg_type, arg)
     return make_tangent_ref_stack(tangent_ref_type_ub(arg_type))
 end
 
+@inline function __tangent_ref_stacks(args::Vararg{Any, N}) where {N}
+    return tuple_map(args) do arg
+        arg isa InactiveStack && return arg
+        arg isa Stack{<:Ref} && return arg
+        return FixedStackTangentRefStack(arg)
+    end
+end
+
 is_active(::Union{Argument, ID}) = true
 is_active(::Any) = false
 
@@ -534,12 +577,12 @@ end
 
 @inline function __execute_reverse_pass!(pb!!, dout, arg_tangent_ref_stacks)
     # Get the tangent w.r.t. each argument of the primal.
-    tangent_stacks = tuple_map(pop!, arg_tangent_ref_stacks)
+    tangent_refs = tuple_map(pop!, arg_tangent_ref_stacks)
 
     # Run the pullback and increment the argument tangents.
-    dargs = tuple_map(set_immutable_to_zero ∘ getindex, tangent_stacks)
+    dargs = tuple_map(set_immutable_to_zero ∘ getindex, tangent_refs)
     new_dargs = pb!!(dout, dargs...)
-    tuple_map(increment_ref!, tangent_stacks, new_dargs)
+    tuple_map(increment_ref!, tangent_refs, new_dargs)
     return nothing
 end
 
@@ -693,7 +736,8 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
     ssa_types = Dict{ID, Any}(
         map((id, t) -> (id, _get_type(t)), concatenate_ids(primal_ir), ir.stmts.type)
     )
-    info = ADInfo(interp, arg_types, ssa_types)
+    insts = Dict{ID, Any}(zip(concatenate_ids(primal_ir), concatenate_stmts(primal_ir)))
+    info = ADInfo(interp, arg_types, ssa_types, insts)
 
     # For each block in the fwds and pullback BBCode, translate all statements.
     ad_stmts_blocks = map(primal_ir.blocks) do primal_blk
@@ -705,23 +749,23 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
     # Make shared data, and construct BBCode for forwards-pass and pullback.
     shared_data = shared_data_tuple(info.shared_data_pairs)
     # display(sig)
-    # @show length(shared_data)
-    # @show length(ir.stmts.inst)
+    @show length(shared_data)
+    @show length(ir.stmts.inst)
 
     # If we've already derived the OpaqueClosures and info, do not re-derive, just create a
     # copy and pass in new shared data.
     if !haskey(interp.oc_cache, sig)
         fwds_ir = forwards_pass_ir(primal_ir, ad_stmts_blocks, info, _typeof(shared_data))
         pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, _typeof(shared_data))
-        optimised_fwds_ir = optimise_ir!(IRCode(fwds_ir))
-        optimised_pb_ir = optimise_ir!(IRCode(pb_ir))
-        # @show length(optimised_fwds_ir.stmts.inst)
-        # @show length(optimised_pb_ir.stmts.inst)
+        optimised_fwds_ir = optimise_ir!(IRCode(fwds_ir); do_inline=true)
+        optimised_pb_ir = optimise_ir!(IRCode(pb_ir); do_inline=true)
+        @show length(optimised_fwds_ir.stmts.inst)
+        @show length(optimised_pb_ir.stmts.inst)
         # display(optimised_fwds_ir)
         # display(optimised_pb_ir)
         fwds_oc = OpaqueClosure(optimised_fwds_ir, shared_data...; do_compile=true)
         pb_oc = OpaqueClosure(optimised_pb_ir, shared_data...; do_compile=true)
-        interp.oc_cache[sig] = (fwds_oc, pb_oc)
+        # interp.oc_cache[sig] = (fwds_oc, pb_oc)
     else
         existing_fwds_oc, existing_pb_oc = interp.oc_cache[sig]
         fwds_oc = replace_captures(existing_fwds_oc, shared_data)

@@ -24,7 +24,7 @@ Stack(x::T) where {T} = Stack{T}(x)
     memory = x.memory
     x.position = position
     if position <= length(memory)
-        @inbounds memory[position] = val
+        memory[position] = val
         return nothing
     else
         @noinline push!(memory, val)
@@ -136,3 +136,12 @@ increment_ref!(::InactiveRef{T}, ::T) where {T} = nothing
 top_ref(::Nothing) = InactiveRef(nothing)
 
 increment_ref!(::InactiveRef{Nothing}, ::T) where {T} = nothing
+
+
+struct FixedStackTangentRefStack{T}
+    x::Stack{T}
+end
+
+Base.push!(x::FixedStackTangentRefStack, t) = nothing
+
+Base.pop!(x::FixedStackTangentRefStack) = top_ref(x.x)
