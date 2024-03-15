@@ -93,7 +93,7 @@ end
             stmt = IDGotoIfNot(cond_id, ID())
             ad_stmts = make_ad_stmts!(stmt, line, info)
             @test ad_stmts isa ADStmtInfo
-            @test ad_stmts.rvs === nothing
+            @test ad_stmts.rvs[1][2] === nothing
             fwds = ad_stmts.fwds
             @test fwds[1][1] == fwds[2][2].cond
             @test Meta.isexpr(fwds[1][2], :call)
@@ -151,11 +151,11 @@ end
             @testset "invoke" begin
                 stmt = Expr(:invoke, nothing, cos, Argument(2))
                 ad_stmts = make_ad_stmts!(stmt, id_line_1, info)
-                fwds_stmt = only(ad_stmts.fwds)[2]
+                fwds_stmt = ad_stmts.fwds[2][2]
                 @test Meta.isexpr(fwds_stmt, :call)
                 @test fwds_stmt.args[1] == Taped.__fwds_pass!
-                @test Meta.isexpr(ad_stmts.rvs, :call)
-                @test ad_stmts.rvs.args[1] == Taped.__rvs_pass!
+                @test Meta.isexpr(ad_stmts.rvs[2][2], :call)
+                @test ad_stmts.rvs[2][2].args[1] == Taped.__rvs_pass!
             end
             @testset "copyast" begin
                 stmt = Expr(:copyast, QuoteNode(:(hi)))
@@ -216,7 +216,7 @@ end
         # println("s2s ratio ratio: $(s2s_ratio)")
         # println("interp ratio: $(interp_ratio)")
         # @profview(run_many_times(
-        #     100_000_000,
+        #     100_000,
         #     (rule, codual_args, out) -> rule(codual_args...)[2](tangent(out), map(tangent, codual_args)...),
         #     rule,
         #     codual_args,
