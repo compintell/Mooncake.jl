@@ -378,33 +378,24 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         # `__fwds_pass!` and `__rvs_pass!` that specialise on the type of the pullback to
         # avoid ever using the arg tangent ref stacks, so we just need to create a default
         # value here (`nothing`), as it will never be used.
+        arg_tangent_ref_stacks_id = ID()
         if pb_stack isa SingletonStack{NoPullback}
-            arg_tangent_ref_stacks_id = nothing
+            arg_tangent_ref_stacks = nothing
         else
-            # ref_stacks = map(arg_types, args) do arg_type, arg
-            #     stack = __make_arg_tangent_ref_stack(arg_type, arg)
-            #     if Base.issingletontype(_typeof(stack))
-            #         return stack
-            #     else
-            #         return add_data!(info, stack)
-            #     end
-            # end
-
-            # arg_tangent_ref_stacks_id = ID()
-            # arg_tangent_ref_stacks = Expr(:call, tuple, ref_stacks...)
-
-
-            ref_stacks = map(__make_arg_tangent_ref_stack, arg_types, args)
-            if Base.issingletontype(_typeof(ref_stacks))
-                arg_tangent_ref_stacks_id = ref_stacks
-            else
-                arg_tangent_ref_stacks_id = add_data!(info, ref_stacks)
+            ref_stacks = map(arg_types, args) do arg_type, arg
+                stack = __make_arg_tangent_ref_stack(arg_type, arg)
+                if Base.issingletontype(_typeof(stack))
+                    return stack
+                else
+                    return add_data!(info, stack)
+                end
             end
+            arg_tangent_ref_stacks = Expr(:call, tuple, ref_stacks...)
         end
 
         # Create calls to `__fwds_pass!` and `__rvs_pass!`, which run the forwards pass and
         # pullback associated to a call / invoke.
-        fwds = Expr(
+        fwds_pass_call = Expr(
             :call,
             __fwds_pass!,
             arg_tangent_ref_stacks_id,
@@ -414,9 +405,19 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
             register_type(get_primal_type(info, line)),
             map(__inc, args)...,
         )
-        rvs = Expr(
+
+        rvs_pass_call = Expr(
             :call, __rvs_pass!, arg_tangent_ref_stacks_id, ret_tangent_stack_id, pb_stack_id
         )
+
+        fwds = Tuple{ID, Any}[
+            (arg_tangent_ref_stacks_id, arg_tangent_ref_stacks),
+            (line, fwds_pass_call),
+        ]
+        rvs = Tuple{ID, Any}[
+            (arg_tangent_ref_stacks_id, arg_tangent_ref_stacks),
+            (line, rvs_pass_call),
+        ]
         return ad_stmt_info(line, fwds, rvs)
 
     elseif Meta.isexpr(stmt, :boundscheck)
