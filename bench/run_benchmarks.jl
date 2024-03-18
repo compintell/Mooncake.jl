@@ -178,7 +178,7 @@ function benchmark_rules!!(
             )
 
             # Benchmark AD via Taped.
-            @info "taped'"
+            @info "taped"
             rule = Taped.build_rrule(args...)
             coduals = map(x -> x isa CoDual ? x : zero_codual(x), args)
             to_benchmark(rule, coduals...)
