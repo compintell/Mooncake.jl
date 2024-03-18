@@ -752,6 +752,10 @@ Returns a `DerivedRule` which is an `rrule!!` for `sig` in context `C`.
 """
 function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
 
+    # Reset id count. This ensures that everything in this function is deterministic.
+    # It's like fixing a global random seed.
+    global _id_count = 0
+
     # If we have a hand-coded rule, just use that.
     is_primitive(C, sig) && return rrule!!
 
@@ -803,7 +807,7 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
         # display(optimised_pb_ir)
         fwds_oc = OpaqueClosure(optimised_fwds_ir, shared_data...; do_compile=true)
         pb_oc = OpaqueClosure(optimised_pb_ir, shared_data...; do_compile=true)
-        # interp.oc_cache[sig] = (fwds_oc, pb_oc)
+        interp.oc_cache[sig] = (fwds_oc, pb_oc)
     else
         existing_fwds_oc, existing_pb_oc = interp.oc_cache[sig]
         fwds_oc = replace_captures(existing_fwds_oc, shared_data)
