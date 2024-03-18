@@ -787,9 +787,9 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
 
     # Make shared data, and construct BBCode for forwards-pass and pullback.
     shared_data = shared_data_tuple(info.shared_data_pairs)
-    # display(sig)
-    # @show length(shared_data)
-    # @show length(ir.stmts.inst)
+    display(sig)
+    @show length(shared_data)
+    @show length(ir.stmts.inst)
     # display(collect(_typeof(shared_data).parameters))
 
     # If we've already derived the OpaqueClosures and info, do not re-derive, just create a
@@ -799,8 +799,8 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
         pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, _typeof(shared_data))
         optimised_fwds_ir = optimise_ir!(IRCode(fwds_ir); do_inline=true)
         optimised_pb_ir = optimise_ir!(IRCode(pb_ir); do_inline=true)
-        # @show length(optimised_fwds_ir.stmts.inst)
-        # @show length(optimised_pb_ir.stmts.inst)
+        @show length(optimised_fwds_ir.stmts.inst)
+        @show length(optimised_pb_ir.stmts.inst)
         # display(ir)
         # display(optimised_fwds_ir)
         # display(optimised_pb_ir)
@@ -869,7 +869,7 @@ function forwards_pass_ir(ir::BBCode, ad_stmts_blocks::ADStmts, info::ADInfo, Ts
     return BBCode(vcat(entry_block, blocks), arg_types, ir.sptypes, ir.linetable, ir.meta)
 end
 
-@inline __push_blk_stack!(block_stack::Stack{Int32}, id::Int32) = push!(block_stack, id)
+@noinline __push_blk_stack!(block_stack::Stack{Int32}, id::Int32) = push!(block_stack, id)
 
 #=
     pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, Tshared_data)
@@ -977,7 +977,7 @@ function make_switch_stmts(pred_ids::Vector{ID}, info::ADInfo)
     return vcat((prev_blk_id, prev_blk), conds, switch)
 end
 
-@inline __pop_blk_stack!(block_stack::Stack{Int32}) = pop!(block_stack)
+@noinline __pop_blk_stack!(block_stack::Stack{Int32}) = pop!(block_stack)
 
 # Helper function emitted by `make_switch_stmts`.
 __switch_case(id::Int32, predecessor_id::Int32) = !(id === predecessor_id)
