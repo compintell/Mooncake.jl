@@ -17,6 +17,18 @@ end
 Base.copy(id::ID) = id
 
 """
+    seed_id!()
+
+Set the global counter used to ensure ID uniqueness to 0. This is useful when you want to
+ensure determinism between two runs of the same function which makes use of `ID`s.
+
+This is akin to setting the random seed associated to a random number generator globally.
+"""
+function seed_id!()
+    global _id_count = 0
+end
+
+"""
     IDPhiNode(edges::Vector{ID}, values::Vector{Any})
 
 Like a `PhiNode`, but `edges` are `ID`s rather than `Int32`s.

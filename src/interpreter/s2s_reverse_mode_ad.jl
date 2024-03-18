@@ -753,8 +753,7 @@ Returns a `DerivedRule` which is an `rrule!!` for `sig` in context `C`.
 function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
 
     # Reset id count. This ensures that everything in this function is deterministic.
-    # It's like fixing a global random seed.
-    global _id_count = 0
+    seed_id!()
 
     # If we have a hand-coded rule, just use that.
     is_primitive(C, sig) && return rrule!!
