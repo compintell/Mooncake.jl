@@ -1470,6 +1470,10 @@ function test_handwritten_sum(x::AbstractArray{<:Real})
     return y
 end
 
+function test_map(x::Vector{Float64}, y::Vector{Float64})
+    return map((x, y) -> sin(cos(exp(x)) + exp(y) * sin(y)), x, y)
+end
+
 function generate_test_functions()
     return Any[
         (false, :allocs, nothing, const_tester),
@@ -1649,8 +1653,9 @@ function generate_test_functions()
             randn(sr(2), 700, 500),
             randn(sr(3), 300, 700),
         ),
-        (false, :none, (1.0, 250), test_handwritten_sum, randn(1024 * 1024)),
+        (false, :allocs, (1.0, 250), test_handwritten_sum, randn(1024 * 1024)),
         (false, :none, nothing, _sum, randn(1024)),
+        (false, :none, nothing, test_map, randn(1024), randn(1024)),
     ]
 end
 
