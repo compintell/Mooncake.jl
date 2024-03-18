@@ -1,4 +1,4 @@
-_id_count::Int = 0
+_id_count::Int32 = 0
 
 """
     ID()
@@ -7,7 +7,7 @@ An `ID` (read: unique name) is just a wrapper around an `Int`. Uniqueness is ens
 global counter, which is incremented each time that an `ID` is created.
 """
 struct ID
-    id::Int
+    id::Int32
     function ID()
         global _id_count += 1 
         return new(_id_count)

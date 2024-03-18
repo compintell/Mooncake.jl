@@ -16,8 +16,10 @@ end
     @testset "ADInfo" begin
         arg_types = Dict{Argument, Any}(Argument(1) => Float64, Argument(2) => Int)
         id_ssa_1 = ID()
-        ssa_types = Dict{ID, Any}(id_ssa_1 => Float64, ID() => Any)
-        info = ADInfo(Taped.TInterp(), arg_types, ssa_types)
+        id_ssa_2 = ID()
+        ssa_types = Dict{ID, Any}(id_ssa_1 => Float64, id_ssa_2 => Any)
+        insts = Dict{ID, Any}(id_ssa_1 => nothing, id_ssa_2 => nothing)
+        info = ADInfo(Taped.TInterp(), arg_types, ssa_types, insts, Any[])
 
         # Verify that we can access the interpreter and terminator block ID.
         @test info.interp isa Taped.TInterp
@@ -44,6 +46,11 @@ end
             Taped.TInterp(),
             Dict{Argument, Any}(Argument(1) => typeof(sin), Argument(2) => Float64),
             Dict{ID, Any}(id_line_1 => Float64, id_line_2 => Any),
+            Dict{ID, Any}(
+                id_line_1 => Expr(:invoke, nothing, cos, Argument(2)),
+                id_line_2 => nothing,
+            ),
+            Any[Taped.NoTangentStack(), Stack{Float64}()],
         )
 
         @testset "Nothing" begin
@@ -215,12 +222,9 @@ end
         # interp_ratio = time(interp_time) / time(primal_time)
         # println("s2s ratio ratio: $(s2s_ratio)")
         # println("interp ratio: $(interp_ratio)")
-        # @profview(run_many_times(
-        #     100_000,
-        #     (rule, codual_args, out) -> rule(codual_args...)[2](tangent(out), map(tangent, codual_args)...),
-        #     rule,
-        #     codual_args,
-        #     out,
-        # ))
+
+        # f(rule, codual_args, out) = rule(codual_args...)[2](tangent(out), map(tangent, codual_args)...)
+        # f(rule, codual_args, out)
+        # @profview(run_many_times(1_000, f, rule, codual_args, out))
     end
 end

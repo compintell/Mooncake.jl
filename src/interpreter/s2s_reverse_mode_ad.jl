@@ -91,6 +91,10 @@ codegen which produces the forwards- and reverse-passes.
     to both the forwards- and reverse-passes..
 - `arg_types`: a map from `Argument` to its static type.
 - `ssa_types`: a map from `ID` associated to lines to their static / inferred type.
+- `arg_tangent_stacks`: a map from primal `Argument`s to their tangent stacks. If the stack
+    associated to an `Argument` is a bits type then this will just be the tangent stack.
+    Otherwise, it will be the `ID` associated to the stack, and the stack itself will be put
+    in the `shared_data_pairs`.
 - `tangent_stacks`: a map from `ID` to tangent stacks. If the tangent stack associated to
     the `ID` is a bit type, then this will actually be the tangent stack. Otherwise it will
     be the `ID` associated to the stack, and the stack itself will be put in the
@@ -99,11 +103,12 @@ codegen which produces the forwards- and reverse-passes.
 struct ADInfo
     interp::TInterp
     block_stack_id::ID
-    block_stack::Stack{Int}
+    block_stack::Stack{Int32}
     entry_id::ID
     shared_data_pairs::SharedDataPairs
     arg_types::Dict{Argument, Any}
     ssa_types::Dict{ID, Any}
+    arg_tangent_stacks::Dict{Argument, Any}
     tangent_stacks::Dict{ID, Any}
 end
 
@@ -113,20 +118,38 @@ function ADInfo(
     arg_types::Dict{Argument, Any},
     ssa_types::Dict{ID, Any},
     insts::Dict{ID, Any},
+    arg_tangent_stacks,
 )
     shared_data_pairs = SharedDataPairs()
-    bs = Stack{Int}()
-    bs_id = add_data!(shared_data_pairs, bs)
-    tangent_stacks = make_tangent_stacks!(insts, ssa_types, shared_data_pairs)
+    block_stack = Stack{Int32}()
     return ADInfo(
-        interp, bs_id, bs, ID(), shared_data_pairs, arg_types, ssa_types, tangent_stacks
+        interp,
+        add_data!(shared_data_pairs, block_stack),
+        block_stack,
+        ID(),
+        shared_data_pairs,
+        arg_types,
+        ssa_types,
+        make_arg_tangent_stacks!(shared_data_pairs, arg_tangent_stacks),
+        make_tangent_stacks!(shared_data_pairs, insts, ssa_types),
     )
 end
 
-#=
+# Construct a map from primal `Argument`s to the location of its tangent stack in the
+# forwards-pass and pullback. If tangent stacks is a singleton, just yields the tangent
+# stack itself.
+function make_arg_tangent_stacks!(data_pairs, arg_tangent_stacks)
+    arguments = Argument.(eachindex(arg_tangent_stacks))
+    stack_ids = map(arg_tangent_stacks) do s
+        return Base.issingletontype(_typeof(s)) ? s : add_data!(data_pairs, s)
+    end
+    return Dict{Argument, Any}(zip(arguments, stack_ids))
+end
 
-=#
-function make_tangent_stacks!(insts::Dict{ID, Any}, ssa_types::Dict{ID, Any}, shared_data)
+# Construct a map from primal `ID`s corresponding to lines in the IR, to the location of
+# their tangent stacks in the forwards-pass and pullback. If tangent stacks is a singleton,
+# just yields the tangent stack itself.
+function make_tangent_stacks!(shared_data, insts::Dict{ID, Any}, ssa_types::Dict{ID, Any})
     tangent_stacks = Dict{ID, Any}()
     for (k, typ) in ssa_types
         Meta.isexpr(insts[k], :call) || Meta.isexpr(insts[k], :invoke) || continue
@@ -384,17 +407,9 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         # the rule into shared data, because it's safe to put it directly into the code.
         rule_ref = rule == rrule!! ? rrule!! : add_data!(info, rule)
 
-        # If the tangent stack contains singletons (e.g. if it's a `NoTangentStack`)
-        # then avoid putting it in the shared data, just interpolate directly into the IR.
-        # ret_tangent_stack = make_tangent_stack(get_primal_type(info, line))
-        # if Base.issingletontype(_typeof(ret_tangent_stack))
-        #     ret_tangent_stack_id = ret_tangent_stack
-        # else
-        #     ret_tangent_stack_id = add_data!(info, ret_tangent_stack)
-        # end
-        # @show typeof(ret_tangent_stack_id), typeof(info.tangent_stacks[line])
+        # Tangent stacks are allocated in build_rrule, and stored in the `info`. Just
+        # retrieve the stack associated to the tangent returned from this line.
         ret_tangent_stack_id = info.tangent_stacks[line]
-        # @show ret_tangent_stack_id
 
         # If the type of the pullback is a singleton type, then there is no need to store it
         # in the shared data, it can be interpolated directly into the generated IR.
@@ -421,6 +436,8 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
                     return stack
                 elseif haskey(info.tangent_stacks, arg)
                     return info.tangent_stacks[arg]
+                elseif arg isa Argument
+                    return info.arg_tangent_stacks[arg]
                 else
                     return add_data!(info, stack)
                 end
@@ -502,10 +519,20 @@ function __make_arg_tangent_ref_stack(arg_type, arg)
 end
 
 @inline function __tangent_ref_stacks(args::Vararg{Any, N}) where {N}
-    return tuple_map(args) do arg
-        arg isa InactiveStack && return arg
-        arg isa Stack{<:Ref} && return arg
-        return FixedStackTangentRefStack(arg)
+    return tuple_map(___tangent_ref_stacks_helper, args)
+end
+
+# Distinguish between tangent stacks and tangent ref stacks based on their type. If we see
+# a type which looks like a tangent ref stack, just return it. If we see any other type,
+# assume it is a tangent stack, meaning that the tangent stack is fixed.
+# This is bit of a hack -- ideally we would get the code construction in `make_ad_stmts!` to
+# determine this, as doing this based on type is potentially flakey. It will have to do for
+# now though.
+@inline @generated function ___tangent_ref_stacks_helper(arg::P) where {P}
+    if P <: Union{InactiveStack, Stack{<:Ref}, NoTangentRefStack} && !(P <: Stack{<:Ptr})
+        return :(arg)
+    else
+        return :(FixedStackTangentRefStack(arg))
     end
 end
 
@@ -551,8 +578,8 @@ end
     out, pb!! = rule(args...)
 
     # Log the results and return.
-    push!(ret_tangent_stack, tangent(out))
-    push!(pb_stack, pb!!)
+    __push_tangent_stack!(ret_tangent_stack, tangent(out))
+    __push_pb_stack!(pb_stack, pb!!)
     return AugmentedRegister(out, top_ref(ret_tangent_stack))::R
 end
 
@@ -567,13 +594,20 @@ end
 @inline __push_ref_stack(::InactiveStack, ref) = nothing
 @inline __push_ref_stack(::NoTangentRefStack, ref) = nothing
 
+@inline __push_tangent_stack!(stack, t) = push!(stack, t)
+@inline __push_pb_stack!(stack, pb!!) = push!(stack, pb!!)
+
 # Used in `make_ad_stmts!` method for `Expr(:call, ...)` and `Expr(:invoke, ...)`.
 #
 # Executes the reverse-pass. `data` is the `NamedTuple` shared with `fwds_pass!`.
 # Much of this pass will be optimised away in practice.
 @inline function __rvs_pass!(arg_tangent_ref_stacks, ret_tangent_stack, pb_stack)::Nothing
-    __execute_reverse_pass!(pop!(pb_stack), pop!(ret_tangent_stack), arg_tangent_ref_stacks)
+    pb = __pop_pb_stack!(pb_stack)
+    tngt = __pop_tangent_stack!(ret_tangent_stack)
+    __execute_reverse_pass!(pb, tngt, arg_tangent_ref_stacks)
 end
+
+@inline __execute_reverse_pass!(::NoPullback, ::Any, ::Any) = nothing
 
 @inline function __execute_reverse_pass!(pb!!, dout, arg_tangent_ref_stacks)
     # Get the tangent w.r.t. each argument of the primal.
@@ -586,7 +620,8 @@ end
     return nothing
 end
 
-@inline __execute_reverse_pass!(::NoPullback, ::Any, ::Any) = nothing
+@inline __pop_pb_stack!(stack) = pop!(stack)
+@inline __pop_tangent_stack!(tangent_stack) = pop!(tangent_stack)
 
 #
 # Runners for generated code.
@@ -600,7 +635,7 @@ struct Pullback{Tpb, Tret_ref, Targ_tangent_stacks, Tisva, Tnargs}
     nargs::Tnargs
 end
 
-function (pb::Pullback{P, Q})(dy, dargs::Vararg{Any, N}) where {P, Q, N}
+@inline function (pb::Pullback{P, Q})(dy, dargs::Vararg{Any, N}) where {P, Q, N}
     unflattened_dargs = __unflatten_varargs(pb.isva, dargs, pb.nargs)
     map(setindex!, map(top_ref, pb.arg_tangent_stacks), unflattened_dargs)
     increment_ref!(pb.ret_ref, dy)
@@ -615,12 +650,12 @@ struct DerivedRule{Tfwds_oc, Targ_tangent_stacks, Tpb_oc, Tisva<:Val, Tnargs<:Va
     fwds_oc::Tfwds_oc
     pb_oc::Tpb_oc
     arg_tangent_stacks::Targ_tangent_stacks
-    block_stack::Stack{Int}
+    block_stack::Stack{Int32}
     isva::Tisva
     nargs::Tnargs
 end
 
-function (fwds::DerivedRule{P, Q, S})(args::Vararg{CoDual, N}) where {P, Q, S, N}
+@inline function (fwds::DerivedRule{P, Q, S})(args::Vararg{CoDual, N}) where {P, Q, S, N}
 
     # Load arguments in to stacks, and create tuples.
     args = __unflatten_codual_varargs(fwds.isva, args, fwds.nargs)
@@ -737,7 +772,8 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
         map((id, t) -> (id, _get_type(t)), concatenate_ids(primal_ir), ir.stmts.type)
     )
     insts = Dict{ID, Any}(zip(concatenate_ids(primal_ir), concatenate_stmts(primal_ir)))
-    info = ADInfo(interp, arg_types, ssa_types, insts)
+    arg_tangent_stacks = (map(make_tangent_stack ∘ _get_type, primal_ir.argtypes)..., )
+    info = ADInfo(interp, arg_types, ssa_types, insts, arg_tangent_stacks)
 
     # For each block in the fwds and pullback BBCode, translate all statements.
     ad_stmts_blocks = map(primal_ir.blocks) do primal_blk
@@ -749,8 +785,9 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
     # Make shared data, and construct BBCode for forwards-pass and pullback.
     shared_data = shared_data_tuple(info.shared_data_pairs)
     # display(sig)
-    @show length(shared_data)
-    @show length(ir.stmts.inst)
+    # @show length(shared_data)
+    # @show length(ir.stmts.inst)
+    # display(collect(_typeof(shared_data).parameters))
 
     # If we've already derived the OpaqueClosures and info, do not re-derive, just create a
     # copy and pass in new shared data.
@@ -759,8 +796,9 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
         pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, _typeof(shared_data))
         optimised_fwds_ir = optimise_ir!(IRCode(fwds_ir); do_inline=true)
         optimised_pb_ir = optimise_ir!(IRCode(pb_ir); do_inline=true)
-        @show length(optimised_fwds_ir.stmts.inst)
-        @show length(optimised_pb_ir.stmts.inst)
+        # @show length(optimised_fwds_ir.stmts.inst)
+        # @show length(optimised_pb_ir.stmts.inst)
+        # display(ir)
         # display(optimised_fwds_ir)
         # display(optimised_pb_ir)
         fwds_oc = OpaqueClosure(optimised_fwds_ir, shared_data...; do_compile=true)
@@ -772,7 +810,6 @@ function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
         pb_oc = replace_captures(existing_pb_oc, shared_data)
     end
 
-    arg_tangent_stacks = (map(make_tangent_stack ∘ _get_type, primal_ir.argtypes)..., )
     return rule_type(interp, sig)(
         fwds_oc,
         pb_oc,
@@ -820,7 +857,7 @@ function forwards_pass_ir(ir::BBCode, ad_stmts_blocks::ADStmts, info::ADInfo, Ts
     blocks = map(ad_stmts_blocks) do (block_id, ad_stmts)
         fwds_stmts = reduce(vcat, map(x -> x.fwds, ad_stmts))
         ins_loc = length(fwds_stmts) + (isa(fwds_stmts[end][2], Terminator) ? 0 : 1)
-        ins_stmt = (ID(), Expr(:call, push!, info.block_stack_id, block_id.id))
+        ins_stmt = (ID(), Expr(:call, __push_blk_stack!, info.block_stack_id, block_id.id))
         return BBlock(block_id, insert!(fwds_stmts, ins_loc, ins_stmt))
     end
 
@@ -828,6 +865,8 @@ function forwards_pass_ir(ir::BBCode, ad_stmts_blocks::ADStmts, info::ADInfo, Ts
     arg_types = vcat(Tshared_data, map(register_type ∘ _get_type, ir.argtypes))
     return BBCode(vcat(entry_block, blocks), arg_types, ir.sptypes, ir.linetable, ir.meta)
 end
+
+@inline __push_blk_stack!(block_stack::Stack{Int32}, id::Int32) = push!(block_stack, id)
 
 #=
     pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, Tshared_data)
@@ -922,7 +961,7 @@ function make_switch_stmts(pred_ids::Vector{ID}, info::ADInfo)
 
     # Get the predecessor that we actually had in the primal.
     prev_blk_id = ID()
-    prev_blk = Expr(:call, pop!, info.block_stack_id)
+    prev_blk = Expr(:call, __pop_blk_stack!, info.block_stack_id)
 
     # Compare predecessor from primal with all possible predecessors.
     conds = Tuple{ID, Any}[
@@ -935,8 +974,10 @@ function make_switch_stmts(pred_ids::Vector{ID}, info::ADInfo)
     return vcat((prev_blk_id, prev_blk), conds, switch)
 end
 
+@inline __pop_blk_stack!(block_stack::Stack{Int32}) = pop!(block_stack)
+
 # Helper function emitted by `make_switch_stmts`.
-__switch_case(id::Int, predecessor_id::Int) = !(id === predecessor_id)
+__switch_case(id::Int32, predecessor_id::Int32) = !(id === predecessor_id)
 
 
 #=
