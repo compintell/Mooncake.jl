@@ -171,12 +171,14 @@ function benchmark_rules!!(
 
             # Benchmark primal.
             primals = map(x -> x isa CoDual ? primal(x) : x, args)
+            @info "primal"
             suite["primal"] = @benchmark(
                 (a[1][])((a[2][])...);
                 setup=(a = (Ref($primals[1]), Ref(_deepcopy($primals[2:end])))),
             )
 
             # Benchmark AD via Taped.
+            @info "taped'"
             rule = Taped.build_rrule(args...)
             coduals = map(x -> x isa CoDual ? x : zero_codual(x), args)
             to_benchmark(rule, coduals...)
@@ -185,12 +187,14 @@ function benchmark_rules!!(
             if include_other_frameworks
 
                 if should_run_benchmark(Val(:zygote), args...)
+                    @info "zygote"
                     suite["zygote"] = @benchmark(
                         zygote_to_benchmark($(Zygote.Context()), $primals...)
                     )
                 end
 
                 if should_run_benchmark(Val(:reverse_diff), args...)
+                    @info "reversediff"
                     tape = ReverseDiff.GradientTape(primals[1], primals[2:end])
                     compiled_tape = ReverseDiff.compile(tape)
                     result = map(x -> randn(size(x)), primals[2:end])
@@ -200,6 +204,7 @@ function benchmark_rules!!(
                 end
 
                 if should_run_benchmark(Val(:enzyme), args...)
+                    @info "enzyme"
                     dup_args = map(x -> Duplicated(x, randn(size(x))), primals[2:end])
                     suite["enzyme"] = @benchmark(
                         autodiff(Reverse, $primals[1], Active, $dup_args...)
