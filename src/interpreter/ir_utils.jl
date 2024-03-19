@@ -261,9 +261,7 @@ is_reachable_return_node(x) = false
 
 Returns the static type of the value referred to by `x`.
 """
-function globalref_type(x::GlobalRef)
-    return isconst(x) ? _typeof(getglobal(x.mod, x.name)) : x.binding.ty
-end
+globalref_type(x::GlobalRef) = isconst(x) ? _typeof(getglobal(x.mod, x.name)) : x.binding.ty
 
 """
     UnhandledLanguageFeatureException(message::String)
