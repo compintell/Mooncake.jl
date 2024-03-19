@@ -1632,12 +1632,12 @@ function generate_test_functions()
             (lb=100, ub=5_000),
             ldiv!, randn(20, 20), Diagonal(rand(20) .+ 1), randn(20, 20),
         ),
-        # (
-        #     false,
-        #     :allocs,
-        #     (lb=100, ub=10_000),
-        #     LinearAlgebra._kron!, randn(400, 400), randn(20, 20), randn(20, 20),
-        # ), # runs with poor performance
+        (
+            false,
+            :allocs,
+            (lb=100, ub=10_000),
+            LinearAlgebra._kron!, randn(400, 400), randn(20, 20), randn(20, 20),
+        ),
         (
             false,
             :allocs,

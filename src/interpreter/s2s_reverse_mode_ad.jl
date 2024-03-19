@@ -268,7 +268,9 @@ function make_ad_stmts!(stmt::IDPhiNode, line::ID, info::ADInfo)
         isassigned(vals, n) || continue
         new_vals[n] = is_active(vals[n]) ? __inc(vals[n]) : const_register(vals[n], info)
     end
-    return ad_stmt_info(line, IDPhiNode(stmt.edges, new_vals), nothing)
+    new_type = register_type(get_primal_type(info, line))
+    _inst = new_inst(IDPhiNode(stmt.edges, new_vals), new_type)
+    return ad_stmt_info(line, _inst, nothing)
 end
 
 function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
