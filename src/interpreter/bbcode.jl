@@ -195,24 +195,6 @@ end
 # Makes use of the above outer constructor for `BBCode`.
 Base.copy(ir::BBCode) = BBCode(ir, copy(ir.blocks))
 
-function predecessors(blk::BBlock, ir::BBCode)
-    tmp = map(b -> is_successor(b, blk.id, is_next(b, blk, ir)) ? [b.id] : ID[], ir.blocks)
-    return reduce(vcat, tmp)
-end
-
-function is_next(block::BBlock, other_block::BBlock, ir::BBCode)
-    return location(block, ir) + 1 == location(other_block, ir)
-end
-
-location(block::BBlock, ir::BBCode) = findfirst(b -> b.id == block.id, ir.blocks)
-
-is_successor(b::BBlock, id::ID, is_next::Bool) = is_successor(terminator(b), id, is_next)
-is_successor(::Nothing, ::ID, is_next::Bool) = is_next
-is_successor(x::IDGotoNode, id::ID, ::Bool) = x.label == id
-is_successor(x::IDGotoIfNot, id::ID, is_next::Bool) = is_next || x.dest == id
-is_successor(::ReturnNode, ::ID, ::Bool) = false
-is_successor(x::Switch, id::ID, ::Bool) = any(==(id), x.dests) || id == x.fallthrough_dest
-
 """
     compute_all_successors(ir::BBCode)::Dict{ID, Vector{ID}}
 
