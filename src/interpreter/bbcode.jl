@@ -3,8 +3,11 @@ _id_count::Int32 = 0
 """
     ID()
 
-An `ID` (read: unique name) is just a wrapper around an `Int`. Uniqueness is ensured via a
+An `ID` (read: unique name) is just a wrapper around an `Int32`. Uniqueness is ensured via a
 global counter, which is incremented each time that an `ID` is created.
+
+This counter can be reset using `seed_id!` if you need to ensure deterministic `ID`s are
+produced, in the same way that seed for random number generators can be set.
 """
 struct ID
     id::Int32
@@ -66,7 +69,8 @@ Base.copy(node::IDGotoIfNot) = IDGotoIfNot(copy(node.cond), copy(node.dest))
 """
     Switch(conds::Vector{Any}, dests::Vector{ID}, fallthrough_dest::ID)
 
-A switch-statement node. This can be placed (temporarily) in Julia IR. Has the following
+A switch-statement node. These can be inserted in the `BBCode` representation of Julia IR.
+`Switch` has the following
 semantics:
 ```julia
 goto dests[1] if not conds[1]
@@ -80,7 +84,8 @@ which block to jump to. If none of the conditions are met, then we go to whichev
 specified by `fallthrough_dest`.
 
 `Switch` statements are lowered into the above sequence of `GotoIfNot`s and `GotoNode`s
-before converting `BBCode` back into `IRCode`.
+before converting `BBCode` back into `IRCode`, because `Switch` statements are not valid
+nodes in regular Julia IR.
 """
 struct Switch
     conds::Vector{Any}
@@ -110,8 +115,8 @@ way that does not change when additional `BBlocks` are inserted into a `BBCode`.
 This differs from the positional block numbering found in `IRCode`, in which the number
 associated to a basic block changes when new blocks are inserted.
 
-Note that `PhiNode`s, `GotoIfNot`s, and `GotoNode`s should all be replaced with their
-`IDPhiNode`, `IDGotoIfNot`, and `IDGotoNode` equivalents.
+Note that `PhiNode`s, `GotoIfNot`s, and `GotoNode`s should not appear in a `BBlock` --
+instead an `IDPhiNode`, `IDGotoIfNot`, or `IDGotoNode` should be used.
 """
 mutable struct BBlock
     id::ID
@@ -187,6 +192,7 @@ function BBCode(ir::Union{IRCode, BBCode}, new_blocks::Vector{BBlock})
     )
 end
 
+# Makes use of the above outer constructor for `BBCode`.
 Base.copy(ir::BBCode) = BBCode(ir, copy(ir.blocks))
 
 function predecessors(blk::BBlock, ir::BBCode)
@@ -206,8 +212,6 @@ is_successor(x::IDGotoNode, id::ID, ::Bool) = x.label == id
 is_successor(x::IDGotoIfNot, id::ID, is_next::Bool) = is_next || x.dest == id
 is_successor(::ReturnNode, ::ID, ::Bool) = false
 is_successor(x::Switch, id::ID, ::Bool) = any(==(id), x.dests) || id == x.fallthrough_dest
-
-find_block_ind(ir::BBCode, id::ID) = findfirst(b -> b.id == id, ir.blocks)
 
 """
     compute_all_successors(ir::BBCode)::Dict{ID, Vector{ID}}
