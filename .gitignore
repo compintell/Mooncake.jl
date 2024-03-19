@@ -4,3 +4,4 @@ bench/Manifest.toml
 analysis_results
 .vscode
 profile.pb.gz
+scratch.jl
