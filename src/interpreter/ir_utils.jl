@@ -273,6 +273,11 @@ struct UnhandledLanguageFeatureException <: Exception
     msg::String
 end
 
+"""
+    unhandled_feature(msg::String)
+
+Throw an `UnhandledLanguageFeatureException` with message `msg`.
+"""
 unhandled_feature(msg::String) = throw(UnhandledLanguageFeatureException(msg))
 
 """
