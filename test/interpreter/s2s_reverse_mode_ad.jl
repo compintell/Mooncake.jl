@@ -109,9 +109,8 @@ end
             @test fwds[2][2].stmt.dest == stmt.dest
         end
         @testset "IDPhiNode" begin
-            line = ID()
             stmt = IDPhiNode(ID[ID(), ID()], Any[ID(), 5.0])
-            ad_stmts = make_ad_stmts!(stmt, line, info)
+            ad_stmts = make_ad_stmts!(stmt, id_line_1, info)
             @test ad_stmts isa ADStmtInfo
         end
         @testset "PiNode" begin
