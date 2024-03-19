@@ -220,7 +220,7 @@ successors(t::Switch, ::Int, ::BBCode, ::Bool) = vcat(t.dests, t.fallthrough_des
 """
     compute_all_predecessors(ir::BBCode)::Dict{ID, Vector{ID}}
 
-    Compute a map from the `ID of each `BBlock` in `ir` to its possible predecessors.
+Compute a map from the `ID of each `BBlock` in `ir` to its possible predecessors.
 """
 function compute_all_predecessors(ir::BBCode)::Dict{ID, Vector{ID}}
 
