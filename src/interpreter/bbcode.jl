@@ -105,35 +105,75 @@ A Union of the possible types of a terminator node.
 const Terminator = Union{Switch, IDGotoIfNot, IDGotoNode, ReturnNode}
 
 """
-    BBlock(id::ID, stmts::Vector{<:Tuple{ID, Any}})
+    const InstVector = Vector{NewInstruction}
+"""
+const InstVector = Vector{NewInstruction}
+
+"""
+    BBlock(id::ID, stmt_ids::Vector{ID}, stmts::InstVector)
 
 A basic block data structure (not called `BasicBlock` to avoid accidental confusion with
-`CC.BasicBlock`). Forms a single basic block from a sequence of `stmts`.
+`CC.BasicBlock`). Forms a single basic block.
 
 Each `BBlock` has an `ID` (a unique name). This makes it possible to refer to blocks in a
 way that does not change when additional `BBlocks` are inserted into a `BBCode`.
 This differs from the positional block numbering found in `IRCode`, in which the number
 associated to a basic block changes when new blocks are inserted.
 
+The `n`th line of code in a `BBlock` is associated to `ID` `stmt_ids[n]`, and the `n`th
+instruction from `stmts`.
+
 Note that `PhiNode`s, `GotoIfNot`s, and `GotoNode`s should not appear in a `BBlock` --
 instead an `IDPhiNode`, `IDGotoIfNot`, or `IDGotoNode` should be used.
 """
 mutable struct BBlock
     id::ID
-    stmts::Vector{Tuple{ID, Any}}
+    inst_ids::Vector{ID}
+    insts::InstVector
+    function BBlock(id::ID, inst_ids::Vector{ID}, insts::InstVector)
+        @assert length(inst_ids) == length(insts)
+        return new(id, inst_ids, insts)
+    end
 end
 
-Base.length(bb::BBlock) = length(bb.stmts)
+function BBlock(id::ID, inst_pairs::Vector{Tuple{ID, NewInstruction}})
+    return BBlock(id, first.(inst_pairs), last.(inst_pairs))
+end
 
-Base.copy(bb::BBlock) = BBlock(bb.id, copy(bb.stmts))
+Base.length(bb::BBlock) = length(bb.inst_ids)
 
-concatenate_ids(bb::BBlock) = first.(bb.stmts)
+Base.copy(bb::BBlock) = BBlock(bb.id, copy(bb.inst_ids), copy(bb.insts))
 
-concatenate_stmts(bb::BBlock) = Any[last(stmt) for stmt in bb.stmts]
+"""
+    Base.insert!(bb::BBlock, n::Int, id::ID, stmt::CC.NewInstruction)::Nothing
 
-first_id(bb::BBlock) = first(concatenate_ids(bb))
+Inserts `stmt` and `id` into `bb` immediately before the `n`th instruction.
+"""
+function Base.insert!(bb::BBlock, n::Int, id::ID, inst::NewInstruction)::Nothing
+    insert!(bb.inst_ids, n, id)
+    insert!(bb.insts, n, inst)
+    return nothing
+end
 
-terminator(bb::BBlock) = isa(bb.stmts[end][2], Terminator) ? bb.stmts[end][2] : nothing
+# first_id(bb::BBlock) = first(bb.stmt_ids)
+
+"""
+    terminator(bb::BBlock)
+
+Returns the terminator associated to `bb`. If the last instruction in `bb` isa
+`Terminator` then that is returned, otherwise `nothing` is returned.
+"""
+terminator(bb::BBlock) = isa(bb.insts[end].stmt, Terminator) ? bb.insts[end].stmt : nothing
+
+"""
+    collect_stmts(bb::BBlock)::Vector{Tuple{ID, NewInstruction}}
+
+Returns a `Vector` containing the `ID`s and instructions associated to each line in `bb`.
+These should be assumed to be ordered.
+"""
+function collect_stmts(bb::BBlock)::Vector{Tuple{ID, NewInstruction}}
+    return collect(zip(bb.inst_ids, bb.insts))
+end
 
 """
     BBCode(
@@ -241,14 +281,14 @@ function compute_all_predecessors(ir::BBCode)::Dict{ID, Vector{ID}}
 end
 
 """
-    collect_stmts(ir::BBCode)::Vector{Tuple{ID, Any}}
+    collect_stmts(ir::BBCode)::Vector{Tuple{ID, CC.NewInstruction}}
 
 Produce a `Vector{Any}` containing all of the statements in `ir`. These are returned in
 order, so it is safe to assume that element `n` refers to the `nth` element of the `IRCode`
 associated to `ir`. 
 """
-function collect_stmts(ir::BBCode)::Vector{Tuple{ID, Any}}
-    return reduce(vcat, map(blk -> blk.stmts, ir.blocks))
+function collect_stmts(ir::BBCode)::Vector{Tuple{ID, NewInstruction}}
+    return reduce(vcat, map(collect_stmts, ir.blocks))
 end
 
 """
@@ -264,6 +304,9 @@ function id_to_line_map(ir::BBCode)
     ids_and_line_numbers = map(x -> (x[1][1], x[2]), lines_and_line_numbers)
     return Dict(ids_and_line_numbers)
 end
+
+concatenate_ids(bb_code::BBCode) = reduce(vcat, map(b -> b.inst_ids, bb_code.blocks))
+concatenate_stmts(bb_code::BBCode) = reduce(vcat, map(b -> b.insts, bb_code.blocks))
 
 #
 # Converting from IRCode to BBCode
@@ -285,18 +328,21 @@ Note that `IRCode(BBCode(ir))` should be equal to the identity function.
 function BBCode(ir::IRCode)
 
     # Produce a new set of statements with `IDs` rather than `SSAValues` and block numbers.
-    ssa_ids, stmts = _ssas_to_ids(ir.stmts.inst)
+    insts = new_inst_vec(ir.stmts)
+    ssa_ids, stmts = _ssas_to_ids(insts)
     block_ids, stmts = _block_nums_to_ids(stmts, ir.cfg)
 
     # Chop up the new statements into `BBlocks`, according to the `CFG` in `ir`.
     blocks = map(zip(ir.cfg.blocks, block_ids)) do (bb, id)
-        return BBlock(id, collect(zip(ssa_ids[bb.stmts], stmts[bb.stmts])))
+        return BBlock(id, ssa_ids[bb.stmts], stmts[bb.stmts])
     end
     return BBCode(ir, blocks)
 end
 
-concatenate_ids(bb_code::BBCode) = reduce(vcat, map(concatenate_ids, bb_code.blocks))
-concatenate_stmts(bb_code::BBCode) = reduce(vcat, map(concatenate_stmts, bb_code.blocks))
+# Convert an InstructionStream into a list of `NewInstruction`s.
+function new_inst_vec(x::CC.InstructionStream)
+    return map((v..., ) -> NewInstruction(v...), x.inst, x.type, x.info, x.line, x.flag)
+end
 
 # Maps from positional names (SSAValues for nodes, Integers for basic blocks) to IDs.
 const SSAToIdDict = Dict{SSAValue, ID}
@@ -305,16 +351,19 @@ const BlockNumToIdDict = Dict{Integer, ID}
 # Assigns an ID to each line in `stmts`, and replaces each instance of an `SSAValue` in each
 # line with the corresponding `ID`. For example, a call statement of the form
 # `Expr(:call, :f, %4)` is be replaced with `Expr(:call, :f, id_assigned_to_%4)`.
-function _ssas_to_ids(stmts::Vector{Any})
-    ids = map(_ -> ID(), stmts)
-    val_id_map = SSAToIdDict(zip(SSAValue.(eachindex(stmts)), ids))
-    return ids, convert(Vector{Any}, map(Base.Fix1(_ssa_to_ids, val_id_map), stmts))
+function _ssas_to_ids(insts::InstVector)::Tuple{Vector{ID}, InstVector}
+    ids = map(_ -> ID(), insts)
+    val_id_map = SSAToIdDict(zip(SSAValue.(eachindex(insts)), ids))
+    return ids, map(Base.Fix1(_ssa_to_ids, val_id_map), insts)
 end
 
 # Produce a new instance of `x` in which all instances of `SSAValue`s are replaced with
 # the `ID`s prescribed by `d`, all basic block numbers are replaced with the `ID`s
 # prescribed by `d`, and `GotoIfNot`, `GotoNode`, and `PhiNode` instances are replaced with
 # the corresponding `ID` versions.
+function _ssa_to_ids(d::SSAToIdDict, inst::NewInstruction)
+    return NewInstruction(inst; stmt=_ssa_to_ids(d, inst.stmt))
+end
 function _ssa_to_ids(d::SSAToIdDict, x::ReturnNode)
     return isdefined(x, :val) ? ReturnNode(get(d, x.val, x.val)) : x
 end
@@ -335,12 +384,15 @@ _ssa_to_ids(d::SSAToIdDict, x::GotoNode) = x
 _ssa_to_ids(d::SSAToIdDict, x::GotoIfNot) = GotoIfNot(get(d, x.cond, x.cond), x.dest)
 
 # Replace all integers corresponding to references to blocks with IDs.
-function _block_nums_to_ids(stmts::Vector{Any}, cfg::CC.CFG)
+function _block_nums_to_ids(insts::InstVector, cfg::CC.CFG)::Tuple{Vector{ID}, InstVector}
     ids = map(_ -> ID(), cfg.blocks)
     block_num_id_map = BlockNumToIdDict(zip(eachindex(cfg.blocks), ids))
-    return ids, map(Base.Fix1(_block_num_to_ids, block_num_id_map), stmts)
+    return ids, map(Base.Fix1(_block_num_to_ids, block_num_id_map), insts)
 end
 
+function _block_num_to_ids(d::BlockNumToIdDict, x::NewInstruction)
+    return NewInstruction(x; stmt=_block_num_to_ids(d, x.stmt))
+end
 function _block_num_to_ids(d::BlockNumToIdDict, x::PhiNode)
     return IDPhiNode(ID[d[e] for e in x.edges], x.values)
 end
@@ -367,16 +419,16 @@ collection of `GotoIfNot` nodes.
 function CC.IRCode(bb_code::BBCode)
     bb_code = _lower_switch_statements(bb_code)
     bb_code = remove_double_edges(bb_code)
-    stmts = _ids_to_line_positions(bb_code)
-    cfg = CC.compute_basic_blocks(stmts)
-    stmts = _lines_to_blocks(stmts, cfg)
+    insts = _ids_to_line_positions(bb_code)
+    cfg = compute_basic_blocks(insts)
+    insts = _lines_to_blocks(insts, cfg)
     return IRCode(
-        CC.InstructionStream( # fill in dummy values for types etc.
-            stmts,
-            fill(Any, length(stmts)),
-            fill(CC.NoCallInfo(), length(stmts)),
-            fill(Int32(1), length(stmts)),
-            fill(CC.IR_FLAG_REFINED, length(stmts)),
+        CC.InstructionStream(
+            map(x -> x.stmt, insts),
+            map(x -> x.type, insts),
+            map(x -> x.info, insts),
+            map(x -> x.line, insts),
+            map(x -> x.flag, insts),
         ),
         cfg,
         CC.copy(bb_code.linetable),
@@ -395,17 +447,18 @@ function _lower_switch_statements(bb_code::BBCode)
         if t isa Switch
 
             # Create new block without the `Switch`.
-            push!(new_blocks, BBlock(block.id, block.stmts[1:end-1]))
+            bb = BBlock(block.id, block.inst_ids[1:end-1], block.insts[1:end-1])
+            push!(new_blocks, bb)
 
             # Create new blocks for each `GotoIfNot` from the `Switch`.
             foreach(t.conds, t.dests) do cond, dest
-                blk = BBlock(ID(), Tuple{ID, Any}[(ID(), IDGotoIfNot(cond, dest))])
+                blk = BBlock(ID(), [ID()], [new_inst(IDGotoIfNot(cond, dest), Any)])
                 push!(new_blocks, blk)
             end
 
             # Create a new block for the fallthrough dest.
-            blk = BBlock(ID(), Tuple{ID, Any}[(ID(), IDGotoNode(t.fallthrough_dest))])
-            push!(new_blocks, blk)
+            fallthrough_inst = new_inst(IDGotoNode(t.fallthrough_dest), Any)
+            push!(new_blocks, BBlock(ID(), [ID()], [fallthrough_inst]))
         else
             push!(new_blocks, block)
         end
@@ -415,7 +468,7 @@ end
 
 # Returns a `Vector{Any}` of statements in which each `ID` has been replaced by either an
 # `SSAValue`, or an `Int64` / `Int32` which refers to an `SSAValue`.
-function _ids_to_line_positions(bb_code::BBCode)
+function _ids_to_line_positions(bb_code::BBCode)::InstVector
 
     # Construct map from `ID`s to `SSAValue`s.
     block_ids = [b.id for b in bb_code.blocks]
@@ -426,10 +479,11 @@ function _ids_to_line_positions(bb_code::BBCode)
     id_to_ssa_map = Dict(zip(vcat(block_ids, line_ids), vcat(block_start_ssas, line_ssas)))
 
     # Apply map.
-    return Any[_to_ssas(id_to_ssa_map, stmt) for stmt in concatenate_stmts(bb_code)]
+    return [_to_ssas(id_to_ssa_map, stmt) for stmt in concatenate_stmts(bb_code)]
 end
 
 # Like `_to_ids`, but converts IDs to SSAValues / (integers corresponding to ssas).
+_to_ssas(d::Dict, inst::NewInstruction) = NewInstruction(inst; stmt=_to_ssas(d, inst.stmt))
 _to_ssas(d::Dict, x::ReturnNode) = isdefined(x, :val) ? ReturnNode(get(d, x.val, x.val)) : x
 _to_ssas(d::Dict, x::Expr) = Expr(x.head, map(a -> get(d, a, a), x.args)...)
 _to_ssas(d::Dict, x::PiNode) = PiNode(get(d, x.val, x.val), get(d, x.typ, x.typ))
@@ -447,11 +501,18 @@ end
 _to_ssas(d::Dict, x::IDGotoNode) = GotoNode(d[x.label].id)
 _to_ssas(d::Dict, x::IDGotoIfNot) = GotoIfNot(get(d, x.cond, x.cond), d[x.dest].id)
 
-# Replaces references to blocks by line-number with references to block numbers.
-function _lines_to_blocks(stmts::Vector{Any}, cfg::CC.CFG)
-    return map(stmt -> __lines_to_blocks(cfg, stmt), stmts)
+function compute_basic_blocks(insts::InstVector)
+    return CC.compute_basic_blocks(Any[inst.stmt for inst in insts])
 end
 
+# Replaces references to blocks by line-number with references to block numbers.
+function _lines_to_blocks(insts::InstVector, cfg::CC.CFG)
+    return map(inst -> __lines_to_blocks(cfg, inst), insts)
+end
+
+function __lines_to_blocks(cfg::CC.CFG, inst::NewInstruction)
+    return NewInstruction(inst; stmt=__lines_to_blocks(cfg, inst.stmt))
+end
 function __lines_to_blocks(cfg::CC.CFG, stmt::GotoNode)
     return GotoNode(CC.block_for_inst(cfg, stmt.label))
 end
@@ -465,7 +526,7 @@ function __lines_to_blocks(cfg::CC.CFG, stmt::Expr)
     Meta.isexpr(stmt, :enter) && throw(error("Cannot handle enter yet"))
     return stmt
 end
-__lines_to_blocks(cfg::CC.CFG, stmt) = stmt
+__lines_to_blocks(::CC.CFG, stmt) = stmt
 
 # If the `dest` field of a `GotoIfNot` node points towards the next block, replace it with
 # a `GotoNode`.
@@ -473,8 +534,8 @@ function remove_double_edges(ir::BBCode)
     new_blks = map(enumerate(ir.blocks)) do (n, blk)
         t = terminator(blk)
         if t isa IDGotoIfNot && t.dest == ir.blocks[n+1].id
-            t_id = blk.stmts[end][1]
-            return BBlock(blk.id, vcat(blk.stmts[1:end-1], (t_id, IDGotoNode(t.dest))))
+            new_insts = vcat(blk.insts[1:end-1], NewInstruction(t; stmt=IDGotoNode(t.dest)))
+            return BBlock(blk.id, blk.inst_ids, new_insts)
         else
             return blk
         end

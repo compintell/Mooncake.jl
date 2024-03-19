@@ -22,7 +22,7 @@ using Base.Iterators: product
 using Core:
     Intrinsics, bitcast, SimpleVector, svec, ReturnNode, GotoNode, GotoIfNot, PhiNode,
     PiNode, SSAValue, Argument, OpaqueClosure
-using Core.Compiler: IRCode
+using Core.Compiler: IRCode, NewInstruction
 using Core.Intrinsics: pointerref, pointerset
 using LinearAlgebra.BLAS: @blasfunc, BlasInt, trsm!
 using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!, potrf!, potrs!

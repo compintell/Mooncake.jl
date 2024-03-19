@@ -17,9 +17,11 @@ end
         arg_types = Dict{Argument, Any}(Argument(1) => Float64, Argument(2) => Int)
         id_ssa_1 = ID()
         id_ssa_2 = ID()
-        ssa_types = Dict{ID, Any}(id_ssa_1 => Float64, id_ssa_2 => Any)
-        insts = Dict{ID, Any}(id_ssa_1 => nothing, id_ssa_2 => nothing)
-        info = ADInfo(Taped.TInterp(), arg_types, ssa_types, insts, Any[])
+        ssa_insts = Dict{ID, CC.NewInstruction}(
+            id_ssa_1 => CC.NewInstruction(nothing, Float64),
+            id_ssa_2 => CC.NewInstruction(nothing, Any),
+        )
+        info = ADInfo(Taped.TInterp(), arg_types, ssa_insts, Any[])
 
         # Verify that we can access the interpreter and terminator block ID.
         @test info.interp isa Taped.TInterp
@@ -45,10 +47,9 @@ end
         info = ADInfo(
             Taped.TInterp(),
             Dict{Argument, Any}(Argument(1) => typeof(sin), Argument(2) => Float64),
-            Dict{ID, Any}(id_line_1 => Float64, id_line_2 => Any),
-            Dict{ID, Any}(
-                id_line_1 => Expr(:invoke, nothing, cos, Argument(2)),
-                id_line_2 => nothing,
+            Dict{ID, CC.NewInstruction}(
+                id_line_1 => CC.NewInstruction(Expr(:invoke, nothing, cos, Argument(2)), Float64),
+                id_line_2 => CC.NewInstruction(nothing, Any),
             ),
             Any[Taped.NoTangentStack(), Stack{Float64}()],
         )
@@ -78,13 +79,13 @@ end
             @testset "literal" begin
                 stmt_info = make_ad_stmts!(ReturnNode(5.0), line, info)
                 @test stmt_info isa ADStmtInfo
-                @test stmt_info.fwds[1][2] isa ReturnNode
+                @test stmt_info.fwds[1][2].stmt isa ReturnNode
             end
             @testset "GlobalRef" begin
                 node = ReturnNode(GlobalRef(S2SGlobals, :const_float))
                 stmt_info = make_ad_stmts!(node, line, info)
                 @test stmt_info isa ADStmtInfo
-                @test stmt_info.fwds[1][2] isa ReturnNode
+                @test stmt_info.fwds[1][2].stmt isa ReturnNode
             end
         end
         @testset "IDGotoNode" begin
@@ -100,12 +101,12 @@ end
             stmt = IDGotoIfNot(cond_id, ID())
             ad_stmts = make_ad_stmts!(stmt, line, info)
             @test ad_stmts isa ADStmtInfo
-            @test ad_stmts.rvs[1][2] === nothing
+            @test ad_stmts.rvs[1][2].stmt === nothing
             fwds = ad_stmts.fwds
-            @test fwds[1][1] == fwds[2][2].cond
-            @test Meta.isexpr(fwds[1][2], :call)
-            @test fwds[2][2] isa IDGotoIfNot
-            @test fwds[2][2].dest == stmt.dest
+            @test fwds[1][1] == fwds[2][2].stmt.cond
+            @test Meta.isexpr(fwds[1][2].stmt, :call)
+            @test fwds[2][2].stmt isa IDGotoIfNot
+            @test fwds[2][2].stmt.dest == stmt.dest
         end
         @testset "IDPhiNode" begin
             line = ID()
@@ -132,14 +133,14 @@ end
                 global_ref = GlobalRef(S2SGlobals, :non_const_global)
                 stmt_info = make_ad_stmts!(global_ref, ID(), info)
                 @test stmt_info isa Taped.ADStmtInfo
-                @test Meta.isexpr(last(stmt_info.fwds)[2], :call)
-                @test last(stmt_info.fwds)[2].args[1] == Taped.__verify_const
+                @test Meta.isexpr(last(stmt_info.fwds)[2].stmt, :call)
+                @test last(stmt_info.fwds)[2].stmt.args[1] == Taped.__verify_const
             end
             @testset "differentiable const globals" begin
                 stmt_info = make_ad_stmts!(GlobalRef(S2SGlobals, :const_float), ID(), info)
                 @test stmt_info isa Taped.ADStmtInfo
-                @test Meta.isexpr(only(stmt_info.fwds)[2], :call)
-                @test only(stmt_info.fwds)[2].args[1] == identity
+                @test Meta.isexpr(only(stmt_info.fwds)[2].stmt, :call)
+                @test only(stmt_info.fwds)[2].stmt.args[1] == identity
             end
         end
         @testset "PhiCNode" begin
@@ -158,18 +159,18 @@ end
             @testset "invoke" begin
                 stmt = Expr(:invoke, nothing, cos, Argument(2))
                 ad_stmts = make_ad_stmts!(stmt, id_line_1, info)
-                fwds_stmt = ad_stmts.fwds[2][2]
+                fwds_stmt = ad_stmts.fwds[2][2].stmt
                 @test Meta.isexpr(fwds_stmt, :call)
                 @test fwds_stmt.args[1] == Taped.__fwds_pass!
-                @test Meta.isexpr(ad_stmts.rvs[2][2], :call)
-                @test ad_stmts.rvs[2][2].args[1] == Taped.__rvs_pass!
+                @test Meta.isexpr(ad_stmts.rvs[2][2].stmt, :call)
+                @test ad_stmts.rvs[2][2].stmt.args[1] == Taped.__rvs_pass!
             end
             @testset "copyast" begin
                 stmt = Expr(:copyast, QuoteNode(:(hi)))
                 ad_stmts = make_ad_stmts!(stmt, ID(), info)
                 @test ad_stmts isa Taped.ADStmtInfo
-                @test Meta.isexpr(ad_stmts.fwds[1][2], :call)
-                @test ad_stmts.fwds[1][2].args[1] == identity
+                @test Meta.isexpr(ad_stmts.fwds[1][2].stmt, :call)
+                @test ad_stmts.fwds[1][2].stmt.args[1] == identity
             end
             @testset "throw_undef_if_not" begin
                 cond_id = ID()

@@ -303,3 +303,17 @@ inc_args(x::GlobalRef) = x
 
 __inc(x::Argument) = Argument(x.n + 1)
 __inc(x) = x
+
+"""
+    new_inst(stmt, type=Any)::NewInstruction
+
+Create a `NewInstruction` with fields:
+- `stmt` = `stmt`
+- `type` = `type`
+- `info` = `CC.NoCallInfo()`
+- `line` = `Int32(1)`
+- `flag` = `CC.IR_FLAG_REFINED`
+"""
+function new_inst(@nospecialize(stmt), @nospecialize(type)=Any)
+    return NewInstruction(stmt, type, CC.NoCallInfo(), Int32(1), CC.IR_FLAG_REFINED)
+end
