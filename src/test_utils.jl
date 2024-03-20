@@ -1477,6 +1477,8 @@ function test_map(x::Vector{Float64}, y::Vector{Float64})
     return map((x, y) -> sin(cos(exp(x)) + exp(y) * sin(y)), x, y)
 end
 
+test_getfield_of_tuple_of_types(n::Int) = getfield((Float64, Float64), n)
+
 function generate_test_functions()
     return Any[
         (false, :allocs, nothing, const_tester),
@@ -1502,7 +1504,7 @@ function generate_test_functions()
         (false, :allocs, nothing, globalref_tester_3),
         (false, :allocs, nothing, globalref_tester_4),
         (false, :none, (lb=1, ub=500), globalref_tester_5),
-        (false, :none, nothing, type_unstable_tester_0, Ref{Any}(5.0)),
+        (false, :none, (lb=1, ub=1_000), type_unstable_tester_0, Ref{Any}(5.0)),
         (false, :none, nothing, type_unstable_tester, Ref{Any}(5.0)),
         (false, :none, nothing, type_unstable_tester_2, Ref{Real}(5.0)),
         (false, :none, (lb=1, ub=1000), type_unstable_tester_3, Ref{Any}(5.0)),
@@ -1614,15 +1616,15 @@ function generate_test_functions()
         (false, :allocs, (lb=10, ub=1_000), sum, randn(30)),
         (false, :none, (lb=10, ub=1_000), test_diagonal_to_matrix, Diagonal(randn(30))),
         (
-            false, :allocs, (lb=100, ub=5_000),
+            false, :allocs, (lb=100, ub=1_000),
             ldiv!, randn(20, 20), Diagonal(rand(20) .+ 1), randn(20, 20),
         ),
         (
-            false, :allocs, (lb=100, ub=10_000),
+            false, :allocs, (lb=10, ub=500),
             LinearAlgebra._kron!, randn(400, 400), randn(20, 20), randn(20, 20),
         ),
         (
-            false, :allocs, (lb=100, ub=10_000),
+            false, :allocs, (lb=10, ub=500),
             kron!, randn(400, 400), Diagonal(randn(20)), randn(20, 20),
         ),
         (
