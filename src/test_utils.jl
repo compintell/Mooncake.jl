@@ -447,7 +447,7 @@ function test_interpreted_rrule!!(rng::AbstractRNG, x...; interp, kwargs...)
 end
 
 function test_derived_rule(rng::AbstractRNG, x...; interp, kwargs...)
-    rule = Taped.build_rrule(interp, Tuple{map(Taped._typeof, x)...})
+    rule = Taped.build_rrule(interp, _typeof(__get_primals(x)))
     test_rrule!!(rng, x...; rule, kwargs...)
 end
 
@@ -928,8 +928,7 @@ Optionally, an interpreter may be provided via the `interp` kwarg.
 See also: `Taped.TestUtils.value_and_gradient!!`.
 """
 function set_up_gradient_problem(fargs...; interp=Taped.TInterp())
-    primals = map(x -> x isa CoDual ? primal(x) : x, fargs)
-    sig = _typeof(primals)
+    sig = _typeof(__get_primals(fargs))
     if Taped.is_primitive(DefaultCtx, sig)
         return rrule!!, Taped._eval
     else
@@ -937,6 +936,8 @@ function set_up_gradient_problem(fargs...; interp=Taped.TInterp())
         return Taped.build_rrule!!(in_f), in_f
     end
 end
+
+__get_primals(xs) = map(x -> x isa CoDual ? primal(x) : x, xs)
 
 """
     value_and_gradient!!(rule, in_f::CoDual{<:InterpretedFunction}, f::CoDual, x::CoDual...)
