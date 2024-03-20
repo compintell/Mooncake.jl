@@ -26,8 +26,8 @@ end
 end
 
 @model broadcast_demo(x) = begin
-    μ ~ TruncatedNormal(1, 2, 0.1, 10)
-    σ ~ TruncatedNormal(1, 2, 0.1, 10)
+    μ ~ truncated(Normal(1, 2), 0.1, 10)
+    σ ~ truncated(Normal(1, 2), 0.1, 10)
     
     x .~ LogNormal(μ, σ)   
 end
