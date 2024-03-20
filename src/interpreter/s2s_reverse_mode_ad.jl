@@ -151,7 +151,14 @@ end
 function make_tangent_stacks!(shared_data, ssa_insts::Dict{ID, NewInstruction})
     tangent_stacks = Dict{ID, Any}()
     for (k, inst) in ssa_insts
-        Meta.isexpr(inst.stmt, :call) || Meta.isexpr(inst.stmt, :invoke) || continue
+
+        # If the node is not one that needs a tangent stack, do not create one.
+        Meta.isexpr(inst.stmt, :call) ||
+            Meta.isexpr(inst.stmt, :invoke) ||
+            isa(inst.stmt, PiNode) ||
+            continue
+
+        # Create a tangent stack, and store it in shared storage if not a singleton.
         tangent_stack = make_tangent_stack(_get_type(inst.type))
         if Base.issingletontype(_typeof(tangent_stack))
             tangent_stacks[k] = tangent_stack
@@ -289,18 +296,26 @@ function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
 
     # Create a statement which moves data from the loosely-typed register to a more
     # strictly typed one, which is possible because of the `PiNode`.
-    tangent_stack = make_tangent_stack(sharp_primal_type)
-    tangent_stack_id = add_data!(info, tangent_stack)
+    tangent_stack = info.tangent_stacks[line]
+    val = stmt.val
     val_type = get_primal_type(info, stmt.val)
-    tangent_ref_stack = make_tangent_ref_stack(tangent_ref_type_ub(val_type))
-    tangent_ref_stack_id = add_data!(info, tangent_ref_stack)
-    new_line = Expr(:call, __pi_fwds!, tangent_stack_id, tangent_ref_stack_id, new_pi_line)
+    stack = make_tangent_ref_stack(tangent_ref_type_ub(val_type))
+    tangent_ref_stack = if Base.issingletontype(_typeof(stack))
+        stack
+    elseif haskey(info.tangent_stacks, val)
+        info.tangent_stacks[val]
+    elseif val isa Argument
+        info.arg_tangent_stacks[val]
+    else
+        add_data!(info, stack)
+    end
+    new_line = Expr(:call, __pi_fwds!, tangent_stack, tangent_ref_stack, new_pi_line)
 
     # Assemble the above lines and construct reverse-pass.
     return ad_stmt_info(
         line,
         [(new_pi_line, new_inst(new_pi)), (line, new_inst(new_line))],
-        Expr(:call, __pi_rvs!, tangent_stack_id, tangent_ref_stack_id),
+        Expr(:call, __pi_rvs!, tangent_stack, tangent_ref_stack),
     )
 end
 
@@ -857,7 +872,7 @@ function forwards_pass_ir(ir::BBCode, ad_stmts_blocks::ADStmts, info::ADInfo, Ts
     # `OpaqueClosure`, which contains all of the data shared between the forwards- and
     # reverse-passes. These are assigned to the `ID`s given by the `SharedDataPairs`.
     # Additionally, push the entry id onto the block stack.
-    push_block_stack_stmt = Expr(:call, push!, info.block_stack_id, info.entry_id.id)
+    push_block_stack_stmt = Expr(:call, __push_blk_stack!, info.block_stack_id, info.entry_id.id)
     entry_stmts = vcat(
         shared_data_stmts(info.shared_data_pairs),
         (ID(), new_inst(push_block_stack_stmt)),

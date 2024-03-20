@@ -121,7 +121,7 @@ end
                 )
             end
             @testset "sharpen type of ID" begin
-                line = ID()
+                line = id_line_1
                 val = id_line_2
                 stmt_info = make_ad_stmts!(PiNode(val, Float64), line, info)
                 @test stmt_info isa ADStmtInfo

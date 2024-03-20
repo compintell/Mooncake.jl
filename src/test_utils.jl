@@ -1176,6 +1176,8 @@ const __x_for_gref_tester_4::Float64 = 3.0
 __x_for_gref_tester_5 = 5.0
 @eval globalref_tester_5() = $(GlobalRef(@__MODULE__, :__x_for_gref_tester_5))
 
+type_unstable_tester_0(x::Ref{Any}) = x[]
+
 type_unstable_tester(x::Ref{Any}) = cos(x[])
 
 type_unstable_tester_2(x::Ref{Real}) = cos(x[])
@@ -1500,6 +1502,7 @@ function generate_test_functions()
         (false, :allocs, nothing, globalref_tester_3),
         (false, :allocs, nothing, globalref_tester_4),
         (false, :none, nothing, globalref_tester_5),
+        (false, :none, nothing, type_unstable_tester_0, Ref{Any}(5.0)),
         (false, :none, nothing, type_unstable_tester, Ref{Any}(5.0)),
         (false, :none, nothing, type_unstable_tester_2, Ref{Real}(5.0)),
         (false, :none, (lb=1, ub=1000), type_unstable_tester_3, Ref{Any}(5.0)),
