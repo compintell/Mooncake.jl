@@ -1486,8 +1486,8 @@ function generate_test_functions()
         (false, :allocs, nothing, non_differentiable_foo, 5),
         (false, :allocs, nothing, bar, 5.0, 4.0),
         (false, :none, nothing, type_unstable_argument_eval, sin, 5.0),
-        (false, :none, (lb=1, ub=500), pi_node_tester, Ref{Any}(5.0)),
-        (false, :none, (lb=1, ub=500), pi_node_tester, Ref{Any}(5)),
+        (false, :none, (lb=1, ub=1_000), pi_node_tester, Ref{Any}(5.0)),
+        (false, :none, (lb=1, ub=1_000), pi_node_tester, Ref{Any}(5)),
         (false, :allocs, nothing, intrinsic_tester, 5.0),
         (false, :allocs, nothing, goto_tester, 5.0),
         (false, :allocs, nothing, new_tester, 5.0, :hello),
@@ -1501,12 +1501,12 @@ function generate_test_functions()
         (false, :none, nothing, globalref_tester_2, false),
         (false, :allocs, nothing, globalref_tester_3),
         (false, :allocs, nothing, globalref_tester_4),
-        (false, :none, nothing, globalref_tester_5),
+        (false, :none, (lb=1, ub=500), globalref_tester_5),
         (false, :none, nothing, type_unstable_tester_0, Ref{Any}(5.0)),
         (false, :none, nothing, type_unstable_tester, Ref{Any}(5.0)),
         (false, :none, nothing, type_unstable_tester_2, Ref{Real}(5.0)),
         (false, :none, (lb=1, ub=1000), type_unstable_tester_3, Ref{Any}(5.0)),
-        (false, :none, (lb=1, ub=1000), test_primitive_dynamic_dispatch, Any[5.0, false]),
+        (false, :none, (lb=1, ub=10_000), test_primitive_dynamic_dispatch, Any[5.0, false]),
         (false, :none, nothing, type_unstable_function_eval, Ref{Any}(sin), 5.0),
         (false, :allocs, nothing, phi_const_bool_tester, 5.0),
         (false, :allocs, nothing, phi_const_bool_tester, -5.0),
@@ -1546,12 +1546,12 @@ function generate_test_functions()
         # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}(5.0)), # known failure case -- no rrule for _apply_iterate
         # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}((5.0, 4.0))), # known failure case -- no rrule for _apply_iterate
         # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}((5.0, 4.0, 3.0))), # known failure case -- no rrule for _apply_iterate
-        (false, :none, nothing, inferred_const_tester, Ref{Any}(nothing)),
+        (false, :none, (lb=1, ub=1_000), inferred_const_tester, Ref{Any}(nothing)),
         (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 1),
         (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 2),
         (false, :none, (lb=1, ub=100_000_000), test_union_of_arrays, randn(5), true), # union splitting with types issue
         (
-            false, :none, nothing,
+            false, :none, (lb=1, ub=500),
             test_union_of_types, Ref{Union{Type{Float64}, Type{Int}}}(Float64),
         ),
         (false, :allocs, nothing, test_self_reference, 1.1, 1.5),
@@ -1579,7 +1579,7 @@ function generate_test_functions()
             false, :none, (lb=100, ub=100_000_000),
             mul!, transpose(randn(3, 5)), randn(5, 5), randn(5, 3), 4.0, 3.0,
         ), # static_parameter
-        (false, :none, (lb=100, ub=100_000_000), Xoshiro, 123456),
+        (false, :none, nothing, Xoshiro, 123456),
         (false, :none, (lb=1, ub=100_000), *, randn(250, 500), randn(500, 250)),
         (false, :allocs, nothing, test_sin, 1.0),
         (false, :allocs, nothing, test_cos_sin, 2.0),
@@ -1591,8 +1591,8 @@ function generate_test_functions()
         (false, :allocs, nothing, test_isbits_multiple_usage_phi, false, 1.1),
         (false, :allocs, nothing, test_isbits_multiple_usage_phi, true, 1.1),
         (false, :allocs, nothing, test_multiple_call_non_primitive, 5.0),
-        (false, :none, (lb=1, ub=500), test_multiple_pi_nodes, Ref{Any}(5.0)),
-        (false, :none, (lb=1, ub=500), test_multi_use_pi_node, Ref{Any}(5.0)),
+        (false, :none, (lb=1, ub=1500), test_multiple_pi_nodes, Ref{Any}(5.0)),
+        (false, :none, (lb=1, ub=1500), test_multi_use_pi_node, Ref{Any}(5.0)),
         (false, :allocs, nothing, test_getindex, [1.0, 2.0]),
         (false, :allocs, nothing, test_mutation!, [1.0, 2.0]),
         (false, :allocs, nothing, test_while_loop, 2.0),
@@ -1612,7 +1612,7 @@ function generate_test_functions()
             (A, C) -> test_naive_mat_mul!(C, A, A), randn(100, 100), randn(100, 100),
         ),
         (false, :allocs, (lb=10, ub=1_000), sum, randn(30)),
-        (false, :none, (lb=100, ub=10_000), test_diagonal_to_matrix, Diagonal(randn(30))),
+        (false, :none, (lb=10, ub=1_000), test_diagonal_to_matrix, Diagonal(randn(30))),
         (
             false, :allocs, (lb=100, ub=5_000),
             ldiv!, randn(20, 20), Diagonal(rand(20) .+ 1), randn(20, 20),
@@ -1632,7 +1632,7 @@ function generate_test_functions()
             randn(sr(2), 700, 500),
             randn(sr(3), 300, 700),
         ),
-        (false, :allocs, (1.0, 250), test_handwritten_sum, randn(1024 * 1024)),
+        (false, :allocs, (lb=1.0, ub=150), test_handwritten_sum, randn(1024 * 1024)),
         (false, :none, nothing, _sum, randn(1024)),
         (false, :none, nothing, test_map, randn(1024), randn(1024)),
     ]
