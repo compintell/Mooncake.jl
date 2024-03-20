@@ -269,7 +269,7 @@ function make_ad_stmts!(stmt::IDPhiNode, line::ID, info::ADInfo)
         new_vals[n] = is_active(vals[n]) ? __inc(vals[n]) : const_register(vals[n], info)
     end
     new_type = register_type(get_primal_type(info, line))
-    _inst = new_inst(IDPhiNode(stmt.edges, new_vals), new_type)
+    _inst = new_inst(IDPhiNode(stmt.edges, new_vals), new_type, info.ssa_insts[line].flag)
     return ad_stmt_info(line, _inst, nothing)
 end
 

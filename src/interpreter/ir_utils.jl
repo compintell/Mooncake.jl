@@ -119,7 +119,6 @@ function __infer_ir!(ir, interp::CC.AbstractInterpreter, mi::CC.MethodInstance)
     irsv = CC.IRInterpretationState(
         interp, method_info, ir, mi, ir.argtypes, world, min_world, max_world
     )
-    ir.stmts.flag .|= CC.IR_FLAG_REFINED
     rt = CC._ir_abstract_constant_propagation(interp, irsv)
     return ir
 end
@@ -305,15 +304,15 @@ __inc(x::Argument) = Argument(x.n + 1)
 __inc(x) = x
 
 """
-    new_inst(stmt, type=Any)::NewInstruction
+    new_inst(stmt, type=Any, flag=CC.IR_FLAG_REFINED)::NewInstruction
 
 Create a `NewInstruction` with fields:
 - `stmt` = `stmt`
 - `type` = `type`
 - `info` = `CC.NoCallInfo()`
 - `line` = `Int32(1)`
-- `flag` = `CC.IR_FLAG_REFINED`
+- `flag` = `flag`
 """
-function new_inst(@nospecialize(stmt), @nospecialize(type)=Any)
-    return NewInstruction(stmt, type, CC.NoCallInfo(), Int32(1), CC.IR_FLAG_REFINED)
+function new_inst(@nospecialize(stmt), @nospecialize(type)=Any, flag=CC.IR_FLAG_REFINED)
+    return NewInstruction(stmt, type, CC.NoCallInfo(), Int32(1), flag)
 end
