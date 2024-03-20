@@ -268,6 +268,11 @@ function make_ad_stmts!(stmt::IDPhiNode, line::ID, info::ADInfo)
         isassigned(vals, n) || continue
         new_vals[n] = is_active(vals[n]) ? __inc(vals[n]) : const_register(vals[n], info)
     end
+
+    # It turns out to be really very important to do type inference correctly for PhiNodes.
+    # For some reason, type inference really doesn't like it when you encounter mutually-
+    # dependent PhiNodes whose types are unknown and for which you set the flag to
+    # CC.IR_FLAG_REFINED.
     new_type = register_type(get_primal_type(info, line))
     _inst = new_inst(IDPhiNode(stmt.edges, new_vals), new_type, info.ssa_insts[line].flag)
     return ad_stmt_info(line, _inst, nothing)
@@ -748,7 +753,9 @@ end
 
 Helper method. Only uses static information from `args`.
 """
-build_rrule(args...) = build_rrule(TapedInterpreter(), Tuple{map(_typeof, args)...})
+function build_rrule(args...)
+    return build_rrule(TapedInterpreter(), _typeof(TestUtils.__get_primals(args)))
+end
 
 """
     build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
