@@ -25,19 +25,19 @@ for (fname, elty) in ((:dgetrf_, :Float64), (:sgetrf_, :Float32))
             A, dA = primal(_A), tangent(_A)
 
             ipiv_vec = unsafe_wrap(Array, IPIV, N_val)
+
+            @assert M_val === N_val
+
+            # Store the initial state.
+            A_mat = wrap_ptr_as_view(A, LDA_val, M_val, N_val)
+            A_store = copy(A_mat)
+
+            # Run the primal.
+            ccall(
+                $(blas_name(fname)), Cvoid, ($TInt, $TInt, Ptr{$elty}, $TInt, $TInt, $TInt),
+                M, N, A, LDA, IPIV, INFO,
+            )
         end
-
-        @assert M_val === N_val
-
-        # Store the initial state.
-        A_mat = wrap_ptr_as_view(A, LDA_val, M_val, N_val)
-        A_store = copy(A_mat)
-
-        # Run the primal.
-        ccall(
-            $(blas_name(fname)), Cvoid, ($TInt, $TInt, Ptr{$elty}, $TInt, $TInt, $TInt),
-            M, N, A, LDA, IPIV, INFO,    
-        )
 
         # Zero out the tangent.
         foreach(n -> unsafe_store!(dA, zero($elty), n), 1:data_len)
