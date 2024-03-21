@@ -208,15 +208,11 @@ tangent_type(::Type{Core.TypeName}) = NoTangent
 tangent_type(::Type{Core.MethodTable}) = NoTangent
 
 @generated function tangent_type(::Type{P}) where {P<:Tuple}
-    if isconcretetype(P)
-        if isempty(P.parameters) || all(p -> tangent_type(p) == NoTangent, P.parameters)
-            return NoTangent
-        else
-            return Tuple{map(tangent_type, fieldtypes(P))...}
-        end
-    else
-        return Any
-    end
+    isa(P, Union) && return Union{tangent_type(P.a), tangent_type(P.b)}
+    isempty(P.parameters) && return NoTangent
+    isa(last(P.parameters), Core.TypeofVararg) && return Any
+    all(p -> tangent_type(p) == NoTangent, P.parameters) && return NoTangent
+    return Tuple{map(tangent_type, fieldtypes(P))...}
 end
 
 @generated function tangent_type(::Type{NamedTuple{N, T}}) where {N, T<:Tuple}

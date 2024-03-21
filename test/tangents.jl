@@ -196,6 +196,27 @@
             end
         end
     end
+
+    # The main tangent testing functionality really needs refactoring -- currently it's
+    # not possible to properly test tangents because you can't separately specify the
+    # static and dynamic types.
+    @testset "extra tuple tests" begin
+        @test tangent_type(Tuple) == Any
+        @test tangent_type(Tuple{}) == NoTangent
+        @test tangent_type(Tuple{Float64, Vararg}) == Any
+        @test tangent_type(Tuple{Float64}) == Tuple{Float64}
+        @test tangent_type(Tuple{Float64, Int}) == Tuple{Float64, NoTangent}
+        @test tangent_type(Tuple{Int, Int}) == NoTangent
+        @test tangent_type(Tuple{DataType, Type{Float64}}) == NoTangent
+        @test ==(
+            tangent_type(Union{Tuple{Float64}, Tuple{Int}}),
+            Union{Tuple{Float64}, NoTangent},
+        )
+        @test ==(
+            tangent_type(Union{Tuple{Float64}, Tuple{Int}, Tuple{Float64, Int}}),
+            Union{Tuple{Float64}, NoTangent, Tuple{Float64, NoTangent}},
+        )
+    end
 end
 
 
