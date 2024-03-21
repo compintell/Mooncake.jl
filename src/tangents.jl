@@ -370,8 +370,8 @@ end
 Related to `zero_tangent`, but a bit different. Check current implementation for
 details -- this docstring is intentionally non-specific in order to avoid becoming outdated.
 """
-uninit_tangent(x) = zero_tangent(x)
-uninit_tangent(x::Ptr{P}) where {P} = bitcast(Ptr{tangent_type(P)}, x)
+@inline uninit_tangent(x) = zero_tangent(x)
+@inline uninit_tangent(x::Ptr{P}) where {P} = bitcast(Ptr{tangent_type(P)}, x)
 
 """
     randn_tangent(rng::AbstractRNG, x::T) where {T}
