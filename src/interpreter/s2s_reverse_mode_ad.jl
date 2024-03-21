@@ -1021,7 +1021,6 @@ function (dynamic_rule::DynamicDerivedRule)(args::Vararg{Any, N}) where {N}
         rule = build_rrule(dynamic_rule.interp, sig)
         dynamic_rule.cache[sig] = rule
     end
-    rule = rule::rule_type(dynamic_rule.interp, sig)
     return rule(args...)
 end
 
