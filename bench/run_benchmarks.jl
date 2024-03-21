@@ -175,6 +175,7 @@ function benchmark_rules!!(
             suite["primal"] = @benchmark(
                 (a[1][])((a[2][])...);
                 setup=(a = (Ref($primals[1]), Ref(_deepcopy($primals[2:end])))),
+                evals=1,
             )
 
             # Benchmark AD via Taped.
