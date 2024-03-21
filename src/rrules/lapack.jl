@@ -24,8 +24,8 @@ for (fname, elty) in ((:dgetrf_, :Float64), (:sgetrf_, :Float32))
             data_len = LDA_val * N_val
             A, dA = primal(_A), tangent(_A)
 
-            ipiv_vec = unsafe_wrap(Array, IPIV, N_val)
-
+            # This implementation is currently limited to square matrices, but should be
+            # extended when someone can find the time to do so.
             @assert M_val === N_val
 
             # Store the initial state.
@@ -37,6 +37,8 @@ for (fname, elty) in ((:dgetrf_, :Float64), (:sgetrf_, :Float32))
                 $(blas_name(fname)), Cvoid, ($TInt, $TInt, Ptr{$elty}, $TInt, $TInt, $TInt),
                 M, N, A, LDA, IPIV, INFO,
             )
+
+            ipiv_vec = copy(unsafe_wrap(Array, IPIV, N_val))
         end
 
         # Zero out the tangent.
