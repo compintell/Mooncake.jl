@@ -108,7 +108,7 @@ end
         ],
         Any[
             (false, "demo_$n", m, Turing.DynamicPPL.TestUtils.rand_prior_true(m)) for
-                (n, m) in enumerate(Turing.DynamicPPL.TestUtils.DEMO_MODELS[1:11])
+                (n, m) in enumerate(Turing.DynamicPPL.TestUtils.DEMO_MODELS)
         ],
     )
         @info name
@@ -124,28 +124,23 @@ end
         # interp_codualed_args = map(zero_codual, (in_f, f, x));
         # codualed_args = map(zero_codual, (f, x))
         # TestUtils.value_and_gradient!!(rule, codualed_args...)
-
-        # # @profview run_many_times(1_000, TestUtils.value_and_gradient!!, rule, codualed_args...)
+        # # @profview run_many_times(10, TestUtils.value_and_gradient!!, rule, codualed_args...)
 
         # primal = @benchmark $f($x)
-        # # interpreted = @benchmark $in_f($f, $x)
-        # interp_gradient = @benchmark(TestUtils.value_and_gradient!!($interp_rule, $interp_codualed_args...))
+        # # interp_gradient = @benchmark(TestUtils.value_and_gradient!!($interp_rule, $interp_codualed_args...))
         # gradient = @benchmark(TestUtils.value_and_gradient!!($rule, $codualed_args...))
 
         # println("primal")
         # display(primal)
         # println()
 
-        # println("interpreted gradient")
-        # display(interp_gradient)
-        # println()
+        # # println("interpreted gradient")
+        # # display(interp_gradient)
+        # # println()
 
         # println("gradient")
         # display(gradient)
         # println()
-
-        # @show time(interp_gradient) / time(primal)
-        # @show time(gradient) / time(primal)
 
         # try
         #     tape = ReverseDiff.GradientTape(f, x);
@@ -161,6 +156,9 @@ end
         # catch
         #     display("revdiff failed")
         # end
+
+        # # @show time(interp_gradient) / time(primal)
+        # @show time(gradient) / time(primal)
 
         # push!(turing_bench_results, (name, primal, interpreted, gradient, revdiff))
     end

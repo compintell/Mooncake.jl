@@ -27,6 +27,7 @@ forwards-pass must be a `register_type(P)`.
 """
 function register_type(::Type{P}) where {P}
     P == DataType && return Any
+    P == UnionAll && return Any
     P isa Union && return __union_register_type(P)
     if isconcretetype(P)
         return AugmentedRegister{codual_type(P), tangent_ref_type_ub(P)}
