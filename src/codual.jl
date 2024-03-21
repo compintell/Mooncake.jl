@@ -24,7 +24,7 @@ zero_codual(x) = CoDual(x, zero_tangent(x))
 
 See implementation for details, as this function is subject to change.
 """
-uninit_codual(x) = CoDual(x, uninit_tangent(x))
+@inline uninit_codual(x::P) where {P} = CoDual(x, uninit_tangent(x))
 
 """
     codual_type(P::Type)
