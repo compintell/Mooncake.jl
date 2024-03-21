@@ -528,7 +528,7 @@ function rrule!!(::CoDual{typeof(getfield)}, value::CoDual, name::CoDual)
     return y, getfield_pullback
 end
 
-function rrule!!(::CoDual{typeof(getfield)}, value::CoDual{<:Any, NoTangent}, name::CoDual)
+@inline function rrule!!(::CoDual{typeof(getfield)}, value::CoDual{<:Any, NoTangent}, name::CoDual)
     return uninit_codual(getfield(primal(value), primal(name))), NoPullback()
 end
 
@@ -547,7 +547,7 @@ function rrule!!(::CoDual{typeof(getfield)}, value::CoDual, name::CoDual, order:
     return y, getfield_pullback
 end
 
-function rrule!!(
+@inline function rrule!!(
     ::CoDual{typeof(getfield)}, value::CoDual{<:Any, NoTangent}, name::CoDual, order::CoDual
 )
     return uninit_codual(getfield(primal(value), primal(name), primal(order))), NoPullback()
