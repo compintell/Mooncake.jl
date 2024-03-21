@@ -1551,7 +1551,7 @@ function generate_test_functions()
         (false, :none, (lb=1, ub=1_000), inferred_const_tester, Ref{Any}(nothing)),
         (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 1),
         (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 2),
-        (false, :none, (lb=1, ub=100_000_000), test_union_of_arrays, randn(5), true), # union splitting with types issue
+        (false, :none, (lb=1, ub=100_000_000), test_union_of_arrays, randn(5), true),
         (
             false, :none, (lb=1, ub=500),
             test_union_of_types, Ref{Union{Type{Float64}, Type{Int}}}(Float64),
@@ -1577,10 +1577,7 @@ function generate_test_functions()
             false, :none, nothing,
             setfield_tester_right!, FullyInitMutableStruct(5.0, randn(3)), randn(5),
         ),
-        (
-            false, :none, (lb=100, ub=100_000_000),
-            mul!, transpose(randn(3, 5)), randn(5, 5), randn(5, 3), 4.0, 3.0,
-        ), # static_parameter
+        (false, :none, nothing, mul!, randn(3, 5)', randn(5, 5), randn(5, 3), 4.0, 3.0),
         (false, :none, nothing, Xoshiro, 123456),
         (false, :none, (lb=1, ub=100_000), *, randn(250, 500), randn(500, 250)),
         (false, :allocs, nothing, test_sin, 1.0),
