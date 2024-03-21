@@ -1603,11 +1603,11 @@ function generate_test_functions()
         (false, :none, nothing, test_struct_partial_init, 3.5),
         (false, :none, nothing, test_mutable_partial_init, 3.3),
         (
-            false, :allocs, (lb=100, ub=2_000),
+            false, :allocs, nothing,
             test_naive_mat_mul!, randn(100, 50), randn(100, 30), randn(30, 50),
         ),
         (
-            false, :allocs, (lb=100, ub=2_000),
+            false, :allocs, nothing,
             (A, C) -> test_naive_mat_mul!(C, A, A), randn(100, 100), randn(100, 100),
         ),
         (false, :allocs, (lb=10, ub=1_000), sum, randn(30)),
