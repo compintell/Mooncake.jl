@@ -103,7 +103,7 @@ Base.push!(::SingletonStack, ::Any) = nothing
 
 
 function tangent_stack_type(::Type{P}) where {P}
-    P === DataType && return NoTangentStack
+    P === DataType && return Stack{Any}
     T = tangent_type(P)
     return T === NoTangent ? NoTangentStack : Stack{T}
 end
