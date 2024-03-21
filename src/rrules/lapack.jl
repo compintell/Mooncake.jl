@@ -19,12 +19,12 @@ for (fname, elty) in ((:dgetrf_, :Float64), (:sgetrf_, :Float32))
             # Extract names.
             M, N, LDA, IPIV, INFO = map(primal, (_M, _N, _LDA, _IPIV, _INFO))
             M_val = unsafe_load(M)
-            N_val = deepcopy(unsafe_load(N))
+            N_val = unsafe_load(N)
             LDA_val = unsafe_load(LDA)
             data_len = LDA_val * N_val
             A, dA = primal(_A), tangent(_A)
 
-            ipiv_vec = copy(unsafe_wrap(Array, IPIV, N_val))
+            ipiv_vec = unsafe_wrap(Array, IPIV, N_val)
         end
 
         @assert M_val === N_val
