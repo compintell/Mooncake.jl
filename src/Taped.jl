@@ -6,6 +6,7 @@ using
     BenchmarkTools,
     DiffRules,
     ExprTools,
+    Graphs,
     InteractiveUtils,
     LinearAlgebra,
     Random,
@@ -20,8 +21,8 @@ using Base.Experimental: @opaque
 using Base.Iterators: product
 using Core:
     Intrinsics, bitcast, SimpleVector, svec, ReturnNode, GotoNode, GotoIfNot, PhiNode,
-    PiNode, SSAValue, Argument
-using Core.Compiler: IRCode
+    PiNode, SSAValue, Argument, OpaqueClosure
+using Core.Compiler: IRCode, NewInstruction
 using Core.Intrinsics: pointerref, pointerset
 using LinearAlgebra.BLAS: @blasfunc, BlasInt, trsm!
 using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!, potrf!, potrs!
@@ -35,11 +36,14 @@ include("codual.jl")
 include("stack.jl")
 
 include(joinpath("interpreter", "contexts.jl"))
+include(joinpath("interpreter", "abstract_interpretation.jl"))
+include(joinpath("interpreter", "bbcode.jl"))
 include(joinpath("interpreter", "ir_utils.jl"))
 include(joinpath("interpreter", "ir_normalisation.jl"))
-include(joinpath("interpreter", "abstract_interpretation.jl"))
+include(joinpath("interpreter", "registers.jl"))
 include(joinpath("interpreter", "interpreted_function.jl"))
 include(joinpath("interpreter", "reverse_mode_ad.jl"))
+include(joinpath("interpreter", "s2s_reverse_mode_ad.jl"))
 
 include("test_utils.jl")
 
@@ -54,13 +58,13 @@ include(joinpath("rrules", "misc.jl"))
 include(joinpath("rrules", "new.jl"))
 
 include("chain_rules_macro.jl")
+include("interface.jl")
 
 export
     primal,
     tangent,
     randn_tangent,
     increment!!,
-    increment_field!!,
     NoTangent,
     Tangent,
     MutableTangent,
@@ -74,6 +78,9 @@ export
     _dot,
     zero_codual,
     codual_type,
-    rrule!!
+    rrule!!,
+    build_rrule,
+    value_and_gradient!!,
+    value_and_pullback!!
 
 end

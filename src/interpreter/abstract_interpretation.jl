@@ -12,15 +12,15 @@ end
 TICache() = TICache(IdDict{Core.MethodInstance, Core.CodeInstance}())
 
 struct TapedInterpreter{C} <: CC.AbstractInterpreter
-    ctx::C
     meta # additional information
     world::UInt
     inf_params::CC.InferenceParams
     opt_params::CC.OptimizationParams
     inf_cache::Vector{CC.InferenceResult}
     code_cache::TICache
+    oc_cache::Dict{Any, Any}
     function TapedInterpreter(
-        ctx::C=DefaultCtx();
+        ::Type{C};
         meta=nothing,
         world::UInt=Base.get_world_counter(),
         inf_params::CC.InferenceParams=CC.InferenceParams(),
@@ -28,9 +28,11 @@ struct TapedInterpreter{C} <: CC.AbstractInterpreter
         inf_cache::Vector{CC.InferenceResult}=CC.InferenceResult[], 
         code_cache::TICache=TICache(),
     ) where {C}
-        return new{C}(ctx, meta, world, inf_params, opt_params, inf_cache, code_cache)
+        return new{C}(meta, world, inf_params, opt_params, inf_cache, code_cache, Dict())
     end
 end
+
+TapedInterpreter() = TapedInterpreter(DefaultCtx)
 
 const TInterp = TapedInterpreter
 
@@ -82,3 +84,5 @@ function CC.inlining_policy(
         argtypes::Vector{Any},
     )
 end
+
+context_type(::TInterp{C}) where {C} = C

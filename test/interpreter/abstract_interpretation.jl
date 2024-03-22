@@ -25,7 +25,7 @@ contains_primitive_behind_call(x) = @inline contains_primitive(x)
             @assert usual_ir.stmts.inst[invoke_line].args[2] == GlobalRef(Main, :sin)
 
             # Should continue to inline away under AD compilation.
-            interp = Taped.TapedInterpreter(Taped.DefaultCtx())
+            interp = Taped.TapedInterpreter(DefaultCtx)
             ad_ir = Base.code_ircode_by_type(sig; interp)[1][1]
             invoke_line = findfirst(x -> Meta.isexpr(x, :invoke), ad_ir.stmts.inst)
             @test ad_ir.stmts.inst[invoke_line].args[2] == GlobalRef(Main, :sin)
@@ -42,7 +42,7 @@ contains_primitive_behind_call(x) = @inline contains_primitive(x)
             @assert usual_ir.stmts.inst[invoke_line].args[2] == GlobalRef(Main, :sin)
 
             # Should not inline away under AD compilation.
-            interp = Taped.TapedInterpreter(Taped.DefaultCtx())
+            interp = Taped.TapedInterpreter(DefaultCtx)
             ad_ir = Base.code_ircode_by_type(sig; interp)[1][1]
             invoke_line = findfirst(x -> Meta.isexpr(x, :invoke), ad_ir.stmts.inst)
             @test ad_ir.stmts.inst[invoke_line].args[2] == GlobalRef(Main, :a_primitive)
@@ -61,7 +61,7 @@ contains_primitive_behind_call(x) = @inline contains_primitive(x)
             @assert usual_ir.stmts.inst[invoke_line].args[2] == GlobalRef(Main, :sin)
 
             # Should not inline away under AD compilation.
-            interp = Taped.TapedInterpreter(Taped.DefaultCtx())
+            interp = Taped.TapedInterpreter(DefaultCtx)
             ad_ir = Base.code_ircode_by_type(sig; interp)[1][1]
             invoke_line = findfirst(x -> Meta.isexpr(x, :invoke), ad_ir.stmts.inst)
             @test ad_ir.stmts.inst[invoke_line].args[2] == GlobalRef(Main, :a_primitive)

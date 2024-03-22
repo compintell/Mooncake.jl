@@ -119,8 +119,62 @@ function __infer_ir!(ir, interp::CC.AbstractInterpreter, mi::CC.MethodInstance)
     irsv = CC.IRInterpretationState(
         interp, method_info, ir, mi, ir.argtypes, world, min_world, max_world
     )
-    ir.stmts.flag .|= CC.IR_FLAG_REFINED
     rt = CC._ir_abstract_constant_propagation(interp, irsv)
+    return ir
+end
+
+# In automatically generated code, it is meaningless to include code coverage effects.
+# Moreover, it seems to cause some serious inference probems. Consequently, it makes sense
+# to remove such effects before optimising IRCode.
+function __strip_coverage!(ir::IRCode)
+    for n in eachindex(ir.stmts.inst)
+        if Meta.isexpr(ir.stmts.inst[n], :code_coverage_effect)
+            ir.stmts.inst[n] = nothing
+        end
+    end
+    return ir
+end
+
+"""
+    optimise_ir!(ir::IRCode, show_ir=false)
+
+Run a fairly standard optimisation pass on `ir`. If `show_ir` is `true`, displays the IR
+to `stdout` at various points in the pipeline -- this is sometimes useful for debugging.
+"""
+function optimise_ir!(ir::IRCode; show_ir=false, do_inline=true)
+    if show_ir
+        println("Pre-optimization")
+        display(ir)
+        println()
+    end
+    CC.verify_ir(ir)
+    ir = __strip_coverage!(ir)
+    ir = CC.compact!(ir)
+    local_interp = CC.NativeInterpreter()
+    mi = __get_toplevel_mi_from_ir(ir, @__MODULE__);
+    ir = __infer_ir!(ir, local_interp, mi)
+    if show_ir
+        println("Post-inference")
+        display(ir)
+        println()
+    end
+    inline_state = CC.InliningState(local_interp)
+    CC.verify_ir(ir)
+    if do_inline
+        ir = CC.ssa_inlining_pass!(ir, inline_state, #=propagate_inbounds=#true)
+        ir = CC.compact!(ir)
+    end
+    ir = __strip_coverage!(ir)
+    ir = CC.sroa_pass!(ir, inline_state)
+    ir = CC.adce_pass!(ir, inline_state)
+    ir = CC.compact!(ir)
+    # CC.verify_ir(ir, true, false, CC.optimizer_lattice(local_interp))
+    CC.verify_linetable(ir.linetable, true)
+    if show_ir
+        println("Post-optimization")
+        display(ir)
+        println()
+    end
     return ir
 end
 
@@ -173,3 +227,92 @@ end
 
 # Return new_value if val equals current_val.
 _replace(val::SSAValue, new_val, current_val) = val == current_val ? new_val : current_val
+
+"""
+    lookup_ir(interp::AbstractInterpreter, sig::Type{<:Tuple})::Tuple{IRCode, T}
+
+Get the IR unique IR associated to `sig` under `interp`. Throws `ArgumentError`s if there is
+no code found, or if more than one `IRCode` instance returned.
+
+Returns a tuple containing the `IRCode` and its return type.
+"""
+function lookup_ir(interp::CC.AbstractInterpreter, sig::Type{<:Tuple})
+    output = Base.code_ircode_by_type(sig; interp)
+    if isempty(output)
+        throw(ArgumentError("No methods found for signature $sig"))
+    elseif length(output) > 1
+        throw(ArgumentError("$(length(output)) methods found for signature $sig"))
+    end
+    return only(output)
+end
+
+"""
+    is_reachable(x::ReturnNode)
+
+Determine whether `x` is a `ReturnNode`, and if it is, if it is also reachable. This is
+purely a function of whether or not its `val` field is defined or not.
+"""
+is_reachable_return_node(x::ReturnNode) = isdefined(x, :val)
+is_reachable_return_node(x) = false
+
+"""
+    globalref_type(x::GlobaRef)
+
+Returns the static type of the value referred to by `x`.
+"""
+globalref_type(x::GlobalRef) = isconst(x) ? _typeof(getglobal(x.mod, x.name)) : x.binding.ty
+
+"""
+    UnhandledLanguageFeatureException(message::String)
+
+An exception used to indicate that some aspect of the Julia language which AD cannot handle
+has been encountered.
+"""
+struct UnhandledLanguageFeatureException <: Exception
+    msg::String
+end
+
+"""
+    unhandled_feature(msg::String)
+
+Throw an `UnhandledLanguageFeatureException` with message `msg`.
+"""
+unhandled_feature(msg::String) = throw(UnhandledLanguageFeatureException(msg))
+
+"""
+    inc_args(stmt)
+
+Increment by `1` the `n` field of any `Argument`s present in `stmt`.
+"""
+inc_args(x::Expr) = Expr(x.head, map(__inc, x.args)...)
+inc_args(x::ReturnNode) = isdefined(x, :val) ? ReturnNode(__inc(x.val)) : x
+inc_args(x::IDGotoIfNot) = IDGotoIfNot(__inc(x.cond), x.dest)
+inc_args(x::IDGotoNode) = x
+function inc_args(x::IDPhiNode)
+    new_values = Vector{Any}(undef, length(x.values))
+    for n in eachindex(x.values)
+        if isassigned(x.values, n)
+            new_values[n] = __inc(x.values[n])
+        end
+    end
+    return IDPhiNode(x.edges, new_values)
+end
+inc_args(::Nothing) = nothing
+inc_args(x::GlobalRef) = x
+
+__inc(x::Argument) = Argument(x.n + 1)
+__inc(x) = x
+
+"""
+    new_inst(stmt, type=Any, flag=CC.IR_FLAG_REFINED)::NewInstruction
+
+Create a `NewInstruction` with fields:
+- `stmt` = `stmt`
+- `type` = `type`
+- `info` = `CC.NoCallInfo()`
+- `line` = `Int32(1)`
+- `flag` = `flag`
+"""
+function new_inst(@nospecialize(stmt), @nospecialize(type)=Any, flag=CC.IR_FLAG_REFINED)
+    return NewInstruction(stmt, type, CC.NoCallInfo(), Int32(1), flag)
+end

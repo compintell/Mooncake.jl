@@ -5,6 +5,7 @@ for (M, f, arity) in DiffRules.diffrules(; filter_modules=nothing)
         continue  # Skip rules for methods not defined in the current scope
     end
     (f == :rem2pi || f == :ldexp) && continue # not designed for Float64s
+    (f == :+ || f == :*) && continue # use intrinsics instead
     if arity == 1
         dx = DiffRules.diffrule(M, f, :x)
         pb_name = Symbol("$(M).$(f)_pb!!")
@@ -60,6 +61,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:low_level_mat
         end
         arity > 2 && return
         (f == :rem2pi || f == :ldexp || f == :(^)) && return
+        (f == :+ || f == :*) && return # use intrinsics instead
         f = @eval $M.$f
         push!(test_cases, Any[false, :stability, nothing, f, rand_inputs(rng, f, arity)...])
     end

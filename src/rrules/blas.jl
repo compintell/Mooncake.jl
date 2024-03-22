@@ -600,7 +600,7 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
             end,
         )),
 
-        # trmm!
+        # trsm!
         vec(reduce(
             vcat,
             map(

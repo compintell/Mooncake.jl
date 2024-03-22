@@ -1,10 +1,10 @@
 using Turing
 
+using ReverseDiff
 # using CSV, DataFrames, ReverseDiff
 # turing_bench_results = DataFrame(
 #     :name => String[],
 #     :primal => [],
-#     :interp => [],
 #     :gradient => [],
 #     :reversediff => [],
 # )
@@ -25,8 +25,8 @@ end
 end
 
 @model broadcast_demo(x) = begin
-    μ ~ TruncatedNormal(1, 2, 0.1, 10)
-    σ ~ TruncatedNormal(1, 2, 0.1, 10)
+    μ ~ truncated(Normal(1, 2), 0.1, 10)
+    σ ~ truncated(Normal(1, 2), 0.1, 10)
     
     x .~ LogNormal(μ, σ)   
 end
@@ -107,41 +107,26 @@ end
         ],
         Any[
             (false, "demo_$n", m, Turing.DynamicPPL.TestUtils.rand_prior_true(m)) for
-                (n, m) in enumerate(Turing.DynamicPPL.TestUtils.DEMO_MODELS[1:11])
+                (n, m) in enumerate(Turing.DynamicPPL.TestUtils.DEMO_MODELS)
         ],
     )
         @info name
         rng = sr(123)
         f, x = build_turing_problem(rng, model, ex)
-
-        in_f = Taped.InterpretedFunction(DefaultCtx(), _typeof((f, x)), interp);
-        if interface_only
-            in_f(f, deepcopy(x))
-        else
-            @test has_equal_data(in_f(f, deepcopy(x)), f(deepcopy(x)))
-        end
-
-        TestUtils.test_rrule!!(
-            sr(123456), in_f, f, x;
-            perf_flag=:none, interface_only=true, is_primitive=false,
+        TestUtils.test_derived_rule(
+            sr(123456), f, x;
+            perf_flag=:none, interface_only=true, is_primitive=false, interp
         )
 
-        rule, in_f = TestUtils.set_up_gradient_problem(f, x);
-        codualed_args = map(zero_codual, (in_f, f, x));
-        TestUtils.value_and_gradient!!(rule, codualed_args...)
-
-        # @profview run_many_times(1_000, TestUtils.value_and_gradient!!, rule, codualed_args...)
+        # rule = build_rrule(interp, _typeof((f, x)))
+        # codualed_args = map(zero_codual, (f, x))
+        # TestUtils.to_benchmark(rule, codualed_args...)
 
         # primal = @benchmark $f($x)
-        # interpreted = @benchmark $in_f($f, $x)
-        # gradient = @benchmark(TestUtils.value_and_gradient!!($rule, $codualed_args...))
+        # gradient = @benchmark(TestUtils.to_benchmark($rule, $codualed_args...))
 
         # println("primal")
         # display(primal)
-        # println()
-
-        # println("interpreted")
-        # display(interpreted)
         # println()
 
         # println("gradient")
@@ -158,11 +143,14 @@ end
         #     println("ReverseDiff")
         #     display(revdiff)
         #     println()
+        #     @show time(revdiff) / time(primal)
         # catch
         #     display("revdiff failed")
         # end
 
-        # push!(turing_bench_results, (name, primal, interpreted, gradient, revdiff))
+        # @show time(gradient) / time(primal)
+
+        # push!(turing_bench_results, (name, primal, gradient, revdiff))
     end
 end
 
@@ -170,7 +158,6 @@ end
 #     out_df = DataFrame(
 #         :name => df.name,
 #         :primal => map(time, df.primal),
-#         :interp => map(time, df.interp),
 #         :gradient => map(time, df.gradient),
 #         :reversediff => map(time, df.reversediff),
 #     )

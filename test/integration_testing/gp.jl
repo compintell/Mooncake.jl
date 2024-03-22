@@ -40,7 +40,7 @@ using AbstractGPs, KernelFunctions
             (rand, Xoshiro(123456), fx),
             (logpdf, fx, rand(fx)),
         ]
-            TestUtils.test_interpreted_rrule!!(
+            TestUtils.test_derived_rule(
                 sr(123456), rand, Xoshiro(123456), GP(k)(x1, 1.1);
                 interp, perf_flag=:none, interface_only=true, is_primitive=false,
             )

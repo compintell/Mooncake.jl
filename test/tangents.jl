@@ -39,13 +39,16 @@
                 (4.0, [4.0, 3.0]),
                 (9.0, [7.0, 7.0]),
             ),
+            ((), NoTangent(), NoTangent(), NoTangent()),
+            ((1,), NoTangent(), NoTangent(), NoTangent()),
+            ((2, 3), NoTangent(), NoTangent(), NoTangent()),
             (
                 (a=6.0, b=[1.0, 2.0]),
                 (a=5.0, b=[3.0, 4.0]),
                 (a=4.0, b=[4.0, 3.0]),
                 (a=9.0, b=[7.0, 7.0]),
             ),
-            ((;), (;), (;), (;)),
+            ((;), NoTangent(), NoTangent(), NoTangent()),
             (
                 TypeStableMutableStruct{Float64}(5.0, 3.0),
                 build_tangent(TypeStableMutableStruct{Float64}, 5.0, 4.0),
@@ -76,12 +79,7 @@
                 build_tangent(MutableFoo, 4.0),
                 build_tangent(MutableFoo, 9.0),
             ),
-            (
-                UnitRange{Int}(5, 7),
-                build_tangent(UnitRange{Int}, NoTangent(), NoTangent()),
-                build_tangent(UnitRange{Int}, NoTangent(), NoTangent()),
-                build_tangent(UnitRange{Int}, NoTangent(), NoTangent()),
-            ),
+            (UnitRange{Int}(5, 7), NoTangent(), NoTangent(), NoTangent()),
         ],
         map([
             LowerTriangular{Float64, Matrix{Float64}},
@@ -197,6 +195,27 @@
                 @test @inferred(increment_field!!(x, val, f)) === x
             end
         end
+    end
+
+    # The main tangent testing functionality really needs refactoring -- currently it's
+    # not possible to properly test tangents because you can't separately specify the
+    # static and dynamic types.
+    @testset "extra tuple tests" begin
+        @test tangent_type(Tuple) == Any
+        @test tangent_type(Tuple{}) == NoTangent
+        @test tangent_type(Tuple{Float64, Vararg}) == Any
+        @test tangent_type(Tuple{Float64}) == Tuple{Float64}
+        @test tangent_type(Tuple{Float64, Int}) == Tuple{Float64, NoTangent}
+        @test tangent_type(Tuple{Int, Int}) == NoTangent
+        @test tangent_type(Tuple{DataType, Type{Float64}}) == NoTangent
+        @test ==(
+            tangent_type(Union{Tuple{Float64}, Tuple{Int}}),
+            Union{Tuple{Float64}, NoTangent},
+        )
+        @test ==(
+            tangent_type(Union{Tuple{Float64}, Tuple{Int}, Tuple{Float64, Int}}),
+            Union{Tuple{Float64}, NoTangent, Tuple{Float64, NoTangent}},
+        )
     end
 end
 

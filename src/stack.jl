@@ -6,7 +6,7 @@ A stack specialised for reverse-mode AD.
 Semantically equivalent to a usual stack, but never de-allocates memory once allocated.
 """
 mutable struct Stack{T}
-    memory::Vector{T}
+    const memory::Vector{T}
     position::Int
     Stack{T}() where {T} = new{T}(Vector{T}(undef, 0), 0)
 end
@@ -19,7 +19,7 @@ end
 
 Stack(x::T) where {T} = Stack{T}(x)
 
-function Base.push!(x::Stack{T}, val::T) where {T}
+@inline function Base.push!(x::Stack{T}, val::T) where {T}
     position = x.position + 1
     memory = x.memory
     x.position = position
@@ -27,12 +27,12 @@ function Base.push!(x::Stack{T}, val::T) where {T}
         @inbounds memory[position] = val
         return nothing
     else
-        push!(memory, val)
+        @noinline push!(memory, val)
         return nothing
     end
 end
 
-function Base.pop!(x::Stack)
+@inline function Base.pop!(x::Stack)
     position = x.position
     val = x.memory[position]
     x.position = position - 1
@@ -62,7 +62,7 @@ end
 
 Base.eltype(::Stack{T}) where {T} = T
 
-top_ref(x::Stack) = Ref(x.memory, x.position)
+top_ref(x::Stack) = Ref(getfield(x, :memory), getfield(x, :position))
 
 """
     NoTangentStack()
@@ -118,3 +118,30 @@ function tangent_ref_type_ub(::Type{P}) where {P}
 end
 
 tangent_ref_type_ub(::Type{Type{P}}) where {P} = NoTangentRef
+
+struct InactiveStack{T}
+    zero_tangent::T
+end
+
+Base.pop!(s::InactiveStack{T}) where {T} = s.zero_tangent
+
+struct InactiveRef{T}
+    x::T
+end
+
+Base.getindex(x::InactiveRef{T}) where {T} = x.x
+
+increment_ref!(::InactiveRef{T}, ::T) where {T} = nothing
+
+top_ref(::Nothing) = InactiveRef(nothing)
+
+increment_ref!(::InactiveRef{Nothing}, ::T) where {T} = nothing
+
+
+struct FixedStackTangentRefStack{T}
+    x::Stack{T}
+end
+
+Base.push!(x::FixedStackTangentRefStack, t) = nothing
+
+Base.pop!(x::FixedStackTangentRefStack) = top_ref(x.x)

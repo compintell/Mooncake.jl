@@ -176,6 +176,7 @@ function populate_address_map!(m::AddressMap, primal::P, tangent::T) where {P, T
 end
 
 function populate_address_map!(m::AddressMap, p::P, t) where {P<:Union{Tuple, NamedTuple}}
+    t isa NoTangent && return m
     foreach(n -> populate_address_map!(m, getfield(p, n), getfield(t, n)), fieldnames(P))
     return m
 end
@@ -227,12 +228,12 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...; rul
     y_primal = f(x_primal...)
 
     # Use finite differences to estimate vjps
-    ẋ = randn_tangent(rng, x)
+    ẋ = map(_x -> randn_tangent(rng, _x), x)
     ε = 1e-7
     x′ = _add_to_primal(x, _scale(ε, ẋ))
     y′ = f(x′...)
     ẏ = _scale(1 / ε, _diff(y′, y_primal))
-    ẋ_post = _scale(1 / ε, _diff(x′, x_primal))
+    ẋ_post = map((_x′, _x_p) -> _scale(1 / ε, _diff(_x′, _x_p)), x′, x_primal)
 
     # Run `rrule!!` on copies of `f` and `x`. We use randomly generated tangents so that we
     # can later verify that non-zero values do not get propagated by the rule.
@@ -273,7 +274,7 @@ get_address(x) = ismutable(x) ? pointer_from_objref(x) : nothing
 _deepcopy(x) = deepcopy(x)
 _deepcopy(x::Module) = x
 
-rrule_output_type(::Type{Ty}) where {Ty} = Tuple{CoDual{Ty, tangent_type(Ty)}, Any}
+rrule_output_type(::Type{Ty}) where {Ty} = Tuple{codual_type(Ty), Any}
 
 function test_rrule_interface(f_f̄, x_x̄...; is_primitive, ctx::C, rule) where {C}
     @nospecialize f_f̄ x_x̄
@@ -442,6 +443,11 @@ Does not require that the method being called is a primitive.
 function test_interpreted_rrule!!(rng::AbstractRNG, x...; interp, kwargs...)
     rule, in_f = set_up_gradient_problem(x...; interp)
     test_rrule!!(rng, in_f, x...; rule, kwargs...)
+end
+
+function test_derived_rule(rng::AbstractRNG, x...; interp, kwargs...)
+    rule = Taped.build_rrule(interp, _typeof(__get_primals(x)))
+    test_rrule!!(rng, x...; rule, kwargs...)
 end
 
 #
@@ -883,7 +889,7 @@ function run_derived_rrule!!_test_cases(rng_ctor, v::Val)
     test_cases, memory = Taped.generate_derived_rrule!!_test_cases(rng_ctor, v)
     GC.@preserve memory @testset "$f, $(typeof(x))" for
         (interface_only, perf_flag, _, f, x...) in test_cases
-        test_interpreted_rrule!!(
+        test_derived_rule(
             rng_ctor(123), f, x...; interp, interface_only, perf_flag, is_primitive=false
         )
     end
@@ -921,8 +927,7 @@ Optionally, an interpreter may be provided via the `interp` kwarg.
 See also: `Taped.TestUtils.value_and_gradient!!`.
 """
 function set_up_gradient_problem(fargs...; interp=Taped.TInterp())
-    primals = map(x -> x isa CoDual ? primal(x) : x, fargs)
-    sig = _typeof(primals)
+    sig = _typeof(__get_primals(fargs))
     if Taped.is_primitive(DefaultCtx, sig)
         return rrule!!, Taped._eval
     else
@@ -931,63 +936,7 @@ function set_up_gradient_problem(fargs...; interp=Taped.TInterp())
     end
 end
 
-"""
-    value_and_gradient!!(rule, in_f::CoDual{<:InterpretedFunction}, f::CoDual, x::CoDual...)
-
-In-place version of `value_and_gradient!!` in which the arguments have been wrapped in
-`CoDual`s. Note that any mutable data in `f` and `x` will be incremented in-place. As such,
-if calling this function multiple times with different values of `x`, should be careful to
-ensure that you zero-out the tangent fields of `x` each time. See
-`Taped.TestUtils.zero_out_arguments!` for more details.
-"""
-function value_and_gradient!!(
-    rule::R, in_f::CoDual{<:Taped.InterpretedFunction}, codual_fargs::Vararg{CoDual, N}
-) where {R, N}
-    out, pb!! = rule(in_f, codual_fargs...)
-    @assert out isa CoDual{Float64, Float64}
-    return primal(out), pb!!(1.0, NoTangent(), map(tangent, codual_fargs)...)[2:end]
-end
-
-"""
-    value_and_gradient!!(rule, in_f::InterpretedFunction, f, args...)
-
-Compute the value and gradient of `f(args...)`.
-
-`rule` and `in_f` should be constructed using `set_up_gradient_problem`.
-
-*Note:* If calling `value_and_gradient!!` multiple times for various values of `args`, you
-should use the same `rule` and `in_f` each time, as there is no need to re-build them each
-time.
-
-*Note:* It is your responsibility to ensure that there is no aliasing in `f` and `args`.
-For example,
-```julia
-X = randn(5, 5)
-rule, in_f = set_up_gradient_problem(*, X, X)
-value_and_gradient!!(rule, in_f, *, X, X)
-```
-will yield the wrong result.
-
-*Note:* This method of `value_and_gradient!!` has to first call `zero_codual` on all of its
-arguments. This may cause some additional allocations. If this is a problem in your
-use-case, consider pre-allocating the `CoDual`s and calling the other method of this
-function. See `Taped.TestUtils.zero_out_arguments!!` for a helper function that you may find
-useful if setting up your code this way.
-"""
-function value_and_gradient!!(
-    rule::R, in_f::Taped.InterpretedFunction, fargs::Vararg{Any, N}
-) where {R, N}
-    return value_and_gradient!!(rule, zero_codual(in_f), map(zero_codual, fargs)...)
-end
-
-"""
-    zero_out_arguments!!(codualed_fargs::CoDual...)
-
-Set the tangent component of a collection of `CoDuals` to zero. Mutates where possible.
-"""
-function zero_out_arguments!!(codualed_fargs::CoDual...)
-    return map(x -> CoDual(primal(x), Taped.set_to_zero!!(tangent(x))), codualed_fargs)
-end
+__get_primals(xs) = map(x -> x isa CoDual ? primal(x) : x, xs)
 
 end
 
@@ -1041,6 +990,11 @@ end
 
 Base.:(==)(a::MutableFoo, b::MutableFoo) = equal_field(a, b, :a) && equal_field(a, b, :b)
 
+mutable struct NonDifferentiableFoo
+    x::Int
+    y::Bool
+end
+
 mutable struct TypeStableMutableStruct{T}
     a::Float64
     b::T
@@ -1083,6 +1037,15 @@ end
     return z
 end
 
+# A function in which everything is non-differentiable and has no branching. Ideally, the
+# reverse-pass of this function would be a no-op, and there would be no use of the block
+# stack anywhere.
+function non_differentiable_foo(x::Int)
+    y = 5x
+    z = y + x
+    return 10z
+end
+
 function bar(x, y)
     x1 = sin(x)
     x2 = cos(y)
@@ -1091,6 +1054,8 @@ function bar(x, y)
     x5 = x2 + x4
     return x5
 end
+
+const_tester_non_differentiable() = 1
 
 const_tester() = cos(5.0)
 
@@ -1122,8 +1087,11 @@ end
 type_stable_getfield_tester_1(x::StableFoo) = x.x
 type_stable_getfield_tester_2(x::StableFoo) = x.y
 
-__x_for_gref_test = 5.0
+const __x_for_gref_test = 5.0
 @eval globalref_tester() = $(GlobalRef(@__MODULE__, :__x_for_gref_test))
+
+const __y_for_gref_test = false
+@eval globalref_tester_bool() = $(GlobalRef(@__MODULE__, :__y_for_gref_test))
 
 function globalref_tester_2(use_gref::Bool)
     v = use_gref ? __x_for_gref_test : 1
@@ -1133,8 +1101,13 @@ end
 const __x_for_gref_tester_3 = 5.0
 @eval globalref_tester_3() = $(GlobalRef(@__MODULE__, :__x_for_gref_tester_3))
 
-__x_for_gref_tester_4::Float64 = 3.0
+const __x_for_gref_tester_4::Float64 = 3.0
 @eval globalref_tester_4() = $(GlobalRef(@__MODULE__, :__x_for_gref_tester_4))
+
+__x_for_gref_tester_5 = 5.0
+@eval globalref_tester_5() = $(GlobalRef(@__MODULE__, :__x_for_gref_tester_5))
+
+type_unstable_tester_0(x::Ref{Any}) = x[]
 
 type_unstable_tester(x::Ref{Any}) = cos(x[])
 
@@ -1293,7 +1266,7 @@ function test_while_loop(x)
 end
 
 function test_for_loop(x)
-    for _ in 1:5
+    for _ in 1:500
         x = sin(x)
     end
     return x
@@ -1421,15 +1394,33 @@ function _sum(x)
     return z
 end
 
+function test_handwritten_sum(x::AbstractArray{<:Real})
+    y = 0.0
+    n = 0
+    while n < length(x)
+        n += 1
+        y += x[n]
+    end
+    return y
+end
+
+function test_map(x::Vector{Float64}, y::Vector{Float64})
+    return map((x, y) -> sin(cos(exp(x)) + exp(y) * sin(y)), x, y)
+end
+
+test_getfield_of_tuple_of_types(n::Int) = getfield((Float64, Float64), n)
+
 function generate_test_functions()
     return Any[
         (false, :allocs, nothing, const_tester),
+        (false, :allocs, nothing, const_tester_non_differentiable),
         (false, :allocs, nothing, identity, 5.0),
         (false, :allocs, nothing, foo, 5.0),
+        (false, :allocs, nothing, non_differentiable_foo, 5),
         (false, :allocs, nothing, bar, 5.0, 4.0),
         (false, :none, nothing, type_unstable_argument_eval, sin, 5.0),
-        (false, :none, (lb=1, ub=500), pi_node_tester, Ref{Any}(5.0)),
-        (false, :none, (lb=1, ub=500), pi_node_tester, Ref{Any}(5)),
+        (false, :none, (lb=1, ub=1_000), pi_node_tester, Ref{Any}(5.0)),
+        (false, :none, (lb=1, ub=1_000), pi_node_tester, Ref{Any}(5)),
         (false, :allocs, nothing, intrinsic_tester, 5.0),
         (false, :allocs, nothing, goto_tester, 5.0),
         (false, :allocs, nothing, new_tester, 5.0, :hello),
@@ -1438,14 +1429,17 @@ function generate_test_functions()
         (false, :allocs, nothing, type_stable_getfield_tester_1, StableFoo(5.0, :hi)),
         (false, :allocs, nothing, type_stable_getfield_tester_2, StableFoo(5.0, :hi)),
         (false, :none, nothing, globalref_tester),
-        # (false, :stability, nothing, globalref_tester_2, true),
-        # (false, :stability, nothing, globalref_tester_2, false),
+        (false, :none, nothing, globalref_tester_bool),
+        (false, :none, nothing, globalref_tester_2, true),
+        (false, :none, nothing, globalref_tester_2, false),
         (false, :allocs, nothing, globalref_tester_3),
         (false, :allocs, nothing, globalref_tester_4),
+        (false, :none, (lb=1, ub=500), globalref_tester_5),
+        (false, :none, (lb=1, ub=1_000), type_unstable_tester_0, Ref{Any}(5.0)),
         (false, :none, nothing, type_unstable_tester, Ref{Any}(5.0)),
         (false, :none, nothing, type_unstable_tester_2, Ref{Real}(5.0)),
         (false, :none, (lb=1, ub=1000), type_unstable_tester_3, Ref{Any}(5.0)),
-        (false, :none, (lb=1, ub=1000), test_primitive_dynamic_dispatch, Any[5.0, false]),
+        (false, :none, (lb=1, ub=10_000), test_primitive_dynamic_dispatch, Any[5.0, false]),
         (false, :none, nothing, type_unstable_function_eval, Ref{Any}(sin), 5.0),
         (false, :allocs, nothing, phi_const_bool_tester, 5.0),
         (false, :allocs, nothing, phi_const_bool_tester, -5.0),
@@ -1461,7 +1455,7 @@ function generate_test_functions()
             randn(5),
             1,
             Base.Slice(Base.OneTo(1)),
-        ), # fun PhiNode example to do with not assigning values
+        ), # fun PhiNode example
         (false, :allocs, nothing, avoid_throwing_path_tester, 5.0),
         (false, :allocs, nothing, simple_foreigncall_tester, randn(5)),
         (false, :none, nothing, simple_foreigncall_tester_2, randn(6), (2, 3)),
@@ -1485,24 +1479,19 @@ function generate_test_functions()
         # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}(5.0)), # known failure case -- no rrule for _apply_iterate
         # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}((5.0, 4.0))), # known failure case -- no rrule for _apply_iterate
         # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}((5.0, 4.0, 3.0))), # known failure case -- no rrule for _apply_iterate
-        (false, :none, nothing, inferred_const_tester, Ref{Any}(nothing)),
+        (false, :none, (lb=1, ub=1_000), inferred_const_tester, Ref{Any}(nothing)),
         (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 1),
         (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 2),
         (false, :none, (lb=1, ub=100_000_000), test_union_of_arrays, randn(5), true),
         (
-            false,
-            :none,
-            nothing,
-            test_union_of_types,
-            Ref{Union{Type{Float64}, Type{Int}}}(Float64),
+            false, :none, (lb=1, ub=500),
+            test_union_of_types, Ref{Union{Type{Float64}, Type{Int}}}(Float64),
         ),
         (false, :allocs, nothing, test_self_reference, 1.1, 1.5),
         (false, :allocs, nothing, test_self_reference, 1.5, 1.1),
         (false, :none, nothing, test_recursive_sum, randn(2)),
         (
-            false,
-            :none,
-            (lb=1, ub=1_000),
+            false, :none, (lb=1, ub=1_000),
             LinearAlgebra._modify!,
             LinearAlgebra.MulAddMul(5.0, 4.0),
             5.0,
@@ -1512,26 +1501,15 @@ function generate_test_functions()
         (false, :allocs, nothing, getfield_tester, (5.0, 5)),
         (false, :allocs, nothing, getfield_tester_2, (5.0, 5)),
         (
-            false,
-            :allocs,
-            nothing,
-            setfield_tester_left!,
-            FullyInitMutableStruct(5.0, randn(3)),
-            4.0,
+            false, :allocs, nothing,
+            setfield_tester_left!, FullyInitMutableStruct(5.0, randn(3)), 4.0,
         ),
         (
-            false,
-            :none,
-            nothing,
-            setfield_tester_right!,
-            FullyInitMutableStruct(5.0, randn(3)),
-            randn(5),
+            false, :none, nothing,
+            setfield_tester_right!, FullyInitMutableStruct(5.0, randn(3)), randn(5),
         ),
-        (
-            false, :none, (lb=100, ub=100_000_000),
-            mul!, transpose(randn(3, 5)), randn(5, 5), randn(5, 3), 4.0, 3.0,
-        ), # static_parameter,
-        (false, :none, (lb=100, ub=100_000_000), Xoshiro, 123456),
+        (false, :none, nothing, mul!, randn(3, 5)', randn(5, 5), randn(5, 3), 4.0, 3.0),
+        (false, :none, nothing, Xoshiro, 123456),
         (false, :none, (lb=1, ub=100_000), *, randn(250, 500), randn(500, 250)),
         (false, :allocs, nothing, test_sin, 1.0),
         (false, :allocs, nothing, test_cos_sin, 2.0),
@@ -1543,8 +1521,8 @@ function generate_test_functions()
         (false, :allocs, nothing, test_isbits_multiple_usage_phi, false, 1.1),
         (false, :allocs, nothing, test_isbits_multiple_usage_phi, true, 1.1),
         (false, :allocs, nothing, test_multiple_call_non_primitive, 5.0),
-        (false, :none, (lb=1, ub=500), test_multiple_pi_nodes, Ref{Any}(5.0)),
-        (false, :none, (lb=1, ub=500), test_multi_use_pi_node, Ref{Any}(5.0)),
+        (false, :none, (lb=1, ub=1500), test_multiple_pi_nodes, Ref{Any}(5.0)),
+        (false, :none, (lb=1, ub=1500), test_multi_use_pi_node, Ref{Any}(5.0)),
         (false, :allocs, nothing, test_getindex, [1.0, 2.0]),
         (false, :allocs, nothing, test_mutation!, [1.0, 2.0]),
         (false, :allocs, nothing, test_while_loop, 2.0),
@@ -1556,47 +1534,37 @@ function generate_test_functions()
         (false, :none, nothing, test_struct_partial_init, 3.5),
         (false, :none, nothing, test_mutable_partial_init, 3.3),
         (
-            false,
-            :allocs,
-            (lb=100, ub=2_000),
+            false, :allocs, nothing,
             test_naive_mat_mul!, randn(100, 50), randn(100, 30), randn(30, 50),
         ),
         (
-            false,
-            :allocs,
-            (lb=100, ub=2_000),
+            false, :allocs, nothing,
             (A, C) -> test_naive_mat_mul!(C, A, A), randn(100, 100), randn(100, 100),
         ),
         (false, :allocs, (lb=10, ub=1_000), sum, randn(30)),
-        (false, :none, (lb=100, ub=10_000), test_diagonal_to_matrix, Diagonal(randn(30))),
+        (false, :none, (lb=10, ub=1_000), test_diagonal_to_matrix, Diagonal(randn(30))),
         (
-            false,
-            :allocs,
-            (lb=100, ub=5_000),
+            false, :allocs, (lb=100, ub=1_000),
             ldiv!, randn(20, 20), Diagonal(rand(20) .+ 1), randn(20, 20),
         ),
         (
-            false,
-            :allocs,
-            (lb=100, ub=10_000),
-            kron!, randn(400, 400), randn(20, 20), randn(20, 20),
+            false, :allocs, (lb=10, ub=500),
+            LinearAlgebra._kron!, randn(400, 400), randn(20, 20), randn(20, 20),
         ),
         (
-            false,
-            :allocs,
-            (lb=100, ub=10_000),
+            false, :allocs, (lb=10, ub=500),
             kron!, randn(400, 400), Diagonal(randn(20)), randn(20, 20),
         ),
         (
-            false,
-            :none,
-            nothing,
+            false, :none, nothing,
             test_mlp,
             randn(sr(1), 500, 200),
             randn(sr(2), 700, 500),
             randn(sr(3), 300, 700),
         ),
+        (false, :allocs, (lb=1.0, ub=150), test_handwritten_sum, randn(1024 * 1024)),
         (false, :none, nothing, _sum, randn(1024)),
+        (false, :none, nothing, test_map, randn(1024), randn(1024)),
     ]
 end
 
@@ -1703,8 +1671,12 @@ const DIFFTESTS_FUNCTIONS = vcat(
     ),
 )
 
+export MutableFoo, StructFoo, NonDifferentiableFoo, FullyInitMutableStruct
+
 end
 
 function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:test_utils})
     return TestResources.generate_test_functions(), Any[]
 end
+
+using .TestResources

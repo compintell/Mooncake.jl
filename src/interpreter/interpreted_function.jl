@@ -477,13 +477,7 @@ explosion of types. Moreover, type-stability it maintained.
 function InterpretedFunction(ctx::C, sig::Type{<:Tuple}, interp) where {C}
 
     # Grab code associated to this function.
-    output = Base.code_ircode_by_type(sig; interp)
-    if isempty(output)
-        throw(ArgumentError("No methods found for signature $sig"))
-    elseif length(output) > 1
-        throw(ArgumentError("$(length(output)) methods found for signature $sig"))
-    end
-    ir, Treturn = only(output)
+    ir, Treturn = lookup_ir(interp, sig)
 
     # Slot into which the output of this function will be placed.
     return_slot = SlotRef{Treturn}()
@@ -551,19 +545,6 @@ function __barrier(in_f::Tf) where {Tf<:InterpretedFunction}
         end
     end
     return in_f.return_slot[]
-end
-
-"""
-    tuple_map(f::F, x::Tuple) where {F}
-
-This function is semantically equivalent to `map(f, x)`, but always specialises on all of
-the element types of `x`, regardless the length of `x`. This contrasts with `map`, in which
-the number of element types specialised upon is a fixed constant in the compiler.
-
-As a consequence, if `x` is very long, this function may have very large compile times.
-"""
-@generated function tuple_map(f::F, x::Tuple) where {F}
-    return Expr(:call, :tuple, map(n -> :(f(x[$n])), eachindex(x.parameters))...)
 end
 
 # Produce a `Dict` mapping from block numbers to line number of their first statement.

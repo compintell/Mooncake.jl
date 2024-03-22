@@ -43,7 +43,19 @@ using Taped:
     get_codual,
     get_tangent_stack,
     top_ref,
-    NoTangentRef
+    NoTangentRef,
+    BBCode,
+    ID,
+    IDPhiNode,
+    IDGotoNode,
+    IDGotoIfNot,
+    BBlock,
+    make_ad_stmts!,
+    ADStmtInfo,
+    ad_stmt_info,
+    ADInfo,
+    SharedDataPairs,
+    increment_field!!
 
 using .TestUtils:
     test_rrule!!,

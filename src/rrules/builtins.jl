@@ -489,6 +489,15 @@ function rrule!!(::CoDual{typeof(Core.ifelse)}, cond, a, b)
     return ifelse(_cond, a, b), ifelse_pullback!!
 end
 
+function rrule!!(
+    ::CoDual{typeof(Core.ifelse)},
+    cond,
+    a::CoDual{<:Any, NoTangent},
+    b::CoDual{<:Any, NoTangent},
+)
+    return ifelse(primal(cond), a, b), NoPullback()
+end
+
 # Core.set_binding_type!
 
 function rrule!!(::CoDual{typeof(Core.sizeof)}, x)
@@ -519,6 +528,10 @@ function rrule!!(::CoDual{typeof(getfield)}, value::CoDual, name::CoDual)
     return y, getfield_pullback
 end
 
+@inline function rrule!!(::CoDual{typeof(getfield)}, value::CoDual{<:Any, NoTangent}, name::CoDual)
+    return uninit_codual(getfield(primal(value), primal(name))), NoPullback()
+end
+
 function rrule!!(::CoDual{typeof(getfield)}, value::CoDual, name::CoDual, order::CoDual)
     _name = primal(name)
     _order = primal(order)
@@ -532,6 +545,12 @@ function rrule!!(::CoDual{typeof(getfield)}, value::CoDual, name::CoDual, order:
         _get_tangent_field(primal(value), tangent(value), _name, _order),
     )
     return y, getfield_pullback
+end
+
+@inline function rrule!!(
+    ::CoDual{typeof(getfield)}, value::CoDual{<:Any, NoTangent}, name::CoDual, order::CoDual
+)
+    return uninit_codual(getfield(primal(value), primal(name), primal(order))), NoPullback()
 end
 
 _get_tangent_field(_, tangent, f...) = getfield(tangent, f...)
@@ -585,13 +604,34 @@ function rrule!!(::CoDual{typeof(setfield!)}, value, name, x)
     return y, setfield!_pullback
 end
 
+function rrule!!(
+    ::CoDual{typeof(setfield!)}, value::CoDual{<:Any, NoTangent}, name, x
+)
+    _name = primal(name)
+    save = isdefined(primal(value), _name)
+    old_x = save ? getfield(primal(value), _name) : nothing
+    function setfield!_pullback(dy, df, dvalue, ::NoTangent, dx)
+        old_x !== nothing && setfield!(primal(value), _name, old_x)
+        return df, dvalue, NoTangent(), dx
+    end
+    y = CoDual(setfield!(primal(value), _name, primal(x)), NoTangent())
+    return y, setfield!_pullback
+end
+
 # swapfield!
 # throw
 
-function rrule!!(::CoDual{typeof(tuple)}, args...)
-    y = CoDual(tuple(map(primal, args)...), tuple(map(tangent, args)...))
-    tuple_pullback(dy, ::NoTangent, dargs...) = NoTangent(), map(increment!!, dargs, dy)...
-    return y, tuple_pullback
+@inline function tuple_pullback(dy, ::NoTangent, dargs...)
+    return NoTangent(), tuple_map(increment!!, dargs, dy)...
+end
+
+function rrule!!(::CoDual{typeof(tuple)}, args::Vararg{Any, N}) where {N}
+    primal_output = tuple(map(primal, args)...)
+    if tangent_type(_typeof(primal_output)) == NoTangent
+        return zero_codual(primal_output), NoPullback()
+    else
+        return CoDual(primal_output, tuple(map(tangent, args)...)), tuple_pullback
+    end
 end
 
 function rrule!!(::CoDual{typeof(typeassert)}, x, type)
@@ -754,6 +794,8 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         # Core.get_binding_type -- NEEDS IMPLEMENTING AND TESTING
         [false, :none, nothing, Core.ifelse, true, randn(5), 1],
         [false, :none, nothing, Core.ifelse, false, randn(5), 2],
+        (false, :stability, nothing, Core.ifelse, true, 5, 4),
+        (false, :stability, nothing, Core.ifelse, false, true, false),
         [false, :stability, nothing, Core.ifelse, false, 1.0, 2.0],
         [false, :stability, nothing, Core.ifelse, true, 1.0, 2.0],
         [false, :stability, nothing, Core.ifelse, false, randn(5), randn(3)],
@@ -796,21 +838,27 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         [false, :stability, nothing, applicable, sin, Type],
         [false, :stability, nothing, applicable, +, Type, Float64],
         [false, :stability, nothing, applicable, +, Float64, Float64],
-        [false, :stability, (lb=1e-3, ub=20.0), fieldtype, TestResources.StructFoo, :a],
-        [false, :stability, (lb=1e-3, ub=20.0), fieldtype, TestResources.StructFoo, :b],
-        [false, :stability, (lb=1e-3, ub=20.0), fieldtype, TestResources.MutableFoo, :a],
-        [false, :stability, (lb=1e-3, ub=20.0), fieldtype, TestResources.MutableFoo, :b],
-        [true, :none, _range, getfield, TestResources.StructFoo(5.0), :a],
-        [false, :none, _range, getfield, TestResources.StructFoo(5.0, randn(5)), :a],
-        [false, :none, _range, getfield, TestResources.StructFoo(5.0, randn(5)), :b],
-        [true, :none, _range, getfield, TestResources.StructFoo(5.0), 1],
-        [false, :none, _range, getfield, TestResources.StructFoo(5.0, randn(5)), 1],
-        [false, :none, _range, getfield, TestResources.StructFoo(5.0, randn(5)), 2],
-        [true, :none, _range, getfield, TestResources.MutableFoo(5.0), :a],
-        [false, :none, _range, getfield, TestResources.MutableFoo(5.0, randn(5)), :b],
+        [false, :stability, (lb=1e-3, ub=20.0), fieldtype, StructFoo, :a],
+        [false, :stability, (lb=1e-3, ub=20.0), fieldtype, StructFoo, :b],
+        [false, :stability, (lb=1e-3, ub=20.0), fieldtype, MutableFoo, :a],
+        [false, :stability, (lb=1e-3, ub=20.0), fieldtype, MutableFoo, :b],
+        [true, :none, _range, getfield, StructFoo(5.0), :a],
+        [false, :none, _range, getfield, StructFoo(5.0, randn(5)), :a],
+        [false, :none, _range, getfield, StructFoo(5.0, randn(5)), :b],
+        [true, :none, _range, getfield, StructFoo(5.0), 1],
+        [false, :none, _range, getfield, StructFoo(5.0, randn(5)), 1],
+        [false, :none, _range, getfield, StructFoo(5.0, randn(5)), 2],
+        [true, :none, _range, getfield, MutableFoo(5.0), :a],
+        [false, :none, _range, getfield, MutableFoo(5.0, randn(5)), :b],
         [false, :none, _range, getfield, UnitRange{Int}(5:9), :start],
         [false, :none, _range, getfield, UnitRange{Int}(5:9), :stop],
         [false, :none, _range, getfield, (5.0, ), 1, false],
+        (false, :none, _range, getfield, (1, ), 1, false),
+        (false, :none, _range, getfield, (1, 2), 1),
+        (false, :none, _range, getfield, (a=5, b=4), 1),
+        (false, :none, _range, getfield, (a=5, b=4), 2),
+        (false, :none, _range, getfield, (a=5.0, b=4), 1),
+        (false, :none, _range, getfield, (a=5.0, b=4), 2),
         [false, :none, _range, getfield, UInt8, :name],
         [false, :none, _range, getfield, UInt8, :super],
         [true, :none, _range, getfield, UInt8, :layout],
@@ -820,38 +868,27 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         # invoke -- NEEDS IMPLEMENTING AND TESTING
         [false, :stability, nothing, isa, 5.0, Float64],
         [false, :stability, nothing, isa, 1, Float64],
-        [false, :stability, nothing, isdefined, TestResources.MutableFoo(5.0, randn(5)), :sim],
-        [false, :stability, nothing, isdefined, TestResources.MutableFoo(5.0, randn(5)), :a],
+        [false, :stability, nothing, isdefined, MutableFoo(5.0, randn(5)), :sim],
+        [false, :stability, nothing, isdefined, MutableFoo(5.0, randn(5)), :a],
         # modifyfield! -- NEEDS IMPLEMENTING AND TESTING
-        [false, :stability, nothing, nfields, TestResources.MutableFoo],
-        [false, :stability, nothing, nfields, TestResources.StructFoo],
+        [false, :stability, nothing, nfields, MutableFoo],
+        [false, :stability, nothing, nfields, StructFoo],
         # replacefield! -- NEEDS IMPLEMENTING AND TESTING
-        [false, :none, _range, setfield!, TestResources.MutableFoo(5.0, randn(5)), :a, 4.0],
-        [
-            false,
-            :none,
-            nothing,
-            setfield!,
-            TestResources.MutableFoo(5.0, randn(5)),
-            :b,
-            randn(5),
-        ],
-        [false, :none, _range, setfield!, TestResources.MutableFoo(5.0, randn(5)), 1, 4.0],
-        [
-            false,
-            :none,
-            _range,
-            setfield!,
-            TestResources.MutableFoo(5.0, randn(5)),
-            2,
-            randn(5),
-        ],
+        (false, :none, _range, setfield!, MutableFoo(5.0, randn(5)), :a, 4.0),
+        (false, :none, nothing, setfield!, MutableFoo(5.0, randn(5)), :b, randn(5)),
+        (false, :none, _range, setfield!, MutableFoo(5.0, randn(5)), 1, 4.0),
+        (false, :none, _range, setfield!, MutableFoo(5.0, randn(5)), 2, randn(5)),
+        (false, :stability, _range, setfield!, NonDifferentiableFoo(5, false), 1, 4),
+        (false, :stability, _range, setfield!, NonDifferentiableFoo(5, true), 2, false),
         # swapfield! -- NEEDS IMPLEMENTING AND TESTING
         # throw -- NEEDS IMPLEMENTING AND TESTING
-        [false, :stability, nothing, tuple, 5.0, 4.0],
-        [false, :stability, nothing, tuple, randn(5), 5.0],
-        [false, :stability, nothing, tuple, randn(5), randn(4)],
-        [false, :stability, nothing, tuple, 5.0, randn(1)],
+        [false, :stability_and_allocs, nothing, tuple, 5.0, 4.0],
+        [false, :stability_and_allocs, nothing, tuple, randn(5), 5.0],
+        [false, :stability_and_allocs, nothing, tuple, randn(5), randn(4)],
+        [false, :stability_and_allocs, nothing, tuple, 5.0, randn(1)],
+        (false, :stability_and_allocs, nothing, tuple),
+        (false, :stability_and_allocs, nothing, tuple, 1),
+        (false, :stability_and_allocs, nothing, tuple, 1, 5),
         [false, :stability, nothing, typeassert, 5.0, Float64],
         [false, :stability, nothing, typeassert, randn(5), Vector{Float64}],
         [false, :stability, nothing, typeof, 5.0],

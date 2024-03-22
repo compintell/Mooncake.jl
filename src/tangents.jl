@@ -128,7 +128,19 @@ end
 end
 
 function build_tangent(::Type{P}, fields::Vararg{Any, N}) where {P<:Union{Tuple, NamedTuple}, N}
-    return tangent_type(P)(fields)
+    T = tangent_type(P)
+    if T == NoTangent
+        return NoTangent()
+    elseif isconcretetype(P)
+        return T(fields)
+    else
+        return __tangent_from_non_concrete(P, fields)
+    end
+end
+
+__tangent_from_non_concrete(::Type{P}, fields) where {P<:Tuple} = Tuple(fields)
+function __tangent_from_non_concrete(::Type{P}, fields) where {names, P<:NamedTuple{names}}
+    return NamedTuple{names}(fields)
 end
 
 _value(v::PossiblyUninitTangent) = val(v)
@@ -195,12 +207,28 @@ tangent_type(::Type{Core.TypeName}) = NoTangent
 
 tangent_type(::Type{Core.MethodTable}) = NoTangent
 
-@generated function tangent_type(::Type{T}) where {T<:Tuple}
-    return isconcretetype(T) ? Tuple{map(tangent_type, fieldtypes(T))...} : Tuple
+@generated function tangent_type(::Type{P}) where {P<:Tuple}
+    isa(P, Union) && return Union{tangent_type(P.a), tangent_type(P.b)}
+    isempty(P.parameters) && return NoTangent
+    isa(last(P.parameters), Core.TypeofVararg) && return Any
+    all(p -> tangent_type(p) == NoTangent, P.parameters) && return NoTangent
+    return Tuple{map(tangent_type, fieldtypes(P))...}
 end
 
 @generated function tangent_type(::Type{NamedTuple{N, T}}) where {N, T<:Tuple}
-    return NamedTuple{N, tangent_type(T)}
+    if tangent_type(T) == NoTangent
+        return NoTangent
+    elseif isconcretetype(tangent_type(T))
+        return NamedTuple{N, tangent_type(T)}
+    else
+        return Any
+    end
+end
+
+function backing_type(::Type{P}) where {P}
+    tangent_field_types = map(n -> tangent_field_type(P, n), 1:fieldcount(P))
+    all(==(NoTangent), tangent_field_types) && return NoTangent
+    return NamedTuple{fieldnames(P), Tuple{tangent_field_types...}}
 end
 
 @generated function tangent_type(::Type{P}) where {P}
@@ -222,12 +250,8 @@ end
     Base.issingletontype(P) && return NoTangent
 
     # Derive tangent type.
-    return  (ismutabletype(P) ? MutableTangent : Tangent){backing_type(P)}
-end
-
-function backing_type(::Type{P}) where {P}
-    tangent_field_types = map(n -> tangent_field_type(P, n), 1:fieldcount(P))
-    return NamedTuple{fieldnames(P), Tuple{tangent_field_types...}}
+    bt = backing_type(P)
+    return bt == NoTangent ? bt : (ismutabletype(P) ? MutableTangent : Tangent){bt}
 end
 
 """
@@ -312,7 +336,9 @@ end
 @inline function zero_tangent(x::Array{P, N}) where {P, N}
     return _map_if_assigned!(zero_tangent, Array{tangent_type(P), N}(undef, size(x)...), x)
 end
-@inline zero_tangent(x::Union{Tuple, NamedTuple}) = map(zero_tangent, x)
+@inline function zero_tangent(x::P) where {P<:Union{Tuple, NamedTuple}}
+    return tangent_type(P) == NoTangent ? NoTangent() : map(zero_tangent, x)
+end
 @generated function zero_tangent(x::P) where {P}
 
     tangent_type(P) == NoTangent && return NoTangent()
@@ -344,8 +370,8 @@ end
 Related to `zero_tangent`, but a bit different. Check current implementation for
 details -- this docstring is intentionally non-specific in order to avoid becoming outdated.
 """
-uninit_tangent(x) = zero_tangent(x)
-uninit_tangent(x::Ptr{P}) where {P} = bitcast(Ptr{tangent_type(P)}, x)
+@inline uninit_tangent(x) = zero_tangent(x)
+@inline uninit_tangent(x::Ptr{P}) where {P} = bitcast(Ptr{tangent_type(P)}, x)
 
 """
     randn_tangent(rng::AbstractRNG, x::T) where {T}
@@ -364,8 +390,8 @@ function randn_tangent(rng::AbstractRNG, x::SimpleVector)
         return randn_tangent(rng, x[n])
     end
 end
-function randn_tangent(rng::AbstractRNG, x::Union{Tuple, NamedTuple})
-    return map(x -> randn_tangent(rng, x), x)
+function randn_tangent(rng::AbstractRNG, x::P) where {P <: Union{Tuple, NamedTuple}}
+    return tangent_type(P) == NoTangent ? NoTangent() : map(x -> randn_tangent(rng, x), x)
 end
 function randn_tangent(rng::AbstractRNG, x::T) where {T<:Union{Tangent, MutableTangent}}
     return T(randn_tangent(rng, x.fields))
@@ -604,7 +630,9 @@ end
 function _diff(p::P, q::P) where {P<:SimpleVector}
     return Any[_diff(a, b) for (a, b) in zip(p, q)]
 end
-_diff(p::P, q::P) where {P<:Union{Tuple, NamedTuple}} = _map(_diff, p, q)
+function _diff(p::P, q::P) where {P<:Union{Tuple, NamedTuple}}
+    return tangent_type(P) == NoTangent ? NoTangent() : _map(_diff, p, q)
+end
 
 function _containerlike_diff(p::P, q::P) where {P}
     diffed_fields = map(fieldnames(P)) do f

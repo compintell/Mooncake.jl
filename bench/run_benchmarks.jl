@@ -27,7 +27,7 @@ using Taped:
     TInterp,
     _typeof
 
-using Taped.TestUtils: _deepcopy, to_benchmark, set_up_gradient_problem
+using Taped.TestUtils: _deepcopy, to_benchmark
 
 function zygote_to_benchmark(ctx, x::Vararg{Any, N}) where {N}
     out, pb = Zygote._pullback(ctx, x...)
@@ -154,12 +154,8 @@ function generate_inter_framework_tests()
     ]
 end
 
-function benchmark_rules!!(
-    test_case_data,
-    default_ratios,
-    include_other_frameworks::Bool,
-    tune_benchmarks::Bool,
-)
+function benchmark_rules!!(test_case_data, default_ratios, include_other_frameworks::Bool)
+
     test_cases = reduce(vcat, map(first, test_case_data))
     memory = map(x -> x[2], test_case_data)
     ranges = reduce(vcat, map(x -> x[3], test_case_data))
@@ -167,53 +163,54 @@ function benchmark_rules!!(
     GC.@preserve memory begin
         results = map(enumerate(test_cases)) do (n, args)
             @info "$n / $(length(test_cases))", _typeof(args)
-            suite = BenchmarkGroup()
+            suite = Dict()
 
             # Benchmark primal.
             primals = map(x -> x isa CoDual ? primal(x) : x, args)
-            suite["primal"] = @benchmarkable(
+            @info "primal"
+            suite["primal"] = @benchmark(
                 (a[1][])((a[2][])...);
                 setup=(a = (Ref($primals[1]), Ref(_deepcopy($primals[2:end])))),
+                evals=1,
             )
 
             # Benchmark AD via Taped.
-            rule, in_f = set_up_gradient_problem(args...)
+            @info "taped"
+            rule = Taped.build_rrule(args...)
             coduals = map(x -> x isa CoDual ? x : zero_codual(x), args)
-            suite["taped"] = @benchmarkable(
-                to_benchmark($rule, zero_codual($in_f), $coduals...);
-            )
+            to_benchmark(rule, coduals...)
+            suite["taped"] = @benchmark(to_benchmark($rule, $coduals...))
 
             if include_other_frameworks
 
                 if should_run_benchmark(Val(:zygote), args...)
-                    suite["zygote"] = @benchmarkable(
+                    @info "zygote"
+                    suite["zygote"] = @benchmark(
                         zygote_to_benchmark($(Zygote.Context()), $primals...)
                     )
                 end
 
                 if should_run_benchmark(Val(:reverse_diff), args...)
+                    @info "reversediff"
                     tape = ReverseDiff.GradientTape(primals[1], primals[2:end])
                     compiled_tape = ReverseDiff.compile(tape)
                     result = map(x -> randn(size(x)), primals[2:end])
-                    suite["rd"] = @benchmarkable(
+                    suite["rd"] = @benchmark(
                         rd_to_benchmark!($result, $compiled_tape, $primals[2:end])
                     )
                 end
 
                 if should_run_benchmark(Val(:enzyme), args...)
+                    @info "enzyme"
                     dup_args = map(x -> Duplicated(x, randn(size(x))), primals[2:end])
-                    suite["enzyme"] = @benchmarkable(
+                    suite["enzyme"] = @benchmark(
                         autodiff(Reverse, $primals[1], Active, $dup_args...)
                     )
                 end
             end
 
-            if tune_benchmarks
-                @info "tuning"
-                tune!(suite)
-            end
             @info "running"
-            return (args, run(suite; verbose=true))
+            return (args, suite)
         end
     end
     return combine_results.(results, tags, ranges, Ref(default_ratios))
@@ -259,7 +256,7 @@ function benchmark_hand_written_rrules!!(rng_ctor)
         tags = fill(nothing, length(test_cases))
         return map(x -> x[4:end], test_cases), memory, ranges, tags
     end
-    return benchmark_rules!!(test_case_data, (lb=1e-3, ub=25.0), false, false)
+    return benchmark_rules!!(test_case_data, (lb=1e-3, ub=25.0), false)
 end
 
 function benchmark_derived_rrules!!(rng_ctor)
@@ -271,7 +268,7 @@ function benchmark_derived_rrules!!(rng_ctor)
         tags = fill(nothing, length(test_cases))
         return map(x -> x[4:end], test_cases), memory, ranges, tags
     end
-    return benchmark_rules!!(test_case_data, (lb=1e-3, ub=150), false, false)
+    return benchmark_rules!!(test_case_data, (lb=1e-3, ub=150), false)
 end
 
 function benchmark_inter_framework_rules()
@@ -280,7 +277,7 @@ function benchmark_inter_framework_rules()
     test_cases = map(last, test_case_data)
     memory = []
     ranges = fill(nothing, length(test_cases))
-    return benchmark_rules!!([(test_cases, memory, ranges, tags)], (lb=0.1, ub=150), true, true)
+    return benchmark_rules!!([(test_cases, memory, ranges, tags)], (lb=0.1, ub=150), true)
 end
 
 function flag_concerning_performance(ratios)

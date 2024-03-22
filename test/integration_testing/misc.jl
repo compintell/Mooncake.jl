@@ -86,7 +86,7 @@
         end),
     )
         @info "$(_typeof((f, x...)))"
-        TestUtils.test_interpreted_rrule!!(
+        TestUtils.test_derived_rule(
             Xoshiro(123456), f, x...;
             interp, perf_flag=:none, interface_only, is_primitive=false,
         )

@@ -15,6 +15,7 @@
             "hello",
         ],
         randn(Float64, 5),
+        [1, 2, 3],
         # randn(Float32, 5),
         # randn(Float16, 5),
         [
