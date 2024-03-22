@@ -22,19 +22,19 @@ Puts `data` into `p`, and returns the `id` associated to it. This `id` should be
 be available during the forwards- and reverse-passes of AD, and it should further be assumed
 that the value associated to this `id` is always `data`.
 =#
-function add_data!(data_pairs::SharedDataPairs, data)::ID
+function add_data!(p::SharedDataPairs, data)::ID
     id = ID()
-    push!(data_pairs.pairs, (id, data))
+    push!(p.pairs, (id, data))
     return id
 end
 
 #=
-    shared_data_tuple(data_pairs::SharedDataPairs)::Tuple
+    shared_data_tuple(p::SharedDataPairs)::Tuple
 
 Create the tuple that will constitute the captured variables in the forwards- and reverse-
 pass `OpaqueClosure`s.
 
-For example, if the `pairs` field of `data_pairs.pairs` is
+For example, if `p.pairs` is
 ```julia
 [(ID(5), 5.0), (ID(3), "hello")]
 ```
@@ -43,16 +43,15 @@ then the output of this function is
 (5.0, "hello")
 ```
 =#
-shared_data_tuple(data_pairs::SharedDataPairs) = tuple(map(last, data_pairs.pairs)...)
+shared_data_tuple(p::SharedDataPairs)::Tuple = tuple(map(last, p.pairs)...)
 
 #=
-    shared_data_stmts(data_pairs::SharedDataPairs)::Vector{Tuple{ID, NewInstruction}}
+    shared_data_stmts(p::SharedDataPairs)::Vector{Tuple{ID, NewInstruction}}
 
 Produce a sequence of id-statment pairs which will extract the data from
-`shared_data_tuple(data_pairs)` such that the correct value is associated to the correct
-`ID`.
+`shared_data_tuple(p)` such that the correct value is associated to the correct `ID`.
 
-For example, if the `pairs` field of `data_pairs.pairs` is
+For example, if `p.pairs` is
 ```julia
 [(ID(5), 5.0), (ID(3), "hello")]
 ```
@@ -64,12 +63,10 @@ Tuple{ID, NewInstruction}[
 ]
 ```
 =#
-function shared_data_stmts(data_pairs::SharedDataPairs)::Vector{Tuple{ID, NewInstruction}}
-    stmts = Vector{Tuple{ID, NewInstruction}}(undef, length(data_pairs.pairs))
-    for (n, p) in enumerate(data_pairs.pairs)
-        stmts[n] = (p[1], new_inst(Expr(:call, getfield, Argument(1), n)))
+function shared_data_stmts(p::SharedDataPairs)::Vector{Tuple{ID, NewInstruction}}
+    return map(enumerate(p.pairs)) do (n, p)
+        return (p[1], new_inst(Expr(:call, getfield, Argument(1), n)))
     end
-    return stmts
 end
 
 #=
@@ -96,7 +93,7 @@ codegen which produces the forwards- and reverse-passes.
     Otherwise, it will be the `ID` associated to the stack, and the stack itself will be put
     in the `shared_data_pairs`.
 - `tangent_stacks`: a map from `ID` to tangent stacks. If the tangent stack associated to
-    the `ID` is a bit type, then this will actually be the tangent stack. Otherwise it will
+    the `ID` is a bits type, then this will actually be the tangent stack. Otherwise it will
     be the `ID` associated to the stack, and the stack itself will be put in the
     `shared_data_pairs`.
 =#
@@ -134,30 +131,27 @@ function ADInfo(
     )
 end
 
+function __log_data(p::Union{ADInfo, SharedDataPairs}, x)
+    return Base.issingletontype(_typeof(x)) ? x : add_data!(p, x)
+end
+
 # Construct a map from primal `Argument`s to the location of its tangent stack in the
-# forwards-pass and pullback. If tangent stacks is a singleton, just yields the tangent
+# forwards-pass and pullback. If tangent stack is a singleton, just yields the tangent
 # stack itself.
-function make_arg_tangent_stacks!(data_pairs, arg_tangent_stacks)
+function make_arg_tangent_stacks!(p::SharedDataPairs, arg_tangent_stacks)
     arguments = Argument.(eachindex(arg_tangent_stacks))
-    stack_ids = map(arg_tangent_stacks) do s
-        return Base.issingletontype(_typeof(s)) ? s : add_data!(data_pairs, s)
-    end
+    stack_ids = map(Base.Fix1(__log_data, p), arg_tangent_stacks)
     return Dict{Argument, Any}(zip(arguments, stack_ids))
 end
 
 # Construct a map from primal `ID`s corresponding to lines in the IR, to the location of
 # their tangent stacks in the forwards-pass and pullback. If tangent stacks is a singleton,
 # just yields the tangent stack itself.
-function make_tangent_stacks!(shared_data, ssa_insts::Dict{ID, NewInstruction})
+function make_tangent_stacks!(p::SharedDataPairs, ssa_insts::Dict{ID, NewInstruction})
     tangent_stacks = Dict{ID, Any}()
     for (k, inst) in ssa_insts
         Meta.isexpr(inst.stmt, :call) || Meta.isexpr(inst.stmt, :invoke) || continue
-        tangent_stack = make_tangent_stack(_get_type(inst.type))
-        if Base.issingletontype(_typeof(tangent_stack))
-            tangent_stacks[k] = tangent_stack
-        else
-            tangent_stacks[k] = add_data!(shared_data, tangent_stack)
-        end
+        tangent_stacks[k] = __log_data(p, make_tangent_stack(_get_type(inst.type)))
     end
     return tangent_stacks
 end
@@ -248,9 +242,8 @@ function make_ad_stmts!(stmt::IDGotoIfNot, line::ID, ::ADInfo)
     if stmt.cond isa Union{Argument, ID}
         # If cond refers to a register, then the primal must be extracted.
         cond_id = ID()
-        cond = Expr(:call, primal, stmt.cond)
         fwds = [
-            (cond_id, new_inst(cond)),
+            (cond_id, new_inst(Expr(:call, primal, stmt.cond))),
             (line, new_inst(IDGotoIfNot(cond_id, stmt.dest), Any)),
         ]
         return ad_stmt_info(line, fwds, nothing)
@@ -415,7 +408,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
 
         # If the rule is `rrule!!` (i.e. `sig` is primitive), then don't bother putting
         # the rule into shared data, because it's safe to put it directly into the code.
-        rule_ref = rule == rrule!! ? rrule!! : add_data!(info, rule)
+        rule_ref = __log_data(info, rule)
 
         # Tangent stacks are allocated in build_rrule, and stored in the `info`. Just
         # retrieve the stack associated to the tangent returned from this line.
@@ -424,11 +417,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         # If the type of the pullback is a singleton type, then there is no need to store it
         # in the shared data, it can be interpolated directly into the generated IR.
         pb_stack = build_pb_stack(_typeof(rule), arg_types)
-        if Base.issingletontype(_typeof(pb_stack))
-            pb_stack_id = pb_stack
-        else
-            pb_stack_id = add_data!(info, pb_stack)
-        end
+        pb_stack_id = __log_data(info, pb_stack)
 
         # if the pullback is a `NoPullback`, then there is no need to log the references to
         # the tangent stacks associated to the inputs to this call, because there will never
@@ -566,10 +555,6 @@ function build_pb_stack(Trule, arg_types)
 end
 
 # Used in `make_ad_stmts!` method for `Expr(:call, ...)` and `Expr(:invoke, ...)`.
-#
-# Executes the fowards-pass. `data` is the data shared between the forwards-pass and
-# pullback. It must be a `NamedTuple` with fields `arg_tangent_stacks`, `rule`,
-# `ret_tangent_stack`, and `pb_stack`.
 @inline function __fwds_pass!(
     arg_tangent_ref_stacks,
     rule,
@@ -608,9 +593,6 @@ end
 @inline __push_pb_stack!(stack, pb!!) = push!(stack, pb!!)
 
 # Used in `make_ad_stmts!` method for `Expr(:call, ...)` and `Expr(:invoke, ...)`.
-#
-# Executes the reverse-pass. `data` is the `NamedTuple` shared with `fwds_pass!`.
-# Much of this pass will be optimised away in practice.
 @inline function __rvs_pass!(arg_tangent_ref_stacks, ret_tangent_stack, pb_stack)::Nothing
     pb = __pop_pb_stack!(pb_stack)
     tngt = __pop_tangent_stack!(ret_tangent_stack)
@@ -760,7 +742,8 @@ end
 """
     build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
 
-Returns a `DerivedRule` which is an `rrule!!` for `sig` in context `C`.
+Returns a `DerivedRule` which is an `rrule!!` for `sig` in context `C`. See the docstring
+for `rrule!!` for more info.
 """
 function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
 
