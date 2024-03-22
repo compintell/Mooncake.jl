@@ -8,7 +8,7 @@ The goal of the `Taped.jl` project is to produce a reverse-mode AD package which
 
 # How it works
 
-`Taped.jl` is based around a single function `rrule!!`, which computes vector-Jacobian products (VJPs).
+`Taped.jl` is based around a function `rrule!!` (which computes vector-Jacobian products (VJPs)) and a related function `build_rrule` (which builds functions which are semantically identical to `rrule!!`).
 These VJPs can, for example, be used to compute gradients.
 `rrule!!` is similar to ChainRules' `rrule` and Zygote's `_pullback`, but supports functions which mutate (modify) their arguments, in addition to those that do not, and immediately increments (co)tangents.
 It has, perhaps unsurprisingly, wound up looking quite similar to the rule system in Enzyme.
@@ -18,7 +18,7 @@ For a given function and arguments, it is roughly speaking the case that either
 2. no hand-written method of `rrule!!` is applicable.
 
 In the first case, we run the `rrule!!`.
-In the second, we create an `rrule!!` by "doing AD" -- we decompose the function into a composition of functions which _do_ have hand-written `rrule!!`s.
+In the second, we use a function called `build_rrule` to create a function with the same semantics as `rrule!!` by "doing AD" -- we decompose the function into a composition of functions which _do_ have hand-written `rrule!!`s.
 In general, the goal is to write as few hand-written `rrule!!`s as is necessary, and to "do AD" for the vast majority of functions.
 
 
@@ -48,9 +48,10 @@ All of our testing is implemented via this (or via another function which calls 
 
 This contrasts with `Zygote.jl` / `ChainRules.jl`, where the permissive (co)tangent type system complicates both composition of `rrule`s and testing.
 
-Additionally, our approach to AD naturally handles control flow which differs between calls of a function. This contrasts with e.g. `ReverseDiff.jl`'s compiled tape, which can give silent numerical errors if control flow ought to differ between gradient evaluations at different arguments.
-~~Additionally, we augment the tape that we construct with additional instructions which throw an error if control flow differs from when the tape was constructed.
-This contrasts with `ReverseDiff.jl`, which silently fails in this scenario.~~
+Additionally, our approach to AD naturally handles control flow which differs between multiple calls to the same function.
+This contrasts with e.g. `ReverseDiff.jl`'s compiled tape, which can give silent numerical errors if control flow ought to differ between gradient evaluations at different arguments.
+~~Additionally, we augment the tape that we construct with additional instructions which throw an error if control flow differs from when the tape was constructed.~~
+~~This contrasts with `ReverseDiff.jl`, which silently fails in this scenario.~~
 
 ### Performance
 
@@ -58,7 +59,8 @@ Hand-written `rrule!!`s have excellent performance, provided that they have been
 Consequently, whether or not the overall AD system has good performance is largely a question of how much overhead is associated to the mechanism by which hand-written `rrules!!`s are algorithmically composed.
 
 ~~At present (11/2023), we do _not_ do this in a performant way, but this will change.~~
-At present (01/2024), we do this in a _moderately_ performant way.
+~~At present (01/2024), we do this in a _moderately_ performant way.~~
+At present (03/2024), we do this in a _moderately_ performant way (but better than the previous way!)
 See [Project Status](#project-status) below for more info.
 
 Additionally, the strategy of immediately incrementing (co)tangents resolves long-standing performance issues associated with indexing arrays.
@@ -85,8 +87,14 @@ The plan is to proceed in three phases:
 You should take this with a pinch of salt, as it seems highly likely that we will have to revisit some design choices when optimising performance -- we do not, however, anticipate requiring major re-writes to the design as part of performance optimisation.
 We aim to reach the maintenance phase of the project before 01/06/2024.
 
+*Update: (22/03/2024)*
+Phase 2 is now further along.
+Taped now uses something which could reasonably be described as a source-to-source system to perform AD.
+At present the performance of this system is not as good as that of Enzyme, but often beats compiled ReverseDiff, and comfortably beats Zygote in any situations involving dynamic control flow.
+The present focus is on dealing with some remaining performance limitations that should make Taped's performance much closer to that of Enzyme, and consistently beat ReverseDiff on a range of benchmarks.
+
 *Update: (16/01/2024)*
-Phase 2 is now well underway. We now make use of a much faster approach to interpreting / executing Julia code, which yields performance that is comparable with ReverseDiff (when things go well). The current focus is on ironing out performance issues, and simplifying the implementation.
+~~Phase 2 is now well underway. We now make use of a much faster approach to interpreting / executing Julia code, which yields performance that is comparable with ReverseDiff (when things go well). The current focus is on ironing out performance issues, and simplifying the implementation.~~
 
 *Update: (06/11/2023)*
 ~~We are mostly through the first phase.~~
@@ -99,11 +107,9 @@ Phase 2 is now well underway. We now make use of a much faster approach to inter
 
 # Trying it out
 
-There is not presently a high-level interface to which we are commiting, but if you want to
-compute the gradient of a function, take a look at
-`Taped.TestUtils.set_up_gradient_problem` and `Taped.TestUtils.value_and_gradient!!`.
+There is not presently a high-level interface to which we are yet commiting, but if you want to compute the gradient of a function, take a look at `value_and_pullback!!` / `value_and_gradient!!`.
 
-*Note:* I have found that using a mixture of `PProf` and the `@profview` functionality from Julia's `VSCode` extension essential when profiling code generated by `Taped.jl`.
+*Note:* I have found that using a mixture of `PProf` and the `@profview` functionality from Julia's `VSCode` extension essential when profiling code generated by Taped.
 `PProf` provides complete type information on its flame graphs, which is important for figuring out what is getting called, but it doesn't highilght type-instabilities.
 Conversely, `@profview` does highlight type-instabilities, but fails to provide complete type information.
 So if you use both at the same time, you can get all of the information needed.
@@ -115,9 +121,10 @@ Noteworthy things which should be work and be performant include:
 1. value-dependent control flow
 1. mutation of arrays and mutable structs
 
-These are noteworthy in the sense that they are different from ReverseDiff / Zygote. Enzyme is also able to do these things.
+These are noteworthy in the sense that they are different from ReverseDiff / Zygote.
+Enzyme is also able to do these things.
 
-Please be aware that by "performant" we mean similar performance to ReverseDiff with a compiled tape.
+Please be aware that by "performant" we mean similar or better performance than ReverseDiff with a compiled tape, but not as good performance as Enzyme.
 
 ### What won't work
 
