@@ -70,8 +70,7 @@ Base.copy(node::IDGotoIfNot) = IDGotoIfNot(copy(node.cond), copy(node.dest))
     Switch(conds::Vector{Any}, dests::Vector{ID}, fallthrough_dest::ID)
 
 A switch-statement node. These can be inserted in the `BBCode` representation of Julia IR.
-`Switch` has the following
-semantics:
+`Switch` has the following semantics:
 ```julia
 goto dests[1] if not conds[1]
 goto dests[2] if not conds[2]
@@ -84,7 +83,7 @@ which block to jump to. If none of the conditions are met, then we go to whichev
 specified by `fallthrough_dest`.
 
 `Switch` statements are lowered into the above sequence of `GotoIfNot`s and `GotoNode`s
-before converting `BBCode` back into `IRCode`, because `Switch` statements are not valid
+when converting `BBCode` back into `IRCode`, because `Switch` statements are not valid
 nodes in regular Julia IR.
 """
 struct Switch
@@ -106,6 +105,10 @@ const Terminator = Union{Switch, IDGotoIfNot, IDGotoNode, ReturnNode}
 
 """
     const InstVector = Vector{NewInstruction}
+
+Note: the `CC.NewInstruction` type is used to represent instructions because it has the
+correct fields. While it is only used to represent new instrucdtions in `Core.Compiler`, it
+is used to represent all instructions in `BBCode`.
 """
 const InstVector = Vector{NewInstruction}
 
@@ -136,6 +139,12 @@ mutable struct BBlock
     end
 end
 
+"""
+    BBlock(id::ID, inst_pairs::Vector{Tuple{ID, NewInstruction}})
+
+Convenience constructor -- splits `inst_pairs` into a `Vector{ID}` and `InstVector` in order
+to build a `BBlock`.
+"""
 function BBlock(id::ID, inst_pairs::Vector{Tuple{ID, NewInstruction}})
     return BBlock(id, first.(inst_pairs), last.(inst_pairs))
 end
@@ -154,8 +163,6 @@ function Base.insert!(bb::BBlock, n::Int, id::ID, inst::NewInstruction)::Nothing
     insert!(bb.insts, n, inst)
     return nothing
 end
-
-# first_id(bb::BBlock) = first(bb.stmt_ids)
 
 """
     terminator(bb::BBlock)
@@ -283,7 +290,7 @@ end
 """
     collect_stmts(ir::BBCode)::Vector{Tuple{ID, CC.NewInstruction}}
 
-Produce a `Vector{Any}` containing all of the statements in `ir`. These are returned in
+Produce a `Vector` containing all of the statements in `ir`. These are returned in
 order, so it is safe to assume that element `n` refers to the `nth` element of the `IRCode`
 associated to `ir`. 
 """
@@ -410,7 +417,7 @@ _block_num_to_ids(d::BlockNumToIdDict, x) = x
 Produce an `IRCode` instance which is equivalent to `bb_code`. The resulting `IRCode`
 shares no memory with `bb_code`, so can be safely mutated without modifying `bb_code`.
 
-All `IDPhiNode`s, `IDGotoIfNot`s, and `IDGotoNode`s are converted back into `PhiNode`s,
+All `IDPhiNode`s, `IDGotoIfNot`s, and `IDGotoNode`s are converted into `PhiNode`s,
 `GotoIfNot`s, and `GotoNode`s respectively.
 
 In the resulting `bb_code`, any `Switch` nodes are lowered into a semantically-equivalent
@@ -418,9 +425,9 @@ collection of `GotoIfNot` nodes.
 """
 function CC.IRCode(bb_code::BBCode)
     bb_code = _lower_switch_statements(bb_code)
-    bb_code = remove_double_edges(bb_code)
+    bb_code = _remove_double_edges(bb_code)
     insts = _ids_to_line_positions(bb_code)
-    cfg = compute_basic_blocks(insts)
+    cfg = _compute_basic_blocks(insts)
     insts = _lines_to_blocks(insts, cfg)
     return IRCode(
         CC.InstructionStream(
@@ -501,7 +508,9 @@ end
 _to_ssas(d::Dict, x::IDGotoNode) = GotoNode(d[x.label].id)
 _to_ssas(d::Dict, x::IDGotoIfNot) = GotoIfNot(get(d, x.cond, x.cond), d[x.dest].id)
 
-function compute_basic_blocks(insts::InstVector)
+# Compute the CFG associated to `insts`. All references to blocks must be references to
+# the SSAValue associated to the first statement in the block.
+function _compute_basic_blocks(insts::InstVector)
     return CC.compute_basic_blocks(Any[inst.stmt for inst in insts])
 end
 
@@ -530,7 +539,7 @@ __lines_to_blocks(::CC.CFG, stmt) = stmt
 
 # If the `dest` field of a `GotoIfNot` node points towards the next block, replace it with
 # a `GotoNode`.
-function remove_double_edges(ir::BBCode)
+function _remove_double_edges(ir::BBCode)
     new_blks = map(enumerate(ir.blocks)) do (n, blk)
         t = terminator(blk)
         if t isa IDGotoIfNot && t.dest == ir.blocks[n+1].id
