@@ -213,10 +213,6 @@ function benchmark_rules!!(
                 end
             end
 
-            # if tune_benchmarks
-            #     @info "tuning"
-            #     tune!(suite)
-            # end
             @info "running"
             return (args, suite)
         end
