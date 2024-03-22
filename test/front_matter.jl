@@ -54,7 +54,8 @@ using Taped:
     ADStmtInfo,
     ad_stmt_info,
     ADInfo,
-    SharedDataPairs
+    SharedDataPairs,
+    increment_field!!
 
 using .TestUtils:
     test_rrule!!,

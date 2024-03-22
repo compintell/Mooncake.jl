@@ -65,7 +65,6 @@ export
     tangent,
     randn_tangent,
     increment!!,
-    increment_field!!,
     NoTangent,
     Tangent,
     MutableTangent,
