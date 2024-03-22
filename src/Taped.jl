@@ -58,6 +58,7 @@ include(joinpath("rrules", "misc.jl"))
 include(joinpath("rrules", "new.jl"))
 
 include("chain_rules_macro.jl")
+include("interface.jl")
 
 export
     primal,
@@ -79,6 +80,7 @@ export
     zero_codual,
     codual_type,
     rrule!!,
-    build_rrule
+    build_rrule,
+    value_and_gradient!!
 
 end

@@ -92,13 +92,4 @@
         z̄ = (x̄..., tangent(y_ȳ))
         @test_throws AssertionError populate_address_map(z, z̄)
     end
-    @testset "toy API" begin
-        f = (x, y) -> x * y + sin(x) * cos(y)
-        x = 5.0
-        y = 4.0
-        rule, in_f = TestUtils.set_up_gradient_problem(f, x, y)
-        v, grad = TestUtils.value_and_gradient!!(rule, in_f, f, x, y)
-        @test v ≈ f(x, y)
-        @test grad isa Tuple{tangent_type(typeof(f)), Float64, Float64}
-    end
 end
