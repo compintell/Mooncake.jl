@@ -27,7 +27,7 @@ using Taped:
     TInterp,
     _typeof
 
-using Taped.TestUtils: _deepcopy, to_benchmark, set_up_gradient_problem
+using Taped.TestUtils: _deepcopy, to_benchmark
 
 function zygote_to_benchmark(ctx, x::Vararg{Any, N}) where {N}
     out, pb = Zygote._pullback(ctx, x...)
