@@ -5,7 +5,6 @@ using ReverseDiff
 # turing_bench_results = DataFrame(
 #     :name => String[],
 #     :primal => [],
-#     :interp => [],
 #     :gradient => [],
 #     :reversediff => [],
 # )
@@ -120,23 +119,15 @@ end
         )
 
         # rule = build_rrule(interp, _typeof((f, x)))
-        # interp_rule, in_f = TestUtils.set_up_gradient_problem(f, x);
-        # interp_codualed_args = map(zero_codual, (in_f, f, x));
         # codualed_args = map(zero_codual, (f, x))
-        # TestUtils.value_and_gradient!!(rule, codualed_args...)
-        # # @profview run_many_times(10, TestUtils.value_and_gradient!!, rule, codualed_args...)
+        # TestUtils.to_benchmark(rule, codualed_args...)
 
         # primal = @benchmark $f($x)
-        # # interp_gradient = @benchmark(TestUtils.value_and_gradient!!($interp_rule, $interp_codualed_args...))
-        # gradient = @benchmark(TestUtils.value_and_gradient!!($rule, $codualed_args...))
+        # gradient = @benchmark(TestUtils.to_benchmark($rule, $codualed_args...))
 
         # println("primal")
         # display(primal)
         # println()
-
-        # # println("interpreted gradient")
-        # # display(interp_gradient)
-        # # println()
 
         # println("gradient")
         # display(gradient)
@@ -157,10 +148,9 @@ end
         #     display("revdiff failed")
         # end
 
-        # # @show time(interp_gradient) / time(primal)
         # @show time(gradient) / time(primal)
 
-        # push!(turing_bench_results, (name, primal, interpreted, gradient, revdiff))
+        # push!(turing_bench_results, (name, primal, gradient, revdiff))
     end
 end
 
@@ -168,7 +158,6 @@ end
 #     out_df = DataFrame(
 #         :name => df.name,
 #         :primal => map(time, df.primal),
-#         :interp => map(time, df.interp),
 #         :gradient => map(time, df.gradient),
 #         :reversediff => map(time, df.reversediff),
 #     )
