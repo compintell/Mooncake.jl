@@ -6,4 +6,8 @@
     v, grad = value_and_gradient!!(rule, f, x, y)
     @test v ≈ f(x, y)
     @test grad isa Tuple{NoTangent, Float64, Float64}
+
+    v, grad2 = value_and_pullback!!(rule, 1.0, f, x, y)
+    @test v ≈ f(x, y)
+    @test grad == grad2
 end

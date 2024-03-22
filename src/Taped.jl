@@ -81,6 +81,7 @@ export
     codual_type,
     rrule!!,
     build_rrule,
-    value_and_gradient!!
+    value_and_gradient!!,
+    value_and_pullback!!
 
 end
