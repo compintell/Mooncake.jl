@@ -92,6 +92,7 @@ Phase 2 is now further along.
 `Taped.jl` now uses something which could reasonably be described as a source-to-source system to perform AD.
 At present the performance of this system is not as good as that of Enzyme, but often beats compiled ReverseDiff, and comfortably beats Zygote in any situations involving dynamic control flow.
 The present focus is on dealing with some remaining performance limitations that should make `Taped.jl`'s performance much closer to that of Enzyme, and consistently beat ReverseDiff on a range of benchmarks.
+Fortunately, dealing with these performance limitations necessitates simplifying the internals substantially.
 
 *Update: (16/01/2024)*
 ~~Phase 2 is now well underway. We now make use of a much faster approach to interpreting / executing Julia code, which yields performance that is comparable with ReverseDiff (when things go well). The current focus is on ironing out performance issues, and simplifying the implementation.~~
