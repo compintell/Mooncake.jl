@@ -10,7 +10,8 @@ function value_and_pullback!!(rule::R, ȳ::T, fx::Vararg{CoDual, N}) where {R, 
     out, pb!! = rule(fx...)
     @assert _typeof(tangent(out)) == T
     ty = increment!!(tangent(out), ȳ)
-    return primal(out), pb!!(ty, map(tangent, fx)...)
+    v = copy(primal(out))
+    return v, pb!!(ty, map(tangent, fx)...)
 end
 
 """
