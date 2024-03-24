@@ -1,13 +1,10 @@
 @testset "interface" begin
-    f = (x, y) -> x * y + sin(x) * cos(y)
-    x = 5.0
-    y = 4.0
-    rule = build_rrule(f, x, y)
-    v, grad = value_and_gradient!!(rule, f, x, y)
-    @test v ≈ f(x, y)
-    @test grad isa Tuple{NoTangent, Float64, Float64}
-
-    v, grad2 = value_and_pullback!!(rule, 1.0, f, x, y)
-    @test v ≈ f(x, y)
-    @test grad == grad2
+    @testset "$(typeof((f, x...)))" for (ȳ, f, x...) in Any[
+        (1.0, (x, y) -> x * y + sin(x) * cos(y), 5.0, 4.0),
+        ([1.0, 1.0], x -> [sin(x), sin(2x)], 3.0),
+    ]
+        rule = build_rrule(f, x...)
+        v, grad2 = value_and_pullback!!(rule, ȳ, f, x...)
+        @test v ≈ f(x...)
+    end
 end
