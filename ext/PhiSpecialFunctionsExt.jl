@@ -1,8 +1,8 @@
-module TapedSpecialFunctionsExt
+module PhiSpecialFunctionsExt
 
-    using SpecialFunctions, Taped
+    using SpecialFunctions, Phi
 
-    import Taped: @from_rrule, DefaultCtx
+    import Phi: @from_rrule, DefaultCtx
 
     @from_rrule DefaultCtx Tuple{typeof(airyai), Float64}
     @from_rrule DefaultCtx Tuple{typeof(airyaix), Float64}

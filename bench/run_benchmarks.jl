@@ -13,21 +13,21 @@ using
     PrettyTables,
     Random,
     ReverseDiff,
-    Taped,
+    Phi,
     Test,
     Turing,
     Zygote
 
-using Taped:
+using Phi:
     CoDual,
     generate_hand_written_rrule!!_test_cases,
     generate_derived_rrule!!_test_cases,
     InterpretedFunction,
     TestUtils,
-    TInterp,
+    PInterp,
     _typeof
 
-using Taped.TestUtils: _deepcopy, to_benchmark
+using Phi.TestUtils: _deepcopy, to_benchmark
 
 function zygote_to_benchmark(ctx, x::Vararg{Any, N}) where {N}
     out, pb = Zygote._pullback(ctx, x...)
@@ -84,7 +84,7 @@ _broadcast_sin_cos_exp(x::AbstractArray{<:Real}) = sum(sin.(cos.(exp.(x))))
 # about all of the operations.
 _simple_mlp(W2, W1, Y, X) = sum(abs2, Y - W2 * map(x -> x * (0 <= x), W1 * X))
 
-# Only Zygote and Taped can actually handle this. Note that Taped only has rules for BLAS
+# Only Zygote and Phi can actually handle this. Note that Phi only has rules for BLAS
 # and LAPACK stuff, not explicit rules for things like the squared euclidean distance.
 # Consequently, Zygote is at a major advantage.
 _gp_lml(x, y, s) = logpdf(GP(SEKernel())(x, s), y)
@@ -174,12 +174,12 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
                 evals=1,
             )
 
-            # Benchmark AD via Taped.
-            @info "taped"
-            rule = Taped.build_rrule(args...)
+            # Benchmark AD via Phi.
+            @info "phi"
+            rule = Phi.build_rrule(args...)
             coduals = map(x -> x isa CoDual ? x : zero_codual(x), args)
             to_benchmark(rule, coduals...)
-            suite["taped"] = @benchmark(to_benchmark($rule, $coduals...))
+            suite["phi"] = @benchmark(to_benchmark($rule, $coduals...))
 
             if include_other_frameworks
 
@@ -219,16 +219,16 @@ end
 function combine_results(result, tag, _range, default_range)
     d = result[2]
     primal_time = time(minimum(d["primal"]))
-    taped_time = time(minimum(d["taped"]))
+    phi_time = time(minimum(d["phi"]))
     zygote_time = in("zygote", keys(d)) ? time(minimum(d["zygote"])) : missing
     rd_time = in("rd", keys(d)) ? time(minimum(d["rd"])) : missing
     ez_time = in("enzyme", keys(d)) ? time(minimum(d["enzyme"])) : missing
-    fallback_tag = string((result[1][1], map(Taped._typeof, result[1][2:end])...))
+    fallback_tag = string((result[1][1], map(Phi._typeof, result[1][2:end])...))
     return (
         tag=tag === nothing ? fallback_tag : tag,
         primal_time=primal_time,
-        taped_time=taped_time,
-        Taped=taped_time / primal_time,
+        phi_time=phi_time,
+        Phi=phi_time / primal_time,
         zygote_time=zygote_time,
         Zygote=zygote_time / primal_time,
         rd_time=rd_time,
@@ -283,7 +283,7 @@ end
 function flag_concerning_performance(ratios)
     @testset "detect concerning performance" begin
         @testset for ratio in ratios
-            @test ratio.range.lb < ratio.Taped < ratio.range.ub
+            @test ratio.range.lb < ratio.Phi < ratio.range.ub
         end
     end
 end
@@ -291,18 +291,18 @@ end
 """
     plot_ratio_histogram!(df::DataFrame)
 
-Constructs a histogram of the `taped_ratio` field of `df`, with formatting that is
+Constructs a histogram of the `phi_ratio` field of `df`, with formatting that is
 well-suited to the numbers typically found in this field.
 """
 function plot_ratio_histogram!(df::DataFrame)
     bin = 10.0 .^ (0.0:0.05:6.0)
     xlim = extrema(bin)
-    histogram(df.Taped; xscale=:log10, xlim, bin, title="log", label="")
+    histogram(df.Phi; xscale=:log10, xlim, bin, title="log", label="")
 end
 
 function create_inter_ad_benchmarks()
     results = benchmark_inter_framework_rules()
-    tools = [:Taped, :Zygote, :ReverseDiff, :Enzyme]
+    tools = [:Phi, :Zygote, :ReverseDiff, :Enzyme]
     df = DataFrame(results)[:, [:tag, tools...]]
 
     # Plot graph of results.

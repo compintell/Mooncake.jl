@@ -11,7 +11,7 @@ end
 
 TICache() = TICache(IdDict{Core.MethodInstance, Core.CodeInstance}())
 
-struct TapedInterpreter{C} <: CC.AbstractInterpreter
+struct PhiInterpreter{C} <: CC.AbstractInterpreter
     meta # additional information
     world::UInt
     inf_params::CC.InferenceParams
@@ -19,7 +19,7 @@ struct TapedInterpreter{C} <: CC.AbstractInterpreter
     inf_cache::Vector{CC.InferenceResult}
     code_cache::TICache
     oc_cache::Dict{Any, Any}
-    function TapedInterpreter(
+    function PhiInterpreter(
         ::Type{C};
         meta=nothing,
         world::UInt=Base.get_world_counter(),
@@ -32,15 +32,15 @@ struct TapedInterpreter{C} <: CC.AbstractInterpreter
     end
 end
 
-TapedInterpreter() = TapedInterpreter(DefaultCtx)
+PhiInterpreter() = PhiInterpreter(DefaultCtx)
 
-const TInterp = TapedInterpreter
+const PInterp = PhiInterpreter
 
-CC.InferenceParams(interp::TInterp) = interp.inf_params
-CC.OptimizationParams(interp::TInterp) = interp.opt_params
-CC.get_world_counter(interp::TInterp) = interp.world
-CC.get_inference_cache(interp::TInterp) = interp.inf_cache
-function CC.code_cache(interp::TInterp)
+CC.InferenceParams(interp::PInterp) = interp.inf_params
+CC.OptimizationParams(interp::PInterp) = interp.opt_params
+CC.get_world_counter(interp::PInterp) = interp.world
+CC.get_inference_cache(interp::PInterp) = interp.inf_cache
+function CC.code_cache(interp::PInterp)
     return CC.WorldView(interp.code_cache, CC.WorldRange(interp.world))
 end
 function CC.get(wvc::CC.WorldView{TICache}, mi::Core.MethodInstance, default)
@@ -62,7 +62,7 @@ _type(x::CC.PartialStruct) = x.typ
 _type(x::CC.Conditional) = Union{x.thentype, x.elsetype}
 
 function CC.inlining_policy(
-    interp::TapedInterpreter{C},
+    interp::PhiInterpreter{C},
     @nospecialize(src),
     @nospecialize(info::CC.CallInfo),
     stmt_flag::UInt8,
@@ -85,4 +85,4 @@ function CC.inlining_policy(
     )
 end
 
-context_type(::TInterp{C}) where {C} = C
+context_type(::PInterp{C}) where {C} = C

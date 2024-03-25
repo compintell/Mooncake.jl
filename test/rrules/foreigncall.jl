@@ -10,7 +10,7 @@
     ]
         @test_throws(
             ErrorException,
-            Taped.rrule!!(zero_codual(Taped._foreigncall_), zero_codual(Val(name))),
+            Phi.rrule!!(zero_codual(Phi._foreigncall_), zero_codual(Val(name))),
         )
     end
 end

@@ -1,4 +1,4 @@
-name = "Taped"
+name = "Phi"
 uuid = "07d77754-e150-4737-8c94-cd238a1fb45b"
 authors = ["Will Tebbutt and contributors"]
 version = "0.1.0"
@@ -21,7 +21,7 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 
 [extensions]
-TapedSpecialFunctionsExt = "SpecialFunctions"
+PhiSpecialFunctionsExt = "SpecialFunctions"
 
 [compat]
 BenchmarkTools = "1"
