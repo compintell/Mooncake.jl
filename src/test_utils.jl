@@ -11,7 +11,7 @@ module TestTypes
 using Base.Iterators: product
 using Core: svec
 using ExprTools: combinedef
-using ..Taped: NoTangent, tangent_type, _typeof
+using ..Phi: NoTangent, tangent_type, _typeof
 
 const PRIMALS = Tuple{Bool, Any}[]
 
@@ -84,8 +84,8 @@ interfaces that this package defines have been implemented correctly.
 """
 module TestUtils
 
-using JET, Random, Taped, Test, InteractiveUtils
-using Taped:
+using JET, Random, Phi, Test, InteractiveUtils
+using Phi:
     CoDual, NoTangent, rrule!!, is_init, zero_codual, DefaultCtx, @is_primitive, val,
     is_always_fully_initialised, get_tangent_field, set_tangent_field!, MutableTangent,
     Tangent, _typeof
@@ -289,7 +289,7 @@ function test_rrule_interface(f_f̄, x_x̄...; is_primitive, ctx::C, rule) where
     # Verify that the function to which the rrule applies is considered a primitive.
     # It is not clear that this really belongs here to be frank.
     if is_primitive
-        @test Taped.is_primitive(C, _typeof((f, x...)))
+        @test Phi.is_primitive(C, _typeof((f, x...)))
     end
 
     # Run the primal programme. Bail out early if this doesn't work.
@@ -446,7 +446,7 @@ function test_interpreted_rrule!!(rng::AbstractRNG, x...; interp, kwargs...)
 end
 
 function test_derived_rule(rng::AbstractRNG, x...; interp, kwargs...)
-    rule = Taped.build_rrule(interp, _typeof(__get_primals(x)))
+    rule = Phi.build_rrule(interp, _typeof(__get_primals(x)))
     test_rrule!!(rng, x...; rule, kwargs...)
 end
 
@@ -621,19 +621,19 @@ end
 function test_set_tangent_field!_correctness(t1::T, t2::T) where {T<:MutableTangent}
     Tfields = _typeof(t1.fields)
     for n in 1:fieldcount(Tfields)
-        !Taped.is_init(t2.fields[n]) && continue
+        !Phi.is_init(t2.fields[n]) && continue
         v = get_tangent_field(t2, n)
 
         # Int form.
-        v′ = Taped.set_tangent_field!(t1, n, v)
+        v′ = Phi.set_tangent_field!(t1, n, v)
         @test v′ === v
-        @test Taped.get_tangent_field(t1, n) === v
+        @test Phi.get_tangent_field(t1, n) === v
 
         # Symbol form.
         s = fieldname(Tfields, n)
-        g = Taped.set_tangent_field!(t1, s, v)
+        g = Phi.set_tangent_field!(t1, s, v)
         @test g === v
-        @test Taped.get_tangent_field(t1, n) === v
+        @test Phi.get_tangent_field(t1, n) === v
     end
 end
 
@@ -701,7 +701,7 @@ function test_set_tangent_field!_performance(t1::T, t2::T) where {V, T<:MutableT
         _set_tangent_field!(t1, Val(n), v)
         JET.@report_opt _set_tangent_field!(t1, Val(n), v)
 
-        if all(n -> !(fieldtype(V, n) <: Taped.PossiblyUninitTangent), 1:fieldcount(V))
+        if all(n -> !(fieldtype(V, n) <: Phi.PossiblyUninitTangent), 1:fieldcount(V))
             i = Val(n)
             _set_tangent_field!(t1, i, v)
             @test count_allocs(_set_tangent_field!, t1, i, v) == 0
@@ -712,7 +712,7 @@ function test_set_tangent_field!_performance(t1::T, t2::T) where {V, T<:MutableT
         @inferred _set_tangent_field!(t1, s, v)
         JET.@report_opt _set_tangent_field!(t1, s, v)
 
-        if all(n -> !(fieldtype(V, n) <: Taped.PossiblyUninitTangent), 1:fieldcount(V))
+        if all(n -> !(fieldtype(V, n) <: Phi.PossiblyUninitTangent), 1:fieldcount(V))
             _set_tangent_field!(t1, s, v)
             @test count_allocs(_set_tangent_field!, t1, s, v) == 0
         end
@@ -720,7 +720,7 @@ function test_set_tangent_field!_performance(t1::T, t2::T) where {V, T<:MutableT
 end
 
 function test_get_tangent_field_performance(t::Union{MutableTangent, Tangent})
-    V = Taped._typeof(t.fields)
+    V = Phi._typeof(t.fields)
     for n in 1:fieldcount(V)
         !is_init(t.fields[n]) && continue
 
@@ -757,7 +757,7 @@ __tangent_generation_should_allocate(::Type{P}) where {P<:Array} = true
 
 function __increment_should_allocate(::Type{P}) where {P}
     return any(eachindex(fieldtypes(P))) do n
-        Taped.tangent_field_type(P, n) <: PossiblyUninitTangent
+        Phi.tangent_field_type(P, n) <: PossiblyUninitTangent
     end
 end
 
@@ -800,10 +800,10 @@ function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P,
     @test Tt == _typeof(z)
 
     # Check that zero_tangent is deterministic.
-    @test has_equal_data(z, Taped.zero_tangent(p))
+    @test has_equal_data(z, Phi.zero_tangent(p))
 
     # Check that zero_tangent infers.
-    @test has_equal_data(z, @inferred Taped.zero_tangent(p))
+    @test has_equal_data(z, @inferred Phi.zero_tangent(p))
 
     # Verify that the zero tangent is zero via its action.
     zc = deepcopy(z)
@@ -878,15 +878,15 @@ function test_equality_comparison(x)
 end
 
 function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)
-    test_cases, memory = Taped.generate_hand_written_rrule!!_test_cases(rng_ctor, v)
+    test_cases, memory = Phi.generate_hand_written_rrule!!_test_cases(rng_ctor, v)
     GC.@preserve memory @testset "$f, $(_typeof(x))" for (interface_only, perf_flag, _, f, x...) in test_cases
         test_rrule!!(rng_ctor(123), f, x...; interface_only, perf_flag)
     end
 end
 
 function run_derived_rrule!!_test_cases(rng_ctor, v::Val)
-    interp = Taped.TInterp()
-    test_cases, memory = Taped.generate_derived_rrule!!_test_cases(rng_ctor, v)
+    interp = Phi.PInterp()
+    test_cases, memory = Phi.generate_derived_rrule!!_test_cases(rng_ctor, v)
     GC.@preserve memory @testset "$f, $(typeof(x))" for
         (interface_only, perf_flag, _, f, x...) in test_cases
         test_derived_rule(
@@ -906,7 +906,7 @@ function to_benchmark(__rrule!!::R, dx::Vararg{CoDual, N}) where {R, N}
 end
 
 """
-    set_up_gradient_problem(fargs...; interp=Taped.TInterp())
+    set_up_gradient_problem(fargs...; interp=Phi.PInterp())
 
 Constructs a `rule` and `InterpretedFunction` which can be passed to `value_and_gradient!!`.
 
@@ -914,8 +914,8 @@ For example:
 ```julia
 f(x) = sum(abs2, x)
 x = randn(25)
-rule, in_f = Taped.TestUtils.set_up_gradient_problem(f, x)
-y, dx = Taped.TestUtils.value_and_gradient!!(rule, in_f, f, x)
+rule, in_f = Phi.TestUtils.set_up_gradient_problem(f, x)
+y, dx = Phi.TestUtils.value_and_gradient!!(rule, in_f, f, x)
 ```
 will yield the value and associated gradient for `f` and `x`.
 
@@ -924,15 +924,15 @@ with the same `rule` and `in_f` arguments, but with different values of `x`.
 
 Optionally, an interpreter may be provided via the `interp` kwarg.
 
-See also: `Taped.TestUtils.value_and_gradient!!`.
+See also: `Phi.TestUtils.value_and_gradient!!`.
 """
-function set_up_gradient_problem(fargs...; interp=Taped.TInterp())
+function set_up_gradient_problem(fargs...; interp=Phi.PInterp())
     sig = _typeof(__get_primals(fargs))
-    if Taped.is_primitive(DefaultCtx, sig)
-        return rrule!!, Taped._eval
+    if Phi.is_primitive(DefaultCtx, sig)
+        return rrule!!, Phi._eval
     else
-        in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp)
-        return Taped.build_rrule!!(in_f), in_f
+        in_f = Phi.InterpretedFunction(DefaultCtx(), sig, interp)
+        return Phi.build_rrule!!(in_f), in_f
     end
 end
 
@@ -949,8 +949,8 @@ AD anything.
 """
 module TestResources
 
-using ..Taped
-using ..Taped:
+using ..Phi
+using ..Phi:
     CoDual, Tangent, MutableTangent, NoTangent, PossiblyUninitTangent, ircode,
     @is_primitive, MinimalCtx, val
 
@@ -1357,7 +1357,7 @@ end
 @noinline edge_case_tester(x::Int) = 10
 @noinline edge_case_tester(x::String) = "hi"
 @is_primitive MinimalCtx Tuple{typeof(edge_case_tester), Float64}
-function Taped.rrule!!(::CoDual{typeof(edge_case_tester)}, x::CoDual{Float64})
+function Phi.rrule!!(::CoDual{typeof(edge_case_tester)}, x::CoDual{Float64})
     edge_case_tester_pb!!(dy, df, dx) = df, dx + 5 * dy
     return CoDual(5 * primal(x), 0.0), edge_case_tester_pb!!
 end
@@ -1379,7 +1379,7 @@ sr(n) = Xoshiro(n)
     return a < b ? a * b : test_self_reference(b, a) + a
 end
 
-# See https://github.com/withbayes/Taped.jl/pull/84 for info
+# See https://github.com/withbayes/Phi.jl/pull/84 for info
 @noinline function test_recursive_sum(x::Vector{Float64})
     isempty(x) && return 0.0
     return @inbounds x[1] + test_recursive_sum(x[2:end])
@@ -1589,7 +1589,7 @@ function _setfield!(value::MutableTangent, name, x)
     return x
 end
 
-function Taped.rrule!!(::Taped.CoDual{typeof(my_setfield!)}, value, name, x)
+function Phi.rrule!!(::Phi.CoDual{typeof(my_setfield!)}, value, name, x)
     _name = primal(name)
     old_x = isdefined(primal(value), _name) ? getfield(primal(value), _name) : nothing
     function setfield!_pullback(dy, df, dvalue, ::NoTangent, dx)
@@ -1598,7 +1598,7 @@ function Taped.rrule!!(::Taped.CoDual{typeof(my_setfield!)}, value, name, x)
         old_x !== nothing && setfield!(primal(value), _name, old_x)
         return df, dvalue, NoTangent(), new_dx
     end
-    y = Taped.CoDual(
+    y = Phi.CoDual(
         setfield!(primal(value), _name, primal(x)),
         _setfield!(tangent(value), _name, tangent(x)),
     )

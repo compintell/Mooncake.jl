@@ -22,7 +22,7 @@ function ircode(
     cfg = CC.compute_basic_blocks(insts)
     insts = __line_numbers_to_block_numbers!(insts, cfg)
     stmts = __insts_to_instruction_stream(insts)
-    linetable = [CC.LineInfoNode(Taped, :ircode, :ir_utils, Int32(1), Int32(0))]
+    linetable = [CC.LineInfoNode(Phi, :ircode, :ir_utils, Int32(1), Int32(0))]
     meta = Expr[]
     return CC.IRCode(stmts, cfg, linetable, argtypes, meta, CC.VarState[])
 end
@@ -89,7 +89,7 @@ the types in your IR are not being refined, you may wish to check that neither o
 things are happening.
 """
 function infer_ir!(ir::IRCode)
-    return __infer_ir!(ir, CC.NativeInterpreter(), __get_toplevel_mi_from_ir(ir, Taped))
+    return __infer_ir!(ir, CC.NativeInterpreter(), __get_toplevel_mi_from_ir(ir, Phi))
 end
 
 # Sometimes types in `IRCode` have been replaced by constants, or partially-completed

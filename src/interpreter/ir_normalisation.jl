@@ -4,9 +4,9 @@
 Apply a sequence of standardising transformations to `ir` which leaves its semantics
 unchanged, but makes AD more straightforward. In particular, replace
 1. `:invoke` `Expr`s with `:call`s,
-2. `:foreigncall` `Expr`s with `:call`s to `Taped._foreigncall_`,
-3. `:new` `Expr`s with `:call`s to `Taped._new_`,
-4. `Core.IntrinsicFunction`s with counterparts from `Taped.IntrinsicWrappers`,
+2. `:foreigncall` `Expr`s with `:call`s to `Phi._foreigncall_`,
+3. `:new` `Expr`s with `:call`s to `Phi._new_`,
+4. `Core.IntrinsicFunction`s with counterparts from `Phi.IntrinsicWrappers`,
 5. `getfield(x, 1)` with `lgetfield(x, Val(1))`, and related transformations.
 
 `spnames` are the names associated to the static parameters of `ir`. These are needed when
@@ -15,7 +15,7 @@ static parameter names have been translated into either types, or `:static_param
 expressions.
 
 Unfortunately, the static parameter names are not retained in `IRCode`, and the `Method`
-from which the `IRCode` is derived must be consulted. `Taped.is_vararg_sig_and_sparam_names`
+from which the `IRCode` is derived must be consulted. `Phi.is_vararg_sig_and_sparam_names`
 provides a convenient way to do this.
 """
 function normalise!(ir::IRCode, spnames::Vector{Symbol})
@@ -34,12 +34,12 @@ end
     foreigncall_to_call(inst, sp_map::Dict{Symbol, CC.VarState})
 
 If `inst` is a `:foreigncall` expression translate it into an equivalent `:call` expression.
-If anything else, just return `inst`. See `Taped._foreigncall_` for details.
+If anything else, just return `inst`. See `Phi._foreigncall_` for details.
 
 `sp_map` maps the names of the static parameters to their values. This function is intended
 to be called in the context of an `IRCode`, in which case the values of `sp_map` are given
 by the `sptypes` field of said `IRCode`. The keys should generally be obtained from the
-`Method` from which the `IRCode` is derived. See `Taped.normalise!` for more details.
+`Method` from which the `IRCode` is derived. See `Phi.normalise!` for more details.
 """
 function foreigncall_to_call(inst, sp_map::Dict{Symbol, CC.VarState})
     if Meta.isexpr(inst, :foreigncall)
@@ -109,7 +109,7 @@ end
 """
     new_to_call(x)
 
-If instruction `x` is a `:new` expression, replace if with a `:call` to `Taped._new_`.
+If instruction `x` is a `:new` expression, replace if with a `:call` to `Phi._new_`.
 Otherwise, return `x`.
 """
 new_to_call(x) = Meta.isexpr(x, :new) ? Expr(:call, _new_, x.args...) : x
@@ -118,7 +118,7 @@ new_to_call(x) = Meta.isexpr(x, :new) ? Expr(:call, _new_, x.args...) : x
     intrinsic_to_function(inst)
 
 If `inst` is a `:call` expression to a `Core.IntrinsicFunction`, replace it with a call to
-the corresponding `function` from `Taped.IntrinsicsWrappers`, else return `inst`.
+the corresponding `function` from `Phi.IntrinsicsWrappers`, else return `inst`.
 
 `cglobal` is a special case -- it requires that its first argument be static in exactly the
 same way as `:foreigncall`. See `IntrinsicsWrappers.__cglobal` for more info.

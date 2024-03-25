@@ -4,7 +4,7 @@ _sym(A) = A'A
 _pdmat(A) = PDMat(_sym(A) + 5I)
 
 @testset "distributions" begin
-    interp = Taped.TInterp()
+    interp = Phi.PInterp()
     @testset "$(typeof(d))" for (interface_only, d, x) in Any[
 
         #

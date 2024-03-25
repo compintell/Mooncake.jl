@@ -15,8 +15,8 @@
 module IntrinsicsWrappers
 
 using Core: Intrinsics
-using Taped
-import ..Taped:
+using Phi
+import ..Phi:
     rrule!!, CoDual, primal, tangent, zero_tangent, NoPullback,
     tangent_type, increment!!, @is_primitive, MinimalCtx, is_primitive
 
@@ -110,17 +110,17 @@ pointer to, is known statically. In this regard it is like foreigncalls.
 
 As a consequence, it requires special handling. The name is converted into a `Val` so that
 it is available statically, and the function into which `cglobal` calls are converted is
-named `Taped.IntrinsicsWrappers.__cglobal`, rather than `Taped.IntrinsicsWrappers.cglobal`.
+named `Phi.IntrinsicsWrappers.__cglobal`, rather than `Phi.IntrinsicsWrappers.cglobal`.
 
-If you examine the code associated with `Taped.intrinsic_to_function`, you will see that
+If you examine the code associated with `Phi.intrinsic_to_function`, you will see that
 special handling of `cglobal` is used.
 =#
 __cglobal(::Val{s}, x::Vararg{Any, N}) where {s, N} = cglobal(s, x...)
 
 translate(::Val{Intrinsics.cglobal}) = __cglobal
-Taped.is_primitive(::Type{MinimalCtx}, ::Type{<:Tuple{typeof(__cglobal), Vararg}}) = true
+Phi.is_primitive(::Type{MinimalCtx}, ::Type{<:Tuple{typeof(__cglobal), Vararg}}) = true
 function rrule!!(::CoDual{typeof(__cglobal)}, args...)
-    return Taped.uninit_codual(__cglobal(map(primal, args)...)), NoPullback()
+    return Phi.uninit_codual(__cglobal(map(primal, args)...)), NoPullback()
 end
 
 @inactive_intrinsic checked_sadd_int

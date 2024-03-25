@@ -9,10 +9,10 @@
         @test _typeof((a=5.0, b=Float64)) == @NamedTuple{a::Float64, b::Type{Float64}}
     end
     @testset "tuple_map" begin
-        @test map(sin, (5.0, 4.0)) == Taped.tuple_map(sin, (5.0, 4.0))
+        @test map(sin, (5.0, 4.0)) == Phi.tuple_map(sin, (5.0, 4.0))
         @test ==(
             map(*, (5, 4.0, 3), (5.0, 4, 3.0)),
-            Taped.tuple_map(*, (5, 4.0, 3), (5.0, 4, 3.0)),
+            Phi.tuple_map(*, (5, 4.0, 3), (5.0, 4, 3.0)),
         )
     end
 end

@@ -13,9 +13,9 @@ end
         f, args... = fargs
         insts = only(code_typed(f, _typeof(args)))[1].code
     
-        # Use Taped.ircode to build an `IRCode`.
+        # Use Phi.ircode to build an `IRCode`.
         argtypes = Any[map(_typeof, fargs)...]
-        ir = Taped.ircode(insts, argtypes)
+        ir = Phi.ircode(insts, argtypes)
 
         # Check the validity of the `IRCode`, and that an OpaqueClosure constructed using it
         # gives the same answer as the original function.
@@ -25,7 +25,7 @@ end
     @testset "infer_ir!" begin
 
         # Generate IR without any types. 
-        ir = Taped.ircode(
+        ir = Phi.ircode(
             Any[
                 Expr(:call, GlobalRef(Base, :sin), Argument(2)),
                 Expr(:call, cos, SSAValue(1)),
@@ -35,7 +35,7 @@ end
         )
 
         # Run inference and check that the types are as expected.
-        ir = Taped.infer_ir!(ir)
+        ir = Phi.infer_ir!(ir)
         @test ir.stmts.type[1] == Float64
         @test ir.stmts.type[2] == Float64
 
@@ -68,31 +68,31 @@ end
             (ReturnNode(SSAValue(3)), ReturnNode(SSAValue(3))),
             (ReturnNode(), ReturnNode()),
         ]
-            @test Taped.replace_uses_with(val, SSAValue(1), SSAValue(2)) == target
+            @test Phi.replace_uses_with(val, SSAValue(1), SSAValue(2)) == target
         end
         @testset "PhiNode with undefined" begin
             vals_with_undef_1 = Vector{Any}(undef, 2)
             vals_with_undef_1[2] = SSAValue(1)
             val = PhiNode(Int32[1, 2], vals_with_undef_1)
-            result = Taped.replace_uses_with(val, SSAValue(1), SSAValue(2))
+            result = Phi.replace_uses_with(val, SSAValue(1), SSAValue(2))
             @test result.values[2] == SSAValue(2)
             @test !isassigned(result.values, 1)
         end
     end
     @testset "globalref_type" begin
-        @test Taped.globalref_type(GlobalRef(IRUtilsGlobalRefs, :__x_1)) == Any
-        @test Taped.globalref_type(GlobalRef(IRUtilsGlobalRefs, :__x_2)) == Float64
-        @test Taped.globalref_type(GlobalRef(IRUtilsGlobalRefs, :__x_3)) == Float64
-        @test Taped.globalref_type(GlobalRef(IRUtilsGlobalRefs, :__x_4)) == Float64
+        @test Phi.globalref_type(GlobalRef(IRUtilsGlobalRefs, :__x_1)) == Any
+        @test Phi.globalref_type(GlobalRef(IRUtilsGlobalRefs, :__x_2)) == Float64
+        @test Phi.globalref_type(GlobalRef(IRUtilsGlobalRefs, :__x_3)) == Float64
+        @test Phi.globalref_type(GlobalRef(IRUtilsGlobalRefs, :__x_4)) == Float64
     end
     @testset "unhandled_feature" begin
-        @test_throws Taped.UnhandledLanguageFeatureException Taped.unhandled_feature("foo")
+        @test_throws Phi.UnhandledLanguageFeatureException Phi.unhandled_feature("foo")
     end
     @testset "inc_args" begin
-        @test Taped.inc_args(Expr(:call, sin, Argument(4))) == Expr(:call, sin, Argument(5))
-        @test Taped.inc_args(ReturnNode(Argument(2))) == ReturnNode(Argument(3))
+        @test Phi.inc_args(Expr(:call, sin, Argument(4))) == Expr(:call, sin, Argument(5))
+        @test Phi.inc_args(ReturnNode(Argument(2))) == ReturnNode(Argument(3))
         id = ID()
-        @test Taped.inc_args(IDGotoIfNot(Argument(1), id)) == IDGotoIfNot(Argument(2), id)
-        @test Taped.inc_args(IDGotoNode(id)) == IDGotoNode(id)
+        @test Phi.inc_args(IDGotoIfNot(Argument(1), id)) == IDGotoIfNot(Argument(2), id)
+        @test Phi.inc_args(IDGotoNode(id)) == IDGotoNode(id)
     end
 end

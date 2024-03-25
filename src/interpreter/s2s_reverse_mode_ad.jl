@@ -76,7 +76,7 @@ This data structure is used to hold "global" information associated to a particu
 `build_rrule`. It is used as a means of communication between `make_ad_stmts!` and the
 codegen which produces the forwards- and reverse-passes.
 
-- `interp`: a `TapedInterpreter`.
+- `interp`: a `PhiInterpreter`.
 - `block_stack_id`: the ID associated to the block stack -- the stack which keeps track of
     which blocks we visited during the forwards-pass, and which is used on the reverse-pass
     to determine which blocks to visit.
@@ -98,7 +98,7 @@ codegen which produces the forwards- and reverse-passes.
     `shared_data_pairs`.
 =#
 struct ADInfo
-    interp::TInterp
+    interp::PInterp
     block_stack_id::ID
     block_stack::Stack{Int32}
     entry_id::ID
@@ -111,7 +111,7 @@ end
 
 # The constructor that you should use for ADInfo.
 function ADInfo(
-    interp::TInterp,
+    interp::PInterp,
     arg_types::Dict{Argument, Any},
     ssa_insts::Dict{ID, NewInstruction},
     arg_tangent_stacks,
@@ -376,12 +376,12 @@ end
 get_const_primal_value(x::QuoteNode) = x.value
 get_const_primal_value(x) = x
 
-# Taped does not yet handle `PhiCNode`s. Throw an error if one is encountered.
+# Phi does not yet handle `PhiCNode`s. Throw an error if one is encountered.
 function make_ad_stmts!(stmt::Core.PhiCNode, ::ID, ::ADInfo)
     unhandled_feature("Encountered PhiCNode: $stmt")
 end
 
-# Taped does not yet handle `UpsilonNode`s. Throw an error if one is encountered.
+# Phi does not yet handle `UpsilonNode`s. Throw an error if one is encountered.
 function make_ad_stmts!(stmt::Core.UpsilonNode, ::ID, ::ADInfo)
     unhandled_feature("Encountered UpsilonNode: $stmt")
 end
@@ -667,7 +667,7 @@ end
 # Compute the concrete type of the rule that will be returned from `build_rrule`. This is
 # important for performance in dynamic dispatch, and to ensure that recursion works
 # properly.
-function rule_type(interp::TapedInterpreter{C}, ::Type{sig}) where {C, sig}
+function rule_type(interp::PhiInterpreter{C}, ::Type{sig}) where {C, sig}
     is_primitive(C, sig) && return typeof(rrule!!)
 
     ir, _ = lookup_ir(interp, sig)
@@ -736,16 +736,16 @@ end
 Helper method. Only uses static information from `args`.
 """
 function build_rrule(args...)
-    return build_rrule(TapedInterpreter(), _typeof(TestUtils.__get_primals(args)))
+    return build_rrule(PhiInterpreter(), _typeof(TestUtils.__get_primals(args)))
 end
 
 """
-    build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
+    build_rrule(interp::PInterp{C}, sig::Type{<:Tuple}) where {C}
 
 Returns a `DerivedRule` which is an `rrule!!` for `sig` in context `C`. See the docstring
 for `rrule!!` for more info.
 """
-function build_rrule(interp::TInterp{C}, sig::Type{<:Tuple}) where {C}
+function build_rrule(interp::PInterp{C}, sig::Type{<:Tuple}) where {C}
 
     # Reset id count. This ensures that everything in this function is deterministic.
     seed_id!()
@@ -980,7 +980,7 @@ __switch_case(id::Int32, predecessor_id::Int32) = !(id === predecessor_id)
 
 
 #=
-    DynamicDerivedRule(interp::TapedInterpreter)
+    DynamicDerivedRule(interp::PhiInterpreter)
 
 For internal use only.
 
@@ -994,7 +994,7 @@ struct DynamicDerivedRule{T, V}
     cache::V
 end
 
-DynamicDerivedRule(interp::TapedInterpreter) = DynamicDerivedRule(interp, Dict{Any, Any}())
+DynamicDerivedRule(interp::PhiInterpreter) = DynamicDerivedRule(interp, Dict{Any, Any}())
 
 function (dynamic_rule::DynamicDerivedRule)(args::Vararg{Any, N}) where {N}
     sig = Tuple{map(_typeof, map(primal, args))...}
@@ -1020,7 +1020,7 @@ mutable struct LazyDerivedRule{Trule, T, V}
     interp::T
     sig::V
     rule::Trule
-    function LazyDerivedRule(interp::T, sig::V) where {T<:TInterp, V<:Type{<:Tuple}}
+    function LazyDerivedRule(interp::T, sig::V) where {T<:PInterp, V<:Type{<:Tuple}}
         return new{rule_type(interp, sig), T, V}(interp, sig)
     end
 end

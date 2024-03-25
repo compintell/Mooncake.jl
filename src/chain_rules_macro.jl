@@ -4,7 +4,7 @@ __increment_shim!!(x, y) = increment!!(x, y)
 """
     @from_rrule ctx sig
 
-Creates a `Taped.rrule!!` from a `ChainRulesCore.rrule`. `ctx` is the type of the context in
+Creates a `Phi.rrule!!` from a `ChainRulesCore.rrule`. `ctx` is the type of the context in
 which this rule should apply, and `sig` is the type-tuple which specifies which primal the
 rule should apply to.
 
@@ -12,7 +12,7 @@ For example,
 ```julia
 @from_rrule DefaultCtx Tuple{typeof(sin), Float64}
 ```
-would define a `Taped.rrule!!` for `sin` of `Float64`s, by calling `ChainRulesCore.rrule`.
+would define a `Phi.rrule!!` for `sin` of `Float64`s, by calling `ChainRulesCore.rrule`.
 
 Health warning:
 Use this function with care. It has only been tested for `Float64` arguments and arguments
@@ -29,13 +29,13 @@ macro from_rrule(ctx, sig)
     arg_type_symbols = sig.args[2:end]
 
     arg_names = map(n -> Symbol("x_$n"), eachindex(arg_type_symbols))
-    arg_types = map(t -> :(Taped.CoDual{<:$t}), arg_type_symbols)
+    arg_types = map(t -> :(Phi.CoDual{<:$t}), arg_type_symbols)
     arg_exprs = map((n, t) -> :($n::$t), arg_names, arg_types)
 
     call_rrule = Expr(
         :call,
-        :(Taped.ChainRulesCore.rrule),
-        map(n -> :(Taped.primal($n)), arg_names)...,
+        :(Phi.ChainRulesCore.rrule),
+        map(n -> :(Phi.primal($n)), arg_names)...,
     )
 
     pb_arg_names = map(n -> Symbol("dx_$(n)"), eachindex(arg_names))
@@ -45,7 +45,7 @@ macro from_rrule(ctx, sig)
     incrementers = Expr(
         :tuple,
         map(pb_arg_names, pb_output_names) do a, b
-            :(Taped.__increment_shim!!($a, $b))
+            :(Phi.__increment_shim!!($a, $b))
         end...,
     )
 
@@ -62,18 +62,18 @@ macro from_rrule(ctx, sig)
     rule_expr = ExprTools.combinedef(
         Dict(
             :head => :function,
-            :name => :(Taped.rrule!!),
+            :name => :(Phi.rrule!!),
             :args => arg_exprs,
             :body => quote
                 y, pb = $call_rrule
                 $pb
-                return Taped.zero_codual(y), pb!!
+                return Phi.zero_codual(y), pb!!
             end,
         )
     )
 
     ex = quote
-        Taped.is_primitive(::Type{$ctx}, ::Type{$sig}) = true
+        Phi.is_primitive(::Type{$ctx}, ::Type{$sig}) = true
         $rule_expr
     end
     return esc(ex)

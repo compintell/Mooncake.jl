@@ -3,9 +3,9 @@
     @testset "misc utility" begin
         x = randn(4, 5)
         p = Base.unsafe_convert(Ptr{Float64}, x)
-        @test Taped.wrap_ptr_as_view(p, 4, 4, 5) == x
-        @test Taped.wrap_ptr_as_view(p, 4, 2, 5) == x[1:2, :]
-        @test Taped.wrap_ptr_as_view(p, 4, 2, 3) == x[1:2, 1:3]
+        @test Phi.wrap_ptr_as_view(p, 4, 4, 5) == x
+        @test Phi.wrap_ptr_as_view(p, 4, 2, 5) == x[1:2, :]
+        @test Phi.wrap_ptr_as_view(p, 4, 2, 3) == x[1:2, 1:3]
     end
 
     @testset "lgetfield" begin
@@ -19,11 +19,11 @@
     end
     @testset "lsetfield!" begin
         x = TestResources.MutableFoo(5.0, randn(5))
-        @test Taped.lsetfield!(x, Val(:a), 4.0) == 4.0
+        @test Phi.lsetfield!(x, Val(:a), 4.0) == 4.0
         @test x.a == 4.0
 
         new_b = zeros(10)
-        @test Taped.lsetfield!(x, Val(:b), new_b) === new_b
+        @test Phi.lsetfield!(x, Val(:b), new_b) === new_b
         @test x.b === new_b
     end
 

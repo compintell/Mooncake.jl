@@ -8,7 +8,7 @@ end
 @testset "s2s_reverse_mode_ad" begin
     @testset "SharedDataPairs" begin
         m = SharedDataPairs()
-        id = Taped.add_data!(m, 5.0)
+        id = Phi.add_data!(m, 5.0)
         @test length(m.pairs) == 1
         @test m.pairs[1][1] == id
         @test m.pairs[1][2] == 5.0
@@ -21,22 +21,22 @@ end
             id_ssa_1 => CC.NewInstruction(nothing, Float64),
             id_ssa_2 => CC.NewInstruction(nothing, Any),
         )
-        info = ADInfo(Taped.TInterp(), arg_types, ssa_insts, Any[])
+        info = ADInfo(Phi.PInterp(), arg_types, ssa_insts, Any[])
 
         # Verify that we can access the interpreter and terminator block ID.
-        @test info.interp isa Taped.TInterp
+        @test info.interp isa Phi.PInterp
 
         # Verify that we can get the type associated to Arguments, IDs, and others.
         global ___x = 5.0
         global ___y::Float64 = 5.0
-        @test Taped.get_primal_type(info, Argument(1)) == Float64
-        @test Taped.get_primal_type(info, Argument(2)) == Int
-        @test Taped.get_primal_type(info, id_ssa_1) == Float64
-        @test Taped.get_primal_type(info, GlobalRef(Base, :sin)) == typeof(sin)
-        @test Taped.get_primal_type(info, GlobalRef(Main, :___x)) == Any
-        @test Taped.get_primal_type(info, GlobalRef(Main, :___y)) == Float64
-        @test Taped.get_primal_type(info, 5) == Int
-        @test Taped.get_primal_type(info, QuoteNode(:hello)) == Symbol
+        @test Phi.get_primal_type(info, Argument(1)) == Float64
+        @test Phi.get_primal_type(info, Argument(2)) == Int
+        @test Phi.get_primal_type(info, id_ssa_1) == Float64
+        @test Phi.get_primal_type(info, GlobalRef(Base, :sin)) == typeof(sin)
+        @test Phi.get_primal_type(info, GlobalRef(Main, :___x)) == Any
+        @test Phi.get_primal_type(info, GlobalRef(Main, :___y)) == Float64
+        @test Phi.get_primal_type(info, 5) == Int
+        @test Phi.get_primal_type(info, QuoteNode(:hello)) == Symbol
     end
     @testset "make_ad_stmts!" begin
 
@@ -45,13 +45,13 @@ end
         id_line_1 = ID()
         id_line_2 = ID()
         info = ADInfo(
-            Taped.TInterp(),
+            Phi.PInterp(),
             Dict{Argument, Any}(Argument(1) => typeof(sin), Argument(2) => Float64),
             Dict{ID, CC.NewInstruction}(
                 id_line_1 => CC.NewInstruction(Expr(:invoke, nothing, cos, Argument(2)), Float64),
                 id_line_2 => CC.NewInstruction(nothing, Any),
             ),
-            Any[Taped.NoTangentStack(), Stack{Float64}()],
+            Any[Phi.NoTangentStack(), Stack{Float64}()],
         )
 
         @testset "Nothing" begin
@@ -116,7 +116,7 @@ end
         @testset "PiNode" begin
             @testset "unhandled case" begin
                 @test_throws(
-                    Taped.UnhandledLanguageFeatureException,
+                    Phi.UnhandledLanguageFeatureException,
                     make_ad_stmts!(PiNode(5.0, Float64), ID(), info),
                 )
             end
@@ -131,26 +131,26 @@ end
             @testset "non-const" begin
                 global_ref = GlobalRef(S2SGlobals, :non_const_global)
                 stmt_info = make_ad_stmts!(global_ref, ID(), info)
-                @test stmt_info isa Taped.ADStmtInfo
+                @test stmt_info isa Phi.ADStmtInfo
                 @test Meta.isexpr(last(stmt_info.fwds)[2].stmt, :call)
-                @test last(stmt_info.fwds)[2].stmt.args[1] == Taped.__verify_const
+                @test last(stmt_info.fwds)[2].stmt.args[1] == Phi.__verify_const
             end
             @testset "differentiable const globals" begin
                 stmt_info = make_ad_stmts!(GlobalRef(S2SGlobals, :const_float), ID(), info)
-                @test stmt_info isa Taped.ADStmtInfo
+                @test stmt_info isa Phi.ADStmtInfo
                 @test Meta.isexpr(only(stmt_info.fwds)[2].stmt, :call)
                 @test only(stmt_info.fwds)[2].stmt.args[1] == identity
             end
         end
         @testset "PhiCNode" begin
             @test_throws(
-                Taped.UnhandledLanguageFeatureException,
+                Phi.UnhandledLanguageFeatureException,
                 make_ad_stmts!(Core.PhiCNode(Any[]), ID(), info),
             )
         end
         @testset "UpsilonNode" begin
             @test_throws(
-                Taped.UnhandledLanguageFeatureException,
+                Phi.UnhandledLanguageFeatureException,
                 make_ad_stmts!(Core.UpsilonNode(5), ID(), info),
             )
         end
@@ -160,14 +160,14 @@ end
                 ad_stmts = make_ad_stmts!(stmt, id_line_1, info)
                 fwds_stmt = ad_stmts.fwds[2][2].stmt
                 @test Meta.isexpr(fwds_stmt, :call)
-                @test fwds_stmt.args[1] == Taped.__fwds_pass!
+                @test fwds_stmt.args[1] == Phi.__fwds_pass!
                 @test Meta.isexpr(ad_stmts.rvs[2][2].stmt, :call)
-                @test ad_stmts.rvs[2][2].stmt.args[1] == Taped.__rvs_pass!
+                @test ad_stmts.rvs[2][2].stmt.args[1] == Phi.__rvs_pass!
             end
             @testset "copyast" begin
                 stmt = Expr(:copyast, QuoteNode(:(hi)))
                 ad_stmts = make_ad_stmts!(stmt, ID(), info)
-                @test ad_stmts isa Taped.ADStmtInfo
+                @test ad_stmts isa Phi.ADStmtInfo
                 @test Meta.isexpr(ad_stmts.fwds[1][2].stmt, :call)
                 @test ad_stmts.fwds[1][2].stmt.args[1] == identity
             end
@@ -191,7 +191,7 @@ end
         end
     end
 
-    interp = Taped.TInterp()
+    interp = Phi.PInterp()
     @testset "$(_typeof((f, x...)))" for (n, (interface_only, perf_flag, bnds, f, x...)) in
         collect(enumerate(TestResources.generate_test_functions()))
 
@@ -202,15 +202,15 @@ end
         )
 
         # codual_args = map(zero_codual, (f, x...))
-        # rule = Taped.build_rrule(interp, sig)
+        # rule = Phi.build_rrule(interp, sig)
         # out, pb!! = rule(codual_args...)
         # # @code_warntype optimize=true rule(codual_args...)
         # # @code_warntype optimize=true pb!!(tangent(out), map(tangent, codual_args)...)
 
         # primal_time = @benchmark $f($(Ref(x))[]...)
         # s2s_time = @benchmark $rule($codual_args...)[2]($(tangent(out)), $(map(tangent, codual_args))...)
-        # in_f = in_f = Taped.InterpretedFunction(DefaultCtx(), sig, interp);
-        # __rrule!! = Taped.build_rrule!!(in_f);
+        # in_f = in_f = Phi.InterpretedFunction(DefaultCtx(), sig, interp);
+        # __rrule!! = Phi.build_rrule!!(in_f);
         # df = zero_codual(in_f);
         # codual_x = map(zero_codual, (f, x...));
         # interp_time = @benchmark TestUtils.to_benchmark($__rrule!!, $df, $codual_x...)
