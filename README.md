@@ -73,7 +73,7 @@ These two approaches entail different tradeoffs.
 
 # Project Name
 
-This package is called `Phi.jl` because a lot of time was spent figuring out how to handle the various edge cases associated to phi nodes.
+This package is called `Phi.jl` because 1) this package supports automatic differentiation for functions containing input-dependent control flows (aka `phi`-nodes in SSAIR), 2) the developers spent many hours figuring out how to handle the various edge cases associated to phi nodes, which inspired this name 
 At the time of writing (25/03/2024), we continue to improve the performance of our implementation.
 Additionally, `Phi.jl` is reasonably memorable, and snappy.
 
