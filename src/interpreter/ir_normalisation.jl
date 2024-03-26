@@ -3,11 +3,10 @@
 
 Apply a sequence of standardising transformations to `ir` which leaves its semantics
 unchanged, but makes AD more straightforward. In particular, replace
-1. `:invoke` `Expr`s with `:call`s,
-2. `:foreigncall` `Expr`s with `:call`s to `Phi._foreigncall_`,
-3. `:new` `Expr`s with `:call`s to `Phi._new_`,
-4. `Core.IntrinsicFunction`s with counterparts from `Phi.IntrinsicWrappers`,
-5. `getfield(x, 1)` with `lgetfield(x, Val(1))`, and related transformations.
+1. `:foreigncall` `Expr`s with `:call`s to `Phi._foreigncall_`,
+2. `:new` `Expr`s with `:call`s to `Phi._new_`,
+3. `Core.IntrinsicFunction`s with counterparts from `Phi.IntrinsicWrappers`,
+4. `getfield(x, 1)` with `lgetfield(x, Val(1))`, and related transformations.
 
 `spnames` are the names associated to the static parameters of `ir`. These are needed when
 handling `:foreigncall` expressions, in which it is not necessarily the case that all
