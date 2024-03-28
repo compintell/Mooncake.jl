@@ -621,7 +621,7 @@ end
 function test_set_tangent_field!_correctness(t1::T, t2::T) where {T<:MutableTangent}
     Tfields = _typeof(t1.fields)
     for n in 1:fieldcount(Tfields)
-        Tapir.is_init(t2.fields[n]) && continue
+        !Tapir.is_init(t2.fields[n]) && continue
         v = get_tangent_field(t2, n)
 
         # Int form.
