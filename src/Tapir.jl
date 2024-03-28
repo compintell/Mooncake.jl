@@ -1,4 +1,4 @@
-module Phi
+module Tapir
 
 const CC = Core.Compiler
 

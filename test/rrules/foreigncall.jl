@@ -10,7 +10,7 @@
     ]
         @test_throws(
             ErrorException,
-            Phi.rrule!!(zero_codual(Phi._foreigncall_), zero_codual(Val(name))),
+            Tapir.rrule!!(zero_codual(Tapir._foreigncall_), zero_codual(Val(name))),
         )
     end
 end

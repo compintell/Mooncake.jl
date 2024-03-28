@@ -28,7 +28,7 @@ end
         bb_copy = copy(bb)
         @test bb_copy.inst_ids !== bb.inst_ids
 
-        @test Phi.terminator(bb) === nothing
+        @test Tapir.terminator(bb) === nothing
     end
     @testset "BBCode $f" for (f, P) in [
         (TestResources.test_while_loop, Tuple{Float64}),
@@ -39,14 +39,14 @@ end
         bb_code = BBCode(ir)
         @test bb_code isa BBCode
         @test length(bb_code.blocks) == length(ir.cfg.blocks)
-        new_ir = Phi.IRCode(bb_code)
+        new_ir = Tapir.IRCode(bb_code)
         @test length(new_ir.stmts.inst) == length(ir.stmts.inst)
         @test all(map(==, ir.stmts.inst, new_ir.stmts.inst))
         @test all(map(==, ir.stmts.type, new_ir.stmts.type))
         @test all(map(==, ir.stmts.info, new_ir.stmts.info))
         @test all(map(==, ir.stmts.line, new_ir.stmts.line))
         @test all(map(==, ir.stmts.flag, new_ir.stmts.flag))
-        @test length(Phi.collect_stmts(bb_code)) == length(ir.stmts.inst)
-        @test Phi.id_to_line_map(bb_code) isa Dict{ID, Int}
+        @test length(Tapir.collect_stmts(bb_code)) == length(ir.stmts.inst)
+        @test Tapir.id_to_line_map(bb_code) isa Dict{ID, Int}
     end
 end

@@ -15,16 +15,16 @@
         @test isempty(s)
     end
     @testset "tangent_stack_type" begin
-        @test Phi.tangent_stack_type(Float64) == Stack{Float64}
-        @test Phi.tangent_stack_type(Int) == Phi.NoTangentStack
-        @test Phi.tangent_stack_type(Any) == Stack{Any}
-        @test Phi.tangent_stack_type(DataType) == Stack{Any}
-        @test Phi.tangent_stack_type(Type{Float64}) == Phi.NoTangentStack
+        @test Tapir.tangent_stack_type(Float64) == Stack{Float64}
+        @test Tapir.tangent_stack_type(Int) == Tapir.NoTangentStack
+        @test Tapir.tangent_stack_type(Any) == Stack{Any}
+        @test Tapir.tangent_stack_type(DataType) == Stack{Any}
+        @test Tapir.tangent_stack_type(Type{Float64}) == Tapir.NoTangentStack
 
-        @test Phi.tangent_ref_type_ub(Float64) == Phi.__array_ref_type(Float64)
-        @test Phi.tangent_ref_type_ub(Int) == Phi.NoTangentRef
-        @test Phi.tangent_ref_type_ub(Any) == Ref
-        @test Phi.tangent_ref_type_ub(DataType) == Ref
-        @test Phi.tangent_ref_type_ub(Type{Float64}) == Phi.NoTangentRef
+        @test Tapir.tangent_ref_type_ub(Float64) == Tapir.__array_ref_type(Float64)
+        @test Tapir.tangent_ref_type_ub(Int) == Tapir.NoTangentRef
+        @test Tapir.tangent_ref_type_ub(Any) == Ref
+        @test Tapir.tangent_ref_type_ub(DataType) == Ref
+        @test Tapir.tangent_ref_type_ub(Type{Float64}) == Tapir.NoTangentRef
     end
 end

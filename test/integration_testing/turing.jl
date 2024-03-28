@@ -86,7 +86,7 @@ function build_turing_problem(rng, model, example=nothing)
 end
 
 @testset "turing" begin
-    interp = Phi.PInterp()
+    interp = Tapir.PInterp()
     @testset "$(typeof(model))" for (interface_only, name, model, ex) in vcat(
         Any[
             (false, "simple_model", simple_model(), nothing),

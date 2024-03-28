@@ -502,7 +502,7 @@ _getter() = 5.0
     for (interface_only, f, x...) in test_cases
         f(deepcopy(x)...)
     end
-    interp = Phi.PInterp()
+    interp = Tapir.PInterp()
     @testset for (interface_only, f, x...) in test_cases
         @info _typeof((f, x...))
         TestUtils.test_derived_rule(

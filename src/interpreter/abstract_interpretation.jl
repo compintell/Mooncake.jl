@@ -11,7 +11,7 @@ end
 
 TICache() = TICache(IdDict{Core.MethodInstance, Core.CodeInstance}())
 
-struct PhiInterpreter{C} <: CC.AbstractInterpreter
+struct TapirInterpreter{C} <: CC.AbstractInterpreter
     meta # additional information
     world::UInt
     inf_params::CC.InferenceParams
@@ -19,7 +19,7 @@ struct PhiInterpreter{C} <: CC.AbstractInterpreter
     inf_cache::Vector{CC.InferenceResult}
     code_cache::TICache
     oc_cache::Dict{Any, Any}
-    function PhiInterpreter(
+    function TapirInterpreter(
         ::Type{C};
         meta=nothing,
         world::UInt=Base.get_world_counter(),
@@ -32,9 +32,9 @@ struct PhiInterpreter{C} <: CC.AbstractInterpreter
     end
 end
 
-PhiInterpreter() = PhiInterpreter(DefaultCtx)
+TapirInterpreter() = TapirInterpreter(DefaultCtx)
 
-const PInterp = PhiInterpreter
+const PInterp = TapirInterpreter
 
 CC.InferenceParams(interp::PInterp) = interp.inf_params
 CC.OptimizationParams(interp::PInterp) = interp.opt_params
@@ -62,7 +62,7 @@ _type(x::CC.PartialStruct) = x.typ
 _type(x::CC.Conditional) = Union{x.thentype, x.elsetype}
 
 function CC.inlining_policy(
-    interp::PhiInterpreter{C},
+    interp::TapirInterpreter{C},
     @nospecialize(src),
     @nospecialize(info::CC.CallInfo),
     stmt_flag::UInt8,

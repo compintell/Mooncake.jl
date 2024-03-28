@@ -1,6 +1,6 @@
 include("front_matter.jl")
 
-@testset "Phi.jl" begin
+@testset "Tapir.jl" begin
     if test_group == "basic"
         include("utils.jl")
         include("tangents.jl")
