@@ -11,13 +11,13 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
             fwds_inst, bwds_inst = build_coinsts(ReturnNode, ret, ret_tangent, val)
 
             # Test forwards instruction.
-            @test fwds_inst isa Phi.FwdsInst
+            @test fwds_inst isa Tapir.FwdsInst
             @test fwds_inst(5) == -1
             @test ret[] == get_codual(val)
             @test (@allocations fwds_inst(5)) == 0
             
             # Test backwards instruction.
-            @test bwds_inst isa Phi.BwdsInst
+            @test bwds_inst isa Tapir.BwdsInst
             ret_tangent[] = 2.0
             @test bwds_inst(5) isa Int
             @test get_tangent_stack(val)[] == 3.0
@@ -30,13 +30,13 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
             fwds_inst, bwds_inst = build_coinsts(ReturnNode, ret, ret_tangent, val)
 
             # Test forwards instruction.
-            @test fwds_inst isa Phi.FwdsInst
+            @test fwds_inst isa Tapir.FwdsInst
             @test fwds_inst(5) == -1
             @test ret[] == get_codual(val)
             @test (@allocations fwds_inst(5)) == 0
 
             # Test backwards instruction.
-            @test bwds_inst isa Phi.BwdsInst
+            @test bwds_inst isa Tapir.BwdsInst
             @test bwds_inst(5) isa Int
             @test (@allocations bwds_inst(5)) == 0
         end
@@ -46,12 +46,12 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
         fwds_inst, bwds_inst = build_coinsts(GotoNode, dest)
 
         # Test forwards instructions.
-        @test fwds_inst isa Phi.FwdsInst
+        @test fwds_inst isa Tapir.FwdsInst
         @test fwds_inst(1) == dest
         @test (@allocations fwds_inst(1)) == 0
 
         # Test reverse instructions.
-        @test bwds_inst isa Phi.BwdsInst
+        @test bwds_inst isa Tapir.BwdsInst
         @test bwds_inst(1) == 1
         @test (@allocations bwds_inst(1)) == 0
     end
@@ -63,7 +63,7 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
             fwds_inst, bwds_inst = build_coinsts(GotoIfNot, dest, next_blk, cond)
 
             # Test forwards instructions.
-            @test fwds_inst isa Phi.FwdsInst
+            @test fwds_inst isa Tapir.FwdsInst
             @test fwds_inst(1) == next_blk
             @test (@allocations fwds_inst(1)) == 0
             cond[] = (zero_codual(false), get_tangent_stack(cond))
@@ -71,7 +71,7 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
             @test (@allocations fwds_inst(1)) == 0
 
             # Test backwards instructions.
-            @test bwds_inst isa Phi.BwdsInst
+            @test bwds_inst isa Tapir.BwdsInst
             @test bwds_inst(4) == 4
             @test (@allocations bwds_inst(1)) == 0
         end
@@ -82,12 +82,12 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
             fwds_inst, bwds_inst = build_coinsts(GotoIfNot, dest, next_blk, cond)
 
             # Test forwards instructions.
-            @test fwds_inst isa Phi.FwdsInst
+            @test fwds_inst isa Tapir.FwdsInst
             @test fwds_inst(1) == next_blk
             @test (@allocations fwds_inst(1)) == 0
 
             # Test backwards instructions.
-            @test bwds_inst isa Phi.BwdsInst
+            @test bwds_inst isa Tapir.BwdsInst
             @test bwds_inst(4) == 4
             @test (@allocations bwds_inst(1)) == 0
         end
@@ -122,7 +122,7 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
             fwds_inst, bwds_inst = build_coinsts(Vector{PhiNode}, nodes, next_blk)
 
             # Test forwards instructions.
-            @test fwds_inst isa Phi.FwdsInst
+            @test fwds_inst isa Tapir.FwdsInst
             @test fwds_inst(1) == next_blk
             @test (@allocations fwds_inst(1)) == 0
             @test nodes[1].tmp_slot[] == nodes[1].values[1][]
@@ -133,7 +133,7 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
             @test nodes[3].ret_slot[] == nodes[3].tmp_slot[]
 
             # Test backwards instructions.
-            @test bwds_inst isa Phi.BwdsInst
+            @test bwds_inst isa Tapir.BwdsInst
             @test bwds_inst(4) == 4
             @test (@allocations bwds_inst(1)) == 0
         end
@@ -145,7 +145,7 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
         fwds_inst, bwds_inst = build_coinsts(PiNode, Float64, val, ret, next_blk)
 
         # Test forwards instruction.
-        @test fwds_inst isa Phi.FwdsInst
+        @test fwds_inst isa Tapir.FwdsInst
         @test fwds_inst(1) == next_blk
         @test primal(get_codual(ret)) == primal(get_codual(val))
         @test tangent(get_codual(ret)) == tangent(get_codual(val))
@@ -154,11 +154,11 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
 
         # Increment tangent associated to `val`. This is done in order to check that the
         # tangent to `val` is incremented on the reverse-pass, not replaced.
-        Phi.increment_ref!(get_tangent_stack(val), 0.1)
+        Tapir.increment_ref!(get_tangent_stack(val), 0.1)
 
         # Test backwards instruction.
-        @test bwds_inst isa Phi.BwdsInst
-        Phi.increment_ref!(get_tangent_stack(ret), 1.6)
+        @test bwds_inst isa Tapir.BwdsInst
+        Tapir.increment_ref!(get_tangent_stack(ret), 1.6)
         @test bwds_inst(3) == 3
         @test get_tangent_stack(val)[] == 1.6 + 0.1 # check increment has happened.
     end
@@ -180,12 +180,12 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
         fwds_inst, bwds_inst = build_coinsts(GlobalRef, P, gref, out, next_blk)
 
         # Forwards pass.
-        @test fwds_inst isa Phi.FwdsInst
+        @test fwds_inst isa Tapir.FwdsInst
         @test fwds_inst(4) == next_blk
         @test primal(get_codual(out)) == gref[]
 
         # Backwards pass.
-        @test bwds_inst isa Phi.BwdsInst
+        @test bwds_inst isa Tapir.BwdsInst
         @test bwds_inst(10) == 10
     end
     @testset "QuoteNode and literals" for (x, out, next_blk) in Any[
@@ -197,13 +197,13 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
     ]
         fwds_inst, bwds_inst = build_coinsts(nothing, x, out, next_blk)
 
-        @test fwds_inst isa Phi.FwdsInst
+        @test fwds_inst isa Tapir.FwdsInst
         @test fwds_inst(1) == next_blk
         @test get_codual(out) == x[]
         @test length(get_tangent_stack(out)) == 1
         @test get_tangent_stack(out)[] == tangent(get_codual(out))
 
-        @test bwds_inst isa Phi.BwdsInst
+        @test bwds_inst isa Tapir.BwdsInst
         @test bwds_inst(10) == 10
     end
 
@@ -212,11 +212,11 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
         next_blk = 3
         fwds_inst, bwds_inst = build_coinsts(Val(:boundscheck), val_ref, next_blk)
 
-        @test fwds_inst isa Phi.FwdsInst
+        @test fwds_inst isa Tapir.FwdsInst
         @test fwds_inst(0) == next_blk
         @test get_codual(val_ref) == zero_codual(true)
         @test length(get_tangent_stack(val_ref)) == 1
-        @test bwds_inst isa Phi.BwdsInst
+        @test bwds_inst isa Tapir.BwdsInst
         @test bwds_inst(2) == 2
     end
 
@@ -263,20 +263,20 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
         ),
     ]
         sig = _typeof(map(primal ∘ get_codual, arg_slots))
-        interp = Phi.PInterp()
-        evaluator = Phi.get_evaluator(Phi.MinimalCtx(), sig, interp, true)
-        __rrule!! = Phi.get_rrule!!_evaluator(evaluator)
-        pb_stack = Phi.build_pb_stack(__rrule!!, evaluator, arg_slots)
+        interp = Tapir.PInterp()
+        evaluator = Tapir.get_evaluator(Tapir.MinimalCtx(), sig, interp, true)
+        __rrule!! = Tapir.get_rrule!!_evaluator(evaluator)
+        pb_stack = Tapir.build_pb_stack(__rrule!!, evaluator, arg_slots)
         fwds_inst, bwds_inst = build_coinsts(
             Val(:call), P, out, arg_slots, evaluator, __rrule!!, pb_stack, next_blk
         )
 
         # Test forwards-pass.
-        @test fwds_inst isa Phi.FwdsInst
+        @test fwds_inst isa Tapir.FwdsInst
         @test fwds_inst(0) == next_blk
 
         # Test reverse-pass.
-        @test bwds_inst isa Phi.BwdsInst
+        @test bwds_inst isa Tapir.BwdsInst
         @test bwds_inst(5) == 5
     end
 
@@ -285,37 +285,37 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
         fwds_inst, bwds_inst = build_coinsts(Val(:skipped_expression), next_blk)
 
         # Test forwards pass.
-        @test fwds_inst isa Phi.FwdsInst
+        @test fwds_inst isa Tapir.FwdsInst
         @test fwds_inst(1) == next_blk
 
         # Test backwards pass.
-        @test bwds_inst isa Phi.BwdsInst
+        @test bwds_inst isa Tapir.BwdsInst
     end
 
     # @testset "Expr(:throw_undef_if_not)" begin
     #     @testset "defined" begin
     #         slot_to_check = SlotRef(5.0)
     #         oc = build_inst(Val(:throw_undef_if_not), slot_to_check, 2)
-    #         @test oc isa Phi.Inst
+    #         @test oc isa Tapir.Inst
     #         @test oc(0) == 2
     #     end
     #     @testset "undefined (non-isbits)" begin
     #         slot_to_check = SlotRef{Any}()
     #         oc = build_inst(Val(:throw_undef_if_not), slot_to_check, 2)
-    #         @test oc isa Phi.Inst
+    #         @test oc isa Tapir.Inst
     #         @test_throws ErrorException oc(3)
     #     end
     #     @testset "undefined (isbits)" begin
     #         slot_to_check = SlotRef{Float64}()
     #         oc = build_inst(Val(:throw_undef_if_not), slot_to_check, 2)
-    #         @test oc isa Phi.Inst
+    #         @test oc isa Tapir.Inst
 
     #         # a placeholder for failing to throw an ErrorException when evaluated
     #         @test_broken oc(5) == 1 
     #     end
     # end
 
-    interp = Phi.PInterp()
+    interp = Tapir.PInterp()
 
     # nothings inserted for consistency with generate_test_functions.
     @testset "$(_typeof((f, x...)))" for (interface_only, perf_flag, bnds, f, x...) in
@@ -323,7 +323,7 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
 
         sig = _typeof((f, x...))
         @info "$sig"
-        in_f = Phi.InterpretedFunction(DefaultCtx(), sig, interp);
+        in_f = Tapir.InterpretedFunction(DefaultCtx(), sig, interp);
 
         # Verify correctness.
         @assert f(deepcopy(x)...) == f(deepcopy(x)...) # primal runs
@@ -331,7 +331,7 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
         x_cpy_2 = deepcopy(x)
         @test has_equal_data(in_f(f, x_cpy_1...), f(x_cpy_2...))
         @test has_equal_data(x_cpy_1, x_cpy_2)
-        rule = Phi.build_rrule!!(in_f);
+        rule = Tapir.build_rrule!!(in_f);
         TestUtils.test_rrule!!(
             Xoshiro(123456), in_f, f, x...;
             perf_flag, interface_only, is_primitive=false, rule
@@ -344,7 +344,7 @@ array_ref_type(::Type{T}) where {T} = Base.RefArray{T, Vector{T}, Nothing}
         # r = @benchmark $(Ref(in_f))[]($(Ref(f))[], $(Ref(deepcopy(x)))[]...);
 
         # # Estimate overal forwards-pass and pullback performance.
-        # __rrule!! = Phi.build_rrule!!(in_f);
+        # __rrule!! = Tapir.build_rrule!!(in_f);
         # df = zero_codual(in_f);
         # codual_x = map(zero_codual, (f, x...));
         # overall_timing = @benchmark TestUtils.to_benchmark($__rrule!!, $df, $codual_x...);

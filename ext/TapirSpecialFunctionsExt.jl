@@ -1,8 +1,8 @@
-module PhiSpecialFunctionsExt
+module TapirSpecialFunctionsExt
 
-    using SpecialFunctions, Phi
+    using SpecialFunctions, Tapir
 
-    import Phi: @from_rrule, DefaultCtx
+    import Tapir: @from_rrule, DefaultCtx
 
     @from_rrule DefaultCtx Tuple{typeof(airyai), Float64}
     @from_rrule DefaultCtx Tuple{typeof(airyaix), Float64}

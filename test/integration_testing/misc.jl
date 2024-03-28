@@ -1,5 +1,5 @@
 @testset "integration_testing" begin
-    interp = Phi.PInterp()
+    interp = Tapir.PInterp()
     @testset for (interface_only, f, x...) in vcat(
         [
             (false, getindex, randn(5), 4),

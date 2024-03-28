@@ -1,7 +1,7 @@
 using AbstractGPs, KernelFunctions
 
 @testset "gp" begin
-    interp = Phi.PInterp()
+    interp = Tapir.PInterp()
     base_kernels = Any[
         ZeroKernel(),
         ConstantKernel(; c=1.0),

@@ -51,5 +51,5 @@ is_primitive(::Type{MinimalCtx}, ::Type{<:Tuple{typeof(foo), Float64}}) = true
 You should implemented more complicated method of `is_primitive` in the usual way.
 """
 macro is_primitive(Tctx, sig)
-    return esc(:(Phi.is_primitive(::Type{$Tctx}, ::Type{<:$sig}) = true))
+    return esc(:(Tapir.is_primitive(::Type{$Tctx}, ::Type{<:$sig}) = true))
 end

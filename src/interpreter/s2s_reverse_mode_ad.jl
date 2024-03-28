@@ -76,7 +76,7 @@ This data structure is used to hold "global" information associated to a particu
 `build_rrule`. It is used as a means of communication between `make_ad_stmts!` and the
 codegen which produces the forwards- and reverse-passes.
 
-- `interp`: a `PhiInterpreter`.
+- `interp`: a `TapirInterpreter`.
 - `block_stack_id`: the ID associated to the block stack -- the stack which keeps track of
     which blocks we visited during the forwards-pass, and which is used on the reverse-pass
     to determine which blocks to visit.
@@ -376,12 +376,12 @@ end
 get_const_primal_value(x::QuoteNode) = x.value
 get_const_primal_value(x) = x
 
-# Phi does not yet handle `PhiCNode`s. Throw an error if one is encountered.
+# Tapir does not yet handle `PhiCNode`s. Throw an error if one is encountered.
 function make_ad_stmts!(stmt::Core.PhiCNode, ::ID, ::ADInfo)
     unhandled_feature("Encountered PhiCNode: $stmt")
 end
 
-# Phi does not yet handle `UpsilonNode`s. Throw an error if one is encountered.
+# Tapir does not yet handle `UpsilonNode`s. Throw an error if one is encountered.
 function make_ad_stmts!(stmt::Core.UpsilonNode, ::ID, ::ADInfo)
     unhandled_feature("Encountered UpsilonNode: $stmt")
 end
@@ -667,7 +667,7 @@ end
 # Compute the concrete type of the rule that will be returned from `build_rrule`. This is
 # important for performance in dynamic dispatch, and to ensure that recursion works
 # properly.
-function rule_type(interp::PhiInterpreter{C}, ::Type{sig}) where {C, sig}
+function rule_type(interp::TapirInterpreter{C}, ::Type{sig}) where {C, sig}
     is_primitive(C, sig) && return typeof(rrule!!)
 
     ir, _ = lookup_ir(interp, sig)
@@ -736,7 +736,7 @@ end
 Helper method. Only uses static information from `args`.
 """
 function build_rrule(args...)
-    return build_rrule(PhiInterpreter(), _typeof(TestUtils.__get_primals(args)))
+    return build_rrule(TapirInterpreter(), _typeof(TestUtils.__get_primals(args)))
 end
 
 """
@@ -980,7 +980,7 @@ __switch_case(id::Int32, predecessor_id::Int32) = !(id === predecessor_id)
 
 
 #=
-    DynamicDerivedRule(interp::PhiInterpreter)
+    DynamicDerivedRule(interp::TapirInterpreter)
 
 For internal use only.
 
@@ -994,7 +994,7 @@ struct DynamicDerivedRule{T, V}
     cache::V
 end
 
-DynamicDerivedRule(interp::PhiInterpreter) = DynamicDerivedRule(interp, Dict{Any, Any}())
+DynamicDerivedRule(interp::TapirInterpreter) = DynamicDerivedRule(interp, Dict{Any, Any}())
 
 function (dynamic_rule::DynamicDerivedRule)(args::Vararg{Any, N}) where {N}
     sig = Tuple{map(_typeof, map(primal, args))...}

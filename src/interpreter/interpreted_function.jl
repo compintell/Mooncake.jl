@@ -343,7 +343,7 @@ struct InterpretedFunction{sig<:Tuple, C, Treturn, Targ_info<:ArgInfo}
     bb_starts::Vector{Int}
     bb_ends::Vector{Int}
     ir::IRCode
-    interp::PhiInterpreter
+    interp::TapirInterpreter
     spnames::Any
 end
 
@@ -417,7 +417,7 @@ end
 Construct a data structure which can be used to execute the instruction specified by `sig`.
 For example,
 ```julia
-in_f = InterpretedFunction(DefaultCtx(), Tuple{typeof(sin), Float64}, Phi.PInterp())
+in_f = InterpretedFunction(DefaultCtx(), Tuple{typeof(sin), Float64}, Tapir.PInterp())
 in_f(sin, 5.0)
 ```
 will yield exactly the same result as running `sin(5.0)`. The advantage of this data
@@ -458,7 +458,7 @@ and each `Argument` / `SSAValue` in the IR with a (heap-allocated) `AbstractSlot
 most part, these slots are `Ref`s).
 
 While the details of what each kind of `OpaqueClosure` can be found in the corresponding
-`Phi.build_inst` method, they generally have the following structure:
+`Tapir.build_inst` method, they generally have the following structure:
 - load data from argument / ssa slots,
 - do computation,
 - write result to the instruction's ssa slot,
@@ -566,7 +566,7 @@ end
 # `InterpretedFunction`s operate recursively -- if the types associated to the `args` field
 # of a `:call` expression have not been inferred successfully, then we must wait until
 # runtime to determine what code to run. The `DelayedInterpretedFunction` does exactly this.
-struct DelayedInterpretedFunction{C, Tlocal_cache, T<:PhiInterpreter}
+struct DelayedInterpretedFunction{C, Tlocal_cache, T<:TapirInterpreter}
     ctx::C
     local_cache::Tlocal_cache
     interp::T
