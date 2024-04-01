@@ -1,7 +1,7 @@
 name = "Tapir"
 uuid = "07d77754-e150-4737-8c94-cd238a1fb45b"
 authors = ["Will Tebbutt and contributors"]
-version = "0.1.0"
+version = "0.1.2"
 
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
