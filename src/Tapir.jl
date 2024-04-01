@@ -3,7 +3,6 @@ module Tapir
 const CC = Core.Compiler
 
 using
-    BenchmarkTools,
     DiffRules,
     ExprTools,
     Graphs,
