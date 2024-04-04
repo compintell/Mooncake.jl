@@ -6,6 +6,13 @@
 
 The goal of the `Tapir.jl` project is to produce a reverse-mode AD package which is written entirely in Julia, and improves over both `ReverseDiff.jl` and `Zygote.jl` in several ways, and is competitive with `Enzyme.jl`.
 
+## Note on project status
+
+At the present time (04-04-2024) I (Will) am undertaking a substantial refactoring of the internals.
+Conseqeuently, while we're obviously very happy to receive issues where people encounter problems, they will likely not be addressed for at least a couple of weeks.
+
+Similarly, please note that we registered `Tapir.jl` so that we could start interacting with the various AD frontends straightforwardly (DifferentiationInterface.jl, LogDensityProblemsAD.jl) -- please don't take this initial release as an indication that we believe `Tapir.jl` is ready for general use!
+
 # How it works
 
 `Tapir.jl` is based around a function `rrule!!` (which computes vector-Jacobian products (VJPs)) and a related function `build_rrule` (which builds functions which are semantically identical to `rrule!!`).
@@ -107,7 +114,7 @@ Fortunately, dealing with these performance limitations necessitates simplifying
 
 # Trying it out
 
-There is not presently a high-level interface to which we are yet commiting, but if you want to compute the gradient of a function, take a look at `value_and_pullback!!` / `value_and_gradient!!`.
+There is not presently a high-level interface to which we are commiting, but if you want to compute the gradient of a function, take a look at `value_and_pullback!!` / `value_and_gradient!!`.
 They both provide a high-level interface which will let you differentiate things, and their implementation demonstrates how an `rrule!!` / rrule-like function should be used.
 (There are a couple of things that you have to get right when using `rrule!!` / functions returned from `build_rrule`, so it's best to use `value_and_pullback!!`).
 
