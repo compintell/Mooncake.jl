@@ -11,7 +11,7 @@ The goal of the `Tapir.jl` project is to produce a reverse-mode AD package which
 At present (04-04-2024), I (Will) am undertaking a substantial refactoring of the internals to prepare for performance optimisation (see [#58](https://github.com/withbayes/Tapir.jl/issues/58) for details). 
 Consequently, while we're very happy to receive issues where people encounter problems, there will likely be a couple of weeks delay before they are addressed.
 
-Similarly, please note that we registered `Tapir.jl` so that we could start interacting with the various AD frontends straightforwardly (DifferentiationInterface.jl, LogDensityProblemsAD.jl) -- please be cautious this initial release will likely have bugs and might not be ready for production use!
+Similarly, please note that we registered `Tapir.jl` so that we could start interacting with the various AD frontends straightforwardly ([DifferentiationInterface.jl](https://github.com/gdalle/DifferentiationInterface.jl), [LogDensityProblemsAD.jl](https://github.com/tpapp/LogDensityProblemsAD.jl)) -- please be cautious this initial release will likely have bugs and might not be ready for production use!
 
 # How it works
 
