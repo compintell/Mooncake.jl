@@ -4,18 +4,18 @@
 [![Code Style: Blue](https://img.shields.io/badge/code%20style-blue-4495d1.svg)](https://github.com/invenia/BlueStyle)
 [![ColPrac: Contributor's Guide on Collaborative Practices for Community Packages](https://img.shields.io/badge/ColPrac-Contributor's%20Guide-blueviolet)](https://github.com/SciML/ColPrac)
 
-The goal of the `Tapir.jl` project is to produce a reverse-mode AD package which is written entirely in Julia, and improves over both `ReverseDiff.jl` and `Zygote.jl` in several ways, and is competitive with `Enzyme.jl`.
+The goal of the `Tapir.jl` project is to produce a reverse-mode AD package which is written entirely in Julia. It improves over both `ReverseDiff.jl` and `Zygote.jl` in several ways, and is competitive with `Enzyme.jl`.
 
 ## Note on project status
 
-At the present time (04-04-2024) I (Will) am undertaking a substantial refactoring of the internals.
-Conseqeuently, while we're obviously very happy to receive issues where people encounter problems, they will likely not be addressed for at least a couple of weeks.
+At present (04-04-2024), I (Will) am undertaking a substantial refactoring of the internals to prepare for performance optimisation (see [#58](https://github.com/withbayes/Tapir.jl/issues/58) for details). 
+Consequently, while we're very happy to receive issues where people encounter problems, there will likely be a couple of weeks delay before they are addressed.
 
 Similarly, please note that we registered `Tapir.jl` so that we could start interacting with the various AD frontends straightforwardly (DifferentiationInterface.jl, LogDensityProblemsAD.jl) -- please don't take this initial release as an indication that we believe `Tapir.jl` is ready for general use!
 
 # How it works
 
-`Tapir.jl` is based around a function `rrule!!` (which computes vector-Jacobian products (VJPs)) and a related function `build_rrule` (which builds functions which are semantically identical to `rrule!!`).
+`Tapir.jl` is based around a function `rrule!!` (which computes vector-Jacobian products (VJPs)) and a related function, `build_rrule` (which builds functions semantically identical to `rrule!!`).
 These VJPs can, for example, be used to compute gradients.
 `rrule!!` is similar to ChainRules' `rrule` and Zygote's `_pullback`, but supports functions which mutate (modify) their arguments, in addition to those that do not, and immediately increments (co)tangents.
 It has, perhaps unsurprisingly, wound up looking quite similar to the rule system in Enzyme.
@@ -114,7 +114,7 @@ Fortunately, dealing with these performance limitations necessitates simplifying
 
 # Trying it out
 
-There is not presently a high-level interface to which we are commiting, but if you want to compute the gradient of a function, take a look at `value_and_pullback!!` / `value_and_gradient!!`.
+There is not presently a high-level interface to which we are committing, but if you want to compute the gradient of a function, take a look at `value_and_pullback!!` / `value_and_gradient!!`.
 They both provide a high-level interface which will let you differentiate things, and their implementation demonstrates how an `rrule!!` / rrule-like function should be used.
 (There are a couple of things that you have to get right when using `rrule!!` / functions returned from `build_rrule`, so it's best to use `value_and_pullback!!`).
 
