@@ -4,12 +4,12 @@
 [![Code Style: Blue](https://img.shields.io/badge/code%20style-blue-4495d1.svg)](https://github.com/invenia/BlueStyle)
 [![ColPrac: Contributor's Guide on Collaborative Practices for Community Packages](https://img.shields.io/badge/ColPrac-Contributor's%20Guide-blueviolet)](https://github.com/SciML/ColPrac)
 
-The goal of the `Tapir.jl` project is to produce a reverse-mode AD package which is written entirely in Julia. It improves over both `ReverseDiff.jl` and `Zygote.jl` in several ways, and is competitive with `Enzyme.jl`.
+The goal of the `Tapir.jl` project is to produce a reverse-mode AD package which is written entirely in Julia, which improves over both `ReverseDiff.jl` and `Zygote.jl` in several ways, and is competitive with `Enzyme.jl`.
 
 ## Note on project status
 
-At present (04-04-2024), I (Will) am undertaking a substantial refactoring of the internals to prepare for performance optimisation (see [#58](https://github.com/withbayes/Tapir.jl/issues/58) for details). 
-Consequently, while we're very happy to receive issues where people encounter problems, there will likely be a couple of weeks delay before they are addressed.
+At present (04-04-2024), I (Will) am undertaking a substantial refactoring of the internals. 
+Consequently, while we're very happy to receive issues where people encounter problems, it will be at least a couple of weeks before they are addressed.
 
 Similarly, please note that we registered `Tapir.jl` so that we could start interacting with the various AD frontends straightforwardly ([DifferentiationInterface.jl](https://github.com/gdalle/DifferentiationInterface.jl), [LogDensityProblemsAD.jl](https://github.com/tpapp/LogDensityProblemsAD.jl)) -- please be cautious this initial release will likely have bugs and might not be ready for production use!
 
