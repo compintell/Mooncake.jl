@@ -55,6 +55,9 @@ end
 
 Base.:(==)(x::Tangent, y::Tangent) = x.fields == y.fields
 
+fields_type(::Type{Tangent{Tfields}}) where {Tfields<:NamedTuple} = Tfields
+fields_type(::Type{Tangent}) = NamedTuple
+
 mutable struct MutableTangent{Tfields<:NamedTuple}
     fields::Tfields
 end
@@ -154,9 +157,7 @@ determined entirely by its type.
 """
 tangent_type(T)
 
-function tangent_type(x)
-    throw(error("$x is not a type. Perhaps you meant typeof(x)?"))
-end
+tangent_type(x) = throw(error("$x is not a type. Perhaps you meant typeof(x)?"))
 
 # This is essential for DataType, as the recursive definition always recurses infinitely,
 # because one of the fieldtypes is itself always a DataType. In particular, we'll always

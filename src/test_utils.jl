@@ -809,6 +809,46 @@ function test_equality_comparison(x)
     @test has_equal_data_up_to_undefs(x, x)
 end
 
+"""
+    test_fwds_rvs_data_interface(rng::AbstractRNG, p::P) where {P}
+
+Verify that the forwards data and reverse data functionality associated to primal `p` works
+correctly.
+"""
+function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
+
+    # Check that forwards_data_type and reverse_data_type run and produce types.
+    T = tangent_type(P)
+    F = Tapir.forwards_data_type(T)
+    @test F isa Type
+    R = Tapir.reverse_data_type(T)
+    @test R isa Type
+
+    # Check that forwards_data and reverse_data produce the correct types.
+    t = randn_tangent(rng, p)
+    f = Tapir.forwards_data(t)
+    @test f isa F
+    r = Tapir.reverse_data(t)
+    @test r isa R
+
+    # Check that combining f and r yields a tangent of the correct type and value.
+    t_combined = Tapir.combine_data(T, f, r)
+    @test _typeof(t_combined) == T
+    @test t_combined === t
+
+    # Check that pulling out `f` and `r` from `t_combined` yields the correct values.
+    @test Tapir.forwards_data(t_combined) === f
+    @test Tapir.reverse_data(t_combined) === r
+
+    # Check that constructing a zero tangent from reverse data yields the original tangent.
+    z = zero_tangent(p)
+    f_z = Tapir.forwards_data(z)
+    @test f_z isa Tapir.forwards_data_type(T)
+    z_new = zero_tangent(p, f_z)
+    @test z_new isa tangent_type(P)
+    @test z_new === z
+end
+
 function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)
     test_cases, memory = Tapir.generate_hand_written_rrule!!_test_cases(rng_ctor, v)
     GC.@preserve memory @testset "$f, $(_typeof(x))" for (interface_only, perf_flag, _, f, x...) in test_cases
