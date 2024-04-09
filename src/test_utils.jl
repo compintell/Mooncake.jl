@@ -237,7 +237,8 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...; rul
 
     # Run `rrule!!` on copies of `f` and `x`. We use randomly generated tangents so that we
     # can later verify that non-zero values do not get propagated by the rule.
-    x_x̄_rule = map(x -> CoDual(_deepcopy(x), zero_tangent(x)), x)
+    x̄_zero = map(zero_tangent, x)
+    x_x̄_rule = map((x, x̄_z) -> CoDual(_deepcopy(x), Tapir.forwards_data(x̄_z)), x, x̄_zero)
     inputs_address_map = populate_address_map(map(primal, x_x̄_rule), map(tangent, x_x̄_rule))
     y_ȳ_rule, pb!! = rule(f_f̄, x_x̄_rule...)
 
@@ -256,11 +257,12 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...; rul
     ȳ_delta = randn_tangent(rng, primal(y_ȳ_rule))
     x̄_delta = map(Base.Fix1(randn_tangent, rng) ∘ primal, x_x̄_rule)
 
-    ȳ_init = set_to_zero!!(tangent(y_ȳ_rule))
-    x̄_init = map(set_to_zero!! ∘ tangent, x_x̄_rule)
+    ȳ_init = set_to_zero!!(zero_tangent(primal(y_ȳ_rule), tangent(y_ȳ_rule)))
+    x̄_init = map(set_to_zero!!, x̄_zero)
     ȳ = increment!!(ȳ_init, ȳ_delta)
     x̄ = map(increment!!, x̄_init, x̄_delta)
-    _, x̄... = pb!!(ȳ, tangent(f_f̄), x̄...)
+    _, x̄_inc... = pb!!(Tapir.reverse_data(ȳ))
+    x̄ = map(increment!!, x̄, x̄_inc)
 
     # Check that inputs have been returned to their original value.
     @test all(map(has_equal_data_up_to_undefs, x, map(primal, x_x̄_rule)))
@@ -274,7 +276,7 @@ get_address(x) = ismutable(x) ? pointer_from_objref(x) : nothing
 _deepcopy(x) = deepcopy(x)
 _deepcopy(x::Module) = x
 
-rrule_output_type(::Type{Ty}) where {Ty} = Tuple{codual_type(Ty), Any}
+rrule_output_type(::Type{Ty}) where {Ty} = Tuple{Tapir.fwds_codual_type(Ty), Any}
 
 function test_rrule_interface(f_f̄, x_x̄...; is_primitive, ctx::C, rule) where {C}
     @nospecialize f_f̄ x_x̄
@@ -307,24 +309,29 @@ function test_rrule_interface(f_f̄, x_x̄...; is_primitive, ctx::C, rule) where
         @test _typeof(tangent(x_x̄)) == tangent_type(_typeof(primal(x_x̄)))
     end
 
+    # Extract the forwards-data from the tangents.
+    f_fwds = Tapir.to_fwds(f_f̄)
+    x_fwds = map(Tapir.to_fwds, x_x̄)
+
     # Run the rrule, check it has output a thing of the correct type, and extract results.
     # Throw a meaningful exception if the rrule doesn't run at all.
     x_addresses = map(get_address, x)
     rrule_ret = try
-        rule(f_f̄, x_x̄...)
+        rule(f_fwds, x_fwds...)
     catch e
         display(e)
         println()
         throw(ArgumentError(
-            "rrule!! for $(_typeof(f_f̄)) with argument types $(_typeof(x_x̄)) does not run."
+            "rrule!! for $(_typeof(f_fwds)) with argument types $(_typeof(x_fwds)) does not run."
         ))
     end
     @test rrule_ret isa rrule_output_type(_typeof(y))
     y_ȳ, pb!! = rrule_ret
 
     # Run the reverse-pass. Throw a meaningful exception if it doesn't run at all.
+    ȳ = Tapir.reverse_data(zero_tangent(primal(y_ȳ), tangent(y_ȳ)))
     f̄_new, x̄_new... = try
-        pb!!(tangent(y_ȳ), f̄, x̄...)
+        pb!!(ȳ)
     catch e
         display(e)
         println()
@@ -368,14 +375,12 @@ function test_rrule_performance(
         JET.test_opt(primal(f_f̄), map(_typeof ∘ primal, x_x̄))
 
         # Test forwards-pass stability.
-        JET.test_opt(rule, (_typeof(f_f̄), map(_typeof, x_x̄)...))
+        JET.test_opt(rule, (_typeof(f_f̄), map(_typeof ∘ Tapir.to_fwds, x_x̄)...))
 
         # Test reverse-pass stability.
         y_ȳ, pb!! = rule(f_f̄, _deepcopy(x_x̄)...)
-        JET.test_opt(
-            pb!!,
-            (_typeof(tangent(y_ȳ)), _typeof(tangent(f_f̄)), map(_typeof ∘ tangent, x_x̄)...),
-        )
+        rvs_data = Tapir.reverse_data(zero_tangent(primal(y_ȳ), tangent(y_ȳ)))
+        JET.test_opt(pb!!, (_typeof(rvs_data), ))
     end
 
     if performance_checks_flag in (:allocs, :stability_and_allocs)

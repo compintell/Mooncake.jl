@@ -44,3 +44,18 @@ struct NoPullback end
 @inline (::NoPullback)(dy, dx...) = dx
 
 might_be_active(args) = any(might_be_active ∘ _typeof, args)
+
+to_fwds(x::CoDual) = CoDual(primal(x), forwards_data(tangent(x)))
+
+"""
+    fwds_codual_type(P::Type)
+
+Shorthand for `CoDual{P, tangent_type(P}}` when `P` is concrete, equal to `CoDual` if not.
+"""
+function fwds_codual_type(::Type{P}) where {P}
+    P == DataType && return CoDual
+    P isa Union && return Union{fwds_codual_type(P.a), fwds_codual_type(P.b)}
+    return isconcretetype(P) ? CoDual{P, forwards_data_type(tangent_type(P))} : CoDual
+end
+
+fwds_codual_type(::Type{Type{P}}) where {P} = CoDual{Type{P}, NoTangent}

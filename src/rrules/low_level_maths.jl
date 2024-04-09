@@ -6,27 +6,28 @@ for (M, f, arity) in DiffRules.diffrules(; filter_modules=nothing)
     end
     (f == :rem2pi || f == :ldexp) && continue # not designed for Float64s
     (f == :+ || f == :*) && continue # use intrinsics instead
+    P = Float64
     if arity == 1
         dx = DiffRules.diffrule(M, f, :x)
         pb_name = Symbol("$(M).$(f)_pb!!")
         @eval begin
-            @is_primitive MinimalCtx Tuple{typeof($M.$f), Float64}
-            function rrule!!(::CoDual{typeof($M.$f)}, x::CoDual{Float64})
-                x = primal(x)
-                $pb_name(ȳ, f̄, x̄) = f̄, x̄ + ȳ * $dx
-                return CoDual(($M.$f)(x), zero(Float64)), $pb_name
+            @is_primitive MinimalCtx Tuple{typeof($M.$f), $P}
+            function rrule!!(::CoDual{typeof($M.$f)}, _x::CoDual{$P})
+                x = primal(_x) # needed for dx expression
+                $pb_name(ȳ) = NoTangent(), ȳ * $dx
+                return CoDual(($M.$f)(x), NoFwdsData()), $pb_name
             end
         end
     elseif arity == 2
         da, db = DiffRules.diffrule(M, f, :a, :b)
         pb_name = Symbol("$(M).$(f)_pb!!")
         @eval begin
-            @is_primitive MinimalCtx Tuple{typeof($M.$f), Float64, Float64}
-            function rrule!!(::CoDual{typeof($M.$f)}, a::CoDual{Float64}, b::CoDual{Float64})
-                a = primal(a)
-                b = primal(b)
-                $pb_name(ȳ, f̄, ā, b̄) = f̄, ā + ȳ * $da, b̄ + ȳ * $db
-                return CoDual(($M.$f)(a, b), zero(Float64)), $pb_name
+            @is_primitive MinimalCtx Tuple{typeof($M.$f), $P, $P}
+            function rrule!!(::CoDual{typeof($M.$f)}, _a::CoDual{$P}, _b::CoDual{$P})
+                a = primal(_a)
+                b = primal(_b)
+                $pb_name(ȳ) = NoTangent(), ȳ * $da, ȳ * $db
+                return CoDual(($M.$f)(a, b), NoFwdsData()), $pb_name
             end
         end
     end
