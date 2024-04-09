@@ -14,7 +14,7 @@ for (M, f, arity) in DiffRules.diffrules(; filter_modules=nothing)
             @is_primitive MinimalCtx Tuple{typeof($M.$f), $P}
             function rrule!!(::CoDual{typeof($M.$f)}, _x::CoDual{$P})
                 x = primal(_x) # needed for dx expression
-                $pb_name(ȳ) = NoTangent(), ȳ * $dx
+                $pb_name(ȳ) = NoRvsData(), ȳ * $dx
                 return CoDual(($M.$f)(x), NoFwdsData()), $pb_name
             end
         end
@@ -26,7 +26,7 @@ for (M, f, arity) in DiffRules.diffrules(; filter_modules=nothing)
             function rrule!!(::CoDual{typeof($M.$f)}, _a::CoDual{$P}, _b::CoDual{$P})
                 a = primal(_a)
                 b = primal(_b)
-                $pb_name(ȳ) = NoTangent(), ȳ * $da, ȳ * $db
+                $pb_name(ȳ) = NoRvsData(), ȳ * $da, ȳ * $db
                 return CoDual(($M.$f)(a, b), NoFwdsData()), $pb_name
             end
         end
