@@ -35,7 +35,7 @@ function forwards_data_type(::Type{PossiblyUninitTangent{T}}) where {T}
     return PossiblyUninitTangent{Tfields}
 end
 
-function forwards_data_type(::Type{T}) where {T}
+@generated function forwards_data_type(::Type{T}) where {T}
 
     # If the tangent type is NoTangent, then the forwards-component must be `NoFwdsData`.
     T == NoTangent && return NoFwdsData
@@ -71,7 +71,7 @@ end
 
 forwards_data_type(::Type{Ptr{P}}) where {P} = Ptr{tangent_type(P)}
 
-function forwards_data_type(::Type{P}) where {P<:Tuple}
+@generated function forwards_data_type(::Type{P}) where {P<:Tuple}
     isa(P, Union) && return Union{forwards_data_type(P.a), forwards_data_type(P.b)}
     isempty(P.parameters) && return NoFwdsData
     isa(last(P.parameters), Core.TypeofVararg) && return Any
@@ -79,7 +79,7 @@ function forwards_data_type(::Type{P}) where {P<:Tuple}
     return Tuple{map(forwards_data_type, fieldtypes(P))...}
 end
 
-function forwards_data_type(::Type{NamedTuple{names, T}}) where {names, T<:Tuple}
+@generated function forwards_data_type(::Type{NamedTuple{names, T}}) where {names, T<:Tuple}
     if forwards_data_type(T) == NoFwdsData
         return NoFwdsData
     elseif isconcretetype(forwards_data_type(T))
@@ -110,9 +110,7 @@ function forwards_data(t::T) where {T}
     return F(forwards_data(t.fields))
 end
 
-forwards_data(t::Tuple) = tuple_map(forwards_data, t)
-forwards_data(t::NamedTuple{names}) where {names} = NamedTuple{names}(forwards_data(Tuple(t)))
-
+forwards_data(t::Union{Tuple, NamedTuple}) = tuple_map(forwards_data, t)
 
 """
     NoRvsData()
@@ -121,6 +119,8 @@ Nothing to propagate backwards on the reverse-pass.
 """
 struct NoRvsData end
 
+increment!!(::NoRvsData, ::NoRvsData) = NoRvsData()
+
 """
     RvsData(data::NamedTuple)
 
@@ -128,6 +128,8 @@ struct NoRvsData end
 struct RvsData{T<:NamedTuple}
     data::T
 end
+
+increment!!(x::RvsData{T}, y::RvsData{T}) where {T} = RvsData(increment!!(x.data, y.data))
 
 """
     reverse_data_type(T)
@@ -145,7 +147,7 @@ function reverse_data_type(::Type{PossiblyUninitTangent{T}}) where {T}
     # return PossiblyUninitTangent{reverse_data_type(T)}
 end
 
-function reverse_data_type(::Type{T}) where {T}
+@generated function reverse_data_type(::Type{T}) where {T}
 
     # If the tangent type is NoTangent, then the reverse-component must be `NoRvsData`.
     T == NoTangent && return NoRvsData
@@ -216,8 +218,35 @@ function reverse_data(t::T) where {T}
     return reverse_data_type(T)(reverse_data(t.fields))
 end
 
-reverse_data(t::Tuple) = tuple_map(reverse_data, t)
-reverse_data(t::NamedTuple{names}) where {names} = NamedTuple{names}(reverse_data(Tuple(t)))
+reverse_data(t::Union{Tuple, NamedTuple}) = tuple_map(reverse_data, t)
+
+"""
+    zero_reverse_data(p)
+
+Given value `p`, return the zero element associated to its reverse data type.
+"""
+zero_reverse_data(p)
+
+zero_reverse_data(p::IEEEFloat) = zero(p)
+
+function zero_reverse_data(p::P) where {P}
+
+    # Get types associated to primal.
+    T = tangent_type(P)
+    R = reverse_data_type(T)
+
+    # If there's no reverse data, return no reverse data, e.g. for mutable types.
+    R == NoRvsData && return NoRvsData()
+
+    # T ought to be a `Tangent`. If it's not, something has gone wrong.
+    !(T <: Tangent) && return :(error("Unhandled type $T"))
+    error("do not yet handle structs")
+    return reverse_data_type(T)(reverse_data(t.fields))
+end
+
+zero_reverse_data(p::Union{Tuple, NamedTuple}) = tuple_map(zero_reverse_data, p)
+
+zero_reverse_data(x::CoDual) = zero_reverse_data(primal(x))
 
 """
     combine_data(tangent_type, forwards_data, reverse_data)
@@ -256,7 +285,4 @@ function zero_tangent(p::P, f::F) where {P, F}
     return combine_data(tangent_type(P), f, r)
 end
 
-zero_tangent(p::Tuple, f::Tuple) = tuple_map(zero_tangent, p, f)
-function zero_tangent(p::NamedTuple{names}, f::NamedTuple{names}) where {names}
-    return NamedTuple{names}(zero_tangent(Tuple(p), Tuple(f)))
-end
+zero_tangent(p::Tuple, f::Union{Tuple, NamedTuple}) = tuple_map(zero_tangent, p, f)

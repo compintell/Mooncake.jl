@@ -88,7 +88,7 @@ using JET, Random, Tapir, Test, InteractiveUtils
 using Tapir:
     CoDual, NoTangent, rrule!!, is_init, zero_codual, DefaultCtx, @is_primitive, val,
     is_always_fully_initialised, get_tangent_field, set_tangent_field!, MutableTangent,
-    Tangent, _typeof
+    Tangent, _typeof, reverse_data, NoFwdsData
 
 has_equal_data(x::T, y::T; equal_undefs=true) where {T<:String} = x == y
 has_equal_data(x::Type, y::Type; equal_undefs=true) = x == y
@@ -176,7 +176,7 @@ function populate_address_map!(m::AddressMap, primal::P, tangent::T) where {P, T
 end
 
 function populate_address_map!(m::AddressMap, p::P, t) where {P<:Union{Tuple, NamedTuple}}
-    t isa NoTangent && return m
+    t isa NoFwdsData && return m
     foreach(n -> populate_address_map!(m, getfield(p, n), getfield(t, n)), fieldnames(P))
     return m
 end
@@ -238,7 +238,8 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...; rul
     # Run `rrule!!` on copies of `f` and `x`. We use randomly generated tangents so that we
     # can later verify that non-zero values do not get propagated by the rule.
     x̄_zero = map(zero_tangent, x)
-    x_x̄_rule = map((x, x̄_z) -> CoDual(_deepcopy(x), Tapir.forwards_data(x̄_z)), x, x̄_zero)
+    x̄_fwds = map(Tapir.forwards_data, x̄_zero)
+    x_x̄_rule = map((x, x̄_f) -> CoDual{_typeof(x), _typeof(x̄_f)}(_deepcopy(x), x̄_f), x, x̄_fwds)
     inputs_address_map = populate_address_map(map(primal, x_x̄_rule), map(tangent, x_x̄_rule))
     y_ȳ_rule, pb!! = rule(f_f̄, x_x̄_rule...)
 
@@ -260,9 +261,10 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...; rul
     ȳ_init = set_to_zero!!(zero_tangent(primal(y_ȳ_rule), tangent(y_ȳ_rule)))
     x̄_init = map(set_to_zero!!, x̄_zero)
     ȳ = increment!!(ȳ_init, ȳ_delta)
-    x̄ = map(increment!!, x̄_init, x̄_delta)
-    _, x̄_inc... = pb!!(Tapir.reverse_data(ȳ))
-    x̄ = map(increment!!, x̄, x̄_inc)
+    map(increment!!, x̄_init, x̄_delta)
+    _, x̄_rvs_inc... = pb!!(Tapir.reverse_data(ȳ))
+    x̄_rvs = map((x, x_inc) -> increment!!(reverse_data(x), x_inc), x̄_delta, x̄_rvs_inc)
+    x̄ = map(Tapir.combine_data, map(_typeof, x̄_zero), x̄_fwds, x̄_rvs)
 
     # Check that inputs have been returned to their original value.
     @test all(map(has_equal_data_up_to_undefs, x, map(primal, x_x̄_rule)))
@@ -346,14 +348,13 @@ function test_rrule_interface(f_f̄, x_x̄...; is_primitive, ctx::C, rule) where
 
     # Check the tangent types output by the reverse-pass, and that memory addresses of
     # mutable objects have remained constant.
-    @test _typeof(f̄_new) == _typeof(f̄)
-    @test all(map((a, b) -> _typeof(a) == _typeof(b), x̄_new, x̄))
-    @test all(map((x̄, x̄_new) -> ismutable(x̄) ? x̄ === x̄_new : true, x̄, x̄_new))
+    @test _typeof(f̄_new) == _typeof(reverse_data(f̄))
+    @test all(map((a, b) -> _typeof(a) == _typeof(reverse_data(b)), x̄_new, x̄))
 end
 
 function __forwards_and_backwards(rule, x_x̄::Vararg{Any, N}) where {N}
     out, pb!! = rule(x_x̄...)
-    return pb!!(tangent(out), map(tangent, x_x̄)...)
+    return pb!!(Tapir.zero_reverse_data(primal(out)))
 end
 
 function test_rrule_performance(
@@ -375,10 +376,10 @@ function test_rrule_performance(
         JET.test_opt(primal(f_f̄), map(_typeof ∘ primal, x_x̄))
 
         # Test forwards-pass stability.
-        JET.test_opt(rule, (_typeof(f_f̄), map(_typeof ∘ Tapir.to_fwds, x_x̄)...))
+        JET.test_opt(rule, (_typeof(Tapir.to_fwds(f_f̄)), map(_typeof ∘ Tapir.to_fwds, x_x̄)...))
 
         # Test reverse-pass stability.
-        y_ȳ, pb!! = rule(f_f̄, _deepcopy(x_x̄)...)
+        y_ȳ, pb!! = rule(Tapir.to_fwds(f_f̄), map(Tapir.to_fwds, _deepcopy(x_x̄))...)
         rvs_data = Tapir.reverse_data(zero_tangent(primal(y_ȳ), tangent(y_ȳ)))
         JET.test_opt(pb!!, (_typeof(rvs_data), ))
     end

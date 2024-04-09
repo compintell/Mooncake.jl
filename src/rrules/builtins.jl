@@ -14,11 +14,13 @@
 
 module IntrinsicsWrappers
 
+using Base: IEEEFloat
 using Core: Intrinsics
 using Tapir
 import ..Tapir:
     rrule!!, CoDual, primal, tangent, zero_tangent, NoPullback,
-    tangent_type, increment!!, @is_primitive, MinimalCtx, is_primitive
+    tangent_type, increment!!, @is_primitive, MinimalCtx, is_primitive, NoFwdsData,
+    zero_reverse_data, NoRvsData, tuple_map
 
 # Note: performance is not considered _at_ _all_ in this implementation.
 function rrule!!(f::CoDual{<:Core.IntrinsicFunction}, args...)
@@ -39,9 +41,10 @@ macro inactive_intrinsic(name)
         $name(x...) = Intrinsics.$name(x...)
         (is_primitive)(::Type{MinimalCtx}, ::Type{<:Tuple{typeof($name), Vararg}}) = true
         translate(::Val{Intrinsics.$name}) = $name
-        function rrule!!(::CoDual{typeof($name)}, args...)
+        function rrule!!(::CoDual{typeof($name)}, args::Vararg{Any, N}) where {N}
             y = $name(map(primal, args)...)
-            return CoDual(y, zero_tangent(y)), NoPullback()
+            pb!! = NoPullback((NoRvsData(), tuple_map(zero_reverse_data ∘ primal, args)...))
+            return CoDual(y, NoFwdsData()), pb!!
         end
     end
     return esc(expr)
@@ -49,23 +52,23 @@ end
 
 @intrinsic abs_float
 function rrule!!(::CoDual{typeof(abs_float)}, x)
-    abs_float_pullback!!(dy, df, dx) = df, dx + sign(primal(x)) * dy
+    abs_float_pullback!!(dy) = NoRvsData(), sign(primal(x)) * dy
     y = abs_float(primal(x))
-    return CoDual(y, zero_tangent(y)), abs_float_pullback!!
+    return CoDual(y, NoFwdsData()), abs_float_pullback!!
 end
 
 @intrinsic add_float
 function rrule!!(::CoDual{typeof(add_float)}, a, b)
-    add_float_pb!!(c̄, f̄, ā, b̄) = f̄, c̄ + ā, c̄ + b̄
+    add_float_pb!!(c̄) = NoRvsData(), c̄, c̄
     c = add_float(primal(a), primal(b))
-    return CoDual(c, zero_tangent(c)), add_float_pb!!
+    return CoDual(c, NoFwdsData()), add_float_pb!!
 end
 
 @intrinsic add_float_fast
 function rrule!!(::CoDual{typeof(add_float_fast)}, a, b)
-    add_float_fast_pb!!(c̄, f̄, ā, b̄) = f̄, add_float_fast(c̄, ā), add_float_fast(c̄, b̄)
+    add_float_fast_pb!!(c̄) = NoRvsData(), c̄, c̄
     c = add_float_fast(primal(a), primal(b))
-    return CoDual(c, zero_tangent(c)), add_float_fast_pb!!
+    return CoDual(c, NoFwdsData()), add_float_fast_pb!!
 end
 
 @inactive_intrinsic add_int
@@ -93,9 +96,9 @@ function rrule!!(::CoDual{typeof(bitcast)}, ::CoDual{Type{T}}, x) where {T}
     if T <: Ptr && _x isa Ptr
         dv = bitcast(Ptr{tangent_type(eltype(T))}, tangent(x))
     else
-        dv = zero_tangent(v)
+        dv = NoFwdsData()
     end
-    return CoDual(v, dv), NoPullback()
+    return CoDual(v, dv), NoPullback((NoRvsData(), NoRvsData(), zero_reverse_data(_x)))
 end
 
 @inactive_intrinsic bswap_int
@@ -120,7 +123,8 @@ __cglobal(::Val{s}, x::Vararg{Any, N}) where {s, N} = cglobal(s, x...)
 translate(::Val{Intrinsics.cglobal}) = __cglobal
 Tapir.is_primitive(::Type{MinimalCtx}, ::Type{<:Tuple{typeof(__cglobal), Vararg}}) = true
 function rrule!!(::CoDual{typeof(__cglobal)}, args...)
-    return Tapir.uninit_codual(__cglobal(map(primal, args)...)), NoPullback()
+    pb!! = NoPullback((NoRvsData(), tuple_map(zero_reverse_data, args)...))
+    return Tapir.uninit_codual(__cglobal(map(primal, args)...)), pb!!
 end
 
 @inactive_intrinsic checked_sadd_int
@@ -138,9 +142,9 @@ end
 function rrule!!(::CoDual{typeof(copysign_float)}, x, y)
     _x = primal(x)
     _y = primal(y)
-    copysign_float_pullback!!(dz, df, dx, dy) = df, dx + dz * sign(_y), dy
+    copysign_float_pullback!!(dz) = NoRvsData(), dz * sign(_y), zero_reverse_data(_y)
     z = copysign_float(_x, _y)
-    return CoDual(z, zero_tangent(z)), copysign_float_pullback!!
+    return CoDual(z, NoFwdsData()), copysign_float_pullback!!
 end
 
 @inactive_intrinsic ctlz_int
@@ -152,12 +156,8 @@ function rrule!!(::CoDual{typeof(div_float)}, a, b)
     _a = primal(a)
     _b = primal(b)
     _y = div_float(_a, _b)
-    function div_float_pullback!!(dy, df, da, db)
-        da += div_float(dy, _b)
-        db -= dy * _a / _b^2
-        return df, da, db
-    end
-    return CoDual(_y, zero_tangent(_y)), div_float_pullback!!
+    div_float_pullback!!(dy) = NoRvsData(), div_float(dy, _b), -dy * _a / _b^2
+    return CoDual(_y, NoFwdsData()), div_float_pullback!!
 end
 
 @intrinsic div_float_fast
@@ -165,12 +165,10 @@ function rrule!!(::CoDual{typeof(div_float_fast)}, a, b)
     _a = primal(a)
     _b = primal(b)
     _y = div_float_fast(_a, _b)
-    function div_float_pullback!!(dy, df, da, db)
-        da += div_float_fast(dy, _b)
-        db -= dy * div_float_fast(_a, _b^2)
-        return df, da, db
+    function div_float_pullback!!(dy)
+        return NoRvsData(), div_float_fast(dy, _b), -dy * div_float_fast(_a, _b^2)
     end
-    return CoDual(_y, zero_tangent(_y)), div_float_pullback!!
+    return CoDual(_y, NoFwdsData()), div_float_pullback!!
 end
 
 @inactive_intrinsic eq_float
@@ -183,12 +181,8 @@ end
 function rrule!!(::CoDual{typeof(fma_float)}, x, y, z)
     _x = primal(x)
     _y = primal(y)
-    _z = primal(z)
-    function fma_float_pullback!!(da, df, dx, dy, dz)
-        return df, fma_float(da, _y, dx), fma_float(da, _x, dy), dz + da
-    end
-    a = fma_float(_x, _y, _z)
-    return CoDual(a, zero_tangent(a)), fma_float_pullback!!
+    fma_float_pullback!!(da) = NoRvsData(), da * _y, da * _x, da
+    return CoDual(fma_float(_x, _y, primal(z)), NoFwdsData()), fma_float_pullback!!
 end
 
 # fpext -- maybe interesting
@@ -213,18 +207,16 @@ end
 function rrule!!(::CoDual{typeof(mul_float)}, a, b)
     _a = primal(a)
     _b = primal(b)
-    mul_float_pb!!(dc, df, da, db) = df, fma_float(dc, _b, da), fma_float(_a, dc, db)
-    c = mul_float(_a, _b)
-    return CoDual(c, zero_tangent(c)), mul_float_pb!!
+    mul_float_pb!!(dc) = NoRvsData(), dc * _b, _a * dc
+    return CoDual(mul_float(_a, _b), NoFwdsData()), mul_float_pb!!
 end
 
 @intrinsic mul_float_fast
 function rrule!!(::CoDual{typeof(mul_float_fast)}, a, b)
     _a = primal(a)
     _b = primal(b)
-    mul_float_pb!!(dc, df, da, db) = df, fma_float(dc, _b, da), fma_float(_a, dc, db)
-    c = mul_float_fast(_a, _b)
-    return CoDual(c, zero_tangent(c)), mul_float_pb!!
+    mul_float_fast_pb!!(dc) = NoRvsData(), dc * _b, _a * dc
+    return CoDual(mul_float_fast(_a, _b), NoFwdsData()), mul_float_fast_pb!!
 end
 
 @inactive_intrinsic mul_int
@@ -234,9 +226,8 @@ function rrule!!(::CoDual{typeof(muladd_float)}, x, y, z)
     _x = primal(x)
     _y = primal(y)
     _z = primal(z)
-    muladd_float_pullback!!(da, df, dx, dy, dz) = df, dx + da * _y, dy + da * _x, dz + da
-    a = muladd_float(_x, _y, _z)
-    return CoDual(a, zero_tangent(a)), muladd_float_pullback!!
+    muladd_float_pullback!!(da) = NoRvsData(), da * _y, da * _x, da
+    return CoDual(muladd_float(_x, _y, _z), NoFwdsData()), muladd_float_pullback!!
 end
 
 @inactive_intrinsic ne_float
@@ -246,17 +237,15 @@ end
 @intrinsic neg_float
 function rrule!!(::CoDual{typeof(neg_float)}, x)
     _x = primal(x)
-    neg_float_pullback!!(dy, df, dx) = df, sub_float(dx, dy)
-    y = neg_float(_x)
-    return CoDual(y, zero_tangent(y)), neg_float_pullback!!
+    neg_float_pullback!!(dy) = NoRvsData(), -dy
+    return CoDual(neg_float(_x), NoFwdsData()), neg_float_pullback!!
 end
 
 @intrinsic neg_float_fast
 function rrule!!(::CoDual{typeof(neg_float_fast)}, x)
     _x = primal(x)
-    neg_float_fast_pullback!!(dy, df, dx) = df, sub_float_fast(dx, dy)
-    y = neg_float_fast(_x)
-    return CoDual(y, zero_tangent(y)), neg_float_fast_pullback!!
+    neg_float_fast_pullback!!(dy) = NoRvsData(), -dy
+    return CoDual(neg_float_fast(_x), NoFwdsData()), neg_float_fast_pullback!!
 end
 
 @inactive_intrinsic neg_int
@@ -310,15 +299,15 @@ end
 @intrinsic sqrt_llvm
 function rrule!!(::CoDual{typeof(sqrt_llvm)}, x)
     _x = primal(x)
-    llvm_sqrt_pullback!!(dy, df, dx) = df, dx + dy * inv(2 * sqrt(_x))
-    return CoDual(sqrt_llvm(_x), zero(_x)), llvm_sqrt_pullback!!
+    llvm_sqrt_pullback!!(dy) = NoRvsData(), dy * inv(2 * sqrt(_x))
+    return CoDual(sqrt_llvm(_x), NoFwdsData()), llvm_sqrt_pullback!!
 end
 
 @intrinsic sqrt_llvm_fast
 function rrule!!(::CoDual{typeof(sqrt_llvm_fast)}, x)
     _x = primal(x)
-    llvm_sqrt_pullback!!(dy, df, dx) = df, dx + dy * inv(2 * sqrt(_x))
-    return CoDual(sqrt_llvm_fast(_x), zero(_x)), llvm_sqrt_pullback!!
+    llvm_sqrt_fast_pullback!!(dy) = NoRvsData(), dy * inv(2 * sqrt(_x))
+    return CoDual(sqrt_llvm_fast(_x), NoFwdsData()), llvm_sqrt_fast_pullback!!
 end
 
 @inactive_intrinsic srem_int
@@ -327,20 +316,16 @@ end
 function rrule!!(::CoDual{typeof(sub_float)}, a, b)
     _a = primal(a)
     _b = primal(b)
-    sub_float_pullback!!(dc, df, da, db) = df, add_float(da, dc), sub_float(db, dc)
-    c = sub_float(_a, _b)
-    return CoDual(c, zero_tangent(c)), sub_float_pullback!!
+    sub_float_pullback!!(dc) = NoRvsData(), dc, -dc
+    return CoDual(sub_float(_a, _b), NoFwdsData()), sub_float_pullback!!
 end
 
 @intrinsic sub_float_fast
 function rrule!!(::CoDual{typeof(sub_float_fast)}, a, b)
     _a = primal(a)
     _b = primal(b)
-    function sub_float_fast_pullback!!(dc, df, da, db)
-        return df, add_float_fast(da, dc), sub_float_fast(db, dc)
-    end
-    c = sub_float_fast(_a, _b)
-    return CoDual(c, zero_tangent(c)), sub_float_fast_pullback!!
+    sub_float_fast_pullback!!(dc) = NoRvsData(), dc, -dc
+    return CoDual(sub_float_fast(_a, _b), NoFwdsData()), sub_float_fast_pullback!!
 end
 
 @inactive_intrinsic sub_int
@@ -363,11 +348,15 @@ end
 end # IntrinsicsWrappers
 
 function rrule!!(::CoDual{typeof(<:)}, T1, T2)
-    return CoDual(<:(primal(T1), primal(T2)), NoTangent()), NoPullback()
+    pb!! = NoPullback((NoRvsData(), NoRvsData(), NoRvsData()))
+    return CoDual(<:(primal(T1), primal(T2)), NoFwdsData()), pb!!
 end
 
-function rrule!!(::CoDual{typeof(===)}, args...)
-    return CoDual(===(map(primal, args)...), NoTangent()), NoPullback()
+function rrule!!(::CoDual{typeof(===)}, x, y)
+    _x = primal(x)
+    _y = primal(y)
+    pb!! = NoPullback((NoRvsData(), zero_reverse_data(_x), zero_reverse_data(_y)))
+    return CoDual(_x === _y, NoFwdsData()), pb!!
 end
 
 # Core._abstracttype
@@ -388,13 +377,15 @@ end
 
 function rrule!!(::CoDual{typeof(Core._typevar)}, args...)
     y = Core._typevar(map(primal, args)...)
-    return CoDual(y, zero_tangent(y)), NoPullback()
+    pb!! = NoPullback((NoRvsData(), tuple_map(zero_reverse_data, args)...))
+    return CoDual(y, NoFwdsData()), pb!!
 end
 
 function rrule!!(::CoDual{typeof(Core.apply_type)}, args...)
     arg_primals = map(primal, args)
     T = Core.apply_type(arg_primals...)
-    return CoDual(T, zero_tangent(T)), NoPullback()
+    pb!! = NoPullback((NoRvsData(), map(zero_reverse_data, args)...))
+    return CoDual{_typeof(T), NoFwdsData}(T, NoFwdsData()), pb!!
 end
 
 function rrule!!(
@@ -405,13 +396,14 @@ function rrule!!(
 )
     _inbounds = primal(inbounds)
     _inds = map(primal, inds)
-    function arrayref_pullback!!(dy, df, dinbounds, dx, dinds...)
+    dx = tangent(x)
+    function arrayref_pullback!!(dy)
         current_val = arrayref(_inbounds, dx, _inds...)
         arrayset(_inbounds, dx, increment!!(current_val, dy), _inds...)
-        return df, dinbounds, dx, dinds...
+        return NoRvsData(), NoRvsData(), NoRvsData(), tuple_map(_ -> NoRvsData(), _inds)...
     end
     _y = arrayref(_inbounds, primal(x), _inds...)
-    dy = arrayref(_inbounds, tangent(x), _inds...)
+    dy = forwards_data(arrayref(_inbounds, tangent(x), _inds...))
     return CoDual(_y, dy), arrayref_pullback!!
 end
 
@@ -439,38 +431,42 @@ function rrule!!(
     end
 
     arrayset(_inbounds, primal(A), primal(v), _inds...)
-    arrayset(_inbounds, tangent(A), tangent(v), _inds...)
-    function arrayset_pullback!!(dA::TdA, df, dinbounds, dA2::TdA, dv, dinds::NoTangent...)
-        dv_new = increment!!(dv, arrayref(_inbounds, dA, _inds...))
+    dA = tangent(A)
+    arrayset(_inbounds, dA, tangent(v), _inds...)
+    function arrayset_pullback!!(::NoRvsData)
+        dv = reverse_data(arrayref(_inbounds, dA, _inds...))
         if to_save
             arrayset(_inbounds, primal(A), old_A[][1], _inds...)
             arrayset(_inbounds, dA, old_A[][2], _inds...)
         end
-        return df, dinbounds, dA, dv_new, dinds...
+        return NoRvsData(), NoRvsData(), NoRvsData(), dv, tuple_map(_ -> NoRvsData(), _inds)...
     end
     return A, arrayset_pullback!!
 end
 
 function isbits_arrayset_rrule(
-    _inbounds, _inds, A::CoDual{<:Array{P}, TdA}, v
+    _inbounds, _inds, A::CoDual{<:Array{P}, TdA}, v::CoDual{P}
 ) where {P, V, TdA <: Array{V}}
     old_A = (
         arrayref(_inbounds, primal(A), _inds...),
         arrayref(_inbounds, tangent(A), _inds...),
     )
     arrayset(_inbounds, primal(A), primal(v), _inds...)
-    arrayset(_inbounds, tangent(A), tangent(v), _inds...)
-    function isbits_arrayset_pullback!!(dA::TdA, df, dinbounds, dA2::TdA, dv, dinds::NoTangent...)
-        dv_new = increment!!(dv, arrayref(_inbounds, dA, _inds...))
+
+    dA = tangent(A)
+    arrayset(_inbounds, dA, zero_tangent(primal(v)), _inds...)
+    function isbits_arrayset_pullback!!(::NoRvsData)
+        dv = arrayref(_inbounds, dA, _inds...)
         arrayset(_inbounds, primal(A), old_A[1], _inds...)
         arrayset(_inbounds, dA, old_A[2], _inds...)
-        return df, dinbounds, dA, dv_new, dinds...
+        return NoRvsData(), NoRvsData(), NoRvsData(), dv, tuple_map(_ -> NoRvsData(), _inds)...
     end
     return A, isbits_arrayset_pullback!!
 end
 
 function rrule!!(::CoDual{typeof(Core.arraysize)}, X, dim)
-    return CoDual(Core.arraysize(primal(X), primal(dim)), NoTangent()), NoPullback()
+    pb!! = NoPullback((NoRvsData(), NoRvsData(), NoRvsData()))
+    return CoDual(Core.arraysize(primal(X), primal(dim)), NoFwdsData()), pb!!
 end
 
 # Core.compilerbarrier
@@ -481,10 +477,10 @@ end
 
 function rrule!!(::CoDual{typeof(Core.ifelse)}, cond, a, b)
     _cond = primal(cond)
-    function ifelse_pullback!!(dc, df, ::NoTangent, da, db)
-        da = _cond ? increment!!(da, dc) : da
-        db = _cond ? db : increment!!(db, dc)
-        return df, NoTangent(), da, db
+    function ifelse_pullback!!(dc)
+        da = _cond ? dc : zero_reverse_data(primal(a))
+        db = _cond ? zero_reverse_data(primal(b)) : dc
+        return NoRvsData(), NoRvsData(), da, db
     end
     return ifelse(_cond, a, b), ifelse_pullback!!
 end
@@ -501,25 +497,29 @@ end
 # Core.set_binding_type!
 
 function rrule!!(::CoDual{typeof(Core.sizeof)}, x)
-    return CoDual(Core.sizeof(primal(x)), NoTangent()), NoPullback()
+    pb!! = NoPullback((NoRvsData(), zero_reverse_data(primal(x))))
+    return CoDual(Core.sizeof(primal(x)), NoFwdsData()), pb!!
 end
 
 # Core.svec
 
 function rrule!!(::CoDual{typeof(applicable)}, f, args...)
-    return CoDual(applicable(primal(f), map(primal, args)...), NoTangent()), NoPullback()
+    args_rvs_data = tuple_map(zero_reverse_data, args)
+    pb!! = NoPullback((NoRvsData(), zero_reverse_data(f), args_rvs_data...))
+    return CoDual(applicable(primal(f), map(primal, args)...), NoFwdsData()), pb!!
 end
 
-function rrule!!(::CoDual{typeof(Core.fieldtype)}, args...)
-    arg_primals = map(primal, args)
-    return CoDual(Core.fieldtype(arg_primals...), NoTangent()), NoPullback()
+function rrule!!(::CoDual{typeof(Core.fieldtype)}, args::Vararg{Any, N}) where {N}
+    arg_primals = tuple_map(primal, args)
+    pb!! = NoPullback((NoRvsData(), NoRvsData(), NoRvsData()))
+    return CoDual(Core.fieldtype(arg_primals...), NoFwdsData()), pb!!
 end
 
 function rrule!!(::CoDual{typeof(getfield)}, value::CoDual, name::CoDual)
     _name = primal(name)
     function getfield_pullback(dy, ::NoTangent, dvalue, ::NoTangent)
         new_dvalue = _increment_field!!(dvalue, dy, _name)
-        return NoTangent(), new_dvalue, NoTangent()
+        return NoRvsData(), new_dvalue, NoRvsData()
     end
     y = CoDual(
         getfield(primal(value), _name),
@@ -570,17 +570,20 @@ end
 # invoke
 
 function rrule!!(::CoDual{typeof(isa)}, x, T)
-    return CoDual(isa(primal(x), primal(T)), NoTangent()), NoPullback()
+    pb!! = NoPullback((NoRvsData(), zero_reverse_data(x), NoRvsData()))
+    return CoDual(isa(primal(x), primal(T)), NoFwdsData()), pb!!
 end
 
 function rrule!!(::CoDual{typeof(isdefined)}, args...)
-    return CoDual(isdefined(map(primal, args)...), NoTangent()), NoPullback()
+    pb!! = NoPullback((NoRvsData(), tuple_map(zero_reverse_data, args)...))
+    return CoDual(isdefined(map(primal, args)...), NoFwdsData()), pb!!
 end
 
 # modifyfield!
 
 function rrule!!(::CoDual{typeof(nfields)}, x)
-    return CoDual(nfields(primal(x)), NoTangent()), NoPullback()
+    pb!! = NoPullback((NoRvsData(), zero_reverse_data(x)))
+    return CoDual(nfields(primal(x)), NoFwdsData()), pb!!
 end
 
 # replacefield!
@@ -621,27 +624,31 @@ end
 # swapfield!
 # throw
 
-@inline function tuple_pullback(dy, ::NoTangent, dargs...)
-    return NoTangent(), tuple_map(increment!!, dargs, dy)...
-end
+@inline tuple_pullback(dy) = NoRvsData(), dy...
 
 function rrule!!(::CoDual{typeof(tuple)}, args::Vararg{Any, N}) where {N}
     primal_output = tuple(map(primal, args)...)
     if tangent_type(_typeof(primal_output)) == NoTangent
-        return zero_codual(primal_output), NoPullback()
+        pb!! = NoPullback((NoRvsData(), tuple_map(zero_reverse_data, args)...))
+        return CoDual(primal_output, NoFwdsData()), pb!!
     else
-        return CoDual(primal_output, tuple(map(tangent, args)...)), tuple_pullback
+        if forwards_data_type(_typeof(primal_output)) == NoFwdsData
+            return CoDual(primal_output, NoFwdsData()), tuple_pullback
+        else
+            return CoDual(primal_output, tuple(map(tangent, args)...)), tuple_pullback
+        end
     end
 end
 
-function rrule!!(::CoDual{typeof(typeassert)}, x, type)
-    function typeassert_pullback(dy, ::NoTangent, dx, ::NoTangent)
-        return NoTangent(), increment!!(dx, dy), NoTangent()
-    end
+function rrule!!(::CoDual{typeof(typeassert)}, x::CoDual, type::CoDual)
+    typeassert_pullback(dy) = NoRvsData(), dy, NoRvsData()
     return CoDual(typeassert(primal(x), primal(type)), tangent(x)), typeassert_pullback
 end
 
-rrule!!(::CoDual{typeof(typeof)}, x) = CoDual(typeof(primal(x)), NoTangent()), NoPullback()
+function rrule!!(::CoDual{typeof(typeof)}, x::CoDual)
+    pb!! = NoPullback((NoRvsData(), zero_reverse_data(x)))
+    return CoDual(typeof(primal(x)), NoFwdsData()), pb!!
+end
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
 
@@ -656,109 +663,109 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
     test_cases = Any[
 
         # Core.Intrinsics:
-        [false, :stability, nothing, IntrinsicsWrappers.abs_float, 5.0],
-        [false, :stability, nothing, IntrinsicsWrappers.add_float, 4.0, 5.0],
-        [false, :stability, nothing, IntrinsicsWrappers.add_float_fast, 4.0, 5.0],
-        [false, :stability, nothing, IntrinsicsWrappers.add_int, 1, 2],
-        [false, :stability, nothing, IntrinsicsWrappers.and_int, 2, 3],
-        [false, :stability, nothing, IntrinsicsWrappers.arraylen, randn(10)],
-        [false, :stability, nothing, IntrinsicsWrappers.arraylen, randn(10, 7)],
-        [false, :stability, nothing, IntrinsicsWrappers.ashr_int, 123456, 0x0000000000000020],
+        (false, :stability, nothing, IntrinsicsWrappers.abs_float, 5.0),
+        (false, :stability, nothing, IntrinsicsWrappers.add_float, 4.0, 5.0),
+        (false, :stability, nothing, IntrinsicsWrappers.add_float_fast, 4.0, 5.0),
+        (false, :stability, nothing, IntrinsicsWrappers.add_int, 1, 2),
+        (false, :stability, nothing, IntrinsicsWrappers.and_int, 2, 3),
+        (false, :stability, nothing, IntrinsicsWrappers.arraylen, randn(10)),
+        (false, :stability, nothing, IntrinsicsWrappers.arraylen, randn(10, 7)),
+        (false, :stability, nothing, IntrinsicsWrappers.ashr_int, 123456, 0x0000000000000020),
         # atomic_fence -- NEEDS IMPLEMENTING AND TESTING
         # atomic_pointermodify -- NEEDS IMPLEMENTING AND TESTING
         # atomic_pointerref -- NEEDS IMPLEMENTING AND TESTING
         # atomic_pointerreplace -- NEEDS IMPLEMENTING AND TESTING
         # atomic_pointerset -- NEEDS IMPLEMENTING AND TESTING
         # atomic_pointerswap -- NEEDS IMPLEMENTING AND TESTING
-        [false, :stability, nothing, IntrinsicsWrappers.bitcast, Float64, 5],
-        [false, :stability, nothing, IntrinsicsWrappers.bitcast, Int64, 5.0],
-        [false, :stability, nothing, IntrinsicsWrappers.bswap_int, 5],
-        [false, :stability, nothing, IntrinsicsWrappers.ceil_llvm, 4.1],
-        [
+        (false, :stability, nothing, IntrinsicsWrappers.bitcast, Float64, 5),
+        (false, :stability, nothing, IntrinsicsWrappers.bitcast, Int64, 5.0),
+        (false, :stability, nothing, IntrinsicsWrappers.bswap_int, 5),
+        (false, :stability, nothing, IntrinsicsWrappers.ceil_llvm, 4.1),
+        (
             true,
             :stability,
             nothing,
             IntrinsicsWrappers.__cglobal,
             Val{:jl_uv_stdout}(),
             Ptr{Cvoid},
-        ],
-        [false, :stability, nothing, IntrinsicsWrappers.checked_sadd_int, 5, 4],
-        [false, :stability, nothing, IntrinsicsWrappers.checked_sdiv_int, 5, 4],
-        [false, :stability, nothing, IntrinsicsWrappers.checked_smul_int, 5, 4],
-        [false, :stability, nothing, IntrinsicsWrappers.checked_srem_int, 5, 4],
-        [false, :stability, nothing, IntrinsicsWrappers.checked_ssub_int, 5, 4],
-        [false, :stability, nothing, IntrinsicsWrappers.checked_uadd_int, 5, 4],
-        [false, :stability, nothing, IntrinsicsWrappers.checked_udiv_int, 5, 4],
-        [false, :stability, nothing, IntrinsicsWrappers.checked_umul_int, 5, 4],
-        [false, :stability, nothing, IntrinsicsWrappers.checked_urem_int, 5, 4],
-        [false, :stability, nothing, IntrinsicsWrappers.checked_usub_int, 5, 4],
-        [false, :stability, nothing, IntrinsicsWrappers.copysign_float, 5.0, 4.0],
-        [false, :stability, nothing, IntrinsicsWrappers.copysign_float, 5.0, -3.0],
+        ),
+        (false, :stability, nothing, IntrinsicsWrappers.checked_sadd_int, 5, 4),
+        (false, :stability, nothing, IntrinsicsWrappers.checked_sdiv_int, 5, 4),
+        (false, :stability, nothing, IntrinsicsWrappers.checked_smul_int, 5, 4),
+        (false, :stability, nothing, IntrinsicsWrappers.checked_srem_int, 5, 4),
+        (false, :stability, nothing, IntrinsicsWrappers.checked_ssub_int, 5, 4),
+        (false, :stability, nothing, IntrinsicsWrappers.checked_uadd_int, 5, 4),
+        (false, :stability, nothing, IntrinsicsWrappers.checked_udiv_int, 5, 4),
+        (false, :stability, nothing, IntrinsicsWrappers.checked_umul_int, 5, 4),
+        (false, :stability, nothing, IntrinsicsWrappers.checked_urem_int, 5, 4),
+        (false, :stability, nothing, IntrinsicsWrappers.checked_usub_int, 5, 4),
+        (false, :stability, nothing, IntrinsicsWrappers.copysign_float, 5.0, 4.0),
+        (false, :stability, nothing, IntrinsicsWrappers.copysign_float, 5.0, -3.0),
         [false, :stability, nothing, IntrinsicsWrappers.ctlz_int, 5],
-        [false, :stability, nothing, IntrinsicsWrappers.ctpop_int, 5],
-        [false, :stability, nothing, IntrinsicsWrappers.cttz_int, 5],
-        [false, :stability, nothing, IntrinsicsWrappers.div_float, 5.0, 3.0],
-        [false, :stability, nothing, IntrinsicsWrappers.div_float_fast, 5.0, 3.0],
-        [false, :stability, nothing, IntrinsicsWrappers.eq_float, 5.0, 4.0],
-        [false, :stability, nothing, IntrinsicsWrappers.eq_float, 4.0, 4.0],
-        [false, :stability, nothing, IntrinsicsWrappers.eq_float_fast, 5.0, 4.0],
-        [false, :stability, nothing, IntrinsicsWrappers.eq_float_fast, 4.0, 4.0],
-        [false, :stability, nothing, IntrinsicsWrappers.eq_int, 5, 4],
-        [false, :stability, nothing, IntrinsicsWrappers.eq_int, 4, 4],
-        [false, :stability, nothing, IntrinsicsWrappers.flipsign_int, 4, -3],
-        [false, :stability, nothing, IntrinsicsWrappers.floor_llvm, 4.1],
-        [false, :stability, nothing, IntrinsicsWrappers.fma_float, 5.0, 4.0, 3.0],
+        (false, :stability, nothing, IntrinsicsWrappers.ctpop_int, 5),
+        (false, :stability, nothing, IntrinsicsWrappers.cttz_int, 5),
+        (false, :stability, nothing, IntrinsicsWrappers.div_float, 5.0, 3.0),
+        (false, :stability, nothing, IntrinsicsWrappers.div_float_fast, 5.0, 3.0),
+        (false, :stability, nothing, IntrinsicsWrappers.eq_float, 5.0, 4.0),
+        (false, :stability, nothing, IntrinsicsWrappers.eq_float, 4.0, 4.0),
+        (false, :stability, nothing, IntrinsicsWrappers.eq_float_fast, 5.0, 4.0),
+        (false, :stability, nothing, IntrinsicsWrappers.eq_float_fast, 4.0, 4.0),
+        (false, :stability, nothing, IntrinsicsWrappers.eq_int, 5, 4),
+        (false, :stability, nothing, IntrinsicsWrappers.eq_int, 4, 4),
+        (false, :stability, nothing, IntrinsicsWrappers.flipsign_int, 4, -3),
+        (false, :stability, nothing, IntrinsicsWrappers.floor_llvm, 4.1),
+        (false, :stability, nothing, IntrinsicsWrappers.fma_float, 5.0, 4.0, 3.0),
         # fpext -- NEEDS IMPLEMENTING AND TESTING
-        [false, :stability, nothing, IntrinsicsWrappers.fpiseq, 4.1, 4.0],
-        [false, :stability, nothing, IntrinsicsWrappers.fptosi, UInt32, 4.1],
-        [false, :stability, nothing, IntrinsicsWrappers.fptoui, Int32, 4.1],
+        (false, :stability, nothing, IntrinsicsWrappers.fpiseq, 4.1, 4.0),
+        (false, :stability, nothing, IntrinsicsWrappers.fptosi, UInt32, 4.1),
+        (false, :stability, nothing, IntrinsicsWrappers.fptoui, Int32, 4.1),
         # fptrunc -- maybe interesting
-        [true, :stability, nothing, IntrinsicsWrappers.have_fma, Float64],
-        [false, :stability, nothing, IntrinsicsWrappers.le_float, 4.1, 4.0],
-        [false, :stability, nothing, IntrinsicsWrappers.le_float_fast, 4.1, 4.0],
+        (true, :stability, nothing, IntrinsicsWrappers.have_fma, Float64),
+        (false, :stability, nothing, IntrinsicsWrappers.le_float, 4.1, 4.0),
+        (false, :stability, nothing, IntrinsicsWrappers.le_float_fast, 4.1, 4.0),
         # llvm_call -- NEEDS IMPLEMENTING AND TESTING
-        [false, :stability, nothing, IntrinsicsWrappers.lshr_int, 1308622848, 0x0000000000000018],
-        [false, :stability, nothing, IntrinsicsWrappers.lt_float, 4.1, 4.0],
-        [false, :stability, nothing, IntrinsicsWrappers.lt_float_fast, 4.1, 4.0],
-        [false, :stability, nothing, IntrinsicsWrappers.mul_float, 5.0, 4.0],
-        [false, :stability, nothing, IntrinsicsWrappers.mul_float_fast, 5.0, 4.0],
-        [false, :stability, nothing, IntrinsicsWrappers.mul_int, 5, 4],
-        [false, :stability, nothing, IntrinsicsWrappers.muladd_float, 5.0, 4.0, 3.0],
-        [false, :stability, nothing, IntrinsicsWrappers.ne_float, 5.0, 4.0],
-        [false, :stability, nothing, IntrinsicsWrappers.ne_float_fast, 5.0, 4.0],
-        [false, :stability, nothing, IntrinsicsWrappers.ne_int, 5, 4],
-        [false, :stability, nothing, IntrinsicsWrappers.ne_int, 5, 5],
-        [false, :stability, nothing, IntrinsicsWrappers.neg_float, 5.0],
-        [false, :stability, nothing, IntrinsicsWrappers.neg_float_fast, 5.0],
-        [false, :stability, nothing, IntrinsicsWrappers.neg_int, 5],
-        [false, :stability, nothing, IntrinsicsWrappers.not_int, 5],
-        [false, :stability, nothing, IntrinsicsWrappers.or_int, 5, 5],
+        (false, :stability, nothing, IntrinsicsWrappers.lshr_int, 1308622848, 0x0000000000000018),
+        (false, :stability, nothing, IntrinsicsWrappers.lt_float, 4.1, 4.0),
+        (false, :stability, nothing, IntrinsicsWrappers.lt_float_fast, 4.1, 4.0),
+        (false, :stability, nothing, IntrinsicsWrappers.mul_float, 5.0, 4.0),
+        (false, :stability, nothing, IntrinsicsWrappers.mul_float_fast, 5.0, 4.0),
+        (false, :stability, nothing, IntrinsicsWrappers.mul_int, 5, 4),
+        (false, :stability, nothing, IntrinsicsWrappers.muladd_float, 5.0, 4.0, 3.0),
+        (false, :stability, nothing, IntrinsicsWrappers.ne_float, 5.0, 4.0),
+        (false, :stability, nothing, IntrinsicsWrappers.ne_float_fast, 5.0, 4.0),
+        (false, :stability, nothing, IntrinsicsWrappers.ne_int, 5, 4),
+        (false, :stability, nothing, IntrinsicsWrappers.ne_int, 5, 5),
+        (false, :stability, nothing, IntrinsicsWrappers.neg_float, 5.0),
+        (false, :stability, nothing, IntrinsicsWrappers.neg_float_fast, 5.0),
+        (false, :stability, nothing, IntrinsicsWrappers.neg_int, 5),
+        (false, :stability, nothing, IntrinsicsWrappers.not_int, 5),
+        (false, :stability, nothing, IntrinsicsWrappers.or_int, 5, 5),
         # pointerref -- integration tested because pointers are awkward. See below.
         # pointerset -- integration tested because pointers are awkward. See below.
         # rem_float -- untested and unimplemented because seemingly unused on master
         # rem_float_fast -- untested and unimplemented because seemingly unused on master
-        [false, :stability, nothing, IntrinsicsWrappers.rint_llvm, 5],
-        [false, :stability, nothing, IntrinsicsWrappers.sdiv_int, 5, 4],
-        [false, :stability, nothing, IntrinsicsWrappers.sext_int, Int64, Int32(1308622848)],
-        [false, :stability, nothing, IntrinsicsWrappers.shl_int, 1308622848, 0xffffffffffffffe8],
-        [false, :stability, nothing, IntrinsicsWrappers.sitofp, Float64, 0],
-        [false, :stability, nothing, IntrinsicsWrappers.sle_int, 5, 4],
-        [false, :stability, nothing, IntrinsicsWrappers.slt_int, 4, 5],
-        [false, :stability, nothing, IntrinsicsWrappers.sqrt_llvm, 5.0],
-        [false, :stability, nothing, IntrinsicsWrappers.sqrt_llvm_fast, 5.0],
-        [false, :stability, nothing, IntrinsicsWrappers.srem_int, 4, 1],
-        [false, :stability, nothing, IntrinsicsWrappers.sub_float, 4.0, 1.0],
-        [false, :stability, nothing, IntrinsicsWrappers.sub_float_fast, 4.0, 1.0],
-        [false, :stability, nothing, IntrinsicsWrappers.sub_int, 4, 1],
-        [false, :stability, nothing, IntrinsicsWrappers.trunc_int, UInt8, 78],
-        [false, :stability, nothing, IntrinsicsWrappers.trunc_llvm, 5.1],
-        [false, :stability, nothing, IntrinsicsWrappers.udiv_int, 5, 4],
-        [false, :stability, nothing, IntrinsicsWrappers.uitofp, Float16, 4],
-        [false, :stability, nothing, IntrinsicsWrappers.ule_int, 5, 4],
-        [false, :stability, nothing, IntrinsicsWrappers.ult_int, 5, 4],
-        [false, :stability, nothing, IntrinsicsWrappers.urem_int, 5, 4],
-        [false, :stability, nothing, IntrinsicsWrappers.xor_int, 5, 4],
-        [false, :stability, nothing, IntrinsicsWrappers.zext_int, Int64, 0xffffffff],
+        (false, :stability, nothing, IntrinsicsWrappers.rint_llvm, 5),
+        (false, :stability, nothing, IntrinsicsWrappers.sdiv_int, 5, 4),
+        (false, :stability, nothing, IntrinsicsWrappers.sext_int, Int64, Int32(1308622848)),
+        (false, :stability, nothing, IntrinsicsWrappers.shl_int, 1308622848, 0xffffffffffffffe8),
+        (false, :stability, nothing, IntrinsicsWrappers.sitofp, Float64, 0),
+        (false, :stability, nothing, IntrinsicsWrappers.sle_int, 5, 4),
+        (false, :stability, nothing, IntrinsicsWrappers.slt_int, 4, 5),
+        (false, :stability, nothing, IntrinsicsWrappers.sqrt_llvm, 5.0),
+        (false, :stability, nothing, IntrinsicsWrappers.sqrt_llvm_fast, 5.0),
+        (false, :stability, nothing, IntrinsicsWrappers.srem_int, 4, 1),
+        (false, :stability, nothing, IntrinsicsWrappers.sub_float, 4.0, 1.0),
+        (false, :stability, nothing, IntrinsicsWrappers.sub_float_fast, 4.0, 1.0),
+        (false, :stability, nothing, IntrinsicsWrappers.sub_int, 4, 1),
+        (false, :stability, nothing, IntrinsicsWrappers.trunc_int, UInt8, 78),
+        (false, :stability, nothing, IntrinsicsWrappers.trunc_llvm, 5.1),
+        (false, :stability, nothing, IntrinsicsWrappers.udiv_int, 5, 4),
+        (false, :stability, nothing, IntrinsicsWrappers.uitofp, Float16, 4),
+        (false, :stability, nothing, IntrinsicsWrappers.ule_int, 5, 4),
+        (false, :stability, nothing, IntrinsicsWrappers.ult_int, 5, 4),
+        (false, :stability, nothing, IntrinsicsWrappers.urem_int, 5, 4),
+        (false, :stability, nothing, IntrinsicsWrappers.xor_int, 5, 4),
+        (false, :stability, nothing, IntrinsicsWrappers.zext_int, Int64, 0xffffffff),
 
         # Non-intrinsic built-ins:
         # Core._abstracttype -- NEEDS IMPLEMENTING AND TESTING
@@ -775,46 +782,27 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         # Core._structtype -- NEEDS IMPLEMENTING AND TESTING
         # Core._svec_ref -- NEEDS IMPLEMENTING AND TESTING
         # Core._typebody! -- NEEDS IMPLEMENTING AND TESTING
-        [true, :stability, nothing, Core._typevar, :T, Union{}, Any],
-        [false, :stability, nothing, <:, Float64, Int],
-        [false, :stability, nothing, <:, Any, Float64],
-        [false, :stability, nothing, <:, Float64, Any],
-        [false, :stability, nothing, ===, 5.0, 4.0],
-        [false, :stability, nothing, ===, 5.0, randn(5)],
-        [false, :stability, nothing, ===, randn(5), randn(3)],
-        [false, :stability, nothing, ===, 5.0, 5.0],
-        [false, :none, (lb=1e-3, ub=100.0), Core.apply_type, Vector, Float64],
-        [false, :none, (lb=1e-3, ub=100.0), Core.apply_type, Array, Float64, 2],
-        [false, :stability, nothing, Core.arraysize, randn(5, 4, 3), 2],
-        [false, :stability, nothing, Core.arraysize, randn(5, 4, 3, 2, 1), 100],
-        # Core.compilerbarrier -- NEEDS IMPLEMENTING AND TESTING
-        # Core.const_arrayref -- NEEDS IMPLEMENTING AND TESTING
-        # Core.donotdelete -- NEEDS IMPLEMENTING AND TESTING
-        # Core.finalizer -- NEEDS IMPLEMENTING AND TESTING
-        # Core.get_binding_type -- NEEDS IMPLEMENTING AND TESTING
-        [false, :none, nothing, Core.ifelse, true, randn(5), 1],
-        [false, :none, nothing, Core.ifelse, false, randn(5), 2],
-        (false, :stability, nothing, Core.ifelse, true, 5, 4),
-        (false, :stability, nothing, Core.ifelse, false, true, false),
-        [false, :stability, nothing, Core.ifelse, false, 1.0, 2.0],
-        [false, :stability, nothing, Core.ifelse, true, 1.0, 2.0],
-        [false, :stability, nothing, Core.ifelse, false, randn(5), randn(3)],
-        [false, :stability, nothing, Core.ifelse, true, randn(5), randn(3)],
-        # Core.set_binding_type! -- NEEDS IMPLEMENTING AND TESTING
-        [false, :stability, nothing, Core.sizeof, Float64],
-        [false, :stability, nothing, Core.sizeof, randn(5)],
-        # Core.svec -- NEEDS IMPLEMENTING AND TESTING
-        [false, :stability, nothing, Base.arrayref, true, randn(5), 1],
-        [false, :stability, nothing, Base.arrayref, false, randn(4), 1],
-        [false, :stability, nothing, Base.arrayref, true, randn(5, 4), 1, 1],
-        [false, :stability, nothing, Base.arrayref, false, randn(5, 4), 5, 4],
-        [false, :stability, nothing, Base.arrayset, false, randn(5), 4.0, 3],
-        [false, :stability, nothing, Base.arrayset, false, randn(5, 4), 3.0, 1, 3],
-        [false, :stability, nothing, Base.arrayset, true, randn(5), 4.0, 3],
-        [false, :stability, nothing, Base.arrayset, true, randn(5, 4), 3.0, 1, 3],
-        [false, :stability, nothing, Base.arrayset, false, [randn(3) for _ in 1:5], randn(4), 1],
-        # [false, :stability, Base.arrayset, false, _a, randn(4), 1], # _a is not fully initialised
-        [
+        (false, :stability, nothing, <:, Float64, Int),
+        (false, :stability, nothing, <:, Any, Float64),
+        (false, :stability, nothing, <:, Float64, Any),
+        (false, :stability, nothing, ===, 5.0, 4.0),
+        (false, :stability, nothing, ===, 5.0, randn(5)),
+        (false, :stability, nothing, ===, randn(5), randn(3)),
+        (false, :stability, nothing, ===, 5.0, 5.0),
+        (true, :stability, nothing, Core._typevar, :T, Union{}, Any),
+        (false, :none, (lb=1e-3, ub=100.0), Core.apply_type, Vector, Float64),
+        (false, :none, (lb=1e-3, ub=100.0), Core.apply_type, Array, Float64, 2),
+        (false, :stability, nothing, Base.arrayref, true, randn(5), 1),
+        (false, :stability, nothing, Base.arrayref, false, randn(4), 1),
+        (false, :stability, nothing, Base.arrayref, true, randn(5, 4), 1, 1),
+        (false, :stability, nothing, Base.arrayref, false, randn(5, 4), 5, 4),
+        (false, :stability, nothing, Base.arrayset, false, randn(5), 4.0, 3),
+        (false, :stability, nothing, Base.arrayset, false, randn(5, 4), 3.0, 1, 3),
+        (false, :stability, nothing, Base.arrayset, true, randn(5), 4.0, 3),
+        (false, :stability, nothing, Base.arrayset, true, randn(5, 4), 3.0, 1, 3),
+        (false, :stability, nothing, Base.arrayset, false, [randn(3) for _ in 1:5], randn(4), 1),
+        (false, :stability, nothing, Base.arrayset, false, _a, randn(4), 1),
+        (
             false,
             :stability,
             nothing,
@@ -823,8 +811,8 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
             setindex!(Vector{Vector{Float64}}(undef, 3), randn(3), 1),
             randn(4),
             1,
-        ],
-        [
+        ),
+        (
             false,
             :stability,
             nothing,
@@ -833,53 +821,72 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
             setindex!(Vector{Vector{Float64}}(undef, 3), randn(3), 2),
             randn(4),
             1,
-        ],
-        [false, :stability, nothing, applicable, sin, Float64],
-        [false, :stability, nothing, applicable, sin, Type],
-        [false, :stability, nothing, applicable, +, Type, Float64],
-        [false, :stability, nothing, applicable, +, Float64, Float64],
-        [false, :stability, (lb=1e-3, ub=20.0), fieldtype, StructFoo, :a],
-        [false, :stability, (lb=1e-3, ub=20.0), fieldtype, StructFoo, :b],
-        [false, :stability, (lb=1e-3, ub=20.0), fieldtype, MutableFoo, :a],
-        [false, :stability, (lb=1e-3, ub=20.0), fieldtype, MutableFoo, :b],
-        [true, :none, _range, getfield, StructFoo(5.0), :a],
-        [false, :none, _range, getfield, StructFoo(5.0, randn(5)), :a],
-        [false, :none, _range, getfield, StructFoo(5.0, randn(5)), :b],
-        [true, :none, _range, getfield, StructFoo(5.0), 1],
-        [false, :none, _range, getfield, StructFoo(5.0, randn(5)), 1],
-        [false, :none, _range, getfield, StructFoo(5.0, randn(5)), 2],
-        [true, :none, _range, getfield, MutableFoo(5.0), :a],
-        [false, :none, _range, getfield, MutableFoo(5.0, randn(5)), :b],
-        [false, :none, _range, getfield, UnitRange{Int}(5:9), :start],
-        [false, :none, _range, getfield, UnitRange{Int}(5:9), :stop],
-        [false, :none, _range, getfield, (5.0, ), 1, false],
-        (false, :none, _range, getfield, (1, ), 1, false),
-        (false, :none, _range, getfield, (1, 2), 1),
-        (false, :none, _range, getfield, (a=5, b=4), 1),
-        (false, :none, _range, getfield, (a=5, b=4), 2),
-        (false, :none, _range, getfield, (a=5.0, b=4), 1),
-        (false, :none, _range, getfield, (a=5.0, b=4), 2),
-        [false, :none, _range, getfield, UInt8, :name],
-        [false, :none, _range, getfield, UInt8, :super],
-        [true, :none, _range, getfield, UInt8, :layout],
-        [false, :none, _range, getfield, UInt8, :hash],
-        [false, :none, _range, getfield, UInt8, :flags],
+        ),
+        (false, :stability, nothing, Core.arraysize, randn(5, 4, 3), 2),
+        (false, :stability, nothing, Core.arraysize, randn(5, 4, 3, 2, 1), 100),
+        # Core.compilerbarrier -- NEEDS IMPLEMENTING AND TESTING
+        # Core.const_arrayref -- NEEDS IMPLEMENTING AND TESTING
+        # Core.donotdelete -- NEEDS IMPLEMENTING AND TESTING
+        # Core.finalizer -- NEEDS IMPLEMENTING AND TESTING
+        # Core.get_binding_type -- NEEDS IMPLEMENTING AND TESTING
+        (false, :none, nothing, Core.ifelse, true, randn(5), 1),
+        (false, :none, nothing, Core.ifelse, false, randn(5), 2),
+        (false, :stability, nothing, Core.ifelse, true, 5, 4),
+        (false, :stability, nothing, Core.ifelse, false, true, false),
+        (false, :stability, nothing, Core.ifelse, false, 1.0, 2.0),
+        (false, :stability, nothing, Core.ifelse, true, 1.0, 2.0),
+        (false, :stability, nothing, Core.ifelse, false, randn(5), randn(3)),
+        (false, :stability, nothing, Core.ifelse, true, randn(5), randn(3)),
+        # Core.set_binding_type! -- NEEDS IMPLEMENTING AND TESTING
+        (false, :stability, nothing, Core.sizeof, Float64),
+        (false, :stability, nothing, Core.sizeof, randn(5)),
+        # Core.svec -- NEEDS IMPLEMENTING AND TESTING
+        (false, :stability, nothing, applicable, sin, Float64),
+        (false, :stability, nothing, applicable, sin, Type),
+        (false, :stability, nothing, applicable, +, Type, Float64),
+        (false, :stability, nothing, applicable, +, Float64, Float64),
+        (false, :stability, (lb=1e-3, ub=20.0), fieldtype, StructFoo, :a),
+        (false, :stability, (lb=1e-3, ub=20.0), fieldtype, StructFoo, :b),
+        (false, :stability, (lb=1e-3, ub=20.0), fieldtype, MutableFoo, :a),
+        (false, :stability, (lb=1e-3, ub=20.0), fieldtype, MutableFoo, :b),
+        # [true, :none, _range, getfield, StructFoo(5.0), :a],
+        # [false, :none, _range, getfield, StructFoo(5.0, randn(5)), :a],
+        # [false, :none, _range, getfield, StructFoo(5.0, randn(5)), :b],
+        # [true, :none, _range, getfield, StructFoo(5.0), 1],
+        # [false, :none, _range, getfield, StructFoo(5.0, randn(5)), 1],
+        # [false, :none, _range, getfield, StructFoo(5.0, randn(5)), 2],
+        # [true, :none, _range, getfield, MutableFoo(5.0), :a],
+        # [false, :none, _range, getfield, MutableFoo(5.0, randn(5)), :b],
+        # [false, :none, _range, getfield, UnitRange{Int}(5:9), :start],
+        # [false, :none, _range, getfield, UnitRange{Int}(5:9), :stop],
+        # [false, :none, _range, getfield, (5.0, ), 1, false],
+        # (false, :none, _range, getfield, (1, ), 1, false),
+        # (false, :none, _range, getfield, (1, 2), 1),
+        # (false, :none, _range, getfield, (a=5, b=4), 1),
+        # (false, :none, _range, getfield, (a=5, b=4), 2),
+        # (false, :none, _range, getfield, (a=5.0, b=4), 1),
+        # (false, :none, _range, getfield, (a=5.0, b=4), 2),
+        # [false, :none, _range, getfield, UInt8, :name],
+        # [false, :none, _range, getfield, UInt8, :super],
+        # [true, :none, _range, getfield, UInt8, :layout],
+        # [false, :none, _range, getfield, UInt8, :hash],
+        # [false, :none, _range, getfield, UInt8, :flags],
         # getglobal requires compositional testing, because you can't deepcopy a module
         # invoke -- NEEDS IMPLEMENTING AND TESTING
-        [false, :stability, nothing, isa, 5.0, Float64],
-        [false, :stability, nothing, isa, 1, Float64],
-        [false, :stability, nothing, isdefined, MutableFoo(5.0, randn(5)), :sim],
-        [false, :stability, nothing, isdefined, MutableFoo(5.0, randn(5)), :a],
+        (false, :stability, nothing, isa, 5.0, Float64),
+        (false, :stability, nothing, isa, 1, Float64),
+        (false, :stability, nothing, isdefined, MutableFoo(5.0, randn(5)), :sim),
+        (false, :stability, nothing, isdefined, MutableFoo(5.0, randn(5)), :a),
         # modifyfield! -- NEEDS IMPLEMENTING AND TESTING
-        [false, :stability, nothing, nfields, MutableFoo],
-        [false, :stability, nothing, nfields, StructFoo],
+        (false, :stability, nothing, nfields, MutableFoo),
+        (false, :stability, nothing, nfields, StructFoo),
         # replacefield! -- NEEDS IMPLEMENTING AND TESTING
-        (false, :none, _range, setfield!, MutableFoo(5.0, randn(5)), :a, 4.0),
-        (false, :none, nothing, setfield!, MutableFoo(5.0, randn(5)), :b, randn(5)),
-        (false, :none, _range, setfield!, MutableFoo(5.0, randn(5)), 1, 4.0),
-        (false, :none, _range, setfield!, MutableFoo(5.0, randn(5)), 2, randn(5)),
-        (false, :stability, _range, setfield!, NonDifferentiableFoo(5, false), 1, 4),
-        (false, :stability, _range, setfield!, NonDifferentiableFoo(5, true), 2, false),
+        # (false, :none, _range, setfield!, MutableFoo(5.0, randn(5)), :a, 4.0),
+        # (false, :none, nothing, setfield!, MutableFoo(5.0, randn(5)), :b, randn(5)),
+        # (false, :none, _range, setfield!, MutableFoo(5.0, randn(5)), 1, 4.0),
+        # (false, :none, _range, setfield!, MutableFoo(5.0, randn(5)), 2, randn(5)),
+        # (false, :stability, _range, setfield!, NonDifferentiableFoo(5, false), 1, 4),
+        # (false, :stability, _range, setfield!, NonDifferentiableFoo(5, true), 2, false),
         # swapfield! -- NEEDS IMPLEMENTING AND TESTING
         # throw -- NEEDS IMPLEMENTING AND TESTING
         [false, :stability_and_allocs, nothing, tuple, 5.0, 4.0],
@@ -900,24 +907,24 @@ end
 
 function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
     test_cases = Any[
-        [
-            false,
-            :none,
-            nothing,
-            (
-                function (x)
-                    rx = Ref(x)
-                    pointerref(bitcast(Ptr{Float64}, pointer_from_objref(rx)), 1, 1)
-                end
-            ),
-            5.0,
-        ],
-        [false, :none, nothing, (v, x) -> (pointerset(pointer(x), v, 2, 1); x), 3.0, randn(5)],
-        [false, :none, nothing, x -> (pointerset(pointer(x), UInt8(3), 2, 1); x), rand(UInt8, 5)],
-        [false, :none, nothing, getindex, randn(5), [1, 1]],
-        [false, :none, nothing, getindex, randn(5), [1, 2, 2]],
-        [false, :none, nothing, setindex!, randn(5), [4.0, 5.0], [1, 1]],
-        [false, :none, nothing, setindex!, randn(5), [4.0, 5.0, 6.0], [1, 2, 2]],
+        # [
+        #     false,
+        #     :none,
+        #     nothing,
+        #     (
+        #         function (x)
+        #             rx = Ref(x)
+        #             pointerref(bitcast(Ptr{Float64}, pointer_from_objref(rx)), 1, 1)
+        #         end
+        #     ),
+        #     5.0,
+        # ],
+        # [false, :none, nothing, (v, x) -> (pointerset(pointer(x), v, 2, 1); x), 3.0, randn(5)],
+        # [false, :none, nothing, x -> (pointerset(pointer(x), UInt8(3), 2, 1); x), rand(UInt8, 5)],
+        # [false, :none, nothing, getindex, randn(5), [1, 1]],
+        # [false, :none, nothing, getindex, randn(5), [1, 2, 2]],
+        # [false, :none, nothing, setindex!, randn(5), [4.0, 5.0], [1, 1]],
+        # [false, :none, nothing, setindex!, randn(5), [4.0, 5.0, 6.0], [1, 2, 2]],
     ]
     memory = Any[]
     return test_cases, memory

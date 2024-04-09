@@ -4,6 +4,10 @@ struct CoDual{Tx, Tdx}
 end
 
 # Always sharpen the first thing if it's a type, in order to preserve dispatch possibility.
+function CoDual(x::Type{P}, dx::NoFwdsData) where {P}
+    return CoDual{@isdefined(P) ? Type{P} : typeof(x), NoFwdsData}(P, dx)
+end
+
 function CoDual(x::Type{P}, dx::NoTangent) where {P}
     return CoDual{@isdefined(P) ? Type{P} : typeof(x), NoTangent}(P, dx)
 end
@@ -39,13 +43,17 @@ end
 
 codual_type(::Type{Type{P}}) where {P} = CoDual{Type{P}, NoTangent}
 
-struct NoPullback end
+struct NoPullback{R<:Tuple}
+    r::R
+end
 
-@inline (::NoPullback)(dy, dx...) = dx
+@inline (pb::NoPullback)(_) = pb.r
 
 might_be_active(args) = any(might_be_active ∘ _typeof, args)
 
 to_fwds(x::CoDual) = CoDual(primal(x), forwards_data(tangent(x)))
+
+to_fwds(x::CoDual{Type{P}}) where {P} = CoDual{Type{P}, NoFwdsData}(primal(x), NoFwdsData())
 
 """
     fwds_codual_type(P::Type)
@@ -58,4 +66,4 @@ function fwds_codual_type(::Type{P}) where {P}
     return isconcretetype(P) ? CoDual{P, forwards_data_type(tangent_type(P))} : CoDual
 end
 
-fwds_codual_type(::Type{Type{P}}) where {P} = CoDual{Type{P}, NoTangent}
+fwds_codual_type(::Type{Type{P}}) where {P} = CoDual{Type{P}, NoFwdsData}
