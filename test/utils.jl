@@ -14,5 +14,11 @@
             map(*, (5, 4.0, 3), (5.0, 4, 3.0)),
             Tapir.tuple_map(*, (5, 4.0, 3), (5.0, 4, 3.0)),
         )
+
+        @test map(sin, (a=5.0, b=4)) == Tapir.tuple_map(sin, (a=5.0, b=4))
+        @test ==(
+            map(*, (a=5, b=4.0, c=3), (a=5.0, b=4, c=3.0)),
+            Tapir.tuple_map(*, (a=5, b=4.0, c=3), (a=5.0, b=4, c=3.0)),
+        )
     end
 end

@@ -28,3 +28,11 @@ end
 @inline @generated function tuple_map(f::F, x::Tuple, y::Tuple) where {F}
     return Expr(:call, :tuple, map(n -> :(f(getfield(x, $n), getfield(y, $n))), eachindex(x.parameters))...)
 end
+
+function tuple_map(f::F, x::NamedTuple{names}) where {F, names}
+    return NamedTuple{names}(tuple_map(f, Tuple(x)))
+end
+
+function tuple_map(f::F, x::NamedTuple{names}, y::NamedTuple{names}) where {F, names}
+    return NamedTuple{names}(tuple_map(f, Tuple(x), Tuple(y)))
+end
