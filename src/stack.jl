@@ -64,37 +64,6 @@ Base.eltype(::Stack{T}) where {T} = T
 
 top_ref(x::Stack) = Ref(getfield(x, :memory), getfield(x, :position))
 
-"""
-    NoTangentStack()
-
-If a type has `NoTangent` as its tangent type, it should use one of these stacks.
-Probably needs to be generalised to an inactive-tangent stack in future, as we also need to
-handle constants, which aren't always active.
-"""
-struct NoTangentStack end
-
-Base.push!(::NoTangentStack, ::Any) = nothing
-Base.getindex(::NoTangentStack) = NoTangent()
-Base.setindex!(::NoTangentStack, ::NoTangent) = nothing
-Base.pop!(::NoTangentStack) = NoTangent()
-
-struct NoTangentRef <: Ref{NoTangent} end
-
-Base.getindex(::NoTangentRef) = NoTangent()
-Base.setindex!(::NoTangentRef, ::NoTangent) = nothing
-
-top_ref(::NoTangentStack) = NoTangentRef()
-
-"""
-    NoTangentRefStack
-
-Stack for `NoTangentRef`s.
-"""
-struct NoTangentRefStack end
-
-Base.push!(::NoTangentRefStack, ::Any) = nothing
-Base.pop!(::NoTangentRefStack) = NoTangentRef()
-
 
 struct SingletonStack{T} end
 
@@ -102,46 +71,7 @@ Base.push!(::SingletonStack, ::Any) = nothing
 @generated Base.pop!(::SingletonStack{T}) where {T} = T.instance
 
 
-function tangent_stack_type(::Type{P}) where {P}
-    P === DataType && return Stack{Any}
-    T = tangent_type(P)
-    return T === NoTangent ? NoTangentStack : Stack{T}
+function reverse_data_ref_type(::Type{P}) where {P}
+    P === DataType && return Ref{Any}
+    return Base.RefValue{reverse_data_type(tangent_type(P))}
 end
-
-__array_ref_type(::Type{P}) where {P} = Base.RefArray{P, Vector{P}, Nothing}
-
-function tangent_ref_type_ub(::Type{P}) where {P}
-    P === DataType && return Ref
-    T = tangent_type(P)
-    T === NoTangent && return NoTangentRef
-    return isconcretetype(P) ? __array_ref_type(T) : Ref
-end
-
-tangent_ref_type_ub(::Type{Type{P}}) where {P} = NoTangentRef
-
-struct InactiveStack{T}
-    zero_tangent::T
-end
-
-Base.pop!(s::InactiveStack{T}) where {T} = s.zero_tangent
-
-struct InactiveRef{T}
-    x::T
-end
-
-Base.getindex(x::InactiveRef{T}) where {T} = x.x
-
-increment_ref!(::InactiveRef{T}, ::T) where {T} = nothing
-
-top_ref(::Nothing) = InactiveRef(nothing)
-
-increment_ref!(::InactiveRef{Nothing}, ::T) where {T} = nothing
-
-
-struct FixedStackTangentRefStack{T}
-    x::Stack{T}
-end
-
-Base.push!(x::FixedStackTangentRefStack, t) = nothing
-
-Base.pop!(x::FixedStackTangentRefStack) = top_ref(x.x)

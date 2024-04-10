@@ -88,14 +88,12 @@ codegen which produces the forwards- and reverse-passes.
     to both the forwards- and reverse-passes..
 - `arg_types`: a map from `Argument` to its static type.
 - `ssa_insts`: a map from `ID` associated to lines to the primal `NewInstruction`.
-- `arg_tangent_stacks`: a map from primal `Argument`s to their tangent stacks. If the stack
-    associated to an `Argument` is a bits type then this will just be the tangent stack.
-    Otherwise, it will be the `ID` associated to the stack, and the stack itself will be put
-    in the `shared_data_pairs`.
-- `tangent_stacks`: a map from `ID` to tangent stacks. If the tangent stack associated to
-    the `ID` is a bits type, then this will actually be the tangent stack. Otherwise it will
-    be the `ID` associated to the stack, and the stack itself will be put in the
-    `shared_data_pairs`.
+- `arg_rdata_ref_ids`: the dict mapping from arguments to the `ID` which creates and
+    initialises the `Ref` which contains the reverse data associated to that argument.
+    Recall that the heap allocations associated to this `Ref` are always optimised away in
+    the final programme.
+- `ssa_rdata_ref_ids`: the same as `arg_rdata_ref_ids`, but for each `ID`
+    associated to an ssa rather than each argument.
 =#
 struct ADInfo
     interp::PInterp
@@ -105,16 +103,13 @@ struct ADInfo
     shared_data_pairs::SharedDataPairs
     arg_types::Dict{Argument, Any}
     ssa_insts::Dict{ID, NewInstruction}
-    arg_tangent_stacks::Dict{Argument, Any}
-    tangent_stacks::Dict{ID, Any}
+    arg_rdata_ref_ids::Dict{Argument, ID}
+    ssa_rdata_ref_ids::Dict{ID, ID}
 end
 
 # The constructor that you should use for ADInfo.
 function ADInfo(
-    interp::PInterp,
-    arg_types::Dict{Argument, Any},
-    ssa_insts::Dict{ID, NewInstruction},
-    arg_tangent_stacks,
+    interp::PInterp, arg_types::Dict{Argument, Any}, ssa_insts::Dict{ID, NewInstruction}
 )
     shared_data_pairs = SharedDataPairs()
     block_stack = Stack{Int32}()
@@ -126,38 +121,17 @@ function ADInfo(
         shared_data_pairs,
         arg_types,
         ssa_insts,
-        make_arg_tangent_stacks!(shared_data_pairs, arg_tangent_stacks),
-        make_tangent_stacks!(shared_data_pairs, ssa_insts),
+        Dict((k, ID()) for k in keys(arg_types)),
+        Dict((k, ID()) for k in keys(ssa_insts)),
     )
-end
-
-function __log_data(p::Union{ADInfo, SharedDataPairs}, x)
-    return Base.issingletontype(_typeof(x)) ? x : add_data!(p, x)
-end
-
-# Construct a map from primal `Argument`s to the location of its tangent stack in the
-# forwards-pass and pullback. If tangent stack is a singleton, just yields the tangent
-# stack itself.
-function make_arg_tangent_stacks!(p::SharedDataPairs, arg_tangent_stacks)
-    arguments = Argument.(eachindex(arg_tangent_stacks))
-    stack_ids = map(Base.Fix1(__log_data, p), arg_tangent_stacks)
-    return Dict{Argument, Any}(zip(arguments, stack_ids))
-end
-
-# Construct a map from primal `ID`s corresponding to lines in the IR, to the location of
-# their tangent stacks in the forwards-pass and pullback. If tangent stacks is a singleton,
-# just yields the tangent stack itself.
-function make_tangent_stacks!(p::SharedDataPairs, ssa_insts::Dict{ID, NewInstruction})
-    tangent_stacks = Dict{ID, Any}()
-    for (k, inst) in ssa_insts
-        Meta.isexpr(inst.stmt, :call) || Meta.isexpr(inst.stmt, :invoke) || continue
-        tangent_stacks[k] = __log_data(p, make_tangent_stack(_get_type(inst.type)))
-    end
-    return tangent_stacks
 end
 
 # Shortcut for `add_data!(info.shared_data_pairs, data)`.
 add_data!(info::ADInfo, data) = add_data!(info.shared_data_pairs, data)
+
+function __log_data(p::Union{ADInfo, SharedDataPairs}, x)
+    return Base.issingletontype(_typeof(x)) ? x : add_data!(p, x)
+end
 
 # Returns the static / inferred type associated to `x`.
 get_primal_type(info::ADInfo, x::Argument) = info.arg_types[x]
@@ -167,6 +141,27 @@ get_primal_type(::ADInfo, x) = _typeof(x)
 function get_primal_type(::ADInfo, x::GlobalRef)
     return isconst(x) ? _typeof(getglobal(x.mod, x.name)) : x.binding.ty
 end
+
+# Returns the `ID` associated to the line in the reverse pass which will contain the
+# reverse data for `x`. If `x` is not an `Argument` or `ID`, then `nothing` is returned.
+get_rev_data_id(info::ADInfo, x::Argument) = info.arg_rdata_ref_ids[x]
+get_rev_data_id(info::ADInfo, x::ID) = info.ssa_rdata_ref_ids[x]
+get_rev_data_id(::ADInfo, ::Any) = nothing
+
+# Create the statements which initialise the reverse-data `Ref`s.
+function reverse_data_ref_stmts(info::ADInfo)
+    arg_stmts = [(id, __ref(info.arg_types[k])) for (k, id) in info.arg_rdata_ref_ids]
+    ssa_stmts = [(id, __ref(info.ssa_insts[k].type)) for (k, id) in info.ssa_rdata_ref_ids]
+    return vcat(arg_stmts, ssa_stmts)
+end
+
+# Helper for reverse_data_ref_stmts.
+__ref(P) = new_inst(Expr(:call, __make_ref, P))
+
+@inline __make_ref(::Type{P}) where {P} = Ref(Tapir.zero_reverse_data_from_type(P))
+
+# Returns the number of arguments that the primal function has.
+num_args(info::ADInfo) = length(info.arg_types)
 
 #=
     ADStmtInfo
@@ -214,20 +209,24 @@ make_ad_stmts!(::Nothing, line::ID, ::ADInfo) = ad_stmt_info(line, nothing, noth
 
 # `ReturnNode`s have a single field, `val`, for which there are three cases to consider:
 #
-# 1. `val isa Union{Argument, ID}`: this is an active bit of data. Consequently, we know
-#   that it will be an `AugmentedRegister` already, and can just return it. Therefore `stmt`
-#   is returned as the forwards-pass (with any `Argument`s incremented), and nothing happens
-#   in the pullback.
-# 2. `val` is undefined: this `ReturnNode` is unreachable. Consequently, we'll never hit the
+# 1. `val` is undefined: this `ReturnNode` is unreachable. Consequently, we'll never hit the
 #   associated statements on the forwards-pass of pullback. We just return the original
 #   statement on the forwards-pass, and `nothing` on the reverse-pass.
+# 2. `val isa Union{Argument, ID}`: this is an active bit of data. Consequently, we know
+#   that it will be an `CoDual` already, and can just return it. Therefore `stmt`
+#   is returned as the forwards-pass (with any `Argument`s incremented). On the reverse-pass
+#   the associated rdata ref should be incremented.
 # 3. `val` is defined, but not a `Union{Argument, ID}`: in this case we're returning a
-#   constant -- build a constant register and return that.
+#   constant -- build a constant CoDual and return that. There is nothing to do on the
+#   reverse pass.
 function make_ad_stmts!(stmt::ReturnNode, line::ID, info::ADInfo)
-    if !isdefined(stmt, :val) || is_active(stmt.val)
-        return ad_stmt_info(line, inc_args(stmt), nothing)
+    is_reachable_return_node(stmt) || return ad_stmt_info(line, inc_args(stmt), nothing)
+    if is_active(stmt.val)
+        rdata_id = get_rev_data_id(info, stmt.val)
+        rvs = new_inst(Expr(:call, increment_ref!, rdata_id, Argument(2)))
+        return ad_stmt_info(line, inc_args(stmt), rvs)
     else
-        return ad_stmt_info(line, ReturnNode(const_register(stmt.val, info)), nothing)
+        return ad_stmt_info(line, ReturnNode(const_codual(stmt.val, info)), nothing)
     end
 end
 
@@ -297,7 +296,7 @@ function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
     )
 end
 
-@inline function __pi_fwds!(tangent_stack, tangent_ref_stack, reg::AugmentedRegister)
+@inline function __pi_fwds!(tangent_stack, tangent_ref_stack, reg)
     push!(tangent_ref_stack, reg.tangent_ref)
     push!(tangent_stack, tangent(reg.codual))
     return AugmentedRegister(reg.codual, top_ref(tangent_stack))
@@ -308,18 +307,18 @@ end
     return nothing
 end
 
-# Constant GlobalRefs are handled. See const_register. Non-constant
-# GlobalRefs are handled by assuming that they are constant, and creating a register with
+# Constant GlobalRefs are handled. See const_codual. Non-constant
+# GlobalRefs are handled by assuming that they are constant, and creating a CoDual with
 # the value. We then check at run-time that the value has not changed.
 function make_ad_stmts!(stmt::GlobalRef, line::ID, info::ADInfo)
     if isconst(stmt)
         return const_ad_stmt(stmt, line, info)
     else
-        reg = const_register(getglobal(stmt.mod, stmt.name), info)
+        x = const_codual(getglobal(stmt.mod, stmt.name), info)
         gref_id = ID()
         fwds = [
             (gref_id, new_inst(stmt)),
-            (line, new_inst(Expr(:call, __verify_const, gref_id, reg))),
+            (line, new_inst(Expr(:call, __verify_const, gref_id, x))),
         ]
         return ad_stmt_info(line, fwds, nothing)
     end
@@ -331,41 +330,29 @@ end
     return stored_value
 end
 
-# QuoteNodes are constant. See make_const_register for details.
+# QuoteNodes are constant. See const_codual for details.
 make_ad_stmts!(stmt::QuoteNode, line::ID, info::ADInfo) = const_ad_stmt(stmt, line, info)
 
-# Literal constant. See const_register for details.
+# Literal constant. See const_codual for details.
 make_ad_stmts!(stmt, line::ID, info::ADInfo) = const_ad_stmt(stmt, line, info)
 
 # `make_ad_stmts!` for constants.
 function const_ad_stmt(stmt, line::ID, info::ADInfo)
-    reg = const_register(stmt, info)
-    return ad_stmt_info(line, reg isa ID ? Expr(:call, identity, reg) : reg, nothing)
+    x = const_codual(stmt, info)
+    return ad_stmt_info(line, x isa ID ? Expr(:call, identity, x) : x, nothing)
 end
 
-# Build an `AugmentedRegister` from `stmt`, which will be checked to ensure that its value
-# is constant. If the resulting register is a bits type, then it is returned. If it is not,
-# then the register is put into shared data, and the ID associated to it in the forwards-
+# Build a `CoDual` from `stmt`, which will be checked to ensure that its value
+# is constant. If the resulting CoDual is a bits type, then it is returned. If it is not,
+# then the CoDual is put into shared data, and the ID associated to it in the forwards-
 # and reverse-passes returned.
-function const_register(stmt, info::ADInfo)
-    reg = build_const_reg(stmt)
-    return isbitstype(_typeof(reg)) ? reg : add_data!(info, reg)
+function const_codual(stmt, info::ADInfo)
+    x = build_const_codual(stmt)
+    return isbitstype(_typeof(x)) ? x : add_data!(info, x)
 end
 
-# Create a constant augmented register which lives in the shared data. Returns the `ID`
-# which will be associated to this data in the forwards- and reverse-passes.
-shared_data_const_reg(stmt, info::ADInfo) = add_data!(info, build_const_reg(stmt))
-
-# Create an `AugmentedRegister` containing the values associated to `stmt`, a zero tangent.
-# Pushes a single element onto the stack, and puts a reference to that stack in the
-# register.
-function build_const_reg(stmt)
-    primal_value = get_const_primal_value(stmt)
-    tangent_stack = make_tangent_stack(_typeof(primal_value))
-    tangent = uninit_tangent(primal_value)
-    push!(tangent_stack, tangent)
-    return AugmentedRegister(CoDual(primal_value, tangent), top_ref(tangent_stack))
-end
+# Create a `CoDual` containing the values associated to `stmt`, a zero forwards data.
+build_const_codual(stmt) = uninit_fcodual(get_const_primal_value(stmt))
 
 # Get the value associated to `x`. For `GlobalRef`s, verify that `x` is indeed a constant,
 # and error if it is not.
@@ -410,66 +397,29 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         # the rule into shared data, because it's safe to put it directly into the code.
         rule_ref = __log_data(info, rule)
 
-        # Tangent stacks are allocated in build_rrule, and stored in the `info`. Just
-        # retrieve the stack associated to the tangent returned from this line.
-        ret_tangent_stack_id = info.tangent_stacks[line]
-
         # If the type of the pullback is a singleton type, then there is no need to store it
         # in the shared data, it can be interpolated directly into the generated IR.
-        pb_stack = build_pb_stack(_typeof(rule), arg_types)
-        pb_stack_id = __log_data(info, pb_stack)
-
-        # if the pullback is a `NoPullback`, then there is no need to log the references to
-        # the tangent stacks associated to the inputs to this call, because there will never
-        # need to be any incrementing done. There are functions called within
-        # `__fwds_pass!` and `__rvs_pass!` that specialise on the type of the pullback to
-        # avoid ever using the arg tangent ref stacks, so we just need to create a default
-        # value here (`nothing`), as it will never be used.
-        arg_tangent_ref_stacks_id = ID()
-        if pb_stack isa SingletonStack{NoPullback}
-            arg_tangent_ref_stacks = nothing
-        else
-            ref_stacks = map(arg_types, args) do arg_type, arg
-                stack = __make_arg_tangent_ref_stack(arg_type, arg)
-                if Base.issingletontype(_typeof(stack))
-                    return stack
-                elseif haskey(info.tangent_stacks, arg)
-                    return info.tangent_stacks[arg]
-                elseif arg isa Argument
-                    return info.arg_tangent_stacks[arg]
-                else
-                    return add_data!(info, stack)
-                end
-            end
-            arg_tangent_ref_stacks = Expr(:call, __tangent_ref_stacks, ref_stacks...)
-        end
+        pb_stack_id = __log_data(info, build_pb_stack(_typeof(rule), arg_types))
 
         # Create calls to `__fwds_pass!` and `__rvs_pass!`, which run the forwards pass and
         # pullback associated to a call / invoke.
         fwds_pass_call = Expr(
             :call,
             __fwds_pass!,
-            arg_tangent_ref_stacks_id,
             rule_ref,
-            ret_tangent_stack_id,
             pb_stack_id,
-            register_type(get_primal_type(info, line)),
+            fwds_codual_type(get_primal_type(info, line)),
             map(__inc, args)...,
         )
-
         rvs_pass_call = Expr(
-            :call, __rvs_pass!, arg_tangent_ref_stacks_id, ret_tangent_stack_id, pb_stack_id
+            :call,
+            __rvs_pass!,
+            get_primal_type(info, line),
+            pb_stack_id,
+            get_rev_data_id(info, line),
+            map(Base.Fix1(get_rev_data_id, info), args)...,
         )
-
-        fwds = [
-            (arg_tangent_ref_stacks_id, new_inst(arg_tangent_ref_stacks)),
-            (line, new_inst(fwds_pass_call)),
-        ]
-        rvs = Tuple{ID, NewInstruction}[
-            (arg_tangent_ref_stacks_id, new_inst(arg_tangent_ref_stacks)),
-            (line, new_inst(rvs_pass_call)),
-        ]
-        return ad_stmt_info(line, fwds, rvs)
+        return ad_stmt_info(line, new_inst(fwds_pass_call), new_inst(rvs_pass_call))
 
     elseif Meta.isexpr(stmt, :boundscheck)
         # For some reason the compiler cannot handle boundscheck statements when we run it
@@ -484,8 +434,8 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
 
     elseif Meta.isexpr(stmt, :copyast)
         # Get constant out and shove it in shared storage.
-        reg = const_register(stmt.args[1], info)
-        return ad_stmt_info(line, Expr(:call, identity, reg), nothing)
+        x = const_codual(stmt.args[1], info)
+        return ad_stmt_info(line, Expr(:call, identity, x), nothing)
 
     elseif Meta.isexpr(stmt, :loopinfo)
         # Cannot pass loopinfo back through the optimiser for some reason.
@@ -508,44 +458,13 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
     end
 end
 
-# Used in `make_ad_stmts!` for call and invoke exprs. If an argument to the stmt is active,
-# then we grab its tangnet ref stack. If it's inactive (a constant of some kind -- really
-# anything that's not an `Argument` or an `ID`), then we create a dummy stack that will get
-# optimised away.
-function __make_arg_tangent_ref_stack(arg_type, arg)
-    is_active(arg) || return InactiveStack(InactiveRef(__zero_tangent(arg)))
-    return make_tangent_ref_stack(tangent_ref_type_ub(arg_type))
-end
-
-@inline function __tangent_ref_stacks(args::Vararg{Any, N}) where {N}
-    return tuple_map(___tangent_ref_stacks_helper, args)
-end
-
-# Distinguish between tangent stacks and tangent ref stacks based on their type. If we see
-# a type which looks like a tangent ref stack, just return it. If we see any other type,
-# assume it is a tangent stack, meaning that the tangent stack is fixed.
-# This is bit of a hack -- ideally we would get the code construction in `make_ad_stmts!` to
-# determine this, as doing this based on type is potentially flakey. It will have to do for
-# now though.
-@inline @generated function ___tangent_ref_stacks_helper(arg::P) where {P}
-    if P <: Union{InactiveStack, Stack{<:Ref}, NoTangentRefStack} && !(P <: Stack{<:Ptr})
-        return :(arg)
-    else
-        return :(FixedStackTangentRefStack(arg))
-    end
-end
-
 is_active(::Union{Argument, ID}) = true
 is_active(::Any) = false
-
-__zero_tangent(arg) = zero_tangent(arg)
-__zero_tangent(arg::GlobalRef) = zero_tangent(getglobal(arg.mod, arg.name))
-__zero_tangent(arg::QuoteNode) = zero_tangent(arg.value)
 
 # Build a stack to contain the pullback. Specialises on whether the pullback is a singleton,
 # and whether we get to know the concrete type of the pullback or not.
 function build_pb_stack(Trule, arg_types)
-    T_pb!! = Core.Compiler.return_type(Tuple{Trule, map(codual_type, arg_types)...})
+    T_pb!! = Core.Compiler.return_type(Tuple{Trule, map(fwds_codual_type, arg_types)...})
     if T_pb!! <: Tuple && T_pb!! !== Union{} && !(T_pb!! isa Union)
         F = T_pb!!.parameters[2]
         return Base.issingletontype(F) ? SingletonStack{F}() : Stack{F}()
@@ -555,114 +474,68 @@ function build_pb_stack(Trule, arg_types)
 end
 
 # Used in `make_ad_stmts!` method for `Expr(:call, ...)` and `Expr(:invoke, ...)`.
-@inline function __fwds_pass!(
-    arg_tangent_ref_stacks,
-    rule,
-    ret_tangent_stack,
-    pb_stack,
-    ::Type{R},
-    f::F,
-    raw_args::Vararg{Any, N},
-) where {R, F, N}
+@inline function __fwds_pass!(rule, pb_stack, ::Type{R}, f::F, raw_args...) where {R, F}
 
-    raw_args = (f, raw_args...)
-    __log_tangent_refs!(pb_stack, raw_args, arg_tangent_ref_stacks)
-
-    # Run the rule.
-    args = tuple_map(x -> isa(x, AugmentedRegister) ? x.codual : uninit_codual(x), raw_args)
+    # For each argument if it isn't a CoDual, make it one, then run the rule.
+    args = tuple_map(x -> isa(x, CoDual) ? x : uninit_fcodual(x), (f, raw_args...))
     out, pb!! = rule(args...)
 
-    # Log the results and return.
-    __push_tangent_stack!(ret_tangent_stack, tangent(out))
+    # Log the pullback and return the CoDual.
     __push_pb_stack!(pb_stack, pb!!)
-    return AugmentedRegister(out, top_ref(ret_tangent_stack))::R
+    return out
 end
 
-@inline function __log_tangent_refs!(::Any, raw_args, arg_tangent_ref_stacks)
-    tangent_refs = map(x -> isa(x, AugmentedRegister) ? x.tangent_ref : nothing, raw_args)
-    tuple_map(__push_ref_stack, arg_tangent_ref_stacks, tangent_refs)
-end
-
-@inline __log_tangent_refs!(::SingletonStack{NoPullback}, ::Any, ::Any) = nothing
-
-@inline __push_ref_stack(tangent_ref_stack, ref) = push!(tangent_ref_stack, ref)
-@inline __push_ref_stack(::InactiveStack, ref) = nothing
-@inline __push_ref_stack(::NoTangentRefStack, ref) = nothing
-
-@inline __push_tangent_stack!(stack, t) = push!(stack, t)
+# Useful to have this function call for debugging when looking at the generated IRCode.
 @inline __push_pb_stack!(stack, pb!!) = push!(stack, pb!!)
 
 # Used in `make_ad_stmts!` method for `Expr(:call, ...)` and `Expr(:invoke, ...)`.
-@inline function __rvs_pass!(arg_tangent_ref_stacks, ret_tangent_stack, pb_stack)::Nothing
-    pb = __pop_pb_stack!(pb_stack)
-    tngt = __pop_tangent_stack!(ret_tangent_stack)
-    __execute_reverse_pass!(pb, tngt, arg_tangent_ref_stacks)
+@inline function __rvs_pass!(P, pb_stack, ret_rev_data_ref, arg_rev_data_refs...)::Nothing
+    __run_rvs_pass!(P, __pop_pb_stack!(pb_stack), ret_rev_data_ref, arg_rev_data_refs...)
 end
 
-@inline __execute_reverse_pass!(::NoPullback, ::Any, ::Any) = nothing
+# If `NoPullback` is the pullback, then there is nothing to do. Moreover, since the
+# reverse-data accumulated in the `ret_rev_data_ref` is never used, we don't even need to
+# bother reseting it's value to zero.
+@inline __run_rvs_pass!(::Any, ::NoPullback, ::Ref, arg_rev_data_refs...) = nothing
 
-@inline function __execute_reverse_pass!(pb!!, dout, arg_tangent_ref_stacks)
-    # Get the tangent w.r.t. each argument of the primal.
-    tangent_refs = tuple_map(pop!, arg_tangent_ref_stacks)
-
-    # Run the pullback and increment the argument tangents.
-    dargs = tuple_map(set_immutable_to_zero ∘ getindex, tangent_refs)
-    new_dargs = pb!!(dout, dargs...)
-    tuple_map(increment_ref!, tangent_refs, new_dargs)
+@inline function __run_rvs_pass!(P, pb!!, ret_rev_data_ref::Ref, arg_rev_data_refs...)
+    tuple_map(increment_if_ref!, arg_rev_data_refs, pb!!(ret_rev_data_ref[]))
+    ret_rev_data_ref[] = zero_reverse_data_from_type(P)
     return nothing
 end
 
+increment_if_ref!(ref::Ref, rvs_data) = increment_ref!(ref, rvs_data)
+increment_if_ref!(::Nothing, ::Any) = nothing
+
+# Useful to have this function call for debugging when looking at the generated IRCode.
 @inline __pop_pb_stack!(stack) = pop!(stack)
-@inline __pop_tangent_stack!(tangent_stack) = pop!(tangent_stack)
 
 #
 # Runners for generated code.
 #
 
-struct Pullback{Tpb, Tret_ref, Targ_tangent_stacks, Tisva, Tnargs}
-    pb_oc::Tpb
-    ret_ref::Tret_ref
-    arg_tangent_stacks::Targ_tangent_stacks
+struct Pullback{Tpb_oc, Tisva<:Val, Tnvargs<:Val}
+    pb_oc::Tpb_oc
     isva::Tisva
-    nargs::Tnargs
+    nvargs::Tnvargs
 end
 
-@inline function (pb::Pullback{P, Q})(dy, dargs::Vararg{Any, N}) where {P, Q, N}
-    unflattened_dargs = __unflatten_varargs(pb.isva, dargs, pb.nargs)
-    map(setindex!, map(top_ref, pb.arg_tangent_stacks), unflattened_dargs)
-    increment_ref!(pb.ret_ref, dy)
-    pb.pb_oc(dy, unflattened_dargs...)
-    out = __flatten_varargs(pb.isva, map(pop!, pb.arg_tangent_stacks), nvargs(length(dargs), pb.nargs))
-    return out::_typeof(dargs)
-end
+@inline (pb::Pullback)(dy) = __flatten_varargs(pb.isva, pb.pb_oc(dy), pb.nvargs)
 
-@inline nvargs(n_flat, ::Val{nargs}) where {nargs} = Val(n_flat - nargs + 1)
-
-struct DerivedRule{Tfwds_oc, Targ_tangent_stacks, Tpb_oc, Tisva<:Val, Tnargs<:Val}
+struct DerivedRule{Tfwds_oc, Tpb_oc, Tisva<:Val, Tnargs<:Val}
     fwds_oc::Tfwds_oc
     pb_oc::Tpb_oc
-    arg_tangent_stacks::Targ_tangent_stacks
-    block_stack::Stack{Int32}
     isva::Tisva
     nargs::Tnargs
 end
 
 @inline function (fwds::DerivedRule{P, Q, S})(args::Vararg{CoDual, N}) where {P, Q, S, N}
-
-    # Load arguments in to stacks, and create tuples.
     args = __unflatten_codual_varargs(fwds.isva, args, fwds.nargs)
-    args_with_tangent_stacks = map(args, fwds.arg_tangent_stacks) do arg, arg_tangent_stack
-        push!(arg_tangent_stack, tangent(arg))
-        return AugmentedRegister(arg, top_ref(arg_tangent_stack))
-    end
-
-    # Run forwards-pass.
-    reg = fwds.fwds_oc(args_with_tangent_stacks...)::AugmentedRegister
-
-    # Extract result and assemble pullback.
-    pb!! = Pullback(fwds.pb_oc, reg.tangent_ref, fwds.arg_tangent_stacks, fwds.isva, fwds.nargs)
-    return reg.codual, pb!!
+    pb!! = Pullback(fwds.pb_oc, fwds.isva, nvargs(length(args), fwds.nargs))
+    return fwds.fwds_oc(args...)::CoDual, pb!!
 end
+
+@inline nvargs(n_flat, ::Val{nargs}) where {nargs} = Val(n_flat - nargs + 1)
 
 # Compute the concrete type of the rule that will be returned from `build_rrule`. This is
 # important for performance in dynamic dispatch, and to ensure that recursion works
@@ -675,43 +548,33 @@ function rule_type(interp::TapirInterpreter{C}, ::Type{sig}) where {C, sig}
     isva, _ = is_vararg_sig_and_sparam_names(sig)
 
     arg_types = map(_get_type, ir.argtypes)
-    arg_tangent_types = map(tangent_type, arg_types)
-    Targ_registers = Tuple{map(tangent_stack_type ∘ _get_type, ir.argtypes)...}
-    Treturn_register = register_type(Treturn)
-    if isconcretetype(Treturn_register)
+    arg_fwds_types = Tuple{map(fwds_codual_type, arg_types)...}
+    arg_rvs_types = Tuple{map(reverse_data_type ∘ tangent_type, arg_types)...}
+    fwds_return_codual = fwds_codual_type(Treturn)
+    rvs_return_type = reverse_data_type(tangent_type(Treturn))
+    if isconcretetype(fwds_return_codual)
         return DerivedRule{
-            Core.OpaqueClosure{Tuple{map(register_type, arg_types)...}, Treturn_register},
-            Targ_registers,
-            Core.OpaqueClosure{Tuple{tangent_type(Treturn), arg_tangent_types...}, Nothing},
+            Core.OpaqueClosure{arg_fwds_types, fwds_return_codual},
+            Core.OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types},
             Val{isva},
             Val{length(ir.argtypes)},
         }
     else
+        throw(error("hmmm"))
         return DerivedRule{
             Core.OpaqueClosure{Tuple{map(register_type, arg_types)...}, T} where {T<:Treturn_register},
-            Targ_registers,
-            Core.OpaqueClosure{Tuple{tangent_type(Treturn), arg_tangent_types...}, Nothing},
+            Core.OpaqueClosure{Tuple{reverse_data_type(tangent_type(Treturn))}, Nothing},
             Val{isva},
             Val{length(ir.argtypes)},
         }
-    end
-end
-
-# if isva and nargs=2, then inputs (5.0, 4.0, 3.0) are transformed into (5.0, (4.0, 3.0)).
-function __unflatten_varargs(::Val{isva}, args, ::Val{nargs}) where {isva, nargs}
-    isva || return args
-    if all(t -> t isa NoTangent, args[nargs:end])
-        return (args[1:nargs-1]..., NoTangent())
-    else
-        return (args[1:nargs-1]..., args[nargs:end])
     end
 end
 
 # If isva, inputs (5.0, (4.0, 3.0)) are transformed into (5.0, 4.0, 3.0).
 function __flatten_varargs(::Val{isva}, args, ::Val{nvargs}) where {isva, nvargs}
     isva || return args
-    if args[end] isa NoTangent
-        return (args[1:end-1]..., ntuple(n -> NoTangent(), nvargs)...)
+    if args[end] isa NoRvsData
+        return (args[1:end-1]..., ntuple(n -> NoRvsData(), nvargs)...)
     else
         return (args[1:end-1]..., args[end]...)
     end
@@ -722,8 +585,8 @@ end
 function __unflatten_codual_varargs(::Val{isva}, args, ::Val{nargs}) where {isva, nargs}
     isva || return args
     group_primal = map(primal, args[nargs:end])
-    if tangent_type(_typeof(group_primal)) == NoTangent
-        grouped_args = zero_codual(group_primal)
+    if tangent_type(_typeof(group_primal)) == NoFwdsData
+        grouped_args = zero_fwds_codual(group_primal)
     else
         grouped_args = CoDual(group_primal, map(tangent, args[nargs:end]))
     end
@@ -735,9 +598,7 @@ end
 
 Helper method. Only uses static information from `args`.
 """
-function build_rrule(args...)
-    return build_rrule(TapirInterpreter(), _typeof(TestUtils.__get_primals(args)))
-end
+build_rrule(args...) = build_rrule(PInterp(), _typeof(TestUtils.__get_primals(args)))
 
 """
     build_rrule(interp::PInterp{C}, sig::Type{<:Tuple}) where {C}
@@ -768,8 +629,7 @@ function build_rrule(interp::PInterp{C}, sig::Type{<:Tuple}) where {C}
     )
     insts = new_inst_vec(ir.stmts)
     ssa_types = Dict{ID, NewInstruction}(zip(concatenate_ids(primal_ir), insts))
-    arg_tangent_stacks = (map(make_tangent_stack ∘ _get_type, primal_ir.argtypes)..., )
-    info = ADInfo(interp, arg_types, ssa_types, arg_tangent_stacks)
+    info = ADInfo(interp, arg_types, ssa_types)
 
     # For each block in the fwds and pullback BBCode, translate all statements.
     ad_stmts_blocks = map(primal_ir.blocks) do primal_blk
@@ -780,10 +640,6 @@ function build_rrule(interp::PInterp{C}, sig::Type{<:Tuple}) where {C}
 
     # Make shared data, and construct BBCode for forwards-pass and pullback.
     shared_data = shared_data_tuple(info.shared_data_pairs)
-    # display(sig)
-    # @show length(shared_data)
-    # @show length(ir.stmts.inst)
-    # display(collect(_typeof(shared_data).parameters))
 
     # If we've already derived the OpaqueClosures and info, do not re-derive, just create a
     # copy and pass in new shared data.
@@ -806,14 +662,8 @@ function build_rrule(interp::PInterp{C}, sig::Type{<:Tuple}) where {C}
         pb_oc = replace_captures(existing_pb_oc, shared_data)
     end
 
-    return rule_type(interp, sig)(
-        fwds_oc,
-        pb_oc,
-        arg_tangent_stacks,
-        info.block_stack,
-        Val(isva),
-        Val(length(ir.argtypes)),
-    )
+    # return DerivedRule(fwds_oc, pb_oc, Val(isva), Val(num_args(info)))
+    return rule_type(interp, sig)(fwds_oc, pb_oc, Val(isva), Val(num_args(info)))
 end
 
 # Given an `OpaqueClosure` `oc`, create a new `OpaqueClosure` of the same type, but with new
@@ -840,7 +690,9 @@ function forwards_pass_ir(ir::BBCode, ad_stmts_blocks::ADStmts, info::ADInfo, Ts
     # `OpaqueClosure`, which contains all of the data shared between the forwards- and
     # reverse-passes. These are assigned to the `ID`s given by the `SharedDataPairs`.
     # Additionally, push the entry id onto the block stack.
-    push_block_stack_stmt = Expr(:call, push!, info.block_stack_id, info.entry_id.id)
+    push_block_stack_stmt = Expr(
+        :call, __push_blk_stack!, info.block_stack_id, info.entry_id.id
+    )
     entry_stmts = vcat(
         shared_data_stmts(info.shared_data_pairs),
         (ID(), new_inst(push_block_stack_stmt)),
@@ -860,7 +712,7 @@ function forwards_pass_ir(ir::BBCode, ad_stmts_blocks::ADStmts, info::ADInfo, Ts
     end
 
     # Create and return the `BBCode` for the forwards-pass.
-    arg_types = vcat(Tshared_data, map(register_type ∘ _get_type, ir.argtypes))
+    arg_types = vcat(Tshared_data, map(fwds_codual_type ∘ _get_type, ir.argtypes))
     return BBCode(vcat(entry_block, blocks), arg_types, ir.sptypes, ir.linetable, ir.meta)
 end
 
@@ -874,8 +726,7 @@ Produce the IR associated to the `OpaqueClosure` which runs most of the pullback
 function pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, Tshared_data)
 
     # Compute the argument types associated to the reverse-pass.
-    darg_types = map(tangent_type ∘ _get_type, ir.argtypes)
-    arg_types = vcat(Tshared_data, tangent_type(Tret), darg_types)
+    arg_types = vcat(Tshared_data, reverse_data_type(tangent_type(Tret)))
 
     # Compute the blocks which return in the primal.
     primal_exit_blocks_inds = findall(is_reachable_return_node ∘ terminator, ir.blocks)
@@ -896,12 +747,14 @@ function pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, T
     # Standard path pullback generation -- applied to 99% of primals:
     #
 
-    # Create entry block, which pops the block_stack, and switches to whichever block we
-    # were in at the end of the forwards-pass.
-    exit_blocks_ids = map(n -> ir.blocks[n].id, primal_exit_blocks_inds)
+    # Create entry block, which pops the block_stack, creates + initialised the reverse-data
+    # Refs, and switches to reverse-pass counterpart to whichever block we were in at the
+    # end of the forwards-pass.
     data_stmts = shared_data_stmts(info.shared_data_pairs)
+    rev_data_ref_stmts = reverse_data_ref_stmts(info)
+    exit_blocks_ids = map(n -> ir.blocks[n].id, primal_exit_blocks_inds)
     switch_stmts = make_switch_stmts(exit_blocks_ids, info)
-    entry_block = BBlock(ID(), vcat(data_stmts, switch_stmts))
+    entry_block = BBlock(ID(), vcat(data_stmts, rev_data_ref_stmts, switch_stmts))
 
     # For each basic block in the primal:
     # 1. pull the translated basic block statements from ad_stmts_blocks
@@ -918,8 +771,12 @@ function pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, T
         return BBlock(blk_id, vcat(rvs_stmts, switch_stmts))
     end
 
-    # Create an exit block. Simply returns nothing.
-    exit_block = BBlock(info.entry_id, [(ID(), new_inst(ReturnNode(nothing)))])
+    # Create an exit block. Dereferences reverse-data for arguments and returns it.
+    arg_rdata_ref_ids = map(n -> info.arg_rdata_ref_ids[Argument(n)], 1:num_args(info))
+    deref_id = ID()
+    deref = new_inst(Expr(:call, __deref_arg_rev_data_refs, arg_rdata_ref_ids...))
+    ret = new_inst(ReturnNode(deref_id))
+    exit_block = BBlock(info.entry_id, [(deref_id, deref), (ID(), ret)])
 
     # Create and return `BBCode` for the pullback.
     blks = vcat(entry_block, main_blocks, exit_block)
@@ -949,7 +806,7 @@ block during the forwards-pass.
 =#
 function make_switch_stmts(pred_ids::Vector{ID}, info::ADInfo)
 
-    # If there are no predecessors, then we can't possible have hit this block. This can
+    # If there are no predecessors, then we can't possibly have hit this block. This can
     # happen when all of the statements in a block have been eliminated, but the Julia
     # optimiser has not removed the block entirely from the `IRCode`. This often presents as
     # a block containing only a single `nothing` statement.
@@ -978,6 +835,8 @@ end
 # Helper function emitted by `make_switch_stmts`.
 __switch_case(id::Int32, predecessor_id::Int32) = !(id === predecessor_id)
 
+# Helper function used by `pullback_ir`.
+@inline __deref_arg_rev_data_refs(arg_rev_data_refs...) = map(getindex, arg_rev_data_refs)
 
 #=
     DynamicDerivedRule(interp::TapirInterpreter)

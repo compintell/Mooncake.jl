@@ -94,23 +94,27 @@ end
 
 Extract the forwards data from tangent `t`.
 """
-function forwards_data(t::T) where {T}
+@generated function forwards_data(t::T) where {T}
 
     # Ask for the forwards-data type. Useful catch-all error checking for unexpected types.
     F = forwards_data_type(T)
 
     # Catch-all for anything with no forwards-data.
-    F == NoFwdsData && return NoFwdsData()
+    F == NoFwdsData && return :(NoFwdsData())
 
     # Catch-all for anything where we return the whole object (mutable structs, arrays...).
-    F == T && return t
+    F == T && return :(t)
 
     # T must be a `Tangent` by now. If it's not, something has gone wrong.
     !(T <: Tangent) && return :(error("Unhandled type $T"))
-    return F(forwards_data(t.fields))
+    return :(F(forwards_data(t.fields)))
 end
 
 forwards_data(t::Union{Tuple, NamedTuple}) = tuple_map(forwards_data, t)
+
+zero_forwards_data(p) = forwards_data(zero_tangent(p))
+
+uninit_fdata(p) = forwards_data(uninit_tangent(p))
 
 """
     NoRvsData()
@@ -202,20 +206,20 @@ end
 
 Extract the reverse data from tangent `t`.
 """
-function reverse_data(t::T) where {T}
+@generated function reverse_data(t::T) where {T}
 
     # Ask for the reverse-data type. Useful catch-all error checking for unexpected types.
     R = reverse_data_type(T)
 
     # Catch-all for anything with no reverse-data.
-    R == NoRvsData && return NoRvsData()
+    R == NoRvsData && return :(NoRvsData())
 
     # Catch-all for anything where we return the whole object (Float64, isbits structs, ...)
-    R == T && return t
+    R == T && return :(t)
 
     # T must be a `Tangent` by now. If it's not, something has gone wrong.
     !(T <: Tangent) && return :(error("Unhandled type $T"))
-    return reverse_data_type(T)(reverse_data(t.fields))
+    return :($(reverse_data_type(T))(reverse_data(t.fields)))
 end
 
 reverse_data(t::Union{Tuple, NamedTuple}) = tuple_map(reverse_data, t)
@@ -238,15 +242,41 @@ function zero_reverse_data(p::P) where {P}
     # If there's no reverse data, return no reverse data, e.g. for mutable types.
     R == NoRvsData && return NoRvsData()
 
+    # If the type is itself abstract, it's reverse data could be anything.
+    # The same goes for if the type has any undetermined type parameters.
+    (isabstracttype(T) || !isconcretetype(T)) && return Any
+
     # T ought to be a `Tangent`. If it's not, something has gone wrong.
-    !(T <: Tangent) && return :(error("Unhandled type $T"))
+    !(T <: Tangent) && error("Unhandled type $T")
     error("do not yet handle structs")
     return reverse_data_type(T)(reverse_data(t.fields))
 end
 
 zero_reverse_data(p::Union{Tuple, NamedTuple}) = tuple_map(zero_reverse_data, p)
 
-zero_reverse_data(x::CoDual) = zero_reverse_data(primal(x))
+"""
+
+"""
+zero_reverse_data_from_type(::Type{P}) where {P}
+
+zero_reverse_data_from_type(::Type{P}) where {P<:IEEEFloat} = zero(P)
+
+@generated function zero_reverse_data_from_type(::Type{P}) where {P}
+    # Get types associated to primal.
+    T = tangent_type(P)
+    R = reverse_data_type(T)
+
+    # If there's no reverse data, return no reverse data, e.g. for mutable types.
+    R == NoRvsData && return NoRvsData()
+
+    # If the type is itself abstract, it's reverse data could be anything.
+    # The same goes for if the type has any undetermined type parameters.
+    (isabstracttype(T) || !isconcretetype(T)) && return Any
+
+    # T ought to be a `Tangent`. If it's not, something has gone wrong.
+    !(T <: Tangent) && return :(error("Unhandled type $T"))
+    return :(error("do not yet handle structs in from type"))
+end
 
 """
     combine_data(tangent_type, forwards_data, reverse_data)

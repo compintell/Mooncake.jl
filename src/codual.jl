@@ -30,6 +30,8 @@ See implementation for details, as this function is subject to change.
 """
 @inline uninit_codual(x::P) where {P} = CoDual(x, uninit_tangent(x))
 
+@inline uninit_fcodual(x::P) where {P} = CoDual(x, uninit_fdata(x))
+
 """
     codual_type(P::Type)
 
@@ -55,6 +57,8 @@ to_fwds(x::CoDual) = CoDual(primal(x), forwards_data(tangent(x)))
 
 to_fwds(x::CoDual{Type{P}}) where {P} = CoDual{Type{P}, NoFwdsData}(primal(x), NoFwdsData())
 
+zero_fwds_codual(p) = to_fwds(zero_codual(p))
+
 """
     fwds_codual_type(P::Type)
 
@@ -67,3 +71,5 @@ function fwds_codual_type(::Type{P}) where {P}
 end
 
 fwds_codual_type(::Type{Type{P}}) where {P} = CoDual{Type{P}, NoFwdsData}
+
+zero_reverse_data(x::CoDual) = zero_reverse_data(primal(x))

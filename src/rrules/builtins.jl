@@ -124,7 +124,7 @@ translate(::Val{Intrinsics.cglobal}) = __cglobal
 Tapir.is_primitive(::Type{MinimalCtx}, ::Type{<:Tuple{typeof(__cglobal), Vararg}}) = true
 function rrule!!(::CoDual{typeof(__cglobal)}, args...)
     pb!! = NoPullback((NoRvsData(), tuple_map(zero_reverse_data, args)...))
-    return Tapir.uninit_codual(__cglobal(map(primal, args)...)), pb!!
+    return Tapir.uninit_fdata(__cglobal(map(primal, args)...)), pb!!
 end
 
 @inactive_intrinsic checked_sadd_int
@@ -529,7 +529,7 @@ function rrule!!(::CoDual{typeof(getfield)}, value::CoDual, name::CoDual)
 end
 
 @inline function rrule!!(::CoDual{typeof(getfield)}, value::CoDual{<:Any, NoTangent}, name::CoDual)
-    return uninit_codual(getfield(primal(value), primal(name))), NoPullback()
+    return uninit_fdata(getfield(primal(value), primal(name))), NoPullback()
 end
 
 function rrule!!(::CoDual{typeof(getfield)}, value::CoDual, name::CoDual, order::CoDual)
@@ -550,7 +550,7 @@ end
 @inline function rrule!!(
     ::CoDual{typeof(getfield)}, value::CoDual{<:Any, NoTangent}, name::CoDual, order::CoDual
 )
-    return uninit_codual(getfield(primal(value), primal(name), primal(order))), NoPullback()
+    return uninit_fdata(getfield(primal(value), primal(name), primal(order))), NoPullback()
 end
 
 _get_tangent_field(_, tangent, f...) = getfield(tangent, f...)
