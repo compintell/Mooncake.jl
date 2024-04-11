@@ -21,6 +21,10 @@ end
         @test bb isa BBlock
         @test length(bb) == 2
 
+        ids, phi_nodes = Tapir.phi_nodes(bb)
+        @test only(ids) == bb.inst_ids[1]
+        @test only(phi_nodes) == bb.insts[1]
+
         insert!(bb, 1, ID(), CC.NewInstruction(nothing, Nothing))
         @test length(bb) == 3
         @test bb.insts[1].stmt === nothing

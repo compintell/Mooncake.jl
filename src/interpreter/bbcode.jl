@@ -154,6 +154,17 @@ Base.length(bb::BBlock) = length(bb.inst_ids)
 Base.copy(bb::BBlock) = BBlock(bb.id, copy(bb.inst_ids), copy(bb.insts))
 
 """
+    phi_nodes(bb::BBlock)::Tuple{Vector{ID}, Vector{IDPhiNode}}
+
+Returns all of the `IDPhiNode`s at the start of `bb`, along with their `ID`s. If there are
+no `IDPhiNode`s at the start of `bb`, then both vectors will be empty.
+"""
+function phi_nodes(bb::BBlock)
+    n_phi_nodes = findlast(x -> x.stmt isa IDPhiNode, bb.insts)
+    return bb.inst_ids[1:n_phi_nodes], bb.insts[1:n_phi_nodes]
+end
+
+"""
     Base.insert!(bb::BBlock, n::Int, id::ID, stmt::CC.NewInstruction)::Nothing
 
 Inserts `stmt` and `id` into `bb` immediately before the `n`th instruction.
