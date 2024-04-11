@@ -114,7 +114,7 @@ Fortunately, dealing with these performance limitations necessitates simplifying
 
 # Trying it out
 
-There is not presently a high-level interface to which we are committing
+There is not presently a high-level interface to which we are committing.
 If you want to compute the gradient of a function, we recommend in the first instance using [DifferentiationInterface.jl](https://github.com/gdalle/DifferentiationInterface.jl/), and taking a looking at how things are implemented there to get an idea of how to work with `Tapir.jl`.
 In particular, look at its use of `value_and_pullback!!` / `value_and_gradient!!`, and `build_rrule`.
 (Observe that there are a couple of things that you have to get right when using `Tapir.jl`'s interfaces and working with mutating functions, so care is required. Proper documentation will be made available upon the creation of a proper release of this package).
