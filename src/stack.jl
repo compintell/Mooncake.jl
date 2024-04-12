@@ -62,8 +62,6 @@ end
 
 Base.eltype(::Stack{T}) where {T} = T
 
-top_ref(x::Stack) = Ref(getfield(x, :memory), getfield(x, :position))
-
 
 struct SingletonStack{T} end
 
