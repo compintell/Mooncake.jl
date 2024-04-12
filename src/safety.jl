@@ -30,11 +30,9 @@ function (pb::SafePullback)(dy)
 end
 
 function verify_rvs_type(::P, dx) where {P}
-    rvs_type = reverse_data_type(tangent_type(P))
-    if !isa(dx, rvs_type)
-        msg = "For primal of type $P rdata type must be $rvs_type, but got $(_typeof(dx))"
-        throw(ArgumentError(msg))
-    end
+    _R = reverse_data_type(tangent_type(P))
+    R = _typeof(dx)
+    (R <: _R) || throw(ArgumentError("Type $P has rdata type $_R, but got $R."))
 end
 
 """
@@ -72,9 +70,7 @@ end
 
 function verify_fwds_type(x::CoDual)
     P = _typeof(primal(x))
-    fwds_type = fwds_codual_type(_typeof(primal(x)))
-    if !isa(x, fwds_type)
-        msg = "For primal of type $P fdata type must be $fwds_type, but got $(_typeof(x))"
-        throw(ArgumentError(msg))
-    end
+    F = _typeof(tangent(x))
+    _F = forwards_data_type(tangent_type(_typeof(primal(x))))
+    isa(tangent(x), _F) || throw(ArgumentError("Type $P has fdata type $_F, but got $F."))
 end
