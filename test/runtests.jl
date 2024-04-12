@@ -5,6 +5,7 @@ include("front_matter.jl")
         include("utils.jl")
         include("tangents.jl")
         include("codual.jl")
+        include("safety.jl")
         include("stack.jl")
         @testset "interpreter" begin
             include(joinpath("interpreter", "contexts.jl"))

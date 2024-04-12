@@ -28,11 +28,13 @@ using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!, potrf!, potrs!
 
 # Needs to be defined before various other things.
 function _foreigncall_ end
+function rrule!! end
 
 include("utils.jl")
 include("tangents.jl")
 include("fwds_rvs_data.jl")
 include("codual.jl")
+include("safety.jl")
 include("stack.jl")
 
 include(joinpath("interpreter", "contexts.jl"))
@@ -40,8 +42,8 @@ include(joinpath("interpreter", "abstract_interpretation.jl"))
 include(joinpath("interpreter", "bbcode.jl"))
 include(joinpath("interpreter", "ir_utils.jl"))
 include(joinpath("interpreter", "ir_normalisation.jl"))
-include(joinpath("interpreter", "interpreted_function.jl"))
-include(joinpath("interpreter", "reverse_mode_ad.jl"))
+# include(joinpath("interpreter", "interpreted_function.jl"))
+# include(joinpath("interpreter", "reverse_mode_ad.jl"))
 include(joinpath("interpreter", "s2s_reverse_mode_ad.jl"))
 
 include("test_utils.jl")
