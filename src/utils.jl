@@ -36,3 +36,23 @@ end
 function tuple_map(f::F, x::NamedTuple{names}, y::NamedTuple{names}) where {F, names}
     return NamedTuple{names}(tuple_map(f, Tuple(x), Tuple(y)))
 end
+
+function is_vararg_sig_and_sparam_names(sig)
+    world = Base.get_world_counter()
+    min = Base.RefValue{UInt}(typemin(UInt))
+    max = Base.RefValue{UInt}(typemax(UInt))
+    ms = Base._methods_by_ftype(sig, nothing, -1, world, true, min, max, Ptr{Int32}(C_NULL))::Vector
+    m = only(ms).method
+    return m.isva, sparam_names(m)
+end
+
+function sparam_names(m::Core.Method)::Vector{Symbol}
+    whereparams = ExprTools.where_parameters(m.sig)
+    whereparams === nothing && return Symbol[]
+    return map(whereparams) do name
+        name isa Symbol && return name
+        Meta.isexpr(name, :(<:)) && return name.args[1]
+        Meta.isexpr(name, :(>:)) && return name.args[1]
+        error("unrecognised type param $name")
+    end
+end
