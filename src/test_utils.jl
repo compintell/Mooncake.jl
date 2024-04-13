@@ -88,7 +88,8 @@ using JET, Random, Tapir, Test, InteractiveUtils
 using Tapir:
     CoDual, NoTangent, rrule!!, is_init, zero_codual, DefaultCtx, @is_primitive, val,
     is_always_fully_initialised, get_tangent_field, set_tangent_field!, MutableTangent,
-    Tangent, _typeof, reverse_data, NoFwdsData, to_fwds
+    Tangent, _typeof, reverse_data, NoFwdsData, to_fwds, uninit_fdata, zero_reverse_data,
+    zero_reverse_data_from_type
 
 has_equal_data(x::T, y::T; equal_undefs=true) where {T<:String} = x == y
 has_equal_data(x::Type, y::Type; equal_undefs=true) = x == y
@@ -455,6 +456,8 @@ function test_interpreted_rrule!!(rng::AbstractRNG, x...; interp, kwargs...)
 end
 
 function test_derived_rule(rng::AbstractRNG, x...; interp, kwargs...)
+    safe_rule = Tapir.build_rrule(interp, _typeof(__get_primals(x)); safety_on=true)
+    test_rrule!!(rng, x...; rule=safe_rule, interface_only=true, perf_flag=:none, is_primitive=false)
     rule = Tapir.build_rrule(interp, _typeof(__get_primals(x)))
     test_rrule!!(rng, x...; rule, kwargs...)
 end
@@ -840,6 +843,9 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
     r = Tapir.reverse_data(t)
     @test r isa R
 
+    # Check that uninit_fdata yields data of the correct type.
+    @test uninit_fdata(p) isa F
+
     # Check that combining f and r yields a tangent of the correct type and value.
     t_combined = Tapir.combine_data(T, f, r)
     @test _typeof(t_combined) == T
@@ -856,6 +862,12 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
     z_new = zero_tangent(p, f_z)
     @test z_new isa tangent_type(P)
     @test z_new === z
+
+    # Test that `zero_reverse_data_from_type` produces a valid rdata.
+    @test zero_reverse_data_from_type(P) isa R
+
+    # Test that `zero_reverse_data` produces valid reverse data.
+    @test zero_reverse_data(p) isa R
 end
 
 function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)
@@ -1256,11 +1268,11 @@ end
 # This catches the case where there are multiple phi nodes at the start of the block, and
 # they refer to one another. It is in this instance that the distinction between phi nodes
 # acting "instanteneously" and "in sequence" becomes apparent.
-function test_multiple_phinode_block(x::Float64)
+function test_multiple_phinode_block(x::Float64, N::Int)
     a = 1.0
     b = x
     i = 1
-    while i < 3
+    while i < N
         temp = a
         a = b
         b = 2temp
@@ -1393,105 +1405,105 @@ test_getfield_of_tuple_of_types(n::Int) = getfield((Float64, Float64), n)
 
 function generate_test_functions()
     return Any[
-        (false, :allocs, nothing, const_tester),
-        (false, :allocs, nothing, const_tester_non_differentiable),
-        (false, :allocs, nothing, identity, 5.0),
-        (false, :allocs, nothing, foo, 5.0),
-        (false, :allocs, nothing, non_differentiable_foo, 5),
-        (false, :allocs, nothing, bar, 5.0, 4.0),
-        # (false, :none, nothing, type_unstable_argument_eval, sin, 5.0),
-        # (false, :none, (lb=1, ub=1_000), pi_node_tester, Ref{Any}(5.0)),
-        # (false, :none, (lb=1, ub=1_000), pi_node_tester, Ref{Any}(5)),
-        (false, :allocs, nothing, intrinsic_tester, 5.0),
+        # (false, :allocs, nothing, const_tester),
+        # (false, :allocs, nothing, const_tester_non_differentiable),
+        # (false, :allocs, nothing, identity, 5.0),
+        # (false, :allocs, nothing, foo, 5.0),
+        # (false, :allocs, nothing, non_differentiable_foo, 5),
+        # (false, :allocs, nothing, bar, 5.0, 4.0),
+        # # (false, :none, nothing, type_unstable_argument_eval, sin, 5.0),
+        # # (false, :none, (lb=1, ub=1_000), pi_node_tester, Ref{Any}(5.0)),
+        # # (false, :none, (lb=1, ub=1_000), pi_node_tester, Ref{Any}(5)),
+        # (false, :allocs, nothing, intrinsic_tester, 5.0),
         # (false, :allocs, nothing, goto_tester, 5.0),
-        # (false, :allocs, nothing, new_tester, 5.0, :hello),
-        # (false, :allocs, nothing, new_tester_2, 4.0),
-        # (false, :none, nothing, new_tester_3, Ref{Any}(Tuple{Float64})),
-        # (false, :allocs, nothing, type_stable_getfield_tester_1, StableFoo(5.0, :hi)),
-        # (false, :allocs, nothing, type_stable_getfield_tester_2, StableFoo(5.0, :hi)),
+        # # (false, :allocs, nothing, new_tester, 5.0, :hello),
+        # # (false, :allocs, nothing, new_tester_2, 4.0),
+        # # (false, :none, nothing, new_tester_3, Ref{Any}(Tuple{Float64})),
+        # # (false, :allocs, nothing, type_stable_getfield_tester_1, StableFoo(5.0, :hi)),
+        # # (false, :allocs, nothing, type_stable_getfield_tester_2, StableFoo(5.0, :hi)),
         # (false, :none, nothing, globalref_tester),
         # (false, :none, nothing, globalref_tester_bool),
-        # (false, :none, nothing, globalref_tester_2, true),
-        # (false, :none, nothing, globalref_tester_2, false),
+        # # (false, :none, nothing, globalref_tester_2, true),
+        # # (false, :none, nothing, globalref_tester_2, false),
         # (false, :allocs, nothing, globalref_tester_3),
         # (false, :allocs, nothing, globalref_tester_4),
-        # (false, :none, (lb=1, ub=500), globalref_tester_5),
-        # (false, :none, (lb=1, ub=1_000), type_unstable_tester_0, Ref{Any}(5.0)),
-        # (false, :none, nothing, type_unstable_tester, Ref{Any}(5.0)),
-        # (false, :none, nothing, type_unstable_tester_2, Ref{Real}(5.0)),
-        # (false, :none, (lb=1, ub=1000), type_unstable_tester_3, Ref{Any}(5.0)),
-        # (false, :none, (lb=1, ub=10_000), test_primitive_dynamic_dispatch, Any[5.0, false]),
-        # (false, :none, nothing, type_unstable_function_eval, Ref{Any}(sin), 5.0),
+        # # (false, :none, (lb=1, ub=500), globalref_tester_5),
+        # # (false, :none, (lb=1, ub=1_000), type_unstable_tester_0, Ref{Any}(5.0)),
+        # # (false, :none, nothing, type_unstable_tester, Ref{Any}(5.0)),
+        # # (false, :none, nothing, type_unstable_tester_2, Ref{Real}(5.0)),
+        # # (false, :none, (lb=1, ub=1000), type_unstable_tester_3, Ref{Any}(5.0)),
+        # # (false, :none, (lb=1, ub=10_000), test_primitive_dynamic_dispatch, Any[5.0, false]),
+        # # (false, :none, nothing, type_unstable_function_eval, Ref{Any}(sin), 5.0),
         # (false, :allocs, nothing, phi_const_bool_tester, 5.0),
         # (false, :allocs, nothing, phi_const_bool_tester, -5.0),
         # (false, :allocs, nothing, phi_node_with_undefined_value, true, 4.0),
         # (false, :allocs, nothing, phi_node_with_undefined_value, false, 4.0),
-        # (false, :allocs, nothing, test_multiple_phinode_block, 3.0),
-        # (
-        #     false,
-        #     :none,
-        #     nothing,
-        #     Base._unsafe_getindex,
-        #     IndexLinear(),
-        #     randn(5),
-        #     1,
-        #     Base.Slice(Base.OneTo(1)),
-        # ), # fun PhiNode example
-        # (false, :allocs, nothing, avoid_throwing_path_tester, 5.0),
-        # (false, :allocs, nothing, simple_foreigncall_tester, randn(5)),
-        # (false, :none, nothing, simple_foreigncall_tester_2, randn(6), (2, 3)),
-        # (false, :allocs, nothing, foreigncall_tester, randn(5)),
-        # (false, :none, (lb=1, ub=1_000), no_primitive_inlining_tester, 5.0),
-        # (false, :allocs, nothing, varargs_tester, 5.0),
-        # (false, :allocs, nothing, varargs_tester, 5.0, 4),
-        # (false, :allocs, nothing, varargs_tester, 5.0, 4, 3.0),
-        # (false, :allocs, nothing, varargs_tester_2, 5.0),
-        # (false, :allocs, nothing, varargs_tester_2, 5.0, 4),
-        # (false, :allocs, nothing, varargs_tester_2, 5.0, 4, 3.0),
-        # (false, :allocs, nothing, varargs_tester_3, 5.0),
-        # (false, :allocs, nothing, varargs_tester_3, 5.0, 4),
-        # (false, :allocs, nothing, varargs_tester_3, 5.0, 4, 3.0),
-        # (false, :allocs, nothing, varargs_tester_4, 5.0),
-        # (false, :allocs, nothing, varargs_tester_4, 5.0, 4),
-        # (false, :allocs, nothing, varargs_tester_4, 5.0, 4, 3.0),
-        # (false, :allocs, nothing, splatting_tester, 5.0),
-        # (false, :allocs, nothing, splatting_tester, (5.0, 4.0)),
-        # (false, :allocs, nothing, splatting_tester, (5.0, 4.0, 3.0)),
-        # # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}(5.0)), # known failure case -- no rrule for _apply_iterate
-        # # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}((5.0, 4.0))), # known failure case -- no rrule for _apply_iterate
-        # # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}((5.0, 4.0, 3.0))), # known failure case -- no rrule for _apply_iterate
-        # (false, :none, (lb=1, ub=1_000), inferred_const_tester, Ref{Any}(nothing)),
-        # (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 1),
-        # (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 2),
-        # (false, :none, (lb=1, ub=100_000_000), test_union_of_arrays, randn(5), true),
-        # (
-        #     false, :none, (lb=1, ub=500),
-        #     test_union_of_types, Ref{Union{Type{Float64}, Type{Int}}}(Float64),
-        # ),
-        # (false, :allocs, nothing, test_self_reference, 1.1, 1.5),
-        # (false, :allocs, nothing, test_self_reference, 1.5, 1.1),
-        # (false, :none, nothing, test_recursive_sum, randn(2)),
-        # (
-        #     false, :none, (lb=1, ub=1_000),
-        #     LinearAlgebra._modify!,
-        #     LinearAlgebra.MulAddMul(5.0, 4.0),
-        #     5.0,
-        #     randn(5, 4),
-        #     (5, 4),
-        # ), # for Bool comma,
-        # (false, :allocs, nothing, getfield_tester, (5.0, 5)),
-        # (false, :allocs, nothing, getfield_tester_2, (5.0, 5)),
-        # (
-        #     false, :allocs, nothing,
-        #     setfield_tester_left!, FullyInitMutableStruct(5.0, randn(3)), 4.0,
-        # ),
-        # (
-        #     false, :none, nothing,
-        #     setfield_tester_right!, FullyInitMutableStruct(5.0, randn(3)), randn(5),
-        # ),
-        # (false, :none, nothing, mul!, randn(3, 5)', randn(5, 5), randn(5, 3), 4.0, 3.0),
-        # (false, :none, nothing, Xoshiro, 123456),
-        # (false, :none, (lb=1, ub=100_000), *, randn(250, 500), randn(500, 250)),
+        (false, :allocs, nothing, test_multiple_phinode_block, 3.0, 3),
+        # # (
+        # #     false,
+        # #     :none,
+        # #     nothing,
+        # #     Base._unsafe_getindex,
+        # #     IndexLinear(),
+        # #     randn(5),
+        # #     1,
+        # #     Base.Slice(Base.OneTo(1)),
+        # # ), # fun PhiNode example
+        # # (false, :allocs, nothing, avoid_throwing_path_tester, 5.0),
+        # # (false, :allocs, nothing, simple_foreigncall_tester, randn(5)),
+        # # (false, :none, nothing, simple_foreigncall_tester_2, randn(6), (2, 3)),
+        # # (false, :allocs, nothing, foreigncall_tester, randn(5)),
+        # # (false, :none, (lb=1, ub=1_000), no_primitive_inlining_tester, 5.0),
+        # # (false, :allocs, nothing, varargs_tester, 5.0),
+        # # (false, :allocs, nothing, varargs_tester, 5.0, 4),
+        # # (false, :allocs, nothing, varargs_tester, 5.0, 4, 3.0),
+        # # (false, :allocs, nothing, varargs_tester_2, 5.0),
+        # # (false, :allocs, nothing, varargs_tester_2, 5.0, 4),
+        # # (false, :allocs, nothing, varargs_tester_2, 5.0, 4, 3.0),
+        # # (false, :allocs, nothing, varargs_tester_3, 5.0),
+        # # (false, :allocs, nothing, varargs_tester_3, 5.0, 4),
+        # # (false, :allocs, nothing, varargs_tester_3, 5.0, 4, 3.0),
+        # # (false, :allocs, nothing, varargs_tester_4, 5.0),
+        # # (false, :allocs, nothing, varargs_tester_4, 5.0, 4),
+        # # (false, :allocs, nothing, varargs_tester_4, 5.0, 4, 3.0),
+        # # (false, :allocs, nothing, splatting_tester, 5.0),
+        # # (false, :allocs, nothing, splatting_tester, (5.0, 4.0)),
+        # # (false, :allocs, nothing, splatting_tester, (5.0, 4.0, 3.0)),
+        # # # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}(5.0)), # known failure case -- no rrule for _apply_iterate
+        # # # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}((5.0, 4.0))), # known failure case -- no rrule for _apply_iterate
+        # # # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}((5.0, 4.0, 3.0))), # known failure case -- no rrule for _apply_iterate
+        # # (false, :none, (lb=1, ub=1_000), inferred_const_tester, Ref{Any}(nothing)),
+        # # (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 1),
+        # # (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 2),
+        # # (false, :none, (lb=1, ub=100_000_000), test_union_of_arrays, randn(5), true),
+        # # (
+        # #     false, :none, (lb=1, ub=500),
+        # #     test_union_of_types, Ref{Union{Type{Float64}, Type{Int}}}(Float64),
+        # # ),
+        # # (false, :allocs, nothing, test_self_reference, 1.1, 1.5),
+        # # (false, :allocs, nothing, test_self_reference, 1.5, 1.1),
+        # # (false, :none, nothing, test_recursive_sum, randn(2)),
+        # # (
+        # #     false, :none, (lb=1, ub=1_000),
+        # #     LinearAlgebra._modify!,
+        # #     LinearAlgebra.MulAddMul(5.0, 4.0),
+        # #     5.0,
+        # #     randn(5, 4),
+        # #     (5, 4),
+        # # ), # for Bool comma,
+        # # (false, :allocs, nothing, getfield_tester, (5.0, 5)),
+        # # (false, :allocs, nothing, getfield_tester_2, (5.0, 5)),
+        # # (
+        # #     false, :allocs, nothing,
+        # #     setfield_tester_left!, FullyInitMutableStruct(5.0, randn(3)), 4.0,
+        # # ),
+        # # (
+        # #     false, :none, nothing,
+        # #     setfield_tester_right!, FullyInitMutableStruct(5.0, randn(3)), randn(5),
+        # # ),
+        # # (false, :none, nothing, mul!, randn(3, 5)', randn(5, 5), randn(5, 3), 4.0, 3.0),
+        # # (false, :none, nothing, Xoshiro, 123456),
+        # # (false, :none, (lb=1, ub=100_000), *, randn(250, 500), randn(500, 250)),
         # (false, :allocs, nothing, test_sin, 1.0),
         # (false, :allocs, nothing, test_cos_sin, 2.0),
         # (false, :allocs, nothing, test_isbits_multiple_usage, 5.0),
@@ -1502,51 +1514,61 @@ function generate_test_functions()
         # (false, :allocs, nothing, test_isbits_multiple_usage_phi, false, 1.1),
         # (false, :allocs, nothing, test_isbits_multiple_usage_phi, true, 1.1),
         # (false, :allocs, nothing, test_multiple_call_non_primitive, 5.0),
-        # (false, :none, (lb=1, ub=1500), test_multiple_pi_nodes, Ref{Any}(5.0)),
-        # (false, :none, (lb=1, ub=1500), test_multi_use_pi_node, Ref{Any}(5.0)),
-        # (false, :allocs, nothing, test_getindex, [1.0, 2.0]),
-        # (false, :allocs, nothing, test_mutation!, [1.0, 2.0]),
+        # # (false, :none, (lb=1, ub=1500), test_multiple_pi_nodes, Ref{Any}(5.0)),
+        # # (false, :none, (lb=1, ub=1500), test_multi_use_pi_node, Ref{Any}(5.0)),
+        # # (false, :allocs, nothing, test_getindex, [1.0, 2.0]),
+        # # (false, :allocs, nothing, test_mutation!, [1.0, 2.0]),
         # (false, :allocs, nothing, test_while_loop, 2.0),
         # (false, :allocs, nothing, test_for_loop, 3.0),
-        # (false, :none, nothing, test_mutable_struct_basic, 5.0),
-        # (false, :none, nothing, test_mutable_struct_basic_sin, 5.0),
-        # (false, :none, nothing, test_mutable_struct_setfield, 4.0),
-        # (false, :none, (lb=1, ub=2_000), test_mutable_struct, 5.0),
-        # (false, :none, nothing, test_struct_partial_init, 3.5),
-        # (false, :none, nothing, test_mutable_partial_init, 3.3),
-        # (
-        #     false, :allocs, nothing,
-        #     test_naive_mat_mul!, randn(100, 50), randn(100, 30), randn(30, 50),
-        # ),
-        # (
-        #     false, :allocs, nothing,
-        #     (A, C) -> test_naive_mat_mul!(C, A, A), randn(100, 100), randn(100, 100),
-        # ),
-        # (false, :allocs, (lb=10, ub=1_000), sum, randn(30)),
-        # (false, :none, (lb=10, ub=1_000), test_diagonal_to_matrix, Diagonal(randn(30))),
-        # (
-        #     false, :allocs, (lb=100, ub=1_000),
-        #     ldiv!, randn(20, 20), Diagonal(rand(20) .+ 1), randn(20, 20),
-        # ),
-        # (
-        #     false, :allocs, (lb=10, ub=500),
-        #     LinearAlgebra._kron!, randn(400, 400), randn(20, 20), randn(20, 20),
-        # ),
-        # (
-        #     false, :allocs, (lb=10, ub=500),
-        #     kron!, randn(400, 400), Diagonal(randn(20)), randn(20, 20),
-        # ),
-        # (
-        #     false, :none, nothing,
-        #     test_mlp,
-        #     randn(sr(1), 500, 200),
-        #     randn(sr(2), 700, 500),
-        #     randn(sr(3), 300, 700),
-        # ),
+        # # (false, :none, nothing, test_mutable_struct_basic, 5.0),
+        # # (false, :none, nothing, test_mutable_struct_basic_sin, 5.0),
+        # # (false, :none, nothing, test_mutable_struct_setfield, 4.0),
+        # # (false, :none, (lb=1, ub=2_000), test_mutable_struct, 5.0),
+        # # (false, :none, nothing, test_struct_partial_init, 3.5),
+        # # (false, :none, nothing, test_mutable_partial_init, 3.3),
+        # # (
+        # #     false, :allocs, nothing,
+        # #     test_naive_mat_mul!, randn(100, 50), randn(100, 30), randn(30, 50),
+        # # ),
+        # # (
+        # #     false, :allocs, nothing,
+        # #     (A, C) -> test_naive_mat_mul!(C, A, A), randn(100, 100), randn(100, 100),
+        # # ),
+        # # (false, :allocs, (lb=10, ub=1_000), sum, randn(30)),
+        # # (false, :none, (lb=10, ub=1_000), test_diagonal_to_matrix, Diagonal(randn(30))),
+        # # (
+        # #     false, :allocs, (lb=100, ub=1_000),
+        # #     ldiv!, randn(20, 20), Diagonal(rand(20) .+ 1), randn(20, 20),
+        # # ),
+        # # (
+        # #     false, :allocs, (lb=10, ub=500),
+        # #     LinearAlgebra._kron!, randn(400, 400), randn(20, 20), randn(20, 20),
+        # # ),
+        # # (
+        # #     false, :allocs, (lb=10, ub=500),
+        # #     kron!, randn(400, 400), Diagonal(randn(20)), randn(20, 20),
+        # # ),
+        # # (
+        # #     false, :none, nothing,
+        # #     test_mlp,
+        # #     randn(sr(1), 500, 200),
+        # #     randn(sr(2), 700, 500),
+        # #     randn(sr(3), 300, 700),
+        # # ),
         # (false, :allocs, (lb=1.0, ub=150), test_handwritten_sum, randn(1024 * 1024)),
-        # (false, :none, nothing, _sum, randn(1024)),
+        # (false, :allocs, (lb=1.0, ub=150), _naive_map_sin_cos_exp, randn(100), randn(100)),
+        # # (false, :none, nothing, _sum, randn(1024)),
         # (false, :none, nothing, test_map, randn(1024), randn(1024)),
     ]
+end
+
+function _naive_map_sin_cos_exp(y::AbstractArray{<:Real}, x::AbstractArray{<:Real})
+    n = 1
+    while n <= length(x)
+        y[n] = sin(cos(exp(x[n])))
+        n += 1
+    end
+    return y
 end
 
 function value_dependent_control_flow(x, n)
