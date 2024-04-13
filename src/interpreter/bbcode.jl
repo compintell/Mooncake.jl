@@ -161,6 +161,9 @@ no `IDPhiNode`s at the start of `bb`, then both vectors will be empty.
 """
 function phi_nodes(bb::BBlock)
     n_phi_nodes = findlast(x -> x.stmt isa IDPhiNode, bb.insts)
+    if n_phi_nodes === nothing
+        n_phi_nodes = 0
+    end
     return bb.inst_ids[1:n_phi_nodes], bb.insts[1:n_phi_nodes]
 end
 
