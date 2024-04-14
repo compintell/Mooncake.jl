@@ -624,7 +624,17 @@ end
 # swapfield!
 # throw
 
+struct TuplePullback{N} end
+
+@inline (::TuplePullback{N})(dy::Tuple) where {N} = NoRvsData(), dy...
+
+@inline function (::TuplePullback{N})(::NoRvsData) where {N}
+    return NoRvsData(), ntuple(_ -> NoRvsData(), N)...
+end
+
 @inline tuple_pullback(dy) = NoRvsData(), dy...
+
+@inline tuple_pullback(dy::NoRvsData) = NoRvsData()
 
 function rrule!!(::CoDual{typeof(tuple)}, args::Vararg{Any, N}) where {N}
     primal_output = tuple(map(primal, args)...)
@@ -632,10 +642,10 @@ function rrule!!(::CoDual{typeof(tuple)}, args::Vararg{Any, N}) where {N}
         pb!! = NoPullback((NoRvsData(), tuple_map(zero_reverse_data, args)...))
         return CoDual(primal_output, NoFwdsData()), pb!!
     else
-        if forwards_data_type(_typeof(primal_output)) == NoFwdsData
-            return CoDual(primal_output, NoFwdsData()), tuple_pullback
+        if forwards_data_type(tangent_type(_typeof(primal_output))) == NoFwdsData
+            return CoDual(primal_output, NoFwdsData()), TuplePullback{N}()
         else
-            return CoDual(primal_output, tuple(map(tangent, args)...)), tuple_pullback
+            return CoDual(primal_output, tuple(map(tangent, args)...)), TuplePullback{N}()
         end
     end
 end
@@ -896,6 +906,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability_and_allocs, nothing, tuple),
         (false, :stability_and_allocs, nothing, tuple, 1),
         (false, :stability_and_allocs, nothing, tuple, 1, 5),
+        (false, :stability_and_allocs, nothing, tuple, 1.0, (5, )),
         [false, :stability, nothing, typeassert, 5.0, Float64],
         [false, :stability, nothing, typeassert, randn(5), Vector{Float64}],
         [false, :stability, nothing, typeof, 5.0],

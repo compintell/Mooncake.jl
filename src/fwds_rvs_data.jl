@@ -107,12 +107,14 @@ Extract the forwards data from tangent `t`.
 
     # T must be a `Tangent` by now. If it's not, something has gone wrong.
     !(T <: Tangent) && return :(error("Unhandled type $T"))
-    return :(F(forwards_data(t.fields)))
+    # return :(F(forwards_data(t.fields)))
+    return :($F(forwards_data(t.fields)))
 end
 
-forwards_data(t::Union{Tuple, NamedTuple}) = tuple_map(forwards_data, t)
-
-zero_forwards_data(p) = forwards_data(zero_tangent(p))
+@generated function forwards_data(t::Union{Tuple, NamedTuple})
+    forwards_data_type(t) == NoFwdsData && return NoFwdsData()
+    return :(tuple_map(forwards_data, t))
+end
 
 uninit_fdata(p) = forwards_data(uninit_tangent(p))
 
@@ -183,7 +185,7 @@ end
 
 reverse_data_type(::Type{<:Ptr}) = NoRvsData
 
-function reverse_data_type(::Type{P}) where {P<:Tuple}
+@generated function reverse_data_type(::Type{P}) where {P<:Tuple}
     isa(P, Union) && return Union{reverse_data_type(P.a), reverse_data_type(P.b)}
     isempty(P.parameters) && return NoRvsData
     isa(last(P.parameters), Core.TypeofVararg) && return Any
@@ -222,7 +224,10 @@ Extract the reverse data from tangent `t`.
     return :($(reverse_data_type(T))(reverse_data(t.fields)))
 end
 
-reverse_data(t::Union{Tuple, NamedTuple}) = tuple_map(reverse_data, t)
+@generated function reverse_data(t::Union{Tuple, NamedTuple})
+    reverse_data_type(t) == NoRvsData && return NoRvsData()
+    return :(tuple_map(reverse_data, t))
+end
 
 """
     zero_reverse_data(p)
@@ -233,26 +238,27 @@ zero_reverse_data(p)
 
 zero_reverse_data(p::IEEEFloat) = zero(p)
 
-function zero_reverse_data(p::P) where {P}
+@generated function zero_reverse_data(p::P) where {P}
 
     # Get types associated to primal.
     T = tangent_type(P)
     R = reverse_data_type(T)
 
     # If there's no reverse data, return no reverse data, e.g. for mutable types.
-    R == NoRvsData && return NoRvsData()
-
-    # If the type is itself abstract, it's reverse data could be anything.
-    # The same goes for if the type has any undetermined type parameters.
-    (isabstracttype(T) || !isconcretetype(T)) && return Any
+    R == NoRvsData && return :(NoRvsData())
 
     # T ought to be a `Tangent`. If it's not, something has gone wrong.
-    !(T <: Tangent) && error("Unhandled type $T")
-    error("do not yet handle structs")
-    return reverse_data_type(T)(reverse_data(t.fields))
+    !(T <: Tangent) && Expr(:call, error, "Unhandled type $T")
+    names = fieldnames(P)
+    getfield_exprs = map(n -> Expr(:call, getfield, :p, QuoteNode(n)), names)
+    zs = Expr(:tuple, map(x -> Expr(:call, zero_reverse_data, x), getfield_exprs)...)
+    return :($R(NamedTuple{$names}($zs)))
 end
 
-zero_reverse_data(p::Union{Tuple, NamedTuple}) = tuple_map(zero_reverse_data, p)
+@generated function zero_reverse_data(p::Union{Tuple, NamedTuple})
+    reverse_data_type(tangent_type(p)) == NoRvsData && return NoRvsData()
+    return :(tuple_map(zero_reverse_data, p))
+end
 
 """
 
@@ -262,6 +268,7 @@ zero_reverse_data_from_type(::Type{P}) where {P}
 zero_reverse_data_from_type(::Type{P}) where {P<:IEEEFloat} = zero(P)
 
 @generated function zero_reverse_data_from_type(::Type{P}) where {P}
+
     # Get types associated to primal.
     T = tangent_type(P)
     R = reverse_data_type(T)
@@ -274,8 +281,35 @@ zero_reverse_data_from_type(::Type{P}) where {P<:IEEEFloat} = zero(P)
     (isabstracttype(T) || !isconcretetype(T)) && return Any
 
     # T ought to be a `Tangent`. If it's not, something has gone wrong.
-    !(T <: Tangent) && return :(error("Unhandled type $T"))
-    return :(error("do not yet handle structs in from type"))
+    !(T <: Tangent) && return Expr(:call, error, "Unhandled type $T")
+    return quote
+        zs = tuple_map(zero_reverse_data_from_type, $(fieldtypes(P)))
+        return $R(NamedTuple{$(fieldnames(P))}(zs))
+    end
+end
+
+@generated function zero_reverse_data_from_type(::Type{P}) where {P<:Tuple}
+    # Get types associated to primal.
+    T = tangent_type(P)
+    R = reverse_data_type(T)
+
+    # If there's no reverse data, return no reverse data, e.g. for mutable types.
+    R == NoRvsData && return NoRvsData()
+
+    return Expr(:call, tuple, map(p -> :(zero_reverse_data_from_type($p)), P.parameters)...)
+end
+
+@generated function zero_reverse_data_from_type(::Type{NamedTuple{names, Pt}}) where {names, Pt}
+
+    # Get types associated to primal.
+    P = NamedTuple{names, Pt}
+    T = tangent_type(P)
+    R = reverse_data_type(T)
+
+    # If there's no reverse data, return no reverse data, e.g. for mutable types.
+    R == NoRvsData && return NoRvsData()
+
+    return :(NamedTuple{$names}(zero_reverse_data_from_type($Pt)))
 end
 
 """
@@ -285,21 +319,34 @@ end
 """
 combine_data(::Type{NoTangent}, ::NoFwdsData, ::NoRvsData) = NoTangent()
 combine_data(::Type{T}, ::NoFwdsData, r::T) where {T} = r
-combine_data(::Type{F}, f::F, ::NoRvsData) where {F} = f
-function combine_data(::Type{T}, f::Tuple, r::Tuple) where {T}
-    return T(map(combine_data, fieldtypes(T), f, r))
-end
-function combine_data(::Type{T}, f::NamedTuple{ns}, r::NamedTuple{ns}) where {T, ns}
-    t = map(combine_data, fieldtypes(T), Tuple(f), Tuple(r))
-    return T(NamedTuple{ns}(t))
-end
+combine_data(::Type{T}, f::T, ::NoRvsData) where {T} = f
+
+# General structs.
 function combine_data(::Type{T}, f::FwdsData{F}, r::RvsData{R}) where {T<:Tangent, F, R}
     nt = fields_type(T)
     Ts = fieldtypes(nt)
     return T(nt(tuple(map(combine_data, Ts, f.data, r.data)...)))
 end
 
-combine_data(::Type{T}, f::FwdsData{F}, ::NoRvsData) where {T<:Tangent, F} = T(f.data)
+function combine_data(::Type{T}, f::FwdsData{F}, ::NoRvsData) where {T<:Tangent, names, F<:NamedTuple{names}}
+    return combine_data(T, f, RvsData(NamedTuple{names}(tuple_map(_ -> NoRvsData(), names))))
+end
+
+
+# Tuples and NamedTuples
+function combine_data(::Type{T}, f::Tuple, r::Tuple) where {T}
+    return T(map(combine_data, fieldtypes(T), f, r))
+end
+function combine_data(::Type{T}, f::NamedTuple{ns}, r::NamedTuple{ns}) where {T, ns}
+    return T(map(combine_data, fieldtypes(T), f, r))
+end
+function combine_data(::Type{T}, f::Union{Tuple, NamedTuple}, r::NoRvsData) where {T}
+    return combine_data(T, f, map(_ -> NoRvsData(), f))
+end
+function combine_data(::Type{T}, f::NoFwdsData, r::Union{Tuple, NamedTuple}) where {T}
+    return combine_data(T, map(_ -> NoFwdsData(), r), r)
+end
+
 
 """
     zero_tangent(p, ::NoFwdsData)

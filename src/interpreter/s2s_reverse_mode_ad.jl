@@ -105,11 +105,15 @@ struct ADInfo
     ssa_insts::Dict{ID, NewInstruction}
     arg_rdata_ref_ids::Dict{Argument, ID}
     ssa_rdata_ref_ids::Dict{ID, ID}
+    safety_on::Bool
 end
 
 # The constructor that you should use for ADInfo.
 function ADInfo(
-    interp::PInterp, arg_types::Dict{Argument, Any}, ssa_insts::Dict{ID, NewInstruction}
+    interp::PInterp,
+    arg_types::Dict{Argument, Any},
+    ssa_insts::Dict{ID, NewInstruction},
+    safety_on::Bool,
 )
     shared_data_pairs = SharedDataPairs()
     block_stack = Stack{Int32}()
@@ -123,6 +127,7 @@ function ADInfo(
         ssa_insts,
         Dict((k, ID()) for k in keys(arg_types)),
         Dict((k, ID()) for k in keys(ssa_insts)),
+        safety_on,
     )
 end
 
@@ -150,14 +155,15 @@ get_rev_data_id(::ADInfo, ::Any) = nothing
 
 # Create the statements which initialise the reverse-data `Ref`s.
 function reverse_data_ref_stmts(info::ADInfo)
-    arg_stmts = [(id, __ref(info.arg_types[k])) for (k, id) in info.arg_rdata_ref_ids]
-    ssa_stmts = [(id, __ref(info.ssa_insts[k].type)) for (k, id) in info.ssa_rdata_ref_ids]
+    arg_stmts = [(id, __ref(_type(info.arg_types[k]))) for (k, id) in info.arg_rdata_ref_ids]
+    ssa_stmts = [(id, __ref(_type(info.ssa_insts[k].type))) for (k, id) in info.ssa_rdata_ref_ids]
     return vcat(arg_stmts, ssa_stmts)
 end
 
 # Helper for reverse_data_ref_stmts.
 __ref(P) = new_inst(Expr(:call, __make_ref, P))
 
+# Helper for reverse_data_ref_stmts.
 @inline __make_ref(::Type{P}) where {P} = Ref(Tapir.zero_reverse_data_from_type(P))
 
 # Returns the number of arguments that the primal function has.
@@ -258,52 +264,38 @@ function make_ad_stmts!(stmt::IDPhiNode, line::ID, info::ADInfo)
     new_vals = Vector{Any}(undef, length(vals))
     for n in eachindex(vals)
         isassigned(vals, n) || continue
-        new_vals[n] = is_active(vals[n]) ? __inc(vals[n]) : const_register(vals[n], info)
+        new_vals[n] = is_active(vals[n]) ? __inc(vals[n]) : const_codual(vals[n], info)
     end
 
     # It turns out to be really very important to do type inference correctly for PhiNodes.
     # For some reason, type inference really doesn't like it when you encounter mutually-
     # dependent PhiNodes whose types are unknown and for which you set the flag to
-    # CC.IR_FLAG_REFINED.
-    new_type = register_type(get_primal_type(info, line))
+    # CC.IR_FLAG_REFINED. To avoid this we directly tell the compiler what the type is.
+    new_type = fwds_codual_type(get_primal_type(info, line))
     _inst = new_inst(IDPhiNode(stmt.edges, new_vals), new_type, info.ssa_insts[line].flag)
+    # _inst = new_inst(IDPhiNode(stmt.edges, new_vals))
     return ad_stmt_info(line, _inst, nothing)
 end
 
 function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
     isa(stmt.val, Union{Argument, ID}) || unhandled_feature("PiNode: $stmt")
 
-    # Create line which sharpens the register type as much as possible.
-    sharp_primal_type = _get_type(stmt.typ)
-    sharpened_register_type = AugmentedRegister{codual_type(_get_type(sharp_primal_type))}
-    new_pi_line = ID()
-    new_pi = PiNode(__inc(stmt.val), sharpened_register_type)
-
-    # Create a statement which moves data from the loosely-typed register to a more
-    # strictly typed one, which is possible because of the `PiNode`.
-    tangent_stack = make_tangent_stack(sharp_primal_type)
-    tangent_stack_id = add_data!(info, tangent_stack)
-    val_type = get_primal_type(info, stmt.val)
-    tangent_ref_stack = make_tangent_ref_stack(tangent_ref_type_ub(val_type))
-    tangent_ref_stack_id = add_data!(info, tangent_ref_stack)
-    new_line = Expr(:call, __pi_fwds!, tangent_stack_id, tangent_ref_stack_id, new_pi_line)
+    # Get the primal type of this line, and the rdata refs for the `val` of this `PiNode`
+    # and this line itself.
+    P = get_primal_type(info, line)
+    val_rdata_ref_id = get_rev_data_id(info, stmt.val)
+    output_rdata_ref_id = get_rev_data_id(info, line)
 
     # Assemble the above lines and construct reverse-pass.
     return ad_stmt_info(
         line,
-        [(new_pi_line, new_inst(new_pi)), (line, new_inst(new_line))],
-        Expr(:call, __pi_rvs!, tangent_stack_id, tangent_ref_stack_id),
+        PiNode(stmt.val, fwds_codual_type(stmt.typ)),
+        Expr(:call, __pi_rvs!, P, val_rdata_ref_id, output_rdata_ref_id),
     )
 end
 
-@inline function __pi_fwds!(tangent_stack, tangent_ref_stack, reg)
-    push!(tangent_ref_stack, reg.tangent_ref)
-    push!(tangent_stack, tangent(reg.codual))
-    return AugmentedRegister(reg.codual, top_ref(tangent_stack))
-end
-
-@inline function __pi_rvs!(tangent_stack, tangent_ref_stack)
-    increment_ref!(pop!(tangent_ref_stack), pop!(tangent_stack))
+@inline function __pi_rvs!(::Type{P}, val_rdata_ref::Ref, output_rdata_ref::Ref) where {P}
+    increment_ref!(val_rdata_ref, __deref_and_zero(P, output_rdata_ref))
     return nothing
 end
 
@@ -327,7 +319,7 @@ end
 # Helper used by `make_ad_stmts! ` for `GlobalRef`.
 @noinline function __verify_const(global_ref, stored_value)
     @assert global_ref == primal(stored_value)
-    return stored_value
+    return uninit_fcodual(global_ref)
 end
 
 # QuoteNodes are constant. See const_codual for details.
@@ -385,13 +377,16 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
 
         # Construct signature, and determine how the rrule is to be computed.
         sig = Tuple{arg_types...}
-        rule = if is_primitive(context_type(info.interp), sig)
+        raw_rule = if is_primitive(context_type(info.interp), sig)
             rrule!! # intrinsic / builtin / thing we provably have rule for
         elseif is_invoke
-            LazyDerivedRule(info.interp, sig) # Static dispatch
+            LazyDerivedRule(info.interp, sig, info.safety_on) # Static dispatch
         else
-            DynamicDerivedRule(info.interp)  # Dynamic dispatch
+            DynamicDerivedRule(info.interp, info.safety_on)  # Dynamic dispatch
         end
+
+        # If we need to run safety checks, wrap the rule in a correctness checker.
+        rule = info.safety_on ? SafeRRule(raw_rule) : raw_rule
 
         # If the rule is `rrule!!` (i.e. `sig` is primitive), then don't bother putting
         # the rule into shared data, because it's safe to put it directly into the code.
@@ -507,6 +502,8 @@ end
 increment_if_ref!(ref::Ref, rvs_data) = increment_ref!(ref, rvs_data)
 increment_if_ref!(::Nothing, ::Any) = nothing
 
+increment_ref!(x::Ref, t) = setindex!(x, increment!!(x[], t))
+
 # Useful to have this function call for debugging when looking at the generated IRCode.
 @inline __pop_pb_stack!(stack) = pop!(stack)
 
@@ -560,10 +557,9 @@ function rule_type(interp::TapirInterpreter{C}, ::Type{sig}) where {C, sig}
             Val{length(ir.argtypes)},
         }
     else
-        throw(error("hmmm"))
         return DerivedRule{
-            Core.OpaqueClosure{Tuple{map(register_type, arg_types)...}, T} where {T<:Treturn_register},
-            Core.OpaqueClosure{Tuple{reverse_data_type(tangent_type(Treturn))}, Nothing},
+            Core.OpaqueClosure{arg_fwds_types, fwds_return_codual},
+            Core.OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types},
             Val{isva},
             Val{length(ir.argtypes)},
         }
@@ -573,11 +569,8 @@ end
 # If isva, inputs (5.0, (4.0, 3.0)) are transformed into (5.0, 4.0, 3.0).
 function __flatten_varargs(::Val{isva}, args, ::Val{nvargs}) where {isva, nvargs}
     isva || return args
-    if args[end] isa NoRvsData
-        return (args[1:end-1]..., ntuple(n -> NoRvsData(), nvargs)...)
-    else
-        return (args[1:end-1]..., args[end]...)
-    end
+    last_el = isa(args[end], NoRvsData) ? ntuple(n -> NoRvsData(), nvargs) : args[end]
+    return (args[1:end-1]..., last_el...)
 end
 
 # If isva and nargs=2, then inputs `(CoDual(5.0, 0.0), CoDual(4.0, 0.0), CoDual(3.0, 0.0))`
@@ -585,7 +578,7 @@ end
 function __unflatten_codual_varargs(::Val{isva}, args, ::Val{nargs}) where {isva, nargs}
     isva || return args
     group_primal = map(primal, args[nargs:end])
-    if tangent_type(_typeof(group_primal)) == NoFwdsData
+    if forwards_data_type(tangent_type(_typeof(group_primal))) == NoFwdsData
         grouped_args = zero_fwds_codual(group_primal)
     else
         grouped_args = CoDual(group_primal, map(tangent, args[nargs:end]))
@@ -601,18 +594,20 @@ Helper method. Only uses static information from `args`.
 build_rrule(args...) = build_rrule(PInterp(), _typeof(TestUtils.__get_primals(args)))
 
 """
-    build_rrule(interp::PInterp{C}, sig::Type{<:Tuple}) where {C}
+    build_rrule(interp::PInterp{C}, sig::Type{<:Tuple}; safety_on=false) where {C}
 
 Returns a `DerivedRule` which is an `rrule!!` for `sig` in context `C`. See the docstring
 for `rrule!!` for more info.
+
+If `safety_on` is `true`, then all calls to rules are replaced with calls to `SafeRRule`s.
 """
-function build_rrule(interp::PInterp{C}, sig::Type{<:Tuple}) where {C}
+function build_rrule(interp::PInterp{C}, sig::Type{<:Tuple}; safety_on=false) where {C}
 
     # Reset id count. This ensures that everything in this function is deterministic.
     seed_id!()
 
     # If we have a hand-coded rule, just use that.
-    is_primitive(C, sig) && return rrule!!
+    is_primitive(C, sig) && return (safety_on ? SafeRRule(rrule!!) : rrule!!)
 
     # Grab code associated to the primal.
     ir, _ = lookup_ir(interp, sig)
@@ -629,7 +624,7 @@ function build_rrule(interp::PInterp{C}, sig::Type{<:Tuple}) where {C}
     )
     insts = new_inst_vec(ir.stmts)
     ssa_types = Dict{ID, NewInstruction}(zip(concatenate_ids(primal_ir), insts))
-    info = ADInfo(interp, arg_types, ssa_types)
+    info = ADInfo(interp, arg_types, ssa_types, safety_on)
 
     # For each block in the fwds and pullback BBCode, translate all statements.
     ad_stmts_blocks = map(primal_ir.blocks) do primal_blk
@@ -643,27 +638,29 @@ function build_rrule(interp::PInterp{C}, sig::Type{<:Tuple}) where {C}
 
     # If we've already derived the OpaqueClosures and info, do not re-derive, just create a
     # copy and pass in new shared data.
-    if !haskey(interp.oc_cache, sig)
+    if !haskey(interp.oc_cache, (sig, safety_on))
         fwds_ir = forwards_pass_ir(primal_ir, ad_stmts_blocks, info, _typeof(shared_data))
         pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, _typeof(shared_data))
+        display(ir)
+        # display(IRCode(fwds_ir))
+        # display(IRCode(pb_ir))
         optimised_fwds_ir = optimise_ir!(IRCode(fwds_ir); do_inline=true)
         optimised_pb_ir = optimise_ir!(IRCode(pb_ir); do_inline=true)
         # @show length(optimised_fwds_ir.stmts.inst)
         # @show length(optimised_pb_ir.stmts.inst)
-        # display(ir)
         # display(optimised_fwds_ir)
         # display(optimised_pb_ir)
         fwds_oc = OpaqueClosure(optimised_fwds_ir, shared_data...; do_compile=true)
         pb_oc = OpaqueClosure(optimised_pb_ir, shared_data...; do_compile=true)
         interp.oc_cache[sig] = (fwds_oc, pb_oc)
     else
-        existing_fwds_oc, existing_pb_oc = interp.oc_cache[sig]
+        existing_fwds_oc, existing_pb_oc = interp.oc_cache[(sig, safety_on)]
         fwds_oc = replace_captures(existing_fwds_oc, shared_data)
         pb_oc = replace_captures(existing_pb_oc, shared_data)
     end
 
-    # return DerivedRule(fwds_oc, pb_oc, Val(isva), Val(num_args(info)))
-    return rule_type(interp, sig)(fwds_oc, pb_oc, Val(isva), Val(num_args(info)))
+    raw_rule = rule_type(interp, sig)(fwds_oc, pb_oc, Val(isva), Val(num_args(info)))
+    return safety_on ? SafeRRule(raw_rule) : raw_rule
 end
 
 # Given an `OpaqueClosure` `oc`, create a new `OpaqueClosure` of the same type, but with new
@@ -716,7 +713,7 @@ function forwards_pass_ir(ir::BBCode, ad_stmts_blocks::ADStmts, info::ADInfo, Ts
     return BBCode(vcat(entry_block, blocks), arg_types, ir.sptypes, ir.linetable, ir.meta)
 end
 
-@noinline __push_blk_stack!(block_stack::Stack{Int32}, id::Int32) = push!(block_stack, id)
+@inline __push_blk_stack!(block_stack::Stack{Int32}, id::Int32) = push!(block_stack, id)
 
 #=
     pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, Tshared_data)
@@ -767,9 +764,11 @@ function pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, T
     main_blocks = map(ad_stmts_blocks, enumerate(ir.blocks)) do (blk_id, ad_stmts), (n, blk)
         rvs_stmts = reduce(vcat, [x.rvs for x in reverse(ad_stmts)])
         pred_ids = vcat(ps[blk.id], n == 1 ? [info.entry_id] : ID[])
-        switch_stmts = make_switch_stmts(pred_ids, info)
-        return BBlock(blk_id, vcat(rvs_stmts, switch_stmts))
+        additional_stmts, new_blocks = finalise_rvs_block(blk, pred_ids, info)
+        rvs_block = BBlock(blk_id, vcat(rvs_stmts, additional_stmts))
+        return vcat(rvs_block, new_blocks)
     end
+    main_blocks = vcat(main_blocks...)
 
     # Create an exit block. Dereferences reverse-data for arguments and returns it.
     arg_rdata_ref_ids = map(n -> info.arg_rdata_ref_ids[Argument(n)], 1:num_args(info))
@@ -781,6 +780,88 @@ function pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, T
     # Create and return `BBCode` for the pullback.
     blks = vcat(entry_block, main_blocks, exit_block)
     return _sort_blocks!(BBCode(blks, arg_types, ir.sptypes, ir.linetable, ir.meta))
+end
+
+#=
+
+=#
+function finalise_rvs_block(blk::BBlock, pred_ids::Vector{ID}, info::ADInfo)
+
+    # Get the PhiNodes and their IDs.
+    phi_ids, phis = phi_nodes(blk)
+
+    # If there are no PhiNodes in this block, switch directly to the predecessor.
+    length(phi_ids) == 0 && (return make_switch_stmts(pred_ids, info), BBlock[])
+
+    # Create statements which extract + zero the rdata refs associated to them.
+    rdata_ids = map(_ -> ID(), phi_ids)
+    deref_stmts = map(phi_ids, rdata_ids) do phi_id, deref_id
+        P = get_primal_type(info, phi_id)
+        r = get_rev_data_id(info, phi_id)
+        return (deref_id, new_inst(Expr(:call, __deref_and_zero, P, r)))
+    end
+
+    # For each predecessor, create a `BBlock` which processes its corresponding edge in
+    # each of the `PhiNode`s.
+    new_blocks = map(pred_ids) do pred_id
+        values = Any[__get_value(pred_id, p.stmt) for p in phis]
+        return rvs_phi_block(pred_id, rdata_ids, values, info)
+    end
+    new_pred_ids = map(blk -> blk.id, new_blocks)
+    return vcat(deref_stmts, make_switch_stmts(pred_ids, new_pred_ids, info)), new_blocks
+end
+
+# Helper functionality for finalise_rvs_block # REDO THIS DOCUMENTATION BEFORE MERGING!!!
+function __get_value(edge::ID, x::IDPhiNode)
+    edge in x.edges || return nothing
+    n = only(findall(==(edge), x.edges))
+    return isassigned(x.values, n) ? x.values[n] : nothing
+end
+
+# Helper, used in finalise_rvs_block... SWITCH OUT FINALISE_RVS_BLOCK TO BE A MORE HELPFUL
+# FUNCTION NAME.
+@inline function __deref_and_zero(::Type{P}, x::Ref) where {P}
+    t = x[]
+    x[] = Tapir.zero_reverse_data_from_type(P)
+    return t
+end
+
+#=
+    rvs_phi_block(pred_id::ID, rdata_ids::Vector{ID}, values::Vector{Any}, info::ADInfo)
+
+Produces a `BBlock` which runs the reverse-pass for the edge associated to `pred_id` in a
+collection of `IDPhiNode`s, and then goes to the block associated to `pred_id`.
+
+For example, suppose that we encounter the following collection of `PhiNode`s at the start
+of some block:
+```julia
+%6 = φ (#2 => _1, #3 => %5)
+%7 = φ (#2 => 5., #3 => _2)
+```
+Let the tangent refs associated to `%6`, `%7`, and `_1`` be denoted `t%6`, `t%7`, and `t_1`
+resp., and let `pred_id` be `#2`, then this function will produce a basic block of the form
+```julia
+increment_ref!(t_1, t%6)
+nothing
+goto #2
+```
+The call to `increment_ref!` appears because `_1` is the value associated to`%6` when the
+primal code comes from `#2`. Similarly, the `goto #2` statement appears because we came from
+`#2` on the forwards-pass. There is no `increment_ref!` associated to `%7` because `5.` is a
+constant. We emit a `nothing` statement, which the compiler will happily optimise away later
+on.
+
+The same ideas apply if `pred_id` were `#3`. The block would end with `#3`, and there would
+be two `increment_ref!` calls because both `%5` and `_2` are not constants.
+=#
+function rvs_phi_block(pred_id::ID, rdata_ids::Vector{ID}, values::Vector{Any}, info::ADInfo)
+    @assert length(rdata_ids) == length(values)
+    inc_stmts = map(rdata_ids, values) do id, val
+        stmt = Expr(:call, increment_if_ref!, get_rev_data_id(info, val), id)
+        return (ID(), new_inst(stmt))
+    end
+    goto_stmt = (ID(), new_inst(IDGotoNode(pred_id)))
+    return BBlock(ID(), vcat(inc_stmts, goto_stmt))
 end
 
 #=
@@ -804,7 +885,7 @@ switch(
 In words: `make_switch_stmts` emits code which jumps to whichever block preceded the current
 block during the forwards-pass.
 =#
-function make_switch_stmts(pred_ids::Vector{ID}, info::ADInfo)
+function make_switch_stmts(pred_ids::Vector{ID}, target_ids::Vector{ID}, info::ADInfo)
 
     # If there are no predecessors, then we can't possibly have hit this block. This can
     # happen when all of the statements in a block have been eliminated, but the Julia
@@ -824,13 +905,17 @@ function make_switch_stmts(pred_ids::Vector{ID}, info::ADInfo)
     end
 
     # Switch statement to change to the predecessor.
-    switch_stmt = Switch(Any[c[1] for c in conds], pred_ids[1:end-1], pred_ids[end])
+    switch_stmt = Switch(Any[c[1] for c in conds], target_ids[1:end-1], target_ids[end])
     switch = (ID(), new_inst(switch_stmt))
 
     return vcat((prev_blk_id, prev_blk), conds, switch)
 end
 
-@noinline __pop_blk_stack!(block_stack::Stack{Int32}) = pop!(block_stack)
+function make_switch_stmts(pred_ids::Vector{ID}, info::ADInfo)
+    return make_switch_stmts(pred_ids, pred_ids, info)
+end
+
+@inline __pop_blk_stack!(block_stack::Stack{Int32}) = pop!(block_stack)
 
 # Helper function emitted by `make_switch_stmts`.
 __switch_case(id::Int32, predecessor_id::Int32) = !(id === predecessor_id)
@@ -851,9 +936,12 @@ This is used to implement dynamic dispatch.
 struct DynamicDerivedRule{T, V}
     interp::T
     cache::V
+    safety_on::Bool
 end
 
-DynamicDerivedRule(interp::TapirInterpreter) = DynamicDerivedRule(interp, Dict{Any, Any}())
+function DynamicDerivedRule(interp::TapirInterpreter, safety_on::Bool)
+    return DynamicDerivedRule(interp, Dict{Any, Any}(), safety_on)
+end
 
 function (dynamic_rule::DynamicDerivedRule)(args::Vararg{Any, N}) where {N}
     sig = Tuple{map(_typeof, map(primal, args))...}
@@ -861,32 +949,39 @@ function (dynamic_rule::DynamicDerivedRule)(args::Vararg{Any, N}) where {N}
     rule = get(dynamic_rule.cache, sig, nothing)
     if rule === nothing
         rule = build_rrule(dynamic_rule.interp, sig)
-        dynamic_rule.cache[sig] = rule
+        dynamic_rule.cache[sig] = (dynamic_rule.safety_on ? SafeRRule(rule) : rule)
     end
     return rule(args...)
 end
 
 #=
-    LazyDerivedRule(interp, sig)
+    LazyDerivedRule(interp, sig, safety_on::Bool)
 
 For internal use only.
 
 A type-stable wrapper around a `DerivedRule`, which only instantiates the `DerivedRule`
 when it is first called. This is useful, as it means that if a rule does not get run, it
 does not have to be derived.
+
+If `safety_on` is `true`, then the rule constructed will be a `SafeRRule`. This is useful
+when debugging, but should usually be switched off for production code as it (in general)
+incurs some runtime overhead.
 =#
-mutable struct LazyDerivedRule{Trule, T, V}
-    interp::T
-    sig::V
+mutable struct LazyDerivedRule{Tinterp<:TapirInterpreter, Tsig, Trule}
+    interp::Tinterp
+    sig::Tsig
+    safety_on::Bool
     rule::Trule
-    function LazyDerivedRule(interp::T, sig::V) where {T<:PInterp, V<:Type{<:Tuple}}
-        return new{rule_type(interp, sig), T, V}(interp, sig)
+    function LazyDerivedRule(interp::A, sig::B, safety_on::Bool) where {A, B}
+        rt = safety_on ? SafeRRule{rule_type(interp, sig)} : rule_type(interp, sig)
+        return new{A, B, rt}(interp, sig, safety_on)
     end
 end
 
 function (rule::LazyDerivedRule)(args::Vararg{Any, N}) where {N}
     if !isdefined(rule, :rule)
-        rule.rule = build_rrule(rule.interp, rule.sig)
+        raw_rule = build_rrule(rule.interp, rule.sig)
+        rule.rule = rule.safety_on ? SafeRRule(raw_rule) : raw_rule
     end
     return rule.rule(args...)
 end

@@ -21,7 +21,7 @@ end
             id_ssa_1 => CC.NewInstruction(nothing, Float64),
             id_ssa_2 => CC.NewInstruction(nothing, Any),
         )
-        info = ADInfo(Tapir.PInterp(), arg_types, ssa_insts)
+        info = ADInfo(Tapir.PInterp(), arg_types, ssa_insts, false)
 
         # Verify that we can access the interpreter and terminator block ID.
         @test info.interp isa Tapir.PInterp
@@ -51,6 +51,7 @@ end
                 id_line_1 => CC.NewInstruction(Expr(:invoke, nothing, cos, Argument(2)), Float64),
                 id_line_2 => CC.NewInstruction(nothing, Any),
             ),
+            false,
         )
 
         @testset "Nothing" begin
@@ -94,38 +95,38 @@ end
                 make_ad_stmts!(stmt, line, info), ad_stmt_info(line, stmt, nothing)
             )
         end
-        # @testset "IDGotoIfNot" begin
-        #     line = ID()
-        #     cond_id = ID()
-        #     stmt = IDGotoIfNot(cond_id, ID())
-        #     ad_stmts = make_ad_stmts!(stmt, line, info)
-        #     @test ad_stmts isa ADStmtInfo
-        #     @test ad_stmts.rvs[1][2].stmt === nothing
-        #     fwds = ad_stmts.fwds
-        #     @test fwds[1][1] == fwds[2][2].stmt.cond
-        #     @test Meta.isexpr(fwds[1][2].stmt, :call)
-        #     @test fwds[2][2].stmt isa IDGotoIfNot
-        #     @test fwds[2][2].stmt.dest == stmt.dest
-        # end
-        # @testset "IDPhiNode" begin
-        #     stmt = IDPhiNode(ID[ID(), ID()], Any[ID(), 5.0])
-        #     ad_stmts = make_ad_stmts!(stmt, id_line_1, info)
-        #     @test ad_stmts isa ADStmtInfo
-        # end
-        # @testset "PiNode" begin
-        #     @testset "unhandled case" begin
-        #         @test_throws(
-        #             Tapir.UnhandledLanguageFeatureException,
-        #             make_ad_stmts!(PiNode(5.0, Float64), ID(), info),
-        #         )
-        #     end
-        #     @testset "sharpen type of ID" begin
-        #         line = id_line_1
-        #         val = id_line_2
-        #         stmt_info = make_ad_stmts!(PiNode(val, Float64), line, info)
-        #         @test stmt_info isa ADStmtInfo
-        #     end
-        # end
+        @testset "IDGotoIfNot" begin
+            line = ID()
+            cond_id = ID()
+            stmt = IDGotoIfNot(cond_id, ID())
+            ad_stmts = make_ad_stmts!(stmt, line, info)
+            @test ad_stmts isa ADStmtInfo
+            @test ad_stmts.rvs[1][2].stmt === nothing
+            fwds = ad_stmts.fwds
+            @test fwds[1][1] == fwds[2][2].stmt.cond
+            @test Meta.isexpr(fwds[1][2].stmt, :call)
+            @test fwds[2][2].stmt isa IDGotoIfNot
+            @test fwds[2][2].stmt.dest == stmt.dest
+        end
+        @testset "IDPhiNode" begin
+            stmt = IDPhiNode(ID[ID(), ID()], Any[ID(), 5.0])
+            ad_stmts = make_ad_stmts!(stmt, id_line_1, info)
+            @test ad_stmts isa ADStmtInfo
+        end
+        @testset "PiNode" begin
+            @testset "unhandled case" begin
+                @test_throws(
+                    Tapir.UnhandledLanguageFeatureException,
+                    make_ad_stmts!(PiNode(5.0, Float64), ID(), info),
+                )
+            end
+            @testset "sharpen type of ID" begin
+                line = id_line_1
+                val = id_line_2
+                stmt_info = make_ad_stmts!(PiNode(val, Float64), line, info)
+                @test stmt_info isa ADStmtInfo
+            end
+        end
         @testset "GlobalRef" begin
             @testset "non-const" begin
                 global_ref = GlobalRef(S2SGlobals, :non_const_global)
@@ -207,7 +208,6 @@ end
         # # @code_warntype optimize=true pb!!(tangent(out), map(tangent, codual_args)...)
 
         # primal_time = @benchmark $f($(Ref(x))[]...)
-
         # s2s_time = @benchmark $rule($fwds_args...)[2]($(Tapir.zero_reverse_data(primal(out))))
         # # in_f = in_f = Tapir.InterpretedFunction(DefaultCtx(), sig, interp);
         # # __rrule!! = Tapir.build_rrule!!(in_f);
@@ -223,8 +223,8 @@ end
         # println("s2s ratio ratio: $(s2s_ratio)")
         # # println("interp ratio: $(interp_ratio)")
 
-        # # f(rule, codual_args, out) = rule(codual_args...)[2](tangent(out), map(tangent, codual_args)...)
-        # # f(rule, codual_args, out)
-        # # @profview(run_many_times(1_000, f, rule, codual_args, out))
+        # f(rule, fwds_args, out) = rule(fwds_args...)[2]((Tapir.zero_reverse_data(primal(out))))
+        # f(rule, fwds_args, out)
+        # @profview(run_many_times(500, f, rule, fwds_args, out))
     end
 end

@@ -3,7 +3,8 @@
 # https://github.com/JuliaLang/julia/blob/9f9e989f241fad1ae03c3920c20a93d8017a5b8f/base/pointer.jl#L282
 @is_primitive MinimalCtx Tuple{typeof(Base.:(+)), Ptr, Integer}
 function rrule!!(::CoDual{typeof(Base.:(+))}, x::CoDual{<:Ptr}, y::CoDual{<:Integer})
-    return CoDual(primal(x) + primal(y), tangent(x) + primal(y)), NoPullback()
+    pb!! = NoPullback((NoRvsData(), NoRvsData(), NoRvsData()))
+    return CoDual(primal(x) + primal(y), tangent(x) + primal(y)), pb!!
 end
 
 @is_primitive MinimalCtx Tuple{typeof(randn), Xoshiro, Vararg}
