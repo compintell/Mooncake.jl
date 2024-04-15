@@ -641,7 +641,7 @@ function build_rrule(interp::PInterp{C}, sig::Type{<:Tuple}; safety_on=false) wh
     if !haskey(interp.oc_cache, (sig, safety_on))
         fwds_ir = forwards_pass_ir(primal_ir, ad_stmts_blocks, info, _typeof(shared_data))
         pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, _typeof(shared_data))
-        display(ir)
+        # display(ir)
         # display(IRCode(fwds_ir))
         # display(IRCode(pb_ir))
         optimised_fwds_ir = optimise_ir!(IRCode(fwds_ir); do_inline=true)

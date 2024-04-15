@@ -200,28 +200,28 @@ end
             Xoshiro(123456), f, x...; interp, perf_flag, interface_only, is_primitive=false
         )
 
-        # codual_args = map(zero_codual, (f, x...))
-        # fwds_args = map(Tapir.to_fwds, codual_args)
-        # rule = Tapir.build_rrule(interp, sig)
-        # out, pb!! = rule(fwds_args...)
-        # # @code_warntype optimize=true rule(codual_args...)
-        # # @code_warntype optimize=true pb!!(tangent(out), map(tangent, codual_args)...)
+        codual_args = map(zero_codual, (f, x...))
+        fwds_args = map(Tapir.to_fwds, codual_args)
+        rule = Tapir.build_rrule(interp, sig)
+        out, pb!! = rule(fwds_args...)
+        # @code_warntype optimize=true rule(codual_args...)
+        # @code_warntype optimize=true pb!!(tangent(out), map(tangent, codual_args)...)
 
-        # primal_time = @benchmark $f($(Ref(x))[]...)
-        # s2s_time = @benchmark $rule($fwds_args...)[2]($(Tapir.zero_reverse_data(primal(out))))
-        # # in_f = in_f = Tapir.InterpretedFunction(DefaultCtx(), sig, interp);
-        # # __rrule!! = Tapir.build_rrule!!(in_f);
-        # # df = zero_codual(in_f);
-        # # codual_x = map(zero_codual, (f, x...));
-        # # interp_time = @benchmark TestUtils.to_benchmark($__rrule!!, $df, $codual_x...)
+        primal_time = @benchmark $f($(Ref(x))[]...)
+        s2s_time = @benchmark $rule($fwds_args...)[2]($(Tapir.zero_reverse_data(primal(out))))
+        # in_f = in_f = Tapir.InterpretedFunction(DefaultCtx(), sig, interp);
+        # __rrule!! = Tapir.build_rrule!!(in_f);
+        # df = zero_codual(in_f);
+        # codual_x = map(zero_codual, (f, x...));
+        # interp_time = @benchmark TestUtils.to_benchmark($__rrule!!, $df, $codual_x...)
 
-        # display(primal_time)
-        # display(s2s_time)
-        # # display(interp_time)
-        # s2s_ratio = time(s2s_time) / time(primal_time)
-        # # interp_ratio = time(interp_time) / time(primal_time)
-        # println("s2s ratio ratio: $(s2s_ratio)")
-        # # println("interp ratio: $(interp_ratio)")
+        display(primal_time)
+        display(s2s_time)
+        # display(interp_time)
+        s2s_ratio = time(s2s_time) / time(primal_time)
+        # interp_ratio = time(interp_time) / time(primal_time)
+        println("s2s ratio ratio: $(s2s_ratio)")
+        # println("interp ratio: $(interp_ratio)")
 
         # f(rule, fwds_args, out) = rule(fwds_args...)[2]((Tapir.zero_reverse_data(primal(out))))
         # f(rule, fwds_args, out)

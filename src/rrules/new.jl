@@ -1,9 +1,10 @@
+@eval _new_pullback!!(dy) = (NoRvsData(), NoRvsData(), map(_value, dy.fields)...)
+@eval _new_pullback!!(dy::Union{Tuple, NamedTuple}) = (NoRvsData(), NoRvsData(), dy...)
+
 for N in 0:32
     @eval @inline function _new_(::Type{T}, x::Vararg{Any, $N}) where {T}
         return $(Expr(:new, :T, map(n -> :(x[$n]), 1:N)...))
     end
-    @eval _new_pullback!!(dy) = (NoRvsData(), NoRvsData(), map(_value, dy.fields)...)
-    @eval _new_pullback!!(dy::Union{Tuple, NamedTuple}) = (NoRvsData(), NoRvsData(), dy...)
     @eval function rrule!!(
         ::CoDual{typeof(_new_)}, ::CoDual{Type{P}}, x::Vararg{CoDual, $N}
     ) where {P}

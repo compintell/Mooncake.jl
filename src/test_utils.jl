@@ -1531,14 +1531,14 @@ function generate_test_functions()
         # # # (false, :none, (lb=1, ub=2_000), test_mutable_struct, 5.0),
         # # # (false, :none, nothing, test_struct_partial_init, 3.5),
         # # # (false, :none, nothing, test_mutable_partial_init, 3.3),
-        # (
-        #     false, :allocs, nothing,
-        #     test_naive_mat_mul!, randn(100, 50), randn(100, 30), randn(30, 50),
-        # ),
         (
             false, :allocs, nothing,
-            (A, C) -> test_naive_mat_mul!(C, A, A), randn(100, 100), randn(100, 100),
+            test_naive_mat_mul!, randn(100, 50), randn(100, 30), randn(30, 50),
         ),
+        # (
+        #     false, :allocs, nothing,
+        #     (A, C) -> test_naive_mat_mul!(C, A, A), randn(100, 100), randn(100, 100),
+        # ),
         # # (false, :allocs, (lb=10, ub=1_000), sum, randn(30)),
         # # (false, :none, (lb=10, ub=1_000), test_diagonal_to_matrix, Diagonal(randn(30))),
         # # (
@@ -1560,8 +1560,8 @@ function generate_test_functions()
         # #     randn(sr(2), 700, 500),
         # #     randn(sr(3), 300, 700),
         # # ),
-        # (false, :allocs, (lb=1.0, ub=150), test_handwritten_sum, randn(1024 * 1024)),
-        # (false, :allocs, (lb=1.0, ub=150), _naive_map_sin_cos_exp, randn(100), randn(100)),
+        (false, :allocs, (lb=1.0, ub=150), test_handwritten_sum, randn(1024 * 1024)),
+        (false, :allocs, (lb=1.0, ub=150), _naive_map_sin_cos_exp, randn(100), randn(100)),
         # # (false, :none, nothing, _sum, randn(1024)),
         # # (false, :none, nothing, test_map, randn(1024), randn(1024)),
     ]
