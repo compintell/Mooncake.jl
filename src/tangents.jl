@@ -575,3 +575,143 @@ increment_field!!(x, y, n::Int) = increment_field!!(x, y, Val(n))
 for T in [Symbol, Int, Val]
     @eval increment_field!!(::NoTangent, ::NoTangent, f::Union{$T}) = NoTangent()
 end
+
+#=
+    tangent_test_cases()
+
+Constructs a `Vector` of `Tuple`s containing test cases for the tangent infrastructure.
+
+If the returned tuple has 2 elements, the elements should be interpreted as follows:
+1 - primal type
+2 - primal value
+
+The primal type does not have to be equal to `typeof` the primal value, it can also be any
+supertype. This distinction is important as the compiler is not always able to infer the
+type of a value, merely its supertype (e.g. in type-unstable code). It is important to test
+that the tangent machinery also works in these situations.
+
+If the returned tuple has 5 elements, then the elements are interpreted as follows:
+1 - primal type
+2 - primal value
+3, 4, 5 - tangents, where <5> == increment!!(<3>, <4>).
+
+Generally speaking, it's very straightforward to produce test cases in the first format,
+while the second requires more work. Consequently, at the time of writing there are many
+more instances of the first format than the second.
+
+Test cases in the first format make use of `zero_tangent` / `randn_tangent` etc to generate
+tangents, but they're unable to check that `increment!!` is correct in an absolute sense.
+=#
+function tangent_test_cases()
+    return vcat(
+        [
+            (typeof(sin), sin, NoTangent(), NoTangent(), NoTangent()),
+            (Float16, map(Float16, (5.0, 4.0, 3.1, 7.1))...),
+            (Float32, 5f0, 4f0, 3f0, 7f0),
+            (Float64, 5.1, 4.0, 3.0, 7.0),
+            (Core.SimpleVector, svec(5.0), Any[4.0], Any[3.0], Any[7.0]),
+            (Vector{Float64}, [3.0, 2.0], [1.0, 2.0], [2.0, 3.0], [3.0, 5.0]),
+            (
+                Vector{Int},
+                [1, 2],
+                [NoTangent(), NoTangent()],
+                [NoTangent(), NoTangent()],
+                [NoTangent(), NoTangent()],
+            ),
+            (
+                Vector{Vector{Float64}},
+                [[1.0], [1.0, 2.0]],
+                [[2.0], [2.0, 3.0]],
+                [[3.0], [4.0, 5.0]],
+                [[5.0], [6.0, 8.0]],
+            ),
+            (
+                Vector{Vector{Float64}},
+                setindex!(Vector{Vector{Float64}}(undef, 2), [1.0], 1),
+                setindex!(Vector{Vector{Float64}}(undef, 2), [2.0], 1),
+                setindex!(Vector{Vector{Float64}}(undef, 2), [3.0], 1),
+                setindex!(Vector{Vector{Float64}}(undef, 2), [5.0], 1),
+            ),
+            (
+                Vector{Vector{Float64}},
+                setindex!(Vector{Vector{Float64}}(undef, 2), [1.0], 2),
+                setindex!(Vector{Vector{Float64}}(undef, 2), [2.0], 2),
+                setindex!(Vector{Vector{Float64}}(undef, 2), [3.0], 2),
+                setindex!(Vector{Vector{Float64}}(undef, 2), [5.0], 2),
+            ),
+            (
+                Tuple{Float64, Vector{Int}},
+                (6.0, [1.0, 2.0]),
+                (5.0, [3.0, 4.0]),
+                (4.0, [4.0, 3.0]),
+                (9.0, [7.0, 7.0]),
+            ),
+            (Tuple{}, (), NoTangent(), NoTangent(), NoTangent()),
+            (Tuple{Int}, (1,), NoTangent(), NoTangent(), NoTangent()),
+            (Tuple{Int, Int}, (2, 3), NoTangent(), NoTangent(), NoTangent()),
+            (
+                @NamedTuple{a::Float64, b::Vector{Float64}},
+                (a=6.0, b=[1.0, 2.0]),
+                (a=5.0, b=[3.0, 4.0]),
+                (a=4.0, b=[4.0, 3.0]),
+                (a=9.0, b=[7.0, 7.0]),
+            ),
+            (@NamedTuple{}, (;), NoTangent(), NoTangent(), NoTangent()),
+            (
+                TestResources.TypeStableMutableStruct{Float64},
+                TestResources.TypeStableMutableStruct{Float64}(5.0, 3.0),
+                build_tangent(TestResources.TypeStableMutableStruct{Float64}, 5.0, 4.0),
+                build_tangent(TestResources.TypeStableMutableStruct{Float64}, 3.0, 3.0),
+                build_tangent(TestResources.TypeStableMutableStruct{Float64}, 8.0, 7.0),
+            ),
+            ( # complete init
+                TestResources.StructFoo,
+                TestResources.StructFoo(6.0, [1.0, 2.0]),
+                build_tangent(TestResources.StructFoo, 5.0, [3.0, 4.0]),
+                build_tangent(TestResources.StructFoo, 3.0, [2.0, 1.0]),
+                build_tangent(TestResources.StructFoo, 8.0, [5.0, 5.0]),
+            ),
+            ( # partial init
+                TestResources.StructFoo,
+                TestResources.StructFoo(6.0),
+                build_tangent(TestResources.StructFoo, 5.0),
+                build_tangent(TestResources.StructFoo, 4.0),
+                build_tangent(TestResources.StructFoo, 9.0),
+            ),
+            ( # complete init
+                TestResources.MutableFoo,
+                TestResources.MutableFoo(6.0, [1.0, 2.0]),
+                build_tangent(TestResources.MutableFoo, 5.0, [3.0, 4.0]),
+                build_tangent(TestResources.MutableFoo, 3.0, [2.0, 1.0]),
+                build_tangent(TestResources.MutableFoo, 8.0, [5.0, 5.0]),
+            ),
+            ( # partial init
+                TestResources.MutableFoo,
+                TestResources.MutableFoo(6.0),
+                build_tangent(TestResources.MutableFoo, 5.0),
+                build_tangent(TestResources.MutableFoo, 4.0),
+                build_tangent(TestResources.MutableFoo, 9.0),
+            ),
+            (UnitRange{Int}, UnitRange{Int}(5, 7), NoTangent(), NoTangent(), NoTangent()),
+        ],
+        map([
+            LowerTriangular{Float64, Matrix{Float64}},
+            UpperTriangular{Float64, Matrix{Float64}},
+            UnitLowerTriangular{Float64, Matrix{Float64}},
+            UnitUpperTriangular{Float64, Matrix{Float64}},
+        ]) do T
+            return (
+                T,
+                T(randn(2, 2)),
+                build_tangent(T, [1.0 2.0; 3.0 4.0]),
+                build_tangent(T, [2.0 1.0; 5.0 4.0]),
+                build_tangent(T, [3.0 3.0; 8.0 8.0]),
+            )
+        end,
+        [
+            (_typeof(p), p, NoTangent(), NoTangent(), NoTangent()) for p in
+                [Array, Float64, Union{Float64, Float32}, Union, UnionAll,
+                Core.Intrinsics.xor_int, typeof(<:)]
+        ],
+    )
+end
