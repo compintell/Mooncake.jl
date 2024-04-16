@@ -581,16 +581,13 @@ end
 Constructs a `Vector` of `Tuple`s containing test cases for the tangent infrastructure.
 
 If the returned tuple has 2 elements, the elements should be interpreted as follows:
-1 - primal type
+1 - interface_only
 2 - primal value
 
-The primal type does not have to be equal to `typeof` the primal value, it can also be any
-supertype. This distinction is important as the compiler is not always able to infer the
-type of a value, merely its supertype (e.g. in type-unstable code). It is important to test
-that the tangent machinery also works in these situations.
+interface_only is a Bool which will be used to determine which subset of tests to run.
 
 If the returned tuple has 5 elements, then the elements are interpreted as follows:
-1 - primal type
+1 - interface_only
 2 - primal value
 3, 4, 5 - tangents, where <5> == increment!!(<3>, <4>).
 
