@@ -436,23 +436,6 @@ function set_to_zero!!(x::MutableTangent)
 end
 
 """
-    set_immutable_to_zero(x::T) where {T}
-
-Return a `T` whose immutable components are zero, and whose mutable components are `===` to
-`x`. Please consult implementation for details.
-"""
-set_immutable_to_zero(x::NoTangent) = NoTangent()
-set_immutable_to_zero(x::Base.IEEEFloat) = zero(x)
-set_immutable_to_zero(x::Union{Tuple, NamedTuple}) = map(set_immutable_to_zero, x)
-set_immutable_to_zero(x::Array) = x
-function set_immutable_to_zero(x::T) where {T<:PossiblyUninitTangent}
-    return is_init(x) ? T(set_immutable_to_zero(val(x))) : x
-end
-set_immutable_to_zero(x::Tangent) = Tangent(set_immutable_to_zero(x.fields))
-set_immutable_to_zero(x::MutableTangent) = x
-set_immutable_to_zero(x::Ptr) = x
-
-"""
     increment_field!!(x::T, y::V, f) where {T, V}
 
 `increment!!` the field `f` of `x` by `y`, and return the updated `x`.
