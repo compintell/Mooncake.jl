@@ -30,7 +30,6 @@ using Tapir:
     rrule!!,
     lgetfield,
     lsetfield!,
-    might_be_active,
     build_tangent,
     # SlotRef,
     # ConstSlot,

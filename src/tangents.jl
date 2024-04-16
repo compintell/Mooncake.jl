@@ -613,15 +613,3 @@ function _containerlike_diff(p::P, q::P) where {P}
     diffed_fields = i === nothing ? diffed_fields : diffed_fields[1:i-1]
     return build_tangent(P, diffed_fields...)
 end
-
-@generated function might_be_active(::Type{P}) where {P}
-    tangent_type(P) == NoTangent && return :(return false)
-    Base.issingletontype(P) && return :(return false)
-    Base.isabstracttype(P) && return :(return true)
-    isprimitivetype(P) && return :(return true)
-    return :(return $(any(might_be_active, fieldtypes(P))))
-end
-@generated function might_be_active(::Type{<:Array{P}}) where {P}
-    return :(return $(might_be_active(P)))
-end
-might_be_active(::Type{SimpleVector}) = true

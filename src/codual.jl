@@ -51,8 +51,6 @@ end
 
 @inline (pb::NoPullback)(_) = pb.r
 
-might_be_active(args) = any(might_be_active ∘ _typeof, args)
-
 to_fwds(x::CoDual) = CoDual(primal(x), forwards_data(tangent(x)))
 
 to_fwds(x::CoDual{Type{P}}) where {P} = CoDual{Type{P}, NoFwdsData}(primal(x), NoFwdsData())
