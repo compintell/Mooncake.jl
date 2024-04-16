@@ -55,14 +55,15 @@ end
 
 Base.:(==)(x::Tangent, y::Tangent) = x.fields == y.fields
 
-fields_type(::Type{Tangent{Tfields}}) where {Tfields<:NamedTuple} = Tfields
-fields_type(::Type{Tangent}) = NamedTuple
-
 mutable struct MutableTangent{Tfields<:NamedTuple}
     fields::Tfields
 end
 
 Base.:(==)(x::MutableTangent, y::MutableTangent) = x.fields == y.fields
+
+fields_type(::Type{MutableTangent{Tfields}}) where {Tfields<:NamedTuple} = Tfields
+fields_type(::Type{Tangent{Tfields}}) where {Tfields<:NamedTuple} = Tfields
+fields_type(::Type{<:Union{MutableTangent, Tangent}}) = NamedTuple
 
 const PossiblyMutableTangent{T} = Union{MutableTangent{T}, Tangent{T}}
 
@@ -75,9 +76,9 @@ Has the same semantics that `setfield!` would have if the data in the `fields` f
 were actually fields of `t`. This is the moral equivalent of `getfield` for
 `MutableTangent`.
 """
-function get_tangent_field(t::PossiblyMutableTangent{Tfields}, i::Int) where {Tfields}
+@inline function get_tangent_field(t::PossiblyMutableTangent{Tfs}, i::Int) where {Tfs}
     v = getfield(t.fields, i)
-    return fieldtype(Tfields, i) <: PossiblyUninitTangent ? val(v) : v
+    return fieldtype(Tfs, i) <: PossiblyUninitTangent ? val(v) : v
 end
 
 @inline function get_tangent_field(t::PossiblyMutableTangent{F}, s::Symbol) where {F}

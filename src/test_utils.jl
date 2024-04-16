@@ -742,6 +742,8 @@ function test_get_tangent_field_performance(t::Union{MutableTangent, Tangent})
     V = Tapir._typeof(t.fields)
     for n in 1:fieldcount(V)
         !is_init(t.fields[n]) && continue
+        Tfield = fieldtype(Tapir.fields_type(Tapir._typeof(t)), n)
+        !__is_completely_stable_type(Tfield) && continue
 
         # Int mode.
         i = Val(n)
@@ -765,9 +767,10 @@ end
 @noinline zero_tangent_wrapper(p) = zero_tangent(p)
 @noinline randn_tangent_wrapper(rng, p) = randn_tangent(rng, p)
 
-# Returns true if both `zero_tangent` and `randn_tangnet` should allocate when run on
+# Returns true if both `zero_tangent` and `randn_tangent` should allocate when run on
 # an object of type `P`.
 function __tangent_generation_should_allocate(::Type{P}) where {P}
+    (!isconcretetype(P) || isabstracttype(P)) && return true
     (fieldcount(P) == 0 && !ismutabletype(P)) && return false
     return ismutabletype(P) || any(__tangent_generation_should_allocate, fieldtypes(P))
 end
@@ -778,6 +781,13 @@ function __increment_should_allocate(::Type{P}) where {P}
     return any(eachindex(fieldtypes(P))) do n
         Tapir.tangent_field_type(P, n) <: PossiblyUninitTangent
     end
+end
+__increment_should_allocate(::Type{Core.SimpleVector}) = true
+
+function __is_completely_stable_type(::Type{P}) where {P}
+    (!isconcretetype(P) || isabstracttype(P)) && return false
+    isprimitivetype(P) && return true
+    return all(__is_completely_stable_type, fieldtypes(P))
 end
 
 """
@@ -808,6 +818,9 @@ function test_tangent(rng::AbstractRNG, p::P, x::T, y::T, z_target::T) where {P,
     if ismutabletype(P)
         @test z_pred === x
     end
+
+    # Check performance is as expected.
+    test_tangent_performance(rng, p)
 end
 
 function test_equality_comparison(x)
