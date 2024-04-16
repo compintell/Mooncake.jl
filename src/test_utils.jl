@@ -448,20 +448,9 @@ function test_rrule!!(
     test_rrule_performance(perf_flag, rule, x_x̄...)
 end
 
-"""
-    test_interpreted_rrule!!(rng::AbstractRNG, x...; interp, kwargs...)
-
-A thin wrapper around a call to `set_up_gradient_problem` and `test_rrule!!`.
-Does not require that the method being called is a primitive.
-"""
-function test_interpreted_rrule!!(rng::AbstractRNG, x...; interp, kwargs...)
-    rule, in_f = set_up_gradient_problem(x...; interp)
-    test_rrule!!(rng, in_f, x...; rule, kwargs...)
-end
-
 function test_derived_rule(rng::AbstractRNG, x...; interp, kwargs...)
-    # safe_rule = Tapir.build_rrule(interp, _typeof(__get_primals(x)); safety_on=true)
-    # test_rrule!!(rng, x...; rule=safe_rule, interface_only=true, perf_flag=:none, is_primitive=false)
+    safe_rule = Tapir.build_rrule(interp, _typeof(__get_primals(x)); safety_on=true)
+    test_rrule!!(rng, x...; rule=safe_rule, interface_only=true, perf_flag=:none, is_primitive=false)
     rule = Tapir.build_rrule(interp, _typeof(__get_primals(x)))
     test_rrule!!(rng, x...; rule, kwargs...)
 end
@@ -708,6 +697,10 @@ function test_tangent_performance(rng::AbstractRNG, p::P) where {P}
     t isa Union{MutableTangent, Tangent} && test_get_tangent_field_performance(t)
 end
 
+# Used in test_tangent_performance to ensure performance tests work correctly.
+@noinline zero_tangent_wrapper(p) = zero_tangent(p)
+@noinline randn_tangent_wrapper(rng, p) = randn_tangent(rng, p)
+
 _set_tangent_field!(x, ::Val{i}, v) where {i} = set_tangent_field!(x, i, v)
 _get_tangent_field(x, ::Val{i}) where {i} = get_tangent_field(x, i)
 
@@ -763,9 +756,6 @@ end
 function count_allocs(f::F, x::Vararg{Any, N}) where {F, N}
     @allocations f(x...)
 end
-
-@noinline zero_tangent_wrapper(p) = zero_tangent(p)
-@noinline randn_tangent_wrapper(rng, p) = randn_tangent(rng, p)
 
 # Returns true if both `zero_tangent` and `randn_tangent` should allocate when run on
 # an object of type `P`.
@@ -912,37 +902,6 @@ end
 function to_benchmark(__rrule!!::R, dx::Vararg{CoDual, N}) where {R, N}
     out, pb!! = __rrule!!(dx...)
     return pb!!(tangent(out), map(tangent, dx)...)
-end
-
-"""
-    set_up_gradient_problem(fargs...; interp=Tapir.PInterp())
-
-Constructs a `rule` and `InterpretedFunction` which can be passed to `value_and_gradient!!`.
-
-For example:
-```julia
-f(x) = sum(abs2, x)
-x = randn(25)
-rule, in_f = Tapir.TestUtils.set_up_gradient_problem(f, x)
-y, dx = Tapir.TestUtils.value_and_gradient!!(rule, in_f, f, x)
-```
-will yield the value and associated gradient for `f` and `x`.
-
-You only need to run this function once, and may then call `value_and_gradient!!` many times
-with the same `rule` and `in_f` arguments, but with different values of `x`.
-
-Optionally, an interpreter may be provided via the `interp` kwarg.
-
-See also: `Tapir.TestUtils.value_and_gradient!!`.
-"""
-function set_up_gradient_problem(fargs...; interp=Tapir.PInterp())
-    sig = _typeof(__get_primals(fargs))
-    if Tapir.is_primitive(DefaultCtx, sig)
-        return rrule!!, Tapir._eval
-    else
-        in_f = Tapir.InterpretedFunction(DefaultCtx(), sig, interp)
-        return Tapir.build_rrule!!(in_f), in_f
-    end
 end
 
 __get_primals(xs) = map(x -> x isa CoDual ? primal(x) : x, xs)
