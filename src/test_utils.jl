@@ -1561,7 +1561,8 @@ function generate_test_functions()
         # #     randn(sr(3), 300, 700),
         # # ),
         (false, :allocs, (lb=1.0, ub=150), test_handwritten_sum, randn(1024 * 1024)),
-        (false, :allocs, (lb=1.0, ub=150), _naive_map_sin_cos_exp, randn(100), randn(100)),
+        (false, :allocs, (lb=1.0, ub=150), _naive_map_sin_cos_exp, randn(1024 ^ 2), randn(1024 ^ 2)),
+        (false, :allocs, nothing, test_from_slack, randn(10_000)),
         # # (false, :none, nothing, _sum, randn(1024)),
         # # (false, :none, nothing, test_map, randn(1024), randn(1024)),
     ]
@@ -1571,6 +1572,20 @@ function _naive_map_sin_cos_exp(y::AbstractArray{<:Real}, x::AbstractArray{<:Rea
     n = 1
     while n <= length(x)
         y[n] = sin(cos(exp(x[n])))
+        n += 1
+    end
+    return y
+end
+
+function test_from_slack(x::AbstractVector{T}) where {T}
+    y = zero(T)
+    n = 1
+    while n <= length(x)
+        if iseven(n)
+            y += sin(x[n])
+        else
+            y += cos(x[n])
+        end
         n += 1
     end
     return y
