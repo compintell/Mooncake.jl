@@ -5,7 +5,7 @@ for (M, f, arity) in DiffRules.diffrules(; filter_modules=nothing)
         continue  # Skip rules for methods not defined in the current scope
     end
     (f == :rem2pi || f == :ldexp) && continue # not designed for Float64s
-    (f == :+ || f == :*) && continue # use intrinsics instead
+    (f in [:+, :*, :sin, :cos]) && continue # use intrinsics instead
     P = Float64
     if arity == 1
         dx = DiffRules.diffrule(M, f, :x)
@@ -31,6 +31,20 @@ for (M, f, arity) in DiffRules.diffrules(; filter_modules=nothing)
             end
         end
     end
+end
+
+@is_primitive MinimalCtx Tuple{typeof(sin), Float64}
+function rrule!!(::CoDual{typeof(sin), NoFwdsData}, x::CoDual{Float64, NoFwdsData})
+    s, c = sincos(primal(x))
+    sin_pullback!!(dy::Float64) = NoRvsData(), dy * c
+    return CoDual(s, NoFwdsData()), sin_pullback!!
+end
+
+@is_primitive MinimalCtx Tuple{typeof(cos), Float64}
+function rrule!!(::CoDual{typeof(cos), NoFwdsData}, x::CoDual{Float64, NoFwdsData})
+    s, c = sincos(primal(x))
+    cos_pullback!!(dy::Float64) = NoRvsData(), -dy * s
+    return CoDual(c, NoFwdsData()), cos_pullback!!
 end
 
 rand_inputs(rng, f, arity) = randn(rng, arity)
