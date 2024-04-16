@@ -604,7 +604,7 @@ Test cases in the first format make use of `zero_tangent` / `randn_tangent` etc 
 tangents, but they're unable to check that `increment!!` is correct in an absolute sense.
 =#
 function tangent_test_cases()
-    return vcat(
+    abs_test_cases = vcat(
         [
             (typeof(sin), sin, NoTangent(), NoTangent(), NoTangent()),
             (Float16, map(Float16, (5.0, 4.0, 3.1, 7.1))...),
@@ -715,4 +715,5 @@ function tangent_test_cases()
                 Core.Intrinsics.xor_int, typeof(<:)]
         ],
     )
+    return vcat(map(x -> (false, x...), abs_test_cases), Tapir.TestTypes.PRIMALS)
 end

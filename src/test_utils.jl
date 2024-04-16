@@ -13,7 +13,7 @@ using Core: svec
 using ExprTools: combinedef
 using ..Tapir: NoTangent, tangent_type, _typeof
 
-const PRIMALS = Tuple{Bool, Any}[]
+const PRIMALS = Tuple{Bool, Any, Any}[]
 
 # Generate all of the composite types against which we might wish to test.
 function generate_primals()
@@ -67,7 +67,7 @@ function generate_primals()
             for n in n_always_def:n_fields
                 interface_only = any(x -> isbitstype(x.type), fields[n+1:end])
                 p = invokelatest(t, map(x -> deepcopy(x.primal), fields[1:n])...)
-                push!(PRIMALS, (interface_only, p))
+                push!(PRIMALS, (interface_only, _typeof(p), p))
             end
         end
     end
@@ -800,7 +800,7 @@ of type `P`, and to test them using `test_rrule!!`.
 As always, there are limits to the errors that these tests can identify -- they form
 necessary but not sufficient conditions for the correctness of your code.
 """
-function test_tangent(rng::AbstractRNG, p::P, x::T, y::T, z_target::T) where {P, T}
+function test_tangent(rng::AbstractRNG, p::P, x::T, y::T, z_target::T; interface_only) where {P, T}
     @nospecialize rng p x y z_target
 
     # Check the interface.
@@ -820,6 +820,11 @@ function test_tangent(rng::AbstractRNG, p::P, x::T, y::T, z_target::T) where {P,
     end
 
     # Check performance is as expected.
+    test_tangent_performance(rng, p)
+end
+
+function test_tangent(rng::AbstractRNG, p::P; interface_only=false) where {P}
+    test_tangent_consistency(rng, p; interface_only)
     test_tangent_performance(rng, p)
 end
 
