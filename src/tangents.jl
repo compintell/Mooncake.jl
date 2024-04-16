@@ -23,8 +23,6 @@ end
 @inline PossiblyUninitTangent(tangent::T) where {T} = PossiblyUninitTangent{T}(tangent)
 @inline PossiblyUninitTangent(T::Type) = PossiblyUninitTangent{T}()
 
-const __PUT = PossiblyUninitTangent
-
 @inline is_init(t::PossiblyUninitTangent) = isdefined(t, :tangent)
 is_init(t) = true
 
