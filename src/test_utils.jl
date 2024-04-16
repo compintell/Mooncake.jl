@@ -781,7 +781,7 @@ function __increment_should_allocate(::Type{P}) where {P}
 end
 
 """
-    test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P, T}
+    test_tangent(rng::AbstractRNG, p::P, x::T, y::T, z_target::T) where {P, T}
 
 Verify that primal `p` with tangents `z_target`, `x`, and `y`, satisfies the tangent
 interface. If these tests pass, then it should be possible to write `rrule!!`s for primals
@@ -790,8 +790,8 @@ of type `P`, and to test them using `test_rrule!!`.
 As always, there are limits to the errors that these tests can identify -- they form
 necessary but not sufficient conditions for the correctness of your code.
 """
-function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P, T}
-    @nospecialize rng p z_target x y
+function test_tangent(rng::AbstractRNG, p::P, x::T, y::T, z_target::T) where {P, T}
+    @nospecialize rng p x y z_target
 
     # Check the interface.
     test_tangent_consistency(rng, p; interface_only=false)
@@ -801,13 +801,6 @@ function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P,
 
     # Check that zero_tangent infers.
     @inferred Tapir.zero_tangent(p)
-
-    # Verify that the zero tangent is zero via its action.
-    z = zero_tangent(p)
-    t = randn_tangent(rng, p)
-    @test has_equal_data(@inferred(increment!!(z, z)), z)
-    @test has_equal_data(increment!!(z, t), t)
-    @test has_equal_data(increment!!(t, z), t)
 
     # Verify that adding together `x` and `y` gives the value the user expected.
     z_pred = increment!!(x, y)

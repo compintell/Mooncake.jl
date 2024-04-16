@@ -1,8 +1,7 @@
 @testset "tangents" begin
 
     @testset "$(typeof(p))" for (_, p, x, y, z) in Tapir.tangent_test_cases()
-        rng = Xoshiro(123456)
-        test_tangent(rng, p, z, x, y)
+        test_tangent(Xoshiro(123456), p, x, y, z)
     end
 
     # Bulk test auto-generated tangents.
