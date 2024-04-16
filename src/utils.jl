@@ -37,7 +37,64 @@ function tuple_map(f::F, x::NamedTuple{names}, y::NamedTuple{names}) where {F, n
     return NamedTuple{names}(tuple_map(f, Tuple(x), Tuple(y)))
 end
 
-function is_vararg_sig_and_sparam_names(sig)
+#=
+    _map_if_assigned!(f, y::Array, x::Array{P}) where {P}
+
+For all `n`, if `x[n]` is assigned, then writes the value returned by `f(x[n])` to `y[n]`,
+otherwise leaves `y[n]` unchanged.
+
+Equivalent to `map!(f, y, x)` if `P` is a bits type as element will always be assigned.
+
+Requires that `y` and `x` have the same size.
+=#
+function _map_if_assigned!(f::F, y::Array, x::Array{P}) where {F, P}
+    @assert size(y) == size(x)
+    @inbounds for n in eachindex(y)
+        if isbitstype(P) || isassigned(x, n)
+            y[n] = f(x[n])
+        end
+    end
+    return y
+end
+
+#=
+    _map_if_assigned!(f::F, y::Array, x1::Array{P}, x2::Array)
+
+Similar to the other method of `_map_if_assigned!` -- for all `n`, if `x1[n]` is assigned,
+writes `f(x1[n], x2[n])` to `y[n]`, otherwise leaves `y[n]` unchanged.
+
+Requires that `y`, `x1`, and `x2` have the same size.
+=#
+function _map_if_assigned!(f::F, y::Array, x1::Array{P}, x2::Array) where {F, P}
+    @assert size(y) == size(x1)
+    @assert size(y) == size(x2)
+    @inbounds for n in eachindex(y)
+        if isbitstype(P) || isassigned(x1, n)
+            y[n] = f(x1[n], x2[n])
+        end
+    end
+    return y
+end
+
+#=
+    _map(f, x...)
+
+Same as `map` but requires all elements of `x` to have equal length.
+The usual function `map` doesn't enforce this for `Array`s.
+=#
+@inline function _map(f::F, x::Vararg{Any, N}) where {F, N}
+    @assert allequal(map(length, x))
+    return map(f, x...)
+end
+
+#=
+    is_vararg_sig_and_sparam_names(sig)::Tuple{Bool, Vector{Symbol}}
+
+Returns a 2-tuple. The first element is true if the method associated to `sig` is a vararg
+method, and false if not. The second element contains all of the names of the static
+parameters associated to said method.
+=#
+function is_vararg_sig_and_sparam_names(sig)::Tuple{Bool, Vector{Symbol}}
     world = Base.get_world_counter()
     min = Base.RefValue{UInt}(typemin(UInt))
     max = Base.RefValue{UInt}(typemax(UInt))
@@ -46,6 +103,7 @@ function is_vararg_sig_and_sparam_names(sig)
     return m.isva, sparam_names(m)
 end
 
+# Returns the names of all of the static parameters in `m`.
 function sparam_names(m::Core.Method)::Vector{Symbol}
     whereparams = ExprTools.where_parameters(m.sig)
     whereparams === nothing && return Symbol[]

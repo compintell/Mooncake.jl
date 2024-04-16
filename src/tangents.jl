@@ -289,38 +289,6 @@ function is_always_fully_initialised(::Type{P}) where {P}
     return Core.Compiler.datatype_min_ninitialized(P) == fieldcount(P)
 end
 
-function _map_if_assigned!(f::F, y::Array, x::Array{P}) where {F, P}
-    @assert size(y) == size(x)
-    @inbounds for n in eachindex(y)
-        if isbitstype(P) || isassigned(x, n)
-            y[n] = f(x[n])
-        end
-    end
-    return y
-end
-
-function _map_if_assigned!(f::F, y::Array, x1::Array{P}, x2::Array) where {F, P}
-    @assert size(y) == size(x1)
-    @assert size(y) == size(x2)
-    @inbounds for n in eachindex(y)
-        if isbitstype(P) || isassigned(x1, n)
-            y[n] = f(x1[n], x2[n])
-        end
-    end
-    return y
-end
-
-"""
-    _map(f, x...)
-
-Same as `map` but requires all elements of `x` to have equal length.
-The usual function `map` doesn't enforce this for `Array`s.
-"""
-@inline function _map(f::F, x::Vararg{Any, N}) where {F, N}
-    @assert allequal(map(length, x))
-    return map(f, x...)
-end
-
 """
     zero_tangent(x)
 
