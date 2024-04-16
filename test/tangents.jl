@@ -1,7 +1,7 @@
 @testset "tangents" begin
 
     @testset "$(typeof(data))" for (interface_only, data...) in Tapir.tangent_test_cases()
-        test_tangent(Xoshiro(123456), data[2:end]...; interface_only)
+        test_tangent(Xoshiro(123456), data...; interface_only)
     end
 
     tangent(nt::NamedTuple) = Tangent(map(PossiblyUninitTangent, nt))
