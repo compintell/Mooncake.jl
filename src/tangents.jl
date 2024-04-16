@@ -436,42 +436,6 @@ function set_to_zero!!(x::MutableTangent)
 end
 
 """
-    increment_field!!(x::T, y::V, f) where {T, V}
-
-`increment!!` the field `f` of `x` by `y`, and return the updated `x`.
-"""
-@inline @generated function increment_field!!(x::Tuple, y, ::Val{i}) where {i}
-    exprs = map(n -> n == i ? :(increment!!(x[$n], y)) : :(x[$n]), fieldnames(x))
-    return Expr(:tuple, exprs...)
-end
-
-@inline @generated function increment_field!!(x::T, y, ::Val{f}) where {T<:NamedTuple, f}
-    i = f isa Symbol ? findfirst(==(f), fieldnames(T)) : f
-    new_fields = Expr(:call, increment_field!!, :(Tuple(x)), :y, :(Val($i)))
-    return Expr(:call, T, new_fields)
-end
-
-function increment_field!!(x::Tangent{T}, y, f::Val{F}) where {T, F}
-    y isa NoTangent && return x
-    new_val = fieldtype(T, F) <: PossiblyUninitTangent ? fieldtype(T, F)(y) : y
-    return Tangent(increment_field!!(x.fields, new_val, f))
-end
-function increment_field!!(x::MutableTangent{T}, y, f::V) where {T, F, V<:Val{F}}
-    y isa NoTangent && return x
-    new_val = fieldtype(T, F) <: PossiblyUninitTangent ? fieldtype(T, F)(y) : y
-    setfield!(x, :fields, increment_field!!(x.fields, new_val, f))
-    return x
-end
-
-increment_field!!(x, y, f::Symbol) = increment_field!!(x, y, Val(f))
-increment_field!!(x, y, n::Int) = increment_field!!(x, y, Val(n))
-
-# Fallback method for when a tangent type for a struct is declared to be `NoTangent`.
-for T in [Symbol, Int, Val]
-    @eval increment_field!!(::NoTangent, ::NoTangent, f::Union{$T}) = NoTangent()
-end
-
-"""
     _scale(a::Float64, t::T) where {T}
 
 Required for testing.
@@ -595,4 +559,40 @@ function _containerlike_diff(p::P, q::P) where {P}
     i = findfirst(==(FieldUndefined()), diffed_fields)
     diffed_fields = i === nothing ? diffed_fields : diffed_fields[1:i-1]
     return build_tangent(P, diffed_fields...)
+end
+
+"""
+    increment_field!!(x::T, y::V, f) where {T, V}
+
+`increment!!` the field `f` of `x` by `y`, and return the updated `x`.
+"""
+@inline @generated function increment_field!!(x::Tuple, y, ::Val{i}) where {i}
+    exprs = map(n -> n == i ? :(increment!!(x[$n], y)) : :(x[$n]), fieldnames(x))
+    return Expr(:tuple, exprs...)
+end
+
+@inline @generated function increment_field!!(x::T, y, ::Val{f}) where {T<:NamedTuple, f}
+    i = f isa Symbol ? findfirst(==(f), fieldnames(T)) : f
+    new_fields = Expr(:call, increment_field!!, :(Tuple(x)), :y, :(Val($i)))
+    return Expr(:call, T, new_fields)
+end
+
+function increment_field!!(x::Tangent{T}, y, f::Val{F}) where {T, F}
+    y isa NoTangent && return x
+    new_val = fieldtype(T, F) <: PossiblyUninitTangent ? fieldtype(T, F)(y) : y
+    return Tangent(increment_field!!(x.fields, new_val, f))
+end
+function increment_field!!(x::MutableTangent{T}, y, f::V) where {T, F, V<:Val{F}}
+    y isa NoTangent && return x
+    new_val = fieldtype(T, F) <: PossiblyUninitTangent ? fieldtype(T, F)(y) : y
+    setfield!(x, :fields, increment_field!!(x.fields, new_val, f))
+    return x
+end
+
+increment_field!!(x, y, f::Symbol) = increment_field!!(x, y, Val(f))
+increment_field!!(x, y, n::Int) = increment_field!!(x, y, Val(n))
+
+# Fallback method for when a tangent type for a struct is declared to be `NoTangent`.
+for T in [Symbol, Int, Val]
+    @eval increment_field!!(::NoTangent, ::NoTangent, f::Union{$T}) = NoTangent()
 end
