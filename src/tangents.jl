@@ -269,27 +269,6 @@ function tangent_field_type(::Type{P}, n::Int) where {P}
 end
 
 """
-    is_always_initialised(::Type{P}, n::Int)
-
-True if the `n`th field of `P` is always initialised. If the `n`th fieldtype of `P`
-`isbitstype`, then this is distinct from asking whether the `n`th field is always defined.
-An isbits field is always defined, but is not always explicitly initialised.
-"""
-function is_always_initialised(::Type{P}, n::Int) where {P}
-    return n <= Core.Compiler.datatype_min_ninitialized(P)
-end
-
-"""
-    is_always_fully_initialised(::Type{P}) where {P}
-
-True if all fields in `P` are always initialised. Put differently, there are no inner
-constructors which permit partial initialisation.
-"""
-function is_always_fully_initialised(::Type{P}) where {P}
-    return Core.Compiler.datatype_min_ninitialized(P) == fieldcount(P)
-end
-
-"""
     zero_tangent(x)
 
 Returns the unique zero element of the tangent space of `x`.
