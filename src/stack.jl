@@ -71,5 +71,5 @@ Base.push!(::SingletonStack, ::Any) = nothing
 
 function reverse_data_ref_type(::Type{P}) where {P}
     P === DataType && return Ref{Any}
-    return Base.RefValue{reverse_data_type(tangent_type(P))}
+    return Base.RefValue{rdata_type(tangent_type(P))}
 end

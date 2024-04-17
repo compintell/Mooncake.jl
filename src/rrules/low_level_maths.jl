@@ -14,8 +14,8 @@ for (M, f, arity) in DiffRules.diffrules(; filter_modules=nothing)
             @is_primitive MinimalCtx Tuple{typeof($M.$f), $P}
             function rrule!!(::CoDual{typeof($M.$f)}, _x::CoDual{$P})
                 x = primal(_x) # needed for dx expression
-                $pb_name(ȳ) = NoRvsData(), ȳ * $dx
-                return CoDual(($M.$f)(x), NoFwdsData()), $pb_name
+                $pb_name(ȳ) = NoRData(), ȳ * $dx
+                return CoDual(($M.$f)(x), NoFData()), $pb_name
             end
         end
     elseif arity == 2
@@ -26,25 +26,25 @@ for (M, f, arity) in DiffRules.diffrules(; filter_modules=nothing)
             function rrule!!(::CoDual{typeof($M.$f)}, _a::CoDual{$P}, _b::CoDual{$P})
                 a = primal(_a)
                 b = primal(_b)
-                $pb_name(ȳ) = NoRvsData(), ȳ * $da, ȳ * $db
-                return CoDual(($M.$f)(a, b), NoFwdsData()), $pb_name
+                $pb_name(ȳ) = NoRData(), ȳ * $da, ȳ * $db
+                return CoDual(($M.$f)(a, b), NoFData()), $pb_name
             end
         end
     end
 end
 
 @is_primitive MinimalCtx Tuple{typeof(sin), Float64}
-function rrule!!(::CoDual{typeof(sin), NoFwdsData}, x::CoDual{Float64, NoFwdsData})
+function rrule!!(::CoDual{typeof(sin), NoFData}, x::CoDual{Float64, NoFData})
     s, c = sincos(primal(x))
-    sin_pullback!!(dy::Float64) = NoRvsData(), dy * c
-    return CoDual(s, NoFwdsData()), sin_pullback!!
+    sin_pullback!!(dy::Float64) = NoRData(), dy * c
+    return CoDual(s, NoFData()), sin_pullback!!
 end
 
 @is_primitive MinimalCtx Tuple{typeof(cos), Float64}
-function rrule!!(::CoDual{typeof(cos), NoFwdsData}, x::CoDual{Float64, NoFwdsData})
+function rrule!!(::CoDual{typeof(cos), NoFData}, x::CoDual{Float64, NoFData})
     s, c = sincos(primal(x))
-    cos_pullback!!(dy::Float64) = NoRvsData(), -dy * s
-    return CoDual(c, NoFwdsData()), cos_pullback!!
+    cos_pullback!!(dy::Float64) = NoRData(), -dy * s
+    return CoDual(c, NoFData()), cos_pullback!!
 end
 
 rand_inputs(rng, f, arity) = randn(rng, arity)

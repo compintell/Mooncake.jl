@@ -1,5 +1,5 @@
-@eval _new_pullback!!(dy) = (NoRvsData(), NoRvsData(), map(_value, dy.fields)...)
-@eval _new_pullback!!(dy::Union{Tuple, NamedTuple}) = (NoRvsData(), NoRvsData(), dy...)
+@eval _new_pullback!!(dy) = (NoRData(), NoRData(), map(_value, dy.fields)...)
+@eval _new_pullback!!(dy::Union{Tuple, NamedTuple}) = (NoRData(), NoRData(), dy...)
 
 for N in 0:32
     @eval @inline function _new_(::Type{T}, x::Vararg{Any, $N}) where {T}
@@ -9,17 +9,17 @@ for N in 0:32
         ::CoDual{typeof(_new_)}, ::CoDual{Type{P}}, x::Vararg{CoDual, $N}
     ) where {P}
         y = $(Expr(:new, :P, map(n -> :(primal(x[$n])), 1:N)...))
-        F = forwards_data_type(tangent_type(P))
-        R = reverse_data_type(tangent_type(P))
-        dy = F == NoFwdsData ? NoFwdsData() : build_fdata(P, tuple_map(tangent, x))
-        pb!! = R == NoRvsData ? NoPullback((NoRvsData(), NoRvsData(), tuple_map(zero_reverse_data, tuple_map(tangent, x))...)) : _new_pullback!!
+        F = fdata_type(tangent_type(P))
+        R = rdata_type(tangent_type(P))
+        dy = F == NoFData ? NoFData() : build_fdata(P, tuple_map(tangent, x))
+        pb!! = R == NoRData ? NoPullback((NoRData(), NoRData(), tuple_map(zero_reverse_data, tuple_map(tangent, x))...)) : _new_pullback!!
         return CoDual(y, dy), pb!!
     end
 end
 
 @generated function build_fdata(::Type{P}, fdatas::Tuple) where {P}
     names = fieldnames(P)
-    return :(FwdsData(NamedTuple{$names}(fdatas)))
+    return :(FData(NamedTuple{$names}(fdatas)))
 end
 
 @is_primitive MinimalCtx Tuple{typeof(_new_), Vararg}

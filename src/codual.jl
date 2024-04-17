@@ -4,8 +4,8 @@ struct CoDual{Tx, Tdx}
 end
 
 # Always sharpen the first thing if it's a type, in order to preserve dispatch possibility.
-function CoDual(x::Type{P}, dx::NoFwdsData) where {P}
-    return CoDual{@isdefined(P) ? Type{P} : typeof(x), NoFwdsData}(P, dx)
+function CoDual(x::Type{P}, dx::NoFData) where {P}
+    return CoDual{@isdefined(P) ? Type{P} : typeof(x), NoFData}(P, dx)
 end
 
 function CoDual(x::Type{P}, dx::NoTangent) where {P}
@@ -51,9 +51,9 @@ end
 
 @inline (pb::NoPullback)(_) = pb.r
 
-to_fwds(x::CoDual) = CoDual(primal(x), forwards_data(tangent(x)))
+to_fwds(x::CoDual) = CoDual(primal(x), fdata(tangent(x)))
 
-to_fwds(x::CoDual{Type{P}}) where {P} = CoDual{Type{P}, NoFwdsData}(primal(x), NoFwdsData())
+to_fwds(x::CoDual{Type{P}}) where {P} = CoDual{Type{P}, NoFData}(primal(x), NoFData())
 
 zero_fwds_codual(p) = to_fwds(zero_codual(p))
 
@@ -65,9 +65,9 @@ Shorthand for `CoDual{P, tangent_type(P}}` when `P` is concrete, equal to `CoDua
 function fwds_codual_type(::Type{P}) where {P}
     P == DataType && return CoDual
     P isa Union && return Union{fwds_codual_type(P.a), fwds_codual_type(P.b)}
-    return isconcretetype(P) ? CoDual{P, forwards_data_type(tangent_type(P))} : CoDual
+    return isconcretetype(P) ? CoDual{P, fdata_type(tangent_type(P))} : CoDual
 end
 
-fwds_codual_type(::Type{Type{P}}) where {P} = CoDual{Type{P}, NoFwdsData}
+fwds_codual_type(::Type{Type{P}}) where {P} = CoDual{Type{P}, NoFData}
 
 zero_reverse_data(x::CoDual) = zero_reverse_data(primal(x))

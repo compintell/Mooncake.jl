@@ -1,52 +1,52 @@
 
 """
-    NoFwdsData
+    NoFData
 
 Singleton type which indicates that there is nothing to be propagated on the forwards-pass
 in addition to the primal data.
 """
-struct NoFwdsData end
+struct NoFData end
 
 """
-    FwdsData(data::NamedTuple)
+    FData(data::NamedTuple)
 
 The component of a `struct` which is propagated alongside the primal on the forwards-pass of
 AD. For example, the tangents for `Float64`s do not need to be propagated on the forwards-
 pass of reverse-mode AD, so any `Float64` fields of `Tangent` do not need to appear in the
-associated `FwdsData`.
+associated `FData`.
 """
-struct FwdsData{T<:NamedTuple}
+struct FData{T<:NamedTuple}
     data::T
 end
 
 """
-    forwards_data_type(T)
+    fdata_type(T)
 
 Returns the type of the forwards data associated to a tangent of type `T`.
 """
-forwards_data_type(T)
+fdata_type(T)
 
-forwards_data_type(x) = throw(error("$x is not a type. Perhaps you meant typeof(x)?"))
+fdata_type(x) = throw(error("$x is not a type. Perhaps you meant typeof(x)?"))
 
-forwards_data_type(::Type{T}) where {T<:IEEEFloat} = NoFwdsData
+fdata_type(::Type{T}) where {T<:IEEEFloat} = NoFData
 
-function forwards_data_type(::Type{PossiblyUninitTangent{T}}) where {T}
-    Tfields = forwards_data_type(T)
+function fdata_type(::Type{PossiblyUninitTangent{T}}) where {T}
+    Tfields = fdata_type(T)
     return PossiblyUninitTangent{Tfields}
 end
 
-@generated function forwards_data_type(::Type{T}) where {T}
+@generated function fdata_type(::Type{T}) where {T}
 
-    # If the tangent type is NoTangent, then the forwards-component must be `NoFwdsData`.
-    T == NoTangent && return NoFwdsData
+    # If the tangent type is NoTangent, then the forwards-component must be `NoFData`.
+    T == NoTangent && return NoFData
 
     # This method can only handle struct types. Tell user to implement their own method.
     isprimitivetype(T) && throw(error(
-        "$T is a primitive type. Implement a method of `forwards_data_type` for it."
+        "$T is a primitive type. Implement a method of `fdata_type` for it."
     ))
 
     # If the type is a Union, then take the union type of its arguments.
-    T isa Union && return Union{forwards_data_type(T.a), forwards_data_type(T.b)}
+    T isa Union && return Union{fdata_type(T.a), fdata_type(T.b)}
 
     # If the type is itself abstract, it's forward data could be anything.
     # The same goes for if the type has any undetermined type parameters.
@@ -60,147 +60,147 @@ end
     if T <: Tangent
         Tfields = fields_type(T)
         fwds_data_field_types = map(1:fieldcount(Tfields)) do n
-            return forwards_data_type(fieldtype(Tfields, n))
+            return fdata_type(fieldtype(Tfields, n))
         end
-        all(==(NoFwdsData), fwds_data_field_types) && return NoFwdsData
-        return FwdsData{NamedTuple{fieldnames(Tfields), Tuple{fwds_data_field_types...}}}
+        all(==(NoFData), fwds_data_field_types) && return NoFData
+        return FData{NamedTuple{fieldnames(Tfields), Tuple{fwds_data_field_types...}}}
     end
 
     return :(error("Unhandled type $T"))
 end
 
-forwards_data_type(::Type{Ptr{P}}) where {P} = Ptr{tangent_type(P)}
+fdata_type(::Type{Ptr{P}}) where {P} = Ptr{tangent_type(P)}
 
-@generated function forwards_data_type(::Type{P}) where {P<:Tuple}
-    isa(P, Union) && return Union{forwards_data_type(P.a), forwards_data_type(P.b)}
-    isempty(P.parameters) && return NoFwdsData
+@generated function fdata_type(::Type{P}) where {P<:Tuple}
+    isa(P, Union) && return Union{fdata_type(P.a), fdata_type(P.b)}
+    isempty(P.parameters) && return NoFData
     isa(last(P.parameters), Core.TypeofVararg) && return Any
-    all(p -> forwards_data_type(p) == NoFwdsData, P.parameters) && return NoFwdsData
-    return Tuple{map(forwards_data_type, fieldtypes(P))...}
+    all(p -> fdata_type(p) == NoFData, P.parameters) && return NoFData
+    return Tuple{map(fdata_type, fieldtypes(P))...}
 end
 
-@generated function forwards_data_type(::Type{NamedTuple{names, T}}) where {names, T<:Tuple}
-    if forwards_data_type(T) == NoFwdsData
-        return NoFwdsData
-    elseif isconcretetype(forwards_data_type(T))
-        return NamedTuple{names, forwards_data_type(T)}
+@generated function fdata_type(::Type{NamedTuple{names, T}}) where {names, T<:Tuple}
+    if fdata_type(T) == NoFData
+        return NoFData
+    elseif isconcretetype(fdata_type(T))
+        return NamedTuple{names, fdata_type(T)}
     else
         return Any
     end
 end
 
 """
-    forwards_data(t)::forwards_data_type(typeof(t))
+    fdata(t)::fdata_type(typeof(t))
 
 Extract the forwards data from tangent `t`.
 """
-@generated function forwards_data(t::T) where {T}
+@generated function fdata(t::T) where {T}
 
     # Ask for the forwards-data type. Useful catch-all error checking for unexpected types.
-    F = forwards_data_type(T)
+    F = fdata_type(T)
 
     # Catch-all for anything with no forwards-data.
-    F == NoFwdsData && return :(NoFwdsData())
+    F == NoFData && return :(NoFData())
 
     # Catch-all for anything where we return the whole object (mutable structs, arrays...).
     F == T && return :(t)
 
     # T must be a `Tangent` by now. If it's not, something has gone wrong.
     !(T <: Tangent) && return :(error("Unhandled type $T"))
-    return :($F(forwards_data(t.fields)))
+    return :($F(fdata(t.fields)))
 end
 
-function forwards_data(t::T) where {T<:PossiblyUninitTangent}
-    F = forwards_data_type(T)
-    return is_init(t) ? F(forwards_data(val(t))) : F()
+function fdata(t::T) where {T<:PossiblyUninitTangent}
+    F = fdata_type(T)
+    return is_init(t) ? F(fdata(val(t))) : F()
 end
 
-@generated function forwards_data(t::Union{Tuple, NamedTuple})
-    forwards_data_type(t) == NoFwdsData && return NoFwdsData()
-    return :(tuple_map(forwards_data, t))
+@generated function fdata(t::Union{Tuple, NamedTuple})
+    fdata_type(t) == NoFData && return NoFData()
+    return :(tuple_map(fdata, t))
 end
 
-uninit_fdata(p) = forwards_data(uninit_tangent(p))
+uninit_fdata(p) = fdata(uninit_tangent(p))
 
 """
-    NoRvsData()
+    NoRData()
 
 Nothing to propagate backwards on the reverse-pass.
 """
-struct NoRvsData end
+struct NoRData end
 
-increment!!(::NoRvsData, ::NoRvsData) = NoRvsData()
-
-"""
-    RvsData(data::NamedTuple)
+increment!!(::NoRData, ::NoRData) = NoRData()
 
 """
-struct RvsData{T<:NamedTuple}
+    RData(data::NamedTuple)
+
+"""
+struct RData{T<:NamedTuple}
     data::T
 end
 
-increment!!(x::RvsData{T}, y::RvsData{T}) where {T} = RvsData(increment!!(x.data, y.data))
+increment!!(x::RData{T}, y::RData{T}) where {T} = RData(increment!!(x.data, y.data))
 
 """
-    reverse_data_type(T)
+    rdata_type(T)
 
 Returns the type of the reverse data of a tangent of type T.
 """
-reverse_data_type(T)
+rdata_type(T)
 
-reverse_data_type(x) = throw(error("$x is not a type. Perhaps you meant typeof(x)?"))
+rdata_type(x) = throw(error("$x is not a type. Perhaps you meant typeof(x)?"))
 
-reverse_data_type(::Type{T}) where {T<:IEEEFloat} = T
+rdata_type(::Type{T}) where {T<:IEEEFloat} = T
 
-function reverse_data_type(::Type{PossiblyUninitTangent{T}}) where {T}
-    return PossiblyUninitTangent{reverse_data_type(T)}
+function rdata_type(::Type{PossiblyUninitTangent{T}}) where {T}
+    return PossiblyUninitTangent{rdata_type(T)}
 end
 
-@generated function reverse_data_type(::Type{T}) where {T}
+@generated function rdata_type(::Type{T}) where {T}
 
-    # If the tangent type is NoTangent, then the reverse-component must be `NoRvsData`.
-    T == NoTangent && return NoRvsData
+    # If the tangent type is NoTangent, then the reverse-component must be `NoRData`.
+    T == NoTangent && return NoRData
 
     # This method can only handle struct types. Tell user to implement their own method.
     isprimitivetype(T) && throw(error(
-        "$T is a primitive type. Implement a method of `reverse_data_type` for it."
+        "$T is a primitive type. Implement a method of `rdata_type` for it."
     ))
 
     # If the type is a Union, then take the union type of its arguments.
-    T isa Union && return Union{reverse_data_type(T.a), reverse_data_type(T.b)}
+    T isa Union && return Union{rdata_type(T.a), rdata_type(T.b)}
 
     # If the type is itself abstract, it's reverse data could be anything.
     # The same goes for if the type has any undetermined type parameters.
     (isabstracttype(T) || !isconcretetype(T)) && return Any
 
     # If `P` is a mutable type, then all tangent info is propagated on the forwards-pass.
-    ismutabletype(T) && return NoRvsData
+    ismutabletype(T) && return NoRData
 
     # If `T` is an immutable type, then some of its fields may not have been propagated on
     # the forwards-pass.
     if T <: Tangent
         Tfs = fields_type(T)
-        rvs_types = map(n -> reverse_data_type(fieldtype(Tfs, n)), 1:fieldcount(Tfs))
-        all(==(NoRvsData), rvs_types) && return NoRvsData
-        return RvsData{NamedTuple{fieldnames(Tfs), Tuple{rvs_types...}}}
+        rvs_types = map(n -> rdata_type(fieldtype(Tfs, n)), 1:fieldcount(Tfs))
+        all(==(NoRData), rvs_types) && return NoRData
+        return RData{NamedTuple{fieldnames(Tfs), Tuple{rvs_types...}}}
     end
 end
 
-reverse_data_type(::Type{<:Ptr}) = NoRvsData
+rdata_type(::Type{<:Ptr}) = NoRData
 
-@generated function reverse_data_type(::Type{P}) where {P<:Tuple}
-    isa(P, Union) && return Union{reverse_data_type(P.a), reverse_data_type(P.b)}
-    isempty(P.parameters) && return NoRvsData
+@generated function rdata_type(::Type{P}) where {P<:Tuple}
+    isa(P, Union) && return Union{rdata_type(P.a), rdata_type(P.b)}
+    isempty(P.parameters) && return NoRData
     isa(last(P.parameters), Core.TypeofVararg) && return Any
-    all(p -> reverse_data_type(p) == NoRvsData, P.parameters) && return NoRvsData
-    return Tuple{map(reverse_data_type, fieldtypes(P))...}
+    all(p -> rdata_type(p) == NoRData, P.parameters) && return NoRData
+    return Tuple{map(rdata_type, fieldtypes(P))...}
 end
 
-function reverse_data_type(::Type{NamedTuple{names, T}}) where {names, T<:Tuple}
-    if reverse_data_type(T) == NoRvsData
-        return NoRvsData
-    elseif isconcretetype(reverse_data_type(T))
-        return NamedTuple{names, reverse_data_type(T)}
+function rdata_type(::Type{NamedTuple{names, T}}) where {names, T<:Tuple}
+    if rdata_type(T) == NoRData
+        return NoRData
+    elseif isconcretetype(rdata_type(T))
+        return NamedTuple{names, rdata_type(T)}
     else
         return Any
     end
@@ -213,44 +213,44 @@ Returns the type of to the nth field of the rdata type associated to `P`. Will b
 `PossiblyUninitTangent` if said field can be undefined.
 """
 function rdata_field_type(::Type{P}, n::Int) where {P}
-    r = reverse_data_type(tangent_type(fieldtype(P, n)))
+    r = rdata_type(tangent_type(fieldtype(P, n)))
     return is_always_initialised(P, n) ? r : _wrap_type(r)
 end
 
 """
-    reverse_data(t)::reverse_data_type(typeof(t))
+    rdata(t)::rdata_type(typeof(t))
 
 Extract the reverse data from tangent `t`.
 """
-@generated function reverse_data(t::T) where {T}
+@generated function rdata(t::T) where {T}
 
     # Ask for the reverse-data type. Useful catch-all error checking for unexpected types.
-    R = reverse_data_type(T)
+    R = rdata_type(T)
 
     # Catch-all for anything with no reverse-data.
-    R == NoRvsData && return :(NoRvsData())
+    R == NoRData && return :(NoRData())
 
     # Catch-all for anything where we return the whole object (Float64, isbits structs, ...)
     R == T && return :(t)
 
     # T must be a `Tangent` by now. If it's not, something has gone wrong.
     !(T <: Tangent) && return :(error("Unhandled type $T"))
-    return :($(reverse_data_type(T))(reverse_data(t.fields)))
+    return :($(rdata_type(T))(rdata(t.fields)))
 end
 
-function reverse_data(t::T) where {T<:PossiblyUninitTangent}
-    R = reverse_data_type(T)
-    return is_init(t) ? R(reverse_data(val(t))) : R()
+function rdata(t::T) where {T<:PossiblyUninitTangent}
+    R = rdata_type(T)
+    return is_init(t) ? R(rdata(val(t))) : R()
 end
 
-@generated function reverse_data(t::Union{Tuple, NamedTuple})
-    reverse_data_type(t) == NoRvsData && return NoRvsData()
-    return :(tuple_map(reverse_data, t))
+@generated function rdata(t::Union{Tuple, NamedTuple})
+    rdata_type(t) == NoRData && return NoRData()
+    return :(tuple_map(rdata, t))
 end
 
 function rdata_backing_type(::Type{P}) where {P}
     rdata_field_types = map(n -> rdata_field_type(P, n), 1:fieldcount(P))
-    all(==(NoRvsData), rdata_field_types) && return NoRvsData
+    all(==(NoRData), rdata_field_types) && return NoRData
     return NamedTuple{fieldnames(P), Tuple{rdata_field_types...}}
 end
 
@@ -267,10 +267,10 @@ zero_reverse_data(p::IEEEFloat) = zero(p)
 
     # Get types associated to primal.
     T = tangent_type(P)
-    R = reverse_data_type(T)
+    R = rdata_type(T)
 
     # If there's no reverse data, return no reverse data, e.g. for mutable types.
-    R == NoRvsData && return :(NoRvsData())
+    R == NoRData && return :(NoRData())
 
     # T ought to be a `Tangent`. If it's not, something has gone wrong.
     !(T <: Tangent) && Expr(:call, error, "Unhandled type $T")
@@ -288,7 +288,7 @@ zero_reverse_data(p::IEEEFloat) = zero(p)
 end
 
 @generated function zero_reverse_data(p::Union{Tuple, NamedTuple})
-    reverse_data_type(tangent_type(p)) == NoRvsData && return NoRvsData()
+    rdata_type(tangent_type(p)) == NoRData && return NoRData()
     return :(tuple_map(zero_reverse_data, p))
 end
 
@@ -315,10 +315,10 @@ zero_reverse_data_from_type(::Type{P}) where {P<:IEEEFloat} = zero(P)
 
     # Get types associated to primal.
     T = tangent_type(P)
-    R = reverse_data_type(T)
+    R = rdata_type(T)
 
     # If there's no reverse data, return no reverse data, e.g. for mutable types.
-    R == NoRvsData && return NoRvsData()
+    R == NoRData && return NoRData()
 
     # If the type is itself abstract, it's reverse data could be anything.
     # The same goes for if the type has any undetermined type parameters.
@@ -342,10 +342,10 @@ end
 @generated function zero_reverse_data_from_type(::Type{P}) where {P<:Tuple}
     # Get types associated to primal.
     T = tangent_type(P)
-    R = reverse_data_type(T)
+    R = rdata_type(T)
 
     # If there's no reverse data, return no reverse data, e.g. for mutable types.
-    R == NoRvsData && return NoRvsData()
+    R == NoRData && return NoRData()
 
     return Expr(:call, tuple, map(p -> :(zero_reverse_data_from_type($p)), P.parameters)...)
 end
@@ -355,34 +355,34 @@ end
     # Get types associated to primal.
     P = NamedTuple{names, Pt}
     T = tangent_type(P)
-    R = reverse_data_type(T)
+    R = rdata_type(T)
 
     # If there's no reverse data, return no reverse data, e.g. for mutable types.
-    R == NoRvsData && return NoRvsData()
+    R == NoRData && return NoRData()
 
     return :(NamedTuple{$names}(zero_reverse_data_from_type($Pt)))
 end
 
 """
-    combine_data(tangent_type, forwards_data, reverse_data)
+    combine_data(tangent_type, fdata, rdata)
 
 
 """
-combine_data(::Type{NoTangent}, ::NoFwdsData, ::NoRvsData) = NoTangent()
-combine_data(::Type{T}, ::NoFwdsData, r::T) where {T} = r
-combine_data(::Type{T}, f::T, ::NoRvsData) where {T} = f
+combine_data(::Type{NoTangent}, ::NoFData, ::NoRData) = NoTangent()
+combine_data(::Type{T}, ::NoFData, r::T) where {T} = r
+combine_data(::Type{T}, f::T, ::NoRData) where {T} = f
 
 # General structs.
-function combine_data(::Type{T}, f::FwdsData{F}, r::RvsData{R}) where {T<:Tangent, F, R}
+function combine_data(::Type{T}, f::FData{F}, r::RData{R}) where {T<:Tangent, F, R}
     return __combine_struct_data(T, f.data, r.data)
 end
 
-function combine_data(::Type{T}, f::NoFwdsData, r::RvsData{R}) where {T<:Tangent, R}
-    return __combine_struct_data(T, tuple_map(_ -> NoFwdsData(), r.data), r.data)
+function combine_data(::Type{T}, f::NoFData, r::RData{R}) where {T<:Tangent, R}
+    return __combine_struct_data(T, tuple_map(_ -> NoFData(), r.data), r.data)
 end
 
-function combine_data(::Type{T}, f::FwdsData{F}, ::NoRvsData) where {T<:Tangent, F}
-    return __combine_struct_data(T, f.data, tuple_map(_ -> NoRvsData(), f.data))
+function combine_data(::Type{T}, f::FData{F}, ::NoRData) where {T<:Tangent, F}
+    return __combine_struct_data(T, f.data, tuple_map(_ -> NoRData(), f.data))
 end
 
 # Helper used for combining fdata and rdata for (mutable) structs.
@@ -405,24 +405,24 @@ end
 function combine_data(::Type{T}, f::NamedTuple{ns}, r::NamedTuple{ns}) where {T, ns}
     return T(map(combine_data, fieldtypes(T), f, r))
 end
-function combine_data(::Type{T}, f::Union{Tuple, NamedTuple}, r::NoRvsData) where {T}
-    return combine_data(T, f, map(_ -> NoRvsData(), f))
+function combine_data(::Type{T}, f::Union{Tuple, NamedTuple}, r::NoRData) where {T}
+    return combine_data(T, f, map(_ -> NoRData(), f))
 end
-function combine_data(::Type{T}, f::NoFwdsData, r::Union{Tuple, NamedTuple}) where {T}
-    return combine_data(T, map(_ -> NoFwdsData(), r), r)
+function combine_data(::Type{T}, f::NoFData, r::Union{Tuple, NamedTuple}) where {T}
+    return combine_data(T, map(_ -> NoFData(), r), r)
 end
 
 """
-    zero_tangent(p, ::NoFwdsData)
+    zero_tangent(p, ::NoFData)
 
 
 """
-zero_tangent(p, ::NoFwdsData) = zero_tangent(p)
+zero_tangent(p, ::NoFData) = zero_tangent(p)
 
 function zero_tangent(p::P, f::F) where {P, F}
     T = tangent_type(P)
     T == F && return f
-    r = reverse_data(zero_tangent(p))
+    r = rdata(zero_tangent(p))
     return combine_data(tangent_type(P), f, r)
 end
 

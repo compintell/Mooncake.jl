@@ -45,8 +45,8 @@ using Tapir:
     ADInfo,
     SharedDataPairs,
     increment_field!!,
-    NoFwdsData,
-    NoRvsData,
+    NoFData,
+    NoRData,
     zero_fwds_codual
 
 using .TestUtils:

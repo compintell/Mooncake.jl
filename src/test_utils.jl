@@ -88,7 +88,7 @@ using JET, Random, Tapir, Test, InteractiveUtils
 using Tapir:
     CoDual, NoTangent, rrule!!, is_init, zero_codual, DefaultCtx, @is_primitive, val,
     is_always_fully_initialised, get_tangent_field, set_tangent_field!, MutableTangent,
-    Tangent, _typeof, reverse_data, NoFwdsData, to_fwds, uninit_fdata, zero_reverse_data,
+    Tangent, _typeof, rdata, NoFData, to_fwds, uninit_fdata, zero_reverse_data,
     zero_reverse_data_from_type
 
 has_equal_data(x::T, y::T; equal_undefs=true) where {T<:String} = x == y
@@ -156,7 +156,7 @@ throws an `AssertionError` if the same address is not mapped to in `tangent` eac
 function populate_address_map!(m::AddressMap, primal::P, tangent::T) where {P, T}
     isprimitivetype(P) && return m
     T === NoTangent && return m
-    T === NoFwdsData && return m
+    T === NoFData && return m
     if ismutabletype(P)
         @assert T <: MutableTangent
         k = pointer_from_objref(primal)
@@ -178,10 +178,10 @@ function populate_address_map!(m::AddressMap, primal::P, tangent::T) where {P, T
 end
 
 __get_data_field(t::Union{Tangent, MutableTangent}, n) = getfield(t.fields, n)
-__get_data_field(t::Union{Tapir.FwdsData, Tapir.RvsData}, n) = getfield(t.data, n)
+__get_data_field(t::Union{Tapir.FData, Tapir.RData}, n) = getfield(t.data, n)
 
 function populate_address_map!(m::AddressMap, p::P, t) where {P<:Union{Tuple, NamedTuple}}
-    t isa NoFwdsData && return m
+    t isa NoFData && return m
     t isa NoTangent && return m
     foreach(n -> populate_address_map!(m, getfield(p, n), getfield(t, n)), fieldnames(P))
     return m
@@ -244,7 +244,7 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...; rul
     # Run `rrule!!` on copies of `f` and `x`. We use randomly generated tangents so that we
     # can later verify that non-zero values do not get propagated by the rule.
     x̄_zero = map(zero_tangent, x)
-    x̄_fwds = map(Tapir.forwards_data, x̄_zero)
+    x̄_fwds = map(Tapir.fdata, x̄_zero)
     x_x̄_rule = map((x, x̄_f) -> CoDual{_typeof(x), _typeof(x̄_f)}(_deepcopy(x), x̄_f), x, x̄_fwds)
     inputs_address_map = populate_address_map(map(primal, x_x̄_rule), map(tangent, x_x̄_rule))
     y_ȳ_rule, pb!! = rule(to_fwds(f_f̄), x_x̄_rule...)
@@ -268,8 +268,8 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...; rul
     x̄_init = map(set_to_zero!!, x̄_zero)
     ȳ = increment!!(ȳ_init, ȳ_delta)
     map(increment!!, x̄_init, x̄_delta)
-    _, x̄_rvs_inc... = pb!!(Tapir.reverse_data(ȳ))
-    x̄_rvs = map((x, x_inc) -> increment!!(reverse_data(x), x_inc), x̄_delta, x̄_rvs_inc)
+    _, x̄_rvs_inc... = pb!!(Tapir.rdata(ȳ))
+    x̄_rvs = map((x, x_inc) -> increment!!(rdata(x), x_inc), x̄_delta, x̄_rvs_inc)
     x̄ = map(Tapir.combine_data, map(_typeof, x̄_zero), x̄_fwds, x̄_rvs)
 
     # Check that inputs have been returned to their original value.
@@ -337,7 +337,7 @@ function test_rrule_interface(f_f̄, x_x̄...; is_primitive, ctx::C, rule) where
     y_ȳ, pb!! = rrule_ret
 
     # Run the reverse-pass. Throw a meaningful exception if it doesn't run at all.
-    ȳ = Tapir.reverse_data(zero_tangent(primal(y_ȳ), tangent(y_ȳ)))
+    ȳ = Tapir.rdata(zero_tangent(primal(y_ȳ), tangent(y_ȳ)))
     f̄_new, x̄_new... = try
         pb!!(ȳ)
     catch e
@@ -354,8 +354,8 @@ function test_rrule_interface(f_f̄, x_x̄...; is_primitive, ctx::C, rule) where
 
     # Check the tangent types output by the reverse-pass, and that memory addresses of
     # mutable objects have remained constant.
-    @test _typeof(f̄_new) == _typeof(reverse_data(f̄))
-    @test all(map((a, b) -> _typeof(a) == _typeof(reverse_data(b)), x̄_new, x̄))
+    @test _typeof(f̄_new) == _typeof(rdata(f̄))
+    @test all(map((a, b) -> _typeof(a) == _typeof(rdata(b)), x̄_new, x̄))
 end
 
 function __forwards_and_backwards(rule, x_x̄::Vararg{Any, N}) where {N}
@@ -386,7 +386,7 @@ function test_rrule_performance(
 
         # Test reverse-pass stability.
         y_ȳ, pb!! = rule(to_fwds(f_f̄), map(to_fwds, _deepcopy(x_x̄))...)
-        rvs_data = Tapir.reverse_data(zero_tangent(primal(y_ȳ), tangent(y_ȳ)))
+        rvs_data = Tapir.rdata(zero_tangent(primal(y_ȳ), tangent(y_ȳ)))
         JET.test_opt(pb!!, (_typeof(rvs_data), ))
     end
 
@@ -834,18 +834,18 @@ correctly.
 """
 function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
 
-    # Check that forwards_data_type and reverse_data_type run and produce types.
+    # Check that fdata_type and rdata_type run and produce types.
     T = tangent_type(P)
-    F = Tapir.forwards_data_type(T)
+    F = Tapir.fdata_type(T)
     @test F isa Type
-    R = Tapir.reverse_data_type(T)
+    R = Tapir.rdata_type(T)
     @test R isa Type
 
-    # Check that forwards_data and reverse_data produce the correct types.
+    # Check that fdata and rdata produce the correct types.
     t = randn_tangent(rng, p)
-    f = Tapir.forwards_data(t)
+    f = Tapir.fdata(t)
     @test f isa F
-    r = Tapir.reverse_data(t)
+    r = Tapir.rdata(t)
     @test r isa R
 
     # Check that uninit_fdata yields data of the correct type.
@@ -857,13 +857,13 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
     @test t_combined === t
 
     # Check that pulling out `f` and `r` from `t_combined` yields the correct values.
-    @test Tapir.forwards_data(t_combined) === f
-    @test Tapir.reverse_data(t_combined) === r
+    @test Tapir.fdata(t_combined) === f
+    @test Tapir.rdata(t_combined) === r
 
     # Check that constructing a zero tangent from reverse data yields the original tangent.
     z = zero_tangent(p)
-    f_z = Tapir.forwards_data(z)
-    @test f_z isa Tapir.forwards_data_type(T)
+    f_z = Tapir.fdata(z)
+    @test f_z isa Tapir.fdata_type(T)
     z_new = zero_tangent(p, f_z)
     @test z_new isa tangent_type(P)
     @test z_new === z

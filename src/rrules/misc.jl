@@ -32,7 +32,7 @@ for name in [
     @eval @is_primitive DefaultCtx Tuple{typeof($name), Vararg}
     @eval function rrule!!(::CoDual{_typeof($name)}, args::CoDual...)
         v = $name(map(primal, args)...)
-        pb!! = NoPullback((NoRvsData(), tuple_map(zero_reverse_data, args)...))
+        pb!! = NoPullback((NoRData(), tuple_map(zero_reverse_data, args)...))
         return zero_fwds_codual(v), pb!!
     end
 end
@@ -62,7 +62,7 @@ lgetfield(x, ::Val{f}) where {f} = getfield(x, f)
 
 @is_primitive MinimalCtx Tuple{typeof(lgetfield), Any, Any}
 function rrule!!(::CoDual{typeof(lgetfield)}, x::CoDual, ::CoDual{Val{f}}) where {f}
-    lgetfield_pb!!(dy) = NoRvsData(), increment_field!!(dx, dy, Val{f}()), NoRvsData()
+    lgetfield_pb!!(dy) = NoRData(), increment_field!!(dx, dy, Val{f}()), NoRData()
     y = CoDual(getfield(primal(x), f), _get_tangent_field(primal(x), tangent(x), f))
     return y, lgetfield_pb!!
 end

@@ -546,9 +546,9 @@ function rule_type(interp::TapirInterpreter{C}, ::Type{sig}) where {C, sig}
 
     arg_types = map(_get_type, ir.argtypes)
     arg_fwds_types = Tuple{map(fwds_codual_type, arg_types)...}
-    arg_rvs_types = Tuple{map(reverse_data_type ∘ tangent_type, arg_types)...}
+    arg_rvs_types = Tuple{map(rdata_type ∘ tangent_type, arg_types)...}
     fwds_return_codual = fwds_codual_type(Treturn)
-    rvs_return_type = reverse_data_type(tangent_type(Treturn))
+    rvs_return_type = rdata_type(tangent_type(Treturn))
     if isconcretetype(fwds_return_codual)
         return DerivedRule{
             Core.OpaqueClosure{arg_fwds_types, fwds_return_codual},
@@ -569,7 +569,7 @@ end
 # If isva, inputs (5.0, (4.0, 3.0)) are transformed into (5.0, 4.0, 3.0).
 function __flatten_varargs(::Val{isva}, args, ::Val{nvargs}) where {isva, nvargs}
     isva || return args
-    last_el = isa(args[end], NoRvsData) ? ntuple(n -> NoRvsData(), nvargs) : args[end]
+    last_el = isa(args[end], NoRData) ? ntuple(n -> NoRData(), nvargs) : args[end]
     return (args[1:end-1]..., last_el...)
 end
 
@@ -578,7 +578,7 @@ end
 function __unflatten_codual_varargs(::Val{isva}, args, ::Val{nargs}) where {isva, nargs}
     isva || return args
     group_primal = map(primal, args[nargs:end])
-    if forwards_data_type(tangent_type(_typeof(group_primal))) == NoFwdsData
+    if fdata_type(tangent_type(_typeof(group_primal))) == NoFData
         grouped_args = zero_fwds_codual(group_primal)
     else
         grouped_args = CoDual(group_primal, map(tangent, args[nargs:end]))
@@ -723,7 +723,7 @@ Produce the IR associated to the `OpaqueClosure` which runs most of the pullback
 function pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, Tshared_data)
 
     # Compute the argument types associated to the reverse-pass.
-    arg_types = vcat(Tshared_data, reverse_data_type(tangent_type(Tret)))
+    arg_types = vcat(Tshared_data, rdata_type(tangent_type(Tret)))
 
     # Compute the blocks which return in the primal.
     primal_exit_blocks_inds = findall(is_reachable_return_node ∘ terminator, ir.blocks)

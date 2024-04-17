@@ -1,9 +1,9 @@
 @testset "safety" begin
 
     # Forwards-pass tests.
-    x = (CoDual(sin, NoTangent()), CoDual(5.0, NoFwdsData()))
+    x = (CoDual(sin, NoTangent()), CoDual(5.0, NoFData()))
     @test_throws(ArgumentError, Tapir.SafeRRule(rrule!!)(x...))
-    x = (CoDual(sin, NoFwdsData()), CoDual(5.0, NoFwdsData()))
+    x = (CoDual(sin, NoFData()), CoDual(5.0, NoFData()))
     @test_throws(
         ArgumentError, Tapir.SafeRRule((x..., ) -> (CoDual(1.0, 0.0), nothing))(x...)
     )

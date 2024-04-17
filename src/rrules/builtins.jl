@@ -19,8 +19,8 @@ using Core: Intrinsics
 using Tapir
 import ..Tapir:
     rrule!!, CoDual, primal, tangent, zero_tangent, NoPullback,
-    tangent_type, increment!!, @is_primitive, MinimalCtx, is_primitive, NoFwdsData,
-    zero_reverse_data, NoRvsData, tuple_map
+    tangent_type, increment!!, @is_primitive, MinimalCtx, is_primitive, NoFData,
+    zero_reverse_data, NoRData, tuple_map
 
 # Note: performance is not considered _at_ _all_ in this implementation.
 function rrule!!(f::CoDual{<:Core.IntrinsicFunction}, args...)
@@ -43,8 +43,8 @@ macro inactive_intrinsic(name)
         translate(::Val{Intrinsics.$name}) = $name
         function rrule!!(::CoDual{typeof($name)}, args::Vararg{Any, N}) where {N}
             y = $name(map(primal, args)...)
-            pb!! = NoPullback((NoRvsData(), tuple_map(zero_reverse_data ∘ primal, args)...))
-            return CoDual(y, NoFwdsData()), pb!!
+            pb!! = NoPullback((NoRData(), tuple_map(zero_reverse_data ∘ primal, args)...))
+            return CoDual(y, NoFData()), pb!!
         end
     end
     return esc(expr)
@@ -52,23 +52,23 @@ end
 
 @intrinsic abs_float
 function rrule!!(::CoDual{typeof(abs_float)}, x)
-    abs_float_pullback!!(dy) = NoRvsData(), sign(primal(x)) * dy
+    abs_float_pullback!!(dy) = NoRData(), sign(primal(x)) * dy
     y = abs_float(primal(x))
-    return CoDual(y, NoFwdsData()), abs_float_pullback!!
+    return CoDual(y, NoFData()), abs_float_pullback!!
 end
 
 @intrinsic add_float
 function rrule!!(::CoDual{typeof(add_float)}, a, b)
-    add_float_pb!!(c̄) = NoRvsData(), c̄, c̄
+    add_float_pb!!(c̄) = NoRData(), c̄, c̄
     c = add_float(primal(a), primal(b))
-    return CoDual(c, NoFwdsData()), add_float_pb!!
+    return CoDual(c, NoFData()), add_float_pb!!
 end
 
 @intrinsic add_float_fast
 function rrule!!(::CoDual{typeof(add_float_fast)}, a, b)
-    add_float_fast_pb!!(c̄) = NoRvsData(), c̄, c̄
+    add_float_fast_pb!!(c̄) = NoRData(), c̄, c̄
     c = add_float_fast(primal(a), primal(b))
-    return CoDual(c, NoFwdsData()), add_float_fast_pb!!
+    return CoDual(c, NoFData()), add_float_fast_pb!!
 end
 
 @inactive_intrinsic add_int
@@ -96,9 +96,9 @@ function rrule!!(::CoDual{typeof(bitcast)}, ::CoDual{Type{T}}, x) where {T}
     if T <: Ptr && _x isa Ptr
         dv = bitcast(Ptr{tangent_type(eltype(T))}, tangent(x))
     else
-        dv = NoFwdsData()
+        dv = NoFData()
     end
-    return CoDual(v, dv), NoPullback((NoRvsData(), NoRvsData(), zero_reverse_data(_x)))
+    return CoDual(v, dv), NoPullback((NoRData(), NoRData(), zero_reverse_data(_x)))
 end
 
 @inactive_intrinsic bswap_int
@@ -123,7 +123,7 @@ __cglobal(::Val{s}, x::Vararg{Any, N}) where {s, N} = cglobal(s, x...)
 translate(::Val{Intrinsics.cglobal}) = __cglobal
 Tapir.is_primitive(::Type{MinimalCtx}, ::Type{<:Tuple{typeof(__cglobal), Vararg}}) = true
 function rrule!!(::CoDual{typeof(__cglobal)}, args...)
-    pb!! = NoPullback((NoRvsData(), tuple_map(zero_reverse_data, args)...))
+    pb!! = NoPullback((NoRData(), tuple_map(zero_reverse_data, args)...))
     return Tapir.uninit_fdata(__cglobal(map(primal, args)...)), pb!!
 end
 
@@ -142,9 +142,9 @@ end
 function rrule!!(::CoDual{typeof(copysign_float)}, x, y)
     _x = primal(x)
     _y = primal(y)
-    copysign_float_pullback!!(dz) = NoRvsData(), dz * sign(_y), zero_reverse_data(_y)
+    copysign_float_pullback!!(dz) = NoRData(), dz * sign(_y), zero_reverse_data(_y)
     z = copysign_float(_x, _y)
-    return CoDual(z, NoFwdsData()), copysign_float_pullback!!
+    return CoDual(z, NoFData()), copysign_float_pullback!!
 end
 
 @inactive_intrinsic ctlz_int
@@ -156,8 +156,8 @@ function rrule!!(::CoDual{typeof(div_float)}, a, b)
     _a = primal(a)
     _b = primal(b)
     _y = div_float(_a, _b)
-    div_float_pullback!!(dy) = NoRvsData(), div_float(dy, _b), -dy * _a / _b^2
-    return CoDual(_y, NoFwdsData()), div_float_pullback!!
+    div_float_pullback!!(dy) = NoRData(), div_float(dy, _b), -dy * _a / _b^2
+    return CoDual(_y, NoFData()), div_float_pullback!!
 end
 
 @intrinsic div_float_fast
@@ -166,9 +166,9 @@ function rrule!!(::CoDual{typeof(div_float_fast)}, a, b)
     _b = primal(b)
     _y = div_float_fast(_a, _b)
     function div_float_pullback!!(dy)
-        return NoRvsData(), div_float_fast(dy, _b), -dy * div_float_fast(_a, _b^2)
+        return NoRData(), div_float_fast(dy, _b), -dy * div_float_fast(_a, _b^2)
     end
-    return CoDual(_y, NoFwdsData()), div_float_pullback!!
+    return CoDual(_y, NoFData()), div_float_pullback!!
 end
 
 @inactive_intrinsic eq_float
@@ -181,8 +181,8 @@ end
 function rrule!!(::CoDual{typeof(fma_float)}, x, y, z)
     _x = primal(x)
     _y = primal(y)
-    fma_float_pullback!!(da) = NoRvsData(), da * _y, da * _x, da
-    return CoDual(fma_float(_x, _y, primal(z)), NoFwdsData()), fma_float_pullback!!
+    fma_float_pullback!!(da) = NoRData(), da * _y, da * _x, da
+    return CoDual(fma_float(_x, _y, primal(z)), NoFData()), fma_float_pullback!!
 end
 
 # fpext -- maybe interesting
@@ -207,16 +207,16 @@ end
 function rrule!!(::CoDual{typeof(mul_float)}, a, b)
     _a = primal(a)
     _b = primal(b)
-    mul_float_pb!!(dc) = NoRvsData(), dc * _b, _a * dc
-    return CoDual(mul_float(_a, _b), NoFwdsData()), mul_float_pb!!
+    mul_float_pb!!(dc) = NoRData(), dc * _b, _a * dc
+    return CoDual(mul_float(_a, _b), NoFData()), mul_float_pb!!
 end
 
 @intrinsic mul_float_fast
 function rrule!!(::CoDual{typeof(mul_float_fast)}, a, b)
     _a = primal(a)
     _b = primal(b)
-    mul_float_fast_pb!!(dc) = NoRvsData(), dc * _b, _a * dc
-    return CoDual(mul_float_fast(_a, _b), NoFwdsData()), mul_float_fast_pb!!
+    mul_float_fast_pb!!(dc) = NoRData(), dc * _b, _a * dc
+    return CoDual(mul_float_fast(_a, _b), NoFData()), mul_float_fast_pb!!
 end
 
 @inactive_intrinsic mul_int
@@ -226,8 +226,8 @@ function rrule!!(::CoDual{typeof(muladd_float)}, x, y, z)
     _x = primal(x)
     _y = primal(y)
     _z = primal(z)
-    muladd_float_pullback!!(da) = NoRvsData(), da * _y, da * _x, da
-    return CoDual(muladd_float(_x, _y, _z), NoFwdsData()), muladd_float_pullback!!
+    muladd_float_pullback!!(da) = NoRData(), da * _y, da * _x, da
+    return CoDual(muladd_float(_x, _y, _z), NoFData()), muladd_float_pullback!!
 end
 
 @inactive_intrinsic ne_float
@@ -237,15 +237,15 @@ end
 @intrinsic neg_float
 function rrule!!(::CoDual{typeof(neg_float)}, x)
     _x = primal(x)
-    neg_float_pullback!!(dy) = NoRvsData(), -dy
-    return CoDual(neg_float(_x), NoFwdsData()), neg_float_pullback!!
+    neg_float_pullback!!(dy) = NoRData(), -dy
+    return CoDual(neg_float(_x), NoFData()), neg_float_pullback!!
 end
 
 @intrinsic neg_float_fast
 function rrule!!(::CoDual{typeof(neg_float_fast)}, x)
     _x = primal(x)
-    neg_float_fast_pullback!!(dy) = NoRvsData(), -dy
-    return CoDual(neg_float_fast(_x), NoFwdsData()), neg_float_fast_pullback!!
+    neg_float_fast_pullback!!(dy) = NoRData(), -dy
+    return CoDual(neg_float_fast(_x), NoFData()), neg_float_fast_pullback!!
 end
 
 @inactive_intrinsic neg_int
@@ -299,15 +299,15 @@ end
 @intrinsic sqrt_llvm
 function rrule!!(::CoDual{typeof(sqrt_llvm)}, x)
     _x = primal(x)
-    llvm_sqrt_pullback!!(dy) = NoRvsData(), dy * inv(2 * sqrt(_x))
-    return CoDual(sqrt_llvm(_x), NoFwdsData()), llvm_sqrt_pullback!!
+    llvm_sqrt_pullback!!(dy) = NoRData(), dy * inv(2 * sqrt(_x))
+    return CoDual(sqrt_llvm(_x), NoFData()), llvm_sqrt_pullback!!
 end
 
 @intrinsic sqrt_llvm_fast
 function rrule!!(::CoDual{typeof(sqrt_llvm_fast)}, x)
     _x = primal(x)
-    llvm_sqrt_fast_pullback!!(dy) = NoRvsData(), dy * inv(2 * sqrt(_x))
-    return CoDual(sqrt_llvm_fast(_x), NoFwdsData()), llvm_sqrt_fast_pullback!!
+    llvm_sqrt_fast_pullback!!(dy) = NoRData(), dy * inv(2 * sqrt(_x))
+    return CoDual(sqrt_llvm_fast(_x), NoFData()), llvm_sqrt_fast_pullback!!
 end
 
 @inactive_intrinsic srem_int
@@ -316,16 +316,16 @@ end
 function rrule!!(::CoDual{typeof(sub_float)}, a, b)
     _a = primal(a)
     _b = primal(b)
-    sub_float_pullback!!(dc) = NoRvsData(), dc, -dc
-    return CoDual(sub_float(_a, _b), NoFwdsData()), sub_float_pullback!!
+    sub_float_pullback!!(dc) = NoRData(), dc, -dc
+    return CoDual(sub_float(_a, _b), NoFData()), sub_float_pullback!!
 end
 
 @intrinsic sub_float_fast
 function rrule!!(::CoDual{typeof(sub_float_fast)}, a, b)
     _a = primal(a)
     _b = primal(b)
-    sub_float_fast_pullback!!(dc) = NoRvsData(), dc, -dc
-    return CoDual(sub_float_fast(_a, _b), NoFwdsData()), sub_float_fast_pullback!!
+    sub_float_fast_pullback!!(dc) = NoRData(), dc, -dc
+    return CoDual(sub_float_fast(_a, _b), NoFData()), sub_float_fast_pullback!!
 end
 
 @inactive_intrinsic sub_int
@@ -348,15 +348,15 @@ end
 end # IntrinsicsWrappers
 
 function rrule!!(::CoDual{typeof(<:)}, T1, T2)
-    pb!! = NoPullback((NoRvsData(), NoRvsData(), NoRvsData()))
-    return CoDual(<:(primal(T1), primal(T2)), NoFwdsData()), pb!!
+    pb!! = NoPullback((NoRData(), NoRData(), NoRData()))
+    return CoDual(<:(primal(T1), primal(T2)), NoFData()), pb!!
 end
 
 function rrule!!(::CoDual{typeof(===)}, x, y)
     _x = primal(x)
     _y = primal(y)
-    pb!! = NoPullback((NoRvsData(), zero_reverse_data(_x), zero_reverse_data(_y)))
-    return CoDual(_x === _y, NoFwdsData()), pb!!
+    pb!! = NoPullback((NoRData(), zero_reverse_data(_x), zero_reverse_data(_y)))
+    return CoDual(_x === _y, NoFData()), pb!!
 end
 
 # Core._abstracttype
@@ -377,15 +377,15 @@ end
 
 function rrule!!(::CoDual{typeof(Core._typevar)}, args...)
     y = Core._typevar(map(primal, args)...)
-    pb!! = NoPullback((NoRvsData(), tuple_map(zero_reverse_data, args)...))
-    return CoDual(y, NoFwdsData()), pb!!
+    pb!! = NoPullback((NoRData(), tuple_map(zero_reverse_data, args)...))
+    return CoDual(y, NoFData()), pb!!
 end
 
 function rrule!!(::CoDual{typeof(Core.apply_type)}, args...)
     arg_primals = map(primal, args)
     T = Core.apply_type(arg_primals...)
-    pb!! = NoPullback((NoRvsData(), map(zero_reverse_data, args)...))
-    return CoDual{_typeof(T), NoFwdsData}(T, NoFwdsData()), pb!!
+    pb!! = NoPullback((NoRData(), map(zero_reverse_data, args)...))
+    return CoDual{_typeof(T), NoFData}(T, NoFData()), pb!!
 end
 
 function rrule!!(
@@ -400,10 +400,10 @@ function rrule!!(
     function arrayref_pullback!!(dy)
         current_val = arrayref(_inbounds, dx, _inds...)
         arrayset(_inbounds, dx, increment!!(current_val, dy), _inds...)
-        return NoRvsData(), NoRvsData(), NoRvsData(), tuple_map(_ -> NoRvsData(), _inds)...
+        return NoRData(), NoRData(), NoRData(), tuple_map(_ -> NoRData(), _inds)...
     end
     _y = arrayref(_inbounds, primal(x), _inds...)
-    dy = forwards_data(arrayref(_inbounds, tangent(x), _inds...))
+    dy = fdata(arrayref(_inbounds, tangent(x), _inds...))
     return CoDual(_y, dy), arrayref_pullback!!
 end
 
@@ -433,13 +433,13 @@ function rrule!!(
     arrayset(_inbounds, primal(A), primal(v), _inds...)
     dA = tangent(A)
     arrayset(_inbounds, dA, tangent(v), _inds...)
-    function arrayset_pullback!!(::NoRvsData)
-        dv = reverse_data(arrayref(_inbounds, dA, _inds...))
+    function arrayset_pullback!!(::NoRData)
+        dv = rdata(arrayref(_inbounds, dA, _inds...))
         if to_save
             arrayset(_inbounds, primal(A), old_A[][1], _inds...)
             arrayset(_inbounds, dA, old_A[][2], _inds...)
         end
-        return NoRvsData(), NoRvsData(), NoRvsData(), dv, tuple_map(_ -> NoRvsData(), _inds)...
+        return NoRData(), NoRData(), NoRData(), dv, tuple_map(_ -> NoRData(), _inds)...
     end
     return A, arrayset_pullback!!
 end
@@ -455,18 +455,18 @@ function isbits_arrayset_rrule(
 
     dA = tangent(A)
     arrayset(_inbounds, dA, zero_tangent(primal(v)), _inds...)
-    function isbits_arrayset_pullback!!(::NoRvsData)
+    function isbits_arrayset_pullback!!(::NoRData)
         dv = arrayref(_inbounds, dA, _inds...)
         arrayset(_inbounds, primal(A), old_A[1], _inds...)
         arrayset(_inbounds, dA, old_A[2], _inds...)
-        return NoRvsData(), NoRvsData(), NoRvsData(), dv, tuple_map(_ -> NoRvsData(), _inds)...
+        return NoRData(), NoRData(), NoRData(), dv, tuple_map(_ -> NoRData(), _inds)...
     end
     return A, isbits_arrayset_pullback!!
 end
 
 function rrule!!(::CoDual{typeof(Core.arraysize)}, X, dim)
-    pb!! = NoPullback((NoRvsData(), NoRvsData(), NoRvsData()))
-    return CoDual(Core.arraysize(primal(X), primal(dim)), NoFwdsData()), pb!!
+    pb!! = NoPullback((NoRData(), NoRData(), NoRData()))
+    return CoDual(Core.arraysize(primal(X), primal(dim)), NoFData()), pb!!
 end
 
 # Core.compilerbarrier
@@ -480,7 +480,7 @@ function rrule!!(::CoDual{typeof(Core.ifelse)}, cond, a, b)
     function ifelse_pullback!!(dc)
         da = _cond ? dc : zero_reverse_data(primal(a))
         db = _cond ? zero_reverse_data(primal(b)) : dc
-        return NoRvsData(), NoRvsData(), da, db
+        return NoRData(), NoRData(), da, db
     end
     return ifelse(_cond, a, b), ifelse_pullback!!
 end
@@ -497,29 +497,29 @@ end
 # Core.set_binding_type!
 
 function rrule!!(::CoDual{typeof(Core.sizeof)}, x)
-    pb!! = NoPullback((NoRvsData(), zero_reverse_data(primal(x))))
-    return CoDual(Core.sizeof(primal(x)), NoFwdsData()), pb!!
+    pb!! = NoPullback((NoRData(), zero_reverse_data(primal(x))))
+    return CoDual(Core.sizeof(primal(x)), NoFData()), pb!!
 end
 
 # Core.svec
 
 function rrule!!(::CoDual{typeof(applicable)}, f, args...)
     args_rvs_data = tuple_map(zero_reverse_data, args)
-    pb!! = NoPullback((NoRvsData(), zero_reverse_data(f), args_rvs_data...))
-    return CoDual(applicable(primal(f), map(primal, args)...), NoFwdsData()), pb!!
+    pb!! = NoPullback((NoRData(), zero_reverse_data(f), args_rvs_data...))
+    return CoDual(applicable(primal(f), map(primal, args)...), NoFData()), pb!!
 end
 
 function rrule!!(::CoDual{typeof(Core.fieldtype)}, args::Vararg{Any, N}) where {N}
     arg_primals = tuple_map(primal, args)
-    pb!! = NoPullback((NoRvsData(), NoRvsData(), NoRvsData()))
-    return CoDual(Core.fieldtype(arg_primals...), NoFwdsData()), pb!!
+    pb!! = NoPullback((NoRData(), NoRData(), NoRData()))
+    return CoDual(Core.fieldtype(arg_primals...), NoFData()), pb!!
 end
 
 function rrule!!(::CoDual{typeof(getfield)}, value::CoDual, name::CoDual)
     _name = primal(name)
     function getfield_pullback(dy, ::NoTangent, dvalue, ::NoTangent)
         new_dvalue = _increment_field!!(dvalue, dy, _name)
-        return NoRvsData(), new_dvalue, NoRvsData()
+        return NoRData(), new_dvalue, NoRData()
     end
     y = CoDual(
         getfield(primal(value), _name),
@@ -570,20 +570,20 @@ end
 # invoke
 
 function rrule!!(::CoDual{typeof(isa)}, x, T)
-    pb!! = NoPullback((NoRvsData(), zero_reverse_data(x), NoRvsData()))
-    return CoDual(isa(primal(x), primal(T)), NoFwdsData()), pb!!
+    pb!! = NoPullback((NoRData(), zero_reverse_data(x), NoRData()))
+    return CoDual(isa(primal(x), primal(T)), NoFData()), pb!!
 end
 
 function rrule!!(::CoDual{typeof(isdefined)}, args...)
-    pb!! = NoPullback((NoRvsData(), tuple_map(zero_reverse_data, args)...))
-    return CoDual(isdefined(map(primal, args)...), NoFwdsData()), pb!!
+    pb!! = NoPullback((NoRData(), tuple_map(zero_reverse_data, args)...))
+    return CoDual(isdefined(map(primal, args)...), NoFData()), pb!!
 end
 
 # modifyfield!
 
 function rrule!!(::CoDual{typeof(nfields)}, x)
-    pb!! = NoPullback((NoRvsData(), zero_reverse_data(x)))
-    return CoDual(nfields(primal(x)), NoFwdsData()), pb!!
+    pb!! = NoPullback((NoRData(), zero_reverse_data(x)))
+    return CoDual(nfields(primal(x)), NoFData()), pb!!
 end
 
 # replacefield!
@@ -626,24 +626,24 @@ end
 
 struct TuplePullback{N} end
 
-@inline (::TuplePullback{N})(dy::Tuple) where {N} = NoRvsData(), dy...
+@inline (::TuplePullback{N})(dy::Tuple) where {N} = NoRData(), dy...
 
-@inline function (::TuplePullback{N})(::NoRvsData) where {N}
-    return NoRvsData(), ntuple(_ -> NoRvsData(), N)...
+@inline function (::TuplePullback{N})(::NoRData) where {N}
+    return NoRData(), ntuple(_ -> NoRData(), N)...
 end
 
-@inline tuple_pullback(dy) = NoRvsData(), dy...
+@inline tuple_pullback(dy) = NoRData(), dy...
 
-@inline tuple_pullback(dy::NoRvsData) = NoRvsData()
+@inline tuple_pullback(dy::NoRData) = NoRData()
 
 function rrule!!(::CoDual{typeof(tuple)}, args::Vararg{Any, N}) where {N}
     primal_output = tuple(map(primal, args)...)
     if tangent_type(_typeof(primal_output)) == NoTangent
-        pb!! = NoPullback((NoRvsData(), tuple_map(zero_reverse_data, args)...))
-        return CoDual(primal_output, NoFwdsData()), pb!!
+        pb!! = NoPullback((NoRData(), tuple_map(zero_reverse_data, args)...))
+        return CoDual(primal_output, NoFData()), pb!!
     else
-        if forwards_data_type(tangent_type(_typeof(primal_output))) == NoFwdsData
-            return CoDual(primal_output, NoFwdsData()), TuplePullback{N}()
+        if fdata_type(tangent_type(_typeof(primal_output))) == NoFData
+            return CoDual(primal_output, NoFData()), TuplePullback{N}()
         else
             return CoDual(primal_output, tuple(map(tangent, args)...)), TuplePullback{N}()
         end
@@ -651,13 +651,13 @@ function rrule!!(::CoDual{typeof(tuple)}, args::Vararg{Any, N}) where {N}
 end
 
 function rrule!!(::CoDual{typeof(typeassert)}, x::CoDual, type::CoDual)
-    typeassert_pullback(dy) = NoRvsData(), dy, NoRvsData()
+    typeassert_pullback(dy) = NoRData(), dy, NoRData()
     return CoDual(typeassert(primal(x), primal(type)), tangent(x)), typeassert_pullback
 end
 
 function rrule!!(::CoDual{typeof(typeof)}, x::CoDual)
-    pb!! = NoPullback((NoRvsData(), zero_reverse_data(x)))
-    return CoDual(typeof(primal(x)), NoFwdsData()), pb!!
+    pb!! = NoPullback((NoRData(), zero_reverse_data(x)))
+    return CoDual(typeof(primal(x)), NoFData()), pb!!
 end
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
