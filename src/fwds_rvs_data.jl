@@ -90,6 +90,17 @@ end
 end
 
 """
+    fdata_field_type(::Type{P}, n::Int) where {P}
+
+Returns the type of to the nth field of the fdata type associated to `P`. Will be a
+`PossiblyUninitTangent` if said field can be undefined.
+"""
+function fdata_field_type(::Type{P}, n::Int) where {P}
+    f = fdata_type(tangent_type(fieldtype(P, n)))
+    return is_always_initialised(P, n) ? f : _wrap_type(f)
+end
+
+"""
     fdata(t)::fdata_type(typeof(t))
 
 Extract the forwards data from tangent `t`.
