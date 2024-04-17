@@ -208,7 +208,7 @@ end
         # # @code_warntype optimize=true pb!!(tangent(out), map(tangent, codual_args)...)
 
         # primal_time = @benchmark $f($(Ref(x))[]...)
-        # s2s_time = @benchmark $rule($fwds_args...)[2]($(Tapir.zero_reverse_data(primal(out))))
+        # s2s_time = @benchmark $rule($fwds_args...)[2]($(Tapir.zero_rdata(primal(out))))
         # # in_f = in_f = Tapir.InterpretedFunction(DefaultCtx(), sig, interp);
         # # __rrule!! = Tapir.build_rrule!!(in_f);
         # # df = zero_codual(in_f);
@@ -223,7 +223,7 @@ end
         # println("s2s ratio ratio: $(s2s_ratio)")
         # # println("interp ratio: $(interp_ratio)")
 
-        # f(rule, fwds_args, out) = rule(fwds_args...)[2]((Tapir.zero_reverse_data(primal(out))))
+        # f(rule, fwds_args, out) = rule(fwds_args...)[2]((Tapir.zero_rdata(primal(out))))
         # f(rule, fwds_args, out)
         # @profview(run_many_times(500, f, rule, fwds_args, out))
     end

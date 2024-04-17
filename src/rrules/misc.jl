@@ -32,7 +32,7 @@ for name in [
     @eval @is_primitive DefaultCtx Tuple{typeof($name), Vararg}
     @eval function rrule!!(::CoDual{_typeof($name)}, args::CoDual...)
         v = $name(map(primal, args)...)
-        pb!! = NoPullback((NoRData(), tuple_map(zero_reverse_data, args)...))
+        pb!! = NoPullback((NoRData(), tuple_map(zero_rdata, args)...))
         return zero_fwds_codual(v), pb!!
     end
 end

@@ -88,7 +88,7 @@ using JET, Random, Tapir, Test, InteractiveUtils
 using Tapir:
     CoDual, NoTangent, rrule!!, is_init, zero_codual, DefaultCtx, @is_primitive, val,
     is_always_fully_initialised, get_tangent_field, set_tangent_field!, MutableTangent,
-    Tangent, _typeof, rdata, NoFData, to_fwds, uninit_fdata, zero_reverse_data,
+    Tangent, _typeof, rdata, NoFData, to_fwds, uninit_fdata, zero_rdata,
     zero_rdata_from_type
 
 has_equal_data(x::T, y::T; equal_undefs=true) where {T<:String} = x == y
@@ -360,7 +360,7 @@ end
 
 function __forwards_and_backwards(rule, x_x̄::Vararg{Any, N}) where {N}
     out, pb!! = rule(x_x̄...)
-    return pb!!(Tapir.zero_reverse_data(primal(out)))
+    return pb!!(Tapir.zero_rdata(primal(out)))
 end
 
 function test_rrule_performance(
@@ -871,8 +871,8 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
     # Test that `zero_rdata_from_type` produces a valid rdata.
     @test zero_rdata_from_type(P) isa R
 
-    # Test that `zero_reverse_data` produces valid reverse data.
-    @test zero_reverse_data(p) isa R
+    # Test that `zero_rdata` produces valid reverse data.
+    @test zero_rdata(p) isa R
 end
 
 function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)

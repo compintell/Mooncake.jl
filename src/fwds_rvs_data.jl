@@ -255,15 +255,15 @@ function rdata_backing_type(::Type{P}) where {P}
 end
 
 """
-    zero_reverse_data(p)
+    zero_rdata(p)
 
 Given value `p`, return the zero element associated to its reverse data type.
 """
-zero_reverse_data(p)
+zero_rdata(p)
 
-zero_reverse_data(p::IEEEFloat) = zero(p)
+zero_rdata(p::IEEEFloat) = zero(p)
 
-@generated function zero_reverse_data(p::P) where {P}
+@generated function zero_rdata(p::P) where {P}
 
     # Get types associated to primal.
     T = tangent_type(P)
@@ -277,9 +277,9 @@ zero_reverse_data(p::IEEEFloat) = zero(p)
     rdata_field_zeros_exprs = ntuple(fieldcount(P)) do n
         R_field = rdata_field_type(P, n)
         if R_field <: PossiblyUninitTangent
-            return :(isdefined(p, $n) ? $R_field(zero_reverse_data(getfield(p, $n))) : $R_field())
+            return :(isdefined(p, $n) ? $R_field(zero_rdata(getfield(p, $n))) : $R_field())
         else
-            return :(zero_reverse_data(getfield(p, $n)))
+            return :(zero_rdata(getfield(p, $n)))
         end
     end
     backing_data_expr = Expr(:call, :tuple, rdata_field_zeros_exprs...)
@@ -287,9 +287,9 @@ zero_reverse_data(p::IEEEFloat) = zero(p)
     return Expr(:call, R, backing_expr)
 end
 
-@generated function zero_reverse_data(p::Union{Tuple, NamedTuple})
+@generated function zero_rdata(p::Union{Tuple, NamedTuple})
     rdata_type(tangent_type(p)) == NoRData && return NoRData()
-    return :(tuple_map(zero_reverse_data, p))
+    return :(tuple_map(zero_rdata, p))
 end
 
 """

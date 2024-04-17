@@ -12,7 +12,7 @@ for N in 0:32
         F = fdata_type(tangent_type(P))
         R = rdata_type(tangent_type(P))
         dy = F == NoFData ? NoFData() : build_fdata(P, tuple_map(tangent, x))
-        pb!! = R == NoRData ? NoPullback((NoRData(), NoRData(), tuple_map(zero_reverse_data, tuple_map(tangent, x))...)) : _new_pullback!!
+        pb!! = R == NoRData ? NoPullback((NoRData(), NoRData(), tuple_map(zero_rdata, tuple_map(tangent, x))...)) : _new_pullback!!
         return CoDual(y, dy), pb!!
     end
 end

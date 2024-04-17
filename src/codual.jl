@@ -70,4 +70,4 @@ end
 
 fwds_codual_type(::Type{Type{P}}) where {P} = CoDual{Type{P}, NoFData}
 
-zero_reverse_data(x::CoDual) = zero_reverse_data(primal(x))
+zero_rdata(x::CoDual) = zero_rdata(primal(x))
