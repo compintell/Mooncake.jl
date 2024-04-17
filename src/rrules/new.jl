@@ -1,5 +1,5 @@
-@eval _new_pullback!!(dy) = (NoRData(), NoRData(), map(_value, dy.data)...)
-@eval _new_pullback!!(dy::Union{Tuple, NamedTuple}) = (NoRData(), NoRData(), dy...)
+_new_pullback!!(dy) = (NoRData(), NoRData(), map(_value, dy.data)...)
+_new_pullback!!(dy::Union{Tuple, NamedTuple}) = (NoRData(), NoRData(), dy...)
 
 @inline @generated function _new_(::Type{T}, x::Vararg{Any, N}) where {T, N}
     return Expr(:new, :T, map(n -> :(x[$n]), 1:N)...)
@@ -13,7 +13,7 @@ function rrule!!(
     R = rdata_type(tangent_type(P))
     dy = F == NoFData ? NoFData() : build_fdata(P, tuple_map(tangent, x))
     pb!! = if R == NoRData
-        NoPullback((NoRData(), NoRData(), tuple_map(zero_rdata, tuple_map(tangent, x))...))
+        NoPullback((NoRData(), NoRData(), tuple_map(zero_rdata ∘ tangent, x)...))
     else
         _new_pullback!!
     end
