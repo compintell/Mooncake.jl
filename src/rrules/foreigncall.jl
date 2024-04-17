@@ -59,10 +59,6 @@ over from there.
     )
 end
 
-@generated function _eval(::typeof(_foreigncall_), x::Vararg{Any, N}) where {N}
-    return Expr(:call, :_foreigncall_, map(n -> :(getfield(x, $n)), 1:N)...)
-end
-
 @is_primitive MinimalCtx Tuple{typeof(_foreigncall_), Vararg}
 
 #
