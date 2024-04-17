@@ -307,11 +307,11 @@ struct ZeroRData end
 """
 
 """
-zero_reverse_data_from_type(::Type{P}) where {P}
+zero_rdata_from_type(::Type{P}) where {P}
 
-zero_reverse_data_from_type(::Type{P}) where {P<:IEEEFloat} = zero(P)
+zero_rdata_from_type(::Type{P}) where {P<:IEEEFloat} = zero(P)
 
-@generated function zero_reverse_data_from_type(::Type{P}) where {P}
+@generated function zero_rdata_from_type(::Type{P}) where {P}
 
     # Get types associated to primal.
     T = tangent_type(P)
@@ -329,9 +329,9 @@ zero_reverse_data_from_type(::Type{P}) where {P<:IEEEFloat} = zero(P)
     rdata_field_zeros_exprs = ntuple(fieldcount(P)) do n
         R_field = rdata_field_type(P, n)
         if R_field <: PossiblyUninitTangent
-            return :($R_field(zero_reverse_data_from_type($(fieldtype(P, n)))))
+            return :($R_field(zero_rdata_from_type($(fieldtype(P, n)))))
         else
-            return :(zero_reverse_data_from_type($(fieldtype(P, n))))
+            return :(zero_rdata_from_type($(fieldtype(P, n))))
         end
     end
     backing_data_expr = Expr(:call, :tuple, rdata_field_zeros_exprs...)
@@ -339,7 +339,7 @@ zero_reverse_data_from_type(::Type{P}) where {P<:IEEEFloat} = zero(P)
     return Expr(:call, R, backing_expr)
 end
 
-@generated function zero_reverse_data_from_type(::Type{P}) where {P<:Tuple}
+@generated function zero_rdata_from_type(::Type{P}) where {P<:Tuple}
     # Get types associated to primal.
     T = tangent_type(P)
     R = rdata_type(T)
@@ -347,10 +347,10 @@ end
     # If there's no reverse data, return no reverse data, e.g. for mutable types.
     R == NoRData && return NoRData()
 
-    return Expr(:call, tuple, map(p -> :(zero_reverse_data_from_type($p)), P.parameters)...)
+    return Expr(:call, tuple, map(p -> :(zero_rdata_from_type($p)), P.parameters)...)
 end
 
-@generated function zero_reverse_data_from_type(::Type{NamedTuple{names, Pt}}) where {names, Pt}
+@generated function zero_rdata_from_type(::Type{NamedTuple{names, Pt}}) where {names, Pt}
 
     # Get types associated to primal.
     P = NamedTuple{names, Pt}
@@ -360,7 +360,7 @@ end
     # If there's no reverse data, return no reverse data, e.g. for mutable types.
     R == NoRData && return NoRData()
 
-    return :(NamedTuple{$names}(zero_reverse_data_from_type($Pt)))
+    return :(NamedTuple{$names}(zero_rdata_from_type($Pt)))
 end
 
 """
