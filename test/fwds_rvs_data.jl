@@ -1,42 +1,5 @@
 @testset "fwds_rvs_data" begin
-    @testset "$(typeof(p))" for p in [
-        sin,
-        Float16(5.0),
-        5f0,
-        5.1,
-        svec(5.0),
-        [3.0, 2.0],
-        [1, 2],
-        [[1.0], [1.0, 2.0]],
-        setindex!(Vector{Vector{Float64}}(undef, 2), [1.0], 1),
-        setindex!(Vector{Vector{Float64}}(undef, 2), [1.0], 2),
-        (),
-        (1, ),
-        (2, 3),
-        (2.0, 3),
-        (randn(10), 3),
-        (;),
-        UnitRange{Int}(5, 7),
-        Array,
-        Float64,
-        Union{Float64, Float32},
-        Union,
-        UnionAll,
-        Core.Intrinsics.xor_int,
-        typeof(<:),
-        (6.0, [1.0, 2.0]),
-        (a=6.0, b=[1.0, 2.0]),
-        TypeStableMutableStruct{Float64}(5.0, 3.0),
-        StructFoo(6.0, [1.0, 2.0]),
-        StructFoo(6.0),
-        MutableFoo(6.0, [1.0, 2.0]),
-        MutableFoo(6.0),
-        LowerTriangular{Float64, Matrix{Float64}}(randn(2, 2)),
-        UpperTriangular{Float64, Matrix{Float64}}(randn(2, 2)),
-        UnitLowerTriangular{Float64, Matrix{Float64}}(randn(2, 2)),
-        UnitUpperTriangular{Float64, Matrix{Float64}}(randn(2, 2)),
-    ]
-        rng = Xoshiro(123456)
-        TestUtils.test_fwds_rvs_data(rng, p)
+    @testset "$(typeof(p))" for (_, p, _...) in Tapir.tangent_test_cases()
+        TestUtils.test_fwds_rvs_data(Xoshiro(123456), p)
     end
 end

@@ -4,6 +4,7 @@ include("front_matter.jl")
     if test_group == "basic"
         include("utils.jl")
         include("tangents.jl")
+        include("fwds_rvs_data.jl")
         include("codual.jl")
         include("safety.jl")
         include("stack.jl")
