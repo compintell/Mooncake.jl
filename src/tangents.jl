@@ -698,5 +698,13 @@ function tangent_test_cases()
                 Core.Intrinsics.xor_int, typeof(<:)]
         ],
     )
-    return vcat(map(x -> (false, x...), abs_test_cases), Tapir.TestTypes.PRIMALS)
+    rel_test_cases = Any[
+        (2.0, 3),
+        (randn(10), 3),
+    ]
+    return vcat(
+        map(x -> (false, x...), abs_test_cases),
+        map(x -> (false, x), rel_test_cases),
+        Tapir.TestTypes.PRIMALS,
+    )
 end
