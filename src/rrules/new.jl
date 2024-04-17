@@ -1,20 +1,23 @@
 @eval _new_pullback!!(dy) = (NoRData(), NoRData(), map(_value, dy.data)...)
 @eval _new_pullback!!(dy::Union{Tuple, NamedTuple}) = (NoRData(), NoRData(), dy...)
 
-for N in 0:32
-    @eval @inline function _new_(::Type{T}, x::Vararg{Any, $N}) where {T}
-        return $(Expr(:new, :T, map(n -> :(x[$n]), 1:N)...))
+@inline @generated function _new_(::Type{T}, x::Vararg{Any, N}) where {T, N}
+    return Expr(:new, :T, map(n -> :(x[$n]), 1:N)...)
+end
+
+function rrule!!(
+    ::CoDual{typeof(_new_)}, ::CoDual{Type{P}}, x::Vararg{CoDual, N}
+) where {P, N}
+    y = _new_(P, tuple_map(primal, x)...)
+    F = fdata_type(tangent_type(P))
+    R = rdata_type(tangent_type(P))
+    dy = F == NoFData ? NoFData() : build_fdata(P, tuple_map(tangent, x))
+    pb!! = if R == NoRData
+        NoPullback((NoRData(), NoRData(), tuple_map(zero_rdata, tuple_map(tangent, x))...))
+    else
+        _new_pullback!!
     end
-    @eval function rrule!!(
-        ::CoDual{typeof(_new_)}, ::CoDual{Type{P}}, x::Vararg{CoDual, $N}
-    ) where {P}
-        y = $(Expr(:new, :P, map(n -> :(primal(x[$n])), 1:N)...))
-        F = fdata_type(tangent_type(P))
-        R = rdata_type(tangent_type(P))
-        dy = F == NoFData ? NoFData() : build_fdata(P, tuple_map(tangent, x))
-        pb!! = R == NoRData ? NoPullback((NoRData(), NoRData(), tuple_map(zero_rdata, tuple_map(tangent, x))...)) : _new_pullback!!
-        return CoDual(y, dy), pb!!
-    end
+    return CoDual(y, dy), pb!!
 end
 
 @inline @generated function build_fdata(::Type{P}, fdata::Tuple) where {P}
