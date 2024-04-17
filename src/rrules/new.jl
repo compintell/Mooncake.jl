@@ -1,4 +1,4 @@
-@eval _new_pullback!!(dy) = (NoRData(), NoRData(), map(_value, dy.fields)...)
+@eval _new_pullback!!(dy) = (NoRData(), NoRData(), map(_value, dy.data)...)
 @eval _new_pullback!!(dy::Union{Tuple, NamedTuple}) = (NoRData(), NoRData(), dy...)
 
 for N in 0:32
@@ -56,10 +56,11 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:new})
             false, :stability_and_allocs, nothing,
             _new_, @NamedTuple{y::Vector{Float64}}, randn(2),
         ),
-        # (
-        #     false, :stability_and_allocs, nothing,
-        #     _new_, TestResources.TypeStableStruct{Float64}, 5, 4.0,
-        # ),
+        (
+            false, :stability_and_allocs, nothing,
+            _new_, TestResources.TypeStableStruct{Float64}, 5, 4.0,
+        ),
+        (false, :stability_and_allocs, nothing, _new_, UnitRange{Int64}, 5, 4),
         # (
         #     false, :stability_and_allocs, nothing,
         #     _new_, TestResources.TypeStableMutableStruct{Float64}, 5.0, 4.0,
@@ -68,7 +69,6 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:new})
         #     false, :none, nothing,
         #     _new_, TestResources.TypeStableMutableStruct{Any}, 5.0, 4.0,
         # ),
-        (false, :stability_and_allocs, nothing, _new_, UnitRange{Int64}, 5, 4),
     ]
     memory = Any[]
     return test_cases, memory
