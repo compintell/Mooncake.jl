@@ -700,7 +700,9 @@ function tangent_test_cases()
     )
     rel_test_cases = Any[
         (2.0, 3),
+        (2.0, 1.0),
         (randn(10), 3),
+        (randn(10), randn(10)),
     ]
     return vcat(
         map(x -> (false, x...), abs_test_cases),
