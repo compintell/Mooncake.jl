@@ -994,6 +994,14 @@ function Base.:(==)(a::FullyInitMutableStruct, b::FullyInitMutableStruct)
     return equal_field(a, b, :x) && equal_field(a, b, :y)
 end
 
+struct StructNoFwds
+    x::Float64
+end
+
+struct StructNoRvs
+    x::Vector{Float64}
+end
+
 #
 # Tests for AD. There are not rules defined directly on these functions, and they require
 # that most language primitives have rules defined.

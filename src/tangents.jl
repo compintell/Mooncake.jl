@@ -677,6 +677,18 @@ function tangent_test_cases()
                 build_tangent(TestResources.MutableFoo, 4.0),
                 build_tangent(TestResources.MutableFoo, 9.0),
             ),
+            (
+                TestResources.StructNoFwds(5.0),
+                build_tangent(TestResources.StructNoFwds, 5.0),
+                build_tangent(TestResources.StructNoFwds, 4.0),
+                build_tangent(TestResources.StructNoFwds, 9.0),
+            ),
+            (
+                TestResources.StructNoRvs([5.0]),
+                build_tangent(TestResources.StructNoRvs, [5.0]),
+                build_tangent(TestResources.StructNoRvs, [4.0]),
+                build_tangent(TestResources.StructNoRvs, [9.0]),
+            ),
             (UnitRange{Int}(5, 7), NoTangent(), NoTangent(), NoTangent()),
         ],
         map([

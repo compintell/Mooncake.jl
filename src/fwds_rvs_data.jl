@@ -107,8 +107,12 @@ Extract the forwards data from tangent `t`.
 
     # T must be a `Tangent` by now. If it's not, something has gone wrong.
     !(T <: Tangent) && return :(error("Unhandled type $T"))
-    # return :(F(forwards_data(t.fields)))
     return :($F(forwards_data(t.fields)))
+end
+
+function forwards_data(t::T) where {T<:PossiblyUninitTangent}
+    F = forwards_data_type(T)
+    return is_init(t) ? F(forwards_data(val(t))) : F()
 end
 
 @generated function forwards_data(t::Union{Tuple, NamedTuple})
@@ -149,8 +153,7 @@ reverse_data_type(x) = throw(error("$x is not a type. Perhaps you meant typeof(x
 reverse_data_type(::Type{T}) where {T<:IEEEFloat} = T
 
 function reverse_data_type(::Type{PossiblyUninitTangent{T}}) where {T}
-    return NoRvsData
-    # return PossiblyUninitTangent{reverse_data_type(T)}
+    return PossiblyUninitTangent{reverse_data_type(T)}
 end
 
 @generated function reverse_data_type(::Type{T}) where {T}
@@ -204,6 +207,17 @@ function reverse_data_type(::Type{NamedTuple{names, T}}) where {names, T<:Tuple}
 end
 
 """
+    rdata_field_type(::Type{P}, n::Int) where {P}
+
+Returns the type of to the nth field of the rdata type associated to `P`. Will be a
+`PossiblyUninitTangent` if said field can be undefined.
+"""
+function rdata_field_type(::Type{P}, n::Int) where {P}
+    r = reverse_data_type(tangent_type(fieldtype(P, n)))
+    return is_always_initialised(P, n) ? r : _wrap_type(r)
+end
+
+"""
     reverse_data(t)::reverse_data_type(typeof(t))
 
 Extract the reverse data from tangent `t`.
@@ -224,9 +238,20 @@ Extract the reverse data from tangent `t`.
     return :($(reverse_data_type(T))(reverse_data(t.fields)))
 end
 
+function reverse_data(t::T) where {T<:PossiblyUninitTangent}
+    R = reverse_data_type(T)
+    return is_init(t) ? R(reverse_data(val(t))) : R()
+end
+
 @generated function reverse_data(t::Union{Tuple, NamedTuple})
     reverse_data_type(t) == NoRvsData && return NoRvsData()
     return :(tuple_map(reverse_data, t))
+end
+
+function rdata_backing_type(::Type{P}) where {P}
+    rdata_field_types = map(n -> rdata_field_type(P, n), 1:fieldcount(P))
+    all(==(NoRvsData), rdata_field_types) && return NoRvsData
+    return NamedTuple{fieldnames(P), Tuple{rdata_field_types...}}
 end
 
 """
@@ -249,16 +274,35 @@ zero_reverse_data(p::IEEEFloat) = zero(p)
 
     # T ought to be a `Tangent`. If it's not, something has gone wrong.
     !(T <: Tangent) && Expr(:call, error, "Unhandled type $T")
-    names = fieldnames(P)
-    getfield_exprs = map(n -> Expr(:call, getfield, :p, QuoteNode(n)), names)
-    zs = Expr(:tuple, map(x -> Expr(:call, zero_reverse_data, x), getfield_exprs)...)
-    return :($R(NamedTuple{$names}($zs)))
+    rdata_field_zeros_exprs = ntuple(fieldcount(P)) do n
+        R_field = rdata_field_type(P, n)
+        if R_field <: PossiblyUninitTangent
+            return :(isdefined(p, $n) ? $R_field(zero_reverse_data(getfield(p, $n))) : $R_field())
+        else
+            return :(zero_reverse_data(getfield(p, $n)))
+        end
+    end
+    backing_data_expr = Expr(:call, :tuple, rdata_field_zeros_exprs...)
+    backing_expr = :($(rdata_backing_type(P))($backing_data_expr))
+    return Expr(:call, R, backing_expr)
 end
 
 @generated function zero_reverse_data(p::Union{Tuple, NamedTuple})
     reverse_data_type(tangent_type(p)) == NoRvsData && return NoRvsData()
     return :(tuple_map(zero_reverse_data, p))
 end
+
+"""
+    ZeroRData()
+
+Singleton type indicating zero-valued rdata. This should only ever appear as an
+intermediate quantity in the reverse-pass of AD when the type of the primal is not fully
+inferable, or a field of a type is abstractly typed.
+
+If you see this anywhere in actual code, or if it appears in a hand-written rule, this is an
+error -- please open an issue in such a situation.
+"""
+struct ZeroRData end
 
 """
 
@@ -278,14 +322,21 @@ zero_reverse_data_from_type(::Type{P}) where {P<:IEEEFloat} = zero(P)
 
     # If the type is itself abstract, it's reverse data could be anything.
     # The same goes for if the type has any undetermined type parameters.
-    (isabstracttype(T) || !isconcretetype(T)) && return Any
+    (isabstracttype(T) || !isconcretetype(T)) && return ZeroRData()
 
     # T ought to be a `Tangent`. If it's not, something has gone wrong.
     !(T <: Tangent) && return Expr(:call, error, "Unhandled type $T")
-    return quote
-        zs = tuple_map(zero_reverse_data_from_type, $(fieldtypes(P)))
-        return $R(NamedTuple{$(fieldnames(P))}(zs))
+    rdata_field_zeros_exprs = ntuple(fieldcount(P)) do n
+        R_field = rdata_field_type(P, n)
+        if R_field <: PossiblyUninitTangent
+            return :($R_field(zero_reverse_data_from_type($(fieldtype(P, n)))))
+        else
+            return :(zero_reverse_data_from_type($(fieldtype(P, n))))
+        end
     end
+    backing_data_expr = Expr(:call, :tuple, rdata_field_zeros_exprs...)
+    backing_expr = :($(rdata_backing_type(P))($backing_data_expr))
+    return Expr(:call, R, backing_expr)
 end
 
 @generated function zero_reverse_data_from_type(::Type{P}) where {P<:Tuple}
@@ -323,15 +374,29 @@ combine_data(::Type{T}, f::T, ::NoRvsData) where {T} = f
 
 # General structs.
 function combine_data(::Type{T}, f::FwdsData{F}, r::RvsData{R}) where {T<:Tangent, F, R}
+    return __combine_struct_data(T, f.data, r.data)
+end
+
+function combine_data(::Type{T}, f::NoFwdsData, r::RvsData{R}) where {T<:Tangent, R}
+    return __combine_struct_data(T, tuple_map(_ -> NoFwdsData(), r.data), r.data)
+end
+
+function combine_data(::Type{T}, f::FwdsData{F}, ::NoRvsData) where {T<:Tangent, F}
+    return __combine_struct_data(T, f.data, tuple_map(_ -> NoRvsData(), f.data))
+end
+
+# Helper used for combining fdata and rdata for (mutable) structs.
+function __combine_struct_data(::Type{T}, fs, rs) where {T<:Tangent}
     nt = fields_type(T)
-    Ts = fieldtypes(nt)
-    return T(nt(tuple(map(combine_data, Ts, f.data, r.data)...)))
+    return T(nt(map(combine_data, fieldtypes(nt), fs, rs)))
 end
 
-function combine_data(::Type{T}, f::FwdsData{F}, ::NoRvsData) where {T<:Tangent, names, F<:NamedTuple{names}}
-    return combine_data(T, f, RvsData(NamedTuple{names}(tuple_map(_ -> NoRvsData(), names))))
+function combine_data(
+    ::Type{PossiblyUninitTangent{T}}, f::PossiblyUninitTangent, r::PossiblyUninitTangent
+) where {T}
+    Tout = PossiblyUninitTangent{T}
+    return is_init(f) ? Tout(combine_data(T, val(f), val(r))) : Tout()
 end
-
 
 # Tuples and NamedTuples
 function combine_data(::Type{T}, f::Tuple, r::Tuple) where {T}
@@ -346,7 +411,6 @@ end
 function combine_data(::Type{T}, f::NoFwdsData, r::Union{Tuple, NamedTuple}) where {T}
     return combine_data(T, map(_ -> NoFwdsData(), r), r)
 end
-
 
 """
     zero_tangent(p, ::NoFwdsData)
