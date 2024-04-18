@@ -453,11 +453,12 @@ function isbits_arrayset_rrule(
     )
     arrayset(_inbounds, primal(A), primal(v), _inds...)
 
+    _A = primal(A)
     dA = tangent(A)
     arrayset(_inbounds, dA, zero_tangent(primal(v)), _inds...)
     function isbits_arrayset_pullback!!(::NoRData)
         dv = arrayref(_inbounds, dA, _inds...)
-        arrayset(_inbounds, primal(A), old_A[1], _inds...)
+        arrayset(_inbounds, _A, old_A[1], _inds...)
         arrayset(_inbounds, dA, old_A[2], _inds...)
         return NoRData(), NoRData(), NoRData(), dv, tuple_map(_ -> NoRData(), _inds)...
     end
@@ -477,9 +478,11 @@ end
 
 function rrule!!(::CoDual{typeof(Core.ifelse)}, cond, a, b)
     _cond = primal(cond)
+    p_a = primal(a)
+    p_b = primal(b)
     function ifelse_pullback!!(dc)
-        da = _cond ? dc : zero_rdata(primal(a))
-        db = _cond ? zero_rdata(primal(b)) : dc
+        da = _cond ? dc : zero_rdata(p_a)
+        db = _cond ? zero_rdata(p_b) : dc
         return NoRData(), NoRData(), da, db
     end
     return ifelse(_cond, a, b), ifelse_pullback!!
