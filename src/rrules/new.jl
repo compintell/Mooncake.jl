@@ -22,18 +22,16 @@ end
 
 @inline @generated function build_fdata(::Type{P}, fdata::Tuple) where {P}
     names = fieldnames(P)
-    arg_types = fdata.parameters
     fdata_exprs = map(eachindex(names)) do n
         F = fdata_field_type(P, n)
-        if n <= length(arg_types)
+        if n <= length(fdata.parameters)
             data_expr = Expr(:call, getfield, :fdata, n)
             return F <: PossiblyUninitTangent ? Expr(:call, F, data_expr) : data_expr
         else
             return :($F())
         end
     end
-    fdata_tuple = Expr(:call, tuple, fdata_exprs...)
-    return :(FData(NamedTuple{$names}($fdata_tuple)))
+    return :(FData(NamedTuple{$names}($(Expr(:call, tuple, fdata_exprs...)))))
 end
 
 @inline function build_fdata(::Type{P}, fdata::Tuple) where {P<:NamedTuple}
