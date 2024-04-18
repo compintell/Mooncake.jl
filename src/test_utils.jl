@@ -1405,7 +1405,7 @@ function generate_test_functions()
         (false, :allocs, nothing, new_tester_2, 4.0),
         # (false, :none, nothing, new_tester_3, Ref{Any}(Tuple{Float64})),
         # (false, :allocs, nothing, type_stable_getfield_tester_1, StableFoo(5.0, :hi)),
-        # (false, :allocs, nothing, type_stable_getfield_tester_2, StableFoo(5.0, :hi)),
+        (false, :allocs, nothing, type_stable_getfield_tester_2, StableFoo(5.0, :hi)),
         (false, :none, nothing, globalref_tester),
         (false, :none, nothing, globalref_tester_bool),
         # (false, :none, nothing, globalref_tester_2, true),
@@ -1452,8 +1452,8 @@ function generate_test_functions()
         (false, :allocs, nothing, varargs_tester_4, 5.0, 4),
         (false, :allocs, nothing, varargs_tester_4, 5.0, 4, 3.0),
         (false, :allocs, nothing, splatting_tester, 5.0),
-        # (false, :allocs, nothing, splatting_tester, (5.0, 4.0)),
-        # (false, :allocs, nothing, splatting_tester, (5.0, 4.0, 3.0)),
+        (false, :allocs, nothing, splatting_tester, (5.0, 4.0)),
+        (false, :allocs, nothing, splatting_tester, (5.0, 4.0, 3.0)),
         # # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}(5.0)), # known failure case -- no rrule for _apply_iterate
         # # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}((5.0, 4.0))), # known failure case -- no rrule for _apply_iterate
         # # (false, :stability, nothing, unstable_splatting_tester, Ref{Any}((5.0, 4.0, 3.0))), # known failure case -- no rrule for _apply_iterate
@@ -1465,8 +1465,8 @@ function generate_test_functions()
         #     false, :none, (lb=1, ub=500),
         #     test_union_of_types, Ref{Union{Type{Float64}, Type{Int}}}(Float64),
         # ),
-        # (false, :allocs, nothing, test_self_reference, 1.1, 1.5),
-        # (false, :allocs, nothing, test_self_reference, 1.5, 1.1),
+        (false, :allocs, nothing, test_self_reference, 1.1, 1.5),
+        (false, :allocs, nothing, test_self_reference, 1.5, 1.1),
         # (false, :none, nothing, test_recursive_sum, randn(2)),
         # (
         #     false, :none, (lb=1, ub=1_000),
@@ -1476,8 +1476,8 @@ function generate_test_functions()
         #     randn(5, 4),
         #     (5, 4),
         # ), # for Bool comma,
-        # (false, :allocs, nothing, getfield_tester, (5.0, 5)),
-        # (false, :allocs, nothing, getfield_tester_2, (5.0, 5)),
+        (false, :allocs, nothing, getfield_tester, (5.0, 5)),
+        (false, :allocs, nothing, getfield_tester_2, (5.0, 5)),
         # (
         #     false, :allocs, nothing,
         #     setfield_tester_left!, FullyInitMutableStruct(5.0, randn(3)), 4.0,
@@ -1499,18 +1499,18 @@ function generate_test_functions()
         (false, :allocs, nothing, test_isbits_multiple_usage_phi, false, 1.1),
         (false, :allocs, nothing, test_isbits_multiple_usage_phi, true, 1.1),
         (false, :allocs, nothing, test_multiple_call_non_primitive, 5.0),
-        # # (false, :none, (lb=1, ub=1500), test_multiple_pi_nodes, Ref{Any}(5.0)),
-        # # (false, :none, (lb=1, ub=1500), test_multi_use_pi_node, Ref{Any}(5.0)),
-        # # (false, :allocs, nothing, test_getindex, [1.0, 2.0]),
-        # # (false, :allocs, nothing, test_mutation!, [1.0, 2.0]),
+        # (false, :none, (lb=1, ub=1500), test_multiple_pi_nodes, Ref{Any}(5.0)),
+        # (false, :none, (lb=1, ub=1500), test_multi_use_pi_node, Ref{Any}(5.0)),
+        (false, :allocs, nothing, test_getindex, [1.0, 2.0]),
+        # (false, :allocs, nothing, test_mutation!, [1.0, 2.0]),
         (false, :allocs, nothing, test_while_loop, 2.0),
         (false, :allocs, nothing, test_for_loop, 3.0),
-        # # (false, :none, nothing, test_mutable_struct_basic, 5.0),
-        # # (false, :none, nothing, test_mutable_struct_basic_sin, 5.0),
-        # # (false, :none, nothing, test_mutable_struct_setfield, 4.0),
-        # # (false, :none, (lb=1, ub=2_000), test_mutable_struct, 5.0),
-        # # (false, :none, nothing, test_struct_partial_init, 3.5),
-        # # (false, :none, nothing, test_mutable_partial_init, 3.3),
+        # (false, :none, nothing, test_mutable_struct_basic, 5.0),
+        # (false, :none, nothing, test_mutable_struct_basic_sin, 5.0),
+        # (false, :none, nothing, test_mutable_struct_setfield, 4.0),
+        # (false, :none, (lb=1, ub=2_000), test_mutable_struct, 5.0),
+        (false, :none, nothing, test_struct_partial_init, 3.5),
+        # (false, :none, nothing, test_mutable_partial_init, 3.3),
         (
             false, :allocs, nothing,
             test_naive_mat_mul!, randn(100, 50), randn(100, 30), randn(30, 50),
@@ -1540,8 +1540,9 @@ function generate_test_functions()
         #     randn(sr(2), 700, 500),
         #     randn(sr(3), 300, 700),
         # ),
-        (false, :allocs, (lb=1.0, ub=150), test_handwritten_sum, randn(1024 * 1024)),
-        (false, :allocs, (lb=1.0, ub=150), _naive_map_sin_cos_exp, randn(1024 ^ 2), randn(1024 ^ 2)),
+        (false, :allocs, (lb=1.0, ub=150), test_handwritten_sum, randn(1024)),
+        (false, :allocs, (lb=1.0, ub=150), _naive_map_sin_cos_exp, randn(1024), randn(1024)),
+        (false, :allocs, (lb=1.0, ub=150), _naive_map_negate, randn(1024), randn(1024)),
         (false, :allocs, nothing, test_from_slack, randn(10_000)),
         # (false, :none, nothing, _sum, randn(1024)),
         # (false, :none, nothing, test_map, randn(1024), randn(1024)),
@@ -1552,6 +1553,15 @@ function _naive_map_sin_cos_exp(y::AbstractArray{<:Real}, x::AbstractArray{<:Rea
     n = 1
     while n <= length(x)
         y[n] = sin(cos(exp(x[n])))
+        n += 1
+    end
+    return y
+end
+
+function _naive_map_negate(y::AbstractArray{<:Real}, x::AbstractArray{<:Real})
+    n = 1
+    while n <= length(x)
+        y[n] = -x[n]
         n += 1
     end
     return y
