@@ -22,6 +22,14 @@ Apply type checking to enforce pre- and post-conditions on `pb.pb`. See the docs
 function (pb::SafePullback)(dy)
     verify_rvs_type(pb.y, dy)
     dx = pb.pb(dy)
+
+    # Number of arguments and number of elements in pullback must match.
+    l_pb = length(pb.x)
+    l_dx = length(dx)
+    if l_pb != l_dx
+        error("length(pb.x) == $l_pb but length(dx) == $l_dx. They must to be equal.")
+    end
+
     # Use for-loop to keep stack trace as simple as possible.
     for (x, dx) in zip(pb.x, dx)
         verify_rvs_type(x, dx)
