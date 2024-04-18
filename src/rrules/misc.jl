@@ -112,13 +112,23 @@ function rrule!!(
 ) where {P, f, order}
     T = tangent_type(P)
     R = rdata_type(T)
-    dx_r = zero_rdata(primal(x))
-    if ismutabletype(P)
 
+    if ismutabletype(P)
+        dx = tangent(x)
+        pb!! = if R == NoRData
+            NoPullback((NoRData(), NoRData(), NoRData(), NoRData()))
+        else
+            function mutable_lgetfield_pb!!(dy)
+                return NoRData(), increment_field_rdata!!(dx, dy, Val{f}()), NoRData(), NoRData()
+            end
+        end
+        y = CoDual(getfield(primal(x), f), fdata(_get_fdata_field(primal(x), tangent(x), f)))
+        return y, pb!!
     else
         pb!! = if R == NoRData
             NoPullback((NoRData(), NoRData(), NoRData()))
         else
+            dx_r = zero_rdata(primal(x))
             function immutable_lgetfield_pb!!(dy)
                 return NoRData(), increment_field!!(dx_r, dy, Val{f}()), NoRData(), NoRData()
             end
