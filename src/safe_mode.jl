@@ -23,7 +23,8 @@ function (pb::SafePullback)(dy)
     verify_rvs_type(pb.y, dy)
     dx = pb.pb(dy)
 
-    # Number of arguments and number of elements in pullback must match.
+    # Number of arguments and number of elements in pullback must match. Have to check this
+    # because `zip` doesn't require equal lengths for arguments.
     l_pb = length(pb.x)
     l_dx = length(dx)
     if l_pb != l_dx
