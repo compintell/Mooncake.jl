@@ -19,7 +19,10 @@ function rrule!!(
     elseif R == NoRData
         NoPullback((NoRData(), NoRData(), tuple_map(zero_rdata ∘ tangent, x)...))
     else
-        _new_pullback_for_immutable!!
+        function _new_pullback_for_immutable!!(dy::T) where {T}
+            data = Tuple(T <: NamedTuple ? dy : dy.data)[1:N]
+            return NoRData(), NoRData(), map(_value, data)...
+        end
     end
     return CoDual(y, dy), pb!!
 end
@@ -48,9 +51,6 @@ end
 @inline function build_fdata(::Type{P}, x::Tuple, fdata::Tuple) where {P<:NamedTuple}
     return fdata_type(tangent_type(P))(fdata)
 end
-
-_new_pullback_for_immutable!!(dy::NamedTuple) = (NoRData(), NoRData(), dy...)
-_new_pullback_for_immutable!!(dy::RData) = (NoRData(), NoRData(), map(_value, dy.data)...)
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:new})
 
