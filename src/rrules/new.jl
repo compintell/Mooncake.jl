@@ -91,6 +91,22 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:new})
         (false, :none, nothing, _new_, TestResources.MutableFoo, 6.0),
         (false, :stability_and_allocs, nothing, _new_, TestResources.StructNoFwds, 5.0),
         (false, :stability_and_allocs, nothing, _new_, TestResources.StructNoRvs, [5.0]),
+        (
+            false, :stability_and_allocs, nothing,
+            _new_, LowerTriangular{Float64, Matrix{Float64}}, randn(2, 2),
+        ),
+        (
+            false, :stability_and_allocs, nothing,
+            _new_, UpperTriangular{Float64, Matrix{Float64}}, randn(2, 2),
+        ),
+        (
+            false, :stability_and_allocs, nothing,
+            _new_, UnitLowerTriangular{Float64, Matrix{Float64}}, randn(2, 2),
+        ),
+        (
+            false, :stability_and_allocs, nothing,
+            _new_, UnitUpperTriangular{Float64, Matrix{Float64}}, randn(2, 2),
+        ),
     ]
     memory = Any[]
     return test_cases, memory
