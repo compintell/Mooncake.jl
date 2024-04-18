@@ -716,9 +716,12 @@ function tangent_test_cases()
         (randn(10), 3),
         (randn(10), randn(10)),
     ]
+
+
+
     return vcat(
         map(x -> (false, x...), abs_test_cases),
         map(x -> (false, x), rel_test_cases),
-        Tapir.TestTypes.PRIMALS,
+        map(Tapir.TestTypes.instantiate, Tapir.TestTypes.PRIMALS),
     )
 end

@@ -13,7 +13,7 @@ using Core: svec
 using ExprTools: combinedef
 using ..Tapir: NoTangent, tangent_type, _typeof
 
-const PRIMALS = Tuple{Bool, Any}[]
+const PRIMALS = Tuple{Bool, Any, Tuple}[]
 
 # Generate all of the composite types against which we might wish to test.
 function generate_primals()
@@ -66,13 +66,15 @@ function generate_primals()
             t = @eval $name
             for n in n_always_def:n_fields
                 interface_only = any(x -> isbitstype(x.type), fields[n+1:end])
-                p = invokelatest(t, map(x -> deepcopy(x.primal), fields[1:n])...)
-                push!(PRIMALS, (interface_only, p))
+                fields_copies = map(x -> deepcopy(x.primal), fields[1:n])
+                push!(PRIMALS, (interface_only, t, fields_copies))
             end
         end
     end
     return nothing
 end
+
+instantiate(test_case) = (test_case[1], test_case[2](test_case[3]...))
 
 end
 
