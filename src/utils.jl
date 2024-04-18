@@ -19,8 +19,9 @@ As a consequence, if `x` is very long, this function may have very large compile
     tuple_map(f::F, x::Tuple, y::Tuple) where {F}
 
 Binary extension of `tuple_map`. Nearly equivalent to `map(f, x, y)`, but guaranteed to
-specialise on all element types of `x` and `y`, and with throw an argument error if `x` and
-`y` aren't the same length.
+specialise on all element types of `x` and `y`. Furthermore, errors if `x` and `y` aren't
+the same length, while `map` will just produce a new tuple whose length is equal to the
+shorter of `x` and `y`.
 """
 @inline @generated function tuple_map(f::F, x::Tuple) where {F}
     return Expr(:call, :tuple, map(n -> :(f(getfield(x, $n))), eachindex(x.parameters))...)
