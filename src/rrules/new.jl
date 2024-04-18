@@ -35,7 +35,6 @@ end
             return :($F())
         end
     end
-    container_type = ismutabletype(P) ? MutableTangent : FData
     F_out = fdata_type(tangent_type(P))
     return :($F_out(NamedTuple{$names}($(Expr(:call, tuple, fdata_exprs...)))))
 end
