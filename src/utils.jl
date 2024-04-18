@@ -10,7 +10,7 @@ _typeof(x::NamedTuple{names}) where {names} = NamedTuple{names, _typeof(Tuple(x)
 """
     tuple_map(f::F, x::Tuple) where {F}
 
-This function is semantically equivalent to `map(f, x)`, but always specialises on all of
+This function is largely equivalent to `map(f, x)`, but always specialises on all of
 the element types of `x`, regardless the length of `x`. This contrasts with `map`, in which
 the number of element types specialised upon is a fixed constant in the compiler.
 
