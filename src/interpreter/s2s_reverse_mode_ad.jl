@@ -69,6 +69,8 @@ function shared_data_stmts(p::SharedDataPairs)::Vector{Tuple{ID, NewInstruction}
     end
 end
 
+const BlockStack = Stack{Int32}
+
 #=
     ADInfo
 
@@ -98,7 +100,7 @@ codegen which produces the forwards- and reverse-passes.
 struct ADInfo
     interp::PInterp
     block_stack_id::ID
-    block_stack::Stack{Int32}
+    block_stack::BlockStack
     entry_id::ID
     shared_data_pairs::SharedDataPairs
     arg_types::Dict{Argument, Any}
@@ -116,7 +118,7 @@ function ADInfo(
     safety_on::Bool,
 )
     shared_data_pairs = SharedDataPairs()
-    block_stack = Stack{Int32}()
+    block_stack = BlockStack()
     return ADInfo(
         interp,
         add_data!(shared_data_pairs, block_stack),
@@ -713,7 +715,7 @@ function forwards_pass_ir(ir::BBCode, ad_stmts_blocks::ADStmts, info::ADInfo, Ts
     return BBCode(vcat(entry_block, blocks), arg_types, ir.sptypes, ir.linetable, ir.meta)
 end
 
-@inline __push_blk_stack!(block_stack::Stack{Int32}, id::Int32) = push!(block_stack, id)
+@inline __push_blk_stack!(block_stack::BlockStack, id::Int32) = push!(block_stack, id)
 
 #=
     pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, Tshared_data)
@@ -915,7 +917,7 @@ function make_switch_stmts(pred_ids::Vector{ID}, info::ADInfo)
     return make_switch_stmts(pred_ids, pred_ids, info)
 end
 
-@inline __pop_blk_stack!(block_stack::Stack{Int32}) = pop!(block_stack)
+@inline __pop_blk_stack!(block_stack::BlockStack) = pop!(block_stack)
 
 # Helper function emitted by `make_switch_stmts`.
 __switch_case(id::Int32, predecessor_id::Int32) = !(id === predecessor_id)
