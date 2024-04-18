@@ -124,7 +124,7 @@ translate(::Val{Intrinsics.cglobal}) = __cglobal
 Tapir.is_primitive(::Type{MinimalCtx}, ::Type{<:Tuple{typeof(__cglobal), Vararg}}) = true
 function rrule!!(::CoDual{typeof(__cglobal)}, args...)
     pb!! = NoPullback((NoRData(), tuple_map(zero_rdata, args)...))
-    return Tapir.uninit_fdata(__cglobal(map(primal, args)...)), pb!!
+    return Tapir.uninit_fcodual(__cglobal(map(primal, args)...)), pb!!
 end
 
 @inactive_intrinsic checked_sadd_int
