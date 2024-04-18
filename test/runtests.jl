@@ -6,7 +6,7 @@ include("front_matter.jl")
         include("tangents.jl")
         include("fwds_rvs_data.jl")
         include("codual.jl")
-        include("safety.jl")
+        include("safe_mode.jl")
         include("stack.jl")
         @testset "interpreter" begin
             include(joinpath("interpreter", "contexts.jl"))
