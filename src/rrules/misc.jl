@@ -61,39 +61,71 @@ This approach is identical to the one taken by `Zygote.jl` to circumvent the sam
 lgetfield(x, ::Val{f}) where {f} = getfield(x, f)
 
 @is_primitive MinimalCtx Tuple{typeof(lgetfield), Any, Any}
-function rrule!!(::CoDual{typeof(lgetfield)}, x::CoDual, ::CoDual{Val{f}}) where {f}
-    lgetfield_pb!!(dy) = NoRData(), increment_field!!(dx, dy, Val{f}()), NoRData()
-    y = CoDual(getfield(primal(x), f), _get_tangent_field(primal(x), tangent(x), f))
-    return y, lgetfield_pb!!
+function rrule!!(::CoDual{typeof(lgetfield)}, x::CoDual{P}, ::CoDual{Val{f}}) where {P, f}
+    T = tangent_type(P)
+    R = rdata_type(T)
+
+    if ismutabletype(P)
+        dx = tangent(x)
+        pb!! = if R == NoRData
+            NoPullback((NoRData(), NoRData(), NoRData()))
+        else
+            function mutable_lgetfield_pb!!(dy)
+                return NoRData(), increment_field_rdata!!(dx, dy, Val{f}()), NoRData()
+            end
+        end
+        y = CoDual(getfield(primal(x), f), fdata(_get_fdata_field(primal(x), tangent(x), f)))
+        return y, pb!!
+    else
+        pb!! = if R == NoRData
+            NoPullback((NoRData(), NoRData(), NoRData()))
+        else
+            dx_r = zero_rdata(primal(x))
+            function immutable_lgetfield_pb!!(dy)
+                return NoRData(), increment_field!!(dx_r, dy, Val{f}()), NoRData()
+            end
+        end
+        y = CoDual(getfield(primal(x), f), _get_fdata_field(primal(x), tangent(x), f))
+        return y, pb!!
+    end
 end
 
-# Specialise for non-differentiable arguments.
-function rrule!!(
-    ::CoDual{typeof(lgetfield)}, x::CoDual{<:Any, NoTangent}, ::CoDual{Val{f}}
-) where {f}
-    return uninit_codual(getfield(primal(x), f)), NoPullback()
+_get_fdata_field(_, tangent::Union{Tuple, NamedTuple}, f...) = getfield(tangent, f...)
+_get_fdata_field(_, data::FData, f...) = _value(getfield(data.data, f...))
+_get_fdata_field(primal, ::NoFData, f...) = uninit_fdata(getfield(primal, f...))
+_get_fdata_field(_, tangent::MutableTangent, f...) = _value(getfield(tangent.fields, f...))
+
+function increment_field_rdata!!(dx::MutableTangent, dy_rdata, ::Val{f}) where {f}
+    dy = combine_data(fdata(lgetfield(dx.fields, f)), dy_rdata)
+    return increment_field!!(dx, dy, Val(f))
 end
+
+#
+# lgetfield with order argument
+#
 
 lgetfield(x, ::Val{f}, ::Val{order}) where {f, order} = getfield(x, f, order)
 
 @is_primitive MinimalCtx Tuple{typeof(lgetfield), Any, Any, Any}
 function rrule!!(
-    ::CoDual{typeof(lgetfield)}, x::CoDual, ::CoDual{Val{f}}, ::CoDual{Val{order}}
-) where {f, order}
-    function lgetfield_pb!!(dy, df, dx, dsym, dorder)
-        return df, increment_field!!(dx, dy, Val{f}()), dsym, dorder
-    end
-    y = CoDual(getfield(primal(x), f), _get_tangent_field(primal(x), tangent(x), f))
-    return y, lgetfield_pb!!
-end
+    ::CoDual{typeof(lgetfield)}, x::CoDual{P}, ::CoDual{Val{f}}, ::CoDual{Val{order}}
+) where {P, f, order}
+    T = tangent_type(P)
+    R = rdata_type(T)
+    dx_r = zero_rdata(primal(x))
+    if ismutabletype(P)
 
-function rrule!!(
-    ::CoDual{typeof(lgetfield)},
-    x::CoDual{<:Any, NoTangent},
-    ::CoDual{Val{f}},
-    ::CoDual{Val{order}},
-) where {f, order}
-    return uninit_codual(getfield(primal(x), f)), NoPullback()
+    else
+        pb!! = if R == NoRData
+            NoPullback((NoRData(), NoRData(), NoRData()))
+        else
+            function immutable_lgetfield_pb!!(dy)
+                return NoRData(), increment_field!!(dx_r, dy, Val{f}()), NoRData(), NoRData()
+            end
+        end
+        y = CoDual(getfield(primal(x), f, order), _get_fdata_field(primal(x), tangent(x), f))
+        return y, pb!!
+    end
 end
 
 """
@@ -193,16 +225,46 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
         (false, :allocs, nothing, Threads.nthreads),
 
         # Literal replacements for getfield.
+
+        # Tuple
         (false, :stability_and_allocs, nothing, lgetfield, (5.0, 4), Val(1)),
-        # (false, :stability_and_allocs, nothing, lgetfield, (5.0, 4), Val(2)),
-        # (false, :stability_and_allocs, nothing, lgetfield, (1, 4), Val(2)),
-        # (false, :stability_and_allocs, nothing, lgetfield, ((), 4), Val(2)),
-        # (false, :stability_and_allocs, nothing, lgetfield, (a=5.0, b=4), Val(1)),
-        # (false, :stability_and_allocs, nothing, lgetfield, (a=5.0, b=4), Val(2)),
-        # (false, :stability_and_allocs, nothing, lgetfield, (a=5.0, b=4), Val(:a)),
-        # (false, :stability_and_allocs, nothing, lgetfield, (a=5.0, b=4), Val(:b)),
-        # (false, :stability_and_allocs, nothing, lgetfield, 1:5, Val(:start)),
-        # (false, :stability_and_allocs, nothing, lgetfield, 1:5, Val(:stop)),
+        (false, :stability_and_allocs, nothing, lgetfield, (5.0, 4), Val(2)),
+        (false, :stability_and_allocs, nothing, lgetfield, (1, 4), Val(2)),
+        (false, :stability_and_allocs, nothing, lgetfield, ((), 4), Val(2)),
+        (false, :stability_and_allocs, nothing, lgetfield, (randn(2),), Val(1)),
+        (false, :stability_and_allocs, nothing, lgetfield, (randn(2), 5), Val(1)),
+        (false, :stability_and_allocs, nothing, lgetfield, (randn(2), 5), Val(2)),
+
+        # NamedTuple
+        (false, :stability_and_allocs, nothing, lgetfield, (a=5.0, b=4), Val(1)),
+        (false, :stability_and_allocs, nothing, lgetfield, (a=5.0, b=4), Val(2)),
+        (false, :stability_and_allocs, nothing, lgetfield, (a=5.0, b=4), Val(:a)),
+        (false, :stability_and_allocs, nothing, lgetfield, (a=5.0, b=4), Val(:b)),
+        (false, :stability_and_allocs, nothing, lgetfield, (y=randn(2),), Val(1)),
+        (false, :stability_and_allocs, nothing, lgetfield, (y=randn(2),), Val(:y)),
+        (false, :stability_and_allocs, nothing, lgetfield, (y=randn(2), x=5), Val(1)),
+        (false, :stability_and_allocs, nothing, lgetfield, (y=randn(2), x=5), Val(2)),
+        (false, :stability_and_allocs, nothing, lgetfield, (y=randn(2), x=5), Val(:y)),
+        (false, :stability_and_allocs, nothing, lgetfield, (y=randn(2), x=5), Val(:x)),
+
+        # structs
+        (false, :stability_and_allocs, nothing, lgetfield, 1:5, Val(:start)),
+        (false, :stability_and_allocs, nothing, lgetfield, 1:5, Val(:stop)),
+        (true, :none, nothing, lgetfield, StructFoo(5.0), Val(:a)),
+        (false, :none, nothing, lgetfield, StructFoo(5.0, randn(5)), Val(:a)),
+        (false, :none, nothing, lgetfield, StructFoo(5.0, randn(5)), Val(:b)),
+        (true, :none, nothing, lgetfield, StructFoo(5.0), Val(1)),
+        (false, :none, nothing, lgetfield, StructFoo(5.0, randn(5)), Val(1)),
+        (false, :none, nothing, lgetfield, StructFoo(5.0, randn(5)), Val(2)),
+
+        # mutable structs
+        (true, :none, nothing, lgetfield, MutableFoo(5.0), Val(:a)),
+        (false, :none, nothing, lgetfield, MutableFoo(5.0, randn(5)), Val(:b)),
+        (false, :none, nothing, lgetfield, UInt8, Val(:name)),
+        (false, :none, nothing, lgetfield, UInt8, Val(:super)),
+        (true, :none, nothing, lgetfield, UInt8, Val(:layout)),
+        (false, :none, nothing, lgetfield, UInt8, Val(:hash)),
+        (false, :none, nothing, lgetfield, UInt8, Val(:flags)),
 
         # # Literal replacement for setfield!.
         # (
