@@ -1,9 +1,8 @@
-_new_pullback!!(dy) = (NoRData(), NoRData(), map(_value, dy.data)...)
-_new_pullback!!(dy::Union{Tuple, NamedTuple}) = (NoRData(), NoRData(), dy...)
-
 @inline @generated function _new_(::Type{T}, x::Vararg{Any, N}) where {T, N}
     return Expr(:new, :T, map(n -> :(x[$n]), 1:N)...)
 end
+
+@is_primitive MinimalCtx Tuple{typeof(_new_), Vararg}
 
 function rrule!!(
     ::CoDual{typeof(_new_)}, ::CoDual{Type{P}}, x::Vararg{CoDual, N}
@@ -11,34 +10,46 @@ function rrule!!(
     y = _new_(P, tuple_map(primal, x)...)
     F = fdata_type(tangent_type(P))
     R = rdata_type(tangent_type(P))
-    dy = F == NoFData ? NoFData() : build_fdata(P, tuple_map(tangent, x))
-    pb!! = if R == NoRData
+    dy = F == NoFData ? NoFData() : build_fdata(P, tuple_map(primal, x), tuple_map(tangent, x))
+    pb!! = if ismutabletype(P)
+        function _mutable_new_pullback!!(::NoRData)
+            return NoRData(), NoRData(), tuple_map(rdata ∘ _value,  dy.fields)...
+        end
+    elseif R == NoRData
         NoPullback((NoRData(), NoRData(), tuple_map(zero_rdata ∘ tangent, x)...))
     else
-        _new_pullback!!
+        _new_pullback_for_immutable!!
     end
     return CoDual(y, dy), pb!!
 end
 
-@inline @generated function build_fdata(::Type{P}, fdata::Tuple) where {P}
+@generated function build_fdata(::Type{P}, x::Tuple, fdata::Tuple) where {P}
     names = fieldnames(P)
     fdata_exprs = map(eachindex(names)) do n
         F = fdata_field_type(P, n)
         if n <= length(fdata.parameters)
-            data_expr = Expr(:call, getfield, :fdata, n)
+            data_expr = Expr(:call, __get_data, P, :x, :fdata, n)
             return F <: PossiblyUninitTangent ? Expr(:call, F, data_expr) : data_expr
         else
             return :($F())
         end
     end
-    return :(FData(NamedTuple{$names}($(Expr(:call, tuple, fdata_exprs...)))))
+    container_type = ismutabletype(P) ? MutableTangent : FData
+    return :($container_type(NamedTuple{$names}($(Expr(:call, tuple, fdata_exprs...)))))
 end
 
-@inline function build_fdata(::Type{P}, fdata::Tuple) where {P<:NamedTuple}
+# Helper for build_fdata
+@inline function __get_data(::Type{P}, x, f, n) where {P}
+    tmp = getfield(f, n)
+    return ismutabletype(P) ? zero_tangent(getfield(x, n), tmp) : tmp
+end
+
+@inline function build_fdata(::Type{P}, x::Tuple, fdata::Tuple) where {P<:NamedTuple}
     return fdata_type(tangent_type(P))(fdata)
 end
 
-@is_primitive MinimalCtx Tuple{typeof(_new_), Vararg}
+_new_pullback_for_immutable!!(dy::NamedTuple) = (NoRData(), NoRData(), dy...)
+_new_pullback_for_immutable!!(dy::RData) = (NoRData(), NoRData(), map(_value, dy.data)...)
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:new})
     test_cases = Any[
@@ -62,14 +73,14 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:new})
             _new_, TestResources.TypeStableStruct{Float64}, 5, 4.0,
         ),
         (false, :stability_and_allocs, nothing, _new_, UnitRange{Int64}, 5, 4),
-        # (
-        #     false, :stability_and_allocs, nothing,
-        #     _new_, TestResources.TypeStableMutableStruct{Float64}, 5.0, 4.0,
-        # ),
-        # (
-        #     false, :none, nothing,
-        #     _new_, TestResources.TypeStableMutableStruct{Any}, 5.0, 4.0,
-        # ),
+        (
+            false, :stability_and_allocs, nothing,
+            _new_, TestResources.TypeStableMutableStruct{Float64}, 5.0, 4.0,
+        ),
+        (
+            false, :none, nothing,
+            _new_, TestResources.TypeStableMutableStruct{Any}, 5.0, 4.0,
+        ),
     ]
     memory = Any[]
     return test_cases, memory

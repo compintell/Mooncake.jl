@@ -96,7 +96,8 @@ Returns the type of to the nth field of the fdata type associated to `P`. Will b
 `PossiblyUninitTangent` if said field can be undefined.
 """
 function fdata_field_type(::Type{P}, n::Int) where {P}
-    f = fdata_type(tangent_type(fieldtype(P, n)))
+    Tf = tangent_type(fieldtype(P, n))
+    f = ismutabletype(P) ? Tf : fdata_type(Tf)
     return is_always_initialised(P, n) ? f : _wrap_type(f)
 end
 
