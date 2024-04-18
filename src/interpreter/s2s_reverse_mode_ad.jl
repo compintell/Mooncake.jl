@@ -527,9 +527,9 @@ struct DerivedRule{Tfwds_oc, Tpb_oc, Tisva<:Val, Tnargs<:Val}
 end
 
 @inline function (fwds::DerivedRule{P, Q, S})(args::Vararg{CoDual, N}) where {P, Q, S, N}
-    args = __unflatten_codual_varargs(fwds.isva, args, fwds.nargs)
+    uf_args = __unflatten_codual_varargs(fwds.isva, args, fwds.nargs)
     pb!! = Pullback(fwds.pb_oc, fwds.isva, nvargs(length(args), fwds.nargs))
-    return fwds.fwds_oc(args...)::CoDual, pb!!
+    return fwds.fwds_oc(uf_args...)::CoDual, pb!!
 end
 
 @inline nvargs(n_flat, ::Val{nargs}) where {nargs} = Val(n_flat - nargs + 1)
