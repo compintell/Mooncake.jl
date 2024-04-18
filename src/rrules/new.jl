@@ -13,7 +13,8 @@ function rrule!!(
     dy = F == NoFData ? NoFData() : build_fdata(P, tuple_map(primal, x), tuple_map(tangent, x))
     pb!! = if ismutabletype(P)
         function _mutable_new_pullback!!(::NoRData)
-            return NoRData(), NoRData(), tuple_map(rdata ∘ _value,  dy.fields)...
+            rdatas = tuple_map(rdata ∘ _value,  Tuple(dy.fields)[1:N])
+            return NoRData(), NoRData(), rdatas...
         end
     elseif R == NoRData
         NoPullback((NoRData(), NoRData(), tuple_map(zero_rdata ∘ tangent, x)...))
@@ -35,7 +36,8 @@ end
         end
     end
     container_type = ismutabletype(P) ? MutableTangent : FData
-    return :($container_type(NamedTuple{$names}($(Expr(:call, tuple, fdata_exprs...)))))
+    F_out = fdata_type(tangent_type(P))
+    return :($F_out(NamedTuple{$names}($(Expr(:call, tuple, fdata_exprs...)))))
 end
 
 # Helper for build_fdata
@@ -52,6 +54,8 @@ _new_pullback_for_immutable!!(dy::NamedTuple) = (NoRData(), NoRData(), dy...)
 _new_pullback_for_immutable!!(dy::RData) = (NoRData(), NoRData(), map(_value, dy.data)...)
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:new})
+
+    # Specialised test cases for _new_.
     test_cases = Any[
         (false, :stability_and_allocs, nothing, _new_, @NamedTuple{}),
         (false, :stability_and_allocs, nothing, _new_, @NamedTuple{y::Float64}, 5.0),
@@ -81,6 +85,12 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:new})
             false, :none, nothing,
             _new_, TestResources.TypeStableMutableStruct{Any}, 5.0, 4.0,
         ),
+        (false, :none, nothing, _new_, TestResources.StructFoo, 6.0, [1.0, 2.0]),
+        (false, :none, nothing, _new_, TestResources.StructFoo, 6.0),
+        (false, :none, nothing, _new_, TestResources.MutableFoo, 6.0, [1.0, 2.0]),
+        (false, :none, nothing, _new_, TestResources.MutableFoo, 6.0),
+        (false, :stability_and_allocs, nothing, _new_, TestResources.StructNoFwds, 5.0),
+        (false, :stability_and_allocs, nothing, _new_, TestResources.StructNoRvs, [5.0]),
     ]
     memory = Any[]
     return test_cases, memory
