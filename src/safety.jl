@@ -27,7 +27,7 @@ function (pb::SafePullback)(dy)
     l_pb = length(pb.x)
     l_dx = length(dx)
     if l_pb != l_dx
-        error("length(pb.x) == $l_pb but length(dx) == $l_dx. They must to be equal.")
+        error("Number of args = $l_pb but number of rdata = $l_dx. They must to be equal.")
     end
 
     # Use for-loop to keep stack trace as simple as possible.
