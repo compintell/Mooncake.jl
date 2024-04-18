@@ -20,6 +20,10 @@
             map(*, (a=5, b=4.0, c=3), (a=5.0, b=4, c=3.0)),
             Tapir.tuple_map(*, (a=5, b=4.0, c=3), (a=5.0, b=4, c=3.0)),
         )
+
+        # Require that length of arguments are equal.
+        @test_throws ArgumentError Tapir.tuple_map(*, (5.0, 4.0), (4.0, ))
+        @test_throws ArgumentError Tapir.tuple_map(*, (4.0, ), (5.0, 4.0))
     end
     @testset "_map_if_assigned!" begin
         @testset "unary bits type" begin
