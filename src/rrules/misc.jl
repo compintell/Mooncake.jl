@@ -151,39 +151,36 @@ lsetfield!(value, ::Val{name}, x) where {name} = setfield!(value, name, x)
 
 @is_primitive MinimalCtx Tuple{typeof(lsetfield!), Any, Any, Any}
 function rrule!!(
-    ::CoDual{typeof(lsetfield!)}, value::CoDual, ::CoDual{Val{name}}, x::CoDual
-) where {name}
+    ::CoDual{typeof(lsetfield!)}, value::CoDual{P}, ::CoDual{Val{name}}, x::CoDual
+) where {P, name}
+    F = fdata_type(tangent_type(P))
     save = isdefined(primal(value), name)
     old_x = save ? getfield(primal(value), name) : nothing
-    old_dx = save ? val(getfield(tangent(value).fields, name)) : nothing
-    function setfield!_pullback(dy, df, dvalue, dname, dx)
-        new_dx = increment!!(dx, val(getfield(dvalue.fields, name)))
-        new_dx = increment!!(new_dx, dy)
-        old_x !== nothing && lsetfield!(primal(value), Val(name), old_x)
-        old_x !== nothing && set_tangent_field!(tangent(value), name, old_dx)
-        return df, dvalue, dname, new_dx
+    old_dx = if F == NoFData
+        NoFData()
+    else
+        save ? val(getfield(tangent(value).fields, name)) : nothing
     end
-    y = CoDual(
-        lsetfield!(primal(value), Val(name), primal(x)),
-        set_tangent_field!(tangent(value), name, tangent(x)),
-    )
-    return y, setfield!_pullback
-end
-
-function rrule!!(
-    ::CoDual{typeof(lsetfield!)},
-    value::CoDual{<:Any, NoTangent},
-    ::CoDual{Val{name}},
-    x::CoDual,
-) where {name}
-    save = isdefined(primal(value), name)
-    old_x = save ? getfield(primal(value), name) : nothing
-    function setfield!_pullback(dy, df, dvalue, dname, dx)
-        old_x !== nothing && lsetfield!(primal(value), Val(name), old_x)
-        return df, dvalue, dname, dx
+    dx = zero_rdata(primal(x))
+    dvalue = tangent(value)
+    pb!! = if F == NoFData
+        function __setfield!_pullback(dy)
+            new_dx = increment!!(dx, dy)
+            old_x !== nothing && lsetfield!(primal(value), Val(name), old_x)
+            return NoRData(), NoRData(), NoRData(), new_dx
+        end
+    else
+        function setfield!_pullback(dy)
+            new_dx = increment!!(dx, rdata(val(getfield(dvalue.fields, name))))
+            new_dx = increment!!(new_dx, dy)
+            old_x !== nothing && lsetfield!(primal(value), Val(name), old_x)
+            old_x !== nothing && set_tangent_field!(dvalue, name, old_dx)
+            return NoRData(), NoRData(), NoRData(), new_dx
+        end
     end
-    y = CoDual(lsetfield!(primal(value), Val(name), primal(x)), NoTangent())
-    return y, setfield!_pullback
+    yf = F == NoFData ? NoFData() : fdata(set_tangent_field!(dvalue, name, zero_tangent(primal(x), tangent(x))))
+    y = CoDual(lsetfield!(primal(value), Val(name), primal(x)), yf)
+    return y, pb!!
 end
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
@@ -276,23 +273,23 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
         (false, :none, nothing, lgetfield, UInt8, Val(:hash)),
         (false, :none, nothing, lgetfield, UInt8, Val(:flags)),
 
-        # # Literal replacement for setfield!.
-        # (
-        #     false, :stability_and_allocs, nothing,
-        #     lsetfield!, MutableFoo(5.0, [1.0, 2.0]), Val(:a), 4.0,
-        # ),
-        # (
-        #     false, :stability_and_allocs, nothing,
-        #     lsetfield!, FullyInitMutableStruct(5.0, [1.0, 2.0]), Val(:y), [1.0, 3.0, 4.0],
-        # ),
-        # (
-        #     false, :stability_and_allocs, nothing,
-        #     lsetfield!, NonDifferentiableFoo(5, false), Val(:x), 4,
-        # ),
-        # (
-        #     false, :stability_and_allocs, nothing,
-        #     lsetfield!, NonDifferentiableFoo(5, false), Val(:y), true,
-        # )
+        # Literal replacement for setfield!.
+        (
+            false, :stability_and_allocs, nothing,
+            lsetfield!, MutableFoo(5.0, [1.0, 2.0]), Val(:a), 4.0,
+        ),
+        (
+            false, :stability_and_allocs, nothing,
+            lsetfield!, FullyInitMutableStruct(5.0, [1.0, 2.0]), Val(:y), [1.0, 3.0, 4.0],
+        ),
+        (
+            false, :stability_and_allocs, nothing,
+            lsetfield!, NonDifferentiableFoo(5, false), Val(:x), 4,
+        ),
+        (
+            false, :stability_and_allocs, nothing,
+            lsetfield!, NonDifferentiableFoo(5, false), Val(:y), true,
+        )
     ]
     return test_cases, memory
 end
