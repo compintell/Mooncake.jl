@@ -12,16 +12,22 @@ function rrule!!(
     R = rdata_type(tangent_type(P))
     dy = F == NoFData ? NoFData() : build_fdata(P, tuple_map(primal, x), tuple_map(tangent, x))
     pb!! = if ismutabletype(P)
-        function _mutable_new_pullback!!(::NoRData)
-            rdatas = tuple_map(rdata ∘ _value,  Tuple(dy.fields)[1:N])
-            return NoRData(), NoRData(), rdatas...
+        if F == NoFData
+            NoPullback((NoRData(), NoRData(), tuple_map(zero_rdata ∘ tangent, x)...))
+        else
+            function _mutable_new_pullback!!(::NoRData)
+                rdatas = tuple_map(rdata ∘ _value,  Tuple(dy.fields)[1:N])
+                return NoRData(), NoRData(), rdatas...
+            end
         end
-    elseif R == NoRData
-        NoPullback((NoRData(), NoRData(), tuple_map(zero_rdata ∘ tangent, x)...))
     else
-        function _new_pullback_for_immutable!!(dy::T) where {T}
-            data = Tuple(T <: NamedTuple ? dy : dy.data)[1:N]
-            return NoRData(), NoRData(), map(_value, data)...
+        if R == NoRData
+            NoPullback((NoRData(), NoRData(), tuple_map(zero_rdata ∘ tangent, x)...))
+        else
+            function _new_pullback_for_immutable!!(dy::T) where {T}
+                data = Tuple(T <: NamedTuple ? dy : dy.data)[1:N]
+                return NoRData(), NoRData(), map(_value, data)...
+            end
         end
     end
     return CoDual(y, dy), pb!!
@@ -55,7 +61,7 @@ end
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:new})
 
     # Specialised test cases for _new_.
-    test_cases = Any[
+    specific_test_cases = Any[
         (false, :stability_and_allocs, nothing, _new_, @NamedTuple{}),
         (false, :stability_and_allocs, nothing, _new_, @NamedTuple{y::Float64}, 5.0),
         (false, :stability_and_allocs, nothing, _new_, @NamedTuple{y::Int, x::Int}, 5, 4),
@@ -107,6 +113,10 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:new})
             _new_, UnitUpperTriangular{Float64, Matrix{Float64}}, randn(2, 2),
         ),
     ]
+    general_test_cases = map(TestTypes.PRIMALS) do (interface_only, P, args)
+        return (interface_only, :none, nothing, _new_, P, args...)
+    end
+    test_cases = vcat(specific_test_cases, general_test_cases)
     memory = Any[]
     return test_cases, memory
 end
