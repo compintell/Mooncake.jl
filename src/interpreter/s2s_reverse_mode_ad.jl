@@ -166,7 +166,12 @@ end
 __ref(P) = new_inst(Expr(:call, __make_ref, P))
 
 # Helper for reverse_data_ref_stmts.
-@inline __make_ref(::Type{P}) where {P} = Ref(Tapir.zero_rdata_from_type(P))
+@inline function __make_ref(::Type{P}) where {P}
+    R = rdata_type(tangent_type(P))
+    return Ref{R}(Tapir.zero_rdata_from_type(P))
+end
+
+@inline __make_ref(::Type{Union{}}) = nothing
 
 # Returns the number of arguments that the primal function has.
 num_args(info::ADInfo) = length(info.arg_types)
@@ -504,7 +509,7 @@ end
 increment_if_ref!(ref::Ref, rvs_data) = increment_ref!(ref, rvs_data)
 increment_if_ref!(::Nothing, ::Any) = nothing
 
-increment_ref!(x::Ref, t) = setindex!(x, increment!!(x[], t))
+@inline increment_ref!(x::Ref, t) = setindex!(x, increment!!(x[], t))
 
 # Useful to have this function call for debugging when looking at the generated IRCode.
 @inline __pop_pb_stack!(stack) = pop!(stack)

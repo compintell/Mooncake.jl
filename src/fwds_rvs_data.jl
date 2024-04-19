@@ -7,6 +7,8 @@ in addition to the primal data.
 """
 struct NoFData end
 
+increment!!(::NoFData, ::NoFData) = NoFData()
+
 """
     FData(data::NamedTuple)
 
@@ -18,6 +20,8 @@ associated `FData`.
 struct FData{T<:NamedTuple}
     data::T
 end
+
+increment!!(x::F, y::F) where {F<:FData} = F(tuple_map(increment!!, x.data, y.data))
 
 """
     fdata_type(T)
@@ -323,6 +327,8 @@ If you see this anywhere in actual code, or if it appears in a hand-written rule
 error -- please open an issue in such a situation.
 """
 struct ZeroRData end
+
+@inline increment!!(::ZeroRData, r::R) where {R} = r
 
 """
 
