@@ -119,7 +119,7 @@ function rrule!!(
         return y, pb!!
     else
         pb!! = if R == NoRData
-            NoPullback((NoRData(), NoRData(), NoRData()))
+            NoPullback((NoRData(), NoRData(), NoRData(), NoRData()))
         else
             dx_r = zero_rdata(primal(x))
             function immutable_lgetfield_pb!!(dy)
