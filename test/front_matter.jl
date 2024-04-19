@@ -47,7 +47,7 @@ using Tapir:
     increment_field!!,
     NoFData,
     NoRData,
-    zero_fwds_codual
+    zero_fcodual
 
 using .TestUtils:
     test_rrule!!,

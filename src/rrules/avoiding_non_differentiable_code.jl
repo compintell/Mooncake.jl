@@ -10,7 +10,8 @@ end
 @is_primitive MinimalCtx Tuple{typeof(randn), Xoshiro, Vararg}
 function rrule!!(::CoDual{typeof(randn)}, rng::CoDual{Xoshiro}, args::CoDual...)
     x = randn(primal(rng), map(primal, args)...)
-    return CoDual(x, zero(x)), NoPullback()
+    pb!! = NoPullback((NoRData(), NoRData(), map(_ -> NoRData(), args)...))
+    return zero_fcodual(x), pb!!
 end
 
 function generate_hand_written_rrule!!_test_cases(

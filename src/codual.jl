@@ -55,7 +55,7 @@ to_fwds(x::CoDual) = CoDual(primal(x), fdata(tangent(x)))
 
 to_fwds(x::CoDual{Type{P}}) where {P} = CoDual{Type{P}, NoFData}(primal(x), NoFData())
 
-zero_fwds_codual(p) = to_fwds(zero_codual(p))
+zero_fcodual(p) = to_fwds(zero_codual(p))
 
 """
     fwds_codual_type(P::Type)

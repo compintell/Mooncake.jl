@@ -581,7 +581,7 @@ function __unflatten_codual_varargs(::Val{isva}, args, ::Val{nargs}) where {isva
     isva || return args
     group_primal = map(primal, args[nargs:end])
     if fdata_type(tangent_type(_typeof(group_primal))) == NoFData
-        grouped_args = zero_fwds_codual(group_primal)
+        grouped_args = zero_fcodual(group_primal)
     else
         grouped_args = CoDual(group_primal, map(tangent, args[nargs:end]))
     end
