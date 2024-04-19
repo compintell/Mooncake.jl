@@ -63,19 +63,19 @@ lgetfield(x, ::Val{f}) where {f} = getfield(x, f)
 @is_primitive MinimalCtx Tuple{typeof(lgetfield), Any, Any}
 function rrule!!(::CoDual{typeof(lgetfield)}, x::CoDual{P}, ::CoDual{Val{f}}) where {P, f}
     T = tangent_type(P)
+    F = fdata_type(T)
     R = rdata_type(T)
 
     if ismutabletype(P)
         dx = tangent(x)
-        pb!! = if R == NoRData
-            NoPullback((NoRData(), NoRData(), NoRData()))
-        else
-            function mutable_lgetfield_pb!!(dy)
-                return NoRData(), increment_field_rdata!!(dx, dy, Val{f}()), NoRData()
-            end
+        function mutable_lgetfield_pb!!(dy)
+            increment_field_rdata!(dx, dy, Val{f}())
+            return NoRData(), NoRData(), NoRData()
         end
-        y = CoDual(getfield(primal(x), f), fdata(_get_fdata_field(primal(x), tangent(x), f)))
-        return y, pb!!
+        yp = getfield(primal(x), f)
+        yf = F == NoFData ? fdata(zero_tangent(yp)) : fdata(_get_fdata_field(primal(x), tangent(x), f))
+        y = CoDual(yp, yf)
+        return y, mutable_lgetfield_pb!!
     else
         pb!! = if R == NoRData
             NoPullback((NoRData(), NoRData(), NoRData()))
@@ -91,14 +91,19 @@ function rrule!!(::CoDual{typeof(lgetfield)}, x::CoDual{P}, ::CoDual{Val{f}}) wh
 end
 
 _get_fdata_field(_, tangent::Union{Tuple, NamedTuple}, f...) = getfield(tangent, f...)
-_get_fdata_field(_, data::FData, f...) = _value(getfield(data.data, f...))
+_get_fdata_field(_, data::FData, f...) = val(getfield(data.data, f...))
 _get_fdata_field(primal, ::NoFData, f...) = uninit_fdata(getfield(primal, f...))
-_get_fdata_field(_, tangent::MutableTangent, f...) = _value(getfield(tangent.fields, f...))
+_get_fdata_field(_, tangent::MutableTangent, f...) = val(getfield(tangent.fields, f...))
 
-function increment_field_rdata!!(dx::MutableTangent, dy_rdata, ::Val{f}) where {f}
-    dy = combine_data(fdata(lgetfield(dx.fields, f)), dy_rdata)
+function increment_field_rdata!(dx::T, dy_rdata, ::Val{f}) where {T<:MutableTangent, f}
+    Tf = fieldtype(fields_type(T), f)
+    dy_rdata = Tf <: PossiblyUninitTangent ? _wrap_field(eltype(Tf), dy_rdata) : dy_rdata
+    dy = val(combine_data(Tf, fdata(lgetfield(dx.fields, Val(f))), dy_rdata))
     return increment_field!!(dx, dy, Val(f))
 end
+
+increment_field_rdata!(dx::MutableTangent, ::NoRData, ::Val) = dx
+increment_field_rdata!(dx::NoFData, ::NoRData, ::Val) = dx
 
 #
 # lgetfield with order argument
@@ -190,7 +195,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
     _dx = Ref(4.0)
     memory = Any[_x, _dx]
 
-    test_cases = Any[
+    specific_test_cases = Any[
         # Rules to avoid pointer type conversions.
         (
             true, :stability, nothing,
@@ -291,6 +296,12 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
             lsetfield!, NonDifferentiableFoo(5, false), Val(:y), true,
         )
     ]
+    general_lgetfield_test_cases = map(TestTypes.PRIMALS) do (interface_only, P, args)
+        _, primal = TestTypes.instantiate((interface_only, P, args))
+        names = fieldnames(P)[1:length(args)] # only query fields which get values
+        return Any[(interface_only, :none, nothing, lgetfield, primal, Val(name)) for name in names]
+    end
+    test_cases = vcat(specific_test_cases, general_lgetfield_test_cases...)
     return test_cases, memory
 end
 

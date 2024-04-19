@@ -47,6 +47,8 @@ _wrap_type(::Type{T}) where {T} = PossiblyUninitTangent{T}
 _wrap_field(::Type{Q}, x::T) where {Q, T} = PossiblyUninitTangent{Q}(x)
 _wrap_field(x::T) where {T} = _wrap_field(T, x)
 
+Base.eltype(::Type{PossiblyUninitTangent{T}}) where {T} = T
+
 struct Tangent{Tfields<:NamedTuple}
     fields::Tfields
 end
@@ -144,9 +146,6 @@ __tangent_from_non_concrete(::Type{P}, fields) where {P<:Tuple} = Tuple(fields)
 function __tangent_from_non_concrete(::Type{P}, fields) where {names, P<:NamedTuple{names}}
     return NamedTuple{names}(fields)
 end
-
-_value(v::PossiblyUninitTangent) = val(v)
-_value(v) = v
 
 """
     tangent_type(T)

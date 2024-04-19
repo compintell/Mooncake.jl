@@ -558,7 +558,7 @@ end
 
 _get_tangent_field(_, tangent, f...) = getfield(tangent, f...)
 function _get_tangent_field(_, tangent::Union{Tangent, MutableTangent}, f...)
-    return _value(getfield(tangent.fields, f...))
+    return val(getfield(tangent.fields, f...))
 end
 _get_tangent_field(primal, ::NoTangent, f...) = uninit_tangent(getfield(primal, f...))
 

@@ -16,7 +16,7 @@ function rrule!!(
             NoPullback((NoRData(), NoRData(), tuple_map(zero_rdata ∘ tangent, x)...))
         else
             function _mutable_new_pullback!!(::NoRData)
-                rdatas = tuple_map(rdata ∘ _value,  Tuple(dy.fields)[1:N])
+                rdatas = tuple_map(rdata ∘ val,  Tuple(dy.fields)[1:N])
                 return NoRData(), NoRData(), rdatas...
             end
         end
@@ -26,7 +26,7 @@ function rrule!!(
         else
             function _new_pullback_for_immutable!!(dy::T) where {T}
                 data = Tuple(T <: NamedTuple ? dy : dy.data)[1:N]
-                return NoRData(), NoRData(), map(_value, data)...
+                return NoRData(), NoRData(), map(val, data)...
             end
         end
     end

@@ -155,7 +155,7 @@ increment!!(x::RData{T}, y::RData{T}) where {T} = RData(increment!!(x.data, y.da
 
 function increment_field!!(x::RData{T}, y, ::Val{f}) where {T, f}
     y isa NoRData && return x
-    new_val = fieldtype(T, f) <: PossiblyUninitTangent ? fieldtype(T, F)(y) : y
+    new_val = fieldtype(T, f) <: PossiblyUninitTangent ? fieldtype(T, f)(y) : y
     return RData(increment_field!!(x.data, new_val, f))
 end
 
