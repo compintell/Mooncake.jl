@@ -143,6 +143,8 @@ struct NoRData end
 
 increment!!(::NoRData, ::NoRData) = NoRData()
 
+increment_field!!(::NoRData, y, ::Val) = NoRData()
+
 """
     RData(data::NamedTuple)
 

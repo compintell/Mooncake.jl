@@ -62,38 +62,26 @@ lgetfield(x, ::Val{f}) where {f} = getfield(x, f)
 
 @is_primitive MinimalCtx Tuple{typeof(lgetfield), Any, Any}
 function rrule!!(::CoDual{typeof(lgetfield)}, x::CoDual{P}, ::CoDual{Val{f}}) where {P, f}
-    T = tangent_type(P)
-    F = fdata_type(T)
-    R = rdata_type(T)
-
-    if ismutabletype(P)
+    pb!! = if ismutabletype(P)
         dx = tangent(x)
         function mutable_lgetfield_pb!!(dy)
             increment_field_rdata!(dx, dy, Val{f}())
             return NoRData(), NoRData(), NoRData()
         end
-        yp = getfield(primal(x), f)
-        yf = F == NoFData ? fdata(zero_tangent(yp)) : fdata(_get_fdata_field(primal(x), tangent(x), f))
-        y = CoDual(yp, yf)
-        return y, mutable_lgetfield_pb!!
     else
-        pb!! = if R == NoRData
-            NoPullback((NoRData(), NoRData(), NoRData()))
-        else
-            dx_r = zero_rdata(primal(x))
-            function immutable_lgetfield_pb!!(dy)
-                return NoRData(), increment_field!!(dx_r, dy, Val{f}()), NoRData()
-            end
+        dx_r = zero_rdata(primal(x))
+        function immutable_lgetfield_pb!!(dy)
+            return NoRData(), increment_field!!(dx_r, dy, Val{f}()), NoRData()
         end
-        y = CoDual(getfield(primal(x), f), _get_fdata_field(primal(x), tangent(x), f))
-        return y, pb!!
     end
+    y = CoDual(getfield(primal(x), f), _get_fdata_field(primal(x), tangent(x), f))
+    return y, pb!!
 end
 
-_get_fdata_field(_, tangent::Union{Tuple, NamedTuple}, f...) = getfield(tangent, f...)
+_get_fdata_field(_, t::Union{Tuple, NamedTuple}, f...) = getfield(t, f...)
 _get_fdata_field(_, data::FData, f...) = val(getfield(data.data, f...))
 _get_fdata_field(primal, ::NoFData, f...) = uninit_fdata(getfield(primal, f...))
-_get_fdata_field(_, tangent::MutableTangent, f...) = val(getfield(tangent.fields, f...))
+_get_fdata_field(_, t::MutableTangent, f...) = fdata(val(getfield(t.fields, f...)))
 
 function increment_field_rdata!(dx::T, dy_rdata, ::Val{f}) where {T<:MutableTangent, f}
     Tf = fieldtype(fields_type(T), f)
