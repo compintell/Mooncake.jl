@@ -166,15 +166,33 @@ end
 __ref(P) = new_inst(Expr(:call, __make_ref, P))
 
 # Helper for reverse_data_ref_stmts.
-@inline function __make_ref(::Type{P}) where {P}
+@inline @generated function __make_ref(::Type{P}) where {P}
     R = rdata_type(tangent_type(P))
-    return Ref{R}(Tapir.zero_rdata_from_type(P))
+    R = P isa Union ? Union{ZeroRData, R} : R
+    return :(Ref{$R}(Tapir.zero_rdata_from_type(P)))
 end
 
 @inline __make_ref(::Type{Union{}}) = nothing
 
 # Returns the number of arguments that the primal function has.
 num_args(info::ADInfo) = length(info.arg_types)
+
+# This struct is used to ensure that `ZeroRData`s, which are used as placeholder zero
+# elements whenever an actual instance of a zero rdata for a particular primal type cannot
+# be constructed without also having an instance of said type, never reach rules.
+# On the pullback, we increment the cotangent dy by an amount equal to zero. This ensures
+# that if it is a `ZeroRData`, we instead get an actual zero of the correct type. If it is
+# not a zero rdata, the computation _should_ be elided via inlining + constant prop.
+struct RRuleZeroWrapper{Trule}
+    rule::Trule
+end
+
+@inline function (rule::RRuleZeroWrapper{R})(f::F, args::Vararg{CoDual, N}) where {R, F, N}
+    y, pb!! = rule.rule(f, args...)
+    l = LazyZeroRData(primal(y))
+    @inline rrule_wrapper_pb!!(dy) = pb!!(increment!!(dy, instantiate(l)))
+    return y::CoDual, rrule_wrapper_pb!!
+end
 
 #=
     ADStmtInfo
@@ -296,7 +314,7 @@ function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
     # Assemble the above lines and construct reverse-pass.
     return ad_stmt_info(
         line,
-        PiNode(stmt.val, fwds_codual_type(stmt.typ)),
+        PiNode(stmt.val, fwds_codual_type(_type(stmt.typ))),
         Expr(:call, __pi_rvs!, P, val_rdata_ref_id, output_rdata_ref_id),
     )
 end
@@ -392,8 +410,12 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
             DynamicDerivedRule(info.interp, info.safety_on)  # Dynamic dispatch
         end
 
+        # Wrap the raw rule in a struct which ensures that any `ZeroRData`s are stripped
+        # away before the raw_rule is called.
+        zero_safe_rule = RRuleZeroWrapper(raw_rule)
+
         # If we need to run safety checks, wrap the rule in a correctness checker.
-        rule = info.safety_on ? SafeRRule(raw_rule) : raw_rule
+        rule = info.safety_on ? SafeRRule(zero_safe_rule) : zero_safe_rule
 
         # If the rule is `rrule!!` (i.e. `sig` is primitive), then don't bother putting
         # the rule into shared data, because it's safe to put it directly into the code.
@@ -427,8 +449,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         # For some reason the compiler cannot handle boundscheck statements when we run it
         # again. Consequently, emit `true` to be safe. Ideally we would handle this in a
         # more natural way, but I'm not sure how to do that.
-        tmp = AugmentedRegister(zero_codual(true), NoTangentStack())
-        return ad_stmt_info(line, tmp, nothing)
+        return ad_stmt_info(line, zero_fcodual(true), nothing)
 
     elseif Meta.isexpr(stmt, :code_coverage_effect)
         # Code coverage irrelevant for derived code.
@@ -476,16 +497,19 @@ function build_pb_stack(Trule, arg_types)
 end
 
 # Used in `make_ad_stmts!` method for `Expr(:call, ...)` and `Expr(:invoke, ...)`.
-@inline function __fwds_pass!(rule, pb_stack, ::Type{R}, f::F, raw_args...) where {R, F}
+@inline function __fwds_pass!(rule, pb_stack, ::Type{R}, f::F, raw_args::Vararg{Any, N}) where {R, F, N}
 
     # For each argument if it isn't a CoDual, make it one, then run the rule.
-    args = tuple_map(x -> isa(x, CoDual) ? x : uninit_fcodual(x), (f, raw_args...))
-    out, pb!! = rule(args...)
+    f = __make_codual(f)
+    args = tuple_map(__make_codual, raw_args)
+    out, pb!! = tuple_splat(rule, f, args)
 
     # Log the pullback and return the CoDual.
     __push_pb_stack!(pb_stack, pb!!)
-    return out
+    return out::R
 end
+
+__make_codual(x::P) where {P} = (P <: CoDual ? x : uninit_fcodual(x))::CoDual
 
 # Useful to have this function call for debugging when looking at the generated IRCode.
 @inline __push_pb_stack!(stack, pb!!) = push!(stack, pb!!)
@@ -565,7 +589,7 @@ function rule_type(interp::TapirInterpreter{C}, ::Type{sig}) where {C, sig}
         }
     else
         return DerivedRule{
-            Core.OpaqueClosure{arg_fwds_types, fwds_return_codual},
+            Core.OpaqueClosure{arg_fwds_types, P} where {P<:fwds_return_codual},
             Core.OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types},
             Val{isva},
             Val{length(ir.argtypes)},

@@ -47,7 +47,11 @@ using Tapir:
     increment_field!!,
     NoFData,
     NoRData,
-    zero_fcodual
+    zero_fcodual,
+    zero_rdata_from_type,
+    zero_rdata,
+    instantiate,
+    LazyZeroRData
 
 using .TestUtils:
     test_rrule!!,

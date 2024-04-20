@@ -20,7 +20,7 @@ using Tapir
 import ..Tapir:
     rrule!!, CoDual, primal, tangent, zero_tangent, NoPullback,
     tangent_type, increment!!, @is_primitive, MinimalCtx, is_primitive, NoFData,
-    zero_rdata, NoRData, tuple_map, fdata, NoRData
+    zero_rdata, NoRData, tuple_map, fdata, NoRData, rdata, combine_data
 
 # Note: performance is not considered _at_ _all_ in this implementation.
 function rrule!!(f::CoDual{<:Core.IntrinsicFunction}, args...)
@@ -261,8 +261,10 @@ function rrule!!(::CoDual{typeof(pointerref)}, x, y, z)
     a = CoDual(pointerref(_x, _y, _z), fdata(pointerref(dx, _y, _z)))
     function pointerref_pullback!!(da)
         dx_v = pointerref(dx, _y, _z)
-        new_dx_v = increment!!(dx_v, da)
-        pointerset(dx, new_dx_v, _y, _z)
+        fd = fdata(dx_v)
+        rd = rdata(dx_v)
+        new_rd = increment!!(rd, da)
+        pointerset(dx, combine_data(eltype(dx), fd, new_rd), _y, _z)
         return NoRData(), NoRData(), NoRData(), NoRData()
     end
     return a, pointerref_pullback!!
@@ -280,7 +282,7 @@ function rrule!!(::CoDual{typeof(pointerset)}, p, x, idx, z)
         dx_r = pointerref(dp, _idx, _z)
         pointerset(_p, old_value, _idx, _z)
         pointerset(dp, old_tangent, _idx, _z)
-        return NoRData(), NoRData(), dx_r, NoRData(), NoRData()
+        return NoRData(), NoRData(), rdata(dx_r), NoRData(), NoRData()
     end
     pointerset(_p, primal(x), _idx, _z)
     pointerset(dp, zero_tangent(primal(x)), _idx, _z)
@@ -402,7 +404,7 @@ function rrule!!(
         current_val = arrayref(_inbounds, dx, _inds...)
         fc = fdata(current_val)
         rc = increment!!(rdata(current_val), dy)
-        arrayset(_inbounds, dx, combine_data(eltype(dx), fc, rc), _inds...)
+        arrayset(_inbounds, dx, combine_data(_typeof(current_val), fc, rc), _inds...)
         return NoRData(), NoRData(), NoRData(), tuple_map(_ -> NoRData(), _inds)...
     end
     _y = arrayref(_inbounds, primal(x), _inds...)
@@ -479,25 +481,22 @@ end
 # Core.finalizer
 # Core.get_binding_type
 
-function rrule!!(::CoDual{typeof(Core.ifelse)}, cond, a, b)
+function rrule!!(::CoDual{typeof(Core.ifelse)}, cond, a::A, b::B) where {A, B}
     _cond = primal(cond)
     p_a = primal(a)
     p_b = primal(b)
-    function ifelse_pullback!!(dc)
-        da = _cond ? dc : zero_rdata(p_a)
-        db = _cond ? zero_rdata(p_b) : dc
-        return NoRData(), NoRData(), da, db
+    pb!! = if rdata_type(tangent_type(A)) == NoRData && rdata_type(tangent_type(B)) == NoRData
+        NoPullback(ntuple(_ -> NoRData(), 4))
+    else
+        lazy_da = LazyZeroRData(p_a)
+        lazy_db = LazyZeroRData(p_b)
+        function ifelse_pullback!!(dc)
+            da = ifelse(_cond, dc, instantiate(lazy_da))
+            db = ifelse(_cond, instantiate(lazy_db), dc)
+            return NoRData(), NoRData(), da, db
+        end
     end
-    return ifelse(_cond, a, b), ifelse_pullback!!
-end
-
-function rrule!!(
-    ::CoDual{typeof(Core.ifelse)},
-    cond,
-    a::CoDual{<:Any, NoTangent},
-    b::CoDual{<:Any, NoTangent},
-)
-    return ifelse(primal(cond), a, b), NoPullback()
+    return ifelse(_cond, a, b), pb!!
 end
 
 # Core.set_binding_type!
@@ -613,6 +612,11 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
     dx = randn(5)
     dp = pointer(dx)
 
+    y = [1, 2, 3]
+    q = pointer(y)
+    dy = zero_tangent(y)
+    dq = pointer(dy)
+
     # Slightly wider range for builtins whose performance is known not to be great.
     _range = (lb=1e-3, ub=200.0)
 
@@ -696,8 +700,10 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability, nothing, IntrinsicsWrappers.neg_int, 5),
         (false, :stability, nothing, IntrinsicsWrappers.not_int, 5),
         (false, :stability, nothing, IntrinsicsWrappers.or_int, 5, 5),
-        # pointerref -- integration tested because pointers are awkward. See below.
+        (true, :stability, nothing, IntrinsicsWrappers.pointerref, CoDual(p, dp), 2, 1),
+        (true, :stability, nothing, IntrinsicsWrappers.pointerref, CoDual(q, dq), 2, 1),
         (true, :stability, nothing, IntrinsicsWrappers.pointerset, CoDual(p, dp), 5.0, 2, 1),
+        (true, :stability, nothing, IntrinsicsWrappers.pointerset, CoDual(q, dq), 1, 2, 1),
         # rem_float -- untested and unimplemented because seemingly unused on master
         # rem_float_fast -- untested and unimplemented because seemingly unused on master
         (false, :stability, nothing, IntrinsicsWrappers.rint_llvm, 5),

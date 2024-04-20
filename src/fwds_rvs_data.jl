@@ -390,6 +390,55 @@ end
 end
 
 """
+    LazyZeroRData{P, Tdata}()
+
+This type is a lazy placeholder for `zero_rdata_from_type`. This is used to defer
+construction of zero data to the reverse pass. Calling `instantiate` on an instance of this
+will construct a zero data.
+
+Users should construct using `LazyZeroRData(p)`, where `p` is an value of type `P`. This
+constructor, and `instantiate`, are specialised to minimise the amount of data which must
+be stored. For example, `Float64`s do not need any data, so `LazyZeroRData(0.0)` produces
+an instance of a singleton type, meaning that various important optimisations can be
+performed in AD.
+"""
+struct LazyZeroRData{P, Tdata}
+    data::Tdata
+end
+
+# Attempt to make the construction of the zero rdata element as lazy as possible. Fallback
+# to not being lazy if we cannot prove it's safe to defer construction -- just store the
+# entire object.
+@inline function LazyZeroRData(p::P) where {P}
+    R = rdata_type(tangent_type(P))
+
+    R == NoRData && return LazyZeroRData{P, Nothing}(nothing)
+
+    return _lazy_zero_rdata_ctor_fallback(p)
+end
+
+# Fallback just constructs the rdata, and stores it.
+@inline function _lazy_zero_rdata_ctor_fallback(p::P) where {P}
+    rdata = zero_rdata(p)
+    return LazyZeroRData{P, _typeof(rdata)}(rdata)
+end
+
+@inline function instantiate(r::LazyZeroRData{P}) where {P}
+    R = rdata_type(tangent_type(P))
+
+    R == NoRData && return zero_rdata_from_type(P)
+
+    return r.data
+end
+
+# For many important types, no data is required to be stored in order to construct an
+# instance of the zero rdata for `P`. All of the code below here is designed to make use of
+# that to avoid intermediate store when it's not necessary.
+
+@inline LazyZeroRData(::P) where {P<:IEEEFloat} = LazyZeroRData{P, Nothing}(nothing)
+@inline instantiate(::LazyZeroRData{P}) where {P<:IEEEFloat} = zero_rdata_from_type(P)
+
+"""
     combine_data(tangent_type, fdata, rdata)
 
 

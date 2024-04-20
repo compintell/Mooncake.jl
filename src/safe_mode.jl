@@ -41,6 +41,7 @@ end
 function verify_rvs_type(::P, dx) where {P}
     _R = rdata_type(tangent_type(P))
     R = _typeof(dx)
+    R <: ZeroRData && return nothing
     (R <: _R) || throw(ArgumentError("Type $P has rdata type $_R, but got $R."))
 end
 
@@ -67,14 +68,14 @@ end
 Apply type checking to enforce pre- and post-conditions on `rule.rule`. See the docstring
 for `SafeRRule` for details.
 """
-function (rule::SafeRRule)(x::CoDual...)
+function (rule::SafeRRule)(x::Vararg{CoDual, N}) where {N}
     # Use for-loop to keep the stack trace as simple as possible.
     for _x in x
         verify_fwds_type(_x)
     end
     y, pb = rule.rule(x...)
     verify_fwds_type(y)
-    return y, SafePullback(pb, primal(y), map(primal, x))
+    return y::CoDual, SafePullback(pb, primal(y), map(primal, x))
 end
 
 function verify_fwds_type(x::CoDual)
