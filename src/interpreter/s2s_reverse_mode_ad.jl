@@ -506,8 +506,8 @@ end
     return nothing
 end
 
-increment_if_ref!(ref::Ref, rvs_data) = increment_ref!(ref, rvs_data)
-increment_if_ref!(::Nothing, ::Any) = nothing
+@inline increment_if_ref!(ref::Ref, rvs_data) = increment_ref!(ref, rvs_data)
+@inline increment_if_ref!(::Nothing, ::Any) = nothing
 
 @inline increment_ref!(x::Ref, t) = setindex!(x, increment!!(x[], t))
 

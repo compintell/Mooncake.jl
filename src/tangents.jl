@@ -379,7 +379,7 @@ increment!!(x::Ptr{T}, y::Ptr{T}) where {T} = x === y ? x : throw(error("eurgh")
 function increment!!(x::T, y::T) where {P, N, T<:Array{P, N}}
     return x === y ? x : _map_if_assigned!(increment!!, x, x, y)
 end
-increment!!(x::T, y::T) where {T<:Tuple} = _map(increment!!, x, y)
+increment!!(x::T, y::T) where {T<:Tuple} = tuple_map(increment!!, x, y)
 increment!!(x::T, y::T) where {T<:NamedTuple} = T(increment!!(Tuple(x), Tuple(y)))
 function increment!!(x::T, y::T) where {T<:PossiblyUninitTangent}
     is_init(x) && is_init(y) && return T(increment!!(val(x), val(y)))

@@ -145,9 +145,9 @@ Nothing to propagate backwards on the reverse-pass.
 """
 struct NoRData end
 
-increment!!(::NoRData, ::NoRData) = NoRData()
+@inline increment!!(::NoRData, ::NoRData) = NoRData()
 
-increment_field!!(::NoRData, y, ::Val) = NoRData()
+@inline increment_field!!(::NoRData, y, ::Val) = NoRData()
 
 """
     RData(data::NamedTuple)
@@ -157,12 +157,12 @@ struct RData{T<:NamedTuple}
     data::T
 end
 
-increment!!(x::RData{T}, y::RData{T}) where {T} = RData(increment!!(x.data, y.data))
+@inline increment!!(x::RData{T}, y::RData{T}) where {T} = RData(increment!!(x.data, y.data))
 
-function increment_field!!(x::RData{T}, y, ::Val{f}) where {T, f}
+@inline function increment_field!!(x::RData{T}, y, ::Val{f}) where {T, f}
     y isa NoRData && return x
     new_val = fieldtype(T, f) <: PossiblyUninitTangent ? fieldtype(T, f)(y) : y
-    return RData(increment_field!!(x.data, new_val, f))
+    return RData(increment_field!!(x.data, new_val, Val(f)))
 end
 
 """

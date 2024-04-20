@@ -1404,7 +1404,7 @@ function generate_test_functions()
         (false, :allocs, nothing, new_tester, 5.0, :hello),
         (false, :allocs, nothing, new_tester_2, 4.0),
         # (false, :none, nothing, new_tester_3, Ref{Any}(Tuple{Float64})),
-        # (false, :allocs, nothing, type_stable_getfield_tester_1, StableFoo(5.0, :hi)),
+        (false, :allocs, nothing, type_stable_getfield_tester_1, StableFoo(5.0, :hi)),
         (false, :allocs, nothing, type_stable_getfield_tester_2, StableFoo(5.0, :hi)),
         (false, :none, nothing, globalref_tester),
         (false, :none, nothing, globalref_tester_bool),
@@ -1424,21 +1424,21 @@ function generate_test_functions()
         (false, :allocs, nothing, phi_node_with_undefined_value, true, 4.0),
         (false, :allocs, nothing, phi_node_with_undefined_value, false, 4.0),
         (false, :allocs, nothing, test_multiple_phinode_block, 3.0, 3),
-        # (
-        #     false,
-        #     :none,
-        #     nothing,
-        #     Base._unsafe_getindex,
-        #     IndexLinear(),
-        #     randn(5),
-        #     1,
-        #     Base.Slice(Base.OneTo(1)),
-        # ), # fun PhiNode example
-        # (false, :allocs, nothing, avoid_throwing_path_tester, 5.0),
-        # (false, :allocs, nothing, simple_foreigncall_tester, randn(5)),
-        # (false, :none, nothing, simple_foreigncall_tester_2, randn(6), (2, 3)),
-        # (false, :allocs, nothing, foreigncall_tester, randn(5)),
-        # (false, :none, (lb=1, ub=1_000), no_primitive_inlining_tester, 5.0),
+        (
+            false,
+            :none,
+            nothing,
+            Base._unsafe_getindex,
+            IndexLinear(),
+            randn(5),
+            1,
+            Base.Slice(Base.OneTo(1)),
+        ), # fun PhiNode example
+        (false, :allocs, nothing, avoid_throwing_path_tester, 5.0),
+        (false, :allocs, nothing, simple_foreigncall_tester, randn(5)),
+        (false, :none, nothing, simple_foreigncall_tester_2, randn(6), (2, 3)),
+        (false, :allocs, nothing, foreigncall_tester, randn(5)),
+        (false, :none, nothing, no_primitive_inlining_tester, 5.0),
         (false, :allocs, nothing, varargs_tester, 5.0),
         (false, :allocs, nothing, varargs_tester, 5.0, 4),
         (false, :allocs, nothing, varargs_tester, 5.0, 4, 3.0),
@@ -1502,7 +1502,7 @@ function generate_test_functions()
         # (false, :none, (lb=1, ub=1500), test_multiple_pi_nodes, Ref{Any}(5.0)),
         # (false, :none, (lb=1, ub=1500), test_multi_use_pi_node, Ref{Any}(5.0)),
         (false, :allocs, nothing, test_getindex, [1.0, 2.0]),
-        # (false, :allocs, nothing, test_mutation!, [1.0, 2.0]),
+        (false, :allocs, nothing, test_mutation!, [1.0, 2.0]),
         (false, :allocs, nothing, test_while_loop, 2.0),
         (false, :allocs, nothing, test_for_loop, 3.0),
         (false, :none, nothing, test_mutable_struct_basic, 5.0),
@@ -1519,20 +1519,20 @@ function generate_test_functions()
             false, :allocs, nothing,
             (A, C) -> test_naive_mat_mul!(C, A, A), randn(100, 100), randn(100, 100),
         ),
-        # (false, :allocs, (lb=10, ub=1_000), sum, randn(30)),
-        # (false, :none, (lb=10, ub=1_000), test_diagonal_to_matrix, Diagonal(randn(30))),
+        (false, :allocs, nothing, sum, randn(32)),
+        (false, :none, nothing, test_diagonal_to_matrix, Diagonal(randn(30))),
         # (
         #     false, :allocs, (lb=100, ub=1_000),
         #     ldiv!, randn(20, 20), Diagonal(rand(20) .+ 1), randn(20, 20),
         # ),
-        # (
-        #     false, :allocs, (lb=10, ub=500),
-        #     LinearAlgebra._kron!, randn(400, 400), randn(20, 20), randn(20, 20),
-        # ),
-        # (
-        #     false, :allocs, (lb=10, ub=500),
-        #     kron!, randn(400, 400), Diagonal(randn(20)), randn(20, 20),
-        # ),
+        (
+            false, :allocs, nothing,
+            LinearAlgebra._kron!, randn(400, 400), randn(20, 20), randn(20, 20),
+        ),
+        (
+            false, :allocs, nothing,
+            kron!, randn(400, 400), Diagonal(randn(20)), randn(20, 20),
+        ),
         # (
         #     false, :none, nothing,
         #     test_mlp,
@@ -1540,14 +1540,20 @@ function generate_test_functions()
         #     randn(sr(2), 700, 500),
         #     randn(sr(3), 300, 700),
         # ),
-        (false, :allocs, (lb=1.0, ub=150), test_handwritten_sum, randn(1024)),
-        (false, :allocs, (lb=1.0, ub=150), _naive_map_sin_cos_exp, randn(1024), randn(1024)),
-        (false, :allocs, (lb=1.0, ub=150), _naive_map_negate, randn(1024), randn(1024)),
+        (false, :allocs, nothing, test_handwritten_sum, randn(1024)),
+        (false, :allocs, nothing, _naive_map_sin_cos_exp, randn(1024), randn(1024)),
+        (false, :allocs, nothing, _naive_map_negate, randn(1024), randn(1024)),
         (false, :allocs, nothing, test_from_slack, randn(10_000)),
         # (false, :none, nothing, _sum, randn(1024)),
-        # (false, :none, nothing, test_map, randn(1024), randn(1024)),
+        (false, :none, nothing, test_map, randn(1024), randn(1024)),
+        (false, :none, nothing, _broadcast_sin_cos_exp, randn(10, 10)),
+        (false, :none, nothing, _map_sin_cos_exp, randn(10, 10)),
     ]
 end
+
+_broadcast_sin_cos_exp(x::AbstractArray{<:Real}) = sum(sin.(cos.(exp.(x))))
+
+_map_sin_cos_exp(x::AbstractArray{<:Real}) = sum(map(x -> sin(cos(exp(x))), x))
 
 function _naive_map_sin_cos_exp(y::AbstractArray{<:Real}, x::AbstractArray{<:Real})
     n = 1

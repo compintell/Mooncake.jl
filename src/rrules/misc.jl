@@ -70,8 +70,9 @@ function rrule!!(::CoDual{typeof(lgetfield)}, x::CoDual{P}, ::CoDual{Val{f}}) wh
         end
     else
         dx_r = zero_rdata(primal(x))
+        field = Val{f}()
         function immutable_lgetfield_pb!!(dy)
-            return NoRData(), increment_field!!(dx_r, dy, Val{f}()), NoRData()
+            return NoRData(), increment_field!!(dx_r, dy, field), NoRData()
         end
     end
     y = CoDual(getfield(primal(x), f), _get_fdata_field(primal(x), tangent(x), f))
