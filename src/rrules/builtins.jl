@@ -20,7 +20,7 @@ using Tapir
 import ..Tapir:
     rrule!!, CoDual, primal, tangent, zero_tangent, NoPullback,
     tangent_type, increment!!, @is_primitive, MinimalCtx, is_primitive, NoFData,
-    zero_rdata, NoRData, tuple_map
+    zero_rdata, NoRData, tuple_map, fdata, NoRData
 
 # Note: performance is not considered _at_ _all_ in this implementation.
 function rrule!!(f::CoDual{<:Core.IntrinsicFunction}, args...)
@@ -257,13 +257,13 @@ function rrule!!(::CoDual{typeof(pointerref)}, x, y, z)
     _x = primal(x)
     _y = primal(y)
     _z = primal(z)
-    x_s = tangent(x)
-    a = CoDual(pointerref(_x, _y, _z), pointerref(x_s, _y, _z))
-    function pointerref_pullback!!(da, df, dx, dy, dz)
+    dx = tangent(x)
+    a = CoDual(pointerref(_x, _y, _z), fdata(pointerref(dx, _y, _z)))
+    function pointerref_pullback!!(da)
         dx_v = pointerref(dx, _y, _z)
         new_dx_v = increment!!(dx_v, da)
         pointerset(dx, new_dx_v, _y, _z)
-        return df, dx, dy, dz
+        return NoRData(), NoRData(), NoRData(), NoRData()
     end
     return a, pointerref_pullback!!
 end
@@ -275,14 +275,15 @@ function rrule!!(::CoDual{typeof(pointerset)}, p, x, idx, z)
     _z = primal(z)
     old_value = pointerref(_p, _idx, _z)
     old_tangent = pointerref(tangent(p), _idx, _z)
-    function pointerset_pullback!!(_, df, dp, dx, didx, dz)
-        dx_new = increment!!(dx, pointerref(dp, _idx, _z))
+    dp = tangent(p)
+    function pointerset_pullback!!(::NoRData)
+        dx_r = pointerref(dp, _idx, _z)
         pointerset(_p, old_value, _idx, _z)
         pointerset(dp, old_tangent, _idx, _z)
-        return df, dp, dx_new, didx, dz
+        return NoRData(), NoRData(), dx_r, NoRData(), NoRData()
     end
     pointerset(_p, primal(x), _idx, _z)
-    pointerset(tangent(p), tangent(x), _idx, _z)
+    pointerset(dp, zero_tangent(primal(x)), _idx, _z)
     return p, pointerset_pullback!!
 end
 
@@ -399,7 +400,9 @@ function rrule!!(
     dx = tangent(x)
     function arrayref_pullback!!(dy)
         current_val = arrayref(_inbounds, dx, _inds...)
-        arrayset(_inbounds, dx, increment!!(current_val, dy), _inds...)
+        fc = fdata(current_val)
+        rc = increment!!(rdata(current_val), dy)
+        arrayset(_inbounds, dx, combine_data(eltype(dx), fc, rc), _inds...)
         return NoRData(), NoRData(), NoRData(), tuple_map(_ -> NoRData(), _inds)...
     end
     _y = arrayref(_inbounds, primal(x), _inds...)
@@ -457,7 +460,7 @@ function isbits_arrayset_rrule(
     dA = tangent(A)
     arrayset(_inbounds, dA, zero_tangent(primal(v)), _inds...)
     function isbits_arrayset_pullback!!(::NoRData)
-        dv = arrayref(_inbounds, dA, _inds...)
+        dv = rdata(arrayref(_inbounds, dA, _inds...))
         arrayset(_inbounds, _A, old_A[1], _inds...)
         arrayset(_inbounds, dA, old_A[2], _inds...)
         return NoRData(), NoRData(), NoRData(), dv, tuple_map(_ -> NoRData(), _inds)...
@@ -605,6 +608,11 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
     _a = Vector{Vector{Float64}}(undef, 3)
     _a[1] = [5.4, 4.23, -0.1, 2.1]
 
+    x = randn(5)
+    p = pointer(x)
+    dx = randn(5)
+    dp = pointer(dx)
+
     # Slightly wider range for builtins whose performance is known not to be great.
     _range = (lb=1e-3, ub=200.0)
 
@@ -689,7 +697,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability, nothing, IntrinsicsWrappers.not_int, 5),
         (false, :stability, nothing, IntrinsicsWrappers.or_int, 5, 5),
         # pointerref -- integration tested because pointers are awkward. See below.
-        # pointerset -- integration tested because pointers are awkward. See below.
+        (true, :stability, nothing, IntrinsicsWrappers.pointerset, CoDual(p, dp), 5.0, 2, 1),
         # rem_float -- untested and unimplemented because seemingly unused on master
         # rem_float_fast -- untested and unimplemented because seemingly unused on master
         (false, :stability, nothing, IntrinsicsWrappers.rint_llvm, 5),
@@ -744,6 +752,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability, nothing, Base.arrayref, false, randn(4), 1),
         (false, :stability, nothing, Base.arrayref, true, randn(5, 4), 1, 1),
         (false, :stability, nothing, Base.arrayref, false, randn(5, 4), 5, 4),
+        (false, :stability, nothing, Base.arrayset, false, [1, 2, 3], 4, 2),
         (false, :stability, nothing, Base.arrayset, false, randn(5), 4.0, 3),
         (false, :stability, nothing, Base.arrayset, false, randn(5, 4), 3.0, 1, 3),
         (false, :stability, nothing, Base.arrayset, true, randn(5), 4.0, 3),
@@ -850,30 +859,34 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         [false, :stability, nothing, typeof, 5.0],
         [false, :stability, nothing, typeof, randn(5)],
     ]
-    memory = Any[_x, _dx, _a]
+    memory = Any[_x, _dx, _a, p, dp]
     return test_cases, memory
 end
 
 function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
     test_cases = Any[
-        # [
-        #     false,
-        #     :none,
-        #     nothing,
-        #     (
-        #         function (x)
-        #             rx = Ref(x)
-        #             pointerref(bitcast(Ptr{Float64}, pointer_from_objref(rx)), 1, 1)
-        #         end
-        #     ),
-        #     5.0,
-        # ],
-        # [false, :none, nothing, (v, x) -> (pointerset(pointer(x), v, 2, 1); x), 3.0, randn(5)],
-        # [false, :none, nothing, x -> (pointerset(pointer(x), UInt8(3), 2, 1); x), rand(UInt8, 5)],
-        # [false, :none, nothing, getindex, randn(5), [1, 1]],
-        # [false, :none, nothing, getindex, randn(5), [1, 2, 2]],
-        # [false, :none, nothing, setindex!, randn(5), [4.0, 5.0], [1, 1]],
-        # [false, :none, nothing, setindex!, randn(5), [4.0, 5.0, 6.0], [1, 2, 2]],
+        (
+            false, :none, nothing,
+            (
+                function (x)
+                    rx = Ref(x)
+                    pointerref(bitcast(Ptr{Float64}, pointer_from_objref(rx)), 1, 1)
+                end
+            ),
+            5.0,
+        ),
+        (
+            false, :none, nothing,
+            (v, x) -> (pointerset(pointer(x), v, 2, 1); x), 3.0, randn(5),
+        ),
+        (
+            false, :none, nothing,
+            x -> (pointerset(pointer(x), UInt8(3), 2, 1); x), rand(UInt8, 5),
+        ),
+        (false, :none, nothing, getindex, randn(5), [1, 1]),
+        (false, :none, nothing, getindex, randn(5), [1, 2, 2]),
+        (false, :none, nothing, setindex!, randn(5), [4.0, 5.0], [1, 1]),
+        (false, :none, nothing, setindex!, randn(5), [4.0, 5.0, 6.0], [1, 2, 2]),
     ]
     memory = Any[]
     return test_cases, memory
