@@ -617,26 +617,18 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:foreigncall})
         (false, :none, nothing, reshape, randn(5, 4), (10, 2)),
         (false, :none, nothing, reshape, randn(5, 4), (5, 4, 1)),
         (false, :none, nothing, reshape, randn(5, 4), (2, 10, 1)),
-        # (false, :none, nothing, unsafe_copyto_tester, randn(5), randn(3), 2), # ZERO_RDATA PROBLEM
-        # Any[false, :none, nothing, unsafe_copyto_tester, randn(5), randn(6), 4], # ZERO_RDATA PROBLEM
-        # [ # ZERO_RDATA_PROBLEM
-        #     false,
-        #     :none,
-        #     nothing,
-        #     unsafe_copyto_tester,
-        #     [randn(3) for _ in 1:5],
-        #     [randn(4) for _ in 1:6],
-        #     4,
-        # ],
+        (false, :none, nothing, unsafe_copyto_tester, randn(5), randn(3), 2),
+        (false, :none, nothing, unsafe_copyto_tester, randn(5), randn(6), 4),
         (
-            false,
-            :none,
-            (lb=0.1, ub=150),
-            x -> unsafe_pointer_to_objref(pointer_from_objref(x)),
-            _x,
+            false, :none, nothing,
+            unsafe_copyto_tester, [randn(3) for _ in 1:5], [randn(4) for _ in 1:6], 4,
+        ),
+        (
+            false, :none, (lb=0.1, ub=150),
+            x -> unsafe_pointer_to_objref(pointer_from_objref(x)), _x,
         ),
         (false, :none, nothing, isassigned, randn(5), 4),
-        # (false, :none, nothing, x -> (Base._growbeg!(x, 2); x[1:2] .= 2.0), randn(5)), # ZERO_RDATA PROBLEM
+        (false, :none, nothing, x -> (Base._growbeg!(x, 2); x[1:2] .= 2.0), randn(5)),
     ]
     memory = Any[_x]
     return test_cases, memory
