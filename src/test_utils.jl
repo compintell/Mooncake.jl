@@ -272,7 +272,7 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...; rul
     map(increment!!, x̄_init, x̄_delta)
     _, x̄_rvs_inc... = pb!!(Tapir.rdata(ȳ))
     x̄_rvs = map((x, x_inc) -> increment!!(rdata(x), x_inc), x̄_delta, x̄_rvs_inc)
-    x̄ = map(Tapir.combine_data, map(_typeof, x̄_zero), x̄_fwds, x̄_rvs)
+    x̄ = map(tangent, x̄_fwds, x̄_rvs)
 
     # Check that inputs have been returned to their original value.
     @test all(map(has_equal_data_up_to_undefs, x, map(primal, x_x̄_rule)))
@@ -853,14 +853,20 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
     # Check that uninit_fdata yields data of the correct type.
     @test uninit_fdata(p) isa F
 
+    # Compute the tangent type associated to `F` and `R`, and check it is equal to `T`.
+    @test tangent_type(F, R) == T
+
     # Check that combining f and r yields a tangent of the correct type and value.
-    t_combined = Tapir.combine_data(T, f, r)
-    @test _typeof(t_combined) == T
+    t_combined = Tapir.tangent(f, r)
+    @test t_combined isa T
     @test t_combined === t
 
     # Check that pulling out `f` and `r` from `t_combined` yields the correct values.
     @test Tapir.fdata(t_combined) === f
     @test Tapir.rdata(t_combined) === r
+
+    # Test that `zero_rdata` produces valid reverse data.
+    @test zero_rdata(p) isa R
 
     # Check that constructing a zero tangent from reverse data yields the original tangent.
     z = zero_tangent(p)
@@ -872,9 +878,6 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
 
     # Test that `zero_rdata_from_type` produces a valid rdata.
     @test zero_rdata_from_type(P) isa R
-
-    # Test that `zero_rdata` produces valid reverse data.
-    @test zero_rdata(p) isa R
 end
 
 function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)
@@ -902,8 +905,9 @@ function run_rrule!!_test_cases(rng_ctor, v::Val)
 end
 
 function to_benchmark(__rrule!!::R, dx::Vararg{CoDual, N}) where {R, N}
-    out, pb!! = __rrule!!(dx...)
-    return pb!!(tangent(out), map(tangent, dx)...)
+    dx_f = Tapir.tuple_map(x -> CoDual(primal(x), Tapir.fdata(tangent(x))), dx)
+    out, pb!! = __rrule!!(dx_f...)
+    return pb!!(Tapir.zero_rdata(primal(out)))
 end
 
 __get_primals(xs) = map(x -> x isa CoDual ? primal(x) : x, xs)
@@ -1550,6 +1554,7 @@ function generate_test_functions()
         (false, :none, nothing, test_map, randn(1024), randn(1024)),
         (false, :none, nothing, _broadcast_sin_cos_exp, randn(10, 10)),
         (false, :none, nothing, _map_sin_cos_exp, randn(10, 10)),
+        (false, :none, nothing, ArgumentError, "hi"),
     ]
 end
 

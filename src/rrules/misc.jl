@@ -87,7 +87,7 @@ _get_fdata_field(_, t::MutableTangent, f...) = fdata(val(getfield(t.fields, f...
 function increment_field_rdata!(dx::T, dy_rdata, ::Val{f}) where {T<:MutableTangent, f}
     Tf = fieldtype(fields_type(T), f)
     dy_rdata = Tf <: PossiblyUninitTangent ? _wrap_field(eltype(Tf), dy_rdata) : dy_rdata
-    dy = val(combine_data(Tf, fdata(lgetfield(dx.fields, Val(f))), dy_rdata))
+    dy = val(tangent(fdata(lgetfield(dx.fields, Val(f))), dy_rdata))
     return increment_field!!(dx, dy, Val(f))
 end
 

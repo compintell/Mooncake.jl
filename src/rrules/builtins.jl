@@ -20,7 +20,7 @@ using Tapir
 import ..Tapir:
     rrule!!, CoDual, primal, tangent, zero_tangent, NoPullback,
     tangent_type, increment!!, @is_primitive, MinimalCtx, is_primitive, NoFData,
-    zero_rdata, NoRData, tuple_map, fdata, NoRData, rdata, combine_data
+    zero_rdata, NoRData, tuple_map, fdata, NoRData, rdata
 
 # Note: performance is not considered _at_ _all_ in this implementation.
 function rrule!!(f::CoDual{<:Core.IntrinsicFunction}, args...)
@@ -264,7 +264,7 @@ function rrule!!(::CoDual{typeof(pointerref)}, x, y, z)
         fd = fdata(dx_v)
         rd = rdata(dx_v)
         new_rd = increment!!(rd, da)
-        pointerset(dx, combine_data(eltype(dx), fd, new_rd), _y, _z)
+        pointerset(dx, tangent(fd, new_rd), _y, _z)
         return NoRData(), NoRData(), NoRData(), NoRData()
     end
     return a, pointerref_pullback!!
@@ -404,7 +404,7 @@ function rrule!!(
         current_val = arrayref(_inbounds, dx, _inds...)
         fc = fdata(current_val)
         rc = increment!!(rdata(current_val), dy)
-        arrayset(_inbounds, dx, combine_data(_typeof(current_val), fc, rc), _inds...)
+        arrayset(_inbounds, dx, tangent(fc, rc), _inds...)
         return NoRData(), NoRData(), NoRData(), tuple_map(_ -> NoRData(), _inds)...
     end
     _y = arrayref(_inbounds, primal(x), _inds...)
