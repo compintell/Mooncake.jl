@@ -53,12 +53,12 @@ end
     # If the type is a Union, then take the union type of its arguments.
     T isa Union && return Union{fdata_type(T.a), fdata_type(T.b)}
 
+    # If `P` is a mutable type, then its forwards data is its tangent.
+    ismutabletype(T) && return T
+
     # If the type is itself abstract, it's forward data could be anything.
     # The same goes for if the type has any undetermined type parameters.
     (isabstracttype(T) || !isconcretetype(T)) && return Any
-
-    # If `P` is a mutable type, then its forwards data is its tangent.
-    ismutabletype(T) && return T
 
     # If `P` is an immutable type, then some of its fields may not need to be propagated
     # on the forwards-pass.
@@ -196,12 +196,12 @@ end
     # If the type is a Union, then take the union type of its arguments.
     T isa Union && return Union{rdata_type(T.a), rdata_type(T.b)}
 
+    # If `P` is a mutable type, then all tangent info is propagated on the forwards-pass.
+    ismutabletype(T) && return NoRData
+
     # If the type is itself abstract, it's reverse data could be anything.
     # The same goes for if the type has any undetermined type parameters.
     (isabstracttype(T) || !isconcretetype(T)) && return Any
-
-    # If `P` is a mutable type, then all tangent info is propagated on the forwards-pass.
-    ismutabletype(T) && return NoRData
 
     # If `T` is an immutable type, then some of its fields may not have been propagated on
     # the forwards-pass.
@@ -328,6 +328,9 @@ obtained from `P` alone.
 @generated function can_produce_zero_rdata_from_type(::Type{P}) where {P}
     R = rdata_type(tangent_type(P))
     R == NoRData && return true
+    isconcretetype(P) || return false
+
+    # For general structs, just look at their fields.
     return isstructtype(P) ? all(can_produce_zero_rdata_from_type, fieldtypes(P)) : false
 end
 
@@ -365,6 +368,9 @@ with.
 function zero_rdata_from_type(::Type{P}) where {P}
     R = rdata_type(tangent_type(P))
 
+    # If we know we can't produce a tangent, say so.
+    can_produce_zero_rdata_from_type(P) || return CannotProduceZeroRDataFromType()
+
     # Simple case.
     R == NoRData && return NoRData()
 
@@ -388,7 +394,7 @@ function zero_rdata_from_type(::Type{P}) where {P}
 
     # Fallback -- we've not been able to figure out how to produce an instance of zero rdata
     # so report that it cannot be done.
-    return CannotProduceZeroRDataFromType()
+    throw(error("Unhandled type $P"))
 end
 
 function zero_rdata_from_type(::Type{P}) where {P<:Tuple}
