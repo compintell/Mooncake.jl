@@ -236,8 +236,8 @@ for (gemm, elty) in ((:dgemm_, :Float64), (:sgemm_, :Float32))
     @eval function rrule!!(
         ::CoDual{typeof(_foreigncall_)},
         ::CoDual{Val{$(blas_name(gemm))}},
-        RT::CoDual{Val{Cvoid}},
-        AT::CoDual, # arg types
+        ::CoDual{Val{Cvoid}},
+        ::CoDual, # arg types
         ::CoDual, # nreq
         ::CoDual, # calling convention
         tA::CoDual{Ptr{UInt8}},
@@ -253,8 +253,8 @@ for (gemm, elty) in ((:dgemm_, :Float64), (:sgemm_, :Float32))
         beta::CoDual{Ptr{$elty}},
         C::CoDual{Ptr{$elty}},
         LDC::CoDual{Ptr{BLAS.BlasInt}},
-        args...,
-    )
+        args::Vararg{Any, Nargs},
+    ) where {Nargs}
         _tA = Char(unsafe_load(primal(tA)))
         _tB = Char(unsafe_load(primal(tB)))
         _m = unsafe_load(primal(m))
@@ -276,10 +276,13 @@ for (gemm, elty) in ((:dgemm_, :Float64), (:sgemm_, :Float32))
 
         BLAS.gemm!(_tA, _tB, _alpha, A_mat, B_mat, _beta, C_mat)
 
-        function gemm!_pullback!!(
-            _, df, dname, dRT, dAT, dnreq, dconvention,
-            dtA, dtB, dm, dn, dka, dalpha, dA, dLDA, dB, dLDB, dbeta, dC, dLDC, dargs...,
-        )
+        dalpha = tangent(alpha)
+        dA = tangent(A)
+        dB = tangent(B)
+        dbeta = tangent(beta)
+        dC = tangent(C)
+        function gemm!_pullback!!(::NoRData)
+
             # Restore previous state.
             C_mat .= C_copy
 
@@ -296,10 +299,9 @@ for (gemm, elty) in ((:dgemm_, :Float64), (:sgemm_, :Float32))
             dB_mat .+= _alpha * transpose(_trans(_tB, transpose(dC_mat) * _trans(_tA, A_mat)))
             dC_mat .*= _beta
 
-            return df, dname, dRT, dAT, dnreq, dconvention,
-                dtA, dtB, dm, dn, dka, dalpha, dA, dLDA, dB, dLDB, dbeta, dC, dLDC, dargs...
+            return tuple_fill(NoRData(), Val(19 + Nargs))
         end
-        return zero_codual(Cvoid()), gemm!_pullback!!
+        return zero_fcodual(Cvoid()), gemm!_pullback!!
     end
 end
 
@@ -308,8 +310,8 @@ for (syrk, elty) in ((:dsyrk_, :Float64), (:ssyrk_, :Float32))
     @eval function rrule!!(
         ::CoDual{typeof(_foreigncall_)},
         ::CoDual{Val{$(blas_name(syrk))}},
-        RT::CoDual{Val{Cvoid}},
-        AT::CoDual, # arg types
+        ::CoDual{Val{Cvoid}},
+        ::CoDual, # arg types
         ::CoDual, # nreq
         ::CoDual, # calling convention
         uplo::CoDual{Ptr{UInt8}},
@@ -322,8 +324,8 @@ for (syrk, elty) in ((:dsyrk_, :Float64), (:ssyrk_, :Float32))
         beta::CoDual{Ptr{$elty}},
         C::CoDual{Ptr{$elty}},
         LDC::CoDual{Ptr{BLAS.BlasInt}},
-        args...,
-    )
+        args::Vararg{Any, Nargs},
+    ) where {Nargs}
         _uplo = Char(unsafe_load(primal(uplo)))
         _t = Char(unsafe_load(primal(trans)))
         _n = unsafe_load(primal(n))
@@ -341,10 +343,12 @@ for (syrk, elty) in ((:dsyrk_, :Float64), (:ssyrk_, :Float32))
 
         BLAS.syrk!(_uplo, _t, _alpha, A_mat, _beta, C_mat)
 
-        function syrk!_pullback!!(
-            _, df, dname, dRT, dAT, dnreq, dconvention,
-            duplo, dtrans, dn, dk, dalpha, dA, dLDA, dbeta, dC, dLDC, dargs...,
-        )
+        dalpha = tangent(alpha)
+        dA = tangent(A)
+        dbeta = tangent(beta)
+        dC = tangent(C)
+        function syrk!_pullback!!(::NoRData)
+
             # Restore previous state.
             C_mat .= C_copy
 
@@ -360,10 +364,9 @@ for (syrk, elty) in ((:dsyrk_, :Float64), (:ssyrk_, :Float32))
             dA_mat .+= _alpha * (_t == 'N' ? (B + B') * A_mat : A_mat * (B + B'))
             dC_mat .= (_uplo == 'U' ? tril!(dC_mat, -1) : triu!(dC_mat, 1)) .+ _beta .* B
 
-            return df, dname, dRT, dAT, dnreq, dconvention,
-                duplo, dtrans, dn, dk, dalpha, dA, dLDA, dbeta, dC, dLDC, dargs...
+            return tuple_fill(NoRData(), Val(16 + Nargs))
         end
-        return zero_codual(Cvoid()), syrk!_pullback!!
+        return zero_fcodual(Cvoid()), syrk!_pullback!!
     end
 end
 
@@ -386,8 +389,8 @@ for (trmm, elty) in ((:dtrmm_, :Float64), (:strmm_, :Float32))
         _lda::CoDual{Ptr{BLAS.BlasInt}},
         _B::CoDual{Ptr{$elty}},
         _ldb::CoDual{Ptr{BLAS.BlasInt}},
-        args...,
-    )
+        args::Vararg{Any, Nargs},
+    ) where {Nargs}
         # Load in data and store B for the reverse-pass.
         side, ul, tA, diag = map(Char ∘ unsafe_load ∘ primal, (_side, _uplo, _trans, _diag))
         M, N, lda, ldb = map(unsafe_load ∘ primal, (_M, _N, _lda, _ldb))
@@ -400,10 +403,11 @@ for (trmm, elty) in ((:dtrmm_, :Float64), (:strmm_, :Float32))
         # Run primal.
         BLAS.trmm!(side, ul, tA, diag, alpha, A, B)
 
-        function trmm!_pullback!!(
-            _, d1, d2, d3, d4, d5, d6,
-            dside, duplo, dtrans, ddiag, dM, dN, dalpha, _dA, dlda, _dB, dlbd, dargs...,
-        )
+        dalpha = tangent(_alpha)
+        _dA = tangent(_A)
+        _dB = tangent(_B)
+        function trmm!_pullback!!(::NoRData)
+
             # Convert pointers to views.
             dA = wrap_ptr_as_view(_dA, lda, R, R)
             dB = wrap_ptr_as_view(_dB, ldb, M, N)
@@ -424,11 +428,10 @@ for (trmm, elty) in ((:dtrmm_, :Float64), (:strmm_, :Float32))
             # Compute dB tangent.
             BLAS.trmm!(side, ul, tA == 'N' ? 'T' : 'N', diag, alpha, A, dB)
 
-            return d1, d2, d3, d4, d5, d6,
-                dside, duplo, dtrans, ddiag, dM, dN, dalpha, _dA, dlda, _dB, dlbd, dargs...
+            return tuple_fill(NoRData(), Val(17 + Nargs))
         end
 
-        return zero_codual(Cvoid()), trmm!_pullback!!
+        return zero_fcodual(Cvoid()), trmm!_pullback!!
     end
 end
 
@@ -451,8 +454,8 @@ for (trsm, elty) in ((:dtrsm_, :Float64), (:strsm_, :Float32))
         _lda::CoDual{Ptr{BLAS.BlasInt}},
         _B::CoDual{Ptr{$elty}},
         _ldb::CoDual{Ptr{BLAS.BlasInt}},
-        args...,
-    )
+        args::Vararg{Any, Nargs},
+    ) where {Nargs}
         side = Char(unsafe_load(primal(_side)))
         uplo = Char(unsafe_load(primal(_uplo)))
         trans = Char(unsafe_load(primal(_trans)))
@@ -469,10 +472,11 @@ for (trsm, elty) in ((:dtrsm_, :Float64), (:strsm_, :Float32))
 
         trsm!(side, uplo, trans, diag, alpha, A, B)
 
-        function trsm_pb!!(
-            _, d1, d2, d3, d4, d5, d6,
-            dside, duplo, dtrans, ddiag, dM, dN, dalpha, _dA, dlda, _dB, dlbd, dargs...,
-        )
+        dalpha = tangent(_alpha)
+        _dA = tangent(_A)
+        _dB = tangent(_B)
+        function trsm_pb!!(::NoRData)
+
             # Convert pointers to views.
             dA = wrap_ptr_as_view(_dA, lda, R, R)
             dB = wrap_ptr_as_view(_dB, ldb, M, N)
@@ -505,10 +509,9 @@ for (trsm, elty) in ((:dtrsm_, :Float64), (:strsm_, :Float32))
             # Compute dB tangent.
             BLAS.trsm!(side, uplo, trans == 'N' ? 'T' : 'N', diag, alpha, A, dB)
 
-            return d1, d2, d3, d4, d5, d6,
-                dside, duplo, dtrans, ddiag, dM, dN, dalpha, _dA, dlda, _dB, dlbd, dargs...
+            return tuple_fill(NoRData(), Val(17 + Nargs))
         end
-        return zero_codual(Cvoid()), trsm_pb!!
+        return zero_fcodual(Cvoid()), trsm_pb!!
     end
 end
 
@@ -524,38 +527,34 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
         # BLAS LEVEL 1
         #
 
-        # Any[
-        #     (false, :none, nothing, BLAS.dot, 3, randn(5), 1, randn(4), 1),
-        #     (false, :none, nothing, BLAS.dot, 3, randn(6), 2, randn(4), 1),
-        #     (false, :none, nothing, BLAS.dot, 3, randn(6), 1, randn(9), 3),
-        #     (false, :none, nothing, BLAS.dot, 3, randn(12), 3, randn(9), 2),
-        #     (false, :none, nothing, BLAS.scal!, 10, 2.4, randn(30), 2),
-        # ],
+        Any[
+            (false, :none, nothing, BLAS.dot, 3, randn(5), 1, randn(4), 1),
+            (false, :none, nothing, BLAS.dot, 3, randn(6), 2, randn(4), 1),
+            (false, :none, nothing, BLAS.dot, 3, randn(6), 1, randn(9), 3),
+            (false, :none, nothing, BLAS.dot, 3, randn(12), 3, randn(9), 2),
+            (false, :none, nothing, BLAS.scal!, 10, 2.4, randn(30), 2),
+        ],
 
         #
         # BLAS LEVEL 2
         #
 
-        # # gemv!
-        # vec(reduce(
-        #     vcat,
-        #     map(product(t_flags, [1, 3], [1, 2])) do (tA, M, N)
-        #     # map(product(t_flags[1:1], [1], [1])) do (tA, M, N)
-        #         t = tA == 'N'
-        #         As = [
-        #             t ? randn(M, N) : randn(N, M),
-        #             view(randn(15, 15), t ? (3:M+2) : (2:N+1), t ? (2:N+1) : (3:M+2)),
-        #         ]
-        #         xs = [randn(N), view(randn(15), 3:N+2), view(randn(30), 1:2:2N)]
-        #         ys = [randn(M), view(randn(15), 2:M+1), view(randn(30), 2:2:2M)]
-        #         # return map(Iterators.product(As[1:1], xs[1:1], ys[1:1])) do (A, x, y)
-        #         #     (false, :none, nothing, BLAS.gemv!, tA, randn(), A, x, randn(), y)
-        #         # end
-        #         return map(Iterators.product(As, xs, ys)) do (A, x, y)
-        #             (false, :none, nothing, BLAS.gemv!, tA, randn(), A, x, randn(), y)
-        #         end
-        #     end,
-        # )),
+        # gemv!
+        vec(reduce(
+            vcat,
+            map(product(t_flags, [1, 3], [1, 2])) do (tA, M, N)
+                t = tA == 'N'
+                As = [
+                    t ? randn(M, N) : randn(N, M),
+                    view(randn(15, 15), t ? (3:M+2) : (2:N+1), t ? (2:N+1) : (3:M+2)),
+                ]
+                xs = [randn(N), view(randn(15), 3:N+2), view(randn(30), 1:2:2N)]
+                ys = [randn(M), view(randn(15), 2:M+1), view(randn(30), 2:2:2M)]
+                return map(Iterators.product(As, xs, ys)) do (A, x, y)
+                    (false, :none, nothing, BLAS.gemv!, tA, randn(), A, x, randn(), y)
+                end
+            end,
+        )),
 
         # trmv!
         vec(reduce(
@@ -569,63 +568,64 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
             end,
         )),
 
-        # #
-        # # BLAS LEVEL 3
-        # #
+        #
+        # BLAS LEVEL 3
+        #
 
-        # # gemm!
-        # vec(map(product(t_flags, t_flags)) do (tA, tB)
-        #     A = tA == 'N' ? randn(3, 4) : randn(4, 3)
-        #     B = tB == 'N' ? randn(4, 5) : randn(5, 4)
-        #     Any[false, :none, nothing, BLAS.gemm!, tA, tB, randn(), A, B, randn(), randn(3, 5)]
-        # end),
+        # gemm!
+        vec(map(product(t_flags, t_flags)) do (tA, tB)
+            A = tA == 'N' ? randn(3, 4) : randn(4, 3)
+            B = tB == 'N' ? randn(4, 5) : randn(5, 4)
+            (false, :none, nothing, BLAS.gemm!, tA, tB, randn(), A, B, randn(), randn(3, 5))
+        end),
 
-        # vec(map(product(t_flags, t_flags)) do (tA, tB)
-        #     A = randn(5, 5)
-        #     B = randn(5, 5)
-        #     Any[false, :none, nothing, aliased_gemm!, tA, tB, randn(), randn(), A, B]
-        # end),
+        # aliased gemm!
+        vec(map(product(t_flags, t_flags)) do (tA, tB)
+            A = randn(5, 5)
+            B = randn(5, 5)
+            (false, :none, nothing, aliased_gemm!, tA, tB, randn(), randn(), A, B)
+        end),
 
-        # # syrk!
-        # vec(map(product(['U', 'L'], t_flags)) do (uplo, t)
-        #     A = t == 'N' ? randn(3, 4) : randn(4, 3)
-        #     C = randn(3, 3)
-        #     Any[false, :none, nothing, BLAS.syrk!, uplo, t, randn(), A, randn(), C]
-        # end),
+        # syrk!
+        vec(map(product(['U', 'L'], t_flags)) do (uplo, t)
+            A = t == 'N' ? randn(3, 4) : randn(4, 3)
+            C = randn(3, 3)
+            Any[false, :none, nothing, BLAS.syrk!, uplo, t, randn(), A, randn(), C]
+        end),
 
-        # # trmm!
-        # vec(reduce(
-        #     vcat,
-        #     map(
-        #         product(['L', 'R'], ['U', 'L'], t_flags, ['N', 'U'], [1, 3], [1, 2]),
-        #     ) do (side, ul, tA, dA, M, N)
-        #         t = tA == 'N'
-        #         R = side == 'L' ? M : N
-        #         As = [randn(R, R), view(randn(15, 15), 3:R+2, 4:R+3)]
-        #         Bs = [randn(M, N), view(randn(15, 15), 2:M+1, 5:N+4)]
-        #         return map(product(As, Bs)) do (A, B)
-        #             alpha = randn()
-        #             Any[false, :none, nothing, BLAS.trmm!, side, ul, tA, dA, alpha, A, B]
-        #         end
-        #     end,
-        # )),
+        # trmm!
+        vec(reduce(
+            vcat,
+            map(
+                product(['L', 'R'], ['U', 'L'], t_flags, ['N', 'U'], [1, 3], [1, 2]),
+            ) do (side, ul, tA, dA, M, N)
+                t = tA == 'N'
+                R = side == 'L' ? M : N
+                As = [randn(R, R), view(randn(15, 15), 3:R+2, 4:R+3)]
+                Bs = [randn(M, N), view(randn(15, 15), 2:M+1, 5:N+4)]
+                return map(product(As, Bs)) do (A, B)
+                    alpha = randn()
+                    Any[false, :none, nothing, BLAS.trmm!, side, ul, tA, dA, alpha, A, B]
+                end
+            end,
+        )),
 
-        # # trsm!
-        # vec(reduce(
-        #     vcat,
-        #     map(
-        #         product(['L', 'R'], ['U', 'L'], t_flags, ['N', 'U'], [1, 3], [1, 2]),
-        #     ) do (side, ul, tA, dA, M, N)
-        #         t = tA == 'N'
-        #         R = side == 'L' ? M : N
-        #         As = [randn(R, R) + 5I, view(randn(15, 15), 3:R+2, 4:R+3) + 5I]
-        #         Bs = [randn(M, N), view(randn(15, 15), 2:M+1, 5:N+4)]
-        #         return map(product(As, Bs)) do (A, B)
-        #             alpha = randn()
-        #             Any[false, :none, nothing, BLAS.trsm!, side, ul, tA, dA, alpha, A, B]
-        #         end
-        #     end,
-        # )),
+        # trsm!
+        vec(reduce(
+            vcat,
+            map(
+                product(['L', 'R'], ['U', 'L'], t_flags, ['N', 'U'], [1, 3], [1, 2]),
+            ) do (side, ul, tA, dA, M, N)
+                t = tA == 'N'
+                R = side == 'L' ? M : N
+                As = [randn(R, R) + 5I, view(randn(15, 15), 3:R+2, 4:R+3) + 5I]
+                Bs = [randn(M, N), view(randn(15, 15), 2:M+1, 5:N+4)]
+                return map(product(As, Bs)) do (A, B)
+                    alpha = randn()
+                    Any[false, :none, nothing, BLAS.trsm!, side, ul, tA, dA, alpha, A, B]
+                end
+            end,
+        )),
     )
     memory = Any[]
     return test_cases, memory
