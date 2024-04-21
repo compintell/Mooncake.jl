@@ -112,7 +112,7 @@ end
 #
 
 for (gemv, elty) in ((:dgemv_, :Float64), (:sgemm_, :Float32))
-    @eval function rrule!!(
+    @eval @inline function rrule!!(
         ::CoDual{typeof(_foreigncall_)},
         ::CoDual{Val{$(blas_name(gemv))}},
         ::CoDual,
@@ -178,7 +178,7 @@ for (gemv, elty) in ((:dgemv_, :Float64), (:sgemm_, :Float32))
 end
 
 for (trmv, elty) in ((:dtrmv_, :Float64), (:strmv_, :Float32))
-    @eval function rrule!!(
+    @eval @inline function rrule!!(
         ::CoDual{typeof(_foreigncall_)},
         ::CoDual{Val{$(blas_name(trmv))}},
         ::CoDual,
@@ -193,8 +193,8 @@ for (trmv, elty) in ((:dtrmv_, :Float64), (:strmv_, :Float32))
         _lda::CoDual{Ptr{BLAS.BlasInt}},
         _x::CoDual{Ptr{$elty}},
         _incx::CoDual{Ptr{BLAS.BlasInt}},
-        args...
-    )
+        args::Vararg{Any, Nargs},
+    ) where {Nargs}
         # Load in data.
         uplo, trans, diag = map(Char ∘ unsafe_load ∘ primal, (_uplo, _trans, _diag))
         N, lda, incx = map(unsafe_load ∘ primal, (_N, _lda, _incx))
@@ -205,9 +205,10 @@ for (trmv, elty) in ((:dtrmv_, :Float64), (:strmv_, :Float32))
         # Run primal computation.
         BLAS.trmv!(uplo, trans, diag, A, x)
 
-        function trmv_pb!!(
-            _, d1, d2, d3, d4, d5, d6, du, dt, ddiag, dN, _dA, dlda, _dx, dincx, dargs...
-        )
+        _dA = tangent(_A)
+        _dx = tangent(_x)
+        function trmv_pb!!(::NoRData)
+
             # Load up the tangents.
             dA = wrap_ptr_as_view(_dA, lda, N, N)
             dx = wrap_ptr_as_view(_dx, N, incx)
@@ -219,10 +220,9 @@ for (trmv, elty) in ((:dtrmv_, :Float64), (:strmv_, :Float32))
             dA .+= tri!(trans == 'N' ? dx * x' : x * dx', uplo, diag)
             BLAS.trmv!(uplo, trans == 'N' ? 'T' : 'N', diag, A, dx)
 
-            return d1, d2, d3, d4, d5, d6, du, dt, ddiag, dN, _dA, dlda, _dx, dincx,
-                dargs...
+            return tuple_fill(NoRData(), Val(14 + Nargs))
         end
-        return zero_codual(Cvoid()), trmv_pb!!
+        return zero_fcodual(Cvoid()), trmv_pb!!
     end
 end
 
@@ -536,38 +536,38 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
         # BLAS LEVEL 2
         #
 
-        # gemv!
-        vec(reduce(
-            vcat,
-            map(product(t_flags, [1, 3], [1, 2])) do (tA, M, N)
-            # map(product(t_flags[1:1], [1], [1])) do (tA, M, N)
-                t = tA == 'N'
-                As = [
-                    t ? randn(M, N) : randn(N, M),
-                    view(randn(15, 15), t ? (3:M+2) : (2:N+1), t ? (2:N+1) : (3:M+2)),
-                ]
-                xs = [randn(N), view(randn(15), 3:N+2), view(randn(30), 1:2:2N)]
-                ys = [randn(M), view(randn(15), 2:M+1), view(randn(30), 2:2:2M)]
-                # return map(Iterators.product(As[1:1], xs[1:1], ys[1:1])) do (A, x, y)
-                #     (false, :none, nothing, BLAS.gemv!, tA, randn(), A, x, randn(), y)
-                # end
-                return map(Iterators.product(As, xs, ys)) do (A, x, y)
-                    (false, :none, nothing, BLAS.gemv!, tA, randn(), A, x, randn(), y)
-                end
-            end,
-        )),
-
-        # # trmv!
+        # # gemv!
         # vec(reduce(
         #     vcat,
-        #     map(product(['L', 'U'], t_flags, ['N', 'U'], [1, 3])) do (ul, tA, dA, N)
-        #         As = [randn(N, N), view(randn(15, 15), 3:N+2, 4:N+3)]
-        #         bs = [randn(N), view(randn(14), 4:N+3)]
-        #         return map(product(As, bs)) do (A, b)
-        #             Any[false, :none, nothing, BLAS.trmv!, ul, tA, dA, A, b]
+        #     map(product(t_flags, [1, 3], [1, 2])) do (tA, M, N)
+        #     # map(product(t_flags[1:1], [1], [1])) do (tA, M, N)
+        #         t = tA == 'N'
+        #         As = [
+        #             t ? randn(M, N) : randn(N, M),
+        #             view(randn(15, 15), t ? (3:M+2) : (2:N+1), t ? (2:N+1) : (3:M+2)),
+        #         ]
+        #         xs = [randn(N), view(randn(15), 3:N+2), view(randn(30), 1:2:2N)]
+        #         ys = [randn(M), view(randn(15), 2:M+1), view(randn(30), 2:2:2M)]
+        #         # return map(Iterators.product(As[1:1], xs[1:1], ys[1:1])) do (A, x, y)
+        #         #     (false, :none, nothing, BLAS.gemv!, tA, randn(), A, x, randn(), y)
+        #         # end
+        #         return map(Iterators.product(As, xs, ys)) do (A, x, y)
+        #             (false, :none, nothing, BLAS.gemv!, tA, randn(), A, x, randn(), y)
         #         end
         #     end,
         # )),
+
+        # trmv!
+        vec(reduce(
+            vcat,
+            map(product(['L', 'U'], t_flags, ['N', 'U'], [1, 3])) do (ul, tA, dA, N)
+                As = [randn(N, N), view(randn(15, 15), 3:N+2, 4:N+3)]
+                bs = [randn(N), view(randn(14), 4:N+3)]
+                return map(product(As, bs)) do (A, b)
+                    (false, :none, nothing, BLAS.trmv!, ul, tA, dA, A, b)
+                end
+            end,
+        )),
 
         # #
         # # BLAS LEVEL 3
