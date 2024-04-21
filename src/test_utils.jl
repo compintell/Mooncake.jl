@@ -91,7 +91,7 @@ using Tapir:
     CoDual, NoTangent, rrule!!, is_init, zero_codual, DefaultCtx, @is_primitive, val,
     is_always_fully_initialised, get_tangent_field, set_tangent_field!, MutableTangent,
     Tangent, _typeof, rdata, NoFData, to_fwds, uninit_fdata, zero_rdata,
-    zero_rdata_from_type
+    zero_like_rdata_from_type
 
 has_equal_data(x::T, y::T; equal_undefs=true) where {T<:String} = x == y
 has_equal_data(x::Type, y::Type; equal_undefs=true) = x == y
@@ -876,8 +876,8 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
     @test z_new isa tangent_type(P)
     @test z_new === z
 
-    # Test that `zero_rdata_from_type` produces a valid rdata.
-    @test zero_rdata_from_type(P) isa R
+    # Test that `zero_like_rdata_from_type` produces a valid rdata.
+    @test zero_like_rdata_from_type(P) isa R
 end
 
 function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)

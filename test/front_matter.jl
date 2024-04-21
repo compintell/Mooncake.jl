@@ -48,7 +48,7 @@ using Tapir:
     NoFData,
     NoRData,
     zero_fcodual,
-    zero_rdata_from_type,
+    zero_like_rdata_from_type,
     zero_rdata,
     instantiate,
     LazyZeroRData

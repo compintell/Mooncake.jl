@@ -169,7 +169,7 @@ __ref(P) = new_inst(Expr(:call, __make_ref, P))
 @inline @generated function __make_ref(::Type{P}) where {P}
     R = rdata_type(tangent_type(P))
     R = P isa Union ? Union{ZeroRData, R} : R
-    return :(Ref{$R}(Tapir.zero_rdata_from_type(P)))
+    return :(Ref{$R}(Tapir.zero_like_rdata_from_type(P)))
 end
 
 @inline __make_ref(::Type{Union{}}) = nothing
@@ -526,7 +526,7 @@ end
 
 @inline function __run_rvs_pass!(P, pb!!, ret_rev_data_ref::Ref, arg_rev_data_refs...)
     tuple_map(increment_if_ref!, arg_rev_data_refs, pb!!(ret_rev_data_ref[]))
-    ret_rev_data_ref[] = zero_rdata_from_type(P)
+    ret_rev_data_ref[] = zero_like_rdata_from_type(P)
     return nothing
 end
 
@@ -853,7 +853,7 @@ end
 # FUNCTION NAME.
 @inline function __deref_and_zero(::Type{P}, x::Ref) where {P}
     t = x[]
-    x[] = Tapir.zero_rdata_from_type(P)
+    x[] = Tapir.zero_like_rdata_from_type(P)
     return t
 end
 
