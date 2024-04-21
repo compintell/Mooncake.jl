@@ -979,8 +979,8 @@ function (dynamic_rule::DynamicDerivedRule)(args::Vararg{Any, N}) where {N}
     is_primitive(context_type(dynamic_rule.interp), sig) && return rrule!!(args...)
     rule = get(dynamic_rule.cache, sig, nothing)
     if rule === nothing
-        rule = build_rrule(dynamic_rule.interp, sig)
-        dynamic_rule.cache[sig] = (dynamic_rule.safety_on ? SafeRRule(rule) : rule)
+        rule = build_rrule(dynamic_rule.interp, sig; safety_on=dynamic_rule.safety_on)
+        dynamic_rule.cache[sig] = rule
     end
     return rule(args...)
 end
