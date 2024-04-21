@@ -28,6 +28,8 @@ include("front_matter.jl")
             include(joinpath("rrules", "builtins.jl"))
             @info "foreigncall"
             include(joinpath("rrules", "foreigncall.jl"))
+            @info "iddict"
+            include(joinpath("rrules", "iddict.jl"))
             @info "lapack"
             include(joinpath("rrules", "lapack.jl"))
             @info "low_level_maths"
