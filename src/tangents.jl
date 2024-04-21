@@ -206,6 +206,8 @@ tangent_type(::Type{Core.TypeName}) = NoTangent
 
 tangent_type(::Type{Core.MethodTable}) = NoTangent
 
+tangent_type(::Type{DimensionMismatch}) = NoTangent
+
 @generated function tangent_type(::Type{P}) where {P<:Tuple}
     isa(P, Union) && return Union{tangent_type(P.a), tangent_type(P.b)}
     isempty(P.parameters) && return NoTangent
