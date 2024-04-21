@@ -48,6 +48,11 @@ end
     return Expr(:call, :f, :v, map(n -> :(x[$n]), 1:length(x.parameters))...)
 end
 
+@inline @generated function tuple_fill(val ,::Val{N}) where {N}
+    return Expr(:call, :tuple, map(_ -> :val, 1:N)...)
+end
+
+
 #=
     _map_if_assigned!(f, y::Array, x::Array{P}) where {P}
 

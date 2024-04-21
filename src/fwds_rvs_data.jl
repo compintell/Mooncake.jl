@@ -465,11 +465,11 @@ function tangent_type(::Type{F}, ::Type{R}) where {F<:Tuple, R<:Tuple}
     return Tuple{tuple_map(tangent_type, Tuple(F.parameters), Tuple(R.parameters))...}
 end
 function tangent_type(::Type{NoFData}, ::Type{R}) where {R<:Tuple}
-    F_tuple = Tuple{fill_tuple(NoFData, Val(length(R.parameters)))...}
+    F_tuple = Tuple{tuple_fill(NoFData, Val(length(R.parameters)))...}
     return tangent_type(F_tuple, R)
 end
 function tangent_type(::Type{F}, ::Type{NoRData}) where {F<:Tuple}
-    R_tuple = Tuple{fill_tuple(NoRData, Val(length(F.parameters)))...}
+    R_tuple = Tuple{tuple_fill(NoRData, Val(length(F.parameters)))...}
     return tangent_type(F, R_tuple)
 end
 
