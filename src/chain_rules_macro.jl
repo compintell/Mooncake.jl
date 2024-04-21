@@ -1,5 +1,5 @@
-__increment_shim!!(::NoTangent, ::ChainRulesCore.NoTangent) = NoTangent()
-__increment_shim!!(x, y) = increment!!(x, y)
+__convert(::ChainRulesCore.NoTangent) = NoRData()
+__convert(dx::Float64) = dx
 
 """
     @from_rrule ctx sig
@@ -38,21 +38,15 @@ macro from_rrule(ctx, sig)
         map(n -> :(Tapir.primal($n)), arg_names)...,
     )
 
-    pb_arg_names = map(n -> Symbol("dx_$(n)"), eachindex(arg_names))
     pb_output_names = map(n -> Symbol("dx_$(n)_inc"), eachindex(arg_names))
 
     call_pb = Expr(:(=), Expr(:tuple, pb_output_names...), :(pb(dy)))
-    incrementers = Expr(
-        :tuple,
-        map(pb_arg_names, pb_output_names) do a, b
-            :(Tapir.__increment_shim!!($a, $b))
-        end...,
-    )
+    incrementers = Expr(:tuple, map(b -> :(Tapir.__convert($b)), pb_output_names)...)
 
     pb = ExprTools.combinedef(Dict(
         :head => :function,
         :name => :pb!!,
-        :args => [:dy, pb_arg_names...],
+        :args => [:dy],
         :body => quote
             $call_pb
             return $incrementers
@@ -67,7 +61,7 @@ macro from_rrule(ctx, sig)
             :body => quote
                 y, pb = $call_rrule
                 $pb
-                return Tapir.zero_codual(y), pb!!
+                return Tapir.zero_fcodual(y), pb!!
             end,
         )
     )
