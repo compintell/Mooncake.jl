@@ -320,6 +320,106 @@ end
 end
 
 """
+    can_produce_zero_rdata_from_type(::Type{P}) where {P}
+
+Returns whether or not the zero element of the rdata type for primal type `P` can be
+obtained from `P` alone.
+"""
+@generated function can_produce_zero_rdata_from_type(::Type{P}) where {P}
+    R = rdata_type(tangent_type(P))
+    R == NoRData && return true
+    return isstructtype(P) ? all(can_produce_zero_rdata_from_type, fieldtypes(P)) : false
+end
+
+can_produce_zero_rdata_from_type(::Type{<:IEEEFloat}) = true
+
+"""
+    CannotProduceZeroRDataFromType()
+
+Returned by `zero_rdata_from_type` if is not possible to construct the zero rdata element
+for a given type. See `zero_rdata_from_type` for more info.
+"""
+struct CannotProduceZeroRDataFromType end
+
+"""
+    zero_rdata_from_type(::Type{P}) where {P}
+
+Returns the zero element of `rdata_type(tangent_type(P))` if this is possible given only
+`P`. If not possible, returns an instance of `CannotProduceZeroRDataFromType`.
+
+For example, the zero rdata associated to any primal of type `Float64` is `0.0`, so for
+`Float64`s this function is simple. Similarly, if the rdata type for `P` is `NoRData`, that
+can simply be returned.
+
+However, it is not possible to return the zero rdata element for abstract types e.g. `Real`
+as the type does not uniquely determine the zero element -- the rdata type for `Real` is
+`Any`.
+
+These considerations apply recursively to tuples / namedtuples / structs, etc.
+
+If you encounter a type which this function returns `CannotProduceZeroRDataFromType`, but
+you believe this is done in error, please open an issue. This kind of problem does not
+constitute a correctness problem, but can be detrimental to performance, so should be dealt
+with.
+"""
+function zero_rdata_from_type(::Type{P}) where {P}
+    R = rdata_type(tangent_type(P))
+
+    # Simple case.
+    R == NoRData && return NoRData()
+
+    # If `P` is a struct type, attempt to derive the zero rdata for it. We cannot derive
+    # the zero rdata if it is not possible to derive the zero rdata for any of its fields.
+    if isstructtype(P)
+        names = fieldnames(P)
+        field_zeros = tuple_map(zero_rdata_from_type, fieldtypes(P))
+        if all(tuple_map(z -> !(z isa CannotProduceZeroRDataFromType), field_zeros))
+            wrapped_field_zeros = tuple_map(ntuple(identity, length(names))) do n
+                fzero = field_zeros[n]
+                if tangent_field_type(P, n) <: PossiblyUninitTangent
+                    return _wrap_field(rdata_type(tangent_type(fieldtype(P, n))), fzero)
+                else
+                    return fzero
+                end
+            end
+            return R(NamedTuple{names}(wrapped_field_zeros))
+        end
+    end
+
+    # Fallback -- we've not been able to figure out how to produce an instance of zero rdata
+    # so report that it cannot be done.
+    return CannotProduceZeroRDataFromType()
+end
+
+function zero_rdata_from_type(::Type{P}) where {P<:Tuple}
+    R = rdata_type(tangent_type(P))
+
+    R == NoRData && return NoRData()
+
+    field_zeros = tuple_map(zero_rdata_from_type, fieldtypes(P))
+    if all(tuple_map(z -> !(z isa CannotProduceZeroRDataFromType), field_zeros))
+        return field_zeros
+    end
+
+    return CannotProduceZeroRDataFromType()
+end
+
+function zero_rdata_from_type(::Type{P}) where {P<:NamedTuple}
+    R = rdata_type(tangent_type(P))
+
+    R == NoRData && return NoRData()
+
+    field_zeros = tuple_map(zero_rdata_from_type, fieldtypes(P))
+    if all(tuple_map(z -> !(z isa CannotProduceZeroRDataFromType), field_zeros))
+        return NamedTuple{fieldnames(P)}(field_zeros)
+    end
+
+    return CannotProduceZeroRDataFromType()
+end
+
+zero_rdata_from_type(::Type{P}) where {P<:IEEEFloat} = zero(P)
+
+"""
     LazyZeroRData{P, Tdata}()
 
 This type is a lazy placeholder for `zero_like_rdata_from_type`. This is used to defer
@@ -336,37 +436,19 @@ struct LazyZeroRData{P, Tdata}
     data::Tdata
 end
 
-# Attempt to make the construction of the zero rdata element as lazy as possible. Fallback
-# to not being lazy if we cannot prove it's safe to defer construction -- just store the
-# entire object.
+# Be lazy if we can compute the zero element given only the type, otherwise just store the
+# zero element and use it later.
 @inline function LazyZeroRData(p::P) where {P}
-    R = rdata_type(tangent_type(P))
-
-    R == NoRData && return LazyZeroRData{P, Nothing}(nothing)
-
-    return _lazy_zero_rdata_ctor_fallback(p)
+    if zero_rdata_from_type(P) isa CannotProduceZeroRDataFromType
+        rdata = zero_rdata(p)
+        return LazyZeroRData{P, _typeof(rdata)}(rdata)
+    else
+        return LazyZeroRData{P, Nothing}(nothing)
+    end
 end
 
-# Fallback just constructs the rdata, and stores it.
-@inline function _lazy_zero_rdata_ctor_fallback(p::P) where {P}
-    rdata = zero_rdata(p)
-    return LazyZeroRData{P, _typeof(rdata)}(rdata)
-end
-
-@inline function instantiate(r::LazyZeroRData{P}) where {P}
-    R = rdata_type(tangent_type(P))
-
-    R == NoRData && return zero_like_rdata_from_type(P)
-
-    return r.data
-end
-
-# For many important types, no data is required to be stored in order to construct an
-# instance of the zero rdata for `P`. All of the code below here is designed to make use of
-# that to avoid intermediate store when it's not necessary.
-
-@inline LazyZeroRData(::P) where {P<:IEEEFloat} = LazyZeroRData{P, Nothing}(nothing)
-@inline instantiate(::LazyZeroRData{P}) where {P<:IEEEFloat} = zero_like_rdata_from_type(P)
+@inline instantiate(::LazyZeroRData{P, Nothing}) where {P} = zero_rdata_from_type(P)
+@inline instantiate(r::LazyZeroRData) = r.data
 
 """
     tangent_type(F::Type, R::Type)::Type

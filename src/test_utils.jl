@@ -91,7 +91,8 @@ using Tapir:
     CoDual, NoTangent, rrule!!, is_init, zero_codual, DefaultCtx, @is_primitive, val,
     is_always_fully_initialised, get_tangent_field, set_tangent_field!, MutableTangent,
     Tangent, _typeof, rdata, NoFData, to_fwds, uninit_fdata, zero_rdata,
-    zero_like_rdata_from_type
+    zero_rdata_from_type, CannotProduceZeroRDataFromType, LazyZeroRData, instantiate,
+    can_produce_zero_rdata_from_type
 
 has_equal_data(x::T, y::T; equal_undefs=true) where {T<:String} = x == y
 has_equal_data(x::Type, y::Type; equal_undefs=true) = x == y
@@ -876,8 +877,20 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
     @test z_new isa tangent_type(P)
     @test z_new === z
 
-    # Test that `zero_like_rdata_from_type` produces a valid rdata.
-    @test zero_like_rdata_from_type(P) isa R
+    # Query whether or not the rdata type can be built given only the primal type.
+    can_make_zero = @inferred can_produce_zero_rdata_from_type(P)
+
+    # Check that when the zero element is asked from the primal type alone, the result is
+    # either an instance of R _or_ a `CannotProduceZeroRDataFromType`.
+    JET.test_opt(zero_rdata_from_type, Tuple{Type{P}})
+    rzero_from_type = @inferred zero_rdata_from_type(P)
+    @test rzero_from_type isa R || rzero_from_type isa CannotProduceZeroRDataFromType
+    @test can_make_zero != isa(rzero_from_type, CannotProduceZeroRDataFromType)
+
+    # Check that we can produce a lazy zero rdata, and that it has the correct type.
+    JET.test_opt(LazyZeroRData, Tuple{P})
+    lazy_rzero = @inferred LazyZeroRData(p)
+    @test instantiate(lazy_rzero) isa R
 end
 
 function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)

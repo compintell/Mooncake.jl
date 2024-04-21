@@ -2,7 +2,9 @@
     @testset "$(typeof(p))" for (_, p, _...) in Tapir.tangent_test_cases()
         TestUtils.test_fwds_rvs_data(Xoshiro(123456), p)
     end
-    @testset "rdata_interal_ctors" begin
+    @testset "lazy construction checks" begin
+        # Check that lazy construction is in fact lazy for some cases where performance
+        # really matters -- floats, things with no rdata, etc.
         @testset "$p" for (p, fully_lazy) in Any[
             (5, true),
             (Int32(5), true),
@@ -12,9 +14,7 @@
             (StructFoo(5.0), false),
             (StructFoo(5.0, randn(4)), false),
         ]
-            r = LazyZeroRData(p)
-            @test zero_rdata(p) == instantiate(r)
-            @test fully_lazy == Base.issingletontype(typeof(r))
+            @test fully_lazy == Base.issingletontype(typeof(LazyZeroRData(p)))
         end
     end
 end

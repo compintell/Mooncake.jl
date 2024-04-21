@@ -1,4 +1,3 @@
-
 """
     ZeroRData()
 
@@ -14,66 +13,25 @@ struct ZeroRData end
 @inline increment!!(::ZeroRData, r::R) where {R} = r
 
 """
-    zero_like_rdata_from_type(::Type{P}) where {P}
+    zero_like_rdata_type(::Type{P}) where {P}
+
+Indicates the type which will be returned by `zero_like_rdata_from_type`. Will be the rdata
+type for `P` if we can produce the zero rdata element given only `P`, and will be the union
+of `R` and `ZeroRData` if an instance of `P` is needed.
 """
-zero_like_rdata_from_type(::Type{P}) where {P}
-
-zero_like_rdata_from_type(::Type{P}) where {P<:IEEEFloat} = zero(P)
-
-@generated function zero_like_rdata_from_type(::Type{P}) where {P}
-
-    # Get types associated to primal.
-    T = tangent_type(P)
-    R = rdata_type(T)
-
-    # If there's no reverse data, return no reverse data, e.g. for mutable types.
-    R == NoRData && return NoRData()
-
-    # If the type is itself abstract, it's reverse data could be anything.
-    # The same goes for if the type has any undetermined type parameters.
-    (isabstracttype(T) || !isconcretetype(T)) && return ZeroRData()
-
-    # T ought to be a `Tangent`. If it's not, something has gone wrong.
-    !(T <: Tangent) && return Expr(:call, error, "Unhandled type $T")
-    rdata_field_zeros_exprs = ntuple(fieldcount(P)) do n
-        R_field = rdata_field_type(P, n)
-        if R_field <: PossiblyUninitTangent
-            return :($R_field(zero_like_rdata_from_type($(fieldtype(P, n)))))
-        else
-            return :(zero_like_rdata_from_type($(fieldtype(P, n))))
-        end
-    end
-    backing_data_expr = Expr(:call, :tuple, rdata_field_zeros_exprs...)
-    backing_expr = :($(rdata_backing_type(P))($backing_data_expr))
-    return Expr(:call, R, backing_expr)
+function zero_like_rdata_type(::Type{P}) where {P}
+    R = rdata_type(tangent_type(P))
+    return can_produce_zero_rdata_from_type(P) ? R : Union{R, ZeroRData}
 end
 
-@generated function zero_like_rdata_from_type(::Type{P}) where {P<:Tuple}
-    # Get types associated to primal.
-    T = tangent_type(P)
-    R = rdata_type(T)
+"""
+    zero_like_rdata_from_type(::Type{P}) where {P}
 
-    # If there's no reverse data, return no reverse data, e.g. for mutable types.
-    R == NoRData && return NoRData()
+This is an internal implementation detail -- you should generally not use this function.
 
-    # If the type is not concrete, then use the `ZeroRData` option.
-    Base.isconcretetype(R) || return ZeroRData()
-
-    return Expr(:call, tuple, map(p -> :(zero_like_rdata_from_type($p)), P.parameters)...)
-end
-
-@generated function zero_like_rdata_from_type(::Type{NamedTuple{names, Pt}}) where {names, Pt}
-
-    # Get types associated to primal.
-    P = NamedTuple{names, Pt}
-    T = tangent_type(P)
-    R = rdata_type(T)
-
-    # If there's no reverse data, return no reverse data, e.g. for mutable types.
-    R == NoRData && return NoRData()
-
-    # If the type is not concrete, then use the `ZeroRData` option.
-    Base.isconcretetype(R) || return ZeroRData()
-
-    return :(NamedTuple{$names}(zero_like_rdata_from_type($Pt)))
+Returns _either_ the zero element of type `rdata_type(tangent_type(P))`, or a `ZeroRData`.
+It is always valid to return a `ZeroRData`, 
+"""
+function zero_like_rdata_from_type(::Type{P}) where {P}
+    return can_produce_zero_rdata_from_type(P) ? zero_rdata_from_type(P) : ZeroRData()
 end

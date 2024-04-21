@@ -3,8 +3,11 @@
         @testset "$P" for P in Any[
             @NamedTuple{a},
             Tuple{Any},
+            Float64,
+            Int,
+            Vector{Float64},
         ]
-            @test Tapir.zero_like_rdata_from_type(P) isa Tapir.ZeroRData
+            @test Tapir.zero_like_rdata_from_type(P) isa Tapir.zero_like_rdata_type(P)
         end
     end
 end

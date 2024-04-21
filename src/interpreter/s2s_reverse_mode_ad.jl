@@ -167,8 +167,7 @@ __ref(P) = new_inst(Expr(:call, __make_ref, P))
 
 # Helper for reverse_data_ref_stmts.
 @inline @generated function __make_ref(::Type{P}) where {P}
-    R = rdata_type(tangent_type(P))
-    R = P isa Union ? Union{ZeroRData, R} : R
+    R = zero_like_rdata_type(P)
     return :(Ref{$R}(Tapir.zero_like_rdata_from_type(P)))
 end
 
