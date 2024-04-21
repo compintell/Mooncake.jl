@@ -683,7 +683,7 @@ function build_rrule(interp::PInterp{C}, sig::Type{<:Tuple}; safety_on=false) wh
         # display(optimised_pb_ir)
         fwds_oc = OpaqueClosure(optimised_fwds_ir, shared_data...; do_compile=true)
         pb_oc = OpaqueClosure(optimised_pb_ir, shared_data...; do_compile=true)
-        interp.oc_cache[sig] = (fwds_oc, pb_oc)
+        interp.oc_cache[(sig, safety_on)] = (fwds_oc, pb_oc)
     else
         existing_fwds_oc, existing_pb_oc = interp.oc_cache[(sig, safety_on)]
         fwds_oc = replace_captures(existing_fwds_oc, shared_data)
@@ -1011,8 +1011,7 @@ end
 
 function (rule::LazyDerivedRule)(args::Vararg{Any, N}) where {N}
     if !isdefined(rule, :rule)
-        raw_rule = build_rrule(rule.interp, rule.sig)
-        rule.rule = rule.safety_on ? SafeRRule(raw_rule) : raw_rule
+        rule.rule = build_rrule(rule.interp, rule.sig; safety_on=rule.safety_on)
     end
     return rule.rule(args...)
 end
