@@ -525,7 +525,7 @@ end
 
 @inline function __run_rvs_pass!(P, pb!!, ret_rev_data_ref::Ref, arg_rev_data_refs...)
     tuple_map(increment_if_ref!, arg_rev_data_refs, pb!!(ret_rev_data_ref[]))
-    ret_rev_data_ref[] = zero_like_rdata_from_type(P)
+    set_ret_ref_to_zero!!(P, ret_rev_data_ref)
     return nothing
 end
 
@@ -533,9 +533,15 @@ end
 @inline increment_if_ref!(::Nothing, ::Any) = nothing
 
 @inline increment_ref!(x::Ref, t) = setindex!(x, increment!!(x[], t))
+@inline increment_ref!(::Base.RefValue{NoRData}, t) = nothing
 
 # Useful to have this function call for debugging when looking at the generated IRCode.
 @inline __pop_pb_stack!(stack) = pop!(stack)
+
+@inline function set_ret_ref_to_zero!!(::Type{P}, r::Ref{R}) where {P, R}
+    r[] = zero_like_rdata_from_type(P)
+end
+@inline set_ret_ref_to_zero!!(::Type{P}, r::Base.RefValue{NoRData}) where {P} = nothing
 
 #
 # Runners for generated code.
