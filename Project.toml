@@ -1,6 +1,6 @@
 name = "Tapir"
 uuid = "07d77754-e150-4737-8c94-cd238a1fb45b"
-authors = ["Will Tebbutt and contributors"]
+authors = ["Will Tebbutt, Hong Ge, and contributors"]
 version = "0.2.0"
 
 [deps]
