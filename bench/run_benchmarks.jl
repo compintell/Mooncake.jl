@@ -22,7 +22,6 @@ using Tapir:
     CoDual,
     generate_hand_written_rrule!!_test_cases,
     generate_derived_rrule!!_test_cases,
-    InterpretedFunction,
     TestUtils,
     PInterp,
     _typeof
@@ -100,8 +99,8 @@ function _generate_gp_inputs()
 end
 
 @model broadcast_demo(x) = begin
-    μ ~ TruncatedNormal(1, 2, 0.1, 10)
-    σ ~ TruncatedNormal(1, 2, 0.1, 10)
+    μ ~ truncated(Normal(1, 2), 0.1, 10)
+    σ ~ truncated(Normal(1, 2), 0.1, 10)
     x .~ LogNormal(μ, σ)   
 end
 
