@@ -387,7 +387,7 @@ function increment!!(x::T, y::T) where {T<:PossiblyUninitTangent}
     !is_init(x) && is_init(y) && error("x is not initialised, but y is")
     return x
 end
-increment!!(x::T, y::T) where {T<:Tangent} = Tangent(increment!!(x.fields, y.fields))
+increment!!(x::T, y::T) where {T<:Tangent} = T(increment!!(x.fields, y.fields))
 function increment!!(x::T, y::T) where {T<:MutableTangent}
     x === y && return x
     x.fields = increment!!(x.fields, y.fields)
@@ -711,13 +711,17 @@ function tangent_test_cases()
     )
     rel_test_cases = Any[
         (2.0, 3),
+        (3, 2.0),
         (2.0, 1.0),
         (randn(10), 3),
+        (3, randn(10)),
         (randn(10), randn(10)),
+        (a=2.0, b=3),
+        (a=3, b=2.0),
+        (a=randn(10), b=3),
+        (a=3, b=randn(10)),
+        (a=randn(10), b=randn(10)),
     ]
-
-
-
     return vcat(
         map(x -> (false, x...), abs_test_cases),
         map(x -> (false, x), rel_test_cases),
