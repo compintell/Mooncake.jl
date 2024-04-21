@@ -758,6 +758,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability, nothing, Base.arrayref, false, randn(4), 1),
         (false, :stability, nothing, Base.arrayref, true, randn(5, 4), 1, 1),
         (false, :stability, nothing, Base.arrayref, false, randn(5, 4), 5, 4),
+        (false, :stability, nothing, Base.arrayref, false, [1, 2, 3], 1),
         (false, :stability, nothing, Base.arrayset, false, [1, 2, 3], 4, 2),
         (false, :stability, nothing, Base.arrayset, false, randn(5), 4.0, 3),
         (false, :stability, nothing, Base.arrayset, false, randn(5, 4), 3.0, 1, 3),
