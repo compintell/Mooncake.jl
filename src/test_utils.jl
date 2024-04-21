@@ -451,9 +451,11 @@ function test_rrule!!(
     test_rrule_performance(perf_flag, rule, x_x̄...)
 end
 
-function test_derived_rule(rng::AbstractRNG, x...; interp, kwargs...)
-    safe_rule = Tapir.build_rrule(interp, _typeof(__get_primals(x)); safety_on=true)
-    test_rrule!!(rng, x...; rule=safe_rule, interface_only=true, perf_flag=:none, is_primitive=false)
+function test_derived_rule(rng::AbstractRNG, x...; safety_on=true, interp, kwargs...)
+    if safety_on
+        safe_rule = Tapir.build_rrule(interp, _typeof(__get_primals(x)); safety_on=true)
+        test_rrule!!(rng, x...; rule=safe_rule, interface_only=true, perf_flag=:none, is_primitive=false)
+    end
     rule = Tapir.build_rrule(interp, _typeof(__get_primals(x)))
     test_rrule!!(rng, x...; rule, kwargs...)
 end
@@ -793,7 +795,9 @@ of type `P`, and to test them using `test_rrule!!`.
 As always, there are limits to the errors that these tests can identify -- they form
 necessary but not sufficient conditions for the correctness of your code.
 """
-function test_tangent(rng::AbstractRNG, p::P, x::T, y::T, z_target::T; interface_only) where {P, T}
+function test_tangent(
+    rng::AbstractRNG, p::P, x::T, y::T, z_target::T; interface_only, perf=true
+) where {P, T}
     @nospecialize rng p x y z_target
 
     # Check the interface.
@@ -813,7 +817,7 @@ function test_tangent(rng::AbstractRNG, p::P, x::T, y::T, z_target::T; interface
     end
 
     # Check performance is as expected.
-    test_tangent_performance(rng, p)
+    perf && test_tangent_performance(rng, p)
 end
 
 function test_tangent(rng::AbstractRNG, p::P; interface_only=false) where {P}
