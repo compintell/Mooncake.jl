@@ -21,6 +21,8 @@ struct FData{T<:NamedTuple}
     data::T
 end
 
+fields_type(::Type{FData{T}}) where {T<:NamedTuple} = T
+
 increment!!(x::F, y::F) where {F<:FData} = F(tuple_map(increment!!, x.data, y.data))
 
 """
@@ -156,6 +158,8 @@ struct NoRData end
 struct RData{T<:NamedTuple}
     data::T
 end
+
+fields_type(::Type{RData{T}}) where {T<:NamedTuple} = T
 
 @inline increment!!(x::RData{T}, y::RData{T}) where {T} = RData(increment!!(x.data, y.data))
 
@@ -331,7 +335,7 @@ struct ZeroRData end
 @inline increment!!(::ZeroRData, r::R) where {R} = r
 
 """
-
+    zero_like_rdata_from_type(::Type{P}) where {P}
 """
 zero_rdata_from_type(::Type{P}) where {P}
 
@@ -373,6 +377,9 @@ end
     # If there's no reverse data, return no reverse data, e.g. for mutable types.
     R == NoRData && return NoRData()
 
+    # If the type is not concrete, then use the `ZeroRData` option.
+    Base.isconcretetype(R) || return ZeroRData()
+
     return Expr(:call, tuple, map(p -> :(zero_rdata_from_type($p)), P.parameters)...)
 end
 
@@ -385,6 +392,9 @@ end
 
     # If there's no reverse data, return no reverse data, e.g. for mutable types.
     R == NoRData && return NoRData()
+
+    # If the type is not concrete, then use the `ZeroRData` option.
+    Base.isconcretetype(R) || return ZeroRData()
 
     return :(NamedTuple{$names}(zero_rdata_from_type($Pt)))
 end
@@ -439,52 +449,119 @@ end
 @inline instantiate(::LazyZeroRData{P}) where {P<:IEEEFloat} = zero_rdata_from_type(P)
 
 """
-    combine_data(tangent_type, fdata, rdata)
+    tangent_type(F::Type, R::Type)::Type
+
+Given the type of the fdata and rdata, `F` and `R` resp., for some primal type, compute its
+tangent type. This method must be equivalent to `tangent_type(_typeof(primal))`.
+"""
+tangent_type(::Type{NoFData}, ::Type{NoRData}) = NoTangent
+tangent_type(::Type{NoFData}, ::Type{R}) where {R<:IEEEFloat} = R
+tangent_type(::Type{F}, ::Type{NoRData}) where {F<:Array} = F
+
+# Tuples
+function tangent_type(::Type{F}, ::Type{R}) where {F<:Tuple, R<:Tuple}
+    return Tuple{tuple_map(tangent_type, Tuple(F.parameters), Tuple(R.parameters))...}
+end
+function tangent_type(::Type{NoFData}, ::Type{R}) where {R<:Tuple}
+    F_tuple = Tuple{fill_tuple(NoFData, Val(length(R.parameters)))...}
+    return tangent_type(F_tuple, R)
+end
+function tangent_type(::Type{F}, ::Type{NoRData}) where {F<:Tuple}
+    R_tuple = Tuple{fill_tuple(NoRData, Val(length(F.parameters)))...}
+    return tangent_type(F, R_tuple)
+end
+
+# NamedTuples
+function tangent_type(::Type{F}, ::Type{R}) where {ns, F<:NamedTuple{ns}, R<:NamedTuple{ns}}
+    return NamedTuple{ns, tangent_type(tuple_type(F), tuple_type(R))}
+end
+function tangent_type(::Type{NoFData}, ::Type{R}) where {ns, R<:NamedTuple{ns}}
+    return NamedTuple{ns, tangent_type(NoFData, tuple_type(R))}
+end
+function tangent_type(::Type{F}, ::Type{NoRData}) where {ns, F<:NamedTuple{ns}}
+    return NamedTuple{ns, tangent_type(tuple_type(F), NoRData)}
+end
+tuple_type(::Type{<:NamedTuple{<:Any, T}}) where {T<:Tuple} = T
+
+# mutable structs
+tangent_type(::Type{F}, ::Type{NoRData}) where {F<:MutableTangent} = F
+
+# structs
+function tangent_type(::Type{F}, ::Type{R}) where {F<:FData, R<:RData}
+    return Tangent{tangent_type(fields_type(F), fields_type(R))}
+end
+function tangent_type(::Type{NoFData}, ::Type{R}) where {R<:RData}
+    return Tangent{tangent_type(NoFData, fields_type(R))}
+end
+function tangent_type(::Type{F}, ::Type{NoRData}) where {F<:FData}
+    return Tangent{tangent_type(fields_type(F), NoRData)}
+end
+
+function tangent_type(
+    ::Type{PossiblyUninitTangent{F}}, ::Type{PossiblyUninitTangent{R}}
+) where {F, R}
+    return PossiblyUninitTangent{tangent_type(F, R)}
+end
+
+# Abstract types.
+tangent_type(::Type{Any}, ::Type{Any}) = Any
 
 
 """
-combine_data(::Type{NoTangent}, ::NoFData, ::NoRData) = NoTangent()
-combine_data(::Type{T}, ::NoFData, r::T) where {T} = r
-combine_data(::Type{T}, f::T, ::NoRData) where {T} = f
+    tangent(f, r)
 
-# General structs.
-function combine_data(::Type{T}, f::FData{F}, r::RData{R}) where {T<:Tangent, F, R}
-    return __combine_struct_data(T, f.data, r.data)
+Reconstruct the tangent `t` for which `fdata(t) == f` and `rdata(t) == r`.
+"""
+tangent(::NoFData, ::NoRData) = NoTangent()
+tangent(::NoFData, r::IEEEFloat) = r
+tangent(f::Array, ::NoRData) = f
+
+# Tuples
+tangent(f::Tuple, r::Tuple) = tuple_map(tangent, f, r)
+tangent(::NoFData, r::Tuple) = tuple_map(_r -> tangent(NoFData(), _r), r)
+tangent(f::Tuple, ::NoRData) = tuple_map(_f -> tangent(_f, NoRData()), f)
+
+# NamedTuples
+function tangent(f::NamedTuple{n}, r::NamedTuple{n}) where {n}
+    return NamedTuple{n}(tangent(Tuple(f), Tuple(r)))
 end
-
-function combine_data(::Type{T}, f::NoFData, r::RData{R}) where {T<:Tangent, R}
-    return __combine_struct_data(T, tuple_map(_ -> NoFData(), r.data), r.data)
+function tangent(::NoFData, r::NamedTuple{ns}) where {ns}
+    return NamedTuple{ns}(tangent(NoFData(), Tuple(r)))
 end
-
-function combine_data(::Type{T}, f::FData{F}, ::NoRData) where {T<:Tangent, F}
-    return __combine_struct_data(T, f.data, tuple_map(_ -> NoRData(), f.data))
-end
-
-# Helper used for combining fdata and rdata for (mutable) structs.
-function __combine_struct_data(::Type{T}, fs, rs) where {T<:Tangent}
-    nt = fields_type(T)
-    return T(nt(map(combine_data, fieldtypes(nt), fs, rs)))
-end
-
-function combine_data(
-    ::Type{PossiblyUninitTangent{T}}, f::PossiblyUninitTangent, r::PossiblyUninitTangent
-) where {T}
-    Tout = PossiblyUninitTangent{T}
-    return is_init(f) ? Tout(combine_data(T, val(f), val(r))) : Tout()
+function tangent(f::NamedTuple{ns}, ::NoRData) where {ns}
+    return NamedTuple{ns}(tangent(Tuple(f), NoRData()))
 end
 
-# Tuples and NamedTuples
-function combine_data(::Type{T}, f::Tuple, r::Tuple) where {T}
-    return T(map(combine_data, fieldtypes(T), f, r))
+# mutable structs
+tangent(f::MutableTangent, r::NoRData) = f
+
+# structs
+function tangent(f::F, r::R) where {F<:FData, R<:RData}
+    return tangent_type(F, R)(tangent(f.data, r.data))
 end
-function combine_data(::Type{T}, f::NamedTuple{ns}, r::NamedTuple{ns}) where {T, ns}
-    return T(map(combine_data, fieldtypes(T), f, r))
+function tangent(::NoFData, r::R) where {R<:RData}
+    return tangent_type(NoFData, R)(tangent(NoFData(), r.data))
 end
-function combine_data(::Type{T}, f::Union{Tuple, NamedTuple}, r::NoRData) where {T}
-    return combine_data(T, f, map(_ -> NoRData(), f))
+function tangent(f::F, ::NoRData) where {F<:FData}
+    return tangent_type(F, NoRData)(tangent(f.data, NoRData()))
 end
-function combine_data(::Type{T}, f::NoFData, r::Union{Tuple, NamedTuple}) where {T}
-    return combine_data(T, map(_ -> NoFData(), r), r)
+
+function tangent(f::PossiblyUninitTangent{F}, r::PossiblyUninitTangent{R}) where {F, R}
+    T = PossiblyUninitTangent{tangent_type(F, R)}
+    is_init(f) && is_init(r) && return T(tangent(val(f), val(r)))
+    !is_init(f) && !is_init(r) && return T()
+    throw(ArgumentError("Initialisation mismatch"))
+end
+function tangent(f::PossiblyUninitTangent{F}, ::PossiblyUninitTangent{NoRData}) where {F}
+    T = PossiblyUninitTangent{tangent_type(F, NoRData)}
+    return is_init(f) ? T(tangent(val(f), NoRData())) : T()
+end
+function tangent(::PossiblyUninitTangent{NoFData}, r::PossiblyUninitTangent{R}) where {R}
+    T = PossiblyUninitTangent{tangent_type(NoFData, R)}
+    return is_init(r) ? T(tangent(NoFData(), val(r))) : T()
+end
+function tangent(::PossiblyUninitTangent{NoFData}, ::PossiblyUninitTangent{NoRData})
+    return PossiblyUninitTangent(NoTangent())
 end
 
 """
@@ -498,7 +575,7 @@ function zero_tangent(p::P, f::F) where {P, F}
     T = tangent_type(P)
     T == F && return f
     r = rdata(zero_tangent(p))
-    return combine_data(tangent_type(P), f, r)
+    return tangent(f, r)
 end
 
 zero_tangent(p::Tuple, f::Union{Tuple, NamedTuple}) = tuple_map(zero_tangent, p, f)
