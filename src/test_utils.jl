@@ -92,7 +92,7 @@ using Tapir:
     is_always_fully_initialised, get_tangent_field, set_tangent_field!, MutableTangent,
     Tangent, _typeof, rdata, NoFData, to_fwds, uninit_fdata, zero_rdata,
     zero_rdata_from_type, CannotProduceZeroRDataFromType, LazyZeroRData, instantiate,
-    can_produce_zero_rdata_from_type
+    can_produce_zero_rdata_from_type, increment_rdata!!
 
 has_equal_data(x::T, y::T; equal_undefs=true) where {T<:String} = x == y
 has_equal_data(x::Type, y::Type; equal_undefs=true) = x == y
@@ -904,6 +904,9 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
     JET.test_opt(LazyZeroRData, Tuple{P})
     lazy_rzero = @inferred LazyZeroRData(p)
     @test instantiate(lazy_rzero) isa R
+
+    # Check incrementing the rdata component of a tangent yields the correct type.
+    @test increment_rdata!!(t, r) isa T
 end
 
 function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)

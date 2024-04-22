@@ -573,6 +573,13 @@ function tangent(::PossiblyUninitTangent{NoFData}, ::PossiblyUninitTangent{NoRDa
 end
 
 """
+    increment_rdata!!(t::T, r)::T where {T}
+
+Increment the rdata component of tangent `t` by `r`, and return the updated tangent.
+"""
+increment_rdata!!(t::T, r) where {T} = tangent(fdata(t), increment!!(rdata(t), r))::T
+
+"""
     zero_tangent(p, ::NoFData)
 
 
