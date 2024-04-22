@@ -20,13 +20,13 @@ Apply type checking to enforce pre- and post-conditions on `pb.pb`. See the docs
 `SafePullback` for details.
 """
 @inline function (pb::SafePullback)(dy)
-    verify_rvs_type(pb.y, dy)
+    verify_rvs(pb.y, dy)
     dx = pb.pb(dy)
-    verify_rvs_types(pb, dx)
+    verify_rvs_output(pb, dx)
     return dx
 end
 
-@noinline function verify_rvs_types(pb, dx)
+@noinline function verify_rvs_output(pb, dx)
     # Number of arguments and number of elements in pullback must match. Have to check this
     # because `zip` doesn't require equal lengths for arguments.
     l_pb = length(pb.x)
@@ -37,11 +37,11 @@ end
 
     # Use for-loop to keep stack trace as simple as possible.
     for (x, dx) in zip(pb.x, dx)
-        verify_rvs_type(x, dx)
+        verify_rvs(x, dx)
     end
 end
 
-@noinline function verify_rvs_type(::P, dx) where {P}
+@noinline function verify_rvs(::P, dx) where {P}
     _R = rdata_type(tangent_type(P))
     R = _typeof(dx)
     R <: ZeroRData && return nothing
@@ -72,20 +72,20 @@ Apply type checking to enforce pre- and post-conditions on `rule.rule`. See the 
 for `SafeRRule` for details.
 """
 @inline function (rule::SafeRRule)(x::Vararg{CoDual, N}) where {N}
-    verify_fwds_types(x)
+    verify_fwds_inputs(x)
     y, pb = rule.rule(x...)
-    verify_fwds_type(y)
+    verify_fwds(y)
     return y::CoDual, SafePullback(pb, primal(y), map(primal, x))
 end
 
-@noinline function verify_fwds_types(x)
+@noinline function verify_fwds_inputs(x::Tuple)
     # Use for-loop to keep the stack trace as simple as possible.
     for _x in x
-        verify_fwds_type(_x)
+        verify_fwds(_x)
     end
 end
 
-@noinline function verify_fwds_type(x::CoDual)
+@noinline function verify_fwds(x::CoDual)
     P = _typeof(primal(x))
     F = _typeof(tangent(x))
     _F = fdata_type(tangent_type(_typeof(primal(x))))
