@@ -20,7 +20,7 @@ using Tapir
 import ..Tapir:
     rrule!!, CoDual, primal, tangent, zero_tangent, NoPullback,
     tangent_type, increment!!, @is_primitive, MinimalCtx, is_primitive, NoFData,
-    zero_rdata, NoRData, tuple_map, fdata, NoRData, rdata
+    zero_rdata, NoRData, tuple_map, fdata, NoRData, rdata, increment_rdata!!
 
 # Note: performance is not considered _at_ _all_ in this implementation.
 function rrule!!(f::CoDual{<:Core.IntrinsicFunction}, args...)
@@ -260,11 +260,8 @@ function rrule!!(::CoDual{typeof(pointerref)}, x, y, z)
     dx = tangent(x)
     a = CoDual(pointerref(_x, _y, _z), fdata(pointerref(dx, _y, _z)))
     function pointerref_pullback!!(da)
-        dx_v = pointerref(dx, _y, _z)
-        fd = fdata(dx_v)
-        rd = rdata(dx_v)
-        new_rd = increment!!(rd, da)
-        pointerset(dx, tangent(fd, new_rd), _y, _z)
+        new_tangent = increment_rdata!!(pointerref(dx, _y, _z), da)
+        pointerset(dx, new_tangent, _y, _z)
         return NoRData(), NoRData(), NoRData(), NoRData()
     end
     return a, pointerref_pullback!!
@@ -401,10 +398,8 @@ function rrule!!(
     _inds = map(primal, inds)
     dx = tangent(x)
     function arrayref_pullback!!(dy)
-        current_val = arrayref(_inbounds, dx, _inds...)
-        fc = fdata(current_val)
-        rc = increment!!(rdata(current_val), dy)
-        arrayset(_inbounds, dx, tangent(fc, rc), _inds...)
+        new_tangent = increment_rdata!!(arrayref(_inbounds, dx, _inds...), dy)
+        arrayset(_inbounds, dx, new_tangent, _inds...)
         return NoRData(), NoRData(), NoRData(), tuple_map(_ -> NoRData(), _inds)...
     end
     _y = arrayref(_inbounds, primal(x), _inds...)
