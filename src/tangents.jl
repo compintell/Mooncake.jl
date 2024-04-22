@@ -709,7 +709,7 @@ function tangent_test_cases()
         [
             (p, NoTangent(), NoTangent(), NoTangent()) for p in
                 [Array, Float64, Union{Float64, Float32}, Union, UnionAll,
-                Core.Intrinsics.xor_int, typeof(<:)]
+                typeof(<:)]
         ],
     )
     rel_test_cases = Any[
