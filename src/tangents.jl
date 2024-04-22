@@ -213,6 +213,7 @@ tangent_type(::Type{DimensionMismatch}) = NoTangent
     isempty(P.parameters) && return NoTangent
     isa(last(P.parameters), Core.TypeofVararg) && return Any
     all(p -> tangent_type(p) == NoTangent, P.parameters) && return NoTangent
+    isconcretetype(P) || return Any
     return Tuple{map(tangent_type, fieldtypes(P))...}
 end
 

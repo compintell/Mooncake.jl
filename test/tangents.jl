@@ -92,6 +92,7 @@
             tangent_type(Union{Tuple{Float64}, Tuple{Int}, Tuple{Float64, Int}}),
             Union{Tuple{Float64}, NoTangent, Tuple{Float64, NoTangent}},
         )
+        @test tangent_type(Tuple{Any, Any}) == Any
     end
 end
 
