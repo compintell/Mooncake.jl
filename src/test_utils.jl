@@ -399,14 +399,12 @@ function test_rrule_performance(
 
         # Test allocations in primal.
         f(x...)
-        GC.gc()
         @test (@allocations f(x...)) == 0
 
         # Test allocations in round-trip.
         f_f̄_fwds = to_fwds(f_f̄)
         x_x̄_fwds = map(to_fwds, x_x̄)
         __forwards_and_backwards(rule, f_f̄_fwds, x_x̄_fwds...)
-        GC.gc()
         @test (@allocations __forwards_and_backwards(rule, f_f̄_fwds, x_x̄_fwds...)) == 0
     end
 end
@@ -676,12 +674,10 @@ function test_tangent_performance(rng::AbstractRNG, p::P) where {P}
 
     # Computing the tangent type must always be type stable and allocation-free.
     @inferred tangent_type(P)
-    GC.gc()
     @test (@allocations tangent_type(P)) == 0
 
     # Check there are no allocations when there ought not to be.
     if !__tangent_generation_should_allocate(P)
-        GC.gc()
         @test (@allocations zero_tangent_wrapper(p)) == 0
         @test (@allocations randn_tangent_wrapper(rng, p)) == 0
     end
@@ -695,7 +691,6 @@ function test_tangent_performance(rng::AbstractRNG, p::P) where {P}
     # Unfortunately, `increment!!` does occassionally allocate at the minute due to the
     # way we're handling partial initialisation. Hopefully this will change in the future.
     if !__increment_should_allocate(P)
-        GC.gc()
         @test (@allocations increment!!(t, t)) == 0
         @test (@allocations increment!!(z, t)) == 0
         @test (@allocations increment!!(t, z)) == 0
@@ -726,7 +721,6 @@ function test_set_tangent_field!_performance(t1::T, t2::T) where {V, T<:MutableT
         if all(n -> !(fieldtype(V, n) <: Tapir.PossiblyUninitTangent), 1:fieldcount(V))
             i = Val(n)
             _set_tangent_field!(t1, i, v)
-            GC.gc()
             @test count_allocs(_set_tangent_field!, t1, i, v) == 0
         end
 
@@ -737,7 +731,6 @@ function test_set_tangent_field!_performance(t1::T, t2::T) where {V, T<:MutableT
 
         if all(n -> !(fieldtype(V, n) <: Tapir.PossiblyUninitTangent), 1:fieldcount(V))
             _set_tangent_field!(t1, s, v)
-            GC.gc()
             @test count_allocs(_set_tangent_field!, t1, s, v) == 0
         end
     end
@@ -754,14 +747,12 @@ function test_get_tangent_field_performance(t::Union{MutableTangent, Tangent})
         i = Val(n)
         JET.@report_opt _get_tangent_field(t, i)
         @inferred _get_tangent_field(t, i)
-        GC.gc()
         @test count_allocs(_get_tangent_field, t, i) == 0
 
         # Symbol mode.
         s = Val(fieldname(V, n))
         JET.@report_opt _get_tangent_field(t, s)
         @inferred _get_tangent_field(t, s)
-        GC.gc()
         @test count_allocs(_get_tangent_field, t, s) == 0
     end
 end
