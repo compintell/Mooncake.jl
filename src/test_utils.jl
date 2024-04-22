@@ -666,7 +666,6 @@ To verify that this is the case, ensure that all tests in either `test_tangent` 
 `test_tangent_consistency` pass.
 """
 function test_tangent_performance(rng::AbstractRNG, p::P) where {P}
-    @nospecialize rng, p
 
     # Should definitely infer, because tangent type must be known statically from primal.
     z = @inferred zero_tangent(p)
@@ -678,7 +677,9 @@ function test_tangent_performance(rng::AbstractRNG, p::P) where {P}
 
     # Check there are no allocations when there ought not to be.
     if !__tangent_generation_should_allocate(P)
+        zero_tangent_wrapper(p)
         @test (@allocations zero_tangent_wrapper(p)) == 0
+        randn_tangent_wrapper(rng, p)
         @test (@allocations randn_tangent_wrapper(rng, p)) == 0
     end
 
