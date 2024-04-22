@@ -154,18 +154,15 @@ function rrule!!(
     else
         save ? val(getfield(tangent(value).fields, name)) : nothing
     end
-    dx = zero_rdata(primal(x))
     dvalue = tangent(value)
     pb!! = if F == NoFData
         function __setfield!_pullback(dy)
-            new_dx = increment!!(dx, dy)
             old_x !== nothing && lsetfield!(primal(value), Val(name), old_x)
-            return NoRData(), NoRData(), NoRData(), new_dx
+            return NoRData(), NoRData(), NoRData(), dy
         end
     else
         function setfield!_pullback(dy)
-            new_dx = increment!!(dx, rdata(val(getfield(dvalue.fields, name))))
-            new_dx = increment!!(new_dx, dy)
+            new_dx = increment!!(dy, rdata(val(getfield(dvalue.fields, name))))
             old_x !== nothing && lsetfield!(primal(value), Val(name), old_x)
             old_x !== nothing && set_tangent_field!(dvalue, name, old_dx)
             return NoRData(), NoRData(), NoRData(), new_dx
