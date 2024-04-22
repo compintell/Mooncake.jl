@@ -247,12 +247,12 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
         # structs
         (false, :stability_and_allocs, nothing, lgetfield, 1:5, Val(:start)),
         (false, :stability_and_allocs, nothing, lgetfield, 1:5, Val(:stop)),
-        (true, :none, nothing, lgetfield, StructFoo(5.0), Val(:a)),
-        (false, :none, nothing, lgetfield, StructFoo(5.0, randn(5)), Val(:a)),
-        (false, :none, nothing, lgetfield, StructFoo(5.0, randn(5)), Val(:b)),
-        (true, :none, nothing, lgetfield, StructFoo(5.0), Val(1)),
-        (false, :none, nothing, lgetfield, StructFoo(5.0, randn(5)), Val(1)),
-        (false, :none, nothing, lgetfield, StructFoo(5.0, randn(5)), Val(2)),
+        (true, :none, (lb=1, ub=100), lgetfield, StructFoo(5.0), Val(:a)),
+        (false, :none, (lb=1, ub=100), lgetfield, StructFoo(5.0, randn(5)), Val(:a)),
+        (false, :none, (lb=1, ub=100), lgetfield, StructFoo(5.0, randn(5)), Val(:b)),
+        (true, :none, nothing, (lb=1, ub=100), StructFoo(5.0), Val(1)),
+        (false, :none, nothing, (lb=1, ub=100), StructFoo(5.0, randn(5)), Val(1)),
+        (false, :none, nothing, (lb=1, ub=100), StructFoo(5.0, randn(5)), Val(2)),
 
         # mutable structs
         (true, :none, nothing, lgetfield, MutableFoo(5.0), Val(:a)),
