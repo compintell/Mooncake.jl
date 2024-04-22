@@ -74,7 +74,7 @@ end
     return :(error("Unhandled type $T"))
 end
 
-fdata_type(::Type{Ptr{P}}) where {P} = Ptr{tangent_type(P)}
+fdata_type(::Type{T}) where {T<:Ptr} = T
 
 @generated function fdata_type(::Type{P}) where {P<:Tuple}
     isa(P, Union) && return Union{fdata_type(P.a), fdata_type(P.b)}
