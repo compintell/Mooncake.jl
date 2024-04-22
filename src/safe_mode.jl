@@ -56,9 +56,17 @@ In particular:
 - check that the fdata in the `CoDual` returned from the rule is of the correct type for the
     primal.
 
-Let `rule` returns `y, pb!!`, then `SafeRRule(rule)` returns `y, SafePullback(pb!!)`.
+Additionally, dynamic checks may be performed (e.g. that an fdata array of the same size as
+its primal).
+
+Let `rule` return `y, pb!!`, then `SafeRRule(rule)` returns `y, SafePullback(pb!!)`.
 `SafePullback` inserts the same kind of checks as `SafeRRule`, but on the reverse-pass. See
 the docstring for details.
+
+*Note:* at any given point in time, the checks performed by this function constitute a
+necessary but insufficient set of conditions to ensure correctness. If you find that an
+error isn't being caught by these tests, but you believe it ought to be, please open an
+issue or (better still) a PR.
 """
 struct SafeRRule{Trule}
     rule::Trule
@@ -85,6 +93,37 @@ end
 end
 
 @noinline function verify_fwds(x::CoDual{P, F}) where {P, F}
+    _fdata_type_checker(P, F)
+    verify_fwds_values(primal(x), tangent(x))
+end
+
+function verify_fwds_values(p::P, f::F) where {P, F}
+    _fdata_type_checker(P, F)
+    if F == NoFData
+        return
+    elseif P <: Array
+        if size(p) != size(f)
+            throw(ArgumentError("Size of P is $(size(p)) but size of F is $(size(f))"))
+        end
+        for n in eachindex(p)
+            Fn = _typeof(f[n])
+            Pn = _typeof(p[n])
+            Tn = tangent_type(Pn)
+            if Fn != Tn
+                throw(ArgumentError(
+                    "The type of each element of an fdata Array must be the tangent_type " *
+                    "of the corresponding element of the primal array. Found that " *
+                    "element $n of fdata array is of type $Fn, while primal is of " *
+                    "type $Pn, whose tangent type is $Tn.",
+                ))
+            end
+        end
+    elseif isstructtype(P)
+        return
+    end
+end
+
+function _fdata_type_checker(P, F)
     _F = fdata_type(tangent_type(P))
-    isa(tangent(x), _F) || throw(ArgumentError("Type $P has fdata type $_F, but got $F."))
+    F == _F || throw(ArgumentError("Type $P has fdata type $_F, but got $F."))
 end

@@ -8,6 +8,18 @@
         ArgumentError, Tapir.SafeRRule((x..., ) -> (CoDual(1.0, 0.0), nothing))(x...)
     )
 
+    # Basic type checking.
+    x = (CoDual(size, NoFData()), CoDual(randn(10), randn(Float16, 11)))
+    @test_throws ArgumentError Tapir.SafeRRule(rrule!!)(x...)
+
+    # Element type checking. Abstractly typed-elements prevent determining incorrectness
+    # just by looking at the array.
+    x = (
+        CoDual(size, NoFData()),
+        CoDual(Any[rand() for _ in 1:10], Any[rand(Float16) for _ in 1:10])
+    )
+    @test_throws ArgumentError Tapir.SafeRRule(rrule!!)(x...)
+
     # Test that bad rdata is caught as a pre-condition.
     y, pb!! = Tapir.SafeRRule(rrule!!)(zero_fcodual(sin), zero_fcodual(5.0))
     @test_throws(ArgumentError, pb!!(5))
