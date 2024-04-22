@@ -40,6 +40,7 @@ Shorthand for `CoDual{P, tangent_type(P}}` when `P` is concrete, equal to `CoDua
 function codual_type(::Type{P}) where {P}
     P == DataType && return CoDual
     P isa Union && return Union{codual_type(P.a), codual_type(P.b)}
+    P <: UnionAll && return CoDual
     return isconcretetype(P) ? CoDual{P, tangent_type(P)} : CoDual
 end
 
@@ -65,6 +66,7 @@ Shorthand for `CoDual{P, tangent_type(P}}` when `P` is concrete, equal to `CoDua
 function fwds_codual_type(::Type{P}) where {P}
     P == DataType && return CoDual
     P isa Union && return Union{fwds_codual_type(P.a), fwds_codual_type(P.b)}
+    P <: UnionAll && return CoDual
     return isconcretetype(P) ? CoDual{P, fdata_type(tangent_type(P))} : CoDual
 end
 

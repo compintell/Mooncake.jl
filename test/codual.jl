@@ -12,4 +12,5 @@
         codual_type(Union{Float64, Int}),
         Union{CoDual{Float64, Float64}, CoDual{Int, NoTangent}},
     ))
+    @test codual_type(UnionAll) == CoDual
 end
