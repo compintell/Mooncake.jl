@@ -70,10 +70,10 @@ function rrule!!(::CoDual{typeof(lgetfield)}, x::CoDual{P}, ::CoDual{Val{f}}) wh
             return NoRData(), NoRData(), NoRData()
         end
     else
-        dx_r = zero_rdata(primal(x))
+        dx_r = LazyZeroRData(primal(x))
         field = Val{f}()
         function immutable_lgetfield_pb!!(dy)
-            return NoRData(), increment_field!!(dx_r, dy, field), NoRData()
+            return NoRData(), increment_field!!(instantiate(dx_r), dy, field), NoRData()
         end
     end
     y = CoDual(getfield(primal(x), f), _get_fdata_field(primal(x), tangent(x), f))
@@ -120,9 +120,10 @@ function rrule!!(
         pb!! = if R == NoRData
             NoPullback((NoRData(), NoRData(), NoRData(), NoRData()))
         else
-            dx_r = zero_rdata(primal(x))
+            dx_r = LazyZeroRData(primal(x))
             function immutable_lgetfield_pb!!(dy)
-                return NoRData(), increment_field!!(dx_r, dy, Val{f}()), NoRData(), NoRData()
+                tmp = increment_field!!(instantiate(dx_r), dy, Val{f}())
+                return NoRData(), tmp, NoRData(), NoRData()
             end
         end
         y = CoDual(getfield(primal(x), f, order), _get_fdata_field(primal(x), tangent(x), f))
