@@ -294,7 +294,7 @@ Constructs a histogram of the `tapir_ratio` field of `df`, with formatting that 
 well-suited to the numbers typically found in this field.
 """
 function plot_ratio_histogram!(df::DataFrame)
-    bin = 10.0 .^ (0.0:0.05:6.0)
+    bin = 10.0 .^ (-1.0:0.05:4.0)
     xlim = extrema(bin)
     histogram(df.Tapir; xscale=:log10, xlim, bin, title="log", label="")
 end
