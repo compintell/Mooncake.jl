@@ -27,6 +27,8 @@ Apply type checking to enforce pre- and post-conditions on `pb.pb`. See the docs
 end
 
 @noinline function verify_rvs_output(pb, dx)
+    @nospecialize pb dx
+
     # Number of arguments and number of elements in pullback must match. Have to check this
     # because `zip` doesn't require equal lengths for arguments.
     l_pb = length(pb.x)
@@ -102,6 +104,7 @@ for `SafeRRule` for details.
 end
 
 @noinline function verify_fwds_inputs(x::Tuple)
+    @nospecialize x
     # Use for-loop to keep the stack trace as simple as possible.
     for _x in x
         verify_fwds(_x)
