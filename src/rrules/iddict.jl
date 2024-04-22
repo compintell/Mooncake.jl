@@ -46,6 +46,14 @@ function TestUtils.has_equal_data(p::P, q::P; equal_undefs=true) where {P<:IdDic
     return all([TestUtils.has_equal_data(p[k], q[k]; equal_undefs) for k in ks])
 end
 
+fdata_type(::Type{T}) where {T<:IdDict} = T
+fdata(t::IdDict) = t
+rdata_type(::Type{<:IdDict}) = NoRData
+rdata(t::IdDict) = NoRData()
+
+tangent_type(::Type{T}, ::Type{NoRData}) where {T<:IdDict} = T
+tangent(f::IdDict, ::NoRData) = f
+
 # All of the rules in here are provided in order to avoid nasty `:ccall`s, and to support
 # standard built-in functionality on `IdDict`s.
 
@@ -53,7 +61,7 @@ end
 function rrule!!(::CoDual{typeof(Base.rehash!)}, d::CoDual{<:IdDict}, newsz::CoDual)
     Base.rehash!(primal(d), primal(newsz))
     Base.rehash!(tangent(d), primal(newsz))
-    return d, NoPullback()
+    return d, NoPullback((NoRData(), NoRData(), NoRData()))
 end
 
 @is_primitive MinimalCtx Tuple{typeof(setindex!), IdDict, Any, Any}
@@ -67,12 +75,14 @@ function rrule!!(::CoDual{typeof(setindex!)}, d::CoDual{IdDict{K,V}}, val, key) 
     end
 
     setindex!(primal(d), primal(val), k)
-    setindex!(tangent(d), tangent(val), k)
+    setindex!(tangent(d), zero_tangent(primal(val), tangent(val)), k)
 
-    function setindex_pb!!(_, df, dd, dval, dkey)
+    dval = LazyZeroRData(primal(val))
+    dkey = LazyZeroRData(primal(key))
+    function setindex_pb!!(::NoRData)
 
         # Increment tangent.
-        dval = increment!!(dval, tangent(d)[k])
+        _dval = increment!!(instantiate(dval), rdata(tangent(d)[k]))
 
         # Restore previous state if necessary.
         if restore_state
@@ -83,7 +93,7 @@ function rrule!!(::CoDual{typeof(setindex!)}, d::CoDual{IdDict{K,V}}, val, key) 
             delete!(tangent(d), k)
         end
 
-        return df, dd, dval, dkey
+        return NoRData(), NoRData(), _dval, instantiate(dkey)
     end
     return d, setindex_pb!!
 end
@@ -94,15 +104,19 @@ function rrule!!(
 ) where {K, V}
     k = primal(key)
     has_key = in(k, keys(primal(d)))
-    y = has_key ? CoDual(primal(d)[k], tangent(d)[k]) : default
+    y = has_key ? CoDual(primal(d)[k], fdata(tangent(d)[k])) : default
 
-    function get_pb!!(dy, df, dd, dkey, ddefault)
+    dd = tangent(d)
+    dkey = LazyZeroRData(primal(key))
+    rdefault = LazyZeroRData(primal(default))
+    function get_pb!!(dy)
         if has_key
-            dd[k] = increment!!(dd[k], dy)
+            dd[k] = increment_rdata!!(dd[k], dy)
+            _rdefault = instantiate(rdefault)
         else
-            ddefault = increment!!(ddefault, dy)
+            _rdefault = increment_rdata!!(instantiate(rdefault), dy)
         end
-        return df, dd, dkey, ddefault
+        return NoRData(), NoRData(), instantiate(dkey), _rdefault
     end
     return y, get_pb!!
 end
@@ -112,10 +126,12 @@ function rrule!!(
     ::CoDual{typeof(getindex)}, d::CoDual{IdDict{K, V}}, key::CoDual
 ) where {K, V}
     k = primal(key)
-    y = CoDual(getindex(primal(d), k), getindex(tangent(d), k))
-    function getindex_pb!!(dy, df, dd, dkey)
-        dd[k] = increment!!(dd[k], dy) 
-        return df, dd, dkey
+    y = CoDual(getindex(primal(d), k), fdata(getindex(tangent(d), k)))
+    dkey = LazyZeroRData(primal(key))
+    dd = tangent(d)
+    function getindex_pb!!(dy)
+        dd[k] = increment_rdata!!(dd[k], dy) 
+        return NoRData(), NoRData(), instantiate(dkey)
     end
     return y, getindex_pb!!
 end
