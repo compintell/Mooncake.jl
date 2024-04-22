@@ -41,9 +41,8 @@ end
     end
 end
 
-@noinline function verify_rvs(::P, dx) where {P}
+@noinline function verify_rvs(::P, dx::R) where {P, R}
     _R = rdata_type(tangent_type(P))
-    R = _typeof(dx)
     R <: ZeroRData && return nothing
     (R <: _R) || throw(ArgumentError("Type $P has rdata type $_R, but got $R."))
 end
@@ -85,9 +84,7 @@ end
     end
 end
 
-@noinline function verify_fwds(x::CoDual)
-    P = _typeof(primal(x))
-    F = _typeof(tangent(x))
-    _F = fdata_type(tangent_type(_typeof(primal(x))))
+@noinline function verify_fwds(x::CoDual{P, F}) where {P, F}
+    _F = fdata_type(tangent_type(P))
     isa(tangent(x), _F) || throw(ArgumentError("Type $P has fdata type $_F, but got $F."))
 end
