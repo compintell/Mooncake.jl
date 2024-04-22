@@ -142,7 +142,7 @@ end
 
 # Returns the static / inferred type associated to `x`.
 get_primal_type(info::ADInfo, x::Argument) = info.arg_types[x]
-get_primal_type(info::ADInfo, x::ID) = _get_type(info.ssa_insts[x].type)
+get_primal_type(info::ADInfo, x::ID) = _type(info.ssa_insts[x].type)
 get_primal_type(::ADInfo, x::QuoteNode) = _typeof(x.value)
 get_primal_type(::ADInfo, x) = _typeof(x)
 function get_primal_type(::ADInfo, x::GlobalRef)
@@ -580,7 +580,7 @@ function rule_type(interp::TapirInterpreter{C}, ::Type{sig}) where {C, sig}
     Treturn = Base.Experimental.compute_ir_rettype(ir)
     isva, _ = is_vararg_sig_and_sparam_names(sig)
 
-    arg_types = map(_get_type, ir.argtypes)
+    arg_types = map(_type, ir.argtypes)
     arg_fwds_types = Tuple{map(fwds_codual_type, arg_types)...}
     arg_rvs_types = Tuple{map(rdata_type ∘ tangent_type, arg_types)...}
     fwds_return_codual = fwds_codual_type(Treturn)
@@ -656,7 +656,7 @@ function build_rrule(interp::PInterp{C}, sig::Type{<:Tuple}; safety_on=false) wh
 
     # Compute global info.
     arg_types = Dict{Argument, Any}(
-        map(((n, t),) -> (Argument(n) => _get_type(t)), enumerate(ir.argtypes))
+        map(((n, t),) -> (Argument(n) => _type(t)), enumerate(ir.argtypes))
     )
     insts = new_inst_vec(ir.stmts)
     ssa_types = Dict{ID, NewInstruction}(zip(concatenate_ids(primal_ir), insts))
@@ -745,7 +745,7 @@ function forwards_pass_ir(ir::BBCode, ad_stmts_blocks::ADStmts, info::ADInfo, Ts
     end
 
     # Create and return the `BBCode` for the forwards-pass.
-    arg_types = vcat(Tshared_data, map(fwds_codual_type ∘ _get_type, ir.argtypes))
+    arg_types = vcat(Tshared_data, map(fwds_codual_type ∘ _type, ir.argtypes))
     return BBCode(vcat(entry_block, blocks), arg_types, ir.sptypes, ir.linetable, ir.meta)
 end
 

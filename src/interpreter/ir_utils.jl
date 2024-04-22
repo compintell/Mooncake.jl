@@ -92,20 +92,12 @@ function infer_ir!(ir::IRCode)
     return __infer_ir!(ir, CC.NativeInterpreter(), __get_toplevel_mi_from_ir(ir, Tapir))
 end
 
-# Sometimes types in `IRCode` have been replaced by constants, or partially-completed
-# structs. A particularly common case is that the first element of the `argtypes` field of
-# an `IRCode` is a `Core.Const` containing the function to be called. `_get_type` recovers
-# the type in such situations.
-_get_type(x::Core.PartialStruct) = x.typ
-_get_type(x::Core.Const) = _typeof(x.val)
-_get_type(T) = T
-
 # Given some IR, generates a MethodInstance suitable for passing to infer_ir!, if you don't
 # already have one with the right argument types. Credit to @oxinabox:
 # https://gist.github.com/oxinabox/cdcffc1392f91a2f6d80b2524726d802#file-example-jl-L54
 function __get_toplevel_mi_from_ir(ir, _module::Module)
     mi = ccall(:jl_new_method_instance_uninit, Ref{Core.MethodInstance}, ());
-    mi.specTypes = Tuple{map(_get_type, ir.argtypes)...}
+    mi.specTypes = Tuple{map(_type, ir.argtypes)...}
     mi.def = _module
     return mi
 end
