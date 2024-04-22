@@ -79,9 +79,25 @@ Apply type checking to enforce pre- and post-conditions on `rule.rule`. See the 
 for `SafeRRule` for details.
 """
 @inline function (rule::SafeRRule)(x::Vararg{CoDual, N}) where {N}
-    verify_fwds_inputs(x)
+
+    # Check inputs.
+    try
+        verify_fwds_inputs(x)
+    catch e
+        error("error in inputs to rule $(rule.rule) with input types $(_typeof(x))")
+    end
+
+    # Run rule.
     y, pb = rule.rule(x...)
-    verify_fwds(y)
+
+    # Check outputs.
+    try
+        verify_fwds(y)
+    catch e
+        error("error in outputs of rule $(rule.rule) with input types $(_typeof(x))")
+    end
+
+    # Wrap pullback and return.
     return y::CoDual, SafePullback(pb, primal(y), map(primal, x))
 end
 
@@ -103,15 +119,16 @@ function verify_fwds_values(p::P, f::F) where {P, F}
         return
     elseif P <: Array
         if size(p) != size(f)
-            throw(ArgumentError("Size of P is $(size(p)) but size of F is $(size(f))"))
+            throw(ArgumentError("size of P is $(size(p)) but size of F is $(size(f))"))
         end
         for n in eachindex(p)
+            !isassigned(p, n) && continue
             Fn = _typeof(f[n])
             Pn = _typeof(p[n])
             Tn = tangent_type(Pn)
             if Fn != Tn
                 throw(ArgumentError(
-                    "The type of each element of an fdata Array must be the tangent_type " *
+                    "the type of each element of an fdata Array must be the tangent_type " *
                     "of the corresponding element of the primal array. Found that " *
                     "element $n of fdata array is of type $Fn, while primal is of " *
                     "type $Pn, whose tangent type is $Tn.",
@@ -125,5 +142,5 @@ end
 
 function _fdata_type_checker(P, F)
     _F = fdata_type(tangent_type(P))
-    F == _F || throw(ArgumentError("Type $P has fdata type $_F, but got $F."))
+    F == _F || throw(ArgumentError("type $P has fdata type $_F, but got $F."))
 end
