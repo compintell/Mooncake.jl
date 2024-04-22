@@ -437,7 +437,7 @@ function rrule!!(
 
     arrayset(_inbounds, primal(A), primal(v), _inds...)
     dA = tangent(A)
-    arrayset(_inbounds, dA, tangent(v), _inds...)
+    arrayset(_inbounds, dA, tangent(tangent(v), zero_rdata(primal(v))), _inds...)
     function arrayset_pullback!!(::NoRData)
         dv = rdata(arrayref(_inbounds, dA, _inds...))
         if to_save
@@ -766,6 +766,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability, nothing, Base.arrayset, true, randn(5, 4), 3.0, 1, 3),
         (false, :stability, nothing, Base.arrayset, false, [randn(3) for _ in 1:5], randn(4), 1),
         (false, :stability, nothing, Base.arrayset, false, _a, randn(4), 1),
+        (false, :stability, nothing, Base.arrayset, true, [(5.0, rand(1))], (4.0, rand(1)), 1),
         (
             false,
             :stability,
