@@ -515,14 +515,30 @@ function rrule!!(::CoDual{typeof(Core.fieldtype)}, args::Vararg{Any, N}) where {
     return CoDual(Core.fieldtype(arg_primals...), NoFData()), pb!!
 end
 
-function rrule!!(::CoDual{typeof(getfield)}, value::CoDual, name::CoDual)
-    return rrule!!(uninit_fcodual(lgetfield), value, uninit_fcodual(Val(primal(name))))
+function rrule!!(::CoDual{typeof(getfield)}, value::CoDual{P, F}, name::CoDual) where {P, F}
+    if rdata_type(tangent_type(P)) == NoRData
+        pb!! = NoPullback((NoRData(), NoRData(), NoRData()))
+        yp = getfield(primal(value), primal(name))
+        yf = _get_fdata_field(primal(value), tangent(value), primal(name))
+        return CoDual{Union{fieldtypes(value)...}, _typeof(yf)}(yp, yf), pb!!
+    else
+        return rrule!!(uninit_fcodual(lgetfield), value, uninit_fcodual(Val(primal(name))))
+    end
 end
 
-function rrule!!(::CoDual{typeof(getfield)}, value::CoDual, name::CoDual, order::CoDual)
-    literal_name = uninit_fcodual(Val(primal(name)))
-    literal_order = uninit_fcodual(Val(primal(order)))
-    return rrule!!(uninit_fcodual(lgetfield), value, literal_name, literal_order)
+function rrule!!(::CoDual{typeof(getfield)}, value::CoDual{P, F}, name::CoDual, order::CoDual) where {P, F}
+    if rdata_type(tangent_type(P)) == NoRData
+        _name = primal(name)
+        _order = primal(order)
+        pb!! = NoPullback((NoRData(), NoRData(), NoRData(), NoRData()))
+        yp = getfield(primal(value), _name, _order)
+        yf = _get_fdata_field(primal(value), tangent(value), _name)
+        return CoDual{Union{fieldtypes(P)...}, _typeof(yf)}(yp, yf), pb!!
+    else
+        literal_name = uninit_fcodual(Val(primal(name)))
+        literal_order = uninit_fcodual(Val(primal(order)))
+        return rrule!!(uninit_fcodual(lgetfield), value, literal_name, literal_order)
+    end
 end
 
 function rrule!!(::CoDual{typeof(getglobal)}, a, b)
@@ -817,8 +833,8 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :none, _range, getfield, StructFoo(5.0, randn(5)), 2),
         (true, :none, _range, getfield, MutableFoo(5.0), :a),
         (false, :none, _range, getfield, MutableFoo(5.0, randn(5)), :b),
-        (false, :none, _range, getfield, UnitRange{Int}(5:9), :start),
-        (false, :none, _range, getfield, UnitRange{Int}(5:9), :stop),
+        (false, :stability_and_allocs, nothing, getfield, UnitRange{Int}(5:9), :start),
+        (false, :stability_and_allocs, nothing, getfield, UnitRange{Int}(5:9), :stop),
         (false, :none, _range, getfield, (5.0, ), 1, false),
         (false, :none, _range, getfield, (1, ), 1, false),
         (false, :none, _range, getfield, (1, 2), 1),
