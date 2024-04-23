@@ -51,7 +51,9 @@ using Tapir:
     zero_like_rdata_from_type,
     zero_rdata,
     instantiate,
-    LazyZeroRData
+    LazyZeroRData,
+    new_inst,
+    _characterise_unique_predecessor_blocks
 
 using .TestUtils:
     test_rrule!!,

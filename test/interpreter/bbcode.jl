@@ -53,4 +53,77 @@ end
         @test length(Tapir.collect_stmts(bb_code)) == length(ir.stmts.inst)
         @test Tapir.id_to_line_map(bb_code) isa Dict{ID, Int}
     end
+    @testset "_characterise_unique_predecessor_blocks" begin
+        @testset "single block" begin
+            blk_id = ID()
+            blks = BBlock[BBlock(blk_id, [ID()], [new_inst(ReturnNode(5))])]
+            upreds, pred_is_upred = _characterise_unique_predecessor_blocks(blks)
+            @test upreds[blk_id] == true
+            @test pred_is_upred[blk_id] == true
+        end
+        @testset "pair of blocks" begin
+            blk_id_1 = ID()
+            blk_id_2 = ID()
+            blks = BBlock[
+                BBlock(blk_id_1, [ID()], [new_inst(IDGotoNode(blk_id_2))]),
+                BBlock(blk_id_2, [ID()], [new_inst(ReturnNode(5))]),
+            ]
+            upreds, pred_is_upred = _characterise_unique_predecessor_blocks(blks)
+            @test upreds[blk_id_1] == true
+            @test upreds[blk_id_2] == true
+            @test pred_is_upred[blk_id_1] == true
+            @test pred_is_upred[blk_id_2] == true
+        end
+        @testset "Non-Unique Exit Node" begin
+            blk_id_1 = ID()
+            blk_id_2 = ID()
+            blk_id_3 = ID()
+            blks = BBlock[
+                BBlock(blk_id_1, [ID()], [new_inst(IDGotoIfNot(true, blk_id_3))]),
+                BBlock(blk_id_2, [ID()], [new_inst(ReturnNode(5))]),
+                BBlock(blk_id_3, [ID()], [new_inst(ReturnNode(5))]),
+            ]
+            upreds, pred_is_upred = _characterise_unique_predecessor_blocks(blks)
+            @test upreds[blk_id_1] == true
+            @test upreds[blk_id_2] == false
+            @test upreds[blk_id_3] == false
+            @test pred_is_upred[blk_id_1] == true
+            @test pred_is_upred[blk_id_2] == true
+            @test pred_is_upred[blk_id_3] == true
+        end
+        @testset "diamond structure of four blocks" begin
+            blk_id_1 = ID()
+            blk_id_2 = ID()
+            blk_id_3 = ID()
+            blk_id_4 = ID()
+            blks = BBlock[
+                BBlock(blk_id_1, [ID()], [new_inst(IDGotoIfNot(true, blk_id_3))]),
+                BBlock(blk_id_2, [ID()], [new_inst(IDGotoNode(blk_id_4))]),
+                BBlock(blk_id_3, [ID()], [new_inst(IDGotoNode(blk_id_4))]),
+                BBlock(blk_id_4, [ID()], [new_inst(ReturnNode(0))]),
+            ]
+            upreds, pred_is_upred = _characterise_unique_predecessor_blocks(blks)
+            @test upreds[blk_id_1] == true
+            @test upreds[blk_id_2] == false
+            @test upreds[blk_id_3] == false
+            @test upreds[blk_id_4] == true
+            @test pred_is_upred[blk_id_1] == true
+            @test pred_is_upred[blk_id_2] == true
+            @test pred_is_upred[blk_id_3] == true
+            @test pred_is_upred[blk_id_4] == false
+        end
+        @testset "simple loop back to first block" begin
+            blk_id_1 = ID()
+            blk_id_2 = ID()
+            blks = BBlock[
+                BBlock(blk_id_1, [ID()], [new_inst(IDGotoIfNot(true, blk_id_1))]),
+                BBlock(blk_id_2, [ID()], [new_inst(ReturnNode(5))]),
+            ]
+            upreds, pred_is_upred = _characterise_unique_predecessor_blocks(blks)
+            @test upreds[blk_id_1] == true
+            @test upreds[blk_id_2] == true
+            @test pred_is_upred[blk_id_1] == false
+            @test pred_is_upred[blk_id_2] == true
+        end
+    end
 end

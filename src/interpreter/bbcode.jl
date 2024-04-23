@@ -262,21 +262,28 @@ Base.copy(ir::BBCode) = BBCode(ir, copy(ir.blocks))
 Compute a map from the `ID of each `BBlock` in `ir` to its possible successors.
 """
 function compute_all_successors(ir::BBCode)::Dict{ID, Vector{ID}}
-    succs = map(enumerate(ir.blocks)) do (n, blk)
-        return successors(terminator(blk), n, ir, n == length(ir.blocks))
-    end
-    return Dict{ID, Vector{ID}}(zip(map(b -> b.id, ir.blocks), succs))
+    return _compute_all_successors(ir.blocks)
 end
 
-function successors(::Nothing, n::Int, ir::BBCode, is_final_block::Bool)
-    return is_final_block ? ID[] : ID[ir.blocks[n+1].id]
+# Internal method. Just requires that a Vector of BBlocks are passed. This method is easier
+# to construct test cases for because there is no need to construct all the other stuff that
+# goes into a `BBCode`.
+function _compute_all_successors(blks::Vector{BBlock})::Dict{ID, Vector{ID}}
+    succs = map(enumerate(blks)) do (n, blk)
+        return successors(terminator(blk), n, blks, n == length(blks))
+    end
+    return Dict{ID, Vector{ID}}(zip(map(b -> b.id, blks), succs))
 end
-successors(t::IDGotoNode, ::Int, ::BBCode, ::Bool) = [t.label]
-function successors(t::IDGotoIfNot, n::Int, ir::BBCode, is_final_block::Bool)
-    return is_final_block ? ID[t.dest] : ID[t.dest, ir.blocks[n + 1].id]
+
+function successors(::Nothing, n::Int, blks::Vector{BBlock}, is_final_block::Bool)
+    return is_final_block ? ID[] : ID[blks[n+1].id]
 end
-successors(::ReturnNode, ::Int, ::BBCode, ::Bool) = ID[]
-successors(t::Switch, ::Int, ::BBCode, ::Bool) = vcat(t.dests, t.fallthrough_dest)
+successors(t::IDGotoNode, ::Int, ::Vector{BBlock}, ::Bool) = [t.label]
+function successors(t::IDGotoIfNot, n::Int, blks::Vector{BBlock}, is_final_block::Bool)
+    return is_final_block ? ID[t.dest] : ID[t.dest, blks[n + 1].id]
+end
+successors(::ReturnNode, ::Int, ::Vector{BBlock}, ::Bool) = ID[]
+successors(t::Switch, ::Int, ::Vector{BBlock}, ::Bool) = vcat(t.dests, t.fallthrough_dest)
 
 """
     compute_all_predecessors(ir::BBCode)::Dict{ID, Vector{ID}}
@@ -284,8 +291,12 @@ successors(t::Switch, ::Int, ::BBCode, ::Bool) = vcat(t.dests, t.fallthrough_des
 Compute a map from the `ID of each `BBlock` in `ir` to its possible predecessors.
 """
 function compute_all_predecessors(ir::BBCode)::Dict{ID, Vector{ID}}
+    return _compute_all_predecessors(ir.blks)
+end
 
-    successor_map = compute_all_successors(ir)
+function _compute_all_predecessors(blks::Vector{BBlock})::Dict{ID, Vector{ID}}
+
+    successor_map = _compute_all_successors(blks)
 
     # Initialise predecessor map to be empty.
     ks = collect(keys(successor_map))
@@ -595,4 +606,76 @@ function _sort_blocks!(ir::BBCode)
     I = sortperm(d)
     ir.blocks .= ir.blocks[I]
     return ir
+end
+
+#=
+    _characterise_unique_predecessor_blocks(blks::Vector{BBlock}) ->
+        Tuple{Dict{ID, Bool}, Dict{ID, Bool}}
+
+We call a block `b` a _unique_ _predecessor_ in the control flow graph associated to `blks`
+if it the only predecessor of all of its successors. Put differently, if control flow
+arrives in any of the successors of `b`, we know for certain that the previous block must
+have been `b`.
+
+Returns two `Dict`s. A value in the first `Dict` is `true` if the block associated to its
+key is a unique precessor, and is `false` if not. A value in the second `Dict` is `true` if 
+it has a single predecessor, and that predecessor is a unique predecessor.
+
+*Context*:
+
+This information is important for optimising AD because knowing that `b` is a unique
+predecessor means that
+1. on the forwards-pass, there is no need to push the ID of `b` to the block stack when
+    passing through it, and
+2. on the reverse-pass, there is no need to pop the block stack when passing through one of
+    the successors to `b`.
+
+Utilising this reduces the overhead associated to doing AD. It is quite important when
+working with cheap loops -- loops where the operations performed at each iteration
+are inexpensive -- for which avoiding as much memory pressure as possible is critical to
+performance. It is also important for single-block functions, because it can be used to
+entirely avoid using a block stack at all.
+=#
+function _characterise_unique_predecessor_blocks(
+    blks::Vector{BBlock}
+)::Tuple{Dict{ID, Bool}, Dict{ID, Bool}}
+
+    # Obtain the block IDs in order -- this ensures that we get the entry block first.
+    blk_ids = ID[b.id for b in blks]
+    preds = _compute_all_predecessors(blks)
+    succs = _compute_all_successors(blks)
+
+    # The bulk of blocks can be hanled by this general loop.
+    is_unique_pred = Dict{ID, Bool}()
+    for id in blk_ids
+        ss = succs[id]
+        is_unique_pred[id] = !isempty(ss) && all(s -> length(preds[s]) == 1, ss)
+    end
+
+    # If there is a single reachable return node, then that block is treated as a unique
+    # pred, since control can only pass "out" of the function via this block. Conversely,
+    # if there are multiple reachable return nodes, then execution can return to the calling
+    # function via any of them, so they are not unique predecessors.
+    # Note that the previous block sets is_unique_pred[id] to false for all nodes which
+    # end with a reachable return node, so the value only needs changing if there is a
+    # unique reachable return node.
+    reachable_return_blocks = filter(blks) do blk
+        is_reachable_return_node(terminator(blk))
+    end
+    if length(reachable_return_blocks) == 1
+        is_unique_pred[only(reachable_return_blocks).id] = true
+    end
+
+    # pred_is_unique_pred is true if the unique predecessor to a block is a unique pred.
+    pred_is_unique_pred = Dict{ID, Bool}()
+    for id in blk_ids
+        pred_is_unique_pred[id] = length(preds[id]) == 1 && is_unique_pred[only(preds[id])]
+    end
+
+    # If the entry block has no predecessors, then it can only be entered once, when the
+    # function is first entered. In this case, we treat it as having a unique predecessor.
+    entry_id = blk_ids[1]
+    pred_is_unique_pred[entry_id] = isempty(preds[entry_id])
+
+    return is_unique_pred, pred_is_unique_pred
 end
