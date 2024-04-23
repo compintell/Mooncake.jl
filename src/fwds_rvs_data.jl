@@ -365,7 +365,7 @@ you believe this is done in error, please open an issue. This kind of problem do
 constitute a correctness problem, but can be detrimental to performance, so should be dealt
 with.
 """
-function zero_rdata_from_type(::Type{P}) where {P}
+@generated function zero_rdata_from_type(::Type{P}) where {P}
     R = rdata_type(tangent_type(P))
 
     # If we know we can't produce a tangent, say so.
@@ -378,23 +378,25 @@ function zero_rdata_from_type(::Type{P}) where {P}
     # the zero rdata if it is not possible to derive the zero rdata for any of its fields.
     if isstructtype(P)
         names = fieldnames(P)
-        field_zeros = tuple_map(zero_rdata_from_type, fieldtypes(P))
-        if all(tuple_map(z -> !(z isa CannotProduceZeroRDataFromType), field_zeros))
-            wrapped_field_zeros = tuple_map(ntuple(identity, length(names))) do n
-                fzero = field_zeros[n]
-                if tangent_field_type(P, n) <: PossiblyUninitTangent
-                    return _wrap_field(rdata_type(tangent_type(fieldtype(P, n))), fzero)
-                else
-                    return fzero
-                end
+        types = fieldtypes(P)
+        field_zeros = tuple_map(zero_rdata_from_type, types)
+        wrapped_field_zeros = tuple_map(ntuple(identity, length(names))) do n
+            # fzero = field_zeros[n]
+            fzero = :(zero_rdata_from_type($(types[n])))
+            if tangent_field_type(P, n) <: PossiblyUninitTangent
+                Q = rdata_type(tangent_type(fieldtype(P, n)))
+                return :(_wrap_field($Q, $fzero))
+            else
+                return fzero
             end
-            return R(NamedTuple{names}(wrapped_field_zeros))
         end
+        wrapped_field_zeros = Expr(:call, :tuple, wrapped_field_zeros...)
+        return :($R(NamedTuple{$names}($wrapped_field_zeros)))
     end
 
     # Fallback -- we've not been able to figure out how to produce an instance of zero rdata
     # so report that it cannot be done.
-    throw(error("Unhandled type $P"))
+    return throw(error("Unhandled type $P"))
 end
 
 function zero_rdata_from_type(::Type{P}) where {P<:Tuple}
