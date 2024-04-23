@@ -601,6 +601,10 @@ Test cases in the first format make use of `zero_tangent` / `randn_tangent` etc 
 tangents, but they're unable to check that `increment!!` is correct in an absolute sense.
 =#
 function tangent_test_cases()
+
+    N_large = 33
+    _names = Tuple(map(n -> Symbol("x$n"), 1:N_large))
+
     abs_test_cases = vcat(
         [
             (sin, NoTangent(), NoTangent(), NoTangent()),
@@ -643,12 +647,24 @@ function tangent_test_cases()
             ((1,), NoTangent(), NoTangent(), NoTangent()),
             ((2, 3), NoTangent(), NoTangent(), NoTangent()),
             (
+                Tapir.tuple_fill(5.0, Val(N_large)),
+                Tapir.tuple_fill(6.0, Val(N_large)),
+                Tapir.tuple_fill(7.0, Val(N_large)),
+                Tapir.tuple_fill(13.0, Val(N_large)),
+            ),
+            (
                 (a=6.0, b=[1.0, 2.0]),
                 (a=5.0, b=[3.0, 4.0]),
                 (a=4.0, b=[4.0, 3.0]),
                 (a=9.0, b=[7.0, 7.0]),
             ),
             ((;), NoTangent(), NoTangent(), NoTangent()),
+            (
+                NamedTuple{_names}(Tapir.tuple_fill(5.0, Val(N_large))),
+                NamedTuple{_names}(Tapir.tuple_fill(6.0, Val(N_large))),
+                NamedTuple{_names}(Tapir.tuple_fill(7.0, Val(N_large))),
+                NamedTuple{_names}(Tapir.tuple_fill(13.0, Val(N_large))),
+            ),
             (
                 TestResources.TypeStableMutableStruct{Float64}(5.0, 3.0),
                 build_tangent(TestResources.TypeStableMutableStruct{Float64}, 5.0, 4.0),
