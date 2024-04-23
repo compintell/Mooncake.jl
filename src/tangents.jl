@@ -340,7 +340,8 @@ function randn_tangent(rng::AbstractRNG, x::SimpleVector)
     end
 end
 function randn_tangent(rng::AbstractRNG, x::P) where {P <: Union{Tuple, NamedTuple}}
-    return tangent_type(P) == NoTangent ? NoTangent() : map(x -> randn_tangent(rng, x), x)
+    tangent_type(P) == NoTangent && return NoTangent()
+    return tuple_map(x -> randn_tangent(rng, x), x)
 end
 function randn_tangent(rng::AbstractRNG, x::T) where {T<:Union{Tangent, MutableTangent}}
     return T(randn_tangent(rng, x.fields))

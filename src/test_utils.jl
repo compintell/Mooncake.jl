@@ -677,10 +677,8 @@ function test_tangent_performance(rng::AbstractRNG, p::P) where {P}
 
     # Check there are no allocations when there ought not to be.
     if !__tangent_generation_should_allocate(P)
-        zero_tangent_wrapper(p)
-        @test (@allocations zero_tangent_wrapper(p)) == 0
-        randn_tangent_wrapper(rng, p)
-        @test (@allocations randn_tangent_wrapper(rng, p)) == 0
+        JET.test_opt(Tuple{typeof(zero_tangent), P})
+        JET.test_opt(Tuple{typeof(randn_tangent), Xoshiro, P})
     end
 
     # `increment!!` should always infer.
@@ -702,10 +700,6 @@ function test_tangent_performance(rng::AbstractRNG, p::P) where {P}
     t isa MutableTangent && test_set_tangent_field!_performance(t, z)
     t isa Union{MutableTangent, Tangent} && test_get_tangent_field_performance(t)
 end
-
-# Used in test_tangent_performance to ensure performance tests work correctly.
-@noinline zero_tangent_wrapper(p) = zero_tangent(p)
-@noinline randn_tangent_wrapper(rng, p) = randn_tangent(rng, p)
 
 _set_tangent_field!(x, ::Val{i}, v) where {i} = set_tangent_field!(x, i, v)
 _get_tangent_field(x, ::Val{i}) where {i} = get_tangent_field(x, i)
