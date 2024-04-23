@@ -398,29 +398,15 @@ with.
 end
 
 function zero_rdata_from_type(::Type{P}) where {P<:Tuple}
-    R = rdata_type(tangent_type(P))
-
-    R == NoRData && return NoRData()
-
-    field_zeros = tuple_map(zero_rdata_from_type, fieldtypes(P))
-    if all(tuple_map(z -> !(z isa CannotProduceZeroRDataFromType), field_zeros))
-        return field_zeros
-    end
-
-    return CannotProduceZeroRDataFromType()
+    can_produce_zero_rdata_from_type(P) || return CannotProduceZeroRDataFromType()
+    rdata_type(tangent_type(P)) == NoRData && return NoRData()
+    return tuple_map(zero_rdata_from_type, fieldtypes(P))
 end
 
 function zero_rdata_from_type(::Type{P}) where {P<:NamedTuple}
-    R = rdata_type(tangent_type(P))
-
-    R == NoRData && return NoRData()
-
-    field_zeros = tuple_map(zero_rdata_from_type, fieldtypes(P))
-    if all(tuple_map(z -> !(z isa CannotProduceZeroRDataFromType), field_zeros))
-        return NamedTuple{fieldnames(P)}(field_zeros)
-    end
-
-    return CannotProduceZeroRDataFromType()
+    can_produce_zero_rdata_from_type(P) || return CannotProduceZeroRDataFromType()
+    rdata_type(tangent_type(P)) == NoRData && return NoRData()
+    return NamedTuple{fieldnames(P)}(tuple_map(zero_rdata_from_type, fieldtypes(P)))
 end
 
 zero_rdata_from_type(::Type{P}) where {P<:IEEEFloat} = zero(P)
