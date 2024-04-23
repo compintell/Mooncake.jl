@@ -980,7 +980,7 @@ function DynamicDerivedRule(interp::TapirInterpreter, safety_on::Bool)
 end
 
 function (dynamic_rule::DynamicDerivedRule)(args::Vararg{Any, N}) where {N}
-    sig = Tuple{map(_typeof, map(primal, args))...}
+    sig = Tuple{tuple_map(_typeof, tuple_map(primal, args))...}
     is_primitive(context_type(dynamic_rule.interp), sig) && return rrule!!(args...)
     rule = get(dynamic_rule.cache, sig, nothing)
     if rule === nothing
@@ -1003,20 +1003,19 @@ If `safety_on` is `true`, then the rule constructed will be a `SafeRRule`. This 
 when debugging, but should usually be switched off for production code as it (in general)
 incurs some runtime overhead.
 =#
-mutable struct LazyDerivedRule{Tinterp<:TapirInterpreter, Tsig, Trule}
+mutable struct LazyDerivedRule{sig, Tinterp<:TapirInterpreter, Trule}
     interp::Tinterp
-    sig::Tsig
     safety_on::Bool
     rule::Trule
-    function LazyDerivedRule(interp::A, sig::B, safety_on::Bool) where {A, B}
+    function LazyDerivedRule(interp::A, ::Type{sig}, safety_on::Bool) where {A, sig}
         rt = safety_on ? SafeRRule{rule_type(interp, sig)} : rule_type(interp, sig)
-        return new{A, B, rt}(interp, sig, safety_on)
+        return new{sig, A, rt}(interp, safety_on)
     end
 end
 
-function (rule::LazyDerivedRule)(args::Vararg{Any, N}) where {N}
+function (rule::LazyDerivedRule{sig})(args::Vararg{Any, N}) where {N, sig}
     if !isdefined(rule, :rule)
-        rule.rule = build_rrule(rule.interp, rule.sig; safety_on=rule.safety_on)
+        rule.rule = build_rrule(rule.interp, sig; safety_on=rule.safety_on)
     end
     return rule.rule(args...)
 end
