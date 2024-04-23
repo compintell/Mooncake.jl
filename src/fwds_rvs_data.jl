@@ -379,9 +379,7 @@ with.
     if isstructtype(P)
         names = fieldnames(P)
         types = fieldtypes(P)
-        field_zeros = tuple_map(zero_rdata_from_type, types)
         wrapped_field_zeros = tuple_map(ntuple(identity, length(names))) do n
-            # fzero = field_zeros[n]
             fzero = :(zero_rdata_from_type($(types[n])))
             if tangent_field_type(P, n) <: PossiblyUninitTangent
                 Q = rdata_type(tangent_type(fieldtype(P, n)))
@@ -390,8 +388,8 @@ with.
                 return fzero
             end
         end
-        wrapped_field_zeros = Expr(:call, :tuple, wrapped_field_zeros...)
-        return :($R(NamedTuple{$names}($wrapped_field_zeros)))
+        wrapped_field_zeros_tuple = Expr(:call, :tuple, wrapped_field_zeros...)
+        return :($R(NamedTuple{$names}($wrapped_field_zeros_tuple)))
     end
 
     # Fallback -- we've not been able to figure out how to produce an instance of zero rdata
