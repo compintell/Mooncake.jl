@@ -62,7 +62,9 @@ This approach is identical to the one taken by `Zygote.jl` to circumvent the sam
 lgetfield(x, ::Val{f}) where {f} = getfield(x, f)
 
 @is_primitive MinimalCtx Tuple{typeof(lgetfield), Any, Any}
-function rrule!!(::CoDual{typeof(lgetfield)}, x::CoDual{P}, ::CoDual{Val{f}}) where {P, f}
+@inline function rrule!!(
+    ::CoDual{typeof(lgetfield)}, x::CoDual{P}, ::CoDual{Val{f}}
+) where {P, f}
     pb!! = if ismutabletype(P)
         dx = tangent(x)
         function mutable_lgetfield_pb!!(dy)
@@ -99,7 +101,7 @@ end
 lgetfield(x, ::Val{f}, ::Val{order}) where {f, order} = getfield(x, f, order)
 
 @is_primitive MinimalCtx Tuple{typeof(lgetfield), Any, Any, Any}
-function rrule!!(
+@inline function rrule!!(
     ::CoDual{typeof(lgetfield)}, x::CoDual{P}, ::CoDual{Val{f}}, ::CoDual{Val{order}}
 ) where {P, f, order}
     T = tangent_type(P)
@@ -143,7 +145,7 @@ setfield!(copy(x), 2, v) == lsetfield(copy(x), Val(2), v)
 lsetfield!(value, ::Val{name}, x) where {name} = setfield!(value, name, x)
 
 @is_primitive MinimalCtx Tuple{typeof(lsetfield!), Any, Any, Any}
-function rrule!!(
+@inline function rrule!!(
     ::CoDual{typeof(lsetfield!)}, value::CoDual{P}, ::CoDual{Val{name}}, x::CoDual
 ) where {P, name}
     F = fdata_type(tangent_type(P))
