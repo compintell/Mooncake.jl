@@ -286,7 +286,7 @@ end
     return _map_if_assigned!(zero_tangent, Array{tangent_type(P), N}(undef, size(x)...), x)
 end
 @inline function zero_tangent(x::P) where {P<:Union{Tuple, NamedTuple}}
-    return tangent_type(P) == NoTangent ? NoTangent() : map(zero_tangent, x)
+    return tangent_type(P) == NoTangent ? NoTangent() : tuple_map(zero_tangent, x)
 end
 @generated function zero_tangent(x::P) where {P}
 
