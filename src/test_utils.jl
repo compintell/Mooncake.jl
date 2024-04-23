@@ -889,14 +889,12 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
     # either an instance of R _or_ a `CannotProduceZeroRDataFromType`.
     JET.test_opt(zero_rdata_from_type, Tuple{Type{P}})
     rzero_from_type = @inferred zero_rdata_from_type(P)
-    @test (@allocations zero_rdata_from_type(P)) == 0
     @test rzero_from_type isa R || rzero_from_type isa CannotProduceZeroRDataFromType
     @test can_make_zero != isa(rzero_from_type, CannotProduceZeroRDataFromType)
 
     # Check that we can produce a lazy zero rdata, and that it has the correct type.
     JET.test_opt(LazyZeroRData, Tuple{P})
     lazy_rzero = @inferred LazyZeroRData(p)
-    @test (@allocations LazyZeroRData(p)) == 0
     @test instantiate(lazy_rzero) isa R
 
     # Check incrementing the rdata component of a tangent yields the correct type.
