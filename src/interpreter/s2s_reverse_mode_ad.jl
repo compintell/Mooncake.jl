@@ -719,17 +719,21 @@ Produce the IR associated to the `OpaqueClosure` which runs most of the forwards
 =#
 function forwards_pass_ir(ir::BBCode, ad_stmts_blocks::ADStmts, info::ADInfo, Tshared_data)
 
+    is_unique_pred, pred_is_unique_pred = characterise_unique_predecessor_blocks(ir.blocks)
+
     # Insert a block at the start which extracts all items from the captures field of the
     # `OpaqueClosure`, which contains all of the data shared between the forwards- and
     # reverse-passes. These are assigned to the `ID`s given by the `SharedDataPairs`.
     # Additionally, push the entry id onto the block stack.
-    push_block_stack_stmt = Expr(
-        :call, __push_blk_stack!, info.block_stack_id, info.entry_id.id
-    )
-    entry_stmts = vcat(
-        shared_data_stmts(info.shared_data_pairs),
-        (ID(), new_inst(push_block_stack_stmt)),
-    )
+    sds = shared_data_stmts(info.shared_data_pairs)
+    if pred_is_unique_pred[ir.blocks[1].id]
+        entry_stmts = sds
+    else
+        push_block_stack_stmt = Expr(
+            :call, __push_blk_stack!, info.block_stack_id, info.entry_id.id
+        )
+        entry_stmts = vcat(sds, (ID(), new_inst(push_block_stack_stmt)))
+    end
     entry_block = BBlock(info.entry_id, entry_stmts)
 
     # Construct augmented version of each basic block from the primal. For each block:
@@ -738,10 +742,13 @@ function forwards_pass_ir(ir::BBCode, ad_stmts_blocks::ADStmts, info::ADInfo, Ts
     # 3. construct and return a BBlock.
     blocks = map(ad_stmts_blocks) do (block_id, ad_stmts)
         fwds_stmts = reduce(vcat, map(x -> x.fwds, ad_stmts))
-        ins_loc = length(fwds_stmts) + (isa(fwds_stmts[end][2].stmt, Terminator) ? 0 : 1)
-        ins_stmt = Expr(:call, __push_blk_stack!, info.block_stack_id, block_id.id)
-        ins_inst = (ID(), new_inst(ins_stmt))
-        return BBlock(block_id, insert!(fwds_stmts, ins_loc, ins_inst))
+        if !is_unique_pred[block_id]
+            ins_loc = length(fwds_stmts) + (isa(fwds_stmts[end][2].stmt, Terminator) ? 0 : 1)
+            ins_stmt = Expr(:call, __push_blk_stack!, info.block_stack_id, block_id.id)
+            ins_inst = (ID(), new_inst(ins_stmt))
+            insert!(fwds_stmts, ins_loc, ins_inst)
+        end
+        return BBlock(block_id, fwds_stmts)
     end
 
     # Create and return the `BBCode` for the forwards-pass.
@@ -786,7 +793,7 @@ function pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, T
     data_stmts = shared_data_stmts(info.shared_data_pairs)
     rev_data_ref_stmts = reverse_data_ref_stmts(info)
     exit_blocks_ids = map(n -> ir.blocks[n].id, primal_exit_blocks_inds)
-    switch_stmts = make_switch_stmts(exit_blocks_ids, info)
+    switch_stmts = make_switch_stmts(exit_blocks_ids, length(exit_blocks_ids) == 1, info)
     entry_block = BBlock(ID(), vcat(data_stmts, rev_data_ref_stmts, switch_stmts))
 
     # For each basic block in the primal:
@@ -797,10 +804,12 @@ function pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, T
     #   considered to only those which are predecessors of this one. If in the first block,
     #   check whether or not the block stack is empty. If empty, jump to the exit block.
     ps = compute_all_predecessors(ir)
+    _, pred_is_unique_pred = characterise_unique_predecessor_blocks(ir.blocks)
     main_blocks = map(ad_stmts_blocks, enumerate(ir.blocks)) do (blk_id, ad_stmts), (n, blk)
         rvs_stmts = reduce(vcat, [x.rvs for x in reverse(ad_stmts)])
         pred_ids = vcat(ps[blk.id], n == 1 ? [info.entry_id] : ID[])
-        additional_stmts, new_blocks = finalise_rvs_block(blk, pred_ids, info)
+        tmp = pred_is_unique_pred[blk_id]
+        additional_stmts, new_blocks = finalise_rvs_block(blk, pred_ids, tmp, info)
         rvs_block = BBlock(blk_id, vcat(rvs_stmts, additional_stmts))
         return vcat(rvs_block, new_blocks)
     end
@@ -821,13 +830,16 @@ end
 #=
 
 =#
-function finalise_rvs_block(blk::BBlock, pred_ids::Vector{ID}, info::ADInfo)
-
+function finalise_rvs_block(
+    blk::BBlock, pred_ids::Vector{ID}, pred_is_unique_pred::Bool, info::ADInfo
+)
     # Get the PhiNodes and their IDs.
     phi_ids, phis = phi_nodes(blk)
 
     # If there are no PhiNodes in this block, switch directly to the predecessor.
-    length(phi_ids) == 0 && (return make_switch_stmts(pred_ids, info), BBlock[])
+    if length(phi_ids) == 0
+        return make_switch_stmts(pred_ids, pred_is_unique_pred, info), BBlock[]
+    end
 
     # Create statements which extract + zero the rdata refs associated to them.
     rdata_ids = map(_ -> ID(), phi_ids)
@@ -844,7 +856,8 @@ function finalise_rvs_block(blk::BBlock, pred_ids::Vector{ID}, info::ADInfo)
         return rvs_phi_block(pred_id, rdata_ids, values, info)
     end
     new_pred_ids = map(blk -> blk.id, new_blocks)
-    return vcat(deref_stmts, make_switch_stmts(pred_ids, new_pred_ids, info)), new_blocks
+    switch = make_switch_stmts(pred_ids, new_pred_ids, pred_is_unique_pred, info)
+    return vcat(deref_stmts, switch), new_blocks
 end
 
 # Helper functionality for finalise_rvs_block # REDO THIS DOCUMENTATION BEFORE MERGING!!!
@@ -901,7 +914,9 @@ function rvs_phi_block(pred_id::ID, rdata_ids::Vector{ID}, values::Vector{Any}, 
 end
 
 #=
-    make_switch_stmts(pred_ids::Vector{ID}, info::ADInfo)
+    make_switch_stmts(
+        pred_ids::Vector{ID}, target_ids::Vector{ID}, pred_is_unique_pred::Bool, info::ADInfo
+    )
 
 `preds_ids` comprises the `ID`s associated to all possible predecessor blocks to the primal
 block under consideration. Suppose its value is `[ID(1), ID(2), ID(3)]`, then
@@ -921,8 +936,9 @@ switch(
 In words: `make_switch_stmts` emits code which jumps to whichever block preceded the current
 block during the forwards-pass.
 =#
-function make_switch_stmts(pred_ids::Vector{ID}, target_ids::Vector{ID}, info::ADInfo)
-
+function make_switch_stmts(
+    pred_ids::Vector{ID}, target_ids::Vector{ID}, pred_is_unique_pred::Bool, info::ADInfo
+)
     # If there are no predecessors, then we can't possibly have hit this block. This can
     # happen when all of the statements in a block have been eliminated, but the Julia
     # optimiser has not removed the block entirely from the `IRCode`. This often presents as
@@ -933,7 +949,11 @@ function make_switch_stmts(pred_ids::Vector{ID}, target_ids::Vector{ID}, info::A
 
     # Get the predecessor that we actually had in the primal.
     prev_blk_id = ID()
-    prev_blk = new_inst(Expr(:call, __pop_blk_stack!, info.block_stack_id))
+    if pred_is_unique_pred
+        prev_blk = new_inst(QuoteNode(only(pred_ids)))
+    else
+        prev_blk = new_inst(Expr(:call, __pop_blk_stack!, info.block_stack_id))
+    end
 
     # Compare predecessor from primal with all possible predecessors.
     conds = map(pred_ids[1:end-1]) do id
@@ -947,8 +967,8 @@ function make_switch_stmts(pred_ids::Vector{ID}, target_ids::Vector{ID}, info::A
     return vcat((prev_blk_id, prev_blk), conds, switch)
 end
 
-function make_switch_stmts(pred_ids::Vector{ID}, info::ADInfo)
-    return make_switch_stmts(pred_ids, pred_ids, info)
+function make_switch_stmts(pred_ids::Vector{ID}, pred_is_unique_pred::Bool, info::ADInfo)
+    return make_switch_stmts(pred_ids, pred_ids, pred_is_unique_pred, info)
 end
 
 @inline __pop_blk_stack!(block_stack::BlockStack) = pop!(block_stack)

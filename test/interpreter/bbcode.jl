@@ -57,7 +57,7 @@ end
         @testset "single block" begin
             blk_id = ID()
             blks = BBlock[BBlock(blk_id, [ID()], [new_inst(ReturnNode(5))])]
-            upreds, pred_is_upred = _characterise_unique_predecessor_blocks(blks)
+            upreds, pred_is_upred = characterise_unique_predecessor_blocks(blks)
             @test upreds[blk_id] == true
             @test pred_is_upred[blk_id] == true
         end
@@ -68,7 +68,7 @@ end
                 BBlock(blk_id_1, [ID()], [new_inst(IDGotoNode(blk_id_2))]),
                 BBlock(blk_id_2, [ID()], [new_inst(ReturnNode(5))]),
             ]
-            upreds, pred_is_upred = _characterise_unique_predecessor_blocks(blks)
+            upreds, pred_is_upred = characterise_unique_predecessor_blocks(blks)
             @test upreds[blk_id_1] == true
             @test upreds[blk_id_2] == true
             @test pred_is_upred[blk_id_1] == true
@@ -83,7 +83,7 @@ end
                 BBlock(blk_id_2, [ID()], [new_inst(ReturnNode(5))]),
                 BBlock(blk_id_3, [ID()], [new_inst(ReturnNode(5))]),
             ]
-            upreds, pred_is_upred = _characterise_unique_predecessor_blocks(blks)
+            upreds, pred_is_upred = characterise_unique_predecessor_blocks(blks)
             @test upreds[blk_id_1] == true
             @test upreds[blk_id_2] == false
             @test upreds[blk_id_3] == false
@@ -102,7 +102,7 @@ end
                 BBlock(blk_id_3, [ID()], [new_inst(IDGotoNode(blk_id_4))]),
                 BBlock(blk_id_4, [ID()], [new_inst(ReturnNode(0))]),
             ]
-            upreds, pred_is_upred = _characterise_unique_predecessor_blocks(blks)
+            upreds, pred_is_upred = characterise_unique_predecessor_blocks(blks)
             @test upreds[blk_id_1] == true
             @test upreds[blk_id_2] == false
             @test upreds[blk_id_3] == false
@@ -119,7 +119,7 @@ end
                 BBlock(blk_id_1, [ID()], [new_inst(IDGotoIfNot(true, blk_id_1))]),
                 BBlock(blk_id_2, [ID()], [new_inst(ReturnNode(5))]),
             ]
-            upreds, pred_is_upred = _characterise_unique_predecessor_blocks(blks)
+            upreds, pred_is_upred = characterise_unique_predecessor_blocks(blks)
             @test upreds[blk_id_1] == true
             @test upreds[blk_id_2] == true
             @test pred_is_upred[blk_id_1] == false

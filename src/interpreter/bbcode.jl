@@ -291,7 +291,7 @@ successors(t::Switch, ::Int, ::Vector{BBlock}, ::Bool) = vcat(t.dests, t.fallthr
 Compute a map from the `ID of each `BBlock` in `ir` to its possible predecessors.
 """
 function compute_all_predecessors(ir::BBCode)::Dict{ID, Vector{ID}}
-    return _compute_all_predecessors(ir.blks)
+    return _compute_all_predecessors(ir.blocks)
 end
 
 function _compute_all_predecessors(blks::Vector{BBlock})::Dict{ID, Vector{ID}}
@@ -609,7 +609,7 @@ function _sort_blocks!(ir::BBCode)
 end
 
 #=
-    _characterise_unique_predecessor_blocks(blks::Vector{BBlock}) ->
+    characterise_unique_predecessor_blocks(blks::Vector{BBlock}) ->
         Tuple{Dict{ID, Bool}, Dict{ID, Bool}}
 
 We call a block `b` a _unique_ _predecessor_ in the control flow graph associated to `blks`
@@ -636,7 +636,7 @@ are inexpensive -- for which avoiding as much memory pressure as possible is cri
 performance. It is also important for single-block functions, because it can be used to
 entirely avoid using a block stack at all.
 =#
-function _characterise_unique_predecessor_blocks(
+function characterise_unique_predecessor_blocks(
     blks::Vector{BBlock}
 )::Tuple{Dict{ID, Bool}, Dict{ID, Bool}}
 
