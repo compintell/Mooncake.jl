@@ -397,7 +397,7 @@ with.
     return throw(error("Unhandled type $P"))
 end
 
-function zero_rdata_from_type(::Type{P}) where {P<:Tuple}
+@generated function zero_rdata_from_type(::Type{P}) where {P<:Tuple}
     can_produce_zero_rdata_from_type(P) || return CannotProduceZeroRDataFromType()
     rdata_type(tangent_type(P)) == NoRData && return NoRData()
     return tuple_map(zero_rdata_from_type, fieldtypes(P))
