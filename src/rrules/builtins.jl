@@ -521,14 +521,36 @@ function rrule!!(::CoDual{typeof(Core.fieldtype)}, args::Vararg{Any, N}) where {
     return CoDual(Core.fieldtype(arg_primals...), NoFData()), pb!!
 end
 
-function rrule!!(::CoDual{typeof(getfield)}, value::CoDual{P, F}, name::CoDual) where {P, F}
-    return rrule!!(uninit_fcodual(lgetfield), value, uninit_fcodual(Val(primal(name))))
+function rrule!!(::CoDual{typeof(getfield)}, value::CoDual{P}, name::CoDual) where {P}
+    if tangent_type(P) == NoTangent
+        y = uninit_fcodual(getfield(primal(value), primal(name)))
+        return y, NoPullback((NoRData(), NoRData(), NoRData()))
+    else
+        return rrule!!(uninit_fcodual(lgetfield), value, uninit_fcodual(Val(primal(name))))
+    end
 end
 
-function rrule!!(::CoDual{typeof(getfield)}, value::CoDual{P, F}, name::CoDual, order::CoDual) where {P, F}
-    literal_name = uninit_fcodual(Val(primal(name)))
-    literal_order = uninit_fcodual(Val(primal(order)))
-    return rrule!!(uninit_fcodual(lgetfield), value, literal_name, literal_order)
+function rrule!!(::CoDual{typeof(getfield)}, value::CoDual{P}, name::CoDual, order::CoDual) where {P}
+    if tangent_type(P) == NoTangent
+        y = uninit_fcodual(getfield(primal(value), primal(name)))
+        return y, NoPullback((NoRData(), NoRData(), NoRData(), NoRData()))
+    else
+        literal_name = uninit_fcodual(Val(primal(name)))
+        literal_order = uninit_fcodual(Val(primal(order)))
+        return rrule!!(uninit_fcodual(lgetfield), value, literal_name, literal_order)
+    end
+end
+
+# Highly specialised rrule to handle tuples of DataTypes.
+function rrule!!(::CoDual{typeof(getfield)}, value::CoDual{P}, name::CoDual) where {P<:NTuple{<:Any, DataType}}
+    pb!! = NoPullback((NoRData(), NoRData(), NoRData(), NoRData()))
+    y = CoDual{DataType, NoFData}(getfield(primal(value), primal(name)), NoFData())
+    return y, pb!!
+end
+function rrule!!(::CoDual{typeof(getfield)}, value::CoDual{P}, name::CoDual, order::CoDual) where {P<:NTuple{<:Any, DataType}}
+    pb!! = NoPullback((NoRData(), NoRData(), NoRData(), NoRData()))
+    y = CoDual{DataType, NoFData}(getfield(primal(value), primal(name), primal(order)), NoFData())
+    return y, pb!!
 end
 
 function rrule!!(::CoDual{typeof(getglobal)}, a, b)
@@ -825,8 +847,8 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :none, _range, getfield, StructFoo(5.0, randn(5)), 2),
         (true, :none, _range, getfield, MutableFoo(5.0), :a),
         (false, :none, _range, getfield, MutableFoo(5.0, randn(5)), :b),
-        (false, :none, nothing, getfield, UnitRange{Int}(5:9), :start),
-        (false, :none, nothing, getfield, UnitRange{Int}(5:9), :stop),
+        (false, :none, :stability_and_allocs, getfield, UnitRange{Int}(5:9), :start),
+        (false, :none, :stability_and_allocs, getfield, UnitRange{Int}(5:9), :stop),
         (false, :none, _range, getfield, (5.0, ), 1, false),
         (false, :none, _range, getfield, (1, ), 1, false),
         (false, :none, _range, getfield, (1, 2), 1),
