@@ -388,22 +388,26 @@ function rrule!!(::CoDual{typeof(Core.apply_type)}, args...)
     return CoDual{_typeof(T), NoFData}(T, NoFData()), pb!!
 end
 
-function rrule!!(
+Base.@propagate_inbounds function rrule!!(
     ::CoDual{typeof(Core.arrayref)},
-    inbounds::CoDual{Bool},
+    checkbounds::CoDual{Bool},
     x::CoDual{<:Array},
-    inds::CoDual{Int}...,
-)
-    _inbounds = primal(inbounds)
-    lin_inds = @inbounds LinearIndices(size(primal(x)))[tuple_map(primal, inds)...]
+    inds::Vararg{CoDual{Int}, N},
+) where {N}
+
+    # Convert to linear indices to reduce amount of data required on the reverse-pass, to
+    # avoid converting from cartesian to linear indices multiple times, and to perform a
+    # bounds check if required by the calling context.
+    lin_inds = LinearIndices(size(primal(x)))[tuple_map(primal, inds)...]
+
     dx = tangent(x)
     function arrayref_pullback!!(dy)
-        new_tangent = increment_rdata!!(arrayref(_inbounds, dx, lin_inds), dy)
-        arrayset(_inbounds, dx, new_tangent, lin_inds)
-        return NoRData(), NoRData(), NoRData(), tuple_map(_ -> NoRData(), inds)...
+        new_tangent = increment_rdata!!(arrayref(false, dx, lin_inds), dy)
+        arrayset(false, dx, new_tangent, lin_inds)
+        return NoRData(), NoRData(), NoRData(), ntuple(_ -> NoRData(), N)...
     end
-    _y = arrayref(_inbounds, primal(x), lin_inds)
-    dy = fdata(arrayref(_inbounds, tangent(x), lin_inds))
+    _y = arrayref(false, primal(x), lin_inds)
+    dy = fdata(arrayref(false, tangent(x), lin_inds))
     return CoDual(_y, dy), arrayref_pullback!!
 end
 
@@ -445,22 +449,24 @@ function rrule!!(
 end
 
 function isbits_arrayset_rrule(
-    _inbounds, _inds, A::CoDual{<:Array{P}, TdA}, v::CoDual{P}
+    boundscheck, _inds, A::CoDual{<:Array{P}, TdA}, v::CoDual{P}
 ) where {P, V, TdA <: Array{V}}
-    old_A = (
-        arrayref(_inbounds, primal(A), _inds...),
-        arrayref(_inbounds, tangent(A), _inds...),
-    )
-    arrayset(_inbounds, primal(A), primal(v), _inds...)
+
+    # Convert to linear indices
+    lin_inds = LinearIndices(size(primal(A)))[_inds...]
+
+    old_A = (arrayref(false, primal(A), lin_inds), arrayref(false, tangent(A), lin_inds))
+    arrayset(false, primal(A), primal(v), lin_inds)
 
     _A = primal(A)
     dA = tangent(A)
-    arrayset(_inbounds, dA, zero_tangent(primal(v)), _inds...)
+    arrayset(false, dA, zero_tangent(primal(v)), lin_inds)
+    ninds = Val(length(_inds))
     function isbits_arrayset_pullback!!(::NoRData)
-        dv = rdata(arrayref(_inbounds, dA, _inds...))
-        arrayset(_inbounds, _A, old_A[1], _inds...)
-        arrayset(_inbounds, dA, old_A[2], _inds...)
-        return NoRData(), NoRData(), NoRData(), dv, tuple_map(_ -> NoRData(), _inds)...
+        dv = rdata(arrayref(false, dA, lin_inds))
+        arrayset(false, _A, old_A[1], lin_inds)
+        arrayset(false, dA, old_A[2], lin_inds)
+        return NoRData(), NoRData(), NoRData(), dv, tuple_fill(NoRData(), ninds)...
     end
     return A, isbits_arrayset_pullback!!
 end
@@ -753,6 +759,8 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability, nothing, Base.arrayref, false, randn(4), 1),
         (false, :stability, nothing, Base.arrayref, true, randn(5, 4), 1, 1),
         (false, :stability, nothing, Base.arrayref, false, randn(5, 4), 5, 4),
+        (false, :stability, nothing, Base.arrayref, true, randn(5, 4), 1),
+        (false, :stability, nothing, Base.arrayref, false, randn(5, 4), 5),
         (false, :stability, nothing, Base.arrayref, false, [1, 2, 3], 1),
         (false, :stability, nothing, Base.arrayset, false, [1, 2, 3], 4, 2),
         (false, :stability, nothing, Base.arrayset, false, randn(5), 4.0, 3),
