@@ -29,6 +29,7 @@ for name in [
     :(Base.reduced_indices),
     :(Base.check_reducedims),
     :(Base.throw_boundserror),
+    :(Base.Broadcast.eltypes),
 ]
     @eval @is_primitive DefaultCtx Tuple{typeof($name), Vararg}
     @eval function rrule!!(::CoDual{_typeof($name)}, args::CoDual...)
