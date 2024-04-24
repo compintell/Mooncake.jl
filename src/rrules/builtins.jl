@@ -395,15 +395,15 @@ function rrule!!(
     inds::CoDual{Int}...,
 )
     _inbounds = primal(inbounds)
-    _inds = map(primal, inds)
+    lin_inds = @inbounds LinearIndices(size(primal(x)))[tuple_map(primal, inds)...]
     dx = tangent(x)
     function arrayref_pullback!!(dy)
-        new_tangent = increment_rdata!!(arrayref(_inbounds, dx, _inds...), dy)
-        arrayset(_inbounds, dx, new_tangent, _inds...)
-        return NoRData(), NoRData(), NoRData(), tuple_map(_ -> NoRData(), _inds)...
+        new_tangent = increment_rdata!!(arrayref(_inbounds, dx, lin_inds), dy)
+        arrayset(_inbounds, dx, new_tangent, lin_inds)
+        return NoRData(), NoRData(), NoRData(), tuple_map(_ -> NoRData(), inds)...
     end
-    _y = arrayref(_inbounds, primal(x), _inds...)
-    dy = fdata(arrayref(_inbounds, tangent(x), _inds...))
+    _y = arrayref(_inbounds, primal(x), lin_inds)
+    dy = fdata(arrayref(_inbounds, tangent(x), lin_inds))
     return CoDual(_y, dy), arrayref_pullback!!
 end
 
@@ -516,29 +516,13 @@ function rrule!!(::CoDual{typeof(Core.fieldtype)}, args::Vararg{Any, N}) where {
 end
 
 function rrule!!(::CoDual{typeof(getfield)}, value::CoDual{P, F}, name::CoDual) where {P, F}
-    if rdata_type(tangent_type(P)) == NoRData
-        pb!! = NoPullback((NoRData(), NoRData(), NoRData()))
-        yp = getfield(primal(value), primal(name))
-        yf = _get_fdata_field(primal(value), tangent(value), primal(name))
-        return CoDual{Union{fieldtypes(value)...}, _typeof(yf)}(yp, yf), pb!!
-    else
-        return rrule!!(uninit_fcodual(lgetfield), value, uninit_fcodual(Val(primal(name))))
-    end
+    return rrule!!(uninit_fcodual(lgetfield), value, uninit_fcodual(Val(primal(name))))
 end
 
 function rrule!!(::CoDual{typeof(getfield)}, value::CoDual{P, F}, name::CoDual, order::CoDual) where {P, F}
-    if rdata_type(tangent_type(P)) == NoRData
-        _name = primal(name)
-        _order = primal(order)
-        pb!! = NoPullback((NoRData(), NoRData(), NoRData(), NoRData()))
-        yp = getfield(primal(value), _name, _order)
-        yf = _get_fdata_field(primal(value), tangent(value), _name)
-        return CoDual{Union{fieldtypes(P)...}, _typeof(yf)}(yp, yf), pb!!
-    else
-        literal_name = uninit_fcodual(Val(primal(name)))
-        literal_order = uninit_fcodual(Val(primal(order)))
-        return rrule!!(uninit_fcodual(lgetfield), value, literal_name, literal_order)
-    end
+    literal_name = uninit_fcodual(Val(primal(name)))
+    literal_order = uninit_fcodual(Val(primal(order)))
+    return rrule!!(uninit_fcodual(lgetfield), value, literal_name, literal_order)
 end
 
 function rrule!!(::CoDual{typeof(getglobal)}, a, b)
@@ -833,8 +817,8 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :none, _range, getfield, StructFoo(5.0, randn(5)), 2),
         (true, :none, _range, getfield, MutableFoo(5.0), :a),
         (false, :none, _range, getfield, MutableFoo(5.0, randn(5)), :b),
-        (false, :stability_and_allocs, nothing, getfield, UnitRange{Int}(5:9), :start),
-        (false, :stability_and_allocs, nothing, getfield, UnitRange{Int}(5:9), :stop),
+        (false, :none, nothing, getfield, UnitRange{Int}(5:9), :start),
+        (false, :none, nothing, getfield, UnitRange{Int}(5:9), :stop),
         (false, :none, _range, getfield, (5.0, ), 1, false),
         (false, :none, _range, getfield, (1, ), 1, false),
         (false, :none, _range, getfield, (1, 2), 1),
