@@ -26,8 +26,10 @@ end
             (Float16(5.0), true),
             (StructFoo(5.0), false),
             (StructFoo(5.0, randn(4)), false),
+            (Bool, true),
         ]
             @test fully_lazy == Base.issingletontype(typeof(LazyZeroRData(p)))
+            @inferred Tapir.instantiate(LazyZeroRData(p))
         end
     end
 end
