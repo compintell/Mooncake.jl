@@ -289,7 +289,20 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
         names = fieldnames(P)[1:length(args)] # only query fields which get values
         return Any[(interface_only, :none, nothing, lgetfield, primal, Val(name)) for name in names]
     end
-    test_cases = vcat(specific_test_cases, general_lgetfield_test_cases...)
+    general_lsetfield_test_cases = map(TestTypes.PRIMALS) do (interface_only, P, args)
+        ismutabletype(P) || return Any[]
+        _, primal = TestTypes.instantiate((interface_only, P, args))
+        names = fieldnames(P)[1:length(args)] # only query fields which get values
+        return Any[
+            (interface_only, :none, nothing, lsetfield!, primal, Val(name), args[n]) for
+            (n, name) in enumerate(names)
+        ]
+    end
+    test_cases = vcat(
+        specific_test_cases,
+        general_lgetfield_test_cases...,
+        general_lsetfield_test_cases...,
+    )
     return test_cases, memory
 end
 
