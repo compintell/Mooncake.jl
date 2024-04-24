@@ -677,11 +677,13 @@ function build_rrule(interp::PInterp{C}, sig::Type{<:Tuple}; safety_on=false) wh
     if !haskey(interp.oc_cache, (sig, safety_on))
         fwds_ir = forwards_pass_ir(primal_ir, ad_stmts_blocks, info, _typeof(shared_data))
         pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, _typeof(shared_data))
+        # @show sig, safety_on
         # display(ir)
         # display(IRCode(fwds_ir))
         # display(IRCode(pb_ir))
         optimised_fwds_ir = optimise_ir!(IRCode(fwds_ir); do_inline=true)
         optimised_pb_ir = optimise_ir!(IRCode(pb_ir); do_inline=true)
+        # @show length(ir.stmts.inst)
         # @show length(optimised_fwds_ir.stmts.inst)
         # @show length(optimised_pb_ir.stmts.inst)
         # display(optimised_fwds_ir)
@@ -797,16 +799,27 @@ function pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, T
     entry_block = BBlock(ID(), vcat(data_stmts, rev_data_ref_stmts, switch_stmts))
 
     # For each basic block in the primal:
-    # 1. pull the translated basic block statements from ad_stmts_blocks
-    # 2. reverse the statements
-    # 3. pop block stack to get the predecessor block
-    # 4. insert a switch statement to determine which block to jump to. Restrict blocks
-    #   considered to only those which are predecessors of this one. If in the first block,
-    #   check whether or not the block stack is empty. If empty, jump to the exit block.
+    # 1. if the block is reachable on the reverse-pass, the bulk of its statements are the
+    #   translated basic block statements, in reverse.
+    # 2. if, on the other hand, the block is provably not reachable on the reverse-pass,
+    #   return a block with nothing in it. At present we only assert that a block is not
+    #   reachable if it ends with an unreachable return node.
+    # 3. if we need to pop the predecessor stack, pop it. We don't need to pop it if there
+    #   is only a single predecessor to this block, and said predecessor is a _unique_
+    #   _predecessor_ (see characterise_unique_predecessor_blocks for more info), as its
+    #   ID is uniquely determined, and nothing will have been put on to the block stack
+    #   during the forwards-pass (see how the output of
+    #   characterise_unique_predecessor_blocks is used in forwards_pass_ir).
+    # 4. if the block began with one or more PhiNodes, then handle their tangents.
+    # 5. jump to the predecessor block
     ps = compute_all_predecessors(ir)
     _, pred_is_unique_pred = characterise_unique_predecessor_blocks(ir.blocks)
     main_blocks = map(ad_stmts_blocks, enumerate(ir.blocks)) do (blk_id, ad_stmts), (n, blk)
-        rvs_stmts = reduce(vcat, [x.rvs for x in reverse(ad_stmts)])
+        if is_unreachable_return_node(terminator(blk))
+            rvs_stmts = [(ID(), new_inst(nothing))]
+        else
+            rvs_stmts = reduce(vcat, [x.rvs for x in reverse(ad_stmts)])
+        end
         pred_ids = vcat(ps[blk.id], n == 1 ? [info.entry_id] : ID[])
         tmp = pred_is_unique_pred[blk_id]
         additional_stmts, new_blocks = finalise_rvs_block(blk, pred_ids, tmp, info)

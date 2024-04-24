@@ -248,6 +248,15 @@ is_reachable_return_node(x::ReturnNode) = isdefined(x, :val)
 is_reachable_return_node(x) = false
 
 """
+    is_unreachable(x::ReturnNode)
+
+Determine whehter `x` is a `ReturnNode`, and if it is, if it is also unreachable. This is
+purely a function of whether or not its `val` field is defined or not.
+"""
+is_unreachable_return_node(x::ReturnNode) = !isdefined(x, :val)
+is_unreachable_return_node(x) = false
+
+"""
     globalref_type(x::GlobaRef)
 
 Returns the static type of the value referred to by `x`.
