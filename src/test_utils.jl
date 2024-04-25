@@ -1548,11 +1548,11 @@ function generate_test_functions()
         ),
         (
             false, :allocs, nothing,
-            LinearAlgebra._kron!, randn(400, 400), randn(20, 20), randn(20, 20),
+            LinearAlgebra._kron!, randn(25, 25), randn(5, 5), randn(5, 5),
         ),
         (
             false, :allocs, nothing,
-            kron!, randn(400, 400), Diagonal(randn(20)), randn(20, 20),
+            kron!, randn(25, 25), Diagonal(randn(5)), randn(5, 5),
         ),
         (
             false, :none, nothing,
