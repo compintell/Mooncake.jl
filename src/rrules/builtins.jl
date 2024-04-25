@@ -515,25 +515,47 @@ function rrule!!(f::CoDual{typeof(Core.fieldtype)}, args::Vararg{Any, N}) where 
     return CoDual(Core.fieldtype(arg_primals...), NoFData()), NoPullback(f, args...)
 end
 
-function rrule!!(f::CoDual{typeof(getfield)}, value::CoDual{P}, name::CoDual) where {P}
+function rrule!!(f::CoDual{typeof(getfield)}, x::CoDual{P}, name::CoDual) where {P}
     if tangent_type(P) == NoTangent
-        y = uninit_fcodual(getfield(primal(value), primal(name)))
-        return y, NoPullback(f, value, name)
+        y = uninit_fcodual(getfield(primal(x), primal(name)))
+        return y, NoPullback(f, x, name)
+    elseif is_homogeneous_and_immutable(primal(x))
+        dx_r = LazyZeroRData(primal(x))
+        _name = primal(name)
+        function immutable_lgetfield_pb!!(dy)
+            return NoRData(), increment_field!!(instantiate(dx_r), dy, _name), NoRData()
+        end
+        yp = getfield(primal(x), _name)
+        y = CoDual(yp, _get_fdata_field(primal(x), tangent(x), _name))
+        return y, immutable_lgetfield_pb!!
     else
-        return rrule!!(uninit_fcodual(lgetfield), value, uninit_fcodual(Val(primal(name))))
+        return rrule!!(uninit_fcodual(lgetfield), x, uninit_fcodual(Val(primal(name))))
     end
 end
 
-function rrule!!(f::CoDual{typeof(getfield)}, value::CoDual{P}, name::CoDual, order::CoDual) where {P}
+function rrule!!(f::CoDual{typeof(getfield)}, x::CoDual{P}, name::CoDual, order::CoDual) where {P}
     if tangent_type(P) == NoTangent
-        y = uninit_fcodual(getfield(primal(value), primal(name)))
-        return y, NoPullback(f, value, name, order)
+        y = uninit_fcodual(getfield(primal(x), primal(name)))
+        return y, NoPullback(f, x, name, order)
+    elseif is_homogeneous_and_immutable(primal(x))
+        dx_r = LazyZeroRData(primal(x))
+        _name = primal(name)
+        function immutable_lgetfield_pb!!(dy)
+            tmp = increment_field!!(instantiate(dx_r), dy, _name)
+            return NoRData(), tmp, NoRData(), NoRData()
+        end
+        yp = getfield(primal(x), _name, primal(order))
+        y = CoDual(yp, _get_fdata_field(primal(x), tangent(x), _name))
+        return y, immutable_lgetfield_pb!!
     else
         literal_name = uninit_fcodual(Val(primal(name)))
         literal_order = uninit_fcodual(Val(primal(order)))
-        return rrule!!(uninit_fcodual(lgetfield), value, literal_name, literal_order)
+        return rrule!!(uninit_fcodual(lgetfield), x, literal_name, literal_order)
     end
 end
+
+@generated is_homogeneous_and_immutable(::P) where {P<:Tuple} = allequal(P.parameters)
+is_homogeneous_and_immutable(::Any) = false
 
 # # Highly specialised rrule to handle tuples of DataTypes.
 # function rrule!!(::CoDual{typeof(getfield)}, value::CoDual{P}, name::CoDual) where {P<:NTuple{<:Any, DataType}}
@@ -835,9 +857,12 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :none, _range, getfield, MutableFoo(5.0, randn(5)), :b),
         (false, :stability_and_allocs, nothing, getfield, UnitRange{Int}(5:9), :start),
         (false, :stability_and_allocs, nothing, getfield, UnitRange{Int}(5:9), :stop),
-        (false, :none, _range, getfield, (5.0, ), 1, false),
-        (false, :none, _range, getfield, (1, ), 1, false),
-        (false, :none, _range, getfield, (1, 2), 1),
+        (false, :stability_and_allocs, nothing, getfield, (5.0, ), 1),
+        (false, :stability_and_allocs, nothing, getfield, (5.0, 4.0), 1),
+        (false, :stability_and_allocs, nothing, getfield, (5.0, ), 1, false),
+        (false, :stability_and_allocs, nothing, getfield, (5.0, 4.0), 1, false),
+        (false, :stability_and_allocs, nothing, getfield, (1, ), 1, false),
+        (false, :stability_and_allocs, nothing, getfield, (1, 2), 1),
         (false, :none, _range, getfield, (a=5, b=4), 1),
         (false, :none, _range, getfield, (a=5, b=4), 2),
         (false, :none, _range, getfield, (a=5.0, b=4), 1),
