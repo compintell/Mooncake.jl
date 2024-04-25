@@ -555,6 +555,7 @@ function rrule!!(f::CoDual{typeof(getfield)}, x::CoDual{P}, name::CoDual, order:
 end
 
 @generated is_homogeneous_and_immutable(::P) where {P<:Tuple} = allequal(P.parameters)
+@inline is_homogeneous_and_immutable(p::NamedTuple) = is_homogeneous_and_immutable(Tuple(p))
 is_homogeneous_and_immutable(::Any) = false
 
 # # Highly specialised rrule to handle tuples of DataTypes.
@@ -863,8 +864,8 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability_and_allocs, nothing, getfield, (5.0, 4.0), 1, false),
         (false, :stability_and_allocs, nothing, getfield, (1, ), 1, false),
         (false, :stability_and_allocs, nothing, getfield, (1, 2), 1),
-        (false, :none, _range, getfield, (a=5, b=4), 1),
-        (false, :none, _range, getfield, (a=5, b=4), 2),
+        (false, :stability_and_allocs, nothing, getfield, (a=5, b=4), 1),
+        (false, :stability_and_allocs, nothing, getfield, (a=5, b=4), 2),
         (false, :none, _range, getfield, (a=5.0, b=4), 1),
         (false, :none, _range, getfield, (a=5.0, b=4), 2),
         (false, :none, _range, getfield, UInt8, :name),
