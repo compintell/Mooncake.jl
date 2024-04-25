@@ -62,7 +62,7 @@ This approach is identical to the one taken by `Zygote.jl` to circumvent the sam
 """
 lgetfield(x, ::Val{f}) where {f} = getfield(x, f)
 
-@is_primitive MinimalCtx Tuple{typeof(lgetfield), Any, Any}
+@is_primitive MinimalCtx Tuple{typeof(lgetfield), Any, Val}
 @inline function rrule!!(
     ::CoDual{typeof(lgetfield)}, x::CoDual{P}, ::CoDual{Val{f}}
 ) where {P, f}
@@ -101,37 +101,25 @@ end
 
 lgetfield(x, ::Val{f}, ::Val{order}) where {f, order} = getfield(x, f, order)
 
-@is_primitive MinimalCtx Tuple{typeof(lgetfield), Any, Any, Any}
+@is_primitive MinimalCtx Tuple{typeof(lgetfield), Any, Val, Val}
 @inline function rrule!!(
     ::CoDual{typeof(lgetfield)}, x::CoDual{P}, ::CoDual{Val{f}}, ::CoDual{Val{order}}
 ) where {P, f, order}
-    T = tangent_type(P)
-    R = rdata_type(T)
-
-    if ismutabletype(P)
+    pb!! = if ismutabletype(P)
         dx = tangent(x)
-        pb!! = if R == NoRData
-            NoPullback((NoRData(), NoRData(), NoRData(), NoRData()))
-        else
-            function mutable_lgetfield_pb!!(dy)
-                return NoRData(), increment_field_rdata!!(dx, dy, Val{f}()), NoRData(), NoRData()
-            end
+        function mutable_lgetfield_pb!!(dy)
+            increment_field_rdata!(dx, dy, Val{f}())
+            return NoRData(), NoRData(), NoRData(), NoRData()
         end
-        y = CoDual(getfield(primal(x), f), fdata(_get_fdata_field(primal(x), tangent(x), f)))
-        return y, pb!!
     else
-        pb!! = if R == NoRData
-            NoPullback((NoRData(), NoRData(), NoRData(), NoRData()))
-        else
-            dx_r = LazyZeroRData(primal(x))
-            function immutable_lgetfield_pb!!(dy)
-                tmp = increment_field!!(instantiate(dx_r), dy, Val{f}())
-                return NoRData(), tmp, NoRData(), NoRData()
-            end
+        dx_r = LazyZeroRData(primal(x))
+        function immutable_lgetfield_pb!!(dy)
+            tmp = increment_field!!(instantiate(dx_r), dy, Val{f}())
+            return NoRData(), tmp, NoRData(), NoRData()
         end
-        y = CoDual(getfield(primal(x), f, order), _get_fdata_field(primal(x), tangent(x), f))
-        return y, pb!!
     end
+    y = CoDual(getfield(primal(x), f, order), _get_fdata_field(primal(x), tangent(x), f))
+    return y, pb!!
 end
 
 """
@@ -224,7 +212,27 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
         ),
         (false, :allocs, nothing, Threads.nthreads),
 
-        # Literal replacements for getfield.
+        # Literal replacement for setfield!.
+        (
+            false, :stability_and_allocs, nothing,
+            lsetfield!, MutableFoo(5.0, [1.0, 2.0]), Val(:a), 4.0,
+        ),
+        (
+            false, :stability_and_allocs, nothing,
+            lsetfield!, FullyInitMutableStruct(5.0, [1.0, 2.0]), Val(:y), [1.0, 3.0, 4.0],
+        ),
+        (
+            false, :stability_and_allocs, nothing,
+            lsetfield!, NonDifferentiableFoo(5, false), Val(:x), 4,
+        ),
+        (
+            false, :stability_and_allocs, nothing,
+            lsetfield!, NonDifferentiableFoo(5, false), Val(:y), true,
+        )
+    ]
+
+    # Some specific test cases for lgetfield to test the basics.
+    specific_lgetfield_test_cases = Any[
 
         # Tuple
         (false, :stability_and_allocs, nothing, lgetfield, (5.0, 4), Val(1)),
@@ -265,42 +273,39 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
         (true, :none, nothing, lgetfield, UInt8, Val(:layout)),
         (false, :none, nothing, lgetfield, UInt8, Val(:hash)),
         (false, :none, nothing, lgetfield, UInt8, Val(:flags)),
-
-        # Literal replacement for setfield!.
-        (
-            false, :stability_and_allocs, nothing,
-            lsetfield!, MutableFoo(5.0, [1.0, 2.0]), Val(:a), 4.0,
-        ),
-        (
-            false, :stability_and_allocs, nothing,
-            lsetfield!, FullyInitMutableStruct(5.0, [1.0, 2.0]), Val(:y), [1.0, 3.0, 4.0],
-        ),
-        (
-            false, :stability_and_allocs, nothing,
-            lsetfield!, NonDifferentiableFoo(5, false), Val(:x), 4,
-        ),
-        (
-            false, :stability_and_allocs, nothing,
-            lsetfield!, NonDifferentiableFoo(5, false), Val(:y), true,
-        )
     ]
+
+    # Create `lgetfield` tests for each type in TestTypes in order to increase coverage.
     general_lgetfield_test_cases = map(TestTypes.PRIMALS) do (interface_only, P, args)
         _, primal = TestTypes.instantiate((interface_only, P, args))
-        names = fieldnames(P)[1:length(args)] # only query fields which get values
-        return Any[(interface_only, :none, nothing, lgetfield, primal, Val(name)) for name in names]
+        names = fieldnames(P)[1:length(args)] # only query fields which get initialised
+        return Any[
+            (interface_only, :none, nothing, lgetfield, primal, Val(name)) for
+            name in names
+        ]
     end
+
+    # lgetfield has both 3 and 4 argument forms. Create test cases for both scenarios.
+    all_lgetfield_test_cases = Any[
+        (case..., order...) for
+        case in vcat(specific_lgetfield_test_cases, general_lgetfield_test_cases...) for
+        order in Any[(), (Val(false), )]
+    ]
+
+    # Create `lsetfield` testsfor each type in TestTypes in order to increase coverage.
     general_lsetfield_test_cases = map(TestTypes.PRIMALS) do (interface_only, P, args)
         ismutabletype(P) || return Any[]
         _, primal = TestTypes.instantiate((interface_only, P, args))
-        names = fieldnames(P)[1:length(args)] # only query fields which get values
+        names = fieldnames(P)[1:length(args)] # only query fields which get initialised
         return Any[
             (interface_only, :none, nothing, lsetfield!, primal, Val(name), args[n]) for
             (n, name) in enumerate(names)
         ]
     end
+
     test_cases = vcat(
         specific_test_cases,
-        general_lgetfield_test_cases...,
+        all_lgetfield_test_cases...,
         general_lsetfield_test_cases...,
     )
     return test_cases, memory
