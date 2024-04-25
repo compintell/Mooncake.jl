@@ -9,8 +9,6 @@ post-conditions to `pb`. Let `dx = pb.pb(dy)`, for some rdata `dy`, then this fu
 """
 struct SafePullback{Tpb, Ty, Tx}
     pb::Tpb
-    y::Ty
-    x::Tx
 end
 
 """
@@ -19,31 +17,33 @@ end
 Apply type checking to enforce pre- and post-conditions on `pb.pb`. See the docstring for
 `SafePullback` for details.
 """
-@inline function (pb::SafePullback)(dy)
-    verify_rvs(pb.y, dy)
+@inline function (pb::SafePullback{Tpb, Ty, Tx})(dy) where {Tpb, Ty, Tx}
+    verify_rvs_input(Ty, dy)
     dx = pb.pb(dy)
-    verify_rvs_output(pb, dx)
+    verify_rvs_output(Tx, dx)
     return dx
 end
 
-@noinline function verify_rvs_output(pb, dx)
+@noinline verify_rvs_input(::Type{Ty}, dy) where {Ty} = verify_rvs(Ty, dy)
+
+@noinline function verify_rvs_output(::Type{Tx}, dx) where {Tx}
     @nospecialize pb dx
 
     # Number of arguments and number of elements in pullback must match. Have to check this
     # because `zip` doesn't require equal lengths for arguments.
-    l_pb = length(pb.x)
+    l_pb = length(Tx.parameters)
     l_dx = length(dx)
     if l_pb != l_dx
         error("Number of args = $l_pb but number of rdata = $l_dx. They must to be equal.")
     end
 
     # Use for-loop to keep stack trace as simple as possible.
-    for (x, dx) in zip(pb.x, dx)
+    for (x, dx) in zip(Tx.parameters, dx)
         verify_rvs(x, dx)
     end
 end
 
-@noinline function verify_rvs(::P, dx::R) where {P, R}
+@noinline function verify_rvs(::Type{P}, dx::R) where {P, R}
     _R = rdata_type(tangent_type(P))
     R <: ZeroRData && return nothing
     (R <: _R) || throw(ArgumentError("Type $P has rdata type $_R, but got $R."))
@@ -81,33 +81,28 @@ Apply type checking to enforce pre- and post-conditions on `rule.rule`. See the 
 for `SafeRRule` for details.
 """
 @inline function (rule::SafeRRule)(x::Vararg{CoDual, N}) where {N}
-
-    # Check inputs.
-    try
-        verify_fwds_inputs(x)
-    catch e
-        error("error in inputs to rule $(rule.rule) with input types $(_typeof(x))")
-    end
-
-    # Run rule.
+    verify_fwds_inputs(x)
     y, pb = rule.rule(x...)
+    verify_fwds_output(x, y)
+    return y::CoDual, SafePullback{_typeof(pb), _typeof(primal(y)), Tuple{tuple_map(_typeof ∘ primal, x)...}}(pb)
+end
 
-    # Check outputs.
+@noinline function verify_fwds_inputs(@nospecialize(x::Tuple))
+    try
+        # Use for-loop to keep the stack trace as simple as possible.
+        for _x in x
+            verify_fwds(_x)
+        end
+    catch e
+        error("error in inputs to rule with input types $(_typeof(x))")
+    end
+end
+
+@noinline function verify_fwds_output(@nospecialize(x), @nospecialize(y))
     try
         verify_fwds(y)
     catch e
-        error("error in outputs of rule $(rule.rule) with input types $(_typeof(x))")
-    end
-
-    # Wrap pullback and return.
-    return y::CoDual, SafePullback(pb, primal(y), map(primal, x))
-end
-
-@noinline function verify_fwds_inputs(x::Tuple)
-    @nospecialize x
-    # Use for-loop to keep the stack trace as simple as possible.
-    for _x in x
-        verify_fwds(_x)
+        error("error in outputs of rule with input types $(_typeof(x))")
     end
 end
 
