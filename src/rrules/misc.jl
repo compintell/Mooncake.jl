@@ -99,6 +99,9 @@ end
 # lgetfield with order argument
 #
 
+# This is largely copy + pasted from the above. Attempts were made to refactor to avoid
+# code duplication, but it wound up not being any cleaner than this copy + pasted version.
+
 lgetfield(x, ::Val{f}, ::Val{order}) where {f, order} = getfield(x, f, order)
 
 @is_primitive MinimalCtx Tuple{typeof(lgetfield), Any, Val, Val}
