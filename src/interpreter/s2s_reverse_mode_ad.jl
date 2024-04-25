@@ -189,8 +189,12 @@ end
 @inline function (rule::RRuleZeroWrapper{R})(f::F, args::Vararg{CoDual, N}) where {R, F, N}
     y, pb!! = rule.rule(f, args...)
     l = LazyZeroRData(primal(y))
-    @inline rrule_wrapper_pb!!(dy) = pb!!(increment!!(dy, instantiate(l)))
-    return y::CoDual, rrule_wrapper_pb!!
+    if pb!! isa NoPullback
+        return y::CoDual, pb!!
+    else
+        @inline rrule_wrapper_pb!!(dy) = pb!!(increment!!(dy, instantiate(l)))
+        return y::CoDual, rrule_wrapper_pb!!
+    end
 end
 
 #=
