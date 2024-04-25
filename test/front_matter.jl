@@ -53,7 +53,8 @@ using Tapir:
     instantiate,
     LazyZeroRData,
     new_inst,
-    characterise_unique_predecessor_blocks
+    characterise_unique_predecessor_blocks,
+    NoPullback
 
 using .TestUtils:
     test_rrule!!,
