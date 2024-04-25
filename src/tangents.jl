@@ -554,6 +554,10 @@ end
     return Expr(:tuple, exprs...)
 end
 
+function increment_field!!(x::Tuple, y, i::Int)
+    return ntuple(n -> n == i ? increment!!(x[n], y) : x[n], length(x))
+end
+
 @inline @generated function increment_field!!(x::T, y, ::Val{f}) where {T<:NamedTuple, f}
     i = f isa Symbol ? findfirst(==(f), fieldnames(T)) : f
     new_fields = Expr(:call, increment_field!!, :(Tuple(x)), :y, :(Val($i)))

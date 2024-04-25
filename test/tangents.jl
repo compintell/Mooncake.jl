@@ -25,6 +25,8 @@
             # Slow versions.
             @test increment_field!!(x, y, 1) == (8.0, nt)
             @test increment_field!!(x, nt, 2) == (5.0, nt)
+
+            @test @inferred(increment_field!!((5.0, 4.0), 3.0, 2)) == (5.0, 7.0)
         end
         @testset "NamedTuple" begin
             nt = NoTangent()
