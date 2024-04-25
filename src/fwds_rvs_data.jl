@@ -441,6 +441,7 @@ end
 
 @inline instantiate(::LazyZeroRData{P, Nothing}) where {P} = zero_rdata_from_type(P)
 @inline instantiate(r::LazyZeroRData) = r.data
+@inline instantiate(::NoRData) = NoRData()
 
 """
     tangent_type(F::Type, R::Type)::Type
