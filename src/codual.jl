@@ -50,7 +50,24 @@ struct NoPullback{R<:Tuple}
     r::R
 end
 
-@inline (pb::NoPullback)(_) = pb.r
+"""
+    NoPullback(args::CoDual...)
+
+Construct a `NoPullback` from the arguments passed to an `rrule!!`. For each argument,
+extracts the primal value, and constructs a `LazyZeroRData`. These are stored in a
+`NoPullback` which, in the reverse-pass of AD, instantiates these `LazyZeroRData`s and
+returns them in order to perform the reverse-pass of AD.
+
+The advantage of this approach is that if it is possible to construct the zero rdata element
+for each of the arguments lazily, the `NoPullback` generated will be a singleton type. This
+means that AD can avoid generating a stack to store this pullback, which can result in
+significant performance improvements.
+"""
+function NoPullback(args::Vararg{CoDual, N}) where {N}
+    return NoPullback(tuple_map(LazyZeroRData ∘ primal, args))
+end
+
+@inline (pb::NoPullback)(_) = tuple_map(instantiate, pb.r)
 
 to_fwds(x::CoDual) = CoDual(primal(x), fdata(tangent(x)))
 

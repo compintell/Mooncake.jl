@@ -13,4 +13,8 @@
         Union{CoDual{Float64, Float64}, CoDual{Int, NoTangent}},
     ))
     @test codual_type(UnionAll) == CoDual
+    @testset "NoPullback" begin
+        @test Base.issingletontype(typeof(NoPullback(zero_fcodual(5.0))))
+        @test NoPullback(zero_codual(5.0))(4.0) == (0.0, )
+    end
 end
