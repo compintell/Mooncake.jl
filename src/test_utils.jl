@@ -1538,7 +1538,7 @@ function generate_test_functions()
         ),
         (
             false, :allocs, nothing,
-            (A, C) -> test_naive_mat_mul!(C, A, A), randn(100, 100), randn(100, 100),
+            (A, C) -> test_naive_mat_mul!(C, A, A), randn(25, 25), randn(25, 25),
         ),
         (false, :allocs, nothing, sum, randn(32)),
         (false, :none, nothing, test_diagonal_to_matrix, Diagonal(randn(30))),
@@ -1557,9 +1557,9 @@ function generate_test_functions()
         (
             false, :none, nothing,
             test_mlp,
-            randn(sr(1), 500, 200),
-            randn(sr(2), 700, 500),
-            randn(sr(3), 300, 700),
+            randn(sr(1), 50, 20),
+            randn(sr(2), 70, 50),
+            randn(sr(3), 30, 70),
         ),
         (false, :allocs, nothing, test_handwritten_sum, randn(128, 128)),
         (false, :allocs, nothing, _naive_map_sin_cos_exp, randn(1024), randn(1024)),
