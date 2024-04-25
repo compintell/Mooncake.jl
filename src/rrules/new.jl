@@ -5,7 +5,7 @@ end
 @is_primitive MinimalCtx Tuple{typeof(_new_), Vararg}
 
 function rrule!!(
-    ::CoDual{typeof(_new_)}, ::CoDual{Type{P}}, x::Vararg{CoDual, N}
+    f::CoDual{typeof(_new_)}, p::CoDual{Type{P}}, x::Vararg{CoDual, N}
 ) where {P, N}
     y = _new_(P, tuple_map(primal, x)...)
     F = fdata_type(tangent_type(P))
@@ -13,7 +13,7 @@ function rrule!!(
     dy = F == NoFData ? NoFData() : build_fdata(P, tuple_map(primal, x), tuple_map(tangent, x))
     pb!! = if ismutabletype(P)
         if F == NoFData
-            NoPullback((NoRData(), NoRData(), tuple_map(zero_rdata ∘ tangent, x)...))
+            NoPullback(f, p, x...)
         else
             function _mutable_new_pullback!!(::NoRData)
                 rdatas = tuple_map(rdata ∘ val,  Tuple(dy.fields)[1:N])
@@ -22,7 +22,7 @@ function rrule!!(
         end
     else
         if R == NoRData
-            NoPullback((NoRData(), NoRData(), tuple_map(zero_rdata ∘ tangent, x)...))
+            NoPullback(f, p, x...)
         else
             function _new_pullback_for_immutable!!(dy::T) where {T}
                 data = Tuple(T <: NamedTuple ? dy : dy.data)[1:N]

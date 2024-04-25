@@ -20,7 +20,7 @@ using Tapir
 import ..Tapir:
     rrule!!, CoDual, primal, tangent, zero_tangent, NoPullback,
     tangent_type, increment!!, @is_primitive, MinimalCtx, is_primitive, NoFData,
-    zero_rdata, NoRData, tuple_map, fdata, NoRData, rdata, increment_rdata!!
+    zero_rdata, NoRData, tuple_map, fdata, NoRData, rdata, increment_rdata!!, zero_fcodual
 
 # Note: performance is not considered _at_ _all_ in this implementation.
 function rrule!!(f::CoDual{<:Core.IntrinsicFunction}, args...)
@@ -41,10 +41,8 @@ macro inactive_intrinsic(name)
         $name(x...) = Intrinsics.$name(x...)
         (is_primitive)(::Type{MinimalCtx}, ::Type{<:Tuple{typeof($name), Vararg}}) = true
         translate(::Val{Intrinsics.$name}) = $name
-        function rrule!!(::CoDual{typeof($name)}, args::Vararg{Any, N}) where {N}
-            y = $name(map(primal, args)...)
-            pb!! = NoPullback((NoRData(), tuple_map(zero_rdata ∘ primal, args)...))
-            return CoDual(y, NoFData()), pb!!
+        function rrule!!(f::CoDual{typeof($name)}, args::Vararg{Any, N}) where {N}
+            return zero_fcodual($name(map(primal, args)...)), NoPullback(f, args...)
         end
     end
     return esc(expr)
@@ -90,7 +88,7 @@ end
 # atomic_pointerswap
 
 @intrinsic bitcast
-function rrule!!(::CoDual{typeof(bitcast)}, ::CoDual{Type{T}}, x) where {T}
+function rrule!!(f::CoDual{typeof(bitcast)}, t::CoDual{Type{T}}, x) where {T}
     _x = primal(x)
     v = bitcast(T, _x)
     if T <: Ptr && _x isa Ptr
@@ -98,7 +96,7 @@ function rrule!!(::CoDual{typeof(bitcast)}, ::CoDual{Type{T}}, x) where {T}
     else
         dv = NoFData()
     end
-    return CoDual(v, dv), NoPullback((NoRData(), NoRData(), zero_rdata(_x)))
+    return CoDual(v, dv), NoPullback(f, t, x)
 end
 
 @inactive_intrinsic bswap_int
@@ -122,9 +120,8 @@ __cglobal(::Val{s}, x::Vararg{Any, N}) where {s, N} = cglobal(s, x...)
 
 translate(::Val{Intrinsics.cglobal}) = __cglobal
 Tapir.is_primitive(::Type{MinimalCtx}, ::Type{<:Tuple{typeof(__cglobal), Vararg}}) = true
-function rrule!!(::CoDual{typeof(__cglobal)}, args...)
-    pb!! = NoPullback((NoRData(), tuple_map(zero_rdata, args)...))
-    return Tapir.uninit_fcodual(__cglobal(map(primal, args)...)), pb!!
+function rrule!!(f::CoDual{typeof(__cglobal)}, args...)
+    return Tapir.uninit_fcodual(__cglobal(map(primal, args)...)), NoPullback(f, args...)
 end
 
 @inactive_intrinsic checked_sadd_int
@@ -259,12 +256,15 @@ function rrule!!(::CoDual{typeof(pointerref)}, x, y, z)
     _z = primal(z)
     dx = tangent(x)
     a = CoDual(pointerref(_x, _y, _z), fdata(pointerref(dx, _y, _z)))
-    function pointerref_pullback!!(da)
-        new_tangent = increment_rdata!!(pointerref(dx, _y, _z), da)
-        pointerset(dx, new_tangent, _y, _z)
-        return NoRData(), NoRData(), NoRData(), NoRData()
+    if Tapir.rdata_type(tangent_type(Tapir._typeof(primal(a)))) == NoRData
+        return a, NoPullback((NoRData(), NoRData(), NoRData(), NoRData()))
+    else
+        function pointerref_pullback!!(da)
+            pointerset(dx, increment_rdata!!(pointerref(dx, _y, _z), da), _y, _z)
+            return NoRData(), NoRData(), NoRData(), NoRData()
+        end
+        return a, pointerref_pullback!!
     end
-    return a, pointerref_pullback!!
 end
 
 @intrinsic pointerset
@@ -347,16 +347,12 @@ end
 
 end # IntrinsicsWrappers
 
-function rrule!!(::CoDual{typeof(<:)}, T1, T2)
-    pb!! = NoPullback((NoRData(), NoRData(), NoRData()))
-    return CoDual(<:(primal(T1), primal(T2)), NoFData()), pb!!
+function rrule!!(f::CoDual{typeof(<:)}, T1, T2)
+    return zero_fcodual(<:(primal(T1), primal(T2))), NoPullback(f, T1, T2)
 end
 
-function rrule!!(::CoDual{typeof(===)}, x, y)
-    _x = primal(x)
-    _y = primal(y)
-    pb!! = NoPullback((NoRData(), zero_rdata(_x), zero_rdata(_y)))
-    return CoDual(_x === _y, NoFData()), pb!!
+function rrule!!(f::CoDual{typeof(===)}, x, y)
+    return zero_fcodual(primal(x) === primal(y)), NoPullback(f, x, y)
 end
 
 # Core._abstracttype
@@ -375,17 +371,13 @@ end
 # Core._typebody!
 # Core._typevar
 
-function rrule!!(::CoDual{typeof(Core._typevar)}, args...)
-    y = Core._typevar(map(primal, args)...)
-    pb!! = NoPullback((NoRData(), tuple_map(zero_rdata, args)...))
-    return CoDual(y, NoFData()), pb!!
+function rrule!!(f::CoDual{typeof(Core._typevar)}, args...)
+    return zero_fcodual(Core._typevar(map(primal, args)...)), NoPullback(f, args...)
 end
 
-function rrule!!(::CoDual{typeof(Core.apply_type)}, args...)
-    arg_primals = map(primal, args)
-    T = Core.apply_type(arg_primals...)
-    pb!! = NoPullback((NoRData(), map(zero_rdata, args)...))
-    return CoDual{_typeof(T), NoFData}(T, NoFData()), pb!!
+function rrule!!(f::CoDual{typeof(Core.apply_type)}, args...)
+    T = Core.apply_type(tuple_map(primal, args)...)
+    return CoDual{_typeof(T), NoFData}(T, NoFData()), NoPullback(f, args...)
 end
 
 Base.@propagate_inbounds function rrule!!(
@@ -471,9 +463,8 @@ function isbits_arrayset_rrule(
     return A, isbits_arrayset_pullback!!
 end
 
-function rrule!!(::CoDual{typeof(Core.arraysize)}, X, dim)
-    pb!! = NoPullback((NoRData(), NoRData(), NoRData()))
-    return CoDual(Core.arraysize(primal(X), primal(dim)), NoFData()), pb!!
+function rrule!!(f::CoDual{typeof(Core.arraysize)}, X, dim)
+    return zero_fcodual(Core.arraysize(primal(X), primal(dim))), NoPullback(f, X, dim)
 end
 
 # Core.compilerbarrier
@@ -482,12 +473,12 @@ end
 # Core.finalizer
 # Core.get_binding_type
 
-function rrule!!(::CoDual{typeof(Core.ifelse)}, cond, a::A, b::B) where {A, B}
+function rrule!!(f::CoDual{typeof(Core.ifelse)}, cond, a::A, b::B) where {A, B}
     _cond = primal(cond)
     p_a = primal(a)
     p_b = primal(b)
     pb!! = if rdata_type(tangent_type(A)) == NoRData && rdata_type(tangent_type(B)) == NoRData
-        NoPullback(ntuple(_ -> NoRData(), 4))
+        NoPullback(f, cond, a, b)
     else
         lazy_da = LazyZeroRData(p_a)
         lazy_db = LazyZeroRData(p_b)
@@ -497,43 +488,46 @@ function rrule!!(::CoDual{typeof(Core.ifelse)}, cond, a::A, b::B) where {A, B}
             return NoRData(), NoRData(), da, db
         end
     end
-    return ifelse(_cond, a, b), pb!!
+
+    # It's a good idea to split up applying ifelse to the primal and tangent. This is
+    # because if you push a `CoDual` through ifelse, it _forces_ the construction of the
+    # CoDual. Conversely, if you pass through the primal and tangents separately, the
+    # compiler will often be able to avoid constructing the CoDual at all by inlining lots
+    # of stuff away.
+    return CoDual(ifelse(_cond, p_a, p_b), ifelse(_cond, tangent(a), tangent(b))), pb!!
 end
 
 # Core.set_binding_type!
 
-function rrule!!(::CoDual{typeof(Core.sizeof)}, x)
-    pb!! = NoPullback((NoRData(), zero_rdata(primal(x))))
-    return CoDual(Core.sizeof(primal(x)), NoFData()), pb!!
+function rrule!!(f::CoDual{typeof(Core.sizeof)}, x)
+    return zero_fcodual(Core.sizeof(primal(x))), NoPullback(f, x)
 end
 
 # Core.svec
 
-function rrule!!(::CoDual{typeof(applicable)}, f, args...)
-    args_rvs_data = tuple_map(zero_rdata, args)
-    pb!! = NoPullback((NoRData(), zero_rdata(f), args_rvs_data...))
-    return CoDual(applicable(primal(f), map(primal, args)...), NoFData()), pb!!
+function rrule!!(_f::CoDual{typeof(applicable)}, f, args...)
+    pb!! = NoPullback(_f, f, args...)
+    return zero_fcodual(applicable(primal(f), map(primal, args)...)), pb!!
 end
 
-function rrule!!(::CoDual{typeof(Core.fieldtype)}, args::Vararg{Any, N}) where {N}
+function rrule!!(f::CoDual{typeof(Core.fieldtype)}, args::Vararg{Any, N}) where {N}
     arg_primals = tuple_map(primal, args)
-    pb!! = NoPullback((NoRData(), NoRData(), NoRData()))
-    return CoDual(Core.fieldtype(arg_primals...), NoFData()), pb!!
+    return CoDual(Core.fieldtype(arg_primals...), NoFData()), NoPullback(f, args...)
 end
 
-function rrule!!(::CoDual{typeof(getfield)}, value::CoDual{P}, name::CoDual) where {P}
+function rrule!!(f::CoDual{typeof(getfield)}, value::CoDual{P}, name::CoDual) where {P}
     if tangent_type(P) == NoTangent
         y = uninit_fcodual(getfield(primal(value), primal(name)))
-        return y, NoPullback((NoRData(), NoRData(), NoRData()))
+        return y, NoPullback(f, value, name)
     else
         return rrule!!(uninit_fcodual(lgetfield), value, uninit_fcodual(Val(primal(name))))
     end
 end
 
-function rrule!!(::CoDual{typeof(getfield)}, value::CoDual{P}, name::CoDual, order::CoDual) where {P}
+function rrule!!(f::CoDual{typeof(getfield)}, value::CoDual{P}, name::CoDual, order::CoDual) where {P}
     if tangent_type(P) == NoTangent
         y = uninit_fcodual(getfield(primal(value), primal(name)))
-        return y, NoPullback((NoRData(), NoRData(), NoRData(), NoRData()))
+        return y, NoPullback(f, value, name, order)
     else
         literal_name = uninit_fcodual(Val(primal(name)))
         literal_order = uninit_fcodual(Val(primal(order)))
@@ -553,29 +547,23 @@ end
 #     return y, pb!!
 # end
 
-function rrule!!(::CoDual{typeof(getglobal)}, a, b)
-    v = getglobal(primal(a), primal(b))
-    return CoDual(v, zero_tangent(v)), NoPullback()
+function rrule!!(f::CoDual{typeof(getglobal)}, a, b)
+    return zero_fcodual(getglobal(primal(a), primal(b))), NoPullback(f, a, b)
 end
 
 # invoke
 
-function rrule!!(::CoDual{typeof(isa)}, x, T)
-    pb!! = NoPullback((NoRData(), zero_rdata(x), NoRData()))
-    return CoDual(isa(primal(x), primal(T)), NoFData()), pb!!
+function rrule!!(f::CoDual{typeof(isa)}, x, T)
+    return zero_fcodual(isa(primal(x), primal(T))), NoPullback(f, x, T)
 end
 
-function rrule!!(::CoDual{typeof(isdefined)}, args...)
-    pb!! = NoPullback((NoRData(), tuple_map(zero_rdata, args)...))
-    return CoDual(isdefined(map(primal, args)...), NoFData()), pb!!
+function rrule!!(f::CoDual{typeof(isdefined)}, args...)
+    return zero_fcodual(isdefined(map(primal, args)...)), NoPullback(f, args...)
 end
 
 # modifyfield!
 
-function rrule!!(::CoDual{typeof(nfields)}, x)
-    pb!! = NoPullback((NoRData(), zero_rdata(x)))
-    return CoDual(nfields(primal(x)), NoFData()), pb!!
-end
+rrule!!(f::CoDual{typeof(nfields)}, x) = zero_fcodual(nfields(primal(x))), NoPullback(f, x)
 
 # replacefield!
 
@@ -599,14 +587,13 @@ end
 
 @inline tuple_pullback(dy::NoRData) = NoRData()
 
-function rrule!!(::CoDual{typeof(tuple)}, args::Vararg{Any, N}) where {N}
+function rrule!!(f::CoDual{typeof(tuple)}, args::Vararg{Any, N}) where {N}
     primal_output = tuple(map(primal, args)...)
     if tangent_type(_typeof(primal_output)) == NoTangent
-        pb!! = NoPullback((NoRData(), tuple_map(zero_rdata, args)...))
-        return CoDual(primal_output, NoFData()), pb!!
+        return zero_fcodual(primal_output), NoPullback(f, args...)
     else
         if fdata_type(tangent_type(_typeof(primal_output))) == NoFData
-            return CoDual(primal_output, NoFData()), TuplePullback{N}()
+            return zero_fcodual(primal_output), TuplePullback{N}()
         else
             return CoDual(primal_output, tuple(map(tangent, args)...)), TuplePullback{N}()
         end
@@ -618,9 +605,8 @@ function rrule!!(::CoDual{typeof(typeassert)}, x::CoDual, type::CoDual)
     return CoDual(typeassert(primal(x), primal(type)), tangent(x)), typeassert_pullback
 end
 
-function rrule!!(::CoDual{typeof(typeof)}, x::CoDual)
-    pb!! = NoPullback((NoRData(), zero_rdata(x)))
-    return CoDual(typeof(primal(x)), NoFData()), pb!!
+function rrule!!(f::CoDual{typeof(typeof)}, x::CoDual)
+    return zero_fcodual(typeof(primal(x))), NoPullback(f, x)
 end
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})

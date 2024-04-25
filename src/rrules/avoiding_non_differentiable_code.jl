@@ -2,16 +2,14 @@
 # because we drop the gradient, because the tangent type of integers is NoTangent.
 # https://github.com/JuliaLang/julia/blob/9f9e989f241fad1ae03c3920c20a93d8017a5b8f/base/pointer.jl#L282
 @is_primitive MinimalCtx Tuple{typeof(Base.:(+)), Ptr, Integer}
-function rrule!!(::CoDual{typeof(Base.:(+))}, x::CoDual{<:Ptr}, y::CoDual{<:Integer})
-    pb!! = NoPullback((NoRData(), NoRData(), NoRData()))
-    return CoDual(primal(x) + primal(y), tangent(x) + primal(y)), pb!!
+function rrule!!(f::CoDual{typeof(Base.:(+))}, x::CoDual{<:Ptr}, y::CoDual{<:Integer})
+    return CoDual(primal(x) + primal(y), tangent(x) + primal(y)), NoPullback(f, x, y)
 end
 
 @is_primitive MinimalCtx Tuple{typeof(randn), Xoshiro, Vararg}
-function rrule!!(::CoDual{typeof(randn)}, rng::CoDual{Xoshiro}, args::CoDual...)
+function rrule!!(f::CoDual{typeof(randn)}, rng::CoDual{Xoshiro}, args::CoDual...)
     x = randn(primal(rng), map(primal, args)...)
-    pb!! = NoPullback((NoRData(), NoRData(), map(_ -> NoRData(), args)...))
-    return zero_fcodual(x), pb!!
+    return zero_fcodual(x), NoPullback(f, rng, args...)
 end
 
 function generate_hand_written_rrule!!_test_cases(
@@ -22,9 +20,7 @@ function generate_hand_written_rrule!!_test_cases(
     test_cases = Any[
         # Rules to avoid pointer type conversions.
         (
-            true,
-            :stability,
-            nothing,
+            true, :stability_and_allocs, nothing,
             +,
             CoDual(
                 bitcast(Ptr{Float64}, pointer_from_objref(_x)),
@@ -34,7 +30,7 @@ function generate_hand_written_rrule!!_test_cases(
         ),
 
         # Rule to avoid llvmcall
-        (true, :stability, nothing, randn, Xoshiro(1)),
+        (true, :stability_and_allocs, nothing, randn, Xoshiro(1)),
         (true, :stability, nothing, randn, Xoshiro(1), 2),
         (true, :stability, nothing, randn, Xoshiro(1), 3, 2),
     ]

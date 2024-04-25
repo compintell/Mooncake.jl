@@ -66,17 +66,15 @@ end
 #
 
 @is_primitive MinimalCtx Tuple{typeof(Base.allocatedinline), Type}
-function rrule!!(::CoDual{typeof(Base.allocatedinline)}, T::CoDual{<:Type})
-    pb!! = NoPullback((NoRData(), NoRData()))
-    return CoDual(Base.allocatedinline(primal(T)), NoFData()), pb!!
+function rrule!!(f::CoDual{typeof(Base.allocatedinline)}, T::CoDual{<:Type})
+    return zero_fcodual(Base.allocatedinline(primal(T))), NoPullback(f, T)
 end
 
 @is_primitive MinimalCtx Tuple{Type{<:Array{T, N}}, typeof(undef), Vararg} where {T, N}
 function rrule!!(
-    ::CoDual{Type{Array{T, N}}}, ::CoDual{typeof(undef)}, m::Vararg{CoDual}
+    f::CoDual{Type{Array{T, N}}}, u::CoDual{typeof(undef)}, m::Vararg{CoDual}
 ) where {T, N}
-    pb!! = NoPullback((NoRData(), NoRData(), map(_ -> NoRData(), m)...))
-    return zero_fcodual(Array{T, N}(undef, map(primal, m)...)), pb!!
+    return zero_fcodual(Array{T, N}(undef, map(primal, m)...)), NoPullback(f, u, m...)
 end
 
 @is_primitive MinimalCtx Tuple{Type{<:Array{T, N}}, typeof(undef), NTuple{N}} where {T, N}
@@ -250,47 +248,46 @@ function rrule!!(
 end
 
 @is_primitive MinimalCtx Tuple{typeof(sizehint!), Vector, Integer}
-function rrule!!(::CoDual{typeof(sizehint!)}, x::CoDual{<:Vector}, sz::CoDual{<:Integer})
+function rrule!!(f::CoDual{typeof(sizehint!)}, x::CoDual{<:Vector}, sz::CoDual{<:Integer})
     sizehint!(primal(x), primal(sz))
     sizehint!(tangent(x), primal(sz))
-    return x, NoPullback((NoRData(), NoRData(), NoRData()))
+    return x, NoPullback(f, x, sz)
 end
 
 @is_primitive MinimalCtx Tuple{typeof(objectid), Any}
-function rrule!!(::CoDual{typeof(objectid)}, @nospecialize(x))
-    return zero_fcodual(objectid(primal(x))), NoPullback((NoRData(), zero_rdata(x)))
+function rrule!!(f::CoDual{typeof(objectid)}, @nospecialize(x))
+    return zero_fcodual(objectid(primal(x))), NoPullback(f, x)
 end
 
 @is_primitive MinimalCtx Tuple{typeof(pointer_from_objref), Any}
-function rrule!!(::CoDual{typeof(pointer_from_objref)}, x)
+function rrule!!(f::CoDual{typeof(pointer_from_objref)}, x)
     y = CoDual(
         pointer_from_objref(primal(x)),
         bitcast(Ptr{tangent_type(Nothing)}, pointer_from_objref(tangent(x))),
     )
-    return y, NoPullback((NoRData(), zero_rdata(primal(x))))
+    return y, NoPullback(f, x)
 end
 
 @is_primitive MinimalCtx Tuple{typeof(CC.return_type), Vararg}
-function rrule!!(::CoDual{typeof(Core.Compiler.return_type)}, args...)
-    pb!! = NoPullback((NoRData(), map(_ -> NoRData(), args)...))
+function rrule!!(f::CoDual{typeof(Core.Compiler.return_type)}, args...)
+    pb!! = NoPullback(f, args...)
     return zero_fcodual(Core.Compiler.return_type(map(primal, args)...)), pb!!
 end
 
 @is_primitive MinimalCtx Tuple{typeof(Base.unsafe_pointer_to_objref), Ptr}
-function rrule!!(::CoDual{typeof(Base.unsafe_pointer_to_objref)}, x::CoDual{<:Ptr})
+function rrule!!(f::CoDual{typeof(Base.unsafe_pointer_to_objref)}, x::CoDual{<:Ptr})
     y = CoDual(unsafe_pointer_to_objref(primal(x)), unsafe_pointer_to_objref(tangent(x)))
-    return y, NoPullback((NoRData(), NoRData()))
+    return y, NoPullback(f, x)
 end
 
 @is_primitive MinimalCtx Tuple{typeof(Threads.threadid)}
-function rrule!!(::CoDual{typeof(Threads.threadid)})
-    return zero_fcodual(Threads.threadid()), NoPullback((NoRData(), ))
+function rrule!!(f::CoDual{typeof(Threads.threadid)})
+    return zero_fcodual(Threads.threadid()), NoPullback(f)
 end
 
 @is_primitive MinimalCtx Tuple{typeof(typeintersect), Any, Any}
-function rrule!!(::CoDual{typeof(typeintersect)}, @nospecialize(a), @nospecialize(b))
-    y = typeintersect(primal(a), primal(b))
-    return zero_fcodual(y), NoPullback((NoRData(), NoRData(), NoRData()))
+function rrule!!(f::CoDual{typeof(typeintersect)}, @nospecialize(a), @nospecialize(b))
+    return zero_fcodual(typeintersect(primal(a), primal(b))), NoPullback(f, a, b)
 end
 
 function _increment_pointer!(x::Ptr{T}, y::Ptr{T}, N::Integer) where {T}
@@ -463,24 +460,22 @@ end
 
 @is_primitive MinimalCtx Tuple{Type{UnionAll}, TypeVar, Any}
 @is_primitive MinimalCtx Tuple{Type{UnionAll}, TypeVar, Type}
-function rrule!!(::CoDual{<:Type{UnionAll}}, x::CoDual{<:TypeVar}, y::CoDual{<:Type})
-    pb!! = NoPullback((NoRData(), NoRData(), NoRData()))
-    return zero_fcodual(UnionAll(primal(x), primal(y))), pb!!
+function rrule!!(f::CoDual{<:Type{UnionAll}}, x::CoDual{<:TypeVar}, y::CoDual{<:Type})
+    return zero_fcodual(UnionAll(primal(x), primal(y))), NoPullback(f, x, y)
 end
 
 @is_primitive MinimalCtx Tuple{typeof(hash), Union{String, SubString{String}}, UInt}
 function rrule!!(
-    ::CoDual{typeof(hash)}, s::CoDual{P}, h::CoDual{UInt}
+    f::CoDual{typeof(hash)}, s::CoDual{P}, h::CoDual{UInt}
 ) where {P<:Union{String, SubString{String}}}
-    pb!! = NoPullback((NoRData(), NoRData(), NoRData()))
-    return zero_fcodual(hash(primal(s), primal(h))), pb!!
+    return zero_fcodual(hash(primal(s), primal(h))), NoPullback(f, s, h)
 end
 
 function rrule!!(
     ::CoDual{typeof(_foreigncall_)}, ::CoDual{Val{:jl_string_ptr}}, args::Vararg{CoDual, N}
 ) where {N}
     x = tuple_map(primal, args)
-    pb!! = NoPullback((NoRData(), NoRData(), map(_ -> NoRData(), args)...))
+    pb!! = NoPullback((NoRData(), NoRData(), tuple_map(_ -> NoRData(), args)...))
     return uninit_fcodual(_foreigncall_(Val(:jl_string_ptr), x...)), pb!!
 end
 

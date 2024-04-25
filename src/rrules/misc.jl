@@ -32,16 +32,14 @@ for name in [
     :(Base.Broadcast.eltypes),
 ]
     @eval @is_primitive DefaultCtx Tuple{typeof($name), Vararg}
-    @eval function rrule!!(::CoDual{_typeof($name)}, args::CoDual...)
-        v = $name(map(primal, args)...)
-        pb!! = NoPullback((NoRData(), tuple_map(zero_rdata, args)...))
-        return zero_fcodual(v), pb!!
+    @eval function rrule!!(f::CoDual{_typeof($name)}, args::Vararg{CoDual, N}) where {N}
+        return zero_fcodual($name(map(primal, args)...)), NoPullback(f, args...)
     end
 end
 
 @is_primitive MinimalCtx Tuple{Type, TypeVar, Type}
 function rrule!!(x::CoDual{<:Type}, y::CoDual{<:TypeVar}, z::CoDual{<:Type})
-    return CoDual(primal(x)(primal(y), primal(z)), NoTangent()), NoPullback()
+    return zero_fcodual(primal(x)(primal(y), primal(z))), NoPullback(x, y, z)
 end
 
 """
