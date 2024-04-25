@@ -554,6 +554,7 @@ end
     return Expr(:tuple, exprs...)
 end
 
+# Optimal for homogeneously-typed Tuples with dynamic field choice.
 function increment_field!!(x::Tuple, y, i::Int)
     return ntuple(n -> n == i ? increment!!(x[n], y) : x[n], length(x))
 end
@@ -562,6 +563,14 @@ end
     i = f isa Symbol ? findfirst(==(f), fieldnames(T)) : f
     new_fields = Expr(:call, increment_field!!, :(Tuple(x)), :y, :(Val($i)))
     return Expr(:call, T, new_fields)
+end
+
+# Optimal for homogeneously-typed NamedTuples with dynamic field choice.
+function increment_field!!(x::T, y, i::Int) where {T<:NamedTuple}
+    return T(increment_field!!(Tuple(x), y, i))
+end
+function increment_field!!(x::T, y, s::Symbol) where {T<:NamedTuple}
+    return T(tuple_map(n -> n == s ? increment!!(x[n], y) : x[n], fieldnames(T)))
 end
 
 function increment_field!!(x::Tangent{T}, y, f::Val{F}) where {T, F}

@@ -26,6 +26,7 @@
             @test increment_field!!(x, y, 1) == (8.0, nt)
             @test increment_field!!(x, nt, 2) == (5.0, nt)
 
+            # Homogeneous type optimisation.
             @test @inferred(increment_field!!((5.0, 4.0), 3.0, 2)) == (5.0, 7.0)
         end
         @testset "NamedTuple" begin
@@ -41,6 +42,10 @@
             @test increment_field!!(x, nt, :b) == (a=5.0, b=nt)
             @test increment_field!!(x, 3.0, 1) == (a=8.0, b=nt)
             @test increment_field!!(x, nt, 2) == (a=5.0, b=nt)
+
+            # Homogeneous type optimisation.
+            @test @inferred(increment_field!!((a=5.0, b=4.0), 3.0, 1)) == (a=8.0, b=4.0)
+            @test @inferred(increment_field!!((a=5.0, b=4.0), 3.0, :a)) == (a=8.0, b=4.0)
         end
         @testset "Tangent" begin
             nt = NoTangent()
