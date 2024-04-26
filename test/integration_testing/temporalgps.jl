@@ -36,6 +36,7 @@ temporalgps_logpdf_tester(x, y, s) = logpdf(build_gp()(x, s), y)
     # @show time(gradient) / time(primal)
 
     # # @profview run_many_times(100, f, x...)
+    # TestUtils.to_benchmark(rule, codual_args...)
     # @profview run_many_times(10, TestUtils.to_benchmark, rule, codual_args...)
     # Profile.clear()
     # @profile run_many_times(10, TestUtils.to_benchmark, rule, codual_args...)
