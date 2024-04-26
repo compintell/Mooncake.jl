@@ -866,6 +866,8 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability_and_allocs, nothing, getfield, (1, 2), 1),
         (false, :stability_and_allocs, nothing, getfield, (a=5, b=4), 1),
         (false, :stability_and_allocs, nothing, getfield, (a=5, b=4), 2),
+        (false, :none, nothing, getfield, (Float64, Float64), 1),
+        (false, :none, nothing, getfield, (Float64, Float64), 2, false),
         (false, :none, _range, getfield, (a=5.0, b=4), 1),
         (false, :none, _range, getfield, (a=5.0, b=4), 2),
         (false, :none, _range, getfield, UInt8, :name),
