@@ -21,7 +21,8 @@ end
             id_ssa_1 => CC.NewInstruction(nothing, Float64),
             id_ssa_2 => CC.NewInstruction(nothing, Any),
         )
-        info = ADInfo(Tapir.PInterp(), arg_types, ssa_insts, false)
+        is_used_dict = Dict{ID, Bool}(id_ssa_1 => true, id_ssa_2 => true)
+        info = ADInfo(Tapir.PInterp(), arg_types, ssa_insts, is_used_dict, false)
 
         # Verify that we can access the interpreter and terminator block ID.
         @test info.interp isa Tapir.PInterp
@@ -48,9 +49,10 @@ end
             Tapir.PInterp(),
             Dict{Argument, Any}(Argument(1) => typeof(sin), Argument(2) => Float64),
             Dict{ID, CC.NewInstruction}(
-                id_line_1 => CC.NewInstruction(Expr(:invoke, nothing, cos, Argument(2)), Float64),
-                id_line_2 => CC.NewInstruction(nothing, Any),
+                id_line_1 => new_inst(Expr(:invoke, nothing, cos, Argument(2)), Float64),
+                id_line_2 => new_inst(nothing, Any),
             ),
+            Dict{ID, Bool}(id_line_1=>true, id_line_2=>true),
             false,
         )
 

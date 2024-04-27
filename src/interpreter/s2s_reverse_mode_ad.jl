@@ -108,13 +108,15 @@ struct ADInfo
     arg_rdata_ref_ids::Dict{Argument, ID}
     ssa_rdata_ref_ids::Dict{ID, ID}
     safety_on::Bool
+    is_used_dict::Dict{ID, Bool}
 end
 
-# The constructor that you should use for ADInfo.
+# The constructor that you should use for ADInfo if you don't have a BBCode lying around.
 function ADInfo(
     interp::PInterp,
     arg_types::Dict{Argument, Any},
     ssa_insts::Dict{ID, NewInstruction},
+    is_used_dict::Dict{ID, Bool},
     safety_on::Bool,
 )
     shared_data_pairs = SharedDataPairs()
@@ -130,7 +132,19 @@ function ADInfo(
         Dict((k, ID()) for k in keys(arg_types)),
         Dict((k, ID()) for k in keys(ssa_insts)),
         safety_on,
+        is_used_dict,
     )
+end
+
+# The constructor you should use for ADInfo if you _do_ have a BBCode lying around.
+function ADInfo(interp::PInterp, ir::BBCode, safety_on::Bool)
+    arg_types = Dict{Argument, Any}(
+        map(((n, t),) -> (Argument(n) => _type(t)), enumerate(ir.argtypes))
+    )
+    stmts = collect_stmts(ir)
+    ssa_insts = Dict{ID, NewInstruction}(stmts)
+    is_used_dict = characterise_used_ids(stmts)
+    return ADInfo(interp, arg_types, ssa_insts, is_used_dict, safety_on)
 end
 
 # Shortcut for `add_data!(info.shared_data_pairs, data)`.
@@ -139,6 +153,8 @@ add_data!(info::ADInfo, data) = add_data!(info.shared_data_pairs, data)
 function __log_data(p::Union{ADInfo, SharedDataPairs}, x)
     return Base.issingletontype(_typeof(x)) ? x : add_data!(p, x)
 end
+
+is_used(info::ADInfo, id::ID) = info.is_used_dict[id]
 
 # Returns the static / inferred type associated to `x`.
 get_primal_type(info::ADInfo, x::Argument) = info.arg_types[x]
@@ -403,6 +419,16 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         args = ((is_invoke ? stmt.args[2:end] : stmt.args)..., )
         arg_types = map(arg -> get_primal_type(info, arg), args)
 
+        # If this function is side-effect free, and its value is unused, then just leave the
+        # call alone, and do nothing of the reverse-pass.
+        if !is_used(info, line) &&
+            get_const_primal_value(args[1]) == getfield &&
+            is_effect_free(args[1], Tuple(arg_types[2:end]))
+
+            fwds = new_inst(Expr(:call, __fwds_pass_no_ad!, map(__inc, args)...))
+            return ad_stmt_info(line, fwds, nothing)
+        end
+
         # Construct signature, and determine how the rrule is to be computed.
         sig = Tuple{arg_types...}
         raw_rule = if is_primitive(context_type(info.interp), sig)
@@ -498,6 +524,13 @@ function build_pb_stack(Trule, arg_types)
         return Stack{Any}()
     end
 end
+
+@inline function __fwds_pass_no_ad!(f::F, raw_args::Vararg{Any, N}) where {F, N}
+    return tuple_splat(__get_primal(f), tuple_map(__get_primal, raw_args))
+end
+
+__get_primal(x::CoDual) = primal(x)
+__get_primal(x) = x
 
 # Used in `make_ad_stmts!` method for `Expr(:call, ...)` and `Expr(:invoke, ...)`.
 @inline function __fwds_pass!(rule, pb_stack, ::Type{R}, f::F, raw_args::Vararg{Any, N}) where {R, F, N}
@@ -659,12 +692,7 @@ function build_rrule(interp::PInterp{C}, sig::Type{<:Tuple}; safety_on=false) wh
     primal_ir = BBCode(ir)
 
     # Compute global info.
-    arg_types = Dict{Argument, Any}(
-        map(((n, t),) -> (Argument(n) => _type(t)), enumerate(ir.argtypes))
-    )
-    insts = new_inst_vec(ir.stmts)
-    ssa_types = Dict{ID, NewInstruction}(zip(concatenate_ids(primal_ir), insts))
-    info = ADInfo(interp, arg_types, ssa_types, safety_on)
+    info = ADInfo(interp, primal_ir, safety_on)
 
     # For each block in the fwds and pullback BBCode, translate all statements.
     ad_stmts_blocks = map(primal_ir.blocks) do primal_blk
