@@ -126,4 +126,72 @@ end
             @test pred_is_upred[blk_id_2] == true
         end
     end
+    @testset "characterise_used_ids" begin
+        @testset "_find_id_uses!" begin
+            @testset "Expr" begin
+                id = ID()
+                d = Dict{ID, Bool}(id => false)
+                Tapir._find_id_uses!(d, Expr(:call, sin, 5))
+                @test d[id] == false
+                Tapir._find_id_uses!(d, Expr(:call, sin, id))
+                @test d[id] == true
+            end
+            @testset "IDGotoIfNot" begin
+                id = ID()
+                d = Dict{ID, Bool}(id => false)
+                Tapir._find_id_uses!(d, IDGotoIfNot(ID(), ID()))
+                @test d[id] == false
+                Tapir._find_id_uses!(d, IDGotoIfNot(true, ID()))
+                @test d[id] == false
+                Tapir._find_id_uses!(d, IDGotoIfNot(id, ID()))
+                @test d[id] == true
+            end
+            @testset "IDGotoNode" begin
+                id = ID()
+                d = Dict{ID, Bool}(id => false)
+                Tapir._find_id_uses!(d, IDGotoNode(ID()))
+                @test d[id] == false
+            end
+            @testset "IDPhiNode" begin
+                id = ID()
+                d = Dict{ID, Bool}(id => false)
+                Tapir._find_id_uses!(d, IDPhiNode([ID()], Vector{Any}(undef, 1)))
+                @test d[id] == false
+                Tapir._find_id_uses!(d, IDPhiNode([ID()], Any[id]))
+                @test d[id] == true
+            end
+            @testset "PiNode" begin
+                id = ID()
+                d = Dict{ID, Bool}(id => false)
+                Tapir._find_id_uses!(d, PiNode(false, Bool))
+                @test d[id] == false
+                Tapir._find_id_uses!(d, PiNode(id, Bool))
+                @test d[id] == true
+            end
+            @testset "ReturnNode" begin
+                id = ID()
+                d = Dict{ID, Bool}(id => false)
+                Tapir._find_id_uses!(d, ReturnNode())
+                @test d[id] == false
+                Tapir._find_id_uses!(d, ReturnNode(5))
+                @test d[id] == false
+                Tapir._find_id_uses!(d, ReturnNode(id))
+                @test d[id] == true
+            end
+        end
+        @testset "some used some unused" begin
+            id_1 = ID()
+            id_2 = ID()
+            id_3 = ID()
+            stmts = Tuple{ID, Core.Compiler.NewInstruction}[
+                (id_1, new_inst(Expr(:call, sin, Argument(1)))),
+                (id_2, new_inst(Expr(:call, cos, id_1))),
+                (id_3, new_inst(ReturnNode(id_2))),
+            ]
+            result = characterise_used_ids(stmts)
+            @test result[id_1] == true
+            @test result[id_2] == true
+            @test result[id_3] == false
+        end
+    end
 end

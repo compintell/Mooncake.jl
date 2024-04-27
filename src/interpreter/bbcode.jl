@@ -679,3 +679,50 @@ function characterise_unique_predecessor_blocks(
 
     return is_unique_pred, pred_is_unique_pred
 end
+
+"""
+    characterise_used_ids(blks::Vector{BBlock})::Dict{ID, Bool}
+
+For each line in `blks`, determine whether it is referenced anywhere else in the code.
+Returns a dictionary containing the results. An element is `false` if the corresponding
+`ID` is unused, and `true` if is used.
+"""
+function characterise_used_ids(stmts::Vector{Tuple{ID, NewInstruction}})::Dict{ID, Bool}
+    ids = first.(stmts)
+    insts = last.(stmts)
+
+    # Initialise to false.
+    is_used = Dict{ID, Bool}(zip(ids, fill(false, length(ids))))
+
+    # Hunt through the instructions, flipping a value in is_used to true whenever an ID
+    # is encountered which corresponds to an SSA.
+    for inst in insts
+        _find_id_uses!(is_used, inst.stmt)
+    end
+    return is_used
+end
+
+# Helper function used in characterise_used_ids.
+function _find_id_uses!(d::Dict{ID, Bool}, x::Expr)
+    for arg in x.args
+        in(arg, keys(d)) && setindex!(d, true, arg)
+    end
+end
+function _find_id_uses!(d::Dict{ID, Bool}, x::IDGotoIfNot)
+    return in(x.cond, keys(d)) && setindex!(d, true, x.cond)
+end
+_find_id_uses!(::Dict{ID, Bool}, ::IDGotoNode) = nothing
+function _find_id_uses!(d::Dict{ID, Bool}, x::PiNode)
+    return in(x.val, keys(d)) && setindex!(d, true, x.val)
+end
+function _find_id_uses!(d::Dict{ID, Bool}, x::IDPhiNode)
+    v = x.values
+    for n in eachindex(v)
+        isassigned(v, n) && in(v[n], keys(d)) && setindex!(d, true, v[n])
+    end
+end
+function _find_id_uses!(d::Dict{ID, Bool}, x::ReturnNode)
+    return isdefined(x, :val) && in(x.val, keys(d)) && setindex!(d, true, x.val)
+end
+_find_id_uses!(d::Dict{ID, Bool}, x::QuoteNode) = nothing
+_find_id_uses!(d::Dict{ID, Bool}, x) = nothing

@@ -54,7 +54,8 @@ using Tapir:
     LazyZeroRData,
     new_inst,
     characterise_unique_predecessor_blocks,
-    NoPullback
+    NoPullback,
+    characterise_used_ids
 
 using .TestUtils:
     test_rrule!!,
