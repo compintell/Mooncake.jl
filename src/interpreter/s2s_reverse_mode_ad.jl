@@ -202,14 +202,20 @@ struct RRuleZeroWrapper{Trule}
     rule::Trule
 end
 
+struct RRuleWrapperPb{Tpb!!, Tl}
+    pb!!::Tpb!!
+    l::Tl
+end
+
+(rule::RRuleWrapperPb)(dy) = rule.pb!!(increment!!(dy, instantiate(rule.l)))
+
 @inline function (rule::RRuleZeroWrapper{R})(f::F, args::Vararg{CoDual, N}) where {R, F, N}
     y, pb!! = rule.rule(f, args...)
     l = LazyZeroRData(primal(y))
     if pb!! isa NoPullback
         return y::CoDual, pb!!
     else
-        @inline rrule_wrapper_pb!!(dy) = pb!!(increment!!(dy, instantiate(l)))
-        return y::CoDual, rrule_wrapper_pb!!
+        return y::CoDual, RRuleWrapperPb(pb!!, l)
     end
 end
 
@@ -454,16 +460,52 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         # in the shared data, it can be interpolated directly into the generated IR.
         pb_stack_id = __log_data(info, build_pb_stack(_typeof(rule), arg_types))
 
-        # Create calls to `__fwds_pass!` and `__rvs_pass!`, which run the forwards pass and
-        # pullback associated to a call / invoke.
-        fwds_pass_call = Expr(
-            :call,
-            __fwds_pass!,
-            rule_ref,
-            pb_stack_id,
-            fwds_codual_type(get_primal_type(info, line)),
-            map(__inc, args)...,
+        #
+        # Write forwards-pass. These statements are written out manually, as writing them
+        # out in a function would prevent inlining in type-unstable situations.
+        #
+
+        # Make arguments to rrule call.
+        codual_arg_ids = map(_ -> ID(), args)
+        __codual_args = map(arg -> Expr(:call, __make_codual, __inc(arg)), args)
+        codual_args = Tuple{ID, NewInstruction}[
+            (id, new_inst(arg)) for (id, arg) in zip(codual_arg_ids, __codual_args)
+        ]
+
+        # Make call to rule.
+        rule_call_id = ID()
+        rule_call = Expr(:call, rule_ref, codual_arg_ids...)
+
+        # Extract output.
+        raw_output_id = ID()
+        raw_output = Expr(:call, getfield, rule_call_id, 1)
+
+        # Extract pullback.
+        pb_id = ID()
+        pb = Expr(:call, getfield, rule_call_id, 2)
+
+        # Push the pullback stack.
+        push_pb_stack_id = ID()
+        push_pb_stack = Expr(:call, __push_pb_stack!, pb_stack_id, pb_id)
+
+        # Impose a type assertion to ensure consistent typing.
+        output_id = line
+        F = fwds_codual_type(get_primal_type(info, line))
+        output = Expr(:call, Core.typeassert, raw_output_id, F)
+
+        # Create statements associated to forwards-pass.
+        fwds = vcat(
+            codual_args,
+            Tuple{ID, NewInstruction}[
+                (rule_call_id, new_inst(rule_call)),
+                (raw_output_id, new_inst(raw_output)),
+                (pb_id, new_inst(pb)),
+                (push_pb_stack_id, new_inst(push_pb_stack)),
+                (output_id, new_inst(output)),
+            ],
         )
+
+        # Make statement associated to reverse-pass.
         rvs_pass_call = Expr(
             :call,
             __rvs_pass!,
@@ -472,7 +514,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
             get_rev_data_id(info, line),
             map(Base.Fix1(get_rev_data_id, info), args)...,
         )
-        return ad_stmt_info(line, new_inst(fwds_pass_call), new_inst(rvs_pass_call))
+        return ad_stmt_info(line, fwds, new_inst(rvs_pass_call))
 
     elseif Meta.isexpr(stmt, :boundscheck)
         # For some reason the compiler cannot handle boundscheck statements when we run it
@@ -531,19 +573,6 @@ end
 
 __get_primal(x::CoDual) = primal(x)
 __get_primal(x) = x
-
-# Used in `make_ad_stmts!` method for `Expr(:call, ...)` and `Expr(:invoke, ...)`.
-@inline function __fwds_pass!(rule, pb_stack, ::Type{R}, f::F, raw_args::Vararg{Any, N}) where {R, F, N}
-
-    # For each argument if it isn't a CoDual, make it one, then run the rule.
-    f = __make_codual(f)
-    args = tuple_map(__make_codual, raw_args)
-    out, pb!! = tuple_splat(rule, f, args)
-
-    # Log the pullback and return the CoDual.
-    __push_pb_stack!(pb_stack, pb!!)
-    return out::R
-end
 
 __make_codual(x::P) where {P} = (P <: CoDual ? x : uninit_fcodual(x))::CoDual
 

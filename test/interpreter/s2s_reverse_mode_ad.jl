@@ -156,15 +156,6 @@ end
             )
         end
         @testset "Expr" begin
-            @testset "invoke" begin
-                stmt = Expr(:invoke, nothing, cos, Argument(2))
-                ad_stmts = make_ad_stmts!(stmt, id_line_1, info)
-                fwds_stmt = only(ad_stmts.fwds)[2].stmt
-                @test Meta.isexpr(fwds_stmt, :call)
-                @test fwds_stmt.args[1] == Tapir.__fwds_pass!
-                @test Meta.isexpr(only(ad_stmts.rvs)[2].stmt, :call)
-                @test only(ad_stmts.rvs)[2].stmt.args[1] == Tapir.__rvs_pass!
-            end
             @testset "copyast" begin
                 stmt = Expr(:copyast, QuoteNode(:(hi)))
                 ad_stmts = make_ad_stmts!(stmt, ID(), info)
