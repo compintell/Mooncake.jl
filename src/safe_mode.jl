@@ -119,6 +119,7 @@ function verify_fwds_values(p::P, f::F) where {P, F}
         if size(p) != size(f)
             throw(ArgumentError("size of P is $(size(p)) but size of F is $(size(f))"))
         end
+        isbitstype(eltype(P)) && return
         for n in eachindex(p)
             !isassigned(p, n) && continue
             Fn = _typeof(f[n])
