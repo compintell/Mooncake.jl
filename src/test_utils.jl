@@ -1052,6 +1052,11 @@ function bar(x, y)
     return x5
 end
 
+function unused_expression(x, n)
+    y = getfield((Float64, ), n)
+    return x
+end
+
 const_tester_non_differentiable() = 1
 
 const_tester() = cos(5.0)
@@ -1415,6 +1420,7 @@ function generate_test_functions()
         (false, :allocs, nothing, foo, 5.0),
         (false, :allocs, nothing, non_differentiable_foo, 5),
         (false, :allocs, nothing, bar, 5.0, 4.0),
+        (false, :allocs, nothing, unused_expression, 5.0, 1),
         (false, :none, nothing, type_unstable_argument_eval, sin, 5.0),
         (false, :none, (lb=1, ub=1_000), pi_node_tester, Ref{Any}(5.0)),
         (false, :none, (lb=1, ub=1_000), pi_node_tester, Ref{Any}(5)),
