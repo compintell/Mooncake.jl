@@ -1351,6 +1351,11 @@ function test_union_of_types(x::Ref{Union{Type{Float64}, Type{Int}}})
     return x[]
 end
 
+function test_small_union(x::Ref{Union{Float64, Vector{Float64}}})
+    v = x[]
+    return v isa Float64 ? v : v[1]
+end
+
 # Only one of these is a primitive. Lots of methods to prevent the compiler from
 # over-specialising.
 @noinline edge_case_tester(x::Float64) = 5x
@@ -1576,6 +1581,8 @@ function generate_test_functions()
         (false, :none, nothing, _broadcast_sin_cos_exp, randn(10, 10)),
         (false, :none, nothing, _map_sin_cos_exp, randn(10, 10)),
         (false, :none, nothing, ArgumentError, "hi"),
+        (false, :none, nothing, test_small_union, Ref{Union{Float64, Vector{Float64}}}(5.0)),
+        (false, :none, nothing, test_small_union, Ref{Union{Float64, Vector{Float64}}}([1.0])),
     ]
 end
 
