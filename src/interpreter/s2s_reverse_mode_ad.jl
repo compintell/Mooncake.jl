@@ -426,11 +426,9 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         arg_types = map(arg -> get_primal_type(info, arg), args)
 
         # If this function is side-effect free, and its value is unused, then just leave the
-        # call alone, and do nothing of the reverse-pass.
-        if !is_used(info, line) &&
-            get_const_primal_value(args[1]) == getfield &&
-            is_effect_free(args[1], Tuple(arg_types[2:end]))
-
+        # call alone, and do nothing of the reverse-pass. This functionality ought to be
+        # generalised to more things.
+        if !is_used(info, line) && get_const_primal_value(args[1]) == getfield
             fwds = new_inst(Expr(:call, __fwds_pass_no_ad!, map(__inc, args)...))
             return ad_stmt_info(line, fwds, nothing)
         end
@@ -458,7 +456,8 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
 
         # If the type of the pullback is a singleton type, then there is no need to store it
         # in the shared data, it can be interpolated directly into the generated IR.
-        pb_stack_id = __log_data(info, build_pb_stack(_typeof(rule), arg_types))
+        T_pb!! = pullback_type(_typeof(rule), arg_types)
+        pb_stack_id = __log_data(info, build_pb_stack(T_pb!!))
 
         #
         # Write forwards-pass. These statements are written out manually, as writing them
@@ -488,7 +487,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         push_pb_stack_id = ID()
         push_pb_stack = Expr(:call, __push_pb_stack!, pb_stack_id, pb_id)
 
-        # Impose a type assertion to ensure consistent typing.
+        # Impose a type assertion to ensure the CoDual returned by the rule is correct.
         output_id = line
         F = fwds_codual_type(get_primal_type(info, line))
         output = Expr(:call, Core.typeassert, raw_output_id, F)
@@ -505,16 +504,21 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
             ],
         )
 
-        # Make statement associated to reverse-pass.
-        rvs_pass_call = Expr(
-            :call,
-            __rvs_pass!,
-            get_primal_type(info, line),
-            pb_stack_id,
-            get_rev_data_id(info, line),
-            map(Base.Fix1(get_rev_data_id, info), args)...,
-        )
-        return ad_stmt_info(line, fwds, new_inst(rvs_pass_call))
+        # Make statement associated to reverse-pass. If the reverse-pass is provably a
+        # NoPullback, then don't bother doing anything at all.
+        rvs_pass = if T_pb!! <: NoPullback
+            nothing
+        else
+            Expr(
+                :call,
+                __rvs_pass!,
+                get_primal_type(info, line),
+                pb_stack_id,
+                get_rev_data_id(info, line),
+                map(Base.Fix1(get_rev_data_id, info), args)...,
+            )
+        end
+        return ad_stmt_info(line, fwds, new_inst(rvs_pass))
 
     elseif Meta.isexpr(stmt, :boundscheck)
         # For some reason the compiler cannot handle boundscheck statements when we run it
@@ -555,16 +559,16 @@ end
 is_active(::Union{Argument, ID}) = true
 is_active(::Any) = false
 
+# Get a bound on the pullback type, given a rule and associated primal types.
+function pullback_type(Trule, arg_types)
+    T = Core.Compiler.return_type(Tuple{Trule, map(fwds_codual_type, arg_types)...})
+    return (T <: Tuple && T !== Union{} && !(T isa Union)) ? T.parameters[2] : Any
+end
+
 # Build a stack to contain the pullback. Specialises on whether the pullback is a singleton,
 # and whether we get to know the concrete type of the pullback or not.
-function build_pb_stack(Trule, arg_types)
-    T_pb!! = Core.Compiler.return_type(Tuple{Trule, map(fwds_codual_type, arg_types)...})
-    if T_pb!! <: Tuple && T_pb!! !== Union{} && !(T_pb!! isa Union)
-        F = T_pb!!.parameters[2]
-        return Base.issingletontype(F) ? SingletonStack{F}() : Stack{F}()
-    else
-        return Stack{Any}()
-    end
+function build_pb_stack(T_pb!!)
+    return Base.issingletontype(T_pb!!) ? SingletonStack{T_pb!!}() : Stack{T_pb!!}()
 end
 
 @inline function __fwds_pass_no_ad!(f::F, raw_args::Vararg{Any, N}) where {F, N}
