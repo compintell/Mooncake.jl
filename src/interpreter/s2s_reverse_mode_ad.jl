@@ -435,9 +435,16 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         args = ((is_invoke ? stmt.args[2:end] : stmt.args)..., )
         arg_types = map(arg -> get_primal_type(info, arg), args)
 
-        # If this function is side-effect free, and its value is unused, then just leave the
-        # call alone, and do nothing of the reverse-pass. This functionality ought to be
-        # generalised to more things.
+        # Special case: if the result of a call to getfield is un-used, then leave the
+        # primal statment alone (just increment arguments as usual). This was causing
+        # performance problems in a couple of situations where the field being requested is
+        # not known at compile time. `getfield` cannot be dead-code eliminated, because it
+        # can throw an error if the requested field does not exist. Everything _other_ than
+        # the boundscheck is eliminated in LLVM codegen, so it's important that AD doesn't
+        # get in the way of this.
+        #
+        # This might need to be generalised to more things than just `getfield`, but at the
+        # time of writing this comment, it's unclear whether or not this is the case.
         if !is_used(info, line) && get_const_primal_value(args[1]) == getfield
             fwds = new_inst(Expr(:call, __fwds_pass_no_ad!, map(__inc, args)...))
             return ad_stmt_info(line, fwds, nothing)
