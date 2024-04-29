@@ -41,6 +41,7 @@ include("front_matter.jl")
         end
         include("chain_rules_macro.jl")
     elseif test_group == "integration_testing/misc"
+        include(joinpath("integration_test", "logdensityproblemsad_interop.jl"))
         include(joinpath("integration_testing/", "misc.jl"))
         include(joinpath("integration_testing", "battery_tests.jl"))
     elseif test_group == "integration_testing/diff_tests"
