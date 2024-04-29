@@ -1,5 +1,5 @@
-__convert(::ChainRulesCore.NoTangent) = NoRData()
-__convert(dx::Float64) = dx
+_to_rdata(::ChainRulesCore.NoTangent) = NoRData()
+_to_rdata(dx::Float64) = dx
 
 """
     @from_rrule ctx sig
@@ -41,7 +41,7 @@ macro from_rrule(ctx, sig)
     pb_output_names = map(n -> Symbol("dx_$(n)_inc"), eachindex(arg_names))
 
     call_pb = Expr(:(=), Expr(:tuple, pb_output_names...), :(pb(dy)))
-    incrementers = Expr(:tuple, map(b -> :(Tapir.__convert($b)), pb_output_names)...)
+    incrementers = Expr(:tuple, map(b -> :(Tapir._to_rdata($b)), pb_output_names)...)
 
     pb = ExprTools.combinedef(Dict(
         :head => :function,
