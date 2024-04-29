@@ -19,7 +19,4 @@ test_gradient(x) = -2 .* x
         @test isapprox(logdensity_and_gradient(∇l, x)[1], logdensity(TestLogDensity2(), x))
         @test isapprox(logdensity_and_gradient(∇l, x)[2], test_gradient(x))
     end
-
-   # ADTypes support
-#    @test ADgradient(ADTypes.AutoTapir(), ℓ) === ∇ℓ
 end
