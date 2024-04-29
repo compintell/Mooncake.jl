@@ -884,12 +884,15 @@ function pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, T
     end
 
     #
-    # Standard path pullback generation -- applied to 99% of primals:
+    # Standard path pullback generation -- applies to 99% of primals:
     #
 
-    # Create entry block, which pops the block_stack, creates + initialised the reverse-data
-    # Refs, and switches to reverse-pass counterpart to whichever block we were in at the
-    # end of the forwards-pass.
+    # Create entry block which:
+    # 1. extracts items from shared data to the correct IDs,
+    # 2. creates `Ref`s (which will be optimised away later) to hold rdata for all ssas,
+    # 3. create switch statement to block which terminated the forwards pass. If there is
+    #   only a single block in the primal containing a reachable ReturnNode, then there is
+    #   no need to pop the block stack.
     data_stmts = shared_data_stmts(info.shared_data_pairs)
     rev_data_ref_stmts = reverse_data_ref_stmts(info)
     exit_blocks_ids = map(n -> ir.blocks[n].id, primal_exit_blocks_inds)
@@ -920,7 +923,7 @@ function pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, T
         end
         pred_ids = vcat(ps[blk.id], n == 1 ? [info.entry_id] : ID[])
         tmp = pred_is_unique_pred[blk_id]
-        additional_stmts, new_blocks = finalise_rvs_block(blk, pred_ids, tmp, info)
+        additional_stmts, new_blocks = conclude_rvs_block(blk, pred_ids, tmp, info)
         rvs_block = BBlock(blk_id, vcat(rvs_stmts, additional_stmts))
         return vcat(rvs_block, new_blocks)
     end
@@ -939,9 +942,14 @@ function pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, T
 end
 
 #=
+    conclude_rvs_block(
+        blk::BBlock, pred_ids::Vector{ID}, pred_is_unique_pred::Bool, info::ADInfo
+    )
 
+Generates code which is inserted at the end of each counterpart block in the reverse-pass.
+Handles phi nodes, and choosing the correct next block to switch to.
 =#
-function finalise_rvs_block(
+function conclude_rvs_block(
     blk::BBlock, pred_ids::Vector{ID}, pred_is_unique_pred::Bool, info::ADInfo
 )
     # Get the PhiNodes and their IDs.
@@ -971,15 +979,14 @@ function finalise_rvs_block(
     return vcat(deref_stmts, switch), new_blocks
 end
 
-# Helper functionality for finalise_rvs_block # REDO THIS DOCUMENTATION BEFORE MERGING!!!
+# Helper functionality for conclude_rvs_block.
 function __get_value(edge::ID, x::IDPhiNode)
     edge in x.edges || return nothing
     n = only(findall(==(edge), x.edges))
     return isassigned(x.values, n) ? x.values[n] : nothing
 end
 
-# Helper, used in finalise_rvs_block... SWITCH OUT FINALISE_RVS_BLOCK TO BE A MORE HELPFUL
-# FUNCTION NAME.
+# Helper, used in conclude_rvs_block.
 @inline function __deref_and_zero(::Type{P}, x::Ref) where {P}
     t = x[]
     x[] = Tapir.zero_like_rdata_from_type(P)
