@@ -92,7 +92,7 @@ using Tapir:
     is_always_fully_initialised, get_tangent_field, set_tangent_field!, MutableTangent,
     Tangent, _typeof, rdata, NoFData, to_fwds, uninit_fdata, zero_rdata,
     zero_rdata_from_type, CannotProduceZeroRDataFromType, LazyZeroRData, instantiate,
-    can_produce_zero_rdata_from_type, increment_rdata!!, fwds_codual_type
+    can_produce_zero_rdata_from_type, increment_rdata!!, fcodual_type
 
 has_equal_data(x::T, y::T; equal_undefs=true) where {T<:String} = x == y
 has_equal_data(x::Type, y::Type; equal_undefs=true) = x == y
@@ -248,7 +248,7 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...; rul
     # can later verify that non-zero values do not get propagated by the rule.
     x̄_zero = map(zero_tangent, x)
     x̄_fwds = map(Tapir.fdata, x̄_zero)
-    x_x̄_rule = map((x, x̄_f) -> fwds_codual_type(_typeof(x))(_deepcopy(x), x̄_f), x, x̄_fwds)
+    x_x̄_rule = map((x, x̄_f) -> fcodual_type(_typeof(x))(_deepcopy(x), x̄_f), x, x̄_fwds)
     inputs_address_map = populate_address_map(map(primal, x_x̄_rule), map(tangent, x_x̄_rule))
     y_ȳ_rule, pb!! = rule(to_fwds(f_f̄), x_x̄_rule...)
 
@@ -287,7 +287,7 @@ get_address(x) = ismutable(x) ? pointer_from_objref(x) : nothing
 _deepcopy(x) = deepcopy(x)
 _deepcopy(x::Module) = x
 
-rrule_output_type(::Type{Ty}) where {Ty} = Tuple{Tapir.fwds_codual_type(Ty), Any}
+rrule_output_type(::Type{Ty}) where {Ty} = Tuple{Tapir.fcodual_type(Ty), Any}
 
 function test_rrule_interface(f_f̄, x_x̄...; is_primitive, ctx::C, rule) where {C}
     @nospecialize f_f̄ x_x̄

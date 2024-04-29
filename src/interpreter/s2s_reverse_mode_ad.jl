@@ -336,7 +336,7 @@ function make_ad_stmts!(stmt::IDPhiNode, line::ID, info::ADInfo)
     # For some reason, type inference really doesn't like it when you encounter mutually-
     # dependent PhiNodes whose types are unknown and for which you set the flag to
     # CC.IR_FLAG_REFINED. To avoid this we directly tell the compiler what the type is.
-    new_type = fwds_codual_type(get_primal_type(info, line))
+    new_type = fcodual_type(get_primal_type(info, line))
     _inst = new_inst(IDPhiNode(stmt.edges, new_vals), new_type, info.ssa_insts[line].flag)
     return ad_stmt_info(line, _inst, nothing)
 end
@@ -356,7 +356,7 @@ function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
     # Assemble the above lines and construct reverse-pass.
     return ad_stmt_info(
         line,
-        PiNode(stmt.val, fwds_codual_type(_type(stmt.typ))),
+        PiNode(stmt.val, fcodual_type(_type(stmt.typ))),
         Expr(:call, __pi_rvs!, P, val_rdata_ref_id, output_rdata_ref_id),
     )
 end
@@ -510,7 +510,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         # be optimised away in situations where the compiler is able to successfully infer
         # the type, so performance in performance-critical situations is unaffected.
         output_id = line
-        F = fwds_codual_type(get_primal_type(info, line))
+        F = fcodual_type(get_primal_type(info, line))
         output = Expr(:call, Core.typeassert, raw_output_id, F)
 
         # Create statements associated to forwards-pass.
@@ -585,7 +585,7 @@ is_active(::Any) = false
 
 # Get a bound on the pullback type, given a rule and associated primal types.
 function pullback_type(Trule, arg_types)
-    T = Core.Compiler.return_type(Tuple{Trule, map(fwds_codual_type, arg_types)...})
+    T = Core.Compiler.return_type(Tuple{Trule, map(fcodual_type, arg_types)...})
     return (T <: Tuple && T !== Union{} && !(T isa Union)) ? T.parameters[2] : Any
 end
 
@@ -700,9 +700,9 @@ function rule_type(interp::TapirInterpreter{C}, ::Type{sig}) where {C, sig}
     isva, _ = is_vararg_sig_and_sparam_names(sig)
 
     arg_types = map(_type, ir.argtypes)
-    arg_fwds_types = Tuple{map(fwds_codual_type, arg_types)...}
+    arg_fwds_types = Tuple{map(fcodual_type, arg_types)...}
     arg_rvs_types = Tuple{map(rdata_type ∘ tangent_type, arg_types)...}
-    fwds_return_codual = fwds_codual_type(Treturn)
+    fwds_return_codual = fcodual_type(Treturn)
     rvs_return_type = rdata_type(tangent_type(Treturn))
     if isconcretetype(fwds_return_codual)
         return DerivedRule{
@@ -850,7 +850,7 @@ function forwards_pass_ir(ir::BBCode, ad_stmts_blocks::ADStmts, info::ADInfo, Ts
     end
 
     # Create and return the `BBCode` for the forwards-pass.
-    arg_types = vcat(Tshared_data, map(fwds_codual_type ∘ _type, ir.argtypes))
+    arg_types = vcat(Tshared_data, map(fcodual_type ∘ _type, ir.argtypes))
     return BBCode(vcat(entry_block, blocks), arg_types, ir.sptypes, ir.linetable, ir.meta)
 end
 

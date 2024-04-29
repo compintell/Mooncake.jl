@@ -35,7 +35,7 @@ See implementation for details, as this function is subject to change.
 """
     codual_type(P::Type)
 
-Shorthand for `CoDual{P, tangent_type(P}}` when `P` is concrete, equal to `CoDual` if not.
+The type of the `CoDual` which contains instances of `P` and associated tangents.
 """
 function codual_type(::Type{P}) where {P}
     P == DataType && return CoDual
@@ -76,17 +76,17 @@ to_fwds(x::CoDual{Type{P}}) where {P} = CoDual{Type{P}, NoFData}(primal(x), NoFD
 zero_fcodual(p) = to_fwds(zero_codual(p))
 
 """
-    fwds_codual_type(P::Type)
+    fcodual_type(P::Type)
 
-Shorthand for `CoDual{P, tangent_type(P}}` when `P` is concrete, equal to `CoDual` if not.
+The type of the `CoDual` which contains instances of `P` and its fdata.
 """
-function fwds_codual_type(::Type{P}) where {P}
+function fcodual_type(::Type{P}) where {P}
     P == DataType && return CoDual
-    P isa Union && return Union{fwds_codual_type(P.a), fwds_codual_type(P.b)}
+    P isa Union && return Union{fcodual_type(P.a), fcodual_type(P.b)}
     P <: UnionAll && return CoDual
     return isconcretetype(P) ? CoDual{P, fdata_type(tangent_type(P))} : CoDual
 end
 
-fwds_codual_type(::Type{Type{P}}) where {P} = CoDual{Type{P}, NoFData}
+fcodual_type(::Type{Type{P}}) where {P} = CoDual{Type{P}, NoFData}
 
 zero_rdata(x::CoDual) = zero_rdata(primal(x))
