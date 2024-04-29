@@ -125,6 +125,7 @@ struct ADInfo
 end
 
 # The constructor that you should use for ADInfo if you don't have a BBCode lying around.
+# See the definition of the ADInfo struct for info on the arguments.
 function ADInfo(
     interp::PInterp,
     arg_types::Dict{Argument, Any},
@@ -149,7 +150,8 @@ function ADInfo(
     )
 end
 
-# The constructor you should use for ADInfo if you _do_ have a BBCode lying around.
+# The constructor you should use for ADInfo if you _do_ have a BBCode lying around. See the
+# ADInfo struct for information regarding `interp` and `safety_on`.
 function ADInfo(interp::PInterp, ir::BBCode, safety_on::Bool)
     arg_types = Dict{Argument, Any}(
         map(((n, t),) -> (Argument(n) => _type(t)), enumerate(ir.argtypes))
