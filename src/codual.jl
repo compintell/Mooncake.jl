@@ -3,7 +3,7 @@ struct CoDual{Tx, Tdx}
     dx::Tdx
 end
 
-# Always sharpen the first thing if it's a type, in order to preserve dispatch possibility.
+# Always sharpen the first thing if it's a type so static dispatch remains possible.
 function CoDual(x::Type{P}, dx::NoFData) where {P}
     return CoDual{@isdefined(P) ? Type{P} : typeof(x), NoFData}(P, dx)
 end
