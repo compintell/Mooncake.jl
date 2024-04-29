@@ -464,7 +464,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         # away before the raw_rule is called.
         zero_safe_rule = RRuleZeroWrapper(raw_rule)
 
-        # If we need to run safety checks, wrap the rule in a correctness checker.
+        # If safe mode has been requested, use a safe rule.
         rule = info.safety_on ? SafeRRule(zero_safe_rule) : zero_safe_rule
 
         # If the rule is `rrule!!` (i.e. `sig` is primitive), then don't bother putting
@@ -478,10 +478,10 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
 
         #
         # Write forwards-pass. These statements are written out manually, as writing them
-        # out in a function would prevent inlining in type-unstable situations.
+        # out in a function would prevent inlining in some (all?) type-unstable situations.
         #
 
-        # Make arguments to rrule call.
+        # Make arguments to rrule call. Things which are not already CoDual must be made so.
         codual_arg_ids = map(_ -> ID(), args)
         __codual_args = map(arg -> Expr(:call, __make_codual, __inc(arg)), args)
         codual_args = Tuple{ID, NewInstruction}[
@@ -492,11 +492,11 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         rule_call_id = ID()
         rule_call = Expr(:call, rule_ref, codual_arg_ids...)
 
-        # Extract output.
+        # Extract the output-codual from the returned tuple.
         raw_output_id = ID()
         raw_output = Expr(:call, getfield, rule_call_id, 1)
 
-        # Extract pullback.
+        # Extract the pullback from the returned tuple.
         pb_id = ID()
         pb = Expr(:call, getfield, rule_call_id, 2)
 
@@ -504,7 +504,11 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         push_pb_stack_id = ID()
         push_pb_stack = Expr(:call, __push_pb_stack!, pb_stack_id, pb_id)
 
-        # Impose a type assertion to ensure the CoDual returned by the rule is correct.
+        # Provide a type assertion to help the compiler out. Doing it this way, rather than
+        # directly changing the inferred type of the instruction associated to raw_output,
+        # has the advantage of not introducing the possibility of segfaults. It will still
+        # be optimised away in situations where the compiler is able to successfully infer
+        # the type, so performance in performance-critical situations is unaffected.
         output_id = line
         F = fwds_codual_type(get_primal_type(info, line))
         output = Expr(:call, Core.typeassert, raw_output_id, F)
@@ -544,7 +548,10 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         return ad_stmt_info(line, zero_fcodual(true), nothing)
 
     elseif Meta.isexpr(stmt, :code_coverage_effect)
-        # Code coverage irrelevant for derived code.
+        # Code coverage irrelevant for derived code, and really inflates it in some
+        # situations. Since code coverage is usually only requrested during CI, including
+        # these effects also creates differences between the code generated when developing
+        # and the code generated in CI, which occassionally creates hard-to-debug issues.
         return ad_stmt_info(line, nothing, nothing)
 
     elseif Meta.isexpr(stmt, :copyast)
@@ -584,10 +591,9 @@ end
 
 # Build a stack to contain the pullback. Specialises on whether the pullback is a singleton,
 # and whether we get to know the concrete type of the pullback or not.
-function build_pb_stack(T_pb!!)
-    return Base.issingletontype(T_pb!!) ? SingletonStack{T_pb!!}() : Stack{T_pb!!}()
-end
+build_pb_stack(Tpb) = Base.issingletontype(Tpb) ? SingletonStack{Tpb}() : Stack{Tpb}()
 
+# Used by the getfield special-case in call / invoke statments.
 @inline function __fwds_pass_no_ad!(f::F, raw_args::Vararg{Any, N}) where {F, N}
     return tuple_splat(__get_primal(f), tuple_map(__get_primal, raw_args))
 end
@@ -595,6 +601,7 @@ end
 __get_primal(x::CoDual) = primal(x)
 __get_primal(x) = x
 
+# Helper used in make_ad_stmts! for call / invoke.
 __make_codual(x::P) where {P} = (P <: CoDual ? x : uninit_fcodual(x))::CoDual
 
 # Useful to have this function call for debugging when looking at the generated IRCode.
@@ -631,7 +638,8 @@ end
 @inline set_ret_ref_to_zero!!(::Type{P}, r::Base.RefValue{NoRData}) where {P} = nothing
 
 #
-# Runners for generated code.
+# Runners for generated code. The main job of these functions is to handle the translation
+# between differing varargs conventions.
 #
 
 struct Pullback{Tpb_oc, Tisva<:Val, Tnvargs<:Val}
@@ -656,6 +664,30 @@ end
 end
 
 @inline nvargs(n_flat, ::Val{nargs}) where {nargs} = Val(n_flat - nargs + 1)
+
+# If isva, inputs (5.0, (4.0, 3.0)) are transformed into (5.0, 4.0, 3.0).
+function __flatten_varargs(::Val{isva}, args, ::Val{nvargs}) where {isva, nvargs}
+    isva || return args
+    last_el = isa(args[end], NoRData) ? ntuple(n -> NoRData(), nvargs) : args[end]
+    return (args[1:end-1]..., last_el...)
+end
+
+# If isva and nargs=2, then inputs `(CoDual(5.0, 0.0), CoDual(4.0, 0.0), CoDual(3.0, 0.0))`
+# are transformed into `(CoDual(5.0, 0.0), CoDual((5.0, 4.0), (0.0, 0.0)))`.
+function __unflatten_codual_varargs(::Val{isva}, args, ::Val{nargs}) where {isva, nargs}
+    isva || return args
+    group_primal = map(primal, args[nargs:end])
+    if fdata_type(tangent_type(_typeof(group_primal))) == NoFData
+        grouped_args = zero_fcodual(group_primal)
+    else
+        grouped_args = CoDual(group_primal, map(tangent, args[nargs:end]))
+    end
+    return (args[1:nargs-1]..., grouped_args)
+end
+
+#
+# Rule derivation.
+#
 
 # Compute the concrete type of the rule that will be returned from `build_rrule`. This is
 # important for performance in dynamic dispatch, and to ensure that recursion works
@@ -689,26 +721,6 @@ function rule_type(interp::TapirInterpreter{C}, ::Type{sig}) where {C, sig}
     end
 end
 
-# If isva, inputs (5.0, (4.0, 3.0)) are transformed into (5.0, 4.0, 3.0).
-function __flatten_varargs(::Val{isva}, args, ::Val{nvargs}) where {isva, nvargs}
-    isva || return args
-    last_el = isa(args[end], NoRData) ? ntuple(n -> NoRData(), nvargs) : args[end]
-    return (args[1:end-1]..., last_el...)
-end
-
-# If isva and nargs=2, then inputs `(CoDual(5.0, 0.0), CoDual(4.0, 0.0), CoDual(3.0, 0.0))`
-# are transformed into `(CoDual(5.0, 0.0), CoDual((5.0, 4.0), (0.0, 0.0)))`.
-function __unflatten_codual_varargs(::Val{isva}, args, ::Val{nargs}) where {isva, nargs}
-    isva || return args
-    group_primal = map(primal, args[nargs:end])
-    if fdata_type(tangent_type(_typeof(group_primal))) == NoFData
-        grouped_args = zero_fcodual(group_primal)
-    else
-        grouped_args = CoDual(group_primal, map(tangent, args[nargs:end]))
-    end
-    return (args[1:nargs-1]..., grouped_args)
-end
-
 """
     build_rrule(args...)
 
@@ -726,7 +738,8 @@ If `safety_on` is `true`, then all calls to rules are replaced with calls to `Sa
 """
 function build_rrule(interp::PInterp{C}, sig::Type{<:Tuple}; safety_on=false) where {C}
 
-    # Reset id count. This ensures that everything in this function is deterministic.
+    # Reset id count. This ensures that the IDs generated are the same each time this
+    # function runs.
     seed_id!()
 
     # If we have a hand-coded rule, just use that.
@@ -744,7 +757,8 @@ function build_rrule(interp::PInterp{C}, sig::Type{<:Tuple}; safety_on=false) wh
     # Compute global info.
     info = ADInfo(interp, primal_ir, safety_on)
 
-    # For each block in the fwds and pullback BBCode, translate all statements.
+    # For each block in the fwds and pullback BBCode, translate all statements. Running this
+    # will, in general, push items to `info.shared_data_pairs`.
     ad_stmts_blocks = map(primal_ir.blocks) do primal_blk
         ids = primal_blk.inst_ids
         primal_stmts = map(x -> x.stmt, primal_blk.insts)
@@ -756,7 +770,11 @@ function build_rrule(interp::PInterp{C}, sig::Type{<:Tuple}; safety_on=false) wh
 
     # If we've already derived the OpaqueClosures and info, do not re-derive, just create a
     # copy and pass in new shared data.
-    if !haskey(interp.oc_cache, (sig, safety_on))
+    if haskey(interp.oc_cache, (sig, safety_on))
+        existing_fwds_oc, existing_pb_oc = interp.oc_cache[(sig, safety_on)]
+        fwds_oc = replace_captures(existing_fwds_oc, shared_data)
+        pb_oc = replace_captures(existing_pb_oc, shared_data)
+    else
         fwds_ir = forwards_pass_ir(primal_ir, ad_stmts_blocks, info, _typeof(shared_data))
         pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, _typeof(shared_data))
         # @show sig, safety_on
@@ -773,10 +791,6 @@ function build_rrule(interp::PInterp{C}, sig::Type{<:Tuple}; safety_on=false) wh
         fwds_oc = OpaqueClosure(optimised_fwds_ir, shared_data...; do_compile=true)
         pb_oc = OpaqueClosure(optimised_pb_ir, shared_data...; do_compile=true)
         interp.oc_cache[(sig, safety_on)] = (fwds_oc, pb_oc)
-    else
-        existing_fwds_oc, existing_pb_oc = interp.oc_cache[(sig, safety_on)]
-        fwds_oc = replace_captures(existing_fwds_oc, shared_data)
-        pb_oc = replace_captures(existing_pb_oc, shared_data)
     end
 
     raw_rule = rule_type(interp, sig)(fwds_oc, pb_oc, Val(isva), Val(num_args(info)))
@@ -808,7 +822,7 @@ function forwards_pass_ir(ir::BBCode, ad_stmts_blocks::ADStmts, info::ADInfo, Ts
     # Insert a block at the start which extracts all items from the captures field of the
     # `OpaqueClosure`, which contains all of the data shared between the forwards- and
     # reverse-passes. These are assigned to the `ID`s given by the `SharedDataPairs`.
-    # Additionally, push the entry id onto the block stack.
+    # Additionally, push the entry id onto the block stack if needed.
     sds = shared_data_stmts(info.shared_data_pairs)
     if pred_is_unique_pred[ir.blocks[1].id]
         entry_stmts = sds
@@ -821,8 +835,8 @@ function forwards_pass_ir(ir::BBCode, ad_stmts_blocks::ADStmts, info::ADInfo, Ts
     entry_block = BBlock(info.entry_id, entry_stmts)
 
     # Construct augmented version of each basic block from the primal. For each block:
-    # 1. pull the translated basic block statements from ad_stmts_blocks.
-    # 2. insert a statement which logs the ID of the current block to the block stack.
+    # 1. pull the translated basic block statements from ad_stmts_blocks,
+    # 2. insert a statement which logs the ID of the current block if necessary, and
     # 3. construct and return a BBlock.
     blocks = map(ad_stmts_blocks) do (block_id, ad_stmts)
         fwds_stmts = reduce(vcat, map(x -> x.fwds, ad_stmts))
@@ -840,6 +854,8 @@ function forwards_pass_ir(ir::BBCode, ad_stmts_blocks::ADStmts, info::ADInfo, Ts
     return BBCode(vcat(entry_block, blocks), arg_types, ir.sptypes, ir.linetable, ir.meta)
 end
 
+# Going via this function, rather than just calling push!, makes it very straightforward to
+# figure out much time is spent pushing to the block stack when profiling AD.
 @inline __push_blk_stack!(block_stack::BlockStack, id::Int32) = push!(block_stack, id)
 
 #=
@@ -1066,6 +1082,8 @@ function make_switch_stmts(pred_ids::Vector{ID}, pred_is_unique_pred::Bool, info
     return make_switch_stmts(pred_ids, pred_ids, pred_is_unique_pred, info)
 end
 
+# Going via this function, rather than just calling pop! directly, makes it easy to figure
+# out how much time is spent popping the block stack when profiling performance.
 @inline __pop_blk_stack!(block_stack::BlockStack) = pop!(block_stack)
 
 # Helper function emitted by `make_switch_stmts`.
