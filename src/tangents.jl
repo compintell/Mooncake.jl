@@ -23,8 +23,6 @@ end
 @inline PossiblyUninitTangent(tangent::T) where {T} = PossiblyUninitTangent{T}(tangent)
 @inline PossiblyUninitTangent(T::Type) = PossiblyUninitTangent{T}()
 
-const __PUT = PossiblyUninitTangent
-
 @inline is_init(t::PossiblyUninitTangent) = isdefined(t, :tangent)
 is_init(t) = true
 
@@ -49,6 +47,8 @@ _wrap_type(::Type{T}) where {T} = PossiblyUninitTangent{T}
 _wrap_field(::Type{Q}, x::T) where {Q, T} = PossiblyUninitTangent{Q}(x)
 _wrap_field(x::T) where {T} = _wrap_field(T, x)
 
+Base.eltype(::Type{PossiblyUninitTangent{T}}) where {T} = T
+
 struct Tangent{Tfields<:NamedTuple}
     fields::Tfields
 end
@@ -61,6 +61,10 @@ end
 
 Base.:(==)(x::MutableTangent, y::MutableTangent) = x.fields == y.fields
 
+fields_type(::Type{MutableTangent{Tfields}}) where {Tfields<:NamedTuple} = Tfields
+fields_type(::Type{Tangent{Tfields}}) where {Tfields<:NamedTuple} = Tfields
+fields_type(::Type{<:Union{MutableTangent, Tangent}}) = NamedTuple
+
 const PossiblyMutableTangent{T} = Union{MutableTangent{T}, Tangent{T}}
 
 """
@@ -72,9 +76,9 @@ Has the same semantics that `setfield!` would have if the data in the `fields` f
 were actually fields of `t`. This is the moral equivalent of `getfield` for
 `MutableTangent`.
 """
-function get_tangent_field(t::PossiblyMutableTangent{Tfields}, i::Int) where {Tfields}
+@inline function get_tangent_field(t::PossiblyMutableTangent{Tfs}, i::Int) where {Tfs}
     v = getfield(t.fields, i)
-    return fieldtype(Tfields, i) <: PossiblyUninitTangent ? val(v) : v
+    return fieldtype(Tfs, i) <: PossiblyUninitTangent ? val(v) : v
 end
 
 @inline function get_tangent_field(t::PossiblyMutableTangent{F}, s::Symbol) where {F}
@@ -143,9 +147,6 @@ function __tangent_from_non_concrete(::Type{P}, fields) where {names, P<:NamedTu
     return NamedTuple{names}(fields)
 end
 
-_value(v::PossiblyUninitTangent) = val(v)
-_value(v) = v
-
 """
     tangent_type(T)
 
@@ -154,9 +155,7 @@ determined entirely by its type.
 """
 tangent_type(T)
 
-function tangent_type(x)
-    throw(error("$x is not a type. Perhaps you meant typeof(x)?"))
-end
+tangent_type(x) = throw(error("$x is not a type. Perhaps you meant typeof(x)?"))
 
 # This is essential for DataType, as the recursive definition always recurses infinitely,
 # because one of the fieldtypes is itself always a DataType. In particular, we'll always
@@ -207,11 +206,16 @@ tangent_type(::Type{Core.TypeName}) = NoTangent
 
 tangent_type(::Type{Core.MethodTable}) = NoTangent
 
+tangent_type(::Type{DimensionMismatch}) = NoTangent
+
+tangent_type(::Type{Method}) = NoTangent
+
 @generated function tangent_type(::Type{P}) where {P<:Tuple}
     isa(P, Union) && return Union{tangent_type(P.a), tangent_type(P.b)}
     isempty(P.parameters) && return NoTangent
     isa(last(P.parameters), Core.TypeofVararg) && return Any
     all(p -> tangent_type(p) == NoTangent, P.parameters) && return NoTangent
+    isconcretetype(P) || return Any
     return Tuple{map(tangent_type, fieldtypes(P))...}
 end
 
@@ -268,59 +272,6 @@ function tangent_field_type(::Type{P}, n::Int) where {P}
 end
 
 """
-    is_always_initialised(::Type{P}, n::Int)
-
-True if the `n`th field of `P` is always initialised. If the `n`th fieldtype of `P`
-`isbitstype`, then this is distinct from asking whether the `n`th field is always defined.
-An isbits field is always defined, but is not always explicitly initialised.
-"""
-function is_always_initialised(::Type{P}, n::Int) where {P}
-    return n <= Core.Compiler.datatype_min_ninitialized(P)
-end
-
-"""
-    is_always_fully_initialised(::Type{P}) where {P}
-
-True if all fields in `P` are always initialised. Put differently, there are no inner
-constructors which permit partial initialisation.
-"""
-function is_always_fully_initialised(::Type{P}) where {P}
-    return Core.Compiler.datatype_min_ninitialized(P) == fieldcount(P)
-end
-
-function _map_if_assigned!(f::F, y::Array, x::Array{P}) where {F, P}
-    @assert size(y) == size(x)
-    @inbounds for n in eachindex(y)
-        if isbitstype(P) || isassigned(x, n)
-            y[n] = f(x[n])
-        end
-    end
-    return y
-end
-
-function _map_if_assigned!(f::F, y::Array, x1::Array{P}, x2::Array) where {F, P}
-    @assert size(y) == size(x1)
-    @assert size(y) == size(x2)
-    @inbounds for n in eachindex(y)
-        if isbitstype(P) || isassigned(x1, n)
-            y[n] = f(x1[n], x2[n])
-        end
-    end
-    return y
-end
-
-"""
-    _map(f, x...)
-
-Same as `map` but requires all elements of `x` to have equal length.
-The usual function `map` doesn't enforce this for `Array`s.
-"""
-@inline function _map(f::F, x::Vararg{Any, N}) where {F, N}
-    @assert allequal(map(length, x))
-    return map(f, x...)
-end
-
-"""
     zero_tangent(x)
 
 Returns the unique zero element of the tangent space of `x`.
@@ -337,7 +288,7 @@ end
     return _map_if_assigned!(zero_tangent, Array{tangent_type(P), N}(undef, size(x)...), x)
 end
 @inline function zero_tangent(x::P) where {P<:Union{Tuple, NamedTuple}}
-    return tangent_type(P) == NoTangent ? NoTangent() : map(zero_tangent, x)
+    return tangent_type(P) == NoTangent ? NoTangent() : tuple_map(zero_tangent, x)
 end
 @generated function zero_tangent(x::P) where {P}
 
@@ -391,7 +342,8 @@ function randn_tangent(rng::AbstractRNG, x::SimpleVector)
     end
 end
 function randn_tangent(rng::AbstractRNG, x::P) where {P <: Union{Tuple, NamedTuple}}
-    return tangent_type(P) == NoTangent ? NoTangent() : map(x -> randn_tangent(rng, x), x)
+    tangent_type(P) == NoTangent && return NoTangent()
+    return tuple_map(x -> randn_tangent(rng, x), x)
 end
 function randn_tangent(rng::AbstractRNG, x::T) where {T<:Union{Tangent, MutableTangent}}
     return T(randn_tangent(rng, x.fields))
@@ -433,7 +385,7 @@ increment!!(x::Ptr{T}, y::Ptr{T}) where {T} = x === y ? x : throw(error("eurgh")
 function increment!!(x::T, y::T) where {P, N, T<:Array{P, N}}
     return x === y ? x : _map_if_assigned!(increment!!, x, x, y)
 end
-increment!!(x::T, y::T) where {T<:Tuple} = _map(increment!!, x, y)
+increment!!(x::T, y::T) where {T<:Tuple} = tuple_map(increment!!, x, y)
 increment!!(x::T, y::T) where {T<:NamedTuple} = T(increment!!(Tuple(x), Tuple(y)))
 function increment!!(x::T, y::T) where {T<:PossiblyUninitTangent}
     is_init(x) && is_init(y) && return T(increment!!(val(x), val(y)))
@@ -441,7 +393,7 @@ function increment!!(x::T, y::T) where {T<:PossiblyUninitTangent}
     !is_init(x) && is_init(y) && error("x is not initialised, but y is")
     return x
 end
-increment!!(x::T, y::T) where {T<:Tangent} = Tangent(increment!!(x.fields, y.fields))
+increment!!(x::T, y::T) where {T<:Tangent} = T(increment!!(x.fields, y.fields))
 function increment!!(x::T, y::T) where {T<:MutableTangent}
     x === y && return x
     x.fields = increment!!(x.fields, y.fields)
@@ -464,59 +416,6 @@ set_to_zero!!(x::T) where {T<:Tangent} = T(set_to_zero!!(x.fields))
 function set_to_zero!!(x::MutableTangent)
     x.fields = set_to_zero!!(x.fields)
     return x
-end
-
-"""
-    set_immutable_to_zero(x::T) where {T}
-
-Return a `T` whose immutable components are zero, and whose mutable components are `===` to
-`x`. Please consult implementation for details.
-"""
-set_immutable_to_zero(x::NoTangent) = NoTangent()
-set_immutable_to_zero(x::Base.IEEEFloat) = zero(x)
-set_immutable_to_zero(x::Union{Tuple, NamedTuple}) = map(set_immutable_to_zero, x)
-set_immutable_to_zero(x::Array) = x
-function set_immutable_to_zero(x::T) where {T<:PossiblyUninitTangent}
-    return is_init(x) ? T(set_immutable_to_zero(val(x))) : x
-end
-set_immutable_to_zero(x::Tangent) = Tangent(set_immutable_to_zero(x.fields))
-set_immutable_to_zero(x::MutableTangent) = x
-set_immutable_to_zero(x::Ptr) = x
-
-"""
-    increment_field!!(x::T, y::V, f) where {T, V}
-
-`increment!!` the field `f` of `x` by `y`, and return the updated `x`.
-"""
-@inline @generated function increment_field!!(x::Tuple, y, ::Val{i}) where {i}
-    exprs = map(n -> n == i ? :(increment!!(x[$n], y)) : :(x[$n]), fieldnames(x))
-    return Expr(:tuple, exprs...)
-end
-
-@inline @generated function increment_field!!(x::T, y, ::Val{f}) where {T<:NamedTuple, f}
-    i = f isa Symbol ? findfirst(==(f), fieldnames(T)) : f
-    new_fields = Expr(:call, increment_field!!, :(Tuple(x)), :y, :(Val($i)))
-    return Expr(:call, T, new_fields)
-end
-
-function increment_field!!(x::Tangent{T}, y, f::Val{F}) where {T, F}
-    y isa NoTangent && return x
-    new_val = fieldtype(T, F) <: PossiblyUninitTangent ? fieldtype(T, F)(y) : y
-    return Tangent(increment_field!!(x.fields, new_val, f))
-end
-function increment_field!!(x::MutableTangent{T}, y, f::V) where {T, F, V<:Val{F}}
-    y isa NoTangent && return x
-    new_val = fieldtype(T, F) <: PossiblyUninitTangent ? fieldtype(T, F)(y) : y
-    setfield!(x, :fields, increment_field!!(x.fields, new_val, f))
-    return x
-end
-
-increment_field!!(x, y, f::Symbol) = increment_field!!(x, y, Val(f))
-increment_field!!(x, y, n::Int) = increment_field!!(x, y, Val(n))
-
-# Fallback method for when a tangent type for a struct is declared to be `NoTangent`.
-for T in [Symbol, Int, Val]
-    @eval increment_field!!(::NoTangent, ::NoTangent, f::Union{$T}) = NoTangent()
 end
 
 """
@@ -645,14 +544,222 @@ function _containerlike_diff(p::P, q::P) where {P}
     return build_tangent(P, diffed_fields...)
 end
 
-@generated function might_be_active(::Type{P}) where {P}
-    tangent_type(P) == NoTangent && return :(return false)
-    Base.issingletontype(P) && return :(return false)
-    Base.isabstracttype(P) && return :(return true)
-    isprimitivetype(P) && return :(return true)
-    return :(return $(any(might_be_active, fieldtypes(P))))
+"""
+    increment_field!!(x::T, y::V, f) where {T, V}
+
+`increment!!` the field `f` of `x` by `y`, and return the updated `x`.
+"""
+@inline @generated function increment_field!!(x::Tuple, y, ::Val{i}) where {i}
+    exprs = map(n -> n == i ? :(increment!!(x[$n], y)) : :(x[$n]), fieldnames(x))
+    return Expr(:tuple, exprs...)
 end
-@generated function might_be_active(::Type{<:Array{P}}) where {P}
-    return :(return $(might_be_active(P)))
+
+# Optimal for homogeneously-typed Tuples with dynamic field choice.
+function increment_field!!(x::Tuple, y, i::Int)
+    return ntuple(n -> n == i ? increment!!(x[n], y) : x[n], length(x))
 end
-might_be_active(::Type{SimpleVector}) = true
+
+@inline @generated function increment_field!!(x::T, y, ::Val{f}) where {T<:NamedTuple, f}
+    i = f isa Symbol ? findfirst(==(f), fieldnames(T)) : f
+    new_fields = Expr(:call, increment_field!!, :(Tuple(x)), :y, :(Val($i)))
+    return Expr(:call, T, new_fields)
+end
+
+# Optimal for homogeneously-typed NamedTuples with dynamic field choice.
+function increment_field!!(x::T, y, i::Int) where {T<:NamedTuple}
+    return T(increment_field!!(Tuple(x), y, i))
+end
+function increment_field!!(x::T, y, s::Symbol) where {T<:NamedTuple}
+    return T(tuple_map(n -> n == s ? increment!!(x[n], y) : x[n], fieldnames(T)))
+end
+
+function increment_field!!(x::Tangent{T}, y, f::Val{F}) where {T, F}
+    y isa NoTangent && return x
+    new_val = fieldtype(T, F) <: PossiblyUninitTangent ? fieldtype(T, F)(y) : y
+    return Tangent(increment_field!!(x.fields, new_val, f))
+end
+function increment_field!!(x::MutableTangent{T}, y, f::V) where {T, F, V<:Val{F}}
+    y isa NoTangent && return x
+    new_val = fieldtype(T, F) <: PossiblyUninitTangent ? fieldtype(T, F)(y) : y
+    setfield!(x, :fields, increment_field!!(x.fields, new_val, f))
+    return x
+end
+
+increment_field!!(x, y, f::Symbol) = increment_field!!(x, y, Val(f))
+increment_field!!(x, y, n::Int) = increment_field!!(x, y, Val(n))
+
+# Fallback method for when a tangent type for a struct is declared to be `NoTangent`.
+for T in [Symbol, Int, Val]
+    @eval increment_field!!(::NoTangent, ::NoTangent, f::Union{$T}) = NoTangent()
+end
+
+#=
+    tangent_test_cases()
+
+Constructs a `Vector` of `Tuple`s containing test cases for the tangent infrastructure.
+
+If the returned tuple has 2 elements, the elements should be interpreted as follows:
+1 - interface_only
+2 - primal value
+
+interface_only is a Bool which will be used to determine which subset of tests to run.
+
+If the returned tuple has 5 elements, then the elements are interpreted as follows:
+1 - interface_only
+2 - primal value
+3, 4, 5 - tangents, where <5> == increment!!(<3>, <4>).
+
+Generally speaking, it's very straightforward to produce test cases in the first format,
+while the second requires more work. Consequently, at the time of writing there are many
+more instances of the first format than the second.
+
+Test cases in the first format make use of `zero_tangent` / `randn_tangent` etc to generate
+tangents, but they're unable to check that `increment!!` is correct in an absolute sense.
+=#
+function tangent_test_cases()
+
+    N_large = 33
+    _names = Tuple(map(n -> Symbol("x$n"), 1:N_large))
+
+    abs_test_cases = vcat(
+        [
+            (sin, NoTangent(), NoTangent(), NoTangent()),
+            (map(Float16, (5.0, 4.0, 3.1, 7.1))...),
+            (5f0, 4f0, 3f0, 7f0),
+            (5.1, 4.0, 3.0, 7.0),
+            (svec(5.0), Any[4.0], Any[3.0], Any[7.0]),
+            ([3.0, 2.0], [1.0, 2.0], [2.0, 3.0], [3.0, 5.0]),
+            (
+                [1, 2],
+                [NoTangent(), NoTangent()],
+                [NoTangent(), NoTangent()],
+                [NoTangent(), NoTangent()],
+            ),
+            (
+                [[1.0], [1.0, 2.0]],
+                [[2.0], [2.0, 3.0]],
+                [[3.0], [4.0, 5.0]],
+                [[5.0], [6.0, 8.0]],
+            ),
+            (
+                setindex!(Vector{Vector{Float64}}(undef, 2), [1.0], 1),
+                setindex!(Vector{Vector{Float64}}(undef, 2), [2.0], 1),
+                setindex!(Vector{Vector{Float64}}(undef, 2), [3.0], 1),
+                setindex!(Vector{Vector{Float64}}(undef, 2), [5.0], 1),
+            ),
+            (
+                setindex!(Vector{Vector{Float64}}(undef, 2), [1.0], 2),
+                setindex!(Vector{Vector{Float64}}(undef, 2), [2.0], 2),
+                setindex!(Vector{Vector{Float64}}(undef, 2), [3.0], 2),
+                setindex!(Vector{Vector{Float64}}(undef, 2), [5.0], 2),
+            ),
+            (
+                (6.0, [1.0, 2.0]),
+                (5.0, [3.0, 4.0]),
+                (4.0, [4.0, 3.0]),
+                (9.0, [7.0, 7.0]),
+            ),
+            ((), NoTangent(), NoTangent(), NoTangent()),
+            ((1,), NoTangent(), NoTangent(), NoTangent()),
+            ((2, 3), NoTangent(), NoTangent(), NoTangent()),
+            (
+                Tapir.tuple_fill(5.0, Val(N_large)),
+                Tapir.tuple_fill(6.0, Val(N_large)),
+                Tapir.tuple_fill(7.0, Val(N_large)),
+                Tapir.tuple_fill(13.0, Val(N_large)),
+            ),
+            (
+                (a=6.0, b=[1.0, 2.0]),
+                (a=5.0, b=[3.0, 4.0]),
+                (a=4.0, b=[4.0, 3.0]),
+                (a=9.0, b=[7.0, 7.0]),
+            ),
+            ((;), NoTangent(), NoTangent(), NoTangent()),
+            (
+                NamedTuple{_names}(Tapir.tuple_fill(5.0, Val(N_large))),
+                NamedTuple{_names}(Tapir.tuple_fill(6.0, Val(N_large))),
+                NamedTuple{_names}(Tapir.tuple_fill(7.0, Val(N_large))),
+                NamedTuple{_names}(Tapir.tuple_fill(13.0, Val(N_large))),
+            ),
+            (
+                TestResources.TypeStableMutableStruct{Float64}(5.0, 3.0),
+                build_tangent(TestResources.TypeStableMutableStruct{Float64}, 5.0, 4.0),
+                build_tangent(TestResources.TypeStableMutableStruct{Float64}, 3.0, 3.0),
+                build_tangent(TestResources.TypeStableMutableStruct{Float64}, 8.0, 7.0),
+            ),
+            ( # complete init
+                TestResources.StructFoo(6.0, [1.0, 2.0]),
+                build_tangent(TestResources.StructFoo, 5.0, [3.0, 4.0]),
+                build_tangent(TestResources.StructFoo, 3.0, [2.0, 1.0]),
+                build_tangent(TestResources.StructFoo, 8.0, [5.0, 5.0]),
+            ),
+            ( # partial init
+                TestResources.StructFoo(6.0),
+                build_tangent(TestResources.StructFoo, 5.0),
+                build_tangent(TestResources.StructFoo, 4.0),
+                build_tangent(TestResources.StructFoo, 9.0),
+            ),
+            ( # complete init
+                TestResources.MutableFoo(6.0, [1.0, 2.0]),
+                build_tangent(TestResources.MutableFoo, 5.0, [3.0, 4.0]),
+                build_tangent(TestResources.MutableFoo, 3.0, [2.0, 1.0]),
+                build_tangent(TestResources.MutableFoo, 8.0, [5.0, 5.0]),
+            ),
+            ( # partial init
+                TestResources.MutableFoo(6.0),
+                build_tangent(TestResources.MutableFoo, 5.0),
+                build_tangent(TestResources.MutableFoo, 4.0),
+                build_tangent(TestResources.MutableFoo, 9.0),
+            ),
+            (
+                TestResources.StructNoFwds(5.0),
+                build_tangent(TestResources.StructNoFwds, 5.0),
+                build_tangent(TestResources.StructNoFwds, 4.0),
+                build_tangent(TestResources.StructNoFwds, 9.0),
+            ),
+            (
+                TestResources.StructNoRvs([5.0]),
+                build_tangent(TestResources.StructNoRvs, [5.0]),
+                build_tangent(TestResources.StructNoRvs, [4.0]),
+                build_tangent(TestResources.StructNoRvs, [9.0]),
+            ),
+            (UnitRange{Int}(5, 7), NoTangent(), NoTangent(), NoTangent()),
+        ],
+        map([
+            LowerTriangular{Float64, Matrix{Float64}},
+            UpperTriangular{Float64, Matrix{Float64}},
+            UnitLowerTriangular{Float64, Matrix{Float64}},
+            UnitUpperTriangular{Float64, Matrix{Float64}},
+        ]) do T
+            return (
+                T(randn(2, 2)),
+                build_tangent(T, [1.0 2.0; 3.0 4.0]),
+                build_tangent(T, [2.0 1.0; 5.0 4.0]),
+                build_tangent(T, [3.0 3.0; 8.0 8.0]),
+            )
+        end,
+        [
+            (p, NoTangent(), NoTangent(), NoTangent()) for p in
+                [Array, Float64, Union{Float64, Float32}, Union, UnionAll,
+                typeof(<:)]
+        ],
+    )
+    rel_test_cases = Any[
+        (2.0, 3),
+        (3, 2.0),
+        (2.0, 1.0),
+        (randn(10), 3),
+        (3, randn(10)),
+        (randn(10), randn(10)),
+        (a=2.0, b=3),
+        (a=3, b=2.0),
+        (a=randn(10), b=3),
+        (a=3, b=randn(10)),
+        (a=randn(10), b=randn(10)),
+    ]
+    return vcat(
+        map(x -> (false, x...), abs_test_cases),
+        map(x -> (false, x), rel_test_cases),
+        map(Tapir.TestTypes.instantiate, Tapir.TestTypes.PRIMALS),
+    )
+end

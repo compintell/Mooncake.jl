@@ -21,6 +21,10 @@ end
         @test bb isa BBlock
         @test length(bb) == 2
 
+        ids, phi_nodes = Tapir.phi_nodes(bb)
+        @test only(ids) == bb.inst_ids[1]
+        @test only(phi_nodes) == bb.insts[1]
+
         insert!(bb, 1, ID(), CC.NewInstruction(nothing, Nothing))
         @test length(bb) == 3
         @test bb.insts[1].stmt === nothing
@@ -48,5 +52,146 @@ end
         @test all(map(==, ir.stmts.flag, new_ir.stmts.flag))
         @test length(Tapir.collect_stmts(bb_code)) == length(ir.stmts.inst)
         @test Tapir.id_to_line_map(bb_code) isa Dict{ID, Int}
+    end
+    @testset "_characterise_unique_predecessor_blocks" begin
+        @testset "single block" begin
+            blk_id = ID()
+            blks = BBlock[BBlock(blk_id, [ID()], [new_inst(ReturnNode(5))])]
+            upreds, pred_is_upred = characterise_unique_predecessor_blocks(blks)
+            @test upreds[blk_id] == true
+            @test pred_is_upred[blk_id] == true
+        end
+        @testset "pair of blocks" begin
+            blk_id_1 = ID()
+            blk_id_2 = ID()
+            blks = BBlock[
+                BBlock(blk_id_1, [ID()], [new_inst(IDGotoNode(blk_id_2))]),
+                BBlock(blk_id_2, [ID()], [new_inst(ReturnNode(5))]),
+            ]
+            upreds, pred_is_upred = characterise_unique_predecessor_blocks(blks)
+            @test upreds[blk_id_1] == true
+            @test upreds[blk_id_2] == true
+            @test pred_is_upred[blk_id_1] == true
+            @test pred_is_upred[blk_id_2] == true
+        end
+        @testset "Non-Unique Exit Node" begin
+            blk_id_1 = ID()
+            blk_id_2 = ID()
+            blk_id_3 = ID()
+            blks = BBlock[
+                BBlock(blk_id_1, [ID()], [new_inst(IDGotoIfNot(true, blk_id_3))]),
+                BBlock(blk_id_2, [ID()], [new_inst(ReturnNode(5))]),
+                BBlock(blk_id_3, [ID()], [new_inst(ReturnNode(5))]),
+            ]
+            upreds, pred_is_upred = characterise_unique_predecessor_blocks(blks)
+            @test upreds[blk_id_1] == true
+            @test upreds[blk_id_2] == false
+            @test upreds[blk_id_3] == false
+            @test pred_is_upred[blk_id_1] == true
+            @test pred_is_upred[blk_id_2] == true
+            @test pred_is_upred[blk_id_3] == true
+        end
+        @testset "diamond structure of four blocks" begin
+            blk_id_1 = ID()
+            blk_id_2 = ID()
+            blk_id_3 = ID()
+            blk_id_4 = ID()
+            blks = BBlock[
+                BBlock(blk_id_1, [ID()], [new_inst(IDGotoIfNot(true, blk_id_3))]),
+                BBlock(blk_id_2, [ID()], [new_inst(IDGotoNode(blk_id_4))]),
+                BBlock(blk_id_3, [ID()], [new_inst(IDGotoNode(blk_id_4))]),
+                BBlock(blk_id_4, [ID()], [new_inst(ReturnNode(0))]),
+            ]
+            upreds, pred_is_upred = characterise_unique_predecessor_blocks(blks)
+            @test upreds[blk_id_1] == true
+            @test upreds[blk_id_2] == false
+            @test upreds[blk_id_3] == false
+            @test upreds[blk_id_4] == true
+            @test pred_is_upred[blk_id_1] == true
+            @test pred_is_upred[blk_id_2] == true
+            @test pred_is_upred[blk_id_3] == true
+            @test pred_is_upred[blk_id_4] == false
+        end
+        @testset "simple loop back to first block" begin
+            blk_id_1 = ID()
+            blk_id_2 = ID()
+            blks = BBlock[
+                BBlock(blk_id_1, [ID()], [new_inst(IDGotoIfNot(true, blk_id_1))]),
+                BBlock(blk_id_2, [ID()], [new_inst(ReturnNode(5))]),
+            ]
+            upreds, pred_is_upred = characterise_unique_predecessor_blocks(blks)
+            @test upreds[blk_id_1] == true
+            @test upreds[blk_id_2] == true
+            @test pred_is_upred[blk_id_1] == false
+            @test pred_is_upred[blk_id_2] == true
+        end
+    end
+    @testset "characterise_used_ids" begin
+        @testset "_find_id_uses!" begin
+            @testset "Expr" begin
+                id = ID()
+                d = Dict{ID, Bool}(id => false)
+                Tapir._find_id_uses!(d, Expr(:call, sin, 5))
+                @test d[id] == false
+                Tapir._find_id_uses!(d, Expr(:call, sin, id))
+                @test d[id] == true
+            end
+            @testset "IDGotoIfNot" begin
+                id = ID()
+                d = Dict{ID, Bool}(id => false)
+                Tapir._find_id_uses!(d, IDGotoIfNot(ID(), ID()))
+                @test d[id] == false
+                Tapir._find_id_uses!(d, IDGotoIfNot(true, ID()))
+                @test d[id] == false
+                Tapir._find_id_uses!(d, IDGotoIfNot(id, ID()))
+                @test d[id] == true
+            end
+            @testset "IDGotoNode" begin
+                id = ID()
+                d = Dict{ID, Bool}(id => false)
+                Tapir._find_id_uses!(d, IDGotoNode(ID()))
+                @test d[id] == false
+            end
+            @testset "IDPhiNode" begin
+                id = ID()
+                d = Dict{ID, Bool}(id => false)
+                Tapir._find_id_uses!(d, IDPhiNode([ID()], Vector{Any}(undef, 1)))
+                @test d[id] == false
+                Tapir._find_id_uses!(d, IDPhiNode([ID()], Any[id]))
+                @test d[id] == true
+            end
+            @testset "PiNode" begin
+                id = ID()
+                d = Dict{ID, Bool}(id => false)
+                Tapir._find_id_uses!(d, PiNode(false, Bool))
+                @test d[id] == false
+                Tapir._find_id_uses!(d, PiNode(id, Bool))
+                @test d[id] == true
+            end
+            @testset "ReturnNode" begin
+                id = ID()
+                d = Dict{ID, Bool}(id => false)
+                Tapir._find_id_uses!(d, ReturnNode())
+                @test d[id] == false
+                Tapir._find_id_uses!(d, ReturnNode(5))
+                @test d[id] == false
+                Tapir._find_id_uses!(d, ReturnNode(id))
+                @test d[id] == true
+            end
+        end
+        @testset "some used some unused" begin
+            id_1 = ID()
+            id_2 = ID()
+            id_3 = ID()
+            stmts = Tuple{ID, Core.Compiler.NewInstruction}[
+                (id_1, new_inst(Expr(:call, sin, Argument(1)))),
+                (id_2, new_inst(Expr(:call, cos, id_1))),
+                (id_3, new_inst(ReturnNode(id_2))),
+            ]
+            result = characterise_used_ids(stmts)
+            @test result[id_1] == true
+            @test result[id_2] == true
+            @test result[id_3] == false
+        end
     end
 end

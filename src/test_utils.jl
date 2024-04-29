@@ -13,7 +13,7 @@ using Core: svec
 using ExprTools: combinedef
 using ..Tapir: NoTangent, tangent_type, _typeof
 
-const PRIMALS = Tuple{Bool, Any}[]
+const PRIMALS = Tuple{Bool, Any, Tuple}[]
 
 # Generate all of the composite types against which we might wish to test.
 function generate_primals()
@@ -66,13 +66,15 @@ function generate_primals()
             t = @eval $name
             for n in n_always_def:n_fields
                 interface_only = any(x -> isbitstype(x.type), fields[n+1:end])
-                p = invokelatest(t, map(x -> deepcopy(x.primal), fields[1:n])...)
-                push!(PRIMALS, (interface_only, p))
+                fields_copies = map(x -> deepcopy(x.primal), fields[1:n])
+                push!(PRIMALS, (interface_only, t, fields_copies))
             end
         end
     end
     return nothing
 end
+
+instantiate(test_case) = (test_case[1], test_case[2](test_case[3]...))
 
 end
 
@@ -88,7 +90,9 @@ using JET, Random, Tapir, Test, InteractiveUtils
 using Tapir:
     CoDual, NoTangent, rrule!!, is_init, zero_codual, DefaultCtx, @is_primitive, val,
     is_always_fully_initialised, get_tangent_field, set_tangent_field!, MutableTangent,
-    Tangent, _typeof
+    Tangent, _typeof, rdata, NoFData, to_fwds, uninit_fdata, zero_rdata,
+    zero_rdata_from_type, CannotProduceZeroRDataFromType, LazyZeroRData, instantiate,
+    can_produce_zero_rdata_from_type, increment_rdata!!, fcodual_type
 
 has_equal_data(x::T, y::T; equal_undefs=true) where {T<:String} = x == y
 has_equal_data(x::Type, y::Type; equal_undefs=true) = x == y
@@ -155,6 +159,7 @@ throws an `AssertionError` if the same address is not mapped to in `tangent` eac
 function populate_address_map!(m::AddressMap, primal::P, tangent::T) where {P, T}
     isprimitivetype(P) && return m
     T === NoTangent && return m
+    T === NoFData && return m
     if ismutabletype(P)
         @assert T <: MutableTangent
         k = pointer_from_objref(primal)
@@ -163,7 +168,7 @@ function populate_address_map!(m::AddressMap, primal::P, tangent::T) where {P, T
         m[k] = v
     end
     foreach(fieldnames(P)) do n
-        t_field = getfield(tangent.fields, n)
+        t_field = __get_data_field(tangent, n)
         if isdefined(primal, n) && is_init(t_field)
             populate_address_map!(m, getfield(primal, n), val(t_field))
         elseif isdefined(primal, n) && !is_init(t_field)
@@ -175,7 +180,11 @@ function populate_address_map!(m::AddressMap, primal::P, tangent::T) where {P, T
     return m
 end
 
+__get_data_field(t::Union{Tangent, MutableTangent}, n) = getfield(t.fields, n)
+__get_data_field(t::Union{Tapir.FData, Tapir.RData}, n) = getfield(t.data, n)
+
 function populate_address_map!(m::AddressMap, p::P, t) where {P<:Union{Tuple, NamedTuple}}
+    t isa NoFData && return m
     t isa NoTangent && return m
     foreach(n -> populate_address_map!(m, getfield(p, n), getfield(t, n)), fieldnames(P))
     return m
@@ -237,9 +246,11 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...; rul
 
     # Run `rrule!!` on copies of `f` and `x`. We use randomly generated tangents so that we
     # can later verify that non-zero values do not get propagated by the rule.
-    x_x̄_rule = map(x -> CoDual(_deepcopy(x), zero_tangent(x)), x)
+    x̄_zero = map(zero_tangent, x)
+    x̄_fwds = map(Tapir.fdata, x̄_zero)
+    x_x̄_rule = map((x, x̄_f) -> fcodual_type(_typeof(x))(_deepcopy(x), x̄_f), x, x̄_fwds)
     inputs_address_map = populate_address_map(map(primal, x_x̄_rule), map(tangent, x_x̄_rule))
-    y_ȳ_rule, pb!! = rule(f_f̄, x_x̄_rule...)
+    y_ȳ_rule, pb!! = rule(to_fwds(f_f̄), x_x̄_rule...)
 
     # Verify that inputs / outputs are the same under `f` and its rrule.
     @test has_equal_data(x_primal, map(primal, x_x̄_rule))
@@ -256,11 +267,13 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...; rul
     ȳ_delta = randn_tangent(rng, primal(y_ȳ_rule))
     x̄_delta = map(Base.Fix1(randn_tangent, rng) ∘ primal, x_x̄_rule)
 
-    ȳ_init = set_to_zero!!(tangent(y_ȳ_rule))
-    x̄_init = map(set_to_zero!! ∘ tangent, x_x̄_rule)
+    ȳ_init = set_to_zero!!(zero_tangent(primal(y_ȳ_rule), tangent(y_ȳ_rule)))
+    x̄_init = map(set_to_zero!!, x̄_zero)
     ȳ = increment!!(ȳ_init, ȳ_delta)
-    x̄ = map(increment!!, x̄_init, x̄_delta)
-    _, x̄... = pb!!(ȳ, tangent(f_f̄), x̄...)
+    map(increment!!, x̄_init, x̄_delta)
+    _, x̄_rvs_inc... = pb!!(Tapir.rdata(ȳ))
+    x̄_rvs = map((x, x_inc) -> increment!!(rdata(x), x_inc), x̄_delta, x̄_rvs_inc)
+    x̄ = map(tangent, x̄_fwds, x̄_rvs)
 
     # Check that inputs have been returned to their original value.
     @test all(map(has_equal_data_up_to_undefs, x, map(primal, x_x̄_rule)))
@@ -274,7 +287,7 @@ get_address(x) = ismutable(x) ? pointer_from_objref(x) : nothing
 _deepcopy(x) = deepcopy(x)
 _deepcopy(x::Module) = x
 
-rrule_output_type(::Type{Ty}) where {Ty} = Tuple{codual_type(Ty), Any}
+rrule_output_type(::Type{Ty}) where {Ty} = Tuple{Tapir.fcodual_type(Ty), Any}
 
 function test_rrule_interface(f_f̄, x_x̄...; is_primitive, ctx::C, rule) where {C}
     @nospecialize f_f̄ x_x̄
@@ -307,24 +320,29 @@ function test_rrule_interface(f_f̄, x_x̄...; is_primitive, ctx::C, rule) where
         @test _typeof(tangent(x_x̄)) == tangent_type(_typeof(primal(x_x̄)))
     end
 
+    # Extract the forwards-data from the tangents.
+    f_fwds = to_fwds(f_f̄)
+    x_fwds = map(to_fwds, x_x̄)
+
     # Run the rrule, check it has output a thing of the correct type, and extract results.
     # Throw a meaningful exception if the rrule doesn't run at all.
     x_addresses = map(get_address, x)
     rrule_ret = try
-        rule(f_f̄, x_x̄...)
+        rule(f_fwds, x_fwds...)
     catch e
         display(e)
         println()
         throw(ArgumentError(
-            "rrule!! for $(_typeof(f_f̄)) with argument types $(_typeof(x_x̄)) does not run."
+            "rrule!! for $(_typeof(f_fwds)) with argument types $(_typeof(x_fwds)) does not run."
         ))
     end
     @test rrule_ret isa rrule_output_type(_typeof(y))
     y_ȳ, pb!! = rrule_ret
 
     # Run the reverse-pass. Throw a meaningful exception if it doesn't run at all.
+    ȳ = Tapir.rdata(zero_tangent(primal(y_ȳ), tangent(y_ȳ)))
     f̄_new, x̄_new... = try
-        pb!!(tangent(y_ȳ), f̄, x̄...)
+        pb!!(ȳ)
     catch e
         display(e)
         println()
@@ -339,14 +357,13 @@ function test_rrule_interface(f_f̄, x_x̄...; is_primitive, ctx::C, rule) where
 
     # Check the tangent types output by the reverse-pass, and that memory addresses of
     # mutable objects have remained constant.
-    @test _typeof(f̄_new) == _typeof(f̄)
-    @test all(map((a, b) -> _typeof(a) == _typeof(b), x̄_new, x̄))
-    @test all(map((x̄, x̄_new) -> ismutable(x̄) ? x̄ === x̄_new : true, x̄, x̄_new))
+    @test _typeof(f̄_new) == _typeof(rdata(f̄))
+    @test all(map((a, b) -> _typeof(a) == _typeof(rdata(b)), x̄_new, x̄))
 end
 
 function __forwards_and_backwards(rule, x_x̄::Vararg{Any, N}) where {N}
     out, pb!! = rule(x_x̄...)
-    return pb!!(tangent(out), map(tangent, x_x̄)...)
+    return pb!!(Tapir.zero_rdata(primal(out)))
 end
 
 function test_rrule_performance(
@@ -368,14 +385,12 @@ function test_rrule_performance(
         JET.test_opt(primal(f_f̄), map(_typeof ∘ primal, x_x̄))
 
         # Test forwards-pass stability.
-        JET.test_opt(rule, (_typeof(f_f̄), map(_typeof, x_x̄)...))
+        JET.test_opt(rule, (_typeof(to_fwds(f_f̄)), map(_typeof ∘ to_fwds, x_x̄)...))
 
         # Test reverse-pass stability.
-        y_ȳ, pb!! = rule(f_f̄, _deepcopy(x_x̄)...)
-        JET.test_opt(
-            pb!!,
-            (_typeof(tangent(y_ȳ)), _typeof(tangent(f_f̄)), map(_typeof ∘ tangent, x_x̄)...),
-        )
+        y_ȳ, pb!! = rule(to_fwds(f_f̄), map(to_fwds, _deepcopy(x_x̄))...)
+        rvs_data = Tapir.rdata(zero_tangent(primal(y_ȳ), tangent(y_ȳ)))
+        JET.test_opt(pb!!, (_typeof(rvs_data), ))
     end
 
     if performance_checks_flag in (:allocs, :stability_and_allocs)
@@ -387,8 +402,10 @@ function test_rrule_performance(
         @test (@allocations f(x...)) == 0
 
         # Test allocations in round-trip.
-        __forwards_and_backwards(rule, f_f̄, x_x̄...)
-        @test (@allocations __forwards_and_backwards(rule, f_f̄, x_x̄...)) == 0
+        f_f̄_fwds = to_fwds(f_f̄)
+        x_x̄_fwds = map(to_fwds, x_x̄)
+        __forwards_and_backwards(rule, f_f̄_fwds, x_x̄_fwds...)
+        @test (@allocations __forwards_and_backwards(rule, f_f̄_fwds, x_x̄_fwds...)) == 0
     end
 end
 
@@ -434,18 +451,11 @@ function test_rrule!!(
     test_rrule_performance(perf_flag, rule, x_x̄...)
 end
 
-"""
-    test_interpreted_rrule!!(rng::AbstractRNG, x...; interp, kwargs...)
-
-A thin wrapper around a call to `set_up_gradient_problem` and `test_rrule!!`.
-Does not require that the method being called is a primitive.
-"""
-function test_interpreted_rrule!!(rng::AbstractRNG, x...; interp, kwargs...)
-    rule, in_f = set_up_gradient_problem(x...; interp)
-    test_rrule!!(rng, in_f, x...; rule, kwargs...)
-end
-
-function test_derived_rule(rng::AbstractRNG, x...; interp, kwargs...)
+function test_derived_rule(rng::AbstractRNG, x...; safety_on=true, interp, kwargs...)
+    if safety_on
+        safe_rule = Tapir.build_rrule(interp, _typeof(__get_primals(x)); safety_on=true)
+        test_rrule!!(rng, x...; rule=safe_rule, interface_only=true, perf_flag=:none, is_primitive=false)
+    end
     rule = Tapir.build_rrule(interp, _typeof(__get_primals(x)))
     test_rrule!!(rng, x...; rule, kwargs...)
 end
@@ -656,7 +666,6 @@ To verify that this is the case, ensure that all tests in either `test_tangent` 
 `test_tangent_consistency` pass.
 """
 function test_tangent_performance(rng::AbstractRNG, p::P) where {P}
-    @nospecialize rng, p
 
     # Should definitely infer, because tangent type must be known statically from primal.
     z = @inferred zero_tangent(p)
@@ -668,8 +677,8 @@ function test_tangent_performance(rng::AbstractRNG, p::P) where {P}
 
     # Check there are no allocations when there ought not to be.
     if !__tangent_generation_should_allocate(P)
-        @test (@allocations zero_tangent_wrapper(p)) == 0
-        @test (@allocations randn_tangent_wrapper(rng, p)) == 0
+        JET.test_opt(Tuple{typeof(zero_tangent), P})
+        JET.test_opt(Tuple{typeof(randn_tangent), Xoshiro, P})
     end
 
     # `increment!!` should always infer.
@@ -726,6 +735,8 @@ function test_get_tangent_field_performance(t::Union{MutableTangent, Tangent})
     V = Tapir._typeof(t.fields)
     for n in 1:fieldcount(V)
         !is_init(t.fields[n]) && continue
+        Tfield = fieldtype(Tapir.fields_type(Tapir._typeof(t)), n)
+        !__is_completely_stable_type(Tfield) && continue
 
         # Int mode.
         i = Val(n)
@@ -746,12 +757,10 @@ function count_allocs(f::F, x::Vararg{Any, N}) where {F, N}
     @allocations f(x...)
 end
 
-@noinline zero_tangent_wrapper(p) = zero_tangent(p)
-@noinline randn_tangent_wrapper(rng, p) = randn_tangent(rng, p)
-
-# Returns true if both `zero_tangent` and `randn_tangnet` should allocate when run on
+# Returns true if both `zero_tangent` and `randn_tangent` should allocate when run on
 # an object of type `P`.
 function __tangent_generation_should_allocate(::Type{P}) where {P}
+    (!isconcretetype(P) || isabstracttype(P)) && return true
     (fieldcount(P) == 0 && !ismutabletype(P)) && return false
     return ismutabletype(P) || any(__tangent_generation_should_allocate, fieldtypes(P))
 end
@@ -763,9 +772,16 @@ function __increment_should_allocate(::Type{P}) where {P}
         Tapir.tangent_field_type(P, n) <: PossiblyUninitTangent
     end
 end
+__increment_should_allocate(::Type{Core.SimpleVector}) = true
+
+function __is_completely_stable_type(::Type{P}) where {P}
+    (!isconcretetype(P) || isabstracttype(P)) && return false
+    isprimitivetype(P) && return true
+    return all(__is_completely_stable_type, fieldtypes(P))
+end
 
 """
-    test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P, T}
+    test_tangent(rng::AbstractRNG, p::P, x::T, y::T, z_target::T) where {P, T}
 
 Verify that primal `p` with tangents `z_target`, `x`, and `y`, satisfies the tangent
 interface. If these tests pass, then it should be possible to write `rrule!!`s for primals
@@ -774,8 +790,10 @@ of type `P`, and to test them using `test_rrule!!`.
 As always, there are limits to the errors that these tests can identify -- they form
 necessary but not sufficient conditions for the correctness of your code.
 """
-function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P, T}
-    @nospecialize rng p z_target x y
+function test_tangent(
+    rng::AbstractRNG, p::P, x::T, y::T, z_target::T; interface_only, perf=true
+) where {P, T}
+    @nospecialize rng p x y z_target
 
     # Check the interface.
     test_tangent_consistency(rng, p; interface_only=false)
@@ -786,19 +804,20 @@ function test_tangent(rng::AbstractRNG, p::P, z_target::T, x::T, y::T) where {P,
     # Check that zero_tangent infers.
     @inferred Tapir.zero_tangent(p)
 
-    # Verify that the zero tangent is zero via its action.
-    z = zero_tangent(p)
-    t = randn_tangent(rng, p)
-    @test has_equal_data(@inferred(increment!!(z, z)), z)
-    @test has_equal_data(increment!!(z, t), t)
-    @test has_equal_data(increment!!(t, z), t)
-
     # Verify that adding together `x` and `y` gives the value the user expected.
     z_pred = increment!!(x, y)
     @test has_equal_data(z_pred, z_target)
     if ismutabletype(P)
         @test z_pred === x
     end
+
+    # Check performance is as expected.
+    perf && test_tangent_performance(rng, p)
+end
+
+function test_tangent(rng::AbstractRNG, p::P; interface_only=false) where {P}
+    test_tangent_consistency(rng, p; interface_only)
+    test_tangent_performance(rng, p)
 end
 
 function test_equality_comparison(x)
@@ -809,10 +828,78 @@ function test_equality_comparison(x)
     @test has_equal_data_up_to_undefs(x, x)
 end
 
+"""
+    test_fwds_rvs_data_interface(rng::AbstractRNG, p::P) where {P}
+
+Verify that the forwards data and reverse data functionality associated to primal `p` works
+correctly.
+"""
+function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
+
+    # Check that fdata_type and rdata_type run and produce types.
+    T = tangent_type(P)
+    F = Tapir.fdata_type(T)
+    @test F isa Type
+    R = Tapir.rdata_type(T)
+    @test R isa Type
+
+    # Check that fdata and rdata produce the correct types.
+    t = randn_tangent(rng, p)
+    f = Tapir.fdata(t)
+    @test f isa F
+    r = Tapir.rdata(t)
+    @test r isa R
+
+    # Check that uninit_fdata yields data of the correct type.
+    @test uninit_fdata(p) isa F
+
+    # Compute the tangent type associated to `F` and `R`, and check it is equal to `T`.
+    @test tangent_type(F, R) == T
+
+    # Check that combining f and r yields a tangent of the correct type and value.
+    t_combined = Tapir.tangent(f, r)
+    @test t_combined isa T
+    @test t_combined === t
+
+    # Check that pulling out `f` and `r` from `t_combined` yields the correct values.
+    @test Tapir.fdata(t_combined) === f
+    @test Tapir.rdata(t_combined) === r
+
+    # Test that `zero_rdata` produces valid reverse data.
+    @test zero_rdata(p) isa R
+
+    # Check that constructing a zero tangent from reverse data yields the original tangent.
+    z = zero_tangent(p)
+    f_z = Tapir.fdata(z)
+    @test f_z isa Tapir.fdata_type(T)
+    z_new = zero_tangent(p, f_z)
+    @test z_new isa tangent_type(P)
+    @test z_new === z
+
+    # Query whether or not the rdata type can be built given only the primal type.
+    can_make_zero = @inferred can_produce_zero_rdata_from_type(P)
+
+    # Check that when the zero element is asked from the primal type alone, the result is
+    # either an instance of R _or_ a `CannotProduceZeroRDataFromType`.
+    JET.test_opt(zero_rdata_from_type, Tuple{Type{P}})
+    rzero_from_type = @inferred zero_rdata_from_type(P)
+    @test rzero_from_type isa R || rzero_from_type isa CannotProduceZeroRDataFromType
+    @test can_make_zero != isa(rzero_from_type, CannotProduceZeroRDataFromType)
+
+    # Check that we can produce a lazy zero rdata, and that it has the correct type.
+    JET.test_opt(LazyZeroRData, Tuple{P})
+    lazy_rzero = @inferred LazyZeroRData(p)
+    @test instantiate(lazy_rzero) isa R
+
+    # Check incrementing the rdata component of a tangent yields the correct type.
+    @test increment_rdata!!(t, r) isa T
+end
+
 function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)
     test_cases, memory = Tapir.generate_hand_written_rrule!!_test_cases(rng_ctor, v)
+    interp = Tapir.PInterp()
     GC.@preserve memory @testset "$f, $(_typeof(x))" for (interface_only, perf_flag, _, f, x...) in test_cases
-        test_rrule!!(rng_ctor(123), f, x...; interface_only, perf_flag)
+        test_derived_rule(rng_ctor(123), f, x...; interface_only, perf_flag, interp)
     end
 end
 
@@ -833,39 +920,9 @@ function run_rrule!!_test_cases(rng_ctor, v::Val)
 end
 
 function to_benchmark(__rrule!!::R, dx::Vararg{CoDual, N}) where {R, N}
-    out, pb!! = __rrule!!(dx...)
-    return pb!!(tangent(out), map(tangent, dx)...)
-end
-
-"""
-    set_up_gradient_problem(fargs...; interp=Tapir.PInterp())
-
-Constructs a `rule` and `InterpretedFunction` which can be passed to `value_and_gradient!!`.
-
-For example:
-```julia
-f(x) = sum(abs2, x)
-x = randn(25)
-rule, in_f = Tapir.TestUtils.set_up_gradient_problem(f, x)
-y, dx = Tapir.TestUtils.value_and_gradient!!(rule, in_f, f, x)
-```
-will yield the value and associated gradient for `f` and `x`.
-
-You only need to run this function once, and may then call `value_and_gradient!!` many times
-with the same `rule` and `in_f` arguments, but with different values of `x`.
-
-Optionally, an interpreter may be provided via the `interp` kwarg.
-
-See also: `Tapir.TestUtils.value_and_gradient!!`.
-"""
-function set_up_gradient_problem(fargs...; interp=Tapir.PInterp())
-    sig = _typeof(__get_primals(fargs))
-    if Tapir.is_primitive(DefaultCtx, sig)
-        return rrule!!, Tapir._eval
-    else
-        in_f = Tapir.InterpretedFunction(DefaultCtx(), sig, interp)
-        return Tapir.build_rrule!!(in_f), in_f
-    end
+    dx_f = Tapir.tuple_map(x -> CoDual(primal(x), Tapir.fdata(tangent(x))), dx)
+    out, pb!! = __rrule!!(dx_f...)
+    return pb!!(Tapir.zero_rdata(primal(out)))
 end
 
 __get_primals(xs) = map(x -> x isa CoDual ? primal(x) : x, xs)
@@ -958,6 +1015,14 @@ function Base.:(==)(a::FullyInitMutableStruct, b::FullyInitMutableStruct)
     return equal_field(a, b, :x) && equal_field(a, b, :y)
 end
 
+struct StructNoFwds
+    x::Float64
+end
+
+struct StructNoRvs
+    x::Vector{Float64}
+end
+
 #
 # Tests for AD. There are not rules defined directly on these functions, and they require
 # that most language primitives have rules defined.
@@ -985,6 +1050,11 @@ function bar(x, y)
     x4 = foo(x3)
     x5 = x2 + x4
     return x5
+end
+
+function unused_expression(x, n)
+    y = getfield((Float64, ), n)
+    return x
 end
 
 const_tester_non_differentiable() = 1
@@ -1207,11 +1277,11 @@ end
 # This catches the case where there are multiple phi nodes at the start of the block, and
 # they refer to one another. It is in this instance that the distinction between phi nodes
 # acting "instanteneously" and "in sequence" becomes apparent.
-function test_multiple_phinode_block(x::Float64)
+function test_multiple_phinode_block(x::Float64, N::Int)
     a = 1.0
     b = x
     i = 1
-    while i < 3
+    while i < N
         temp = a
         a = b
         b = 2temp
@@ -1281,6 +1351,11 @@ function test_union_of_types(x::Ref{Union{Type{Float64}, Type{Int}}})
     return x[]
 end
 
+function test_small_union(x::Ref{Union{Float64, Vector{Float64}}})
+    v = x[]
+    return v isa Float64 ? v : v[1]
+end
+
 # Only one of these is a primitive. Lots of methods to prevent the compiler from
 # over-specialising.
 @noinline edge_case_tester(x::Float64) = 5x
@@ -1290,8 +1365,8 @@ end
 @noinline edge_case_tester(x::String) = "hi"
 @is_primitive MinimalCtx Tuple{typeof(edge_case_tester), Float64}
 function Tapir.rrule!!(::CoDual{typeof(edge_case_tester)}, x::CoDual{Float64})
-    edge_case_tester_pb!!(dy, df, dx) = df, dx + 5 * dy
-    return CoDual(5 * primal(x), 0.0), edge_case_tester_pb!!
+    edge_case_tester_pb!!(dy) = Tapir.NoRData(), 5 * dy
+    return Tapir.zero_fcodual(5 * primal(x)), edge_case_tester_pb!!
 end
 
 # To test the edge case properly, call this with x = Any[5.0, false]
@@ -1329,7 +1404,7 @@ end
 function test_handwritten_sum(x::AbstractArray{<:Real})
     y = 0.0
     n = 0
-    while n < length(x)
+    @inbounds while n < length(x)
         n += 1
         y += x[n]
     end
@@ -1350,6 +1425,7 @@ function generate_test_functions()
         (false, :allocs, nothing, foo, 5.0),
         (false, :allocs, nothing, non_differentiable_foo, 5),
         (false, :allocs, nothing, bar, 5.0, 4.0),
+        (false, :allocs, nothing, unused_expression, 5.0, 1),
         (false, :none, nothing, type_unstable_argument_eval, sin, 5.0),
         (false, :none, (lb=1, ub=1_000), pi_node_tester, Ref{Any}(5.0)),
         (false, :none, (lb=1, ub=1_000), pi_node_tester, Ref{Any}(5)),
@@ -1357,7 +1433,7 @@ function generate_test_functions()
         (false, :allocs, nothing, goto_tester, 5.0),
         (false, :allocs, nothing, new_tester, 5.0, :hello),
         (false, :allocs, nothing, new_tester_2, 4.0),
-        (false, :none, nothing, new_tester_3, Ref{Any}(Tuple{Float64})),
+        (false, :none, nothing, new_tester_3, Ref{Any}(StructFoo)),
         (false, :allocs, nothing, type_stable_getfield_tester_1, StableFoo(5.0, :hi)),
         (false, :allocs, nothing, type_stable_getfield_tester_2, StableFoo(5.0, :hi)),
         (false, :none, nothing, globalref_tester),
@@ -1366,18 +1442,18 @@ function generate_test_functions()
         (false, :none, nothing, globalref_tester_2, false),
         (false, :allocs, nothing, globalref_tester_3),
         (false, :allocs, nothing, globalref_tester_4),
-        (false, :none, (lb=1, ub=500), globalref_tester_5),
+        (false, :none, nothing, globalref_tester_5),
         (false, :none, (lb=1, ub=1_000), type_unstable_tester_0, Ref{Any}(5.0)),
         (false, :none, nothing, type_unstable_tester, Ref{Any}(5.0)),
         (false, :none, nothing, type_unstable_tester_2, Ref{Real}(5.0)),
-        (false, :none, (lb=1, ub=1000), type_unstable_tester_3, Ref{Any}(5.0)),
-        (false, :none, (lb=1, ub=10_000), test_primitive_dynamic_dispatch, Any[5.0, false]),
+        (false, :none, (lb=1, ub=500), type_unstable_tester_3, Ref{Any}(5.0)),
+        (false, :none, (lb=1, ub=500), test_primitive_dynamic_dispatch, Any[5.0, false]),
         (false, :none, nothing, type_unstable_function_eval, Ref{Any}(sin), 5.0),
         (false, :allocs, nothing, phi_const_bool_tester, 5.0),
         (false, :allocs, nothing, phi_const_bool_tester, -5.0),
         (false, :allocs, nothing, phi_node_with_undefined_value, true, 4.0),
         (false, :allocs, nothing, phi_node_with_undefined_value, false, 4.0),
-        (false, :allocs, nothing, test_multiple_phinode_block, 3.0),
+        (false, :allocs, nothing, test_multiple_phinode_block, 3.0, 3),
         (
             false,
             :none,
@@ -1392,7 +1468,7 @@ function generate_test_functions()
         (false, :allocs, nothing, simple_foreigncall_tester, randn(5)),
         (false, :none, nothing, simple_foreigncall_tester_2, randn(6), (2, 3)),
         (false, :allocs, nothing, foreigncall_tester, randn(5)),
-        (false, :none, (lb=1, ub=1_000), no_primitive_inlining_tester, 5.0),
+        (false, :none, nothing, no_primitive_inlining_tester, 5.0),
         (false, :allocs, nothing, varargs_tester, 5.0),
         (false, :allocs, nothing, varargs_tester, 5.0, 4),
         (false, :allocs, nothing, varargs_tester, 5.0, 4, 3.0),
@@ -1416,14 +1492,14 @@ function generate_test_functions()
         (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 2),
         (false, :none, (lb=1, ub=100_000_000), test_union_of_arrays, randn(5), true),
         (
-            false, :none, (lb=1, ub=500),
+            false, :none, nothing,
             test_union_of_types, Ref{Union{Type{Float64}, Type{Int}}}(Float64),
         ),
         (false, :allocs, nothing, test_self_reference, 1.1, 1.5),
         (false, :allocs, nothing, test_self_reference, 1.5, 1.1),
         (false, :none, nothing, test_recursive_sum, randn(2)),
         (
-            false, :none, (lb=1, ub=1_000),
+            false, :none, nothing,
             LinearAlgebra._modify!,
             LinearAlgebra.MulAddMul(5.0, 4.0),
             5.0,
@@ -1441,8 +1517,10 @@ function generate_test_functions()
             setfield_tester_right!, FullyInitMutableStruct(5.0, randn(3)), randn(5),
         ),
         (false, :none, nothing, mul!, randn(3, 5)', randn(5, 5), randn(5, 3), 4.0, 3.0),
+        (false, :none, nothing, Random.make_seed, 5),
+        (false, :none, nothing, Random.SHA.digest!, Random.SHA.SHA2_256_CTX()),
         (false, :none, nothing, Xoshiro, 123456),
-        (false, :none, (lb=1, ub=100_000), *, randn(250, 500), randn(500, 250)),
+        (false, :none, nothing, *, randn(250, 500), randn(500, 250)),
         (false, :allocs, nothing, test_sin, 1.0),
         (false, :allocs, nothing, test_cos_sin, 2.0),
         (false, :allocs, nothing, test_isbits_multiple_usage, 5.0),
@@ -1454,7 +1532,7 @@ function generate_test_functions()
         (false, :allocs, nothing, test_isbits_multiple_usage_phi, true, 1.1),
         (false, :allocs, nothing, test_multiple_call_non_primitive, 5.0),
         (false, :none, (lb=1, ub=1500), test_multiple_pi_nodes, Ref{Any}(5.0)),
-        (false, :none, (lb=1, ub=1500), test_multi_use_pi_node, Ref{Any}(5.0)),
+        (false, :none, (lb=1, ub=500), test_multi_use_pi_node, Ref{Any}(5.0)),
         (false, :allocs, nothing, test_getindex, [1.0, 2.0]),
         (false, :allocs, nothing, test_mutation!, [1.0, 2.0]),
         (false, :allocs, nothing, test_while_loop, 2.0),
@@ -1462,7 +1540,7 @@ function generate_test_functions()
         (false, :none, nothing, test_mutable_struct_basic, 5.0),
         (false, :none, nothing, test_mutable_struct_basic_sin, 5.0),
         (false, :none, nothing, test_mutable_struct_setfield, 4.0),
-        (false, :none, (lb=1, ub=2_000), test_mutable_struct, 5.0),
+        (false, :none, (lb=1, ub=500), test_mutable_struct, 5.0),
         (false, :none, nothing, test_struct_partial_init, 3.5),
         (false, :none, nothing, test_mutable_partial_init, 3.3),
         (
@@ -1471,33 +1549,77 @@ function generate_test_functions()
         ),
         (
             false, :allocs, nothing,
-            (A, C) -> test_naive_mat_mul!(C, A, A), randn(100, 100), randn(100, 100),
+            (A, C) -> test_naive_mat_mul!(C, A, A), randn(25, 25), randn(25, 25),
         ),
-        (false, :allocs, (lb=10, ub=1_000), sum, randn(30)),
-        (false, :none, (lb=10, ub=1_000), test_diagonal_to_matrix, Diagonal(randn(30))),
+        (false, :allocs, nothing, sum, randn(32)),
+        (false, :none, nothing, test_diagonal_to_matrix, Diagonal(randn(30))),
         (
-            false, :allocs, (lb=100, ub=1_000),
+            false, :allocs, nothing,
             ldiv!, randn(20, 20), Diagonal(rand(20) .+ 1), randn(20, 20),
         ),
         (
-            false, :allocs, (lb=10, ub=500),
-            LinearAlgebra._kron!, randn(400, 400), randn(20, 20), randn(20, 20),
+            false, :allocs, nothing,
+            LinearAlgebra._kron!, randn(25, 25), randn(5, 5), randn(5, 5),
         ),
         (
-            false, :allocs, (lb=10, ub=500),
-            kron!, randn(400, 400), Diagonal(randn(20)), randn(20, 20),
+            false, :allocs, nothing,
+            kron!, randn(25, 25), Diagonal(randn(5)), randn(5, 5),
         ),
         (
             false, :none, nothing,
             test_mlp,
-            randn(sr(1), 500, 200),
-            randn(sr(2), 700, 500),
-            randn(sr(3), 300, 700),
+            randn(sr(1), 50, 20),
+            randn(sr(2), 70, 50),
+            randn(sr(3), 30, 70),
         ),
-        (false, :allocs, (lb=1.0, ub=150), test_handwritten_sum, randn(1024 * 1024)),
+        (false, :allocs, nothing, test_handwritten_sum, randn(128, 128)),
+        (false, :allocs, nothing, _naive_map_sin_cos_exp, randn(1024), randn(1024)),
+        (false, :allocs, nothing, _naive_map_negate, randn(1024), randn(1024)),
+        (false, :allocs, nothing, test_from_slack, randn(10_000)),
         (false, :none, nothing, _sum, randn(1024)),
         (false, :none, nothing, test_map, randn(1024), randn(1024)),
+        (false, :none, nothing, _broadcast_sin_cos_exp, randn(10, 10)),
+        (false, :none, nothing, _map_sin_cos_exp, randn(10, 10)),
+        (false, :none, nothing, ArgumentError, "hi"),
+        (false, :none, nothing, test_small_union, Ref{Union{Float64, Vector{Float64}}}(5.0)),
+        (false, :none, nothing, test_small_union, Ref{Union{Float64, Vector{Float64}}}([1.0])),
     ]
+end
+
+_broadcast_sin_cos_exp(x::AbstractArray{<:Real}) = sum(sin.(cos.(exp.(x))))
+
+_map_sin_cos_exp(x::AbstractArray{<:Real}) = sum(map(x -> sin(cos(exp(x))), x))
+
+function _naive_map_sin_cos_exp(y::AbstractArray{<:Real}, x::AbstractArray{<:Real})
+    n = 1
+    while n <= length(x)
+        y[n] = sin(cos(exp(x[n])))
+        n += 1
+    end
+    return y
+end
+
+function _naive_map_negate(y::AbstractArray{<:Real}, x::AbstractArray{<:Real})
+    n = 1
+    while n <= length(x)
+        y[n] = -x[n]
+        n += 1
+    end
+    return y
+end
+
+function test_from_slack(x::AbstractVector{T}) where {T}
+    y = zero(T)
+    n = 1
+    while n <= length(x)
+        if iseven(n)
+            y += sin(x[n])
+        else
+            y += cos(x[n])
+        end
+        n += 1
+    end
+    return y
 end
 
 function value_dependent_control_flow(x, n)

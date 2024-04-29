@@ -4,7 +4,9 @@ include("front_matter.jl")
     if test_group == "basic"
         include("utils.jl")
         include("tangents.jl")
+        include("fwds_rvs_data.jl")
         include("codual.jl")
+        include("safe_mode.jl")
         include("stack.jl")
         @testset "interpreter" begin
             include(joinpath("interpreter", "contexts.jl"))
@@ -12,9 +14,7 @@ include("front_matter.jl")
             include(joinpath("interpreter", "bbcode.jl"))
             include(joinpath("interpreter", "ir_utils.jl"))
             include(joinpath("interpreter", "ir_normalisation.jl"))
-            include(joinpath("interpreter", "registers.jl"))
-            # include(joinpath("interpreter", "interpreted_function.jl"))
-            # include(joinpath("interpreter", "reverse_mode_ad.jl"))
+            include(joinpath("interpreter", "zero_like_rdata.jl"))
             include(joinpath("interpreter", "s2s_reverse_mode_ad.jl"))
         end
     elseif test_group == "rrules"
@@ -28,6 +28,8 @@ include("front_matter.jl")
             include(joinpath("rrules", "builtins.jl"))
             @info "foreigncall"
             include(joinpath("rrules", "foreigncall.jl"))
+            @info "iddict"
+            include(joinpath("rrules", "iddict.jl"))
             @info "lapack"
             include(joinpath("rrules", "lapack.jl"))
             @info "low_level_maths"

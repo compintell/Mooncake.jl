@@ -28,17 +28,18 @@ for name in [
     :(Base.depwarn),
     :(Base.reduced_indices),
     :(Base.check_reducedims),
+    :(Base.throw_boundserror),
+    :(Base.Broadcast.eltypes),
 ]
     @eval @is_primitive DefaultCtx Tuple{typeof($name), Vararg}
-    @eval function rrule!!(::CoDual{_typeof($name)}, args::CoDual...)
-        v = $name(map(primal, args)...)
-        return CoDual(v, zero_tangent(v)), NoPullback()
+    @eval function rrule!!(f::CoDual{_typeof($name)}, args::Vararg{CoDual, N}) where {N}
+        return zero_fcodual($name(map(primal, args)...)), NoPullback(f, args...)
     end
 end
 
 @is_primitive MinimalCtx Tuple{Type, TypeVar, Type}
 function rrule!!(x::CoDual{<:Type}, y::CoDual{<:TypeVar}, z::CoDual{<:Type})
-    return CoDual(primal(x)(primal(y), primal(z)), NoTangent()), NoPullback()
+    return zero_fcodual(primal(x)(primal(y), primal(z))), NoPullback(x, y, z)
 end
 
 """
@@ -59,40 +60,67 @@ This approach is identical to the one taken by `Zygote.jl` to circumvent the sam
 """
 lgetfield(x, ::Val{f}) where {f} = getfield(x, f)
 
-@is_primitive MinimalCtx Tuple{typeof(lgetfield), Any, Any}
-function rrule!!(::CoDual{typeof(lgetfield)}, x::CoDual, ::CoDual{Val{f}}) where {f}
-    lgetfield_pb!!(dy, df, dx, dsym) = df, increment_field!!(dx, dy, Val{f}()), dsym
-    y = CoDual(getfield(primal(x), f), _get_tangent_field(primal(x), tangent(x), f))
-    return y, lgetfield_pb!!
+@is_primitive MinimalCtx Tuple{typeof(lgetfield), Any, Val}
+@inline function rrule!!(
+    ::CoDual{typeof(lgetfield)}, x::CoDual{P}, ::CoDual{Val{f}}
+) where {P, f}
+    pb!! = if ismutabletype(P)
+        dx = tangent(x)
+        function mutable_lgetfield_pb!!(dy)
+            increment_field_rdata!(dx, dy, Val{f}())
+            return NoRData(), NoRData(), NoRData()
+        end
+    else
+        dx_r = LazyZeroRData(primal(x))
+        field = Val{f}()
+        function immutable_lgetfield_pb!!(dy)
+            return NoRData(), increment_field!!(instantiate(dx_r), dy, field), NoRData()
+        end
+    end
+    y = CoDual(getfield(primal(x), f), _get_fdata_field(primal(x), tangent(x), f))
+    return y, pb!!
 end
 
-# Specialise for non-differentiable arguments.
-function rrule!!(
-    ::CoDual{typeof(lgetfield)}, x::CoDual{<:Any, NoTangent}, ::CoDual{Val{f}}
-) where {f}
-    return uninit_codual(getfield(primal(x), f)), NoPullback()
+@inline _get_fdata_field(_, t::Union{Tuple, NamedTuple}, f...) = getfield(t, f...)
+@inline _get_fdata_field(_, data::FData, f...) = val(getfield(data.data, f...))
+@inline _get_fdata_field(primal, ::NoFData, f...) = uninit_fdata(getfield(primal, f...))
+@inline _get_fdata_field(_, t::MutableTangent, f...) = fdata(val(getfield(t.fields, f...)))
+
+increment_field_rdata!(dx::MutableTangent, ::NoRData, ::Val) = dx
+increment_field_rdata!(dx::NoFData, ::NoRData, ::Val) = dx
+function increment_field_rdata!(dx::T, dy_rdata, ::Val{f}) where {T<:MutableTangent, f}
+    set_tangent_field!(dx, f, increment_rdata!!(get_tangent_field(dx, f), dy_rdata))
+    return dx
 end
+
+#
+# lgetfield with order argument
+#
+
+# This is largely copy + pasted from the above. Attempts were made to refactor to avoid
+# code duplication, but it wound up not being any cleaner than this copy + pasted version.
 
 lgetfield(x, ::Val{f}, ::Val{order}) where {f, order} = getfield(x, f, order)
 
-@is_primitive MinimalCtx Tuple{typeof(lgetfield), Any, Any, Any}
-function rrule!!(
-    ::CoDual{typeof(lgetfield)}, x::CoDual, ::CoDual{Val{f}}, ::CoDual{Val{order}}
-) where {f, order}
-    function lgetfield_pb!!(dy, df, dx, dsym, dorder)
-        return df, increment_field!!(dx, dy, Val{f}()), dsym, dorder
+@is_primitive MinimalCtx Tuple{typeof(lgetfield), Any, Val, Val}
+@inline function rrule!!(
+    ::CoDual{typeof(lgetfield)}, x::CoDual{P}, ::CoDual{Val{f}}, ::CoDual{Val{order}}
+) where {P, f, order}
+    pb!! = if ismutabletype(P)
+        dx = tangent(x)
+        function mutable_lgetfield_pb!!(dy)
+            increment_field_rdata!(dx, dy, Val{f}())
+            return NoRData(), NoRData(), NoRData(), NoRData()
+        end
+    else
+        dx_r = LazyZeroRData(primal(x))
+        function immutable_lgetfield_pb!!(dy)
+            tmp = increment_field!!(instantiate(dx_r), dy, Val{f}())
+            return NoRData(), tmp, NoRData(), NoRData()
+        end
     end
-    y = CoDual(getfield(primal(x), f), _get_tangent_field(primal(x), tangent(x), f))
-    return y, lgetfield_pb!!
-end
-
-function rrule!!(
-    ::CoDual{typeof(lgetfield)},
-    x::CoDual{<:Any, NoTangent},
-    ::CoDual{Val{f}},
-    ::CoDual{Val{order}},
-) where {f, order}
-    return uninit_codual(getfield(primal(x), f)), NoPullback()
+    y = CoDual(getfield(primal(x), f, order), _get_fdata_field(primal(x), tangent(x), f))
+    return y, pb!!
 end
 
 """
@@ -107,40 +135,34 @@ setfield!(copy(x), 2, v) == lsetfield(copy(x), Val(2), v)
 lsetfield!(value, ::Val{name}, x) where {name} = setfield!(value, name, x)
 
 @is_primitive MinimalCtx Tuple{typeof(lsetfield!), Any, Any, Any}
-function rrule!!(
-    ::CoDual{typeof(lsetfield!)}, value::CoDual, ::CoDual{Val{name}}, x::CoDual
-) where {name}
+@inline function rrule!!(
+    ::CoDual{typeof(lsetfield!)}, value::CoDual{P}, ::CoDual{Val{name}}, x::CoDual
+) where {P, name}
+    F = fdata_type(tangent_type(P))
     save = isdefined(primal(value), name)
     old_x = save ? getfield(primal(value), name) : nothing
-    old_dx = save ? val(getfield(tangent(value).fields, name)) : nothing
-    function setfield!_pullback(dy, df, dvalue, dname, dx)
-        new_dx = increment!!(dx, val(getfield(dvalue.fields, name)))
-        new_dx = increment!!(new_dx, dy)
-        old_x !== nothing && lsetfield!(primal(value), Val(name), old_x)
-        old_x !== nothing && set_tangent_field!(tangent(value), name, old_dx)
-        return df, dvalue, dname, new_dx
+    old_dx = if F == NoFData
+        NoFData()
+    else
+        save ? val(getfield(tangent(value).fields, name)) : nothing
     end
-    y = CoDual(
-        lsetfield!(primal(value), Val(name), primal(x)),
-        set_tangent_field!(tangent(value), name, tangent(x)),
-    )
-    return y, setfield!_pullback
-end
-
-function rrule!!(
-    ::CoDual{typeof(lsetfield!)},
-    value::CoDual{<:Any, NoTangent},
-    ::CoDual{Val{name}},
-    x::CoDual,
-) where {name}
-    save = isdefined(primal(value), name)
-    old_x = save ? getfield(primal(value), name) : nothing
-    function setfield!_pullback(dy, df, dvalue, dname, dx)
-        old_x !== nothing && lsetfield!(primal(value), Val(name), old_x)
-        return df, dvalue, dname, dx
+    dvalue = tangent(value)
+    pb!! = if F == NoFData
+        function __setfield!_pullback(dy)
+            old_x !== nothing && lsetfield!(primal(value), Val(name), old_x)
+            return NoRData(), NoRData(), NoRData(), dy
+        end
+    else
+        function setfield!_pullback(dy)
+            new_dx = increment!!(dy, rdata(val(getfield(dvalue.fields, name))))
+            old_x !== nothing && lsetfield!(primal(value), Val(name), old_x)
+            old_x !== nothing && set_tangent_field!(dvalue, name, old_dx)
+            return NoRData(), NoRData(), NoRData(), new_dx
+        end
     end
-    y = CoDual(lsetfield!(primal(value), Val(name), primal(x)), NoTangent())
-    return y, setfield!_pullback
+    yf = F == NoFData ? NoFData() : fdata(set_tangent_field!(dvalue, name, zero_tangent(primal(x), tangent(x))))
+    y = CoDual(lsetfield!(primal(value), Val(name), primal(x)), yf)
+    return y, pb!!
 end
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
@@ -150,7 +172,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
     _dx = Ref(4.0)
     memory = Any[_x, _dx]
 
-    test_cases = Any[
+    specific_test_cases = Any[
         # Rules to avoid pointer type conversions.
         (
             true, :stability, nothing,
@@ -191,18 +213,6 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
         ),
         (false, :allocs, nothing, Threads.nthreads),
 
-        # Literal replacements for getfield.
-        (false, :stability_and_allocs, nothing, lgetfield, (5.0, 4), Val(1)),
-        (false, :stability_and_allocs, nothing, lgetfield, (5.0, 4), Val(2)),
-        (false, :stability_and_allocs, nothing, lgetfield, (1, 4), Val(2)),
-        (false, :stability_and_allocs, nothing, lgetfield, ((), 4), Val(2)),
-        (false, :stability_and_allocs, nothing, lgetfield, (a=5.0, b=4), Val(1)),
-        (false, :stability_and_allocs, nothing, lgetfield, (a=5.0, b=4), Val(2)),
-        (false, :stability_and_allocs, nothing, lgetfield, (a=5.0, b=4), Val(:a)),
-        (false, :stability_and_allocs, nothing, lgetfield, (a=5.0, b=4), Val(:b)),
-        (false, :stability_and_allocs, nothing, lgetfield, 1:5, Val(:start)),
-        (false, :stability_and_allocs, nothing, lgetfield, 1:5, Val(:stop)),
-
         # Literal replacement for setfield!.
         (
             false, :stability_and_allocs, nothing,
@@ -221,6 +231,84 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
             lsetfield!, NonDifferentiableFoo(5, false), Val(:y), true,
         )
     ]
+
+    # Some specific test cases for lgetfield to test the basics.
+    specific_lgetfield_test_cases = Any[
+
+        # Tuple
+        (false, :stability_and_allocs, nothing, lgetfield, (5.0, 4), Val(1)),
+        (false, :stability_and_allocs, nothing, lgetfield, (5.0, 4), Val(2)),
+        (false, :stability_and_allocs, nothing, lgetfield, (1, 4), Val(2)),
+        (false, :stability_and_allocs, nothing, lgetfield, ((), 4), Val(2)),
+        (false, :stability_and_allocs, nothing, lgetfield, (randn(2),), Val(1)),
+        (false, :stability_and_allocs, nothing, lgetfield, (randn(2), 5), Val(1)),
+        (false, :stability_and_allocs, nothing, lgetfield, (randn(2), 5), Val(2)),
+
+        # NamedTuple
+        (false, :stability_and_allocs, nothing, lgetfield, (a=5.0, b=4), Val(1)),
+        (false, :stability_and_allocs, nothing, lgetfield, (a=5.0, b=4), Val(2)),
+        (false, :stability_and_allocs, nothing, lgetfield, (a=5.0, b=4), Val(:a)),
+        (false, :stability_and_allocs, nothing, lgetfield, (a=5.0, b=4), Val(:b)),
+        (false, :stability_and_allocs, nothing, lgetfield, (y=randn(2),), Val(1)),
+        (false, :stability_and_allocs, nothing, lgetfield, (y=randn(2),), Val(:y)),
+        (false, :stability_and_allocs, nothing, lgetfield, (y=randn(2), x=5), Val(1)),
+        (false, :stability_and_allocs, nothing, lgetfield, (y=randn(2), x=5), Val(2)),
+        (false, :stability_and_allocs, nothing, lgetfield, (y=randn(2), x=5), Val(:y)),
+        (false, :stability_and_allocs, nothing, lgetfield, (y=randn(2), x=5), Val(:x)),
+
+        # structs
+        (false, :stability_and_allocs, nothing, lgetfield, 1:5, Val(:start)),
+        (false, :stability_and_allocs, nothing, lgetfield, 1:5, Val(:stop)),
+        (true, :none, (lb=1, ub=100), lgetfield, StructFoo(5.0), Val(:a)),
+        (false, :none, (lb=1, ub=100), lgetfield, StructFoo(5.0, randn(5)), Val(:a)),
+        (false, :none, (lb=1, ub=100), lgetfield, StructFoo(5.0, randn(5)), Val(:b)),
+        (true, :none, (lb=1, ub=100), lgetfield, StructFoo(5.0), Val(1)),
+        (false, :none, (lb=1, ub=100), lgetfield, StructFoo(5.0, randn(5)), Val(1)),
+        (false, :none, (lb=1, ub=100), lgetfield, StructFoo(5.0, randn(5)), Val(2)),
+
+        # mutable structs
+        (true, :none, nothing, lgetfield, MutableFoo(5.0), Val(:a)),
+        (false, :none, nothing, lgetfield, MutableFoo(5.0, randn(5)), Val(:b)),
+        (false, :none, nothing, lgetfield, UInt8, Val(:name)),
+        (false, :none, nothing, lgetfield, UInt8, Val(:super)),
+        (true, :none, nothing, lgetfield, UInt8, Val(:layout)),
+        (false, :none, nothing, lgetfield, UInt8, Val(:hash)),
+        (false, :none, nothing, lgetfield, UInt8, Val(:flags)),
+    ]
+
+    # Create `lgetfield` tests for each type in TestTypes in order to increase coverage.
+    general_lgetfield_test_cases = map(TestTypes.PRIMALS) do (interface_only, P, args)
+        _, primal = TestTypes.instantiate((interface_only, P, args))
+        names = fieldnames(P)[1:length(args)] # only query fields which get initialised
+        return Any[
+            (interface_only, :none, nothing, lgetfield, primal, Val(name)) for
+            name in names
+        ]
+    end
+
+    # lgetfield has both 3 and 4 argument forms. Create test cases for both scenarios.
+    all_lgetfield_test_cases = Any[
+        (case..., order...) for
+        case in vcat(specific_lgetfield_test_cases, general_lgetfield_test_cases...) for
+        order in Any[(), (Val(false), )]
+    ]
+
+    # Create `lsetfield` testsfor each type in TestTypes in order to increase coverage.
+    general_lsetfield_test_cases = map(TestTypes.PRIMALS) do (interface_only, P, args)
+        ismutabletype(P) || return Any[]
+        _, primal = TestTypes.instantiate((interface_only, P, args))
+        names = fieldnames(P)[1:length(args)] # only query fields which get initialised
+        return Any[
+            (interface_only, :none, nothing, lsetfield!, primal, Val(name), args[n]) for
+            (n, name) in enumerate(names)
+        ]
+    end
+
+    test_cases = vcat(
+        specific_test_cases,
+        all_lgetfield_test_cases...,
+        general_lsetfield_test_cases...,
+    )
     return test_cases, memory
 end
 

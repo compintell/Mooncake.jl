@@ -23,7 +23,6 @@
             (false, Array{Vector{Float64}, 1}, undef, (1, )),
             (false, Array{Vector{Float64}, 2}, undef, (2, 3)),
             (false, Array{Vector{Float64}, 3}, undef, (2, 3, 4)),
-            (false, Xoshiro, 123456),
             (false, push!, randn(5), 3.0),
             (false, x -> (a=x, b=x), 5.0),
         ],
@@ -88,7 +87,7 @@
         @info "$(_typeof((f, x...)))"
         TestUtils.test_derived_rule(
             Xoshiro(123456), f, x...;
-            interp, perf_flag=:none, interface_only, is_primitive=false,
+            safety_on=false, interp, perf_flag=:none, interface_only, is_primitive=false,
         )
     end
 end

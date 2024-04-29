@@ -150,6 +150,12 @@ end
 
         # @show time(gradient) / time(primal)
 
+        # @profview run_many_times(10_000, TestUtils.to_benchmark, rule, codualed_args...)
+
+        # Profile.clear()
+        # @profile run_many_times(10_000, TestUtils.to_benchmark, rule, codualed_args...)
+        # pprof()
+
         # push!(turing_bench_results, (name, primal, gradient, revdiff))
     end
 end
