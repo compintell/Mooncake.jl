@@ -84,18 +84,24 @@ codegen which produces the forwards- and reverse-passes.
     to determine which blocks to visit.
 - `block_stack`: the block stack. Can always be found at `block_stack_id` in the forwards-
     and reverse-passes.
-- `entry_id`: special ID associated to the block inserted at the start of execution in the
-    the forwards-pass, and the end of execution in the pullback.
+- `entry_id`: ID associated to the block inserted at the start of execution in the the
+    forwards-pass, and the end of execution in the pullback.
 - `shared_data_pairs`: the `SharedDataPairs` used to define the captured variables passed
-    to both the forwards- and reverse-passes..
+    to both the forwards- and reverse-passes.
 - `arg_types`: a map from `Argument` to its static type.
-- `ssa_insts`: a map from `ID` associated to lines to the primal `NewInstruction`.
+- `ssa_insts`: a map from `ID` associated to lines to the primal `NewInstruction`. This
+    contains the line of code, its static / inferred type, and some other detailss. See
+    `Core.Compiler.NewInstruction` for a full list of fields.
 - `arg_rdata_ref_ids`: the dict mapping from arguments to the `ID` which creates and
     initialises the `Ref` which contains the reverse data associated to that argument.
     Recall that the heap allocations associated to this `Ref` are always optimised away in
     the final programme.
-- `ssa_rdata_ref_ids`: the same as `arg_rdata_ref_ids`, but for each `ID`
-    associated to an ssa rather than each argument.
+- `ssa_rdata_ref_ids`: the same as `arg_rdata_ref_ids`, but for each `ID` associated to an
+    ssa rather than each argument.
+- `safety_on`: if `true`, run in "safe mode" -- wraps all rule calls in `SafeRRule`. This is
+    applied recursively, so that safe mode is also switched on in derived rules.
+- `is_used_dict`: for each `ID` associated to a line of code, is `false` if line is not used
+    anywhere in any other line of code.
 =#
 struct ADInfo
     interp::PInterp
