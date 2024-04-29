@@ -30,6 +30,7 @@ jobs:
           - 'integration_testing/special_functions'
           - 'integration_testing/array'
           - 'integration_testing/turing'
+          - 'integration_testing/temporalgps'
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v1

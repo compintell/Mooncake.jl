@@ -41,6 +41,7 @@ include("front_matter.jl")
         end
         include("chain_rules_macro.jl")
     elseif test_group == "integration_testing/misc"
+        include(joinpath("integration_testing", "logdensityproblemsad_interop.jl"))
         include(joinpath("integration_testing/", "misc.jl"))
         include(joinpath("integration_testing", "battery_tests.jl"))
     elseif test_group == "integration_testing/diff_tests"
@@ -55,6 +56,8 @@ include("front_matter.jl")
         include(joinpath("integration_testing", "array.jl"))
     elseif test_group == "integration_testing/turing"
         include(joinpath("integration_testing", "turing.jl"))
+    elseif test_group == "integration_testing/temporalgps"
+        include(joinpath("integration_testing", "temporalgps.jl"))
     else
         throw(error("test_group=$(test_group) is not recognised"))
     end
