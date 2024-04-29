@@ -1,3 +1,5 @@
+# See the docstring for `BBCode` for some context on this file.
+
 _id_count::Int32 = 0
 
 """
