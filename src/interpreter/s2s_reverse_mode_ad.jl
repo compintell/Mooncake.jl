@@ -69,6 +69,13 @@ function shared_data_stmts(p::SharedDataPairs)::Vector{Tuple{ID, NewInstruction}
     end
 end
 
+#=
+The block stack is the stack used to keep track of which basic blocks are visited on the
+forwards pass, and therefore which blocks need to be visited on the reverse pass. There is
+one block stack per derived rule.
+By using Int32, we assume that there aren't more than `typemax(Int32)` unique basic blocks
+in a given function, which ought to be reasonable.
+=#
 const BlockStack = Stack{Int32}
 
 #=
