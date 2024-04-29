@@ -163,13 +163,17 @@ function ADInfo(interp::PInterp, ir::BBCode, safety_on::Bool)
 end
 
 # Shortcut for `add_data!(info.shared_data_pairs, data)`.
-add_data!(info::ADInfo, data) = add_data!(info.shared_data_pairs, data)
+add_data!(info::ADInfo, data)::ID = add_data!(info.shared_data_pairs, data)
 
-function __log_data(p::Union{ADInfo, SharedDataPairs}, x)
+# Returns `x` if it is a singleton, or the `ID` of the ssa which will contain it on the
+# forwards- and reverse-passes. The reason for this is that if something is a singleton, it
+# can be placed directly in the IR.
+function add_data_if_not_singleton!(p::Union{ADInfo, SharedDataPairs}, x)
     return Base.issingletontype(_typeof(x)) ? x : add_data!(p, x)
 end
 
-is_used(info::ADInfo, id::ID) = info.is_used_dict[id]
+# Returns `true` if `id` is used by any of the lines in the ir, false otherwise.
+is_used(info::ADInfo, id::ID)::Bool = info.is_used_dict[id]
 
 # Returns the static / inferred type associated to `x`.
 get_primal_type(info::ADInfo, x::Argument) = info.arg_types[x]
@@ -467,12 +471,12 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
 
         # If the rule is `rrule!!` (i.e. `sig` is primitive), then don't bother putting
         # the rule into shared data, because it's safe to put it directly into the code.
-        rule_ref = __log_data(info, rule)
+        rule_ref = add_data_if_not_singleton!(info, rule)
 
         # If the type of the pullback is a singleton type, then there is no need to store it
         # in the shared data, it can be interpolated directly into the generated IR.
         T_pb!! = pullback_type(_typeof(rule), arg_types)
-        pb_stack_id = __log_data(info, build_pb_stack(T_pb!!))
+        pb_stack_id = add_data_if_not_singleton!(info, build_pb_stack(T_pb!!))
 
         #
         # Write forwards-pass. These statements are written out manually, as writing them
