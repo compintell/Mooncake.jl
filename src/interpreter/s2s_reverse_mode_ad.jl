@@ -338,7 +338,6 @@ function make_ad_stmts!(stmt::IDPhiNode, line::ID, info::ADInfo)
     # CC.IR_FLAG_REFINED. To avoid this we directly tell the compiler what the type is.
     new_type = fwds_codual_type(get_primal_type(info, line))
     _inst = new_inst(IDPhiNode(stmt.edges, new_vals), new_type, info.ssa_insts[line].flag)
-    # _inst = new_inst(IDPhiNode(stmt.edges, new_vals))
     return ad_stmt_info(line, _inst, nothing)
 end
 
