@@ -310,18 +310,17 @@ end
 # Identity forwards-pass, no-op reverse. No shared data.
 function make_ad_stmts!(stmt::IDGotoIfNot, line::ID, ::ADInfo)
     stmt = inc_args(stmt)
-    if stmt.cond isa Union{Argument, ID}
-        # If cond refers to a register, then the primal must be extracted.
-        cond_id = ID()
-        fwds = [
-            (cond_id, new_inst(Expr(:call, primal, stmt.cond))),
-            (line, new_inst(IDGotoIfNot(cond_id, stmt.dest), Any)),
-        ]
-        return ad_stmt_info(line, fwds, nothing)
-    else
-        # If something other than a register, then there is nothing to do.
-        return ad_stmt_info(line, stmt, nothing)
-    end
+
+    # If cond is not going to be wrapped in a `CoDual`, so just return the stmt.
+    is_active(stmt.cond) || return ad_stmt_info(line, stmt, nothing)
+
+    # stmt.cond is active, so primal must be extracted from `CoDual`.
+    cond_id = ID()
+    fwds = [
+        (cond_id, new_inst(Expr(:call, primal, stmt.cond))),
+        (line, new_inst(IDGotoIfNot(cond_id, stmt.dest), Any)),
+    ]
+    return ad_stmt_info(line, fwds, nothing)
 end
 
 # Identity forwards-pass, no-op reverse. No shared data.
