@@ -150,10 +150,6 @@ struct NoRData end
 
 @inline increment_field!!(::NoRData, y, ::Val) = NoRData()
 
-"""
-    RData(data::NamedTuple)
-
-"""
 struct RData{T<:NamedTuple}
     data::T
 end
@@ -563,6 +559,7 @@ end
     increment_rdata!!(t::T, r)::T where {T}
 
 Increment the rdata component of tangent `t` by `r`, and return the updated tangent.
+Useful for implementation getfield-like rules for mutable structs, pointers, dicts, etc.
 """
 increment_rdata!!(t::T, r) where {T} = tangent(fdata(t), increment!!(rdata(t), r))::T
 
