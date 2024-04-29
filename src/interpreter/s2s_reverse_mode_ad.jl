@@ -231,11 +231,7 @@ end
 @inline function (rule::RRuleZeroWrapper{R})(f::F, args::Vararg{CoDual, N}) where {R, F, N}
     y, pb!! = rule.rule(f, args...)
     l = LazyZeroRData(primal(y))
-    if pb!! isa NoPullback
-        return y::CoDual, pb!!
-    else
-        return y::CoDual, RRuleWrapperPb(pb!!, l)
-    end
+    return y::CoDual, (pb!! isa NoPullback ? pb!! : RRuleWrapperPb(pb!!, l))
 end
 
 #=
@@ -287,10 +283,11 @@ make_ad_stmts!(::Nothing, line::ID, ::ADInfo) = ad_stmt_info(line, nothing, noth
 # 1. `val` is undefined: this `ReturnNode` is unreachable. Consequently, we'll never hit the
 #   associated statements on the forwards-pass of pullback. We just return the original
 #   statement on the forwards-pass, and `nothing` on the reverse-pass.
-# 2. `val isa Union{Argument, ID}`: this is an active bit of data. Consequently, we know
+# 2. `val isa Union{Argument, ID}`: this is an active piece of data. Consequently, we know
 #   that it will be an `CoDual` already, and can just return it. Therefore `stmt`
 #   is returned as the forwards-pass (with any `Argument`s incremented). On the reverse-pass
-#   the associated rdata ref should be incremented.
+#   the associated rdata ref should be incremented with the rdata passed to the pullback,
+#   which lives in argument 2.
 # 3. `val` is defined, but not a `Union{Argument, ID}`: in this case we're returning a
 #   constant -- build a constant CoDual and return that. There is nothing to do on the
 #   reverse pass.
