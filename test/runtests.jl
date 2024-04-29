@@ -55,6 +55,8 @@ include("front_matter.jl")
         include(joinpath("integration_testing", "array.jl"))
     elseif test_group == "integration_testing/turing"
         include(joinpath("integration_testing", "turing.jl"))
+    elseif test_group == "integration_testing/temporalgps"
+        include(joinpath("integration_testing", "temporalgps.jl"))
     else
         throw(error("test_group=$(test_group) is not recognised"))
     end
