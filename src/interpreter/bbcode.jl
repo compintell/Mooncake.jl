@@ -615,9 +615,9 @@ end
         Tuple{Dict{ID, Bool}, Dict{ID, Bool}}
 
 We call a block `b` a _unique_ _predecessor_ in the control flow graph associated to `blks`
-if it the only predecessor of all of its successors. Put differently, if control flow
-arrives in any of the successors of `b`, we know for certain that the previous block must
-have been `b`.
+if it is the only predecessor to all of its successors. Put differently we call `b` a unique
+predecessor if, whenever control flow arrives in any of the successors of `b`, we know for
+certain that the previous block must have been `b`.
 
 Returns two `Dict`s. A value in the first `Dict` is `true` if the block associated to its
 key is a unique precessor, and is `false` if not. A value in the second `Dict` is `true` if 
@@ -634,9 +634,9 @@ predecessor means that
 
 Utilising this reduces the overhead associated to doing AD. It is quite important when
 working with cheap loops -- loops where the operations performed at each iteration
-are inexpensive -- for which avoiding as much memory pressure as possible is critical to
-performance. It is also important for single-block functions, because it can be used to
-entirely avoid using a block stack at all.
+are inexpensive -- for which minimising memory pressure is critical to performance. It is
+also important for single-block functions, because it can be used to entirely avoid using a
+block stack at all.
 =#
 function characterise_unique_predecessor_blocks(
     blks::Vector{BBlock}
