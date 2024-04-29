@@ -342,7 +342,10 @@ function make_ad_stmts!(stmt::IDPhiNode, line::ID, info::ADInfo)
 end
 
 function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
-    isa(stmt.val, Union{Argument, ID}) || unhandled_feature("PiNode: $stmt")
+
+    # Assume that the PiNode contains active data -- it's hard to see why a PiNode would be
+    # created for e.g. a constant. Error if code is encountered where this doesn't hold.
+    is_active(stmt.val) || unhandled_feature("PiNode: $stmt")
 
     # Get the primal type of this line, and the rdata refs for the `val` of this `PiNode`
     # and this line itself.
@@ -363,33 +366,31 @@ end
     return nothing
 end
 
-# Constant GlobalRefs are handled. See const_codual. Non-constant
-# GlobalRefs are handled by assuming that they are constant, and creating a CoDual with
-# the value. We then check at run-time that the value has not changed.
+# Constant GlobalRefs are handled. See const_codual. Non-constant GlobalRefs are handled by
+# assuming that they are constant, and creating a CoDual with the value. We then check at
+# run-time that the value has not changed.
 function make_ad_stmts!(stmt::GlobalRef, line::ID, info::ADInfo)
-    if isconst(stmt)
-        return const_ad_stmt(stmt, line, info)
-    else
-        x = const_codual(getglobal(stmt.mod, stmt.name), info)
-        gref_id = ID()
-        fwds = [
-            (gref_id, new_inst(stmt)),
-            (line, new_inst(Expr(:call, __verify_const, gref_id, x))),
-        ]
-        return ad_stmt_info(line, fwds, nothing)
-    end
+    isconst(stmt) && return const_ad_stmt(stmt, line, info)
+
+    x = const_codual(getglobal(stmt.mod, stmt.name), info)
+    globalref_id = ID()
+    fwds = [
+        (globalref_id, new_inst(stmt)),
+        (line, new_inst(Expr(:call, __verify_const, globalref_id, x))),
+    ]
+    return ad_stmt_info(line, fwds, nothing)
 end
 
-# Helper used by `make_ad_stmts! ` for `GlobalRef`.
+# Helper used by `make_ad_stmts! ` for `GlobalRef`. Noinline to avoid IR bloat.
 @noinline function __verify_const(global_ref, stored_value)
     @assert global_ref == primal(stored_value)
     return uninit_fcodual(global_ref)
 end
 
-# QuoteNodes are constant. See const_codual for details.
+# QuoteNodes are constant.
 make_ad_stmts!(stmt::QuoteNode, line::ID, info::ADInfo) = const_ad_stmt(stmt, line, info)
 
-# Literal constant. See const_codual for details.
+# Literal constant.
 make_ad_stmts!(stmt, line::ID, info::ADInfo) = const_ad_stmt(stmt, line, info)
 
 # `make_ad_stmts!` for constants.
@@ -398,20 +399,15 @@ function const_ad_stmt(stmt, line::ID, info::ADInfo)
     return ad_stmt_info(line, x isa ID ? Expr(:call, identity, x) : x, nothing)
 end
 
-# Build a `CoDual` from `stmt`, which will be checked to ensure that its value
-# is constant. If the resulting CoDual is a bits type, then it is returned. If it is not,
-# then the CoDual is put into shared data, and the ID associated to it in the forwards-
-# and reverse-passes returned.
+# Build a `CoDual` from `stmt`, with zero / uninitialised fdata. If the resulting CoDual is
+# a bits type, then it is returned. If it is not, then the CoDual is put into shared data,
+# and the ID associated to it in the forwards- and reverse-passes returned.
 function const_codual(stmt, info::ADInfo)
-    x = build_const_codual(stmt)
+    x = uninit_fcodual(get_const_primal_value(stmt))
     return isbitstype(_typeof(x)) ? x : add_data!(info, x)
 end
 
-# Create a `CoDual` containing the values associated to `stmt`, a zero forwards data.
-build_const_codual(stmt) = uninit_fcodual(get_const_primal_value(stmt))
-
-# Get the value associated to `x`. For `GlobalRef`s, verify that `x` is indeed a constant,
-# and error if it is not.
+# Get the value associated to `x`. For `GlobalRef`s, verify that `x` is indeed a constant.
 function get_const_primal_value(x::GlobalRef)
     isconst(x) || unhandled_feature("Non-constant GlobalRef not supported: $x")
     return getglobal(x.mod, x.name)
