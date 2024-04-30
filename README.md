@@ -8,10 +8,10 @@ The goal of the `Tapir.jl` project is to produce a reverse-mode AD package which
 
 ## Note on project status
 
-At present (04-04-2024), I (Will) am undertaking a substantial refactoring of the internals. 
-Consequently, while we're very happy to receive issues where people encounter problems, it will be at least a couple of weeks before they are addressed.
-
-Similarly, please note that we registered `Tapir.jl` so that we could start interacting with the various AD frontends straightforwardly ([DifferentiationInterface.jl](https://github.com/gdalle/DifferentiationInterface.jl), [LogDensityProblemsAD.jl](https://github.com/tpapp/LogDensityProblemsAD.jl)) -- please be cautious this initial release will likely have bugs and might not be ready for production use!
+`Tapir.jl` is under active development.
+You should presently expect releases involving breaking changes on a semi-regular basis.
+We are trying to keep this README as up to date as possible, particularly with regards to the best examples of code to look at to understand how to use Tapir.jl.
+If you encounter a new version of Tapir.jl in the wild, please consult this README for the most up-to-date advice.
 
 # How it works
 
@@ -93,12 +93,17 @@ The plan is to proceed in three phases:
 You should take this with a pinch of salt, as it seems highly likely that we will have to revisit some design choices when optimising performance -- we do not, however, anticipate requiring major re-writes to the design as part of performance optimisation.
 We aim to reach the maintenance phase of the project before 01/06/2024.
 
+*Update: (30/04/2024)*
+Phase 2 continues!
+We are now finding that `Tapir.jl` comfortably outperforms compiled `ReverseDiff.jl` on type-stable code in all of the situations we have tested.
+Optimising to get similar performance to `Enzyme.jl` is an on-going process.
+
 *Update: (22/03/2024)*
-Phase 2 is now further along.
-`Tapir.jl` now uses something which could reasonably be described as a source-to-source system to perform AD.
-At present the performance of this system is not as good as that of Enzyme, but often beats compiled ReverseDiff, and comfortably beats Zygote in any situations involving dynamic control flow.
-The present focus is on dealing with some remaining performance limitations that should make `Tapir.jl`'s performance much closer to that of Enzyme, and consistently beat ReverseDiff on a range of benchmarks.
-Fortunately, dealing with these performance limitations necessitates simplifying the internals substantially.
+~~Phase 2 is now further along.~~
+~~`Tapir.jl` now uses something which could reasonably be described as a source-to-source system to perform AD.~~
+~~At present the performance of this system is not as good as that of Enzyme, but often beats compiled ReverseDiff, and comfortably beats Zygote in any situations involving dynamic control flow.~~
+~~The present focus is on dealing with some remaining performance limitations that should make `Tapir.jl`'s performance much closer to that of Enzyme, and consistently beat ReverseDiff on a range of benchmarks.~~
+~~Fortunately, dealing with these performance limitations necessitates simplifying the internals substantially.~~
 
 *Update: (16/01/2024)*
 ~~Phase 2 is now well underway. We now make use of a much faster approach to interpreting / executing Julia code, which yields performance that is comparable with ReverseDiff (when things go well). The current focus is on ironing out performance issues, and simplifying the implementation.~~
@@ -115,8 +120,10 @@ Fortunately, dealing with these performance limitations necessitates simplifying
 # Trying it out
 
 There is not presently a high-level interface to which we are committing.
-If you want to compute the gradient of a function, we recommend in the first instance using [DifferentiationInterface.jl](https://github.com/gdalle/DifferentiationInterface.jl/), and taking a looking at how things are implemented there to get an idea of how to work with `Tapir.jl`.
-In particular, look at its use of `value_and_pullback!!` / `value_and_gradient!!`, and `build_rrule`.
+~~If you want to compute the gradient of a function, we recommend in the first instance using [DifferentiationInterface.jl](https://github.com/gdalle/DifferentiationInterface.jl/), and taking a looking at how things are implemented there to get an idea of how to work with `Tapir.jl`~~ 
+~~In particular, look at its use of `value_and_pullback!!` / `value_and_gradient!!`, and `build_rrule`.~~
+
+*Update (30-04-2024):* we are currently in the process of updating DI.jl to the latest Tapir.jl interface as it's current use of Tapir.jl is only appropriate for Tapir v0.1. It is likely most profitable to look at how we interface with `LogDensityProblemsAD.jl` in `ext/TapirLogDensityProblemsADExt.jl` to get a sense of how to take gradients, as this is up to date.
 (Observe that there are a couple of things that you have to get right when using `Tapir.jl`'s interfaces and working with mutating functions, so care is required. Proper documentation will be made available upon the creation of a proper release of this package).
 
 *Note:* I have found that using a mixture of `PProf` and the `@profview` functionality from Julia's `VSCode` extension essential when profiling code generated by `Tapir.jl`.

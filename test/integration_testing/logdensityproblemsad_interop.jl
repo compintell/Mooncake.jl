@@ -1,4 +1,4 @@
-using LogDensityProblemsAD
+using ADTypes, LogDensityProblemsAD
 using LogDensityProblemsAD: logdensity_and_gradient, capabilities, dimension, logdensity
 
 # Copied over from LogDensityProblemsAD test suite.
@@ -19,4 +19,6 @@ test_gradient(x) = -2 .* x
         @test isapprox(logdensity_and_gradient(∇l, x)[1], logdensity(TestLogDensity2(), x))
         @test isapprox(logdensity_and_gradient(∇l, x)[2], test_gradient(x))
     end
+
+    @test ADgradient(ADTypes.AutoTapir(), l) isa typeof(∇l)
 end
