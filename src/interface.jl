@@ -11,7 +11,7 @@ function value_and_pullback!!(rule::R, ȳ::T, fx::Vararg{CoDual, N}) where {R, 
     @assert _typeof(tangent(out)) == fdata_type(T)
     increment!!(tangent(out), fdata(ȳ))
     v = copy(primal(out))
-    return v, pb!!(rdata(ȳ))
+    return v, tuple_map((f, r) -> tangent(tangent(f), r), fx, pb!!(rdata(ȳ)))
 end
 
 """
