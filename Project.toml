@@ -4,6 +4,7 @@ authors = ["Will Tebbutt, Hong Ge, and contributors"]
 version = "0.2.1"
 
 [deps]
+ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
 ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
 DiffRules = "b552c78f-8df3-52c6-915a-8e097449b14b"
 DiffTests = "de460e47-3fe3-5279-bb4a-814414816d5d"
@@ -25,6 +26,7 @@ TapirLogDensityProblemsADExt = "LogDensityProblemsAD"
 TapirSpecialFunctionsExt = "SpecialFunctions"
 
 [compat]
+ADTypes = "1"
 BenchmarkTools = "1"
 ChainRulesCore = "1"
 DiffRules = "1"
@@ -40,7 +42,7 @@ Setfield = "1"
 SpecialFunctions = "2"
 StableRNGs = "1"
 TemporalGPs = "0.6"
-Turing = "0.31"
+Turing = "0.31.3"
 julia = "1"
 
 [extras]
