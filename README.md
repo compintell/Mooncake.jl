@@ -6,7 +6,7 @@
 
 The goal of the `Tapir.jl` project is to produce a reverse-mode AD package which is written entirely in Julia, which improves over both `ReverseDiff.jl` and `Zygote.jl` in several ways, and is competitive with `Enzyme.jl`.
 
-# A General Note on Project Status
+## Note on project status
 
 `Tapir.jl` is under active development.
 You should presently expect releases involving breaking changes on a semi-regular basis.
