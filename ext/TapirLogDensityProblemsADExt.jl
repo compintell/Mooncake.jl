@@ -4,10 +4,12 @@
 module TapirLogDensityProblemsADExt
 
 if isdefined(Base, :get_extension)
+    using ADTypes
     using LogDensityProblemsAD: ADGradientWrapper
     import LogDensityProblemsAD: ADgradient, logdensity_and_gradient, dimension, logdensity
     import Tapir
 else
+    using ADTypes
     using ..LogDensityProblemsAD: ADGradientWrapper
     import ..LogDensityProblemsAD: ADgradient, logdensity_and_gradient, dimension, logdensity
     import ..Tapir
@@ -15,13 +17,13 @@ end
 
 struct TapirGradientLogDensity{Trule, L} <: ADGradientWrapper
     rule::Trule
-    l::L
+    ℓ::L
 end
 
-dimension(∇l::TapirGradientLogDensity) = dimension(Tapir.primal(∇l.l))
+dimension(∇l::TapirGradientLogDensity) = dimension(Tapir.primal(∇l.ℓ))
 
 function logdensity(∇l::TapirGradientLogDensity, x::Vector{Float64})
-    return logdensity(Tapir.primal(∇l.l), x)
+    return logdensity(Tapir.primal(∇l.ℓ), x)
 end
 
 """
@@ -29,13 +31,15 @@ end
 
 Gradient using algorithmic/automatic differentiation via Tapir.
 """
-function ADgradient(::Val{:Tapir}, l)
-    primal_sig = Tuple{typeof(logdensity), typeof(l), Vector{Float64}}
+function ADgradient(::Val{:Tapir}, ℓ)
+    primal_sig = Tuple{typeof(logdensity), typeof(ℓ), Vector{Float64}}
     rule = Tapir.build_rrule(Tapir.TapirInterpreter(), primal_sig)
-    return TapirGradientLogDensity(rule, Tapir.uninit_fcodual(l))
+    return TapirGradientLogDensity(rule, Tapir.uninit_fcodual(ℓ))
 end
 
-Base.show(io::IO, ∇ℓ::TapirGradientLogDensity) = print(io, "Tapir AD wrapper for ", ∇ℓ.ℓ)
+function Base.show(io::IO, ∇ℓ::TapirGradientLogDensity)
+    return print(io, "Tapir AD wrapper for ", Tapir.primal(∇ℓ.ℓ))
+end
 
 # We only test Tapir with `Float64`s at the minute, so make strong assumptions about the
 # types supported in order to prevent silent errors.
@@ -46,10 +50,13 @@ end
 
 function logdensity_and_gradient(∇l::TapirGradientLogDensity, x::Vector{Float64})
     dx = zeros(length(x))
-    y, pb!! = ∇l.rule(Tapir.zero_fcodual(logdensity), ∇l.l, Tapir.CoDual(x, dx))
+    y, pb!! = ∇l.rule(Tapir.zero_fcodual(logdensity), ∇l.ℓ, Tapir.CoDual(x, dx))
     @assert Tapir.primal(y) isa Float64
     pb!!(1.0)
     return Tapir.primal(y), dx
 end
+
+# Interop with ADTypes.
+ADgradient(::ADTypes.AutoTapir, ℓ) = ADgradient(Val(:Tapir), ℓ)
 
 end

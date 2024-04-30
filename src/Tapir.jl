@@ -3,6 +3,7 @@ module Tapir
 const CC = Core.Compiler
 
 using
+    ADTypes,
     DiffRules,
     ExprTools,
     Graphs,
