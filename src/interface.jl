@@ -8,10 +8,10 @@ ensure that you zero-out the tangent fields of `x` each time.
 """
 function value_and_pullback!!(rule::R, ȳ::T, fx::Vararg{CoDual, N}) where {R, N, T}
     out, pb!! = rule(fx...)
-    @assert _typeof(tangent(out)) == T
-    ty = increment!!(tangent(out), ȳ)
+    @assert _typeof(tangent(out)) == fdata_type(T)
+    increment!!(tangent(out), fdata(ȳ))
     v = copy(primal(out))
-    return v, pb!!(ty, map(tangent, fx)...)
+    return v, pb!!(rdata(ȳ))
 end
 
 """
@@ -48,7 +48,7 @@ use-case, consider pre-allocating the `CoDual`s and calling the other method of 
 function.
 """
 function value_and_pullback!!(rule::R, ȳ, fx::Vararg{Any, N}) where {R, N}
-    return value_and_pullback!!(rule, ȳ, map(zero_codual, fx)...)
+    return value_and_pullback!!(rule, ȳ, map(zero_fcodual, fx)...)
 end
 
 """
@@ -57,5 +57,5 @@ end
 Equivalent to `value_and_pullback(rule, 1.0, f, x...)` -- assumes `f` returns a `Float64`.
 """
 function value_and_gradient!!(rule::R, fx::Vararg{Any, N}) where {R, N}
-    return value_and_gradient!!(rule, map(zero_codual, fx)...)
+    return value_and_gradient!!(rule, map(zero_fcodual, fx)...)
 end
