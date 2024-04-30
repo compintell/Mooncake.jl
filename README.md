@@ -93,12 +93,17 @@ The plan is to proceed in three phases:
 You should take this with a pinch of salt, as it seems highly likely that we will have to revisit some design choices when optimising performance -- we do not, however, anticipate requiring major re-writes to the design as part of performance optimisation.
 We aim to reach the maintenance phase of the project before 01/06/2024.
 
+*Update: (30/04/2024)*
+Phase 2 continues!
+We are now finding that `Tapir.jl` comfortably outperforms compiled `ReverseDiff.jl` on type-stable code in all of the situations we have tested.
+Optimising to get similar performance to `Enzyme.jl` is an on-going process.
+
 *Update: (22/03/2024)*
-Phase 2 is now further along.
-`Tapir.jl` now uses something which could reasonably be described as a source-to-source system to perform AD.
-At present the performance of this system is not as good as that of Enzyme, but often beats compiled ReverseDiff, and comfortably beats Zygote in any situations involving dynamic control flow.
-The present focus is on dealing with some remaining performance limitations that should make `Tapir.jl`'s performance much closer to that of Enzyme, and consistently beat ReverseDiff on a range of benchmarks.
-Fortunately, dealing with these performance limitations necessitates simplifying the internals substantially.
+~~Phase 2 is now further along.~~
+~~`Tapir.jl` now uses something which could reasonably be described as a source-to-source system to perform AD.~~
+~~At present the performance of this system is not as good as that of Enzyme, but often beats compiled ReverseDiff, and comfortably beats Zygote in any situations involving dynamic control flow.~~
+~~The present focus is on dealing with some remaining performance limitations that should make `Tapir.jl`'s performance much closer to that of Enzyme, and consistently beat ReverseDiff on a range of benchmarks.~~
+~~Fortunately, dealing with these performance limitations necessitates simplifying the internals substantially.~~
 
 *Update: (16/01/2024)*
 ~~Phase 2 is now well underway. We now make use of a much faster approach to interpreting / executing Julia code, which yields performance that is comparable with ReverseDiff (when things go well). The current focus is on ironing out performance issues, and simplifying the implementation.~~
