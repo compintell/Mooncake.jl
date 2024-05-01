@@ -10,4 +10,11 @@
     )
 
     TestUtils.run_rrule!!_test_cases(StableRNG, Val(:builtins))
+
+    @testset "Disable bitcast to differentiable type" begin
+        @test_throws(
+            ArgumentError,
+            rrule!!(zero_fcodual(bitcast), zero_fcodual(Float64), zero_fcodual(5))
+        )
+    end
 end
