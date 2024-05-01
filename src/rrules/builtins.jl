@@ -89,6 +89,7 @@ end
 
 @intrinsic bitcast
 function rrule!!(f::CoDual{typeof(bitcast)}, t::CoDual{Type{T}}, x) where {T}
+    T === Float64 && error("Hmmmmmmmmmmmm")
     _x = primal(x)
     v = bitcast(T, _x)
     if T <: Ptr && _x isa Ptr
