@@ -7,12 +7,25 @@ if calling this function multiple times with different values of `x`, should be 
 ensure that you zero-out the tangent fields of `x` each time.
 """
 function __value_and_pullback!!(rule::R, ȳ::T, fx::Vararg{CoDual, N}) where {R, N, T}
-    out, pb!! = rule(tuple_map(to_fwds, fx)...)
+    fx_fwds = tuple_map(to_fwds, fx)
+    __verify_sig(rule, fx_fwds)
+    out, pb!! = rule(fx_fwds...)
     @assert _typeof(tangent(out)) == fdata_type(T)
     increment!!(tangent(out), fdata(ȳ))
     v = copy(primal(out))
     return v, tuple_map((f, r) -> tangent(fdata(tangent(f)), r), fx, pb!!(rdata(ȳ)))
 end
+
+function __verify_sig(::DerivedRule{<:OpaqueClosure{sig}}, ::Tfx) where {sig, Tfx}
+    if sig != Tfx
+        msg = "signature of arguments, $Tfx, not equal to signature required by rule, $sig."
+        throw(ArgumentError(msg))
+    end
+end
+
+# rrule!! doesn't specify specific argument types which must be used, so there's nothing to
+# check here.
+__verify_sig(::typeof(rrule!!), fx::Tuple) = nothing
 
 """
     __value_and_gradient!!(rule, f::CoDual, x::CoDual...)
