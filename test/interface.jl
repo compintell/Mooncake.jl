@@ -12,4 +12,9 @@
             @test _dx isa tangent_type(typeof(_x))
         end
     end
+    @testset "sensible error when CoDuals are passed to `value_and_pullback!!" begin
+        foo(x) = sin(cos(x))
+        rule = build_rrule(foo, 5.0)
+        @test_throws ArgumentError value_and_pullback!!(rule, 1.0, foo, CoDual(5.0, 0.0))
+    end
 end
