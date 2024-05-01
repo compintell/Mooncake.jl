@@ -89,6 +89,14 @@ end
 
 @intrinsic bitcast
 function rrule!!(f::CoDual{typeof(bitcast)}, t::CoDual{Type{T}}, x) where {T}
+    if T <: IEEEFloat
+        msg = "It is not permissible to bitcast to a differentiable type during AD, as " *
+        "this risks dropping tangents, and therefore risks silently giving the wrong " *
+        "answer. If this call to bitcast appears as part of the implementation of a " *
+        "differentiable function, you should write a rule for this function, or modify " *
+        "its implementation to avoid the bitcast."
+        throw(ArgumentError(msg))
+    end
     _x = primal(x)
     v = bitcast(T, _x)
     if T <: Ptr && _x isa Ptr
@@ -669,7 +677,6 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         # atomic_pointerreplace -- NEEDS IMPLEMENTING AND TESTING
         # atomic_pointerset -- NEEDS IMPLEMENTING AND TESTING
         # atomic_pointerswap -- NEEDS IMPLEMENTING AND TESTING
-        (false, :stability, nothing, IntrinsicsWrappers.bitcast, Float64, 5),
         (false, :stability, nothing, IntrinsicsWrappers.bitcast, Int64, 5.0),
         (false, :stability, nothing, IntrinsicsWrappers.bswap_int, 5),
         (false, :stability, nothing, IntrinsicsWrappers.ceil_llvm, 4.1),
