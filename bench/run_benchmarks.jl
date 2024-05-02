@@ -243,6 +243,7 @@ function benchmark_hand_written_rrules!!(rng_ctor)
         :avoiding_non_differentiable_code,
         :blas,
         :builtins,
+        :fastmath,
         :foreigncall,
         :iddict,
         :lapack,
