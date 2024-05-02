@@ -21,9 +21,9 @@ end
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:fastmath})
     test_cases = Any[
-        (false, :allocs, nothing, Base.FastMath.exp10_fast, 0.5),
-        (false, :allocs, nothing, Base.FastMath.exp2_fast, 0.5),
-        (false, :allocs, nothing, Base.FastMath.exp_fast, 5.0),
+        (false, :stability_and_allocs, nothing, Base.FastMath.exp10_fast, 0.5),
+        (false, :stability_and_allocs, nothing, Base.FastMath.exp2_fast, 0.5),
+        (false, :stability_and_allocs, nothing, Base.FastMath.exp_fast, 5.0),
     ]
     memory = Any[]
     return test_cases, memory
