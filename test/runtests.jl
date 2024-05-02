@@ -26,6 +26,8 @@ include("front_matter.jl")
             include(joinpath("rrules", "blas.jl"))
             @info "builtins"
             include(joinpath("rrules", "builtins.jl"))
+            @info "fastmath"
+            include(joinpath("rrules", "fastmath.jl"))
             @info "foreigncall"
             include(joinpath("rrules", "foreigncall.jl"))
             @info "iddict"
