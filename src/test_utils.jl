@@ -1086,6 +1086,8 @@ new_tester_2(x) = StableFoo(x, :symbol)
     $(Expr(:new, :y, 5.0))
 end
 
+@eval splatnew_tester(x::Ref{Tuple}) = $(Expr(:splatnew, StableFoo, :(x[])))
+
 type_stable_getfield_tester_1(x::StableFoo) = x.x
 type_stable_getfield_tester_2(x::StableFoo) = x.y
 
@@ -1434,6 +1436,7 @@ function generate_test_functions()
         (false, :allocs, nothing, new_tester, 5.0, :hello),
         (false, :allocs, nothing, new_tester_2, 4.0),
         (false, :none, nothing, new_tester_3, Ref{Any}(StructFoo)),
+        (false, :none, nothing, splatnew_tester, Ref{Tuple}((5.0, :a))),
         (false, :allocs, nothing, type_stable_getfield_tester_1, StableFoo(5.0, :hi)),
         (false, :allocs, nothing, type_stable_getfield_tester_2, StableFoo(5.0, :hi)),
         (false, :none, nothing, globalref_tester),
