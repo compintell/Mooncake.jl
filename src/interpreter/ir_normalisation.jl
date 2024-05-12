@@ -5,8 +5,9 @@ Apply a sequence of standardising transformations to `ir` which leaves its seman
 unchanged, but makes AD more straightforward. In particular, replace
 1. `:foreigncall` `Expr`s with `:call`s to `Tapir._foreigncall_`,
 2. `:new` `Expr`s with `:call`s to `Tapir._new_`,
-3. `Core.IntrinsicFunction`s with counterparts from `Tapir.IntrinsicWrappers`,
-4. `getfield(x, 1)` with `lgetfield(x, Val(1))`, and related transformations.
+3. `:splatnew` Expr`s with `:call`s to `Tapir._splat_new_`,
+4. `Core.IntrinsicFunction`s with counterparts from `Tapir.IntrinsicWrappers`,
+5. `getfield(x, 1)` with `lgetfield(x, Val(1))`, and related transformations.
 
 `spnames` are the names associated to the static parameters of `ir`. These are needed when
 handling `:foreigncall` expressions, in which it is not necessarily the case that all
@@ -22,6 +23,7 @@ function normalise!(ir::IRCode, spnames::Vector{Symbol})
     for (n, inst) in enumerate(ir.stmts.inst)
         inst = foreigncall_to_call(inst, sp_map)
         inst = new_to_call(inst)
+        inst = splatnew_to_call(inst)
         inst = intrinsic_to_function(inst)
         inst = lift_getfield_and_others(inst)
         ir.stmts.inst[n] = inst
@@ -108,10 +110,18 @@ end
 """
     new_to_call(x)
 
-If instruction `x` is a `:new` expression, replace if with a `:call` to `Tapir._new_`.
+If instruction `x` is a `:new` expression, replace it with a `:call` to `Tapir._new_`.
 Otherwise, return `x`.
 """
 new_to_call(x) = Meta.isexpr(x, :new) ? Expr(:call, _new_, x.args...) : x
+
+"""
+    splatnew_to_call(x)
+
+If instruction `x` is a `:splatnew` expression, replace it with a `:call` to
+`Tapir._splat_new_`. Otherwise return `x`.
+"""
+splatnew_to_call(x) = Meta.isexpr(x, :splatnew) ? Expr(:call, _splat_new_, x.args...) : x
 
 """
     intrinsic_to_function(inst)

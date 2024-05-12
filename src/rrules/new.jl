@@ -58,6 +58,13 @@ end
     return fdata_type(tangent_type(P))(fdata)
 end
 
+"""
+    _splat_new_(::Type{P}, x::Tuple) where {P}
+
+Function which replaces instances of `:splatnew`.
+"""
+_splat_new_(::Type{P}, x::Tuple) where {P} = _new_(P, x...)
+
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:new})
 
     # Specialised test cases for _new_.

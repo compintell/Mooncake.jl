@@ -23,6 +23,13 @@
         @test call_ex.args[1] == Tapir._new_
         @test call_ex.args[2:end] == new_ex.args
     end
+    @testset "splatnew_to_call" begin
+        splatnew_ex = Expr(:splatnew, GlobalRef(Tapir, :Foo), SSAValue(1))
+        call_ex = Tapir.splatnew_to_call(splatnew_ex)
+        @test Meta.isexpr(call_ex, :call)
+        @test call_ex.args[1] == Tapir._splat_new_
+        @test call_ex.args[2:end] == splatnew_ex.args
+    end
     @testset "intrinsic_to_function" begin
         @testset "GlobalRef" begin
             intrinsic_ex = Expr(:call, GlobalRef(Core.Intrinsics, :abs_float), SSAValue(1))
