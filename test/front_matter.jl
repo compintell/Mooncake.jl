@@ -9,6 +9,7 @@ using
     SpecialFunctions,
     StableRNGs,
     Tapir,
+    TestReadme,
     Test
 
 import ChainRulesCore
