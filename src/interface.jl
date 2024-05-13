@@ -44,6 +44,9 @@ return by `f(x...)`.
 
 `rule` should be constructed using `build_rrule`.
 
+*Note:* There are lots of subtle ways to mis-use `value_and_pullback!!`, so we generally
+recommend using `value_and_gradient!!` where possible.
+
 *Note:* If calling `value_and_pullback!!` multiple times for various values of `x`, you
 should use the same instance of `rule` each time.
 
@@ -60,6 +63,7 @@ will yield the wrong result.
 arguments. This may cause some additional allocations. If this is a problem in your
 use-case, consider pre-allocating the `CoDual`s and calling the other method of this
 function. The `CoDual`s should be primal-tangent pairs (as opposed to primal-fdata pairs).
+There are lots of ways to get this wrong though, so we generally advise against doing this.
 """
 function value_and_pullback!!(rule::R, ȳ, fx::Vararg{Any, N}) where {R, N}
     return __value_and_pullback!!(rule, ȳ, tuple_map(zero_codual, fx)...)
@@ -69,6 +73,10 @@ end
     value_and_gradient!!(rule, f, x...)
 
 Equivalent to `value_and_pullback(rule, 1.0, f, x...)` -- assumes `f` returns a `Float64`.
+
+*Note:* There are lots of subtle ways to mis-use `value_and_pullback!!`, so we generally
+recommend using `value_and_gradient!!` (this function) where possible. Its docstring is
+useful for understanding this function though.
 """
 function value_and_gradient!!(rule::R, fx::Vararg{Any, N}) where {R, N}
     return __value_and_gradient!!(rule, tuple_map(zero_codual, fx)...)
