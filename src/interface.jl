@@ -62,7 +62,7 @@ use-case, consider pre-allocating the `CoDual`s and calling the other method of 
 function. The `CoDual`s should be primal-tangent pairs (as opposed to primal-fdata pairs).
 """
 function value_and_pullback!!(rule::R, ȳ, fx::Vararg{Any, N}) where {R, N}
-    return __value_and_pullback!!(rule, ȳ, tuple_map(zero_codual, fx)...)
+    return __value_and_pullback!!(rule, ȳ, __create_coduals(fx)...)
 end
 
 """
@@ -71,5 +71,23 @@ end
 Equivalent to `value_and_pullback(rule, 1.0, f, x...)` -- assumes `f` returns a `Float64`.
 """
 function value_and_gradient!!(rule::R, fx::Vararg{Any, N}) where {R, N}
-    return __value_and_gradient!!(rule, tuple_map(zero_codual, fx)...)
+    return __value_and_gradient!!(rule, __create_coduals(fx)...)
+end
+
+function __create_coduals(args)
+    try
+        return tuple_map(zero_codual, args)
+    catch e
+        if e isa StackOverflowError
+            error(
+                "Found a StackOverFlow error when trying to wrap inputs. This often " *
+                "means that Tapir.jl has encountered a self-referential type. Tapir.jl " *
+                "is not presently able to handle self-referential types, so if you are " *
+                "indeed using a self-referential type somewhere, you will need to " *
+                "refactor to avoid it if you wish to use Tapir.jl."
+            )
+        else
+            rethrow(e)
+        end
+    end
 end

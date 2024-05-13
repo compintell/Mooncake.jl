@@ -1,3 +1,7 @@
+mutable struct MutableSelfRef
+    x::Any
+end
+
 @testset "interface" begin
     @testset "$(typeof((f, x...)))" for (ȳ, f, x...) in Any[
         (1.0, (x, y) -> x * y + sin(x) * cos(y), 5.0, 4.0),
@@ -16,5 +20,11 @@
         foo(x) = sin(cos(x))
         rule = build_rrule(foo, 5.0)
         @test_throws ArgumentError value_and_pullback!!(rule, 1.0, foo, CoDual(5.0, 0.0))
+    end
+    @testset "sensible error occurs when self-reference found" begin
+        rule = build_rrule(Tapir.PInterp(), Tuple{typeof(identity), MutableSelfRef})
+        v = MutableSelfRef(nothing)
+        v.x = v
+        @test_throws ErrorException value_and_pullback!!(rule, identity, v)
     end
 end
