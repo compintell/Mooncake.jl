@@ -29,6 +29,24 @@ using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!, potrf!, potrs!
 
 # Needs to be defined before various other things.
 function _foreigncall_ end
+
+"""
+    rrule!!(f::CoDual, x::CoDual...)
+
+Performs the forwards-pass of AD. The `tangent` field of `f` and each `x` should contain the
+forwards tangent data (fdata) associated to each corresponding `primal` field.
+
+Returns a 2-tuple.
+The first element, `y`, is a `CoDual` whose `primal` field is the value associated to
+running `f.primal(map(x -> x.primal, x)...)`, and whose `tangent` field is its associated
+`fdata`. The second element contains the pullback, which runs the reverse-pass. It maps from
+the rdata associated to `y` to the rdata associated to `f` and each `x`.
+
+```jldoctest
+y, pb!! = rrule!!(zero_codual(sin), CoDual(5.0, NoFData()))
+pb!!(1.0)
+```
+"""
 function rrule!! end
 
 include("utils.jl")
