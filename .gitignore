@@ -6,3 +6,4 @@ analysis_results
 profile.pb.gz
 scratch.jl
 docs/build/
+docs/site/
