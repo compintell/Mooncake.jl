@@ -39,7 +39,8 @@ forwards tangent data (fdata) associated to each corresponding `primal` field.
 Returns a 2-tuple.
 The first element, `y`, is a `CoDual` whose `primal` field is the value associated to
 running `f.primal(map(x -> x.primal, x)...)`, and whose `tangent` field is its associated
-`fdata`. The second element contains the pullback, which runs the reverse-pass. It maps from
+`fdata`.
+The second element contains the pullback, which runs the reverse-pass. It maps from
 the rdata associated to `y` to the rdata associated to `f` and each `x`.
 
 ```jldoctest
