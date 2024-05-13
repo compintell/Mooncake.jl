@@ -13,6 +13,22 @@ You should presently expect releases involving breaking changes on a semi-regula
 We are trying to keep this README as up to date as possible, particularly with regards to the best examples of code to look at to understand how to use Tapir.jl.
 If you encounter a new version of Tapir.jl in the wild, please consult this README for the most up-to-date advice.
 
+# Getting Started
+
+There are several ways to interact with Tapir.jl.
+The one that we recommend people begin with is [DifferentiationInterface.jl](https://github.com/gdalle/DifferentiationInterface.jl/). For example, use it as follows to compute the gradient of a function mapping a `Vector{Float64}` to `Float64`.
+```julia
+using DifferentiationInterface
+import Tapir
+
+f(x) = sum(abs2, x)
+backend = AutoTapir()
+x = ones(3)
+extras = prepare_gradient(f, backend, x)
+gradient(f, backend, x, extras)
+```
+You should expect that the first time you run `gradient` that it will take a little bit of time, but subsequent runs should be fast.
+
 # How it works
 
 `Tapir.jl` is based around a function `rrule!!` (which computes vector-Jacobian products (VJPs)) and a related function, `build_rrule` (which builds functions semantically identical to `rrule!!`).
