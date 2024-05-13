@@ -1,7 +1,7 @@
 using Documenter, Tapir
 
 makedocs(
-    sitename = "Tapir",
+    sitename = "Tapir.jl",
     format = Documenter.HTML(),
     modules = [Tapir],
     checkdocs = :none,
