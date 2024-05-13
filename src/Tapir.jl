@@ -43,7 +43,7 @@ running `f.primal(map(x -> x.primal, x)...)`, and whose `tangent` field is its a
 the rdata associated to `y` to the rdata associated to `f` and each `x`.
 
 ```jldoctest
-y, pb!! = rrule!!(zero_codual(sin), CoDual(5.0, NoFData()))
+y, pb!! = rrule!!(zero_fcodual(sin), CoDual(5.0, NoFData()))
 pb!!(1.0)
 ```
 """
