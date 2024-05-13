@@ -25,6 +25,11 @@ end
         rule = build_rrule(Tapir.PInterp(), Tuple{typeof(identity), MutableSelfRef})
         v = MutableSelfRef(nothing)
         v.x = v
+
+        # Check that zero_tangent for v does indeed cause a stack overflow.
+        @test_throws StackOverflowError zero_tangent(v)
+
+        # Check that we're catching the stack overflow.
         @test_throws ErrorException value_and_pullback!!(rule, identity, v)
     end
 end
