@@ -5,3 +5,4 @@ analysis_results
 .vscode
 profile.pb.gz
 scratch.jl
+docs/build/
