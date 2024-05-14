@@ -44,8 +44,13 @@ The second element contains the pullback, which runs the reverse-pass. It maps f
 the rdata associated to `y` to the rdata associated to `f` and each `x`.
 
 ```jldoctest
+using Tapir: zero_fcodual, CoDual, NoFData, rrule!!
 y, pb!! = rrule!!(zero_fcodual(sin), CoDual(5.0, NoFData()))
 pb!!(1.0)
+
+# output
+
+(Tapir.NoRData(), 0.28366218546322625)
 ```
 """
 function rrule!! end
