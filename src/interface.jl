@@ -23,6 +23,8 @@ function __verify_sig(::DerivedRule{<:OpaqueClosure{sig}}, ::Tfx) where {sig, Tf
     end
 end
 
+__verify_sig(rule::SafeRRule, fx) = __verify_sig(rule.rule, fx)
+
 # rrule!! doesn't specify specific argument types which must be used, so there's nothing to
 # check here.
 __verify_sig(::typeof(rrule!!), fx::Tuple) = nothing
