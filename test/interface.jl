@@ -8,12 +8,14 @@ end
         ([1.0, 1.0], x -> [sin(x), sin(2x)], 3.0),
         (1.0, x -> sum(5x), [5.0, 2.0]),
     ]
-        rule = build_rrule(f, x...)
-        v, (df, dx...) = value_and_pullback!!(rule, ȳ, f, x...)
-        @test v ≈ f(x...)
-        @test df isa tangent_type(typeof(f))
-        for (_dx, _x) in zip(dx, x)
-            @test _dx isa tangent_type(typeof(_x))
+        @testset "safe_mode=$safe_mode" for safe_mode in Bool[false, true]
+            rule = build_rrule(f, x...; safety_on=safe_mode)
+            v, (df, dx...) = value_and_pullback!!(rule, ȳ, f, x...)
+            @test v ≈ f(x...)
+            @test df isa tangent_type(typeof(f))
+            for (_dx, _x) in zip(dx, x)
+                @test _dx isa tangent_type(typeof(_x))
+            end
         end
     end
     @testset "sensible error when CoDuals are passed to `value_and_pullback!!" begin
