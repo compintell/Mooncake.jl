@@ -7,4 +7,4 @@ makedocs(
     checkdocs=:none,
 )
 
-deploydocs(repo="github.com/withbayes/Tapir.jl.git", push_preview=true)
+deploydocs(repo="github.com/withbayes/Tapir.jl.git", push_preview=true, devurl="")
