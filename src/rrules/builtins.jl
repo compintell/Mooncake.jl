@@ -365,22 +365,66 @@ end
 
 # Core._abstracttype
 
-function _apply_iterate_equivalent(f::F, args::Vararg{Any, N}) where {F, N}
-    collected_args = tuple_map(collect, args)
-    return __barrier(f, reduce(vcat, collected_args))
+#
+# Core._apply_iterate
+#
+# Core._apply_iterate is a tricky case, and requires calling back into AD to handle
+# properly. The basic strategy is to differentiate a function which is semantically
+# identical to Core._apply_iterate, but whose components we know how to differentiate.
+#
+
+# A function with the same semantics as `Core._apply_iterate`, but which is differentiable.
+function _apply_iterate_equivalent(itr, f::F, args::Vararg{Any, N}) where {F, N}
+    vec_args = reduce(vcat, tuple_map(collect, args))
+    tuple_args = __vec_to_tuple(vec_args)
+    return __barrier(f, tuple_args)
 end
 
-__barrier(f::F, args::Tuple) where {F} = f(args...)
+# A primitive used to avoid exposing `_apply_iterate_equivalent` to `Core._apply_iterate`.
+__vec_to_tuple(v::Vector) = Tuple(v)
 
-#=
-Core._apply_iterate is a tricky case, and requires calling back into AD to handle properly.
-The basic strategy is to differentiate a function which is semantically identical to
-Core._apply_iterate, but whose components we know how to differentiate.
-=#
-function build_rrule!!(
-    interp::TapirInterpreter, ::Type{<:Tuple{typeof(Core._apply_iterate), Vararg}}
+@is_primitive MinimalCtx Tuple{typeof(__vec_to_tuple), Vector}
+
+function rrule!!(::CoDual{typeof(__vec_to_tuple)}, v::CoDual{<:Vector})
+    dv = tangent(v)
+    y = CoDual(Tuple(primal(v)), fdata(Tuple(dv)))
+    function vec_to_tuple_pb!!(dy::Union{Tuple, NoRData})
+        if dy isa Tuple
+            for n in eachindex(dy)
+                dv[n] = increment_rdata!!(dv[n], dy[n])
+            end
+        end
+        return NoRData(), NoRData()
+    end
+    return y, vec_to_tuple_pb!!
+end
+
+@noinline __barrier(f::F, args::Tuple) where {F} = f(args...)
+
+# Over-ride default definition of `is_primitive` for buildins.
+is_primitive(::Type{MinimalCtx}, ::Type{<:Tuple{typeof(Core._apply_iterate), Vararg}}) = false
+
+struct ApplyIterateRule{R}
+    rule::R
+end
+
+function (rule::ApplyIterateRule)(::CoDual{typeof(Core._apply_iterate)}, args::CoDual...)
+    return rule.rule(zero_fcodual(_apply_iterate_equivalent), args...)
+end
+
+function build_rrule(
+    interp::TapirInterpreter, sig::Type{<:Tuple{typeof(Core._apply_iterate), Vararg}};
+    kwargs...
 )
+    new_sig = Tuple{typeof(_apply_iterate_equivalent), sig.parameters[2:end]...}
+    return ApplyIterateRule(build_rrule(interp, new_sig; kwargs...))
+end
 
+function rule_type(
+    interp::TapirInterpreter{C}, sig::Type{<:Tuple{typeof(Core._apply_iterate), Vararg}}
+) where {C}
+    new_sig = Tuple{typeof(_apply_iterate_equivalent), sig.parameters[2:end]...}
+    return ApplyIterateRule{rule_type(interp, new_sig)}
 end
 
 # Core._apply_pure
@@ -786,9 +830,11 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability, nothing, IntrinsicsWrappers.xor_int, 5, 4),
         (false, :stability, nothing, IntrinsicsWrappers.zext_int, Int64, 0xffffffff),
 
-        # Non-intrinsic built-ins:
+        # # Non-intrinsic built-ins:
         # Core._abstracttype -- NEEDS IMPLEMENTING AND TESTING
-        # Core._apply_iterate -- NEEDS IMPLEMENTING AND TESTING
+        (false, :none, nothing, __vec_to_tuple, [1.0]),
+        (false, :none, nothing, __vec_to_tuple, Any[1.0]),
+        (false, :none, nothing, __vec_to_tuple, Any[[1.0]]),
         # Core._apply_pure -- NEEDS IMPLEMENTING AND TESTING
         # Core._call_in_world -- NEEDS IMPLEMENTING AND TESTING
         # Core._call_in_world_total -- NEEDS IMPLEMENTING AND TESTING
@@ -937,6 +983,11 @@ end
 
 function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
     test_cases = Any[
+        (false, :none, nothing, Core._apply_iterate, Base.iterate, *, 5.0, 4.0),
+        (false, :none, nothing, Core._apply_iterate, Base.iterate, *, (5.0, 4.0)),
+        (false, :none, nothing, Core._apply_iterate, Base.iterate, *, [5.0, 4.0]),
+        (false, :none, nothing, Core._apply_iterate, Base.iterate, *, [5.0], (4.0, )),
+        (false, :none, nothing, Core._apply_iterate, Base.iterate, *, 3, (4.0, )),
         (
             false, :none, nothing,
             (
