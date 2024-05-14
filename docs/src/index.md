@@ -1,5 +1,3 @@
 # Tapir.jl
 
-Documentation for Tapir.jl
-
-Hmm this should be working... aha
+Documentation for Tapir.jl is on it's way!
