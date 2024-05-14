@@ -364,7 +364,25 @@ function rrule!!(f::CoDual{typeof(===)}, x, y)
 end
 
 # Core._abstracttype
-# Core._apply_iterate
+
+function _apply_iterate_equivalent(f::F, args::Vararg{Any, N}) where {F, N}
+    collected_args = tuple_map(collect, args)
+    return __barrier(f, reduce(vcat, collected_args))
+end
+
+__barrier(f::F, args::Tuple) where {F} = f(args...)
+
+#=
+Core._apply_iterate is a tricky case, and requires calling back into AD to handle properly.
+The basic strategy is to differentiate a function which is semantically identical to
+Core._apply_iterate, but whose components we know how to differentiate.
+=#
+function build_rrule!!(
+    interp::TapirInterpreter, ::Type{<:Tuple{typeof(Core._apply_iterate), Vararg}}
+)
+
+end
+
 # Core._apply_pure
 # Core._call_in_world
 # Core._call_in_world_total
