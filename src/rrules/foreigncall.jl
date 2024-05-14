@@ -77,6 +77,12 @@ function rrule!!(
     return zero_fcodual(Array{T, N}(undef, map(primal, m)...)), NoPullback(f, u, m...)
 end
 
+function rrule!!(
+    f::CoDual{Type{Array{T, 0}}}, u::CoDual{typeof(undef)}, m::CoDual{Tuple{}}
+) where {T}
+    return zero_fcodual(Array{T, 0}(undef)), NoPullback(f, u, m)
+end
+
 @is_primitive MinimalCtx Tuple{Type{<:Array{T, N}}, typeof(undef), NTuple{N}} where {T, N}
 function rrule!!(
     ::CoDual{<:Type{<:Array{T, N}}}, ::CoDual{typeof(undef)}, m::CoDual{NTuple{N}},
@@ -522,11 +528,13 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:foreigncall})
     test_cases = Any[
         (false, :stability, nothing, Base.allocatedinline, Float64),
         (false, :stability, nothing, Base.allocatedinline, Vector{Float64}),
+        (true, :stability, nothing, Array{Float64, 0}, undef),
         (true, :stability, nothing, Array{Float64, 1}, undef, 5),
         (true, :stability, nothing, Array{Float64, 2}, undef, 5, 4),
         (true, :stability, nothing, Array{Float64, 3}, undef, 5, 4, 3),
         (true, :stability, nothing, Array{Float64, 4}, undef, 5, 4, 3, 2),
         (true, :stability, nothing, Array{Float64, 5}, undef, 5, 4, 3, 2, 1),
+        (true, :stability, nothing, Array{Float64, 0}, undef, ()),
         (true, :stability, nothing, Array{Float64, 4}, undef, (2, 3, 4, 5)),
         (true, :stability, nothing, Array{Float64, 5}, undef, (2, 3, 4, 5, 6)),
         (false, :stability, nothing, copy, randn(5, 4)),
