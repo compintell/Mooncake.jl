@@ -53,6 +53,16 @@ end
         @test length(Tapir.collect_stmts(bb_code)) == length(ir.stmts.inst)
         @test Tapir.id_to_line_map(bb_code) isa Dict{ID, Int}
     end
+    @testset "control_flow_graph" begin
+        ir = Base.code_ircode_by_type(Tuple{typeof(sin), Float64})[1][1]
+        bb = BBCode(ir)
+        new_ir = Core.Compiler.IRCode(bb)
+        cfg = Tapir.control_flow_graph(bb)
+        @test all(map((l, r) -> l.stmts == r.stmts, ir.cfg.blocks, cfg.blocks))
+        @test all(map((l, r) -> sort(l.preds) == sort(r.preds), ir.cfg.blocks, cfg.blocks))
+        @test all(map((l, r) -> sort(l.succs) == sort(r.succs), ir.cfg.blocks, cfg.blocks))
+        @test ir.cfg.index == cfg.index
+    end
     @testset "_characterise_unique_predecessor_blocks" begin
         @testset "single block" begin
             blk_id = ID()

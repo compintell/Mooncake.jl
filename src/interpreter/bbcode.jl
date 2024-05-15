@@ -342,6 +342,37 @@ end
 concatenate_ids(bb_code::BBCode) = reduce(vcat, map(b -> b.inst_ids, bb_code.blocks))
 concatenate_stmts(bb_code::BBCode) = reduce(vcat, map(b -> b.insts, bb_code.blocks))
 
+"""
+    control_flow_graph(bb_code::BBCode)::Core.Compiler.CFG
+
+Computes the `Core.Compiler.CFG` object associated to this `bb_code`.
+"""
+control_flow_graph(bb_code::BBCode)::Core.Compiler.CFG = _control_flow_graph(bb_code.blocks)
+
+# Internal function, used to implement control_flow_graph, but easier to write test cases
+# for because there is no need to construct an ensure BBCode object.
+function _control_flow_graph(blks::Vector{BBlock})::Core.Compiler.CFG
+
+    # Get IDs of predecessors and successors.
+    preds_ids = _compute_all_predecessors(blks)
+    succs_ids = _compute_all_successors(blks)
+
+    # Construct map from block ID to block number.
+    block_ids = map(b -> b.id, blks)
+    id_to_num = Dict{ID, Int}(zip(block_ids, collect(eachindex(block_ids))))
+
+    # Convert predecessor and successor IDs to numbers.
+    preds = map(id -> sort(map(p -> id_to_num[p], preds_ids[id])), block_ids)
+    succs = map(id -> sort(map(s -> id_to_num[s], succs_ids[id])), block_ids)
+
+    index = vcat(0, cumsum(map(length, blks))) .+ 1
+    basic_blocks = map(eachindex(blks)) do n
+        stmt_range = Core.Compiler.StmtRange(index[n], index[n+1] - 1)
+        return Core.Compiler.BasicBlock(stmt_range, preds[n], succs[n])
+    end
+    return Core.Compiler.CFG(basic_blocks, index[2:end-1])
+end
+
 #
 # Converting from IRCode to BBCode
 #
@@ -454,7 +485,7 @@ function CC.IRCode(bb_code::BBCode)
     bb_code = _lower_switch_statements(bb_code)
     bb_code = _remove_double_edges(bb_code)
     insts = _ids_to_line_positions(bb_code)
-    cfg = _compute_basic_blocks(insts)
+    # cfg = _compute_basic_blocks(insts)
     insts = _lines_to_blocks(insts, cfg)
     return IRCode(
         CC.InstructionStream(
@@ -464,7 +495,7 @@ function CC.IRCode(bb_code::BBCode)
             map(x -> x.line, insts),
             map(x -> x.flag, insts),
         ),
-        cfg,
+        control_flow_graph(bb_code),
         CC.copy(bb_code.linetable),
         CC.copy(bb_code.argtypes),
         CC.copy(bb_code.meta),
