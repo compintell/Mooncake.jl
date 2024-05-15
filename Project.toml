@@ -1,7 +1,7 @@
 name = "Tapir"
 uuid = "07d77754-e150-4737-8c94-cd238a1fb45b"
 authors = ["Will Tebbutt, Hong Ge, and contributors"]
-version = "0.2.12"
+version = "0.2.13"
 
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
@@ -26,7 +26,7 @@ TapirLogDensityProblemsADExt = "LogDensityProblemsAD"
 TapirSpecialFunctionsExt = "SpecialFunctions"
 
 [compat]
-ADTypes = "1"
+ADTypes = "1.2"
 BenchmarkTools = "1"
 ChainRulesCore = "1"
 DiffRules = "1"

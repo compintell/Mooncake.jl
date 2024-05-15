@@ -20,5 +20,5 @@ test_gradient(x) = -2 .* x
         @test isapprox(logdensity_and_gradient(∇l, x)[2], test_gradient(x))
     end
 
-    @test ADgradient(ADTypes.AutoTapir(), l) isa typeof(∇l)
+    @test ADgradient(ADTypes.AutoTapir(safe_mode=false), l) isa typeof(∇l)
 end

@@ -4,3 +4,4 @@ Tapir = "07d77754-e150-4737-8c94-cd238a1fb45b"
 
 [compat]
 Documenter = "1"
+Tapir = "0.2.13"
