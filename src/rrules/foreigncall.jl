@@ -355,8 +355,8 @@ function rrule!!(
     _soffs = primal(soffs)
     pdest = primal(dest)
     ddest = tangent(dest)
-    dest_copy = primal(dest)[dest_idx]
-    ddest_copy = tangent(dest)[dest_idx]
+    dest_copy = pdest[dest_idx]
+    ddest_copy = ddest[dest_idx]
 
     # Run primal computation.
     dsrc = tangent(src)
@@ -370,8 +370,11 @@ function rrule!!(
         dsrc[src_idx] .= increment!!.(view(dsrc, src_idx), view(ddest, dest_idx))
 
         # Restore initial state.
-        pdest[dest_idx] .= dest_copy
-        ddest[dest_idx] .= ddest_copy
+        @inbounds for n in eachindex(dest_copy)
+            isassigned(dest_copy, n) || continue
+            pdest[dest_idx[n]] = dest_copy[n]
+            ddest[dest_idx[n]] = ddest_copy[n]
+        end
 
         return NoRData(), NoRData(), NoRData(), NoRData(), NoRData(), NoRData()
     end
@@ -581,6 +584,10 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:foreigncall})
         (
             false, :stability, nothing,
             unsafe_copyto!, [rand(3) for _ in 1:5], 2, [rand(4) for _ in 1:4], 1, 3,
+        ),
+        (
+            false, :none, nothing,
+            unsafe_copyto!, Vector{Any}(undef, 5), 2, Any[rand() for _ in 1:4], 1, 3,
         ),
         (false, :stability, nothing, deepcopy, 5.0),
         (false, :stability, nothing, deepcopy, randn(5)),
