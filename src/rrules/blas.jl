@@ -232,15 +232,29 @@ end
 # LEVEL 3
 #
 
-@is_primitive MinimalCtx Tuple{typeof(BLAS.gemm!), Char, Char, T, Matrix{T}, Matrix{T}, T, Matrix{T}} where {T<:Union{Float32, Float64}}
+const MatrixOrView{T} = Union{Matrix{T}, SubArray{T, 2, Matrix{T}}}
+
+@is_primitive(
+    MinimalCtx,
+    Tuple{
+        typeof(BLAS.gemm!),
+        Char,
+        Char,
+        T,
+        MatrixOrView{T},
+        MatrixOrView{T},
+        T,
+        Matrix{T},
+    } where {T<:Union{Float32, Float64}},
+)
 
 function rrule!!(
     ::CoDual{typeof(BLAS.gemm!)},
     transA::CoDual{Char},
     transB::CoDual{Char},
     alpha::CoDual{T},
-    A::CoDual{Matrix{T}},
-    B::CoDual{Matrix{T}},
+    A::CoDual{<:MatrixOrView{T}},
+    B::CoDual{<:MatrixOrView{T}},
     beta::CoDual{T},
     C::CoDual{Matrix{T}},
 ) where {T<:Union{Float32, Float64}}
@@ -249,9 +263,9 @@ function rrule!!(
     tB = primal(transB)
     a = primal(alpha)
     b = primal(beta)
-    p_A = primal(A)
-    p_B = primal(B)
-    p_C = primal(C)
+    p_A, dA = viewify(A)
+    p_B, dB = viewify(B)
+    p_C, dC = viewify(C)
 
     # In this rule we optimise carefully for the special case a == 1 && b == 0, which
     # corresponds to simply multiplying A and B together, and writing the result to C.
@@ -266,13 +280,10 @@ function rrule!!(
         BLAS.axpby!(a, tmp, b, p_C)
     end
 
-    dA = tangent(A)
-    dB = tangent(B)
-    dC = tangent(C)
     function gemm!_pb!!(::NoRData)
 
         # Compute pullback w.r.t. alpha.
-        da = (a == 1 && b == 0) ? BLAS.dot(dC, p_C) : BLAS.dot(dC, tmp_ref[])
+        da = (a == 1 && b == 0) ? dot(dC, p_C) : dot(dC, tmp_ref[])
 
         # Restore previous state.
         BLAS.copyto!(p_C, p_C_copy)
@@ -296,6 +307,12 @@ function rrule!!(
         return NoRData(), NoRData(), NoRData(), da, NoRData(), NoRData(), db, NoRData()
     end
     return C, gemm!_pb!!
+end
+
+viewify(A::CoDual{<:Matrix}) = view(primal(A), :, :), view(tangent(A), :, :)
+function viewify(A::CoDual{P}) where {P<:SubArray}
+    p_A = primal(A)
+    return p_A, P(tangent(A).data.parent, p_A.indices, p_A.offset1, p_A.stride1)
 end
 
 for (gemm, elty) in ((:dgemm_, :Float64), (:sgemm_, :Float32))
@@ -588,11 +605,27 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
 
     test_cases = vcat(
         # gemm!
-        vec(map(product(t_flags, t_flags, alphas, betas)) do (tA, tB, a, b)
-            A = tA == 'N' ? randn(3, 4) : randn(4, 3)
-            B = tB == 'N' ? randn(4, 5) : randn(5, 4)
-            (false, :stability, nothing, BLAS.gemm!, tA, tB, a, A, B, b, randn(3, 5))
-        end),
+        reduce(
+            vcat,
+            vec(map(product(t_flags, t_flags, alphas, betas)) do (tA, tB, a, b)
+                A = tA == 'N' ? randn(3, 4) : randn(4, 3)
+                B = tB == 'N' ? randn(4, 5) : randn(5, 4)
+                As = if tA == 'N'
+                    [randn(3, 4), view(randn(15, 15), 2:4, 3:6)]
+                else
+                    [randn(4, 3), view(randn(15, 15), 2:5, 3:5)]
+                end
+                Bs = if tB == 'N'
+                    [randn(4, 5), view(randn(15, 15), 1:4, 2:6)]
+                else
+                    [randn(5, 4), view(randn(15, 15), 1:5, 3:6)]
+                end
+                C = randn(3, 5)
+                return map(product(As, Bs)) do (A, B)
+                    (false, :stability, nothing, BLAS.gemm!, tA, tB, a, A, B, b, C)
+                end
+            end),
+        ),
     )
 
     memory = Any[]
