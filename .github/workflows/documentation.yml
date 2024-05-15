@@ -22,7 +22,6 @@ jobs:
           version: '1'
           arch: x64
           include-all-prereleases: false
-      - uses: julia-actions/cache@v1
       - name: Install dependencies
         run: julia --project=docs/ -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.update(); Pkg.instantiate()'
       - name: Build and deploy
