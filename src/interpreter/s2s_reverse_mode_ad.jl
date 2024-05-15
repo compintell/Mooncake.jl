@@ -743,7 +743,7 @@ function build_rrule(
 ) where {C}
 
     # If we're compiling in safe mode, let the user know by default.
-    if !silence_safety_messages
+    if !silence_safety_messages && safety_on
         @info "Compiling rule for $sig in safe mode. Disable for best performance."
     end
 
