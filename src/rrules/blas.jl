@@ -261,7 +261,8 @@ function rrule!!(
     if (a == 1 && b == 0)
         BLAS.gemm!(tA, tB, a, p_A, p_B, b, p_C)
     else
-        tmp_ref[] = BLAS.gemm(tA, tB, one(T), p_A, p_B)
+        tmp = BLAS.gemm(tA, tB, one(T), p_A, p_B)
+        tmp_ref[] = tmp
         BLAS.axpby!(a, tmp, b, p_C)
     end
 
