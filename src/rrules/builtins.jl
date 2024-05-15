@@ -830,7 +830,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability, nothing, IntrinsicsWrappers.xor_int, 5, 4),
         (false, :stability, nothing, IntrinsicsWrappers.zext_int, Int64, 0xffffffff),
 
-        # # Non-intrinsic built-ins:
+        # Non-intrinsic built-ins:
         # Core._abstracttype -- NEEDS IMPLEMENTING AND TESTING
         (false, :none, nothing, __vec_to_tuple, [1.0]),
         (false, :none, nothing, __vec_to_tuple, Any[1.0]),
