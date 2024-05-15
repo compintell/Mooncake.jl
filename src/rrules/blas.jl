@@ -605,7 +605,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
 
     test_cases = vcat(
         # gemm!
-        reduce(
+        vec(reduce(
             vcat,
             vec(map(product(t_flags, t_flags, alphas, betas)) do (tA, tB, a, b)
                 A = tA == 'N' ? randn(3, 4) : randn(4, 3)
@@ -625,7 +625,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
                     (false, :stability, nothing, BLAS.gemm!, tA, tB, a, A, B, b, C)
                 end
             end),
-        ),
+        )),
     )
 
     memory = Any[]
