@@ -232,6 +232,72 @@ end
 # LEVEL 3
 #
 
+@is_primitive MinimalCtx Tuple{typeof(BLAS.gemm!), Char, Char, T, Matrix{T}, Matrix{T}, T, Matrix{T}} where {T<:Union{Float32, Float64}}
+
+function rrule!!(
+    ::CoDual{typeof(BLAS.gemm!)},
+    transA::CoDual{Char},
+    transB::CoDual{Char},
+    alpha::CoDual{T},
+    A::CoDual{Matrix{T}},
+    B::CoDual{Matrix{T}},
+    beta::CoDual{T},
+    C::CoDual{Matrix{T}},
+) where {T<:Union{Float32, Float64}}
+
+    tA = primal(transA)
+    tB = primal(transB)
+    a = primal(alpha)
+    b = primal(beta)
+    p_A = primal(A)
+    p_B = primal(B)
+    p_C = primal(C)
+
+    # In this rule we optimise carefully for the special case a == 1 && b == 0, which
+    # corresponds to simply multiplying A and B together, and writing the result to C.
+    # This is an extremely common edge case, so it's important to do well for it.
+    p_C_copy = copy(p_C)
+    tmp_ref = Ref{Matrix{T}}()
+    if (a == 1 && b == 0)
+        BLAS.gemm!(tA, tB, a, p_A, p_B, b, p_C)
+    else
+        tmp = BLAS.gemm(tA, tB, one(T), p_A, p_B)
+        tmp_ref[] = tmp
+        BLAS.axpby!(a, tmp, b, p_C)
+    end
+
+    dA = tangent(A)
+    dB = tangent(B)
+    dC = tangent(C)
+    function gemm!_pb!!(::NoRData)
+
+        # Compute pullback w.r.t. alpha
+        da = (a == 1 && b == 0) ? BLAS.dot(dC, p_C) : BLAS.dot(dC, tmp_ref[])
+
+        # Restore previous state.
+        BLAS.copyto!(p_C, p_C_copy)
+
+        # Compute pullback w.r.t. beta
+        db = BLAS.dot(dC, p_C)
+
+        # Increment cotangents.
+        if tA == 'N'
+            BLAS.gemm!('N', tB == 'N' ? 'T' : 'N', a, dC, p_B, one(T), dA)
+        else
+            BLAS.gemm!(tB == 'N' ? 'N' : 'T', 'T', a, p_B, dC, one(T), dA)
+        end
+        if tB == 'N'
+            BLAS.gemm!(tA == 'N' ? 'T' : 'N', 'N', a, p_A, dC, one(T), dB)
+        else
+            BLAS.gemm!('T', tA == 'N' ? 'N' : 'T', a, dC, p_A, one(T), dB)
+        end
+        BLAS.scal!(b, dC)
+
+        return NoRData(), NoRData(), NoRData(), da, NoRData(), NoRData(), db, NoRData()
+    end
+    return C, gemm!_pb!!
+end
+
 for (gemm, elty) in ((:dgemm_, :Float64), (:sgemm_, :Float32))
     @eval function rrule!!(
         ::CoDual{typeof(_foreigncall_)},
@@ -515,7 +581,23 @@ for (trsm, elty) in ((:dtrsm_, :Float64), (:strsm_, :Float32))
     end
 end
 
-generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas}) = Any[], Any[]
+function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
+    t_flags = ['N', 'T', 'C']
+    alphas = [0.0, -0.25]
+    betas = [0.0, 0.33]
+
+    test_cases = vcat(
+        # gemm!
+        vec(map(product(t_flags, t_flags, alphas, betas)) do (tA, tB, a, b)
+            A = tA == 'N' ? randn(3, 4) : randn(4, 3)
+            B = tB == 'N' ? randn(4, 5) : randn(5, 4)
+            (false, :stability, nothing, BLAS.gemm!, tA, tB, a, A, B, b, randn(3, 5))
+        end),
+    )
+
+    memory = Any[]
+    return test_cases, memory
+end
 
 function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
     t_flags = ['N', 'T', 'C']
@@ -571,13 +653,6 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
         #
         # BLAS LEVEL 3
         #
-
-        # gemm!
-        vec(map(product(t_flags, t_flags)) do (tA, tB)
-            A = tA == 'N' ? randn(3, 4) : randn(4, 3)
-            B = tB == 'N' ? randn(4, 5) : randn(5, 4)
-            (false, :none, nothing, BLAS.gemm!, tA, tB, randn(), A, B, randn(), randn(3, 5))
-        end),
 
         # aliased gemm!
         vec(map(product(t_flags, t_flags)) do (tA, tB)
