@@ -261,8 +261,7 @@ function rrule!!(
     if (a == 1 && b == 0)
         BLAS.gemm!(tA, tB, a, p_A, p_B, b, p_C)
     else
-        tmp = BLAS.gemm(tA, tB, one(T), p_A, p_B)
-        tmp_ref[] = tmp
+        tmp_ref[] = BLAS.gemm(tA, tB, one(T), p_A, p_B)
         BLAS.axpby!(a, tmp, b, p_C)
     end
 
@@ -271,13 +270,13 @@ function rrule!!(
     dC = tangent(C)
     function gemm!_pb!!(::NoRData)
 
-        # Compute pullback w.r.t. alpha
+        # Compute pullback w.r.t. alpha.
         da = (a == 1 && b == 0) ? BLAS.dot(dC, p_C) : BLAS.dot(dC, tmp_ref[])
 
         # Restore previous state.
         BLAS.copyto!(p_C, p_C_copy)
 
-        # Compute pullback w.r.t. beta
+        # Compute pullback w.r.t. beta.
         db = BLAS.dot(dC, p_C)
 
         # Increment cotangents.
