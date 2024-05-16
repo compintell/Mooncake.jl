@@ -377,7 +377,7 @@ end
 function _apply_iterate_equivalent(itr, f::F, args::Vararg{Any, N}) where {F, N}
     vec_args = reduce(vcat, tuple_map(collect, args))
     tuple_args = __vec_to_tuple(vec_args)
-    return __barrier(f, tuple_args)
+    return tuple_splat(f, tuple_args)
 end
 
 # A primitive used to avoid exposing `_apply_iterate_equivalent` to `Core._apply_iterate`.
@@ -398,8 +398,6 @@ function rrule!!(::CoDual{typeof(__vec_to_tuple)}, v::CoDual{<:Vector})
     end
     return y, vec_to_tuple_pb!!
 end
-
-@noinline __barrier(f::F, args::Tuple) where {F} = f(args...)
 
 # Over-ride default definition of `is_primitive` for buildins.
 is_primitive(::Type{MinimalCtx}, ::Type{<:Tuple{typeof(Core._apply_iterate), Vararg}}) = false
@@ -988,6 +986,13 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :none, nothing, Core._apply_iterate, Base.iterate, *, [5.0, 4.0]),
         (false, :none, nothing, Core._apply_iterate, Base.iterate, *, [5.0], (4.0, )),
         (false, :none, nothing, Core._apply_iterate, Base.iterate, *, 3, (4.0, )),
+        (
+            # 33 arguments is the critical length at which splatting gives up on inferring,
+            # and backs off to `Core._apply_iterate`. It's important to check this in order
+            # to verify that we don't wind up in an infinite recursion.
+            false, :none, nothing,
+            _apply_iterate_equivalent, Base.iterate, +, randn(33),
+        ),
         (
             false, :none, nothing,
             (
