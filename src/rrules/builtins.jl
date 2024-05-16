@@ -375,7 +375,7 @@ end
 
 # A function with the same semantics as `Core._apply_iterate`, but which is differentiable.
 function _apply_iterate_equivalent(itr, f::F, args::Vararg{Any, N}) where {F, N}
-    vec_args = reduce(vcat, tuple_map(collect, args))
+    vec_args = reduce(vcat, map(collect, args))
     tuple_args = __vec_to_tuple(vec_args)
     return tuple_splat(f, tuple_args)
 end
@@ -416,13 +416,6 @@ function build_rrule(
 )
     new_sig = Tuple{typeof(_apply_iterate_equivalent), sig.parameters[2:end]...}
     return ApplyIterateRule(build_rrule(interp, new_sig; kwargs...))
-end
-
-function rule_type(
-    interp::TapirInterpreter{C}, sig::Type{<:Tuple{typeof(Core._apply_iterate), Vararg}}
-) where {C}
-    new_sig = Tuple{typeof(_apply_iterate_equivalent), sig.parameters[2:end]...}
-    return ApplyIterateRule{rule_type(interp, new_sig)}
 end
 
 # Core._apply_pure

@@ -75,6 +75,14 @@ end
     #w ~ arraydist([dist[doc[i]] for i in 1:length(doc)])
 end
 
+function make_large_model(num_tildes::Int)
+    expr = :(function $(Symbol(:demo, num_tildes))() end) |> Base.remove_linenums!
+    mainbody = last(expr.args)
+    append!(mainbody.args, [:($(Symbol("x", j)) ~ Normal()) for j = 1:num_tildes])
+    f = @eval $(DynamicPPL.model(:Main, LineNumberNode(1), expr, false))
+    return invokelatest(f)
+end
+
 function build_turing_problem(rng, model, example=nothing)
     ctx = Turing.DefaultContext()
     vi = example === nothing ? Turing.SimpleVarInfo(model) : Turing.SimpleVarInfo(example)
@@ -89,14 +97,15 @@ end
     interp = Tapir.PInterp()
     @testset "$(typeof(model))" for (interface_only, name, model, ex) in vcat(
         Any[
-            (false, "simple_model", simple_model(), nothing),
-            (false, "demo", demo(), nothing),
-            (
-                false,
-                "broadcast_demo",
-                broadcast_demo(rand(LogNormal(1.5, 0.5), 1_000)),
-                nothing,
-            ),
+            # (false, "simple_model", simple_model(), nothing),
+            # (false, "demo", demo(), nothing),
+            # (
+            #     false,
+            #     "broadcast_demo",
+            #     broadcast_demo(rand(LogNormal(1.5, 0.5), 1_000)),
+            #     nothing,
+            # ),
+            (false, "large model", make_large_model(33), nothing),
             # (
             #     false,
             #     "CollapsedLDA",
@@ -105,50 +114,50 @@ end
             #     ),
             # ), doesn't currently work with SimpleVarInfo
         ],
-        Any[
-            (false, "demo_$n", m, Turing.DynamicPPL.TestUtils.rand_prior_true(m)) for
-                (n, m) in enumerate(Turing.DynamicPPL.TestUtils.DEMO_MODELS)
-        ],
+        # Any[
+        #     (false, "demo_$n", m, Turing.DynamicPPL.TestUtils.rand_prior_true(m)) for
+        #         (n, m) in enumerate(Turing.DynamicPPL.TestUtils.DEMO_MODELS)
+        # ],
     )
         @info name
         rng = sr(123)
         f, x = build_turing_problem(rng, model, ex)
         TestUtils.test_derived_rule(
             sr(123456), f, x;
-            perf_flag=:none, interface_only=true, is_primitive=false, interp
+            perf_flag=:none, interface_only=true, is_primitive=false, interp, safety_on=true
         )
 
-        # rule = build_rrule(interp, _typeof((f, x)))
-        # codualed_args = map(zero_codual, (f, x))
-        # TestUtils.to_benchmark(rule, codualed_args...)
+        rule = build_rrule(interp, _typeof((f, x)))
+        codualed_args = map(zero_codual, (f, x))
+        TestUtils.to_benchmark(rule, codualed_args...)
 
-        # primal = @benchmark $f($x)
-        # gradient = @benchmark(TestUtils.to_benchmark($rule, $codualed_args...))
+        primal = @benchmark $f($x)
+        gradient = @benchmark(TestUtils.to_benchmark($rule, $codualed_args...))
 
-        # println("primal")
-        # display(primal)
-        # println()
+        println("primal")
+        display(primal)
+        println()
 
-        # println("gradient")
-        # display(gradient)
-        # println()
+        println("gradient")
+        display(gradient)
+        println()
 
-        # try
-        #     tape = ReverseDiff.GradientTape(f, x);
-        #     ReverseDiff.gradient!(tape, x);
-        #     result = zeros(size(x));
-        #     ReverseDiff.gradient!(result, tape, x)
+        try
+            tape = ReverseDiff.GradientTape(f, x);
+            ReverseDiff.gradient!(tape, x);
+            result = zeros(size(x));
+            ReverseDiff.gradient!(result, tape, x)
 
-        #     revdiff = @benchmark ReverseDiff.gradient!($result, $tape, $x)
-        #     println("ReverseDiff")
-        #     display(revdiff)
-        #     println()
-        #     @show time(revdiff) / time(primal)
-        # catch
-        #     display("revdiff failed")
-        # end
+            revdiff = @benchmark ReverseDiff.gradient!($result, $tape, $x)
+            println("ReverseDiff")
+            display(revdiff)
+            println()
+            @show time(revdiff) / time(primal)
+        catch
+            display("revdiff failed")
+        end
 
-        # @show time(gradient) / time(primal)
+        @show time(gradient) / time(primal)
 
         # @profview run_many_times(10_000, TestUtils.to_benchmark, rule, codualed_args...)
 

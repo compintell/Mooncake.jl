@@ -1129,7 +1129,7 @@ function DynamicDerivedRule(interp::TapirInterpreter, safety_on::Bool)
 end
 
 function (dynamic_rule::DynamicDerivedRule)(args::Vararg{Any, N}) where {N}
-    sig = signature_from_values(tuple_map(primal, args))
+    sig = Tuple{map(_typeof, args)...}
     is_primitive(context_type(dynamic_rule.interp), sig) && return rrule!!(args...)
     rule = get(dynamic_rule.cache, sig, nothing)
     if rule === nothing
