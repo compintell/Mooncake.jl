@@ -1109,7 +1109,7 @@ __switch_case(id::Int32, predecessor_id::Int32) = !(id === predecessor_id)
 @inline __deref_arg_rev_data_refs(arg_rev_data_refs...) = map(getindex, arg_rev_data_refs)
 
 #=
-    DynamicDerivedRule(interp::TapirInterpreter)
+    DynamicDerivedRule(interp::TapirInterpreter, safety_on::Bool)
 
 For internal use only.
 
@@ -1129,7 +1129,7 @@ function DynamicDerivedRule(interp::TapirInterpreter, safety_on::Bool)
 end
 
 function (dynamic_rule::DynamicDerivedRule)(args::Vararg{Any, N}) where {N}
-    sig = Tuple{tuple_map(_typeof, tuple_map(primal, args))...}
+    sig = Tuple{tuple_map(typeof, tuple_map(primal, args))...}
     is_primitive(context_type(dynamic_rule.interp), sig) && return rrule!!(args...)
     rule = get(dynamic_rule.cache, sig, nothing)
     if rule === nothing
