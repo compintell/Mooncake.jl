@@ -64,7 +64,7 @@ include("front_matter.jl")
     elseif test_group == "interface"
         include("interface.jl")
     elseif test_group == "gpu"
-        print("Running GPU code!")
+        println("Placeholder for actual GPU code.")
     else
         throw(error("test_group=$(test_group) is not recognised"))
     end
