@@ -12,4 +12,4 @@ steps:
     if: build.message !~ /\[skip tests\]/
     timeout_in_minutes: 60
     env:
-      TEST_GROUP: "GPU"
+      TEST_GROUP: "gpu"
