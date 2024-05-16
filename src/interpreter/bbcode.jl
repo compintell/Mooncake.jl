@@ -485,7 +485,6 @@ function CC.IRCode(bb_code::BBCode)
     bb_code = _lower_switch_statements(bb_code)
     bb_code = _remove_double_edges(bb_code)
     insts = _ids_to_line_positions(bb_code)
-    # cfg = _compute_basic_blocks(insts)
     cfg =  control_flow_graph(bb_code)
     insts = _lines_to_blocks(insts, cfg)
     return IRCode(
