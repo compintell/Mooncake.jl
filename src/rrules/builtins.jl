@@ -88,12 +88,12 @@ end
 # atomic_pointerswap
 
 @intrinsic bitcast
-function rrule!!(f::CoDual{typeof(bitcast)}, t::CoDual{Type{T}}, x) where {T}
-    if T <: IEEEFloat
-        msg = "It is not permissible to bitcast to a differentiable type during AD, as " *
-        "this risks dropping tangents, and therefore risks silently giving the wrong " *
-        "answer. If this call to bitcast appears as part of the implementation of a " *
-        "differentiable function, you should write a rule for this function, or modify " *
+function rrule!!(f::CoDual{typeof(bitcast)}, t::CoDual{Type{T}}, x::CoDual{V}) where {T, V}
+    if T <: IEEEFloat || V <: IEEEFloat
+        msg = "It is not permissible to bitcast to or from a differentiable type during " *
+        "AD, as this risks dropping tangents, and therefore risks silently giving the " *
+        " wrong answer. If this call to bitcast appears as part of the implementation of " *
+        "a differentiable function, you should write a rule for this function, or modify " *
         "its implementation to avoid the bitcast."
         throw(ArgumentError(msg))
     end
@@ -193,8 +193,26 @@ end
 # fpext -- maybe interesting
 
 @inactive_intrinsic fpiseq
-@inactive_intrinsic fptosi
-@inactive_intrinsic fptoui
+
+@intrinsic fptosi
+function rrule!!(::CoDual{typeof(fptosi)}, ::CoDual...)
+    msg = "It is not permissible to cast a float to a signed integer in " *
+        "AD, as this risks dropping tangents, and therefore risks silently giving the " *
+        " wrong answer. If this call to Core.Intrinsics.fptosi appears as part of the " *
+        "implementation of a differentiable function, you should write a rule for this " *
+        "function, or modify its implementation to avoid this call."
+    throw(ArgumentError(msg))
+end
+
+@intrinsic fptoui
+function rrule!!(::CoDual{typeof(fptoui)}, ::CoDual...)
+    msg = "It is not permissible to cast a float to an unsigned integer in " *
+        "AD, as this risks dropping tangents, and therefore risks silently giving the " *
+        " wrong answer. If this call to Core.Intrinsics.fptoui appears as part of the " *
+        "implementation of a differentiable function, you should write a rule for this " *
+        "function, or modify its implementation to avoid this call."
+    throw(ArgumentError(msg))
+end
 
 # fptrunc -- maybe interesting
 
@@ -739,7 +757,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         # atomic_pointerreplace -- NEEDS IMPLEMENTING AND TESTING
         # atomic_pointerset -- NEEDS IMPLEMENTING AND TESTING
         # atomic_pointerswap -- NEEDS IMPLEMENTING AND TESTING
-        (false, :stability, nothing, IntrinsicsWrappers.bitcast, Int64, 5.0),
+        (false, :stability, nothing, IntrinsicsWrappers.bitcast, UInt64, 5),
         (false, :stability, nothing, IntrinsicsWrappers.bswap_int, 5),
         (false, :stability, nothing, IntrinsicsWrappers.ceil_llvm, 4.1),
         (
@@ -778,8 +796,6 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability, nothing, IntrinsicsWrappers.fma_float, 5.0, 4.0, 3.0),
         # fpext -- NEEDS IMPLEMENTING AND TESTING
         (false, :stability, nothing, IntrinsicsWrappers.fpiseq, 4.1, 4.0),
-        (false, :stability, nothing, IntrinsicsWrappers.fptosi, UInt32, 4.1),
-        (false, :stability, nothing, IntrinsicsWrappers.fptoui, Int32, 4.1),
         # fptrunc -- maybe interesting
         (true, :stability, nothing, IntrinsicsWrappers.have_fma, Float64),
         (false, :stability, nothing, IntrinsicsWrappers.le_float, 4.1, 4.0),

@@ -24,10 +24,30 @@
 
     TestUtils.run_rrule!!_test_cases(StableRNG, Val(:builtins))
 
-    @testset "Disable bitcast to differentiable type" begin
+    @testset "Disable casting to / from floats inside AD" begin
         @test_throws(
             ArgumentError,
             rrule!!(zero_fcodual(bitcast), zero_fcodual(Float64), zero_fcodual(5))
+        )
+        @test_throws(
+            ArgumentError,
+            rrule!!(zero_fcodual(bitcast), zero_fcodual(UInt64), zero_fcodual(5.0))
+        )
+        @test_throws(
+            ArgumentError,
+            rrule!!(
+                zero_fcodual(Tapir.IntrinsicsWrappers.fptosi),
+                zero_fcodual(Int),
+                zero_fcodual(1.0),
+            ),
+        )
+        @test_throws(
+            ArgumentError,
+            rrule!!(
+                zero_fcodual(Tapir.IntrinsicsWrappers.fptoui),
+                zero_fcodual(UInt),
+                zero_fcodual(1.0),
+            ),
         )
     end
 end
