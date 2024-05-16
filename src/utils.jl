@@ -8,6 +8,13 @@ _typeof(x::Tuple) = Tuple{map(_typeof, x)...}
 _typeof(x::NamedTuple{names}) where {names} = NamedTuple{names, _typeof(Tuple(x))}
 
 """
+    signature_from_values(x::Tuple)
+
+
+"""
+signature_from_values(x::Tuple) = Tuple{map(Base._stable_typeof, x)...}
+
+"""
     tuple_map(f::F, x::Tuple) where {F}
 
 This function is largely equivalent to `map(f, x)`, but always specialises on all of
