@@ -31,10 +31,6 @@
         )
         @test_throws(
             ArgumentError,
-            rrule!!(zero_fcodual(bitcast), zero_fcodual(UInt64), zero_fcodual(5.0))
-        )
-        @test_throws(
-            ArgumentError,
             rrule!!(
                 zero_fcodual(Tapir.IntrinsicsWrappers.fptosi),
                 zero_fcodual(Int),

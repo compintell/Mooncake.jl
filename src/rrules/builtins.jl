@@ -89,8 +89,8 @@ end
 
 @intrinsic bitcast
 function rrule!!(f::CoDual{typeof(bitcast)}, t::CoDual{Type{T}}, x::CoDual{V}) where {T, V}
-    if T <: IEEEFloat || V <: IEEEFloat
-        msg = "It is not permissible to bitcast to or from a differentiable type during " *
+    if T <: IEEEFloat
+        msg = "It is not permissible to bitcast to a differentiable type during " *
         "AD, as this risks dropping tangents, and therefore risks silently giving the " *
         " wrong answer. If this call to bitcast appears as part of the implementation of " *
         "a differentiable function, you should write a rule for this function, or modify " *
