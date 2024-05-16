@@ -78,6 +78,7 @@ using .TestResources:
 # "extended" group fails, there are clearly new tests that need to be added to the "basic"
 # group.
 const test_group = get(ENV, "TEST_GROUP", "basic")
+@show test_group
 
 sr(n::Int) = StableRNG(n)
 
