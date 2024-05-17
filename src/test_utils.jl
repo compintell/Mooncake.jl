@@ -815,9 +815,9 @@ function test_tangent(
     perf && test_tangent_performance(rng, p)
 end
 
-function test_tangent(rng::AbstractRNG, p::P; interface_only=false) where {P}
+function test_tangent(rng::AbstractRNG, p::P; interface_only=false, perf=true) where {P}
     test_tangent_consistency(rng, p; interface_only)
-    test_tangent_performance(rng, p)
+    perf && test_tangent_performance(rng, p)
 end
 
 function test_equality_comparison(x)
