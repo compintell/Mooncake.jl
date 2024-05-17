@@ -64,7 +64,7 @@ include("front_matter.jl")
     elseif test_group == "interface"
         include("interface.jl")
     elseif test_group == "gpu"
-        println("Placeholder for actual GPU code.")
+        include(joinpath("integration_testing", "cuda.jl"))
     else
         throw(error("test_group=$(test_group) is not recognised"))
     end
