@@ -1,4 +1,4 @@
-module TapirSpecialFunctionsExt
+module TapirCUDAExt
 
     using CUDA, Tapir
 
