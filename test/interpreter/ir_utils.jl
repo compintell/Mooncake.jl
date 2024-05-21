@@ -42,49 +42,6 @@ end
         # Check that the ir is runable.
         @test Core.OpaqueClosure(ir)(5.0) == cos(sin(5.0))
     end
-    @testset "replace_all_uses_with!" begin
-
-        # `replace_all_uses_with!` is just a lightweight wrapper around `replace_uses_with`,
-        # so we just test that carefully.
-        @testset "replace_uses_with $val" for (val, target) in Any[
-            (5.0, 5.0),
-            (5, 5),
-            (Expr(:call, sin, SSAValue(1)), Expr(:call, sin, SSAValue(2))),
-            (Expr(:call, sin, SSAValue(3)), Expr(:call, sin, SSAValue(3))),
-            (GotoNode(1), GotoNode(1)),
-            (GotoIfNot(false, 5), GotoIfNot(false, 5)),
-            (GotoIfNot(SSAValue(1), 3), GotoIfNot(SSAValue(2), 3)),
-            (GotoIfNot(SSAValue(3), 3), GotoIfNot(SSAValue(3), 3)),
-            (
-                PhiNode(Int32[1, 2, 3], Any[5, SSAValue(1), SSAValue(3)]),
-                PhiNode(Int32[1, 2, 3], Any[5, SSAValue(2), SSAValue(3)]),
-            ),
-            (PiNode(SSAValue(1), Float64), PiNode(SSAValue(2), Float64)),
-            (PiNode(SSAValue(3), Float64), PiNode(SSAValue(3), Float64)),
-            (PiNode(Argument(1), Float64), PiNode(Argument(1), Float64)),
-            (QuoteNode(:a_quote), QuoteNode(:a_quote)),
-            (ReturnNode(5), ReturnNode(5)),
-            (ReturnNode(SSAValue(1)), ReturnNode(SSAValue(2))),
-            (ReturnNode(SSAValue(3)), ReturnNode(SSAValue(3))),
-            (ReturnNode(), ReturnNode()),
-        ]
-            @test Tapir.replace_uses_with(val, SSAValue(1), SSAValue(2)) == target
-        end
-        @testset "PhiNode with undefined" begin
-            vals_with_undef_1 = Vector{Any}(undef, 2)
-            vals_with_undef_1[2] = SSAValue(1)
-            val = PhiNode(Int32[1, 2], vals_with_undef_1)
-            result = Tapir.replace_uses_with(val, SSAValue(1), SSAValue(2))
-            @test result.values[2] == SSAValue(2)
-            @test !isassigned(result.values, 1)
-        end
-    end
-    @testset "globalref_type" begin
-        @test Tapir.globalref_type(GlobalRef(IRUtilsGlobalRefs, :__x_1)) == Any
-        @test Tapir.globalref_type(GlobalRef(IRUtilsGlobalRefs, :__x_2)) == Float64
-        @test Tapir.globalref_type(GlobalRef(IRUtilsGlobalRefs, :__x_3)) == Float64
-        @test Tapir.globalref_type(GlobalRef(IRUtilsGlobalRefs, :__x_4)) == Float64
-    end
     @testset "unhandled_feature" begin
         @test_throws Tapir.UnhandledLanguageFeatureException Tapir.unhandled_feature("foo")
     end
