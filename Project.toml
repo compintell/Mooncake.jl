@@ -43,7 +43,7 @@ Setfield = "1"
 SpecialFunctions = "2"
 StableRNGs = "1"
 TemporalGPs = "0.6"
-Turing = "0.31.3"
+Turing = "0.32"
 julia = "1"
 
 [extras]
