@@ -63,6 +63,8 @@ include("front_matter.jl")
         include(joinpath("integration_testing", "temporalgps.jl"))
     elseif test_group == "interface"
         include("interface.jl")
+    elseif test_group == "gpu"
+        include(joinpath("integration_testing", "cuda.jl"))
     else
         throw(error("test_group=$(test_group) is not recognised"))
     end
