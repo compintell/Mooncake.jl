@@ -1,7 +1,7 @@
 name = "Tapir"
 uuid = "07d77754-e150-4737-8c94-cd238a1fb45b"
 authors = ["Will Tebbutt, Hong Ge, and contributors"]
-version = "0.2.16"
+version = "0.2.17"
 
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
@@ -39,14 +39,14 @@ Documenter = "1"
 ExprTools = "0.1"
 FillArrays = "1"
 Graphs = "1"
-JET = "0.8"
+JET = "0.9"
 LogDensityProblemsAD = "1"
 PDMats = "0.11"
 Setfield = "1"
 SpecialFunctions = "2"
 StableRNGs = "1"
 TemporalGPs = "0.6"
-Turing = "0.31.3"
+Turing = "0.32"
 julia = "1"
 
 [extras]
