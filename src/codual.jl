@@ -24,15 +24,6 @@ Equivalent to `CoDual(x, zero_tangent(x))`.
 zero_codual(x) = CoDual(x, zero_tangent(x))
 
 """
-    uninit_codual(x)
-
-See implementation for details, as this function is subject to change.
-"""
-@inline uninit_codual(x::P) where {P} = CoDual(x, uninit_tangent(x))
-
-@inline uninit_fcodual(x::P) where {P} = CoDual(x, uninit_fdata(x))
-
-"""
     codual_type(P::Type)
 
 The type of the `CoDual` which contains instances of `P` and associated tangents.
@@ -74,6 +65,14 @@ to_fwds(x::CoDual) = CoDual(primal(x), fdata(tangent(x)))
 to_fwds(x::CoDual{Type{P}}) where {P} = CoDual{Type{P}, NoFData}(primal(x), NoFData())
 
 zero_fcodual(p) = to_fwds(zero_codual(p))
+
+"""
+    uninit_fcodual(x)
+
+Like `zero_fcodual`, but doesn't guarantee that the value of the fdata is initialised.
+See implementation for details, as this function is subject to change.
+"""
+@inline uninit_fcodual(x::P) where {P} = CoDual(x, uninit_fdata(x))
 
 """
     fcodual_type(P::Type)
