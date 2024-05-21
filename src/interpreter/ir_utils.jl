@@ -171,56 +171,6 @@ function optimise_ir!(ir::IRCode; show_ir=false, do_inline=true)
 end
 
 """
-    replace_all_uses_with!(ir::IRCode, value::SSAValue, new_value::Any) -> IRCode
-
-Wherever `value` appears in `ir`, replace it with `new_value`.
-
-Note: this will *not* effect anything in the `new_nodes` field of `ir`.
-"""
-function replace_all_uses_with!(ir::IRCode, value::SSAValue, new_value::Any)
-    insts = ir.stmts.inst
-    for (n, inst) in enumerate(insts)
-        insts[n] = replace_uses_with(inst, value, new_value)
-    end
-    return ir
-end
-
-#=
-    replace_uses_with(x::Any, value::SSAValue, new_value::Any)
-
-Replace all occurences of `value` in the IR node `x` with `new_value`. The semantics of this
-are node-dependent.
-
-If `value` appears by itself as a constant, it will not be replaced.
-=#
-replace_uses_with(x::Any, ::SSAValue, _) = x # constants
-function replace_uses_with(x::Expr, v::SSAValue, new_v)
-    return Expr(x.head, [_replace(v, new_v, a) for a in x.args]...)
-end
-replace_uses_with(x::GotoNode, ::SSAValue, _) = x
-function replace_uses_with(x::GotoIfNot, v::SSAValue, new_v)
-    return GotoIfNot(_replace(v, new_v, x.cond), x.dest)
-end
-function replace_uses_with(x::PhiNode, v::SSAValue, new_v)
-    values = x.values
-    new_values = Vector{Any}(undef, length(values))
-    for n in eachindex(new_values)
-        if isassigned(values, n)
-            new_values[n] = _replace(v, new_v, values[n])
-        end
-    end
-    return PhiNode(x.edges, new_values)
-end
-replace_uses_with(x::PiNode, v::SSAValue, new_v) = PiNode(_replace(v, new_v, x.val), x.typ)
-replace_uses_with(x::QuoteNode, ::SSAValue, _) = x
-function replace_uses_with(x::ReturnNode, v::SSAValue, new_v)
-    return isdefined(x, :val) ? ReturnNode(_replace(v, new_v, x.val)) : x
-end
-
-# Return new_value if val equals current_val.
-_replace(val::SSAValue, new_val, current_val) = val == current_val ? new_val : current_val
-
-"""
     lookup_ir(interp::AbstractInterpreter, sig::Type{<:Tuple})::Tuple{IRCode, T}
 
 Get the IR unique IR associated to `sig` under `interp`. Throws `ArgumentError`s if there is
@@ -239,7 +189,7 @@ function lookup_ir(interp::CC.AbstractInterpreter, sig::Type{<:Tuple})
 end
 
 """
-    is_reachable(x::ReturnNode)
+    is_reachable_return_node(x::ReturnNode)
 
 Determine whether `x` is a `ReturnNode`, and if it is, if it is also reachable. This is
 purely a function of whether or not its `val` field is defined or not.
@@ -248,20 +198,13 @@ is_reachable_return_node(x::ReturnNode) = isdefined(x, :val)
 is_reachable_return_node(x) = false
 
 """
-    is_unreachable(x::ReturnNode)
+    is_unreachable_return_node(x::ReturnNode)
 
 Determine whehter `x` is a `ReturnNode`, and if it is, if it is also unreachable. This is
 purely a function of whether or not its `val` field is defined or not.
 """
 is_unreachable_return_node(x::ReturnNode) = !isdefined(x, :val)
 is_unreachable_return_node(x) = false
-
-"""
-    globalref_type(x::GlobaRef)
-
-Returns the static type of the value referred to by `x`.
-"""
-globalref_type(x::GlobalRef) = isconst(x) ? _typeof(getglobal(x.mod, x.name)) : x.binding.ty
 
 """
     UnhandledLanguageFeatureException(message::String)
