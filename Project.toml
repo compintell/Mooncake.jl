@@ -1,7 +1,7 @@
 name = "Tapir"
 uuid = "07d77754-e150-4737-8c94-cd238a1fb45b"
 authors = ["Will Tebbutt, Hong Ge, and contributors"]
-version = "0.2.15"
+version = "0.2.18"
 
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
@@ -18,16 +18,19 @@ Setfield = "efcf1570-3423-57d1-acb7-fd33fddbac46"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [weakdeps]
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 LogDensityProblemsAD = "996a588d-648d-4e1f-a8f0-a84b347e47b1"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 
 [extensions]
+TapirCUDAExt = "CUDA"
 TapirLogDensityProblemsADExt = "LogDensityProblemsAD"
 TapirSpecialFunctionsExt = "SpecialFunctions"
 
 [compat]
 ADTypes = "1.2"
 BenchmarkTools = "1"
+CUDA = "5"
 ChainRulesCore = "1"
 DiffRules = "1"
 DiffTests = "0.1"
@@ -36,19 +39,20 @@ Documenter = "1"
 ExprTools = "0.1"
 FillArrays = "1"
 Graphs = "1"
-JET = "0.8"
+JET = "0.9"
 LogDensityProblemsAD = "1"
 PDMats = "0.11"
 Setfield = "1"
 SpecialFunctions = "2"
 StableRNGs = "1"
 TemporalGPs = "0.6"
-Turing = "0.31.3"
+Turing = "0.32"
 julia = "1"
 
 [extras]
 AbstractGPs = "99985d1d-32ba-4be9-9821-2ec096f28918"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 DiffTests = "de460e47-3fe3-5279-bb4a-814414816d5d"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
@@ -64,4 +68,4 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
 
 [targets]
-test = ["AbstractGPs", "BenchmarkTools", "DiffTests", "Distributions", "Documenter", "FillArrays", "KernelFunctions", "LogDensityProblemsAD", "PDMats", "ReverseDiff", "SpecialFunctions", "StableRNGs", "Test", "Turing", "TemporalGPs"]
+test = ["AbstractGPs", "BenchmarkTools", "CUDA", "DiffTests", "Distributions", "Documenter", "FillArrays", "KernelFunctions", "LogDensityProblemsAD", "PDMats", "ReverseDiff", "SpecialFunctions", "StableRNGs", "Test", "Turing", "TemporalGPs"]
