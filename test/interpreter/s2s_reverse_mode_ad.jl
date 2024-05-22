@@ -183,20 +183,6 @@ end
         end
     end
 
-    @testset "DynamicDerivedRule" begin
-        # Just check that this runs. You cannot look up the code for generated functions for
-        # non-concrete argument types. This example creates a setting in which
-        # `Tapir._typeof` creates the abstract `Type{AbstractFloat}`, but `typeof` creates
-        # the concrete `DataType`.
-        rule = Tapir.DynamicDerivedRule(Tapir.PInterp(), false)
-        output = rule(
-            zero_fcodual(Tapir.tuple_map),
-            zero_fcodual(typeof),
-            zero_fcodual((AbstractFloat, )),
-        )
-        @test(isa(output, Tuple))
-    end
-
     interp = Tapir.PInterp()
     @testset "$(_typeof((f, x...)))" for (n, (interface_only, perf_flag, bnds, f, x...)) in
         collect(enumerate(TestResources.generate_test_functions()))

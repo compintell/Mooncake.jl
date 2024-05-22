@@ -786,7 +786,9 @@ function build_rrule(
     else
         fwds_ir = forwards_pass_ir(primal_ir, ad_stmts_blocks, info, _typeof(shared_data))
         pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, _typeof(shared_data))
-        # @show sig, safety_on
+        # @show sig
+        # @show Treturn
+        # @show safety_on
         # display(ir)
         # display(IRCode(fwds_ir))
         # display(IRCode(pb_ir))
@@ -1129,8 +1131,7 @@ function DynamicDerivedRule(interp::TapirInterpreter, safety_on::Bool)
 end
 
 function (dynamic_rule::DynamicDerivedRule)(args::Vararg{Any, N}) where {N}
-    sig = Tuple{map(_typeof, args)...}
-    is_primitive(context_type(dynamic_rule.interp), sig) && return rrule!!(args...)
+    sig = Tuple{map(_typeof ∘ primal, args)...}
     rule = get(dynamic_rule.cache, sig, nothing)
     if rule === nothing
         rule = build_rrule(dynamic_rule.interp, sig; safety_on=dynamic_rule.safety_on)
