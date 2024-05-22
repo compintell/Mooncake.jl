@@ -10,10 +10,12 @@ end
         @test Tapir.can_produce_zero_rdata_from_type(Vector) == true
         @test Tapir.zero_rdata_from_type(Vector) == NoRData()
         @test Tapir.can_produce_zero_rdata_from_type(FwdsRvsDataTestResources.Foo) == false
+        @test Tapir.can_produce_zero_rdata_from_type(Tuple{Float64, Type{Float64}})
         @test ==(
             Tapir.zero_rdata_from_type(FwdsRvsDataTestResources.Foo),
             Tapir.CannotProduceZeroRDataFromType(),
         )
+        @test !Tapir.can_produce_zero_rdata_from_type(Tuple)
     end
     @testset "lazy construction checks" begin
         # Check that lazy construction is in fact lazy for some cases where performance

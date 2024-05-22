@@ -324,7 +324,9 @@ obtained from `P` alone.
 @generated function can_produce_zero_rdata_from_type(::Type{P}) where {P}
     R = rdata_type(tangent_type(P))
     R == NoRData && return true
-    isconcretetype(P) || return false
+    isabstracttype(P) && return false
+    (isconcretetype(P) || P <: Tuple) || return false
+    (P <: Tuple && Base.datatype_fieldcount(P) === nothing) && return false
 
     # For general structs, just look at their fields.
     return isstructtype(P) ? all(can_produce_zero_rdata_from_type, fieldtypes(P)) : false
