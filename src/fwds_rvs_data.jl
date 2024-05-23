@@ -140,6 +140,107 @@ end
 uninit_fdata(p) = fdata(uninit_tangent(p))
 
 """
+    InvalidFDataException(msg::String)
+
+Exception indicating that there is a problem with the fdata associated to a primal.
+"""
+struct InvalidFDataException <: Exception
+    msg::String
+end
+
+"""
+    verify_fdata_type(P::Type, F::Type)::Nothing
+
+Check that `F` is a valid type for fdata associated to a primal of type `P`. Returns
+`nothing` if valid, throws an `InvalidFDataException` if a problem is found.
+
+This applies to both concrete and non-concrete `P`. For example, if `P` is the type inferred
+for a primal `q::Q`, such that `Q <: P`, then this method is still applicable.
+"""
+function verify_fdata_type(P::Type, F::Type)::Nothing
+    _F = fdata_type(tangent_type(P))
+    F <: _F && return nothing
+    throw(InvalidFDataException("Type $P has fdata type $_F, but got $F."))
+end
+
+"""
+    verify_fdata_value(p, f)::Nothing
+
+Check that `f` cannot be proven to be invalid fdata for `p`.
+
+This method attempts to provide some confidence that `f` is valid fdata for `p` by checking
+a collection of necessary conditions. We do not guarantee that these amount to a sufficient
+condition, just that they rule out a variety of common problems.
+
+Put differently, we cannot prove that `f` is valid fdata, only that it is not obviously
+invalid.
+"""
+function verify_fdata_value(p, f)::Nothing
+    verify_fdata_type(_typeof(p), typeof(f))
+    _verify_fdata_value(p, f)
+end
+
+_verify_fdata_value(::IEEEFloat, ::NoFData) = nothing
+
+_verify_fdata_value(::Ptr, ::Ptr) = nothing
+
+function _verify_fdata_value(p::Array, f::Array)
+    if size(p) != size(f)
+        throw(InvalidFDataException("p has size $(size(p)) but f has size $(size(f))"))
+    end
+
+    # If the element type is `NoFData` then stop here.
+    eltype(f) == NoFData && return nothing
+
+    # Recurse into each element and check that it is correct. Note that the elements of an
+    # Array contain the tangents, so we must check that the fdata and rdata components are
+    # correct separately.
+    for n in eachindex(p)
+        if isassigned(p, n)
+            t = f[n]
+            verify_fdata_value(p[n], fdata(t))
+            verify_rdata_value(p[n], rdata(t))
+        end
+    end
+
+    return nothing
+end
+
+function _verify_fdata_value(p, f)
+
+    # If f is a NoFData then there are no checks needed, because we have already verified
+    # that NoFData is the correct type for fdata for p, and NoFData is a singleton type.
+    f isa NoFData && return nothing
+
+    # When a primitive is encountered here, it means that we don't have a method of
+    # _verify_fdata_value which is specific to it, and its fdata type is not NoFData.
+    # The rest of this method assumes p is an instance of a struct type, so we must error.
+    P = _typeof(p)
+    isprimitivetype(P) && error("Encountered primitive $p with fdata $f")
+
+    # (mutable) structs, Tuples, and NamedTuples all have slightly different storage.
+    _get_fdata_field(f::NamedTuple, name) = getfield(f, name)
+    _get_fdata_field(f::Tuple, name) = getfield(f, name)
+    _get_fdata_field(f::FData, name) = val(getfield(f.data, name))
+    _get_fdata_field(f::MutableTangent, name) = fdata(val(getfield(f.fields, name)))
+
+    # Having excluded primitive types, we must have a (mutable) struct type. Recurse into
+    # its fields and verify each of them.
+    for name in fieldnames(P)
+        if isdefined(p, name)
+            _p = getfield(p, name)
+            t = _get_fdata_field(f, name)
+            verify_fdata_value(_p, t)
+            if f isa MutableTangent
+                verify_rdata_value(_p, rdata(val(getfield(f.fields, name))))
+            end
+        end
+    end
+
+    return nothing
+end
+
+"""
     NoRData()
 
 Nothing to propagate backwards on the reverse-pass.
@@ -408,6 +509,82 @@ function zero_rdata_from_type(::Type{P}) where {P<:NamedTuple}
 end
 
 zero_rdata_from_type(::Type{P}) where {P<:IEEEFloat} = zero(P)
+
+
+"""
+    InvalidRDataException(msg::String)
+
+Exception indicating that there is a problem with the rdata associated to a primal.
+"""
+struct InvalidRDataException <: Exception
+    msg::String
+end
+
+"""
+    verify_rdata_type(P::Type, R::Type)::Nothing
+
+Check that `R` is a valid type for rdata associated to a primal of type `P`. Returns
+`nothing` if valid, throws an `InvalidRDataException` if a problem is found.
+
+This applies to both concrete and non-concrete `P`. For example, if `P` is the type inferred
+for a primal `q::Q`, such that `Q <: P`, then this method is still applicable.
+"""
+function verify_rdata_type(P::Type, R::Type)::Nothing
+    _R = rdata_type(tangent_type(P))
+    R <: _R && return nothing
+    throw(InvalidRDataException("Type $P has rdata type $_R, but got $R."))
+end
+
+"""
+    verify_rdata_value(p, r)::Nothing
+
+Check that `r` cannot be proven to be invalid rdata for `p`.
+
+This method attempts to provide some confidence that `r` is valid rdata for `p` by checking
+a collection of necessary conditions. We do not guarantee that these amount to a sufficient
+condition, just that they rule out a variety of common problems.
+
+Put differently, we cannot prove that `r` is valid rdata, only that it is not obviously
+invalid.
+"""
+function verify_rdata_value(p, r)::Nothing
+    r isa ZeroRData && return nothing
+    verify_rdata_type(_typeof(p), typeof(r))
+    _verify_rdata_value(p, r)
+end
+
+_verify_rdata_value(::P, ::P) where {P<:IEEEFloat} = nothing
+
+_verify_rdata_value(::Array, ::NoRData) = nothing
+
+function _verify_rdata_value(p, r)
+
+    # If f is a NoFData then there are no checks needed, because we have already verified
+    # that NoFData is the correct type for fdata for p, and NoFData is a singleton type.
+    r isa NoRData && return nothing
+
+    # When a primitive is encountered here, it means that we don't have a method of
+    # _verify_rdata_value which is specific to it, and its fdata type is not NoFData.
+    # The rest of this method assumes p is an instance of a struct type, so we must error.
+    P = _typeof(p)
+    isprimitivetype(P) && error("Encountered primitive $p with rdata $r")
+
+    # (mutable) structs, Tuples, and NamedTuples all have slightly different storage.
+    _get_rdata_field(r::NamedTuple, name) = getfield(r, name)
+    _get_rdata_field(r::Tuple, name) = getfield(r, name)
+    _get_rdata_field(r::RData, name) = val(getfield(r.data, name))
+
+    # Having excluded primitive types, we must have a (mutable) struct type. Recurse into
+    # its fields and verify each of them.
+    for name in fieldnames(P)
+        if isdefined(p, name)
+            verify_rdata_value(getfield(p, name), _get_rdata_field(r, name))
+        end
+    end
+
+    return nothing
+end
+
 
 """
     LazyZeroRData{P, Tdata}()

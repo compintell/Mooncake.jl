@@ -219,7 +219,7 @@ function is_concrete_or_typelike(P::DataType)
     end
 end
 
-is_concrete_or_typelike(::Union) = false
+is_concrete_or_typelike(::Union) = true
 is_concrete_or_typelike(::UnionAll) = false
 is_concrete_or_typelike(::Core.TypeofVararg) = true
 

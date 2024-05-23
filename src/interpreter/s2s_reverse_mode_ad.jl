@@ -786,19 +786,20 @@ function build_rrule(
     else
         fwds_ir = forwards_pass_ir(primal_ir, ad_stmts_blocks, info, _typeof(shared_data))
         pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, _typeof(shared_data))
+
+        optimised_fwds_ir = optimise_ir!(IRCode(fwds_ir); do_inline=true)
+        optimised_pb_ir = optimise_ir!(IRCode(pb_ir); do_inline=true)
         # @show sig
         # @show Treturn
         # @show safety_on
         # display(ir)
         # display(IRCode(fwds_ir))
         # display(IRCode(pb_ir))
-        optimised_fwds_ir = optimise_ir!(IRCode(fwds_ir); do_inline=true)
-        optimised_pb_ir = optimise_ir!(IRCode(pb_ir); do_inline=true)
+        # display(optimised_fwds_ir)
+        # display(optimised_pb_ir)
         # @show length(ir.stmts.inst)
         # @show length(optimised_fwds_ir.stmts.inst)
         # @show length(optimised_pb_ir.stmts.inst)
-        # display(optimised_fwds_ir)
-        # display(optimised_pb_ir)
         fwds_oc = OpaqueClosure(optimised_fwds_ir, shared_data...; do_compile=true)
         pb_oc = OpaqueClosure(optimised_pb_ir, shared_data...; do_compile=true)
         interp.oc_cache[(sig, safety_on)] = (fwds_oc, pb_oc)
