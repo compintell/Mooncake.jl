@@ -46,6 +46,12 @@ module TapirCUDAExt
         m[k] = v
         return m
     end
+    function Tapir._verify_fdata_value(p::CuArray, f::CuArray)
+        if size(p) != size(f)
+            throw(InvalidFDataException("p has size $(size(p)) but f has size $(size(f))"))
+        end
+        return nothing
+    end
 
     # Basic rules for operating on CuArrays.
 
