@@ -94,7 +94,7 @@
             @test Tapir.is_concrete_or_typelike(Tuple{Float64, Type{Float64}})
             @test Tapir.is_concrete_or_typelike(Tuple{Float64, Tuple{Type{Float64}}})
             @test !Tapir.is_concrete_or_typelike(Tuple)
-            @test !Tapir.is_concrete_or_typelike(Union{Float64, Float32})
+            @test Tapir.is_concrete_or_typelike(Union{Float64, Float32})
             @test !Tapir.is_concrete_or_typelike(Tuple{T} where {T<:Any})
         end
         @test tangent_type(Tuple) == Any
