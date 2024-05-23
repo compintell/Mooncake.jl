@@ -84,6 +84,19 @@
     # not possible to properly test tangents because you can't separately specify the
     # static and dynamic types.
     @testset "extra tuple tests" begin
+        @testset "is_concrete_or_typelike" begin
+            @test Tapir.is_concrete_or_typelike(Float64)
+            @test !Tapir.is_concrete_or_typelike(Any)
+            @test Tapir.is_concrete_or_typelike(Type{Float64})
+            @test Tapir.is_concrete_or_typelike(DataType)
+            @test Tapir.is_concrete_or_typelike(Tuple{})
+            @test Tapir.is_concrete_or_typelike(Tuple{Float64})
+            @test Tapir.is_concrete_or_typelike(Tuple{Float64, Type{Float64}})
+            @test Tapir.is_concrete_or_typelike(Tuple{Float64, Tuple{Type{Float64}}})
+            @test !Tapir.is_concrete_or_typelike(Tuple)
+            @test Tapir.is_concrete_or_typelike(Union{Float64, Float32})
+            @test !Tapir.is_concrete_or_typelike(Tuple{T} where {T<:Any})
+        end
         @test tangent_type(Tuple) == Any
         @test tangent_type(Tuple{}) == NoTangent
         @test tangent_type(Tuple{Float64, Vararg}) == Any
@@ -91,6 +104,8 @@
         @test tangent_type(Tuple{Float64, Int}) == Tuple{Float64, NoTangent}
         @test tangent_type(Tuple{Int, Int}) == NoTangent
         @test tangent_type(Tuple{DataType, Type{Float64}}) == NoTangent
+        @test tangent_type(Tuple{Type{Float64}, Float64}) == Tuple{NoTangent, Float64}
+        @test tangent_type(Tuple{Tuple{Type{Int}}, Float64}) == Tuple{NoTangent, Float64}
         @test ==(
             tangent_type(Union{Tuple{Float64}, Tuple{Int}}),
             Union{Tuple{Float64}, NoTangent},

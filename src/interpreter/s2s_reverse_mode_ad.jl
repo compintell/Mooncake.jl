@@ -786,17 +786,20 @@ function build_rrule(
     else
         fwds_ir = forwards_pass_ir(primal_ir, ad_stmts_blocks, info, _typeof(shared_data))
         pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, _typeof(shared_data))
-        # @show sig, safety_on
+
+        optimised_fwds_ir = optimise_ir!(IRCode(fwds_ir); do_inline=true)
+        optimised_pb_ir = optimise_ir!(IRCode(pb_ir); do_inline=true)
+        # @show sig
+        # @show Treturn
+        # @show safety_on
         # display(ir)
         # display(IRCode(fwds_ir))
         # display(IRCode(pb_ir))
-        optimised_fwds_ir = optimise_ir!(IRCode(fwds_ir); do_inline=true)
-        optimised_pb_ir = optimise_ir!(IRCode(pb_ir); do_inline=true)
+        # display(optimised_fwds_ir)
+        # display(optimised_pb_ir)
         # @show length(ir.stmts.inst)
         # @show length(optimised_fwds_ir.stmts.inst)
         # @show length(optimised_pb_ir.stmts.inst)
-        # display(optimised_fwds_ir)
-        # display(optimised_pb_ir)
         fwds_oc = OpaqueClosure(optimised_fwds_ir, shared_data...; do_compile=true)
         pb_oc = OpaqueClosure(optimised_pb_ir, shared_data...; do_compile=true)
         interp.oc_cache[(sig, safety_on)] = (fwds_oc, pb_oc)
@@ -1109,7 +1112,7 @@ __switch_case(id::Int32, predecessor_id::Int32) = !(id === predecessor_id)
 @inline __deref_arg_rev_data_refs(arg_rev_data_refs...) = map(getindex, arg_rev_data_refs)
 
 #=
-    DynamicDerivedRule(interp::TapirInterpreter)
+    DynamicDerivedRule(interp::TapirInterpreter, safety_on::Bool)
 
 For internal use only.
 
@@ -1129,8 +1132,7 @@ function DynamicDerivedRule(interp::TapirInterpreter, safety_on::Bool)
 end
 
 function (dynamic_rule::DynamicDerivedRule)(args::Vararg{Any, N}) where {N}
-    sig = Tuple{tuple_map(_typeof, tuple_map(primal, args))...}
-    is_primitive(context_type(dynamic_rule.interp), sig) && return rrule!!(args...)
+    sig = Tuple{map(_typeof ∘ primal, args)...}
     rule = get(dynamic_rule.cache, sig, nothing)
     if rule === nothing
         rule = build_rrule(dynamic_rule.interp, sig; safety_on=dynamic_rule.safety_on)

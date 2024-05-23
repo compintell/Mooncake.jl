@@ -92,7 +92,9 @@ using Tapir:
     is_always_fully_initialised, get_tangent_field, set_tangent_field!, MutableTangent,
     Tangent, _typeof, rdata, NoFData, to_fwds, uninit_fdata, zero_rdata,
     zero_rdata_from_type, CannotProduceZeroRDataFromType, LazyZeroRData, instantiate,
-    can_produce_zero_rdata_from_type, increment_rdata!!, fcodual_type
+    can_produce_zero_rdata_from_type, increment_rdata!!, fcodual_type,
+    verify_fdata_type, verify_rdata_type, verify_fdata_value, verify_rdata_value,
+    InvalidFDataException, InvalidRDataException
 
 has_equal_data(x::T, y::T; equal_undefs=true) where {T<:String} = x == y
 has_equal_data(x::Type, y::Type; equal_undefs=true) = x == y
@@ -829,7 +831,7 @@ function test_equality_comparison(x)
 end
 
 """
-    test_fwds_rvs_data_interface(rng::AbstractRNG, p::P) where {P}
+    test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
 
 Verify that the forwards data and reverse data functionality associated to primal `p` works
 correctly.
@@ -849,6 +851,17 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
     @test f isa F
     r = Tapir.rdata(t)
     @test r isa R
+
+    # Check that fdata / rdata validation functionality doesn't error on valid fdata / rdata
+    # and does error on obviously wrong fdata / rdata.
+    @test verify_fdata_type(P, F) === nothing
+    @test verify_rdata_type(P, R) === nothing
+    @test verify_fdata_value(p, f) === nothing
+    @test verify_rdata_value(p, r) === nothing
+    @test_throws InvalidFDataException verify_fdata_type(P, Int)
+    @test_throws InvalidRDataException verify_rdata_type(P, Int)
+    @test_throws InvalidFDataException verify_fdata_value(p, 0)
+    @test_throws InvalidRDataException verify_rdata_value(p, 0)
 
     # Check that uninit_fdata yields data of the correct type.
     @test uninit_fdata(p) isa F

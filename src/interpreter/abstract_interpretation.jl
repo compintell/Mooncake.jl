@@ -59,7 +59,7 @@ end
 _type(x) = x
 _type(x::CC.Const) = _typeof(x.val)
 _type(x::CC.PartialStruct) = x.typ
-_type(x::CC.Conditional) = Union{x.thentype, x.elsetype}
+_type(x::CC.Conditional) = Union{_type(x.thentype), _type(x.elsetype)}
 
 function CC.inlining_policy(
     interp::TapirInterpreter{C},

@@ -22,12 +22,12 @@
 
     # Test that bad rdata is caught as a pre-condition.
     y, pb!! = Tapir.SafeRRule(rrule!!)(zero_fcodual(sin), zero_fcodual(5.0))
-    @test_throws(ArgumentError, pb!!(5))
+    @test_throws(InvalidRDataException, pb!!(5))
 
     # Test that bad rdata is caught as a post-condition.
     rule_with_bad_pb(x::CoDual{Float64}) = x, dy -> (5, ) # returns the wrong type
     y, pb!! = Tapir.SafeRRule(rule_with_bad_pb)(zero_fcodual(5.0))
-    @test_throws ArgumentError pb!!(1.0)
+    @test_throws InvalidRDataException pb!!(1.0)
 
     # Test that bad rdata is caught as a post-condition.
     rule_with_bad_pb_length(x::CoDual{Float64}) = x, dy -> (5, 5.0) # returns the wrong type

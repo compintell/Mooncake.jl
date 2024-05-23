@@ -44,6 +44,12 @@ function tuple_map(f::F, x::NamedTuple{names}, y::NamedTuple{names}) where {F, n
     return NamedTuple{names}(tuple_map(f, Tuple(x), Tuple(y)))
 end
 
+for N in 1:256
+    @eval @inline function tuple_splat(f, x::Tuple{Vararg{Any, $N}})
+        return $(Expr(:call, :f, map(n -> :(getfield(x, $n)), 1:N)...))
+    end
+end
+
 @inline @generated function tuple_splat(f, x::Tuple)
     return Expr(:call, :f, map(n -> :(x[$n]), 1:length(x.parameters))...)
 end

@@ -138,8 +138,7 @@ end
 
 lift_intrinsic(x...) = x
 function lift_intrinsic(x::GlobalRef, args...)
-    val = getglobal(x.mod, x.name)
-    return val isa Core.IntrinsicFunction ? lift_intrinsic(val, args...) : (x, args...)
+    return lift_intrinsic(getglobal(x.mod, x.name), args...)
 end
 function lift_intrinsic(x::Core.IntrinsicFunction, v, args...)
     if x === cglobal
@@ -147,6 +146,9 @@ function lift_intrinsic(x::Core.IntrinsicFunction, v, args...)
     else
         return IntrinsicsWrappers.translate(Val(x)), v, args...
     end
+end
+function lift_intrinsic(::typeof(Core._apply_iterate), args...)
+    return _apply_iterate_equivalent, args...
 end
 
 """

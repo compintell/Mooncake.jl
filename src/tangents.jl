@@ -208,12 +208,27 @@ tangent_type(::Type{DimensionMismatch}) = NoTangent
 
 tangent_type(::Type{Method}) = NoTangent
 
+function is_concrete_or_typelike(P::DataType)
+    if P <: Tuple
+        P == Tuple && return false
+        return all(is_concrete_or_typelike, P.parameters)
+    elseif P <: DataType
+        return true
+    else
+        return isconcretetype(P)
+    end
+end
+
+is_concrete_or_typelike(::Union) = true
+is_concrete_or_typelike(::UnionAll) = false
+is_concrete_or_typelike(::Core.TypeofVararg) = true
+
 @generated function tangent_type(::Type{P}) where {P<:Tuple}
     isa(P, Union) && return Union{tangent_type(P.a), tangent_type(P.b)}
     isempty(P.parameters) && return NoTangent
     isa(last(P.parameters), Core.TypeofVararg) && return Any
     all(p -> tangent_type(p) == NoTangent, P.parameters) && return NoTangent
-    isconcretetype(P) || return Any
+    all(is_concrete_or_typelike, P.parameters) || return Any
     return Tuple{map(tangent_type, fieldtypes(P))...}
 end
 

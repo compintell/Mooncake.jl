@@ -75,6 +75,18 @@ end
     #w ~ arraydist([dist[doc[i]] for i in 1:length(doc)])
 end
 
+function make_large_model()
+    num_tildes = 50
+    expr = :(function $(Symbol(:demo, num_tildes))() end) |> Base.remove_linenums!
+    mainbody = last(expr.args)
+    append!(mainbody.args, [:($(Symbol("x", j)) ~ Normal()) for j = 1:num_tildes])
+    f = @eval $(DynamicPPL.model(:Main, LineNumberNode(1), expr, false))
+    return invokelatest(f)
+end
+
+# Run this once in order to avoid world age problems in testset.
+make_large_model()
+
 function build_turing_problem(rng, model, example=nothing)
     ctx = Turing.DefaultContext()
     vi = example === nothing ? Turing.SimpleVarInfo(model) : Turing.SimpleVarInfo(example)
@@ -97,6 +109,7 @@ end
                 broadcast_demo(rand(LogNormal(1.5, 0.5), 1_000)),
                 nothing,
             ),
+            (false, "large model", make_large_model(), nothing),
             # (
             #     false,
             #     "CollapsedLDA",
@@ -115,7 +128,7 @@ end
         f, x = build_turing_problem(rng, model, ex)
         TestUtils.test_derived_rule(
             sr(123456), f, x;
-            perf_flag=:none, interface_only=true, is_primitive=false, interp
+            perf_flag=:none, interface_only=true, is_primitive=false, interp, safety_on=true
         )
 
         # rule = build_rrule(interp, _typeof((f, x)))
