@@ -972,28 +972,28 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
             false, :none, nothing,
             x -> +(x...), randn(33),
         ),
-        # (
-        #     false, :none, nothing,
-        #     (
-        #         function (x)
-        #             rx = Ref(x)
-        #             pointerref(bitcast(Ptr{Float64}, pointer_from_objref(rx)), 1, 1)
-        #         end
-        #     ),
-        #     5.0,
-        # ),
-        # (
-        #     false, :none, nothing,
-        #     (v, x) -> (pointerset(pointer(x), v, 2, 1); x), 3.0, randn(5),
-        # ),
-        # (
-        #     false, :none, nothing,
-        #     x -> (pointerset(pointer(x), UInt8(3), 2, 1); x), rand(UInt8, 5),
-        # ),
-        # (false, :none, nothing, getindex, randn(5), [1, 1]),
-        # (false, :none, nothing, getindex, randn(5), [1, 2, 2]),
-        # (false, :none, nothing, setindex!, randn(5), [4.0, 5.0], [1, 1]),
-        # (false, :none, nothing, setindex!, randn(5), [4.0, 5.0, 6.0], [1, 2, 2]),
+        (
+            false, :none, nothing,
+            (
+                function (x)
+                    rx = Ref(x)
+                    pointerref(bitcast(Ptr{Float64}, pointer_from_objref(rx)), 1, 1)
+                end
+            ),
+            5.0,
+        ),
+        (
+            false, :none, nothing,
+            (v, x) -> (pointerset(pointer(x), v, 2, 1); x), 3.0, randn(5),
+        ),
+        (
+            false, :none, nothing,
+            x -> (pointerset(pointer(x), UInt8(3), 2, 1); x), rand(UInt8, 5),
+        ),
+        (false, :none, nothing, getindex, randn(5), [1, 1]),
+        (false, :none, nothing, getindex, randn(5), [1, 2, 2]),
+        (false, :none, nothing, setindex!, randn(5), [4.0, 5.0], [1, 1]),
+        (false, :none, nothing, setindex!, randn(5), [4.0, 5.0, 6.0], [1, 2, 2]),
     ]
     memory = Any[]
     return test_cases, memory
