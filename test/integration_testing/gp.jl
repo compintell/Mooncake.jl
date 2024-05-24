@@ -20,7 +20,7 @@ using AbstractGPs, KernelFunctions
         RowVecs(randn(9, 4)),
     ]
     d_2_xs = Any[ColVecs(randn(2, 11)), RowVecs(randn(9, 2))]
-    @testset "kernelmatrix_diag $k, $(typeof(x1))" for (k, x1) in vcat(
+    @testset "$k, $(typeof(x1))" for (k, x1) in vcat(
         Any[(k, x) for k in base_kernels for x in simple_xs],
         Any[(with_lengthscale(k, 1.1), x) for k in base_kernels for x in simple_xs],
         Any[(with_lengthscale(k, rand(2)), x) for k in base_kernels for x in d_2_xs],
@@ -30,19 +30,19 @@ using AbstractGPs, KernelFunctions
                 k in base_kernels for x in d_2_xs
         ],
     )
-        @info typeof(k), typeof(x1)
         fx = GP(k)(x1, 1.1)
         @testset "$(_typeof(x))" for x in Any[
             (kernelmatrix, k, x1, x1),
             (kernelmatrix_diag, k, x1, x1),
-            (kernelmatrix, x1),
-            (kernelmatrix_diag, x1),
+            (kernelmatrix, k, x1),
+            (kernelmatrix_diag, k, x1),
             (rand, Xoshiro(123456), fx),
             (logpdf, fx, rand(fx)),
         ]
+            @info typeof(x)
             TestUtils.test_derived_rule(
-                sr(123456), rand, Xoshiro(123456), GP(k)(x1, 1.1);
-                interp, perf_flag=:none, interface_only=true, is_primitive=false,
+                sr(123456), x...;
+                interp, perf_flag=:none, interface_only=false, is_primitive=false,
             )
         end
     end
