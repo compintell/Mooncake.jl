@@ -57,6 +57,13 @@ function logdensity_and_gradient(∇l::TapirGradientLogDensity, x::Vector{Float6
 end
 
 # Interop with ADTypes.
-ADgradient(x::ADTypes.AutoTapir, ℓ) = ADgradient(Val(:Tapir), ℓ; safety_on=x.safe_mode)
+function ADgradient(x::ADTypes.AutoTapir, ℓ)
+    if x.safe_mode
+        msg = "Running Tapir in safe mode. Disable for best performance. Do this by " *
+            "using AutoTapir(safe_mode=false)."
+        @info msg
+    end
+    return ADgradient(Val(:Tapir), ℓ; safety_on=x.safe_mode)
+end
 
 end
