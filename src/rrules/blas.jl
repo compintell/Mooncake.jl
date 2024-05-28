@@ -20,6 +20,29 @@ function tri!(A, u::Char, d::Char)
 end
 
 
+#
+# Utility
+#
+
+@is_primitive MinimalCtx Tuple{typeof(BLAS.get_num_threads)}
+function rrule!!(f::CoDual{typeof(BLAS.get_num_threads)})
+    return zero_fcodual(BLAS.get_num_threads()), NoPullback(f)
+end
+
+@is_primitive MinimalCtx Tuple{typeof(BLAS.lbt_get_num_threads)}
+function rrule!!(f::CoDual{typeof(BLAS.lbt_get_num_threads)})
+    return zero_fcodual(BLAS.lbt_get_num_threads()), NoPullback(f)
+end
+
+@is_primitive MinimalCtx Tuple{typeof(BLAS.set_num_threads), Union{Integer, Nothing}}
+function rrule!!(f::CoDual{typeof(BLAS.set_num_threads)}, x::CoDual)
+    return zero_fcodual(BLAS.set_num_threads(primal(x))), NoPullback(f, x)
+end
+
+@is_primitive MinimalCtx Tuple{typeof(BLAS.lbt_set_num_threads), Any}
+function rrule!!(f::CoDual{typeof(BLAS.lbt_set_num_threads)}, x::CoDual)
+    return zero_fcodual(BLAS.lbt_set_num_threads(primal(x))), NoPullback(f, x)
+end
 
 #
 # LEVEL 1
@@ -604,6 +627,12 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
     betas = [0.0, 0.33]
 
     test_cases = vcat(
+        # utility
+        (false, :stability, nothing, BLAS.get_num_threads),
+        (false, :stability, nothing, BLAS.lbt_get_num_threads),
+        (false, :stability, nothing, BLAS.set_num_threads, 1),
+        (false, :stability, nothing, BLAS.lbt_set_num_threads, 1),
+
         # gemm!
         vec(reduce(
             vcat,
