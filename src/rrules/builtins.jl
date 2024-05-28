@@ -674,7 +674,6 @@ function rrule!!(f::CoDual{typeof(typeof)}, x::CoDual)
 end
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
-    return Any[], Any[]
 
     _x = Ref(5.0) # data used in tests which aren't protected by GC.
     _dx = Ref(4.0)
