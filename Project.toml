@@ -41,6 +41,7 @@ FillArrays = "1"
 Graphs = "1"
 JET = "0.9"
 LogDensityProblemsAD = "1"
+Lux = "0.5"
 PDMats = "0.11"
 Setfield = "1"
 SpecialFunctions = "2"
@@ -59,6 +60,7 @@ Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 FillArrays = "1a297f60-69ca-5386-bcde-b61e274b549b"
 KernelFunctions = "ec8451be-7e33-11e9-00cf-bbf324bd1392"
 LogDensityProblemsAD = "996a588d-648d-4e1f-a8f0-a84b347e47b1"
+Lux = "b2108857-7c20-44ae-9111-449ecde12c47"
 PDMats = "90014a1f-27ba-587c-ab20-58faa44d9150"
 ReverseDiff = "37e2e3b7-166d-5795-8a7a-e32c996b4267"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
@@ -68,4 +70,4 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
 
 [targets]
-test = ["AbstractGPs", "BenchmarkTools", "CUDA", "DiffTests", "Distributions", "Documenter", "FillArrays", "KernelFunctions", "LogDensityProblemsAD", "PDMats", "ReverseDiff", "SpecialFunctions", "StableRNGs", "Test", "Turing", "TemporalGPs"]
+test = ["AbstractGPs", "BenchmarkTools", "CUDA", "DiffTests", "Distributions", "Documenter", "FillArrays", "KernelFunctions", "LogDensityProblemsAD", "Lux", "PDMats", "ReverseDiff", "SpecialFunctions", "StableRNGs", "Test", "Turing", "TemporalGPs"]
