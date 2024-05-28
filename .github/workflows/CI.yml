@@ -116,6 +116,6 @@ jobs:
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
-          body: "Performance Ratio:\n```\n${{ steps.read-file.outputs.table }}\n```"
+          body: "Performance Ratio:\nWarning: results are very approximate!\n```\n${{ steps.read-file.outputs.table }}\n```"
           comment-id: ${{ steps.fc.outputs.comment-id }}
           edit-mode: replace
