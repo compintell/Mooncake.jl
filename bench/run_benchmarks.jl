@@ -47,7 +47,7 @@ function _sum(x::AbstractArray{<:Real})
     n = 0
     while n < length(x)
         n += 1
-        y += x[n]
+        y += sin(cos(exp(x[n])))
     end
     return y
 end
@@ -137,8 +137,8 @@ an array.
 """
 function generate_inter_framework_tests()
     return Any[
-        ("sum", (sum, randn(100))),
-        ("_sum", (_sum, randn(100))),
+        ("sum_sin_cos_exp", (x -> sum(sin.(cos.(exp.(x)))), randn(10_000))),
+        ("_sum_sin_cos_exp", (_sum, randn(10_000))),
         ("kron_sum", (_kron_sum, randn(20, 20), randn(40, 40))),
         ("kron_view_sum", (_kron_view_sum, randn(40, 30), randn(40, 40))),
         ("naive_map_sin_cos_exp", (_naive_map_sin_cos_exp, randn(10, 10))),
