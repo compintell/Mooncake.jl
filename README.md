@@ -104,7 +104,7 @@ Before an initial release, this package was called `Taped.jl`, but that name cea
 For about 48 hours is was called `Phi.jl`, but the community guidelines state that the name of packages in the general registry should generally be at least 5 characters in length.
 
 Disambiguation: when choosing the name `Tapir.jl` we were only vaguely aware of other work [of the same name](https://github.com/wsmoses/Tapir-LLVM), and didn't feel that it presented a serious name clash as it isn't AD-specific or a Julia project.
-As it turns out that there has been significant work attempting to integrate the ideas from this work into the [Julia compiler](https://github.com/JuliaLang/julia/pull/39773), so it is possible that this package name _may_ change again at _some_ point in the future.
+As it turns out, there has been significant work attempting to integrate the ideas from this work into the [Julia compiler](https://github.com/JuliaLang/julia/pull/39773), so it is possible that this package name _may_ change again at _some_ point in the future.
 
 # Project Status
 
