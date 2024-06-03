@@ -28,6 +28,10 @@ increment!!(x::F, y::F) where {F<:FData} = F(tuple_map(increment!!, x.data, y.da
     fdata_type(T)
 
 Returns the type of the forwards data associated to a tangent of type `T`.
+
+# Extended help
+
+
 """
 fdata_type(T)
 
@@ -265,10 +269,14 @@ fields_type(::Type{RData{T}}) where {T<:NamedTuple} = T
     return RData(increment_field!!(x.data, new_val, Val(f)))
 end
 
-"""
+@doc"""
     rdata_type(T)
 
 Returns the type of the reverse data of a tangent of type T.
+
+# Extended help
+
+See extended help in [`fdata_type`](@ref) docstring
 """
 rdata_type(T)
 
