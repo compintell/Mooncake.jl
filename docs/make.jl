@@ -1,5 +1,13 @@
 using Documenter, Tapir
 
+DocMeta.setdocmeta!(
+    Tapir,
+    :DocTestSetup,
+    quote
+        using Tapir
+    end,
+)
+
 makedocs(
     sitename="Tapir.jl",
     format=Documenter.HTML(),
