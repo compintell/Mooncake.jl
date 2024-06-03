@@ -103,6 +103,10 @@ These two approaches entail different tradeoffs.
 Before an initial release, this package was called `Taped.jl`, but that name ceased to be helpful when we stopped using a classic "Wengert list"-style type to implement AD.
 For about 48 hours is was called `Phi.jl`, but the community guidelines state that the name of packages in the general registry should generally be at least 5 characters in length.
 
+Disambiguation: when choosing the name `Tapir.jl` we were only vaguely aware [of the same name](https://github.com/wsmoses/Tapir-LLVM), and didn't feel that it presented a serious name clash as it isn't AD-specific or a Julia project.
+In hindsight it's rather closer than ideal, as it turns out that there has been significant work attempting to integrate the ideas from this work into the [Julia compiler](https://github.com/JuliaLang/julia/pull/39773).
+Consequently, it is possible that this package name _may_ change again at _some_ point in the future.
+
 # Project Status
 
 The plan is to proceed in three phases:
