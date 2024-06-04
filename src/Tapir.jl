@@ -50,7 +50,7 @@ pb!!(1.0)
 
 # output
 
-(Tapir.NoRData(), 0.28366218546322625)
+(NoRData(), 0.28366218546322625)
 ```
 """
 function rrule!! end
@@ -107,6 +107,12 @@ export
     rrule!!,
     build_rrule,
     value_and_gradient!!,
-    value_and_pullback!!
+    value_and_pullback!!,
+    NoFData,
+    NoRData,
+    fdata_type,
+    rdata_type,
+    fdata,
+    rdata
 
 end

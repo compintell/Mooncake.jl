@@ -28,42 +28,14 @@ tangent_type(P)
 
 
 
-### FData and RData
+## FData and RData
 
-Rules in Tapir.jl do not operate on tangents directly.
-Rather, functionality is defined to split each tangent into two components, that we call _fdata_ (forwards-pass data) and _rdata_ (reverse-pass data).
-In short, any component of a tangent which is identified by its address (e.g. a `mutable struct`s or an `Array`) gets passed around on the forwards-pass of AD and is incremented in-place on the reverse-pass, while components of tangents identified by their value get propagated and accumulated only on the reverse-pass.
+While tangents are the things used to represent gradients, they are not strictly what gets propagated forwards and backwards by rules during AD.
+Rather, they are split into fdata and rdata, and these are passed around.
 
-Given a tangent type `T`, you can find out what type its fdata and rdata must be with `Tapir.fdata_type(T)` and `Tapir.rdata_type(T)` respectively.
-A consequence of this is that there is exactly one valid fdata type and rdata type for each primal type.
-
-Given a tangent `t`, you can get its fdata and rdata using `f = Tapir.fdata(t)` and `r = Tapir.rdata(t)` respectively.
-f can be re-combined to recover the original tangent using the binary version of `tangent`: `tangent(f, r)`.
-It must always hold that
-```julia
-tangent(Tapir.fdata(t), Tapir.rdata(t)) === t
+```@docs
+Tapir.fdata_type(T)
 ```
-
-The need for all of this will be explained later, but for now it suffices to consider our running examples again, and to see what their fdata and rdata look like.
-
-#### Float64
-
-The zero tangent for `5.0` is `t = 0.0`.
-`Tapir.fdata(t)` returns `NoFData`, while `Tapir.rdata(t)` returns `0.0`.
-This is because `0.0` is entirely identified with its value.
-
-#### Vector{Float64}
-
-The zero tangent for `[5.0]` is `t = [0.0]`.
-`Tapir.fdata(t)` returns `t`, and satisfies `Tapir.fdata(t) === t`.
-`Tapir.rdata(t)` returns `NoRData`, because `t` is entirely identified by its address.
-
-#### Tuple{Float64, Vector{Float64}}
-
-The zero tangent for `(5.0, [5.0])` is `t = (0.0, [0.0])`.
-`Tapir.fdata(t)` returns `(NoFData(), [0.0])`, where the second element is `===` to the second element of `t`.
-`Tapir.rdata(t)` returns `(0.0, NoRData())`.
-In this example, `t` contains a mixture of data, some of which is identified by its value, and some of which is identified by its address, so there is some fdata and some rdata.
 
 ### Why Uniqueness of Tangents / FData / RData?
 

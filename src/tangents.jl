@@ -172,7 +172,7 @@ Furthermore, this type is _always_ given by the function `Tapir.tangent_type(pri
 
 Consider some more worked examples.
 
-# Int
+#### Int
 
 `Int` is not a differentiable type, so its tangent type is `NoTangent`:
 ```jldoctest
@@ -180,7 +180,7 @@ julia> tangent_type(Int)
 NoTangent
 ```
 
-# Tuples
+#### Tuples
 
 The tangent type of a `Tuple` is defined recursively based on its field types. For example
 ```jldoctest
