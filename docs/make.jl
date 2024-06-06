@@ -10,7 +10,15 @@ DocMeta.setdocmeta!(
 
 makedocs(
     sitename="Tapir.jl",
-    format=Documenter.HTML(),
+    format=Documenter.HTML(;
+        mathengine = Documenter.KaTeX(
+            Dict(
+                :macros => Dict(
+                    "\\RR" => "\\mathbb{R}",
+                ),
+            )
+        ),
+    ),
     modules=[Tapir],
     checkdocs=:none,
 )

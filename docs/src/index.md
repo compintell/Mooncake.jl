@@ -6,14 +6,249 @@ Note (29/05/2024): I (Will) am currently actively working on the documentation.
 It will be merged in chunks over the next month or so as good first drafts of sections are completed.
 Please don't be alarmed that not all of it is here!
 
-# Tapir.jl's Reverse-Mode Interface
+# Tapir.jl and Reverse-Mode AD
 
 The point of Tapir.jl is to perform reverse-mode algorithmic differentiation (AD).
-Consequently, it must be possible to interpret Tapir.jl as computing vector-Jacobian products (VJPs).
-The purpose of this section is to precisely specify _what_ Tapir.jl does, and _how_ it can be interpreted as computing VJPs.
-We do this in two parts:
-1. specify what types are used to represent "vector"s -- the inputs and outputs of a VJP -- and the mathematical model associated to these,
-1. what the functions which compute VJPs must do, and the mathematical model associated to these.
+The purpose of this section is to explain _what_ precisely is meant by this, and _how_ it can be interpreted mathematically.
+We do this as follows:
+1. we recap what AD is, and introduce the mathematics necessary to understand is,
+1. explain how this mathematics relates to functions and data structures in Julia, and
+1. how this is handled in Tapir.jl.
+
+Since Tapir.jl supports in-place operations / mutation, these will push beyond what is encountered in Zygote / Diffractor / ChainRules.
+Consequently, while there is a great deal of overlap with these existing systems, in order to understand Tapir.jl properly you will need to read through this section of the docs.
+
+
+## Algorithmic Differentiation (AD) Introduction and Notation
+
+### Derivatives
+
+Let ``f : \RR \to \RR`` be differentiable everywhere.
+Its derivative at some point ``x \in \RR`` is the scalar ``\alpha \in \RR`` such that
+```math
+\text{d}f = \alpha \, \text{d}x
+```
+This generalises to other kinds of vector spaces.
+For example, if ``f : \RR^P \to \RR^Q`` is differentiable everywhere, then the derivative of ``f`` at a point ``x \in \RR^P`` is the _Jacobian_ matrix ``J \in \RR^{Q \times P}`` such that
+```math
+\text{d}f = J \, \text{d}x
+```
+
+It is possible to stop here, as all the functions we shall need to consider can in principle be written as functions on some subset ``\RR^P``.
+However, writing functions in this way turns out to be incredibly inconvenient in general.
+For example, consider the convolution ``W \ast X``, where ``W`` and ``X`` are matrices -- the function ``X \to W \ast X`` is plainly a finite-dimensional linear operator, so we _could_ express it as a matrix-vector product given an appropriate mapping between the matrix ``X`` and a column vector. However, this is best avoided when possible.
+
+
+Instead, we consider functions ``f : \mathcal{X} \to \mathcal{Y}``, where ``\mathcal{X}`` and ``\mathcal{Y}`` are finite dimensional Hilbert spaces.
+In this instance, the derivative of ``f`` at ``x \in \mathcal{X}`` is the linear operator ``D f [x]`` satisfying
+```math
+\text{d}f = D f [x] \, \text{d} x
+```
+This is a generalisation of the previous cases. For example, if it _is_ ``\mathcal{X} = \RR^P`` and ``\mathcal{Y} = \RR^Q`` then this operator can be specified in terms of the Jacobian matrix: ``D f [x] (\text{d}x) = J \text{d} x`` -- brackets are used to emphasise that ``D f [x]`` is a function, and is being applied to ``\text{d} x``.
+
+### Forwards-Mode AD
+
+At this point we have enough machinery to discuss forwards-mode AD.
+We do this for completeness -- feel free to skip to the next section if you are not interested in this.
+Expressed in the language of linear operators and Hilbert spaces, the goal of forwards-mode AD is the following:
+given a function ``f`` which is differentiable at a point ``x``, compute ``D f [x] (\dot{x})`` for a given vector ``\dot{x}``.
+If ``f : \RR^P \to \RR^Q``, this is equivalent to computing ``J \dot{x}``, where ``J`` is the Jacobian of ``f`` at ``x``.
+
+Forwards-mode AD achieves this by breaking down ``f`` into the composition ``f = f_N \circ \dots \circ f_1``, where each ``f_n`` is a simple function whose derivative (function) ``D f_n [x_n]`` we know for any given ``x_n``. By the chain rule, we have that
+```math
+D f [x] (\dot{x}) = D f_N [x_N] \circ \dots \circ D f_1 [x_1] (\dot{x})
+```
+which suggests the following algorithm:
+1. let ``x_1 = x``, ``\dot{x}_1 = \dot{x}``, and ``n = 1``
+2. let ``\dot{x}_{n+1} = D f_n [x_n] (\dot{x}_n)``
+3. let ``x_{n+1} = f(x_n)``
+4. let ``n = n + 1``
+5. if ``n = N+1`` then return `\dot{x}_{N+1}`, otherwise go to 2.
+
+When each function ``f_n`` maps between Euclidean spaces, the applications of derivatives ``D f_n [x_n] (\dot{x}_n)`` are given by ``J_n \dot{x}_n`` where ``J_n`` is the Jacobian of ``f_n`` at ``x_n``.
+
+### Reverse-Mode AD in Euclidean space
+
+In order to discuss Reverse-Mode AD, we first present the usual Euclidean case involving Jacobians, and then generalise.
+
+In the Euclidean setting, the goal of reverse-mode AD is the following: given a function ``f : \RR^P \to \RR^Q`` which is differentiable at ``x \in \RR^P`` with Jacobian ``J``, compute ``J^\top \bar{y}`` for ``\bar{y} \in \RR^Q``.
+
+As with forwards-mode AD, this is achieved by first decomposing ``f`` into the composition ``f = f_N \circ \dots \circ f_1``, where each ``f_n`` is a simple function whose _Jacobian_ ``J_n`` we can compute at any point ``x_n``. By the chain rule, we have that
+```math
+J = J_N \dots J_1 .
+```
+Taking the transpose and multiplying from the left by ``\bar{y}`` yields
+```math
+J^\top \bar{y} = J^\top_N \dots J^\top_1 \bar{y} .
+```
+
+We see that ``J^\top \bar{y}`` can be evaluated from right to left as a sequence of ``N`` matrix-vector products.
+
+### Adjoints
+
+In order to generalise this algorithm to work with linear operators, we must generalise the idea of multiplying a vector by the transpose of the Jacobian.
+The relevant concept here is that of the _adjoint_ _operator_.
+Specifically, the ``A^\ast`` of linear operator ``A`` is the linear operator satisfying
+```math
+\langle A^\ast \bar{y}, \dot{x} \rangle = \langle \bar{y}, A \dot{x} \rangle.
+```
+The relationship between the adjoint and matrix transpose is this: if ``A (x) := J x`` for some matrix ``J``, then ``A^\ast (y) := J^\top y``.
+
+Moreover, just as ``(A B)^\top = B^\top A^\top`` when ``A`` and ``B`` are matrices, ``(A B)^\ast = B^\ast A^\ast`` when ``A`` and ``B`` are linear operators.
+This result follows in short order from the definition of the adjoint operator -- proving this is a good exercise!
+
+### Reverse-Mode AD in General
+
+Equipped with adjoints, we can express reverse-mode AD only in terms of linear operators, dispensing with the need to express everything in terms of Jacobians.
+The goal of reverse-mode AD is as follows: given a differentiable function ``f : \mathcal{X} \to \mathcal{Y}``, compute ``D f [x]^\ast (\bar{y})`` for some ``\bar{y}``.
+Decomposing ``f`` as before, ``f = f_N \circ \dots \circ f_1``, we assume that we can compute the adjoint of the derivative of each ``f_n``.
+Then the adjoint is
+```math
+D f [x]^\ast (\bar{y}) = (D f_1 [x_1]^\ast \circ \dots \circ D f_N [x_N]^\ast)(\bar{y})
+```
+Our previous reverse-mode AD algorithm can now be generalised.
+
+Forwards-Pass:
+1. ``x_1 = x``, ``n = 1``
+2. construct ``D f_n [x_n]^\ast``
+3. let ``x_{n+1} = f_n (x_n)``
+4. let ``n = n + 1``
+5. if ``n < N + 1`` then go to 2
+
+Reverse-Pass:
+1. let ``\bar{x}_{N+1} = \bar{y}``
+2. let ``n = n - 1``
+3. let ``\bar{x}_{n} = D f_n [x_n]^\ast (\bar{x}_{n+1})``
+4. if ``n = 1`` return ``\bar{x}_1`` else go to 2.
+
+## Some Worked Examples
+
+We now present some worked examples in order to prime intuition, and to introduce the important classes of problems that will be encountered when doing AD in the Julia language.
+We will put all of these problems in a single general framework later on.
+
+### An Example with Matrix Calculus
+
+We have introduced some mathematical abstraction in order to simplify the calculations involved in AD.
+To this end, we consider differentiating ``f(X) = X^\top X``.
+
+[^Giles]
+
+[^Giles]: [Giles, Mike. "An extended collection of matrix derivative results for forward and reverse mode automatic differentiation." (2008).](https://ora.ox.ac.uk/objects/uuid:8d0c0a29-c92b-4153-a1d2-38b276e93124/files/mf93d097c97e691911a8ca49afd87662d)
+
+The derivative of this function is
+```math
+D f [X] (\dot{X}) = \dot{X}^\top X + X^\top \dot{X}
+```
+Observe that this is indeed a linear operator (i.e. it is linear in its argument, ``\dot{X}``).
+You can plug it in to the definition of the Frechet derivative in order to confirm that it is indeed the derivative.
+
+In order to perform reverse-mode AD, we need to find the adjoint operator.
+Using the usual definition of the inner product between matrices,
+```math
+\langle X, Y \rangle := \textrm{tr} (X^\top Y)
+```
+we can derive the adjoint operator:
+```math
+\begin{align}
+    \langle \bar{Y}, D f [X] (\dot{X}) \rangle &= \langle \bar{Y}, \dot{X}^\top X + X^\top \dot{X} \rangle \nonumber
+        &= \langle 
+\end{align}
+```
+
+### AD with Immutables
+
+The way that Tapir.jl handles immutable data is very similar to how Zygote / ChainRules do.
+For example, consider the Julia function
+```julia
+f(x::Float64, y::Tuple{Float64, Float64}) = x + y[1] * y[2]
+```
+If you've previously worked with ChainRules / Zygote, without thinking too hard about the formalisms we introduced previously (perhaps by considering a variety of partial derivatives) you can probably arrive at the following adjoint for the derivative of `f`:
+```julia
+g -> (g, (y[2] * g, y[1] * g))
+```
+
+It is helpful to work through this simple example in detail, as the steps involved apply more generally.
+If at any point this exercise feels pedantic, we ask you to stick with it.
+The goal is to spell out the steps involved in excessive detail, as this level of detail will be required in more complicated examples, and it is most straightforwardly demonstrated in a simple case.
+
+
+
+#### Step 1: produce a mathematical model
+
+There are a couple of aspects of `f` which require thought:
+1. it has two arguments -- we've only handled single argument functions previously, and
+2. the second argument is a `Tuple` -- we've not decided how to model this.
+
+To this end, we define a mathematical notion of a tuple.
+A tuple is a collection of ``N`` elements, each of which is drawn from some set ``\mathcal{X}_n``.
+We denote by ``\mathcal{X} := \{ \mathcal{X}_1 \times \dots \times \mathcal{X}_N \}`` the set of all ``N``-tuples whose ``n``th element is drawn from ``\mathcal{X}_n``.
+Provided that each ``\mathcal{X}_n`` forms a finite Hilbert space, ``\mathcal{X}`` forms a Hilbert space with
+1. ``\alpha x := (\alpha x_1, \dots, \alpha x_N)``,
+2. ``x + y := (x_1 + y_1, \dots, x_N + y_N)``, and
+3. ``\langle x, y \rangle := \sum_{n=1}^N \langle x_n, y_n \rangle``.
+
+We can think of multi-argument functions as single-argument functions of a tuple, so a reasonable mathematical model for `f` might be a function ``f : \{ \RR \times \{ \RR \times \RR \} \} \to \RR``, where
+```math
+f(x, y) := x + y_1 y_2
+```
+Note that while the function is written with two arguments, you should treat them as a single tuple, where we've assigned the name ``x`` to the first element, and ``y`` to the second.
+
+#### Step 2: obtain the derivative
+
+Now that we have a mathematical object, we can differentiate it:
+```math
+D f [x, y](\dot{x}, \dot{y}) = \dot{x} + \dot{y}_1 y_2 + y_1 \dot{y}_2
+```
+
+#### Step 3: obtain the adjoint
+
+``D f[x, y]`` maps ``\{ \RR \times \{ \RR \times \RR \}\}`` to ``\RR``, so ``D f [x, y]^\ast`` must map the other way.
+The reader should verify that the following follows quickly from the definition of the adjoint:
+```math
+D f [x, y]^\ast (\bar{f}) =  (\bar{f}, (\bar{f} y_2, \bar{f} y_1))
+```
+
+
+### AD with mutable data
+
+In the previous two examples there was an obvious mathematical model for the Julia function.
+Indeed this model was sufficiently obvious that it required little explanation.
+This is not always the case though, in particular, Julia functions which modify / mutate their inputs require a little more thought.
+
+Consider the following Julia `function`:
+```julia
+function square!(x::Vector{Float64})
+    x .*= x
+    return nothing
+end
+```
+This `function` simply doubles its input, and returns `nothing`.
+So what is an appropriate mathematical model for this `function`?
+In order to clarify the problem further, consider another `function` which makes use of `square!` internally:
+```julia
+function g(x::Vector{Float64})
+    square!(x)
+    return sum(x)
+end
+```
+`g` looks a bit more like what we've seen previously in that it returns something that we can treat as a real number.
+However, unlike before, the value associated to the elements of `x` changes throughout execution.
+
+The way to handle these two difference from before is to:
+1. introduce a notion of state to each variable involved in a `function`, and
+2. include the arguments in the value returned by the mathematical model.
+
+#### Step 1: produce a mathematical model
+
+We model `square!`
+
+
+
+
+
+## A Rough Mathemtical Model for a Julia Function
+
+
 
 
 ## Tangents
