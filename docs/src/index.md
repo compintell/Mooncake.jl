@@ -10,7 +10,6 @@ Please don't be alarmed that not all of it is here!
 
 The point of Tapir.jl is to perform reverse-mode algorithmic differentiation (AD).
 The purpose of this section is to explain _what_ precisely is meant by this, and _how_ it can be interpreted mathematically.
-We do this as follows:
 1. we recap what AD is, and introduce the mathematics necessary to understand is,
 1. explain how this mathematics relates to functions and data structures in Julia, and
 1. how this is handled in Tapir.jl.
@@ -18,10 +17,23 @@ We do this as follows:
 Since Tapir.jl supports in-place operations / mutation, these will push beyond what is encountered in Zygote / Diffractor / ChainRules.
 Consequently, while there is a great deal of overlap with these existing systems, in order to understand Tapir.jl properly you will need to read through this section of the docs.
 
+## Prerequisites and Resources
 
-## Algorithmic Differentiation (AD) Introduction and Notation
+This introduction assumes familiarity with the differentiation of vector-valued functions -- familiarity with the gradient and Jacobian matrices is a given.
 
-### Derivatives
+In order to provide a convenient exposition of AD, we need to abstract a little further than this and make use of a slightly more general notion of the derivative, gradient, and "transposed Jacobian".
+Please note that, fortunately, we only ever have to handle finite dimensional objects when doing AD, so there is no need for any knowledge of functional analysis to understand what is going on here.
+These concepts will be introduced here, but I cannot promise that these docs give the best exposition -- they're most appropriate as a refresher and to establish the notation that I'll use.
+Rather, I would recommend a couple of lectures from the "Matrix Calculus for Machine Learning and Beyond" course, which you can find [on MIT's OCW website](https://ocw.mit.edu/courses/18-s096-matrix-calculus-for-machine-learning-and-beyond-january-iap-2023/), delivered by Edelman and Johnson (who will be familiar faces to anyone who has spent much time in the Julia world!).
+It is designed for undergraduates, and is accessible to anyone with some undergraduate-level linear algebra and calculus.
+While I recommend the whole course, Lecture 1 part 2 and Lecture 4 part 1 are especially relevant to the problems we shall discuss -- you can skip to 11:30 in Lecture 4 part 1 if you're in a hurry.
+
+
+
+## Derivatives
+
+
+The foundation on which all of AD is built the the derivate -- we need a fairly general definition of it, so we review it here.
 
 Let ``f : \RR \to \RR`` be differentiable everywhere.
 Its derivative at some point ``x \in \RR`` is the scalar ``\alpha \in \RR`` such that
@@ -29,9 +41,9 @@ Its derivative at some point ``x \in \RR`` is the scalar ``\alpha \in \RR`` such
 \text{d}f = \alpha \, \text{d}x
 ```
 This generalises to other kinds of vector spaces.
-For example, if ``f : \RR^P \to \RR^Q`` is differentiable everywhere, then the derivative of ``f`` at a point ``x \in \RR^P`` is the _Jacobian_ matrix ``J \in \RR^{Q \times P}`` such that
+For example, if ``f : \RR^P \to \RR^Q`` is differentiable at a point ``x \in \RR^P``, then the derivative of ``f`` at ``x`` is given by the Jacobian matrix at ``x``, which we denote as ``J[x] \in \RR^{Q \times P}`` such that
 ```math
-\text{d}f = J \, \text{d}x
+\text{d}f = J[x] \, \text{d}x
 ```
 
 It is possible to stop here, as all the functions we shall need to consider can in principle be written as functions on some subset ``\RR^P``.
@@ -46,43 +58,35 @@ In this instance, the derivative of ``f`` at ``x \in \mathcal{X}`` is the linear
 ```
 This is a generalisation of the previous cases. For example, if it _is_ ``\mathcal{X} = \RR^P`` and ``\mathcal{Y} = \RR^Q`` then this operator can be specified in terms of the Jacobian matrix: ``D f [x] (\text{d}x) = J \text{d} x`` -- brackets are used to emphasise that ``D f [x]`` is a function, and is being applied to ``\text{d} x``.
 
-### Forwards-Mode AD
+### An aside: _what_ does Forwards-Mode AD compute?
 
 At this point we have enough machinery to discuss forwards-mode AD.
 We do this for completeness -- feel free to skip to the next section if you are not interested in this.
 Expressed in the language of linear operators and Hilbert spaces, the goal of forwards-mode AD is the following:
 given a function ``f`` which is differentiable at a point ``x``, compute ``D f [x] (\dot{x})`` for a given vector ``\dot{x}``.
-If ``f : \RR^P \to \RR^Q``, this is equivalent to computing ``J \dot{x}``, where ``J`` is the Jacobian of ``f`` at ``x``.
+If ``f : \RR^P \to \RR^Q``, this is equivalent to computing ``J[x] \dot{x}``, where ``J[x]`` is the Jacobian of ``f`` at ``x``.
+We provide a high-level explanation of _how_ forwards-mode AD does this in [_How_ does Forwards-Mode AD work?](@ref).
 
-Forwards-mode AD achieves this by breaking down ``f`` into the composition ``f = f_N \circ \dots \circ f_1``, where each ``f_n`` is a simple function whose derivative (function) ``D f_n [x_n]`` we know for any given ``x_n``. By the chain rule, we have that
+
+
+## Reverse-Mode AD: _what_ does it do?
+
+In order to explain what AD does, it's first helpful to consider it in a familiar context: Euclidean space, ``\RR^N``.
+We then generalise to more general vector spaces (although nothing infinite dimensional, as promised), which is necessary for the general case.
+
+### Reverse-Mode AD: what does it do in Euclidean space?
+
+In this setting, the goal of reverse-mode AD is the following: given a function ``f : \RR^P \to \RR^Q`` which is differentiable at ``x \in \RR^P`` with Jacobian ``J[x]`` at ``x``, compute ``J[x]^\top \bar{y}`` for any ``\bar{y} \in \RR^Q``.
+As with forwards-mode AD, this is achieved by first decomposing ``f`` into the composition ``f = f_N \circ \dots \circ f_1``, where each ``f_n`` is a simple function whose Jacobian ``J_n[x]`` we can compute at any point ``x_n``. By the chain rule, we have that
 ```math
-D f [x] (\dot{x}) = D f_N [x_N] \circ \dots \circ D f_1 [x_1] (\dot{x})
-```
-which suggests the following algorithm:
-1. let ``x_1 = x``, ``\dot{x}_1 = \dot{x}``, and ``n = 1``
-2. let ``\dot{x}_{n+1} = D f_n [x_n] (\dot{x}_n)``
-3. let ``x_{n+1} = f(x_n)``
-4. let ``n = n + 1``
-5. if ``n = N+1`` then return `\dot{x}_{N+1}`, otherwise go to 2.
-
-When each function ``f_n`` maps between Euclidean spaces, the applications of derivatives ``D f_n [x_n] (\dot{x}_n)`` are given by ``J_n \dot{x}_n`` where ``J_n`` is the Jacobian of ``f_n`` at ``x_n``.
-
-### Reverse-Mode AD in Euclidean space
-
-In order to discuss Reverse-Mode AD, we first present the usual Euclidean case involving Jacobians, and then generalise.
-
-In the Euclidean setting, the goal of reverse-mode AD is the following: given a function ``f : \RR^P \to \RR^Q`` which is differentiable at ``x \in \RR^P`` with Jacobian ``J``, compute ``J^\top \bar{y}`` for ``\bar{y} \in \RR^Q``.
-
-As with forwards-mode AD, this is achieved by first decomposing ``f`` into the composition ``f = f_N \circ \dots \circ f_1``, where each ``f_n`` is a simple function whose _Jacobian_ ``J_n`` we can compute at any point ``x_n``. By the chain rule, we have that
-```math
-J = J_N \dots J_1 .
+J[x] = J_N[x] \dots J_1[x] .
 ```
 Taking the transpose and multiplying from the left by ``\bar{y}`` yields
 ```math
-J^\top \bar{y} = J^\top_N \dots J^\top_1 \bar{y} .
+J[x]^\top \bar{y} = J[x]^\top_N \dots J[x]^\top_1 \bar{y} .
 ```
 
-We see that ``J^\top \bar{y}`` can be evaluated from right to left as a sequence of ``N`` matrix-vector products.
+We see that ``J[x]^\top \bar{y}`` can be evaluated from right to left as a sequence of ``N`` matrix-vector products.
 
 ### Adjoints
 
@@ -97,43 +101,23 @@ The relationship between the adjoint and matrix transpose is this: if ``A (x) :=
 Moreover, just as ``(A B)^\top = B^\top A^\top`` when ``A`` and ``B`` are matrices, ``(A B)^\ast = B^\ast A^\ast`` when ``A`` and ``B`` are linear operators.
 This result follows in short order from the definition of the adjoint operator -- proving this is a good exercise!
 
-### Reverse-Mode AD in General
+### Reverse-Mode AD: _what_ does it do in general?
 
 Equipped with adjoints, we can express reverse-mode AD only in terms of linear operators, dispensing with the need to express everything in terms of Jacobians.
 The goal of reverse-mode AD is as follows: given a differentiable function ``f : \mathcal{X} \to \mathcal{Y}``, compute ``D f [x]^\ast (\bar{y})`` for some ``\bar{y}``.
-Decomposing ``f`` as before, ``f = f_N \circ \dots \circ f_1``, we assume that we can compute the adjoint of the derivative of each ``f_n``.
-Then the adjoint is
-```math
-D f [x]^\ast (\bar{y}) = (D f_1 [x_1]^\ast \circ \dots \circ D f_N [x_N]^\ast)(\bar{y})
-```
-Our previous reverse-mode AD algorithm can now be generalised.
+We will explain _how_ reverse-mode AD goes about computing this after some worked examples.
 
-Forwards-Pass:
-1. ``x_1 = x``, ``n = 1``
-2. construct ``D f_n [x_n]^\ast``
-3. let ``x_{n+1} = f_n (x_n)``
-4. let ``n = n + 1``
-5. if ``n < N + 1`` then go to 2
-
-Reverse-Pass:
-1. let ``\bar{x}_{N+1} = \bar{y}``
-2. let ``n = n - 1``
-3. let ``\bar{x}_{n} = D f_n [x_n]^\ast (\bar{x}_{n+1})``
-4. if ``n = 1`` return ``\bar{x}_1`` else go to 2.
-
-## Some Worked Examples
+### Some Worked Examples
 
 We now present some worked examples in order to prime intuition, and to introduce the important classes of problems that will be encountered when doing AD in the Julia language.
 We will put all of these problems in a single general framework later on.
 
-### An Example with Matrix Calculus
+#### An Example with Matrix Calculus
 
 We have introduced some mathematical abstraction in order to simplify the calculations involved in AD.
 To this end, we consider differentiating ``f(X) = X^\top X``.
-
-[^Giles]
-
-[^Giles]: [Giles, Mike. "An extended collection of matrix derivative results for forward and reverse mode automatic differentiation." (2008).](https://ora.ox.ac.uk/objects/uuid:8d0c0a29-c92b-4153-a1d2-38b276e93124/files/mf93d097c97e691911a8ca49afd87662d)
+Results for this and many similar operations are given by [giles2008extended](@cite).
+A similar operation, but which maps from matrices to ``\RR`` is discussed in Lecture 14 part 2 of the MIT course mentioned previouly.
 
 The derivative of this function is
 ```math
@@ -155,7 +139,7 @@ we can derive the adjoint operator:
 \end{align}
 ```
 
-### AD with Immutables
+#### AD with Immutables
 
 The way that Tapir.jl handles immutable data is very similar to how Zygote / ChainRules do.
 For example, consider the Julia function
@@ -173,7 +157,7 @@ The goal is to spell out the steps involved in excessive detail, as this level o
 
 
 
-#### Step 1: produce a mathematical model
+##### Step 1: produce a mathematical model
 
 There are a couple of aspects of `f` which require thought:
 1. it has two arguments -- we've only handled single argument functions previously, and
@@ -193,14 +177,14 @@ f(x, y) := x + y_1 y_2
 ```
 Note that while the function is written with two arguments, you should treat them as a single tuple, where we've assigned the name ``x`` to the first element, and ``y`` to the second.
 
-#### Step 2: obtain the derivative
+##### Step 2: obtain the derivative
 
 Now that we have a mathematical object, we can differentiate it:
 ```math
 D f [x, y](\dot{x}, \dot{y}) = \dot{x} + \dot{y}_1 y_2 + y_1 \dot{y}_2
 ```
 
-#### Step 3: obtain the adjoint
+##### Step 3: obtain the adjoint
 
 ``D f[x, y]`` maps ``\{ \RR \times \{ \RR \times \RR \}\}`` to ``\RR``, so ``D f [x, y]^\ast`` must map the other way.
 The reader should verify that the following follows quickly from the definition of the adjoint:
@@ -209,7 +193,7 @@ D f [x, y]^\ast (\bar{f}) =  (\bar{f}, (\bar{f} y_2, \bar{f} y_1))
 ```
 
 
-### AD with mutable data
+#### AD with mutable data
 
 In the previous two examples there was an obvious mathematical model for the Julia function.
 Indeed this model was sufficiently obvious that it required little explanation.
@@ -217,30 +201,56 @@ This is not always the case though, in particular, Julia functions which modify 
 
 Consider the following Julia `function`:
 ```julia
-function square!(x::Vector{Float64})
+function f!(x::Vector{Float64})
     x .*= x
     return nothing
 end
 ```
-This `function` simply doubles its input, and returns `nothing`.
+This `function` squares each element of its input in-place, and returns `nothing`.
 So what is an appropriate mathematical model for this `function`?
-In order to clarify the problem further, consider another `function` which makes use of `square!` internally:
+In order to clarify the problem further, consider another `function` which makes use of `f!` internally:
 ```julia
-function g(x::Vector{Float64})
-    square!(x)
+function g!(x::Vector{Float64})
+    f!(x)
     return sum(x)
 end
 ```
-`g` looks a bit more like what we've seen previously in that it returns something that we can treat as a real number.
+`g!` looks a bit more like what we've seen previously in that it returns something that we can treat as a real number.
 However, unlike before, the value associated to the elements of `x` changes throughout execution.
 
 The way to handle these two difference from before is to:
 1. introduce a notion of state to each variable involved in a `function`, and
 2. include the arguments in the value returned by the mathematical model.
 
-#### Step 1: produce a mathematical model
+##### Step 1: produce a mathematical model
 
 We model `square!`
+
+
+## Reverse-Mode AD: _how_ does it do it?
+
+As discussed in [Reverse-Mode AD: _what_ does it do?](@ref) the purpose of reverse-mode AD is to apply the adjoint of the derivative, ``D f (x)^\ast`` to a vector ``\bar{y}``.
+
+Decomposing ``f`` as before, ``f = f_N \circ \dots \circ f_1``, we assume that we can compute the adjoint of the derivative of each ``f_n``.
+Then the adjoint is
+```math
+D f [x]^\ast (\bar{y}) = (D f_1 [x_1]^\ast \circ \dots \circ D f_N [x_N]^\ast)(\bar{y})
+```
+Our previous reverse-mode AD algorithm can now be generalised.
+
+Forwards-Pass:
+1. ``x_1 = x``, ``n = 1``
+2. construct ``D f_n [x_n]^\ast``
+3. let ``x_{n+1} = f_n (x_n)``
+4. let ``n = n + 1``
+5. if ``n < N + 1`` then go to 2
+
+Reverse-Pass:
+1. let ``\bar{x}_{N+1} = \bar{y}``
+2. let ``n = n - 1``
+3. let ``\bar{x}_{n} = D f_n [x_n]^\ast (\bar{x}_{n+1})``
+4. if ``n = 1`` return ``\bar{x}_1`` else go to 2.
+
 
 
 
@@ -416,7 +426,26 @@ Note that this very simple function does _not_ have a meaningful `ChainRules.rru
 TODO
 
 
-# Aside
+# Asides
+
+### _How_ does Forwards-Mode AD work?
+
+Forwards-mode AD achieves this by breaking down ``f`` into the composition ``f = f_N \circ \dots \circ f_1``, # where each ``f_n`` is a simple function whose derivative (function) ``D f_n [x_n]`` we know for any given ``x_n``. By the chain rule, we have that
+```math
+D f [x] (\dot{x}) = D f_N [x_N] \circ \dots \circ D f_1 [x_1] (\dot{x})
+```
+which suggests the following algorithm:
+1. let ``x_1 = x``, ``\dot{x}_1 = \dot{x}``, and ``n = 1``
+2. let ``\dot{x}_{n+1} = D f_n [x_n] (\dot{x}_n)``
+3. let ``x_{n+1} = f(x_n)``
+4. let ``n = n + 1``
+5. if ``n = N+1`` then return `\dot{x}_{N+1}`, otherwise go to 2.
+
+When each function ``f_n`` maps between Euclidean spaces, the applications of derivatives ``D f_n [x_n] (\dot{x}_n)`` are given by ``J_n \dot{x}_n`` where ``J_n`` is the Jacobian of ``f_n`` at ``x_n``.v
 
 ### Why Unique Memory Address
 TODO
+
+
+```@bibliography
+```
