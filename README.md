@@ -1,9 +1,9 @@
 # Tapir
 
-[![Build Status](https://github.com/withbayes/Tapir.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/withbayes/Tapir.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![Build Status](https://github.com/compintell/Tapir.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/compintell/Tapir.jl/actions/workflows/CI.yml?query=branch%3Amain)
 [![Code Style: Blue](https://img.shields.io/badge/code%20style-blue-4495d1.svg)](https://github.com/invenia/BlueStyle)
 [![ColPrac: Contributor's Guide on Collaborative Practices for Community Packages](https://img.shields.io/badge/ColPrac-Contributor's%20Guide-blueviolet)](https://github.com/SciML/ColPrac)
-[![](https://img.shields.io/badge/docs-blue.svg)](https://withbayes.github.io/Tapir.jl/dev)
+[![](https://img.shields.io/badge/docs-blue.svg)](https://compintell.github.io/Tapir.jl/dev)
 
 The goal of the `Tapir.jl` project is to produce a reverse-mode AD package which is written entirely in Julia, which improves over both `ReverseDiff.jl` and `Zygote.jl` in several ways, and is competitive with `Enzyme.jl`.
 
