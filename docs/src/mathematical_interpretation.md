@@ -11,8 +11,20 @@ We begin with an explanation of the tangents to input / outputs, and proceed to 
 
 Tangents (also cotangents) are what is used to represent the user-facing result of AD.
 They are the V in VJP.
+
+_**Non-Differentiable Data**_
+
 In the introduction to algorithmic differentiation, we assumed that the set from which the inputs / outputs of a function are drawn is the same as the tangent vectors.
-Things are complicated by the fact that 
+Things are complicated by the fact that not all data types in Julia can reasonably be thought of as forming a Hilbert space.
+e.g. the `String` type.
+
+Consequently we introduce the special type `NoTangent`, instances of which can be thought of as representing the set containing only a ``0`` tangent.
+Morally speaking, for any non-differentiable data `x`, `x + NoTangent() == x`.
+
+Other than non-differentiable data, the model of data in Julia as living in a real-valued finite dimensional Hilbert space is quite reasonable.
+
+
+_**Representing Tangents**_
 
 The extended docstring for [`tangent_type`](@ref) provides the best introduction to the types which are used to represent tangents.
 
@@ -22,7 +34,7 @@ tangent_type(P)
 
 
 
-# FData and RData
+_**FData and RData**_
 
 While tangents are the things used to represent gradients, they are not strictly what gets propagated forwards and backwards by rules during AD.
 Rather, they are split into fdata and rdata, and these are passed around.
@@ -31,7 +43,20 @@ Rather, they are split into fdata and rdata, and these are passed around.
 Tapir.fdata_type(T)
 ```
 
+
+
 # The Rule Abstraction
+
+A rule must return a `CoDual` and a function to run the reverse-pass, known as the pullback.
+Upon exit from the rule, it must be true that
+1. the state of the arguments / output are the same as they would be had the primal been run, and
+2. the uniqueness of the mapping between address-identified primals and their fdata is maintained.
+
+Upon exit from the pullback, it must be true that
+1. the primal state is as it was before running the rule,
+2. the fdata for the arguments has been incremented by the fdata in ``D f[x]^\ast (\bar{y})``, and 
+3. the rdata for the arguments is equal to the rdata in ``D f[x]^\ast (\bar{y})``.
+
 
 Tapir.jl makes use of a rule system which is at first glance similar to the `rrule` function offered by ChainRules.jl.
 However, owing to Tapir.jl's support for mutation (e.g. differentiating through functions which write to arrays) and high degree of precision around the types used to represent (co)-tangent-like data, the number of situations in which the two are identical are actually rather small.
