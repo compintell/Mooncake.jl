@@ -15,7 +15,7 @@ The purpose of this section is to explain _what_ precisely is meant by this, and
 1. how this is handled in Tapir.jl.
 
 Since Tapir.jl supports in-place operations / mutation, these will push beyond what is encountered in Zygote / Diffractor / ChainRules.
-Consequently, while there is a great deal of overlap with these existing systems, in order to understand Tapir.jl properly you will need to read through this section of the docs.
+Consequently, while there is a great deal of overlap with these existing systems, you will need to read through this section of the docs in order to properly understand Tapir.jl.
 
 ## Prerequisites and Resources
 
@@ -23,7 +23,7 @@ This introduction assumes familiarity with the differentiation of vector-valued 
 
 In order to provide a convenient exposition of AD, we need to abstract a little further than this and make use of a slightly more general notion of the derivative, gradient, and "transposed Jacobian".
 Please note that, fortunately, we only ever have to handle finite dimensional objects when doing AD, so there is no need for any knowledge of functional analysis to understand what is going on here.
-These concepts will be introduced here, but I cannot promise that these docs give the best exposition -- they're most appropriate as a refresher and to establish the notation that I'll use.
+The required concepts will be introduced here, but I cannot promise that these docs give the best exposition -- they're most appropriate as a refresher and to establish notation.
 Rather, I would recommend a couple of lectures from the "Matrix Calculus for Machine Learning and Beyond" course, which you can find [on MIT's OCW website](https://ocw.mit.edu/courses/18-s096-matrix-calculus-for-machine-learning-and-beyond-january-iap-2023/), delivered by Edelman and Johnson (who will be familiar faces to anyone who has spent much time in the Julia world!).
 It is designed for undergraduates, and is accessible to anyone with some undergraduate-level linear algebra and calculus.
 While I recommend the whole course, Lecture 1 part 2 and Lecture 4 part 1 are especially relevant to the problems we shall discuss -- you can skip to 11:30 in Lecture 4 part 1 if you're in a hurry.
@@ -33,32 +33,56 @@ While I recommend the whole course, Lecture 1 part 2 and Lecture 4 part 1 are es
 ## Derivatives
 
 
-The foundation on which all of AD is built the the derivate -- we need a fairly general definition of it, so we review it here.
+A foundation on which all of AD is built the the derivate -- we require a fairly general definition of it, which we build up to here.
 
-Let ``f : \RR \to \RR`` be differentiable everywhere.
-Its derivative at some point ``x \in \RR`` is the scalar ``\alpha \in \RR`` such that
+Consider first ``f : \RR \to \RR``, which we require to be differentiable at ``x \in \RR``.
+Its derivative at ``x`` is usually thought of as the scalar ``\alpha \in \RR`` such that
 ```math
-\text{d}f = \alpha \, \text{d}x
+\text{d}f = \alpha \, \text{d}x .
 ```
-This generalises to other kinds of vector spaces.
-For example, if ``f : \RR^P \to \RR^Q`` is differentiable at a point ``x \in \RR^P``, then the derivative of ``f`` at ``x`` is given by the Jacobian matrix at ``x``, which we denote as ``J[x] \in \RR^{Q \times P}`` such that
+Loosely speaking, by this notation we mean that for arbitrary small changes ``\text{d} x`` in the input to ``f``, the change in the output ``\text{d} f`` is ``\alpha \, \text{d}x``.
+We refer readers to the first few minutes of the first lecture mentioned above for a more careful explanation.
+
+The generalisation of this to Euclidean space should be familiar: if ``f : \RR^P \to \RR^Q`` is differentiable at a point ``x \in \RR^P``, then the derivative of ``f`` at ``x`` is given by the Jacobian matrix at ``x``, denoted ``J[x] \in \RR^{Q \times P}``, such that
 ```math
-\text{d}f = J[x] \, \text{d}x
+\text{d}f = J[x] \, \text{d}x .
 ```
 
 It is possible to stop here, as all the functions we shall need to consider can in principle be written as functions on some subset ``\RR^P``.
 However, writing functions in this way turns out to be incredibly inconvenient in general.
-For example, consider the convolution ``W \ast X``, where ``W`` and ``X`` are matrices -- the function ``X \to W \ast X`` is plainly a finite-dimensional linear operator, so we _could_ express it as a matrix-vector product given an appropriate mapping between the matrix ``X`` and a column vector. However, this is best avoided when possible.
+For example, consider the convolution ``W \ast X``, where ``W`` and ``X`` are matrices -- the function ``X \mapsto W \ast X`` is plainly a finite-dimensional linear operator, so we _could_ express it as a matrix-vector product given an appropriate mapping between the matrix ``X`` and a column vector. However, this is best avoided when possible as it is highly inconvenient.
 
+Moreover, when we consider differentiating computer programmes, we will have to deal with complicated nested data structures, e.g. `struct`s inside `Tuple`s inside `Vector`s etc.
+While all of these data structures _can_ be mapped onto a flat vector in order to make sense of the Jacobian of a compute programme, this becomes very inconvenient very quickly.
+Rather, it will be much easier to avoid these kinds of "flattening" operations wherever possible.
 
-Instead, we consider functions ``f : \mathcal{X} \to \mathcal{Y}``, where ``\mathcal{X}`` and ``\mathcal{Y}`` are finite dimensional Hilbert spaces.
-In this instance, the derivative of ``f`` at ``x \in \mathcal{X}`` is the linear operator ``D f [x]`` satisfying
+Instead, we consider functions ``f : \mathcal{X} \to \mathcal{Y}``, where ``\mathcal{X}`` and ``\mathcal{Y}`` are _finite_ dimensional real Hilbert spaces (read: finite-dimensional vector space with an inner product, and real-valued scalars).
+In this instance, the derivative of ``f`` at ``x \in \mathcal{X}`` is the linear operator (read: linear function) ``D f [x] : \mathcal{X} \to \mathcal{Y}`` satisfying
 ```math
 \text{d}f = D f [x] \, \text{d} x
 ```
-This is a generalisation of the previous cases. For example, if it _is_ ``\mathcal{X} = \RR^P`` and ``\mathcal{Y} = \RR^Q`` then this operator can be specified in terms of the Jacobian matrix: ``D f [x] (\text{d}x) = J \text{d} x`` -- brackets are used to emphasise that ``D f [x]`` is a function, and is being applied to ``\text{d} x``.
+That is, instead of thinking of the derivative as a number or a matrix, we think about it as a _function_.
+We can express the previous notions of the derivative in this language.
+In the scalar case, rather than thinking of the derivative as _being_ ``\alpha``, we think of it is a the linear operator ``D f [x] (\dot{x}) := \alpha \dot{x}``.
+Similarly, if ``\mathcal{X} = \RR^P`` and ``\mathcal{Y} = \RR^Q`` then this operator can be specified in terms of the Jacobian matrix: ``D f [x] (\dot{x}) := J[x] \dot{x}`` -- brackets are used to emphasise that ``D f [x]`` is a function, and is being applied to ``\dot{x}``.
 
-### An aside: _what_ does Forwards-Mode AD compute?
+The difference from usual is a little bit subtle.
+We do not define the derivative to _be_ ``\alpha`` or ``J[x]``, rather we define it to be "multiply by ``\alpha``" or "multiply by ``J[x]``".
+For the rest of this document we shall use this definition of the derivative.
+
+_**An aside: the Frechet Derivative**_
+
+This definition of the derivative has a name: the Frechet derivative.
+Formally, we say that a function ``f : \mathcal{X} \to \mathcal{Y}`` is differentiable at a point ``x \in \mathcal{X}`` if there exists a linear operator ``D f [x] : \mathcal{X} \to \mathcal{Y}`` (the derivative) satisfying
+```math
+\lim_{\text{d} h \to 0} \frac{\| f(x + \text{d} h) - f(x) + D f [x] (\text{d} h)  \|_\mathcal{Y}}{\| \text{d}h \|_\mathcal{X}} = 0,
+```
+where ``\| \cdot \|_\mathcal{X}`` and ``\| \cdot \|_\mathcal{Y}`` are the norms associated to Hilbert spaces ``\mathcal{X}`` and ``\mathcal{Y}`` respectively.
+It is a good idea to convince yourself that this agrees with the usual definition of the derivative when ``\mathcal{X} = \mathcal{Y} = \RR``.
+It is sometimes helpful to refer to this definition to e.g. verify the correctness of the derivative of a function -- as with single-variable calculus, however, this is rare.
+
+
+_**Another aside: what does Forwards-Mode AD compute?**_
 
 At this point we have enough machinery to discuss forwards-mode AD.
 We do this for completeness -- feel free to skip to the next section if you are not interested in this.
@@ -71,28 +95,19 @@ We provide a high-level explanation of _how_ forwards-mode AD does this in [_How
 
 ## Reverse-Mode AD: _what_ does it do?
 
-In order to explain what AD does, it's first helpful to consider it in a familiar context: Euclidean space, ``\RR^N``.
-We then generalise to more general vector spaces (although nothing infinite dimensional, as promised), which is necessary for the general case.
+In order to explain what reverse-mode AD does, we first consider the "vector-Jacobian product" definition in Euclidean space which will be familiar to many readers.
+We then generalise.
 
-### Reverse-Mode AD: what does it do in Euclidean space?
+_**Reverse-Mode AD: what does it do in Euclidean space?**_
 
 In this setting, the goal of reverse-mode AD is the following: given a function ``f : \RR^P \to \RR^Q`` which is differentiable at ``x \in \RR^P`` with Jacobian ``J[x]`` at ``x``, compute ``J[x]^\top \bar{y}`` for any ``\bar{y} \in \RR^Q``.
-As with forwards-mode AD, this is achieved by first decomposing ``f`` into the composition ``f = f_N \circ \dots \circ f_1``, where each ``f_n`` is a simple function whose Jacobian ``J_n[x]`` we can compute at any point ``x_n``. By the chain rule, we have that
-```math
-J[x] = J_N[x] \dots J_1[x] .
-```
-Taking the transpose and multiplying from the left by ``\bar{y}`` yields
-```math
-J[x]^\top \bar{y} = J[x]^\top_N \dots J[x]^\top_1 \bar{y} .
-```
+This is useful because we can obtain the gradient from this when ``Q = 1`` by letting ``\bar{y} = 1``.
 
-We see that ``J[x]^\top \bar{y}`` can be evaluated from right to left as a sequence of ``N`` matrix-vector products.
-
-### Adjoints
+_**Adjoints**_
 
 In order to generalise this algorithm to work with linear operators, we must generalise the idea of multiplying a vector by the transpose of the Jacobian.
 The relevant concept here is that of the _adjoint_ _operator_.
-Specifically, the ``A^\ast`` of linear operator ``A`` is the linear operator satisfying
+Specifically, the adjoint ``A^\ast`` of linear operator ``A`` is the linear operator satisfying
 ```math
 \langle A^\ast \bar{y}, \dot{x} \rangle = \langle \bar{y}, A \dot{x} \rangle.
 ```
@@ -101,10 +116,11 @@ The relationship between the adjoint and matrix transpose is this: if ``A (x) :=
 Moreover, just as ``(A B)^\top = B^\top A^\top`` when ``A`` and ``B`` are matrices, ``(A B)^\ast = B^\ast A^\ast`` when ``A`` and ``B`` are linear operators.
 This result follows in short order from the definition of the adjoint operator -- proving this is a good exercise!
 
-### Reverse-Mode AD: _what_ does it do in general?
+_**Reverse-Mode AD: what does it do in general?**_
 
 Equipped with adjoints, we can express reverse-mode AD only in terms of linear operators, dispensing with the need to express everything in terms of Jacobians.
 The goal of reverse-mode AD is as follows: given a differentiable function ``f : \mathcal{X} \to \mathcal{Y}``, compute ``D f [x]^\ast (\bar{y})`` for some ``\bar{y}``.
+
 We will explain _how_ reverse-mode AD goes about computing this after some worked examples.
 
 ### Some Worked Examples
@@ -115,32 +131,40 @@ We will put all of these problems in a single general framework later on.
 #### An Example with Matrix Calculus
 
 We have introduced some mathematical abstraction in order to simplify the calculations involved in AD.
-To this end, we consider differentiating ``f(X) = X^\top X``.
-Results for this and many similar operations are given by [giles2008extended](@cite).
-A similar operation, but which maps from matrices to ``\RR`` is discussed in Lecture 14 part 2 of the MIT course mentioned previouly.
+To this end, we consider differentiating ``f(X) := X^\top X``.
+Results for this and similar operations are given by [giles2008extended](@cite).
+A similar operation, but which maps from matrices to ``\RR`` is discussed in Lecture 4 part 2 of the MIT course mentioned previouly.
+Both [giles2008extended](@cite) and Lecture 4 part 2 provide approaches to obtaining the derivative of this function.
 
-The derivative of this function is
+Following either resource will yield the derivative:
 ```math
 D f [X] (\dot{X}) = \dot{X}^\top X + X^\top \dot{X}
 ```
 Observe that this is indeed a linear operator (i.e. it is linear in its argument, ``\dot{X}``).
-You can plug it in to the definition of the Frechet derivative in order to confirm that it is indeed the derivative.
+(You can always plug it in to the definition of the Frechet derivative to confirm that it is indeed the derivative.)
 
 In order to perform reverse-mode AD, we need to find the adjoint operator.
 Using the usual definition of the inner product between matrices,
 ```math
 \langle X, Y \rangle := \textrm{tr} (X^\top Y)
 ```
-we can derive the adjoint operator:
+we can rearrange the inner product as follows:
 ```math
 \begin{align}
-    \langle \bar{Y}, D f [X] (\dot{X}) \rangle &= \langle \bar{Y}, \dot{X}^\top X + X^\top \dot{X} \rangle \nonumber
-        &= \langle 
+    \langle \bar{Y}, D f [X] (\dot{X}) \rangle &= \langle \bar{Y}, \dot{X}^\top X + X^\top \dot{X} \rangle \nonumber \\
+        &= \textrm{tr} (\bar{Y}^\top \dot{X}^\top X) + \textrm{tr}(\bar{Y}^\top X^\top \dot{X}) \nonumber \\
+        &= \textrm{tr} ( [\bar{Y} X^\top]^\top \dot{X}) + \textrm{tr}( [X \bar{Y}]^\top \dot{X}) \nonumber \\
+        &= \langle \bar{Y} X^\top + X \bar{Y}, \dot{X} \rangle. \nonumber
 \end{align}
+```
+We can read off the adjoint operator from the first argument to the inner product:
+```math
+D f [X]^\ast (\bar{Y}) = \bar{Y} X^\top + X \bar{Y}.
 ```
 
 #### AD with Immutables
 
+We now turn to differentiating Julia `function`s.
 The way that Tapir.jl handles immutable data is very similar to how Zygote / ChainRules do.
 For example, consider the Julia function
 ```julia
@@ -231,12 +255,12 @@ We model `square!`
 
 As discussed in [Reverse-Mode AD: _what_ does it do?](@ref) the purpose of reverse-mode AD is to apply the adjoint of the derivative, ``D f (x)^\ast`` to a vector ``\bar{y}``.
 
-Decomposing ``f`` as before, ``f = f_N \circ \dots \circ f_1``, we assume that we can compute the adjoint of the derivative of each ``f_n``.
+In principle, AD achieves this by decomposing ``f`` into the composition ``f = f_N \circ \dots \circ f_1``, we assume that we can compute the adjoint of the derivative of each ``f_n``.
 Then the adjoint is
 ```math
 D f [x]^\ast (\bar{y}) = (D f_1 [x_1]^\ast \circ \dots \circ D f_N [x_N]^\ast)(\bar{y})
 ```
-Our previous reverse-mode AD algorithm can now be generalised.
+Reverse-mode AD is performed (roughly speaking) as follows.
 
 Forwards-Pass:
 1. ``x_1 = x``, ``n = 1``
@@ -251,7 +275,18 @@ Reverse-Pass:
 3. let ``\bar{x}_{n} = D f_n [x_n]^\ast (\bar{x}_{n+1})``
 4. if ``n = 1`` return ``\bar{x}_1`` else go to 2.
 
+_**How does this relate to vector-Jacobian products?**_
 
+In Euclidean space we have the collection of Jacobians ``J_n[x_n]``. By the chain rule
+```math
+J[x] = J_N[x_N] \dots J_1[x_1] .
+```
+Taking the transpose and multiplying from the left by ``\bar{y}`` yields
+```math
+J[x]^\top \bar{y} = J[x_N]^\top_N \dots J[x_1]^\top_1 \bar{y} .
+```
+Comparing this with the expression in terms of adjoints and operators, we see that composition of adjoints of derivatives has been replaced with multiplying by transposed Jacobian matrices.
+This expression is likely familiar to many readers.
 
 
 
