@@ -154,7 +154,7 @@ be given by `tangent_type(P)`.
 # Extended help
 
 The tangent types which Tapir.jl uses are quite similar in spirit to ChainRules.jl.
-For example, tangents "vectors" for
+For example, tangent "vectors" for
 1. `Float64`s are `Float64`s,
 1. `Vector{Float64}`s are `Vector{Float64}`s, and
 1. `struct`s are other another (special) `struct` with field types specified recursively.
@@ -189,8 +189,11 @@ Tuple{Float64, Vector{Float64}, NoTangent}
 ```
 
 There is one edge case to be aware of: if all of the field of a `Tuple` are
-non-differentiable, then the tangent type is `NoTangent`. For example, `Tuple{Int, Int}` has
-tangent type `NoTangent`.
+non-differentiable, then the tangent type is `NoTangent`. For example,
+```jldoctest
+julia> tangent_type(Tuple{Int, Int})
+NoTangent
+```
 
 #### Structs
 
@@ -201,7 +204,7 @@ This type contains a `NamedTuple` containing the tangent to each field in the pr
 As with `Tuple`s, if all field types are non-differentiable, the tangent type of the entire
 struct is `NoTangent`.
 
-There are a couple of additional subtelties to consider over `Tuple`s though. Firstly, not
+There are a couple of additional subtleties to consider over `Tuple`s though. Firstly, not
 all fields of a `struct` have to be defined. Fortunately, Julia makes it easy to determine
 how many of the fields might possibly not be defined. The tangent associated to any field
 which might possibly not be defined is wrapped in a `PossiblyUninitTangent`.
