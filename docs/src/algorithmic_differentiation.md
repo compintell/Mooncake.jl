@@ -28,6 +28,8 @@ While I recommend the whole course, Lecture 1 part 2 and Lecture 4 part 1 are es
 
 A foundation on which all of AD is built the the derivate -- we require a fairly general definition of it, which we build up to here.
 
+_**Scalar-to-Scalar Functions**_
+
 Consider first ``f : \RR \to \RR``, which we require to be differentiable at ``x \in \RR``.
 Its derivative at ``x`` is usually thought of as the scalar ``\alpha \in \RR`` such that
 ```math
@@ -36,34 +38,45 @@ Its derivative at ``x`` is usually thought of as the scalar ``\alpha \in \RR`` s
 Loosely speaking, by this notation we mean that for arbitrary small changes ``\text{d} x`` in the input to ``f``, the change in the output ``\text{d} f`` is ``\alpha \, \text{d}x``.
 We refer readers to the first few minutes of the first lecture mentioned above for a more careful explanation.
 
+_**Vector-to-Vector Functions**_
+
 The generalisation of this to Euclidean space should be familiar: if ``f : \RR^P \to \RR^Q`` is differentiable at a point ``x \in \RR^P``, then the derivative of ``f`` at ``x`` is given by the Jacobian matrix at ``x``, denoted ``J[x] \in \RR^{Q \times P}``, such that
 ```math
 \text{d}f = J[x] \, \text{d}x .
 ```
 
 It is possible to stop here, as all the functions we shall need to consider can in principle be written as functions on some subset ``\RR^P``.
-However, writing functions in this way turns out to be incredibly inconvenient in general.
-For example, consider the convolution ``W \ast X``, where ``W`` and ``X`` are matrices -- the function ``X \mapsto W \ast X`` is plainly a finite-dimensional linear operator, so we _could_ express it as a matrix-vector product given an appropriate mapping between the matrix ``X`` and a column vector. However, this is best avoided when possible as it is highly inconvenient.
 
-Moreover, when we consider differentiating computer programmes, we will have to deal with complicated nested data structures, e.g. `struct`s inside `Tuple`s inside `Vector`s etc.
-While all of these data structures _can_ be mapped onto a flat vector in order to make sense of the Jacobian of a compute programme, this becomes very inconvenient very quickly.
+However, when we consider differentiating computer programmes, we will have to deal with complicated nested data structures, e.g. `struct`s inside `Tuple`s inside `Vector`s etc.
+While all of these data structures _can_ be mapped onto a flat vector in order to make sense of the Jacobian of a computer programme, this becomes very inconvenient very quickly.
+To see the problem, consider the Julia function whose input of type `Tuple{Tuple{Float64, Vector{Float64}}, Vector{Float64}, Float64}` and whose output is of type `Tuple{Vector{Float64}, Float64}`.
+What kind of object might be use to represent the derivative of a function mapping between these two spaces?
+We certainly _could_ treat these as fancy structured representations of "flat" `Vector{Float64}`s, and then define a Jacobian, but this is awkward.
 Rather, it will be much easier to avoid these kinds of "flattening" operations wherever possible.
 
-Instead, we consider functions ``f : \mathcal{X} \to \mathcal{Y}``, where ``\mathcal{X}`` and ``\mathcal{Y}`` are _finite_ dimensional real Hilbert spaces (read: finite-dimensional vector space with an inner product, and real-valued scalars).
+Similarly, while "vector-Jacobian" products are usually used to explain reverse-mode AD, a more general formulation of the derivative is used all the time -- the matrix calculus discussed by [giles2008extended](@cite) and [minka2000old](@cite) (to name a couple) make use of a generalised form of derivative in order to work with functions which map to and from matrices (despite slight differences in naming conventions from text to text).
+
+_**Functions on More General Spaces**_
+
+In order to avoid the difficulties described above, we consider we consider functions ``f : \mathcal{X} \to \mathcal{Y}``, where ``\mathcal{X}`` and ``\mathcal{Y}`` are _finite_ dimensional real Hilbert spaces (read: finite-dimensional vector space with an inner product, and real-valued scalars).
 In this instance, the derivative of ``f`` at ``x \in \mathcal{X}`` is the linear operator (read: linear function) ``D f [x] : \mathcal{X} \to \mathcal{Y}`` satisfying
 ```math
 \text{d}f = D f [x] \, \text{d} x
 ```
 That is, instead of thinking of the derivative as a number or a matrix, we think about it as a _function_.
 We can express the previous notions of the derivative in this language.
+
 In the scalar case, rather than thinking of the derivative as _being_ ``\alpha``, we think of it is a the linear operator ``D f [x] (\dot{x}) := \alpha \dot{x}``.
+Put differently, rather than thinking of the derivative as the slope of the tangent to ``f`` at ``x``, think of it as the function decribing the tangent itself.
+
 Similarly, if ``\mathcal{X} = \RR^P`` and ``\mathcal{Y} = \RR^Q`` then this operator can be specified in terms of the Jacobian matrix: ``D f [x] (\dot{x}) := J[x] \dot{x}`` -- brackets are used to emphasise that ``D f [x]`` is a function, and is being applied to ``\dot{x}``.
 
 The difference from usual is a little bit subtle.
 We do not define the derivative to _be_ ``\alpha`` or ``J[x]``, rather we define it to be "multiply by ``\alpha``" or "multiply by ``J[x]``".
 For the rest of this document we shall use this definition of the derivative.
+So whenever you see the word "derivative", you should think "linear function".
 
-_**An aside: the Frechet Derivative**_
+_**An aside: the definition of the Frechet Derivative**_
 
 This definition of the derivative has a name: the Frechet derivative.
 Formally, we say that a function ``f : \mathcal{X} \to \mathcal{Y}`` is differentiable at a point ``x \in \mathcal{X}`` if there exists a linear operator ``D f [x] : \mathcal{X} \to \mathcal{Y}`` (the derivative) satisfying
@@ -71,14 +84,13 @@ Formally, we say that a function ``f : \mathcal{X} \to \mathcal{Y}`` is differen
 \lim_{\text{d} h \to 0} \frac{\| f(x + \text{d} h) - f(x) + D f [x] (\text{d} h)  \|_\mathcal{Y}}{\| \text{d}h \|_\mathcal{X}} = 0,
 ```
 where ``\| \cdot \|_\mathcal{X}`` and ``\| \cdot \|_\mathcal{Y}`` are the norms associated to Hilbert spaces ``\mathcal{X}`` and ``\mathcal{Y}`` respectively.
-It is a good idea to convince yourself that this agrees with the usual definition of the derivative when ``\mathcal{X} = \mathcal{Y} = \RR``.
+It is a good idea to consider what this looks like when ``\mathcal{X} = \mathcal{Y} = \RR`` and when ``\mathcal{X} = \mathcal{Y} = \RR^D``.
 It is sometimes helpful to refer to this definition to e.g. verify the correctness of the derivative of a function -- as with single-variable calculus, however, this is rare.
 
 
 _**Another aside: what does Forwards-Mode AD compute?**_
 
 At this point we have enough machinery to discuss forwards-mode AD.
-We do this for completeness -- feel free to skip to the next section if you are not interested in this.
 Expressed in the language of linear operators and Hilbert spaces, the goal of forwards-mode AD is the following:
 given a function ``f`` which is differentiable at a point ``x``, compute ``D f [x] (\dot{x})`` for a given vector ``\dot{x}``.
 If ``f : \RR^P \to \RR^Q``, this is equivalent to computing ``J[x] \dot{x}``, where ``J[x]`` is the Jacobian of ``f`` at ``x``.
