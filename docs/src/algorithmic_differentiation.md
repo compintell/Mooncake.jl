@@ -250,20 +250,16 @@ D f [x]^\ast (\bar{f}) = \cos(x) \bar{f}.
 
 #### AD of a Julia function: a slightly less trivial example
 
-We now turn to differentiating Julia `function`s.
-The way that Tapir.jl handles immutable data is very similar to how Zygote / ChainRules do.
-For example, consider the Julia function
+Now consider the Julia function
 ```julia
 f(x::Float64, y::Tuple{Float64, Float64}) = x + y[1] * y[2]
 ```
-If you've previously worked with ChainRules / Zygote, without thinking too hard about the formalisms we introduced previously (perhaps by considering a variety of partial derivatives) you can probably arrive at the following adjoint for the derivative of `f`:
+Its adjoint is going to be something along the lines of
 ```julia
 g -> (g, (y[2] * g, y[1] * g))
 ```
 
-It is helpful to work through this simple example in detail, as the steps involved apply more generally.
-If at any point this exercise feels pedantic, we ask you to stick with it.
-The goal is to spell out the steps involved in excessive detail, as this level of detail will be required in more complicated examples, and it is most straightforwardly demonstrated in a simple case.
+As before, we work through in detail.
 
 
 
