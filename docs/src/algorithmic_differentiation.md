@@ -346,6 +346,10 @@ D \phi_{\text{f!}} [x]^\ast (\bar{y}) = 2 (x \odot \bar{y}_1 + \bar{y}_2 x).
 
 # Directional Derivatives and Gradients
 
+Now we turn to using reverse-mode AD to compute the gradient of a function.
+In short, given a function ``g : \mathcal{X} \to \RR`` with derivative ``D g [x]`` at ``x``, its gradient is equal to ``D g [x]^\ast (1)``.
+We explain why in this section.
+
 It's worth taking a few minutes to consider the ideas discussed thus far relate to other similar ideas.
 
 The derivative discussed here can be used to compute directional derivatives.
@@ -359,8 +363,8 @@ Having noted that ``D f[x](\dot{x})`` is exactly this directional derivative, we
 D f[x](\dot{x}) = \langle \nabla f (x), \dot{x} \rangle .
 ```
 
-The role of the adjoint is revealed when we consider ``f := \mathcal{l} \circ g``, where ``g : \mathcal{X} \to \mathcal{Y}`` and ``\mathcal{l}(y) := \langle \bar{y}, y \rangle``, where ``\bar{y} \in \mathcal{Y}`` is some fixed vector.
-From the chain rule and noting that ``D \mathcal{l} [y](\dot{y}) = \langle \bar{y}, \dot{y} \rangle``, we obtain
+The role of the adjoint is revealed when we consider ``f := \mathcal{l} \circ g``, where ``g : \mathcal{X} \to \mathcal{Y}``, ``\mathcal{l}(y) := \langle \bar{y}, y \rangle``, and ``\bar{y} \in \mathcal{Y}`` is some fixed vector.
+Noting that ``D \mathcal{l} [y](\dot{y}) = \langle \bar{y}, \dot{y} \rangle``, we apply the chain rule to obtain
 ```math
 \begin{align}
 D f [x] (\dot{x}) &= [(D \mathcal{l} [g(x)]) \circ (D g [x])](\dot{x}) \nonumber \\
@@ -371,6 +375,8 @@ D f [x] (\dot{x}) &= [(D \mathcal{l} [g(x)]) \circ (D g [x])](\dot{x}) \nonumber
 from which we conclude that ``D g [x]^\ast (\bar{y})`` is the gradient of the composition ``l \circ g`` at ``x``.
 
 The consequence is that we can always view the computation performed by reverse-mode AD as computing the gradient of the composition of the function in question and an inner product with the argument to the adjoint.
+
+The above shows that if ``Y = \RR`` and ``g`` is the function we wish to compute the gradient of, we can simply set ``\bar{y} = 1`` and compute ``D g [x]^\ast (\bar{y})`` to obtain the gradient of ``g`` at ``x``.
 
 # Summary
 
