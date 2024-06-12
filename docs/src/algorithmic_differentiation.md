@@ -55,14 +55,14 @@ It is possible to stop here, as all the functions we shall need to consider can 
 
 However, when we consider differentiating computer programmes, we will have to deal with complicated nested data structures, e.g. `struct`s inside `Tuple`s inside `Vector`s etc.
 While all of these data structures _can_ be mapped onto a flat vector in order to make sense of the Jacobian of a computer programme, this becomes very inconvenient very quickly.
-To see the problem, consider the Julia function whose input of type `Tuple{Tuple{Float64, Vector{Float64}}, Vector{Float64}, Float64}` and whose output is of type `Tuple{Vector{Float64}, Float64}`.
+To see the problem, consider the Julia function whose input is of type `Tuple{Tuple{Float64, Vector{Float64}}, Vector{Float64}, Float64}` and whose output is of type `Tuple{Vector{Float64}, Float64}`.
 What kind of object might be use to represent the derivative of a function mapping between these two spaces?
 We certainly _can_ treat these as structured "view" into a "flat" `Vector{Float64}`s, and then define a Jacobian, but actually _finding_ this mapping is a tedious exercise even if it quite obviously exists.
 
 Similarly, while "vector-Jacobian" products are usually used to explain reverse-mode AD, a more general formulation of the derivative is used all the time -- the matrix calculus discussed by [giles2008extended](@cite) and [minka2000old](@cite) (to name a couple) make use of a generalised form of derivative in order to work with functions which map to and from matrices (despite slight differences in naming conventions from text to text).
 
 Consequently, it will be much easier to avoid these kinds of "flattening" operations wherever possible.
-In order to do so, we make use a generalised notion of the derivative.
+In order to do so, we make use of a generalised notion of the derivative.
 
 _**Functions Between More General Spaces**_
 
@@ -89,12 +89,12 @@ So whenever you see the word "derivative", you should think "linear function".
 
 _**The Chain Rule**_
 
-The chain rule is _the_ result which makes AD to work.
+The chain rule is _the_ result which makes AD work.
 Fortunately, it applies to this version of the derivative:
 ```math
 f = g \circ h \implies D f [x] = (D g [h(x)]) \circ (D h [x])
 ```
-This extends to a collection of ``N`` functions ``f_1, \dots, f_N``:
+By induction this extends to a collection of ``N`` functions ``f_1, \dots, f_N``:
 ```math
 f := f_N \circ \dots \circ f_1 \implies D f [x] = (D f_N [x_N]) \circ \dots \circ (D f_1 [x_1]),
 ```
@@ -121,7 +121,7 @@ At this point we have enough machinery to discuss forwards-mode AD.
 Expressed in the language of linear operators and Hilbert spaces, the goal of forwards-mode AD is the following:
 given a function ``f`` which is differentiable at a point ``x``, compute ``D f [x] (\dot{x})`` for a given vector ``\dot{x}``.
 If ``f : \RR^P \to \RR^Q``, this is equivalent to computing ``J[x] \dot{x}``, where ``J[x]`` is the Jacobian of ``f`` at ``x``.
-We provide a high-level explanation of _how_ forwards-mode AD does this in [_How_ does Forwards-Mode AD work?](@ref).
+For the interested reader we provide a high-level explanation of _how_ forwards-mode AD does this in [_How_ does Forwards-Mode AD work?](@ref).
 
 
 
@@ -224,7 +224,7 @@ f(x) := \sin(x)
 ```
 Observe that, we've made (at least) two modelling assumptions here:
 1. a `Float64` is modelled as a real number,
-2. the Julia `function` `sin` is modelled as the usual mathematical function ``sin``.
+2. the Julia `function` `sin` is modelled as the usual mathematical function ``\sin``.
 
 As promised we're being quite pedantic.
 While the first assumption is obvious and will remain true, we will shortly see examples where we have to work a bit harder to obtain a correspondence between a Julia `function` and a mathematical object.
@@ -247,8 +247,6 @@ From here the adjoint can be read off from the first argument to the inner produ
 D f [x]^\ast (\bar{f}) = \cos(x) \bar{f}.
 ```
 
-
-Author contributions, code availability, data availability
 
 #### AD of a Julia function: a slightly less trivial example
 
