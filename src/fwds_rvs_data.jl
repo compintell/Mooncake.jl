@@ -45,7 +45,7 @@ It must always hold that
 tangent(fdata(t), rdata(t)) === t
 ```
 
-The need for all of this will be explained later, but for now it suffices to consider our running examples again, and to see what their fdata and rdata look like.
+The need for all of this is explained in the docs, but for now it suffices to consider our running examples again, and to see what their fdata and rdata look like.
 
 #### Int
 

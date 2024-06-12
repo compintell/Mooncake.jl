@@ -5,23 +5,27 @@ There are two aspects of Julia `function`s which are relevant to our discussion 
 1. how to represent gradients to inputs / outputs of `function`s, and
 2. how to model + differentiate the computation which a function performs.
 
-We begin with an explanation of the tangents to input / outputs, and proceed to discuss how to think about the computation that a function performs.
-
 # Tangents
 
-Tangents (also cotangents) are what is used to represent the user-facing result of AD.
-They are the V in VJP.
+We call the argument or output of a derivative ``D f [x] : \mathcal{X} \to \mathcal{Y}`` a _tangent_, and will usually denote it with a dot over a symbol, e.g. ``\dot{x}``.
+Conversely, we call an argument or output of the adjoint of this derivative ``D f [x]^\ast : \mathcal{Y} \to \mathcal{X}`` a _gradient_, and will usually denote it with a bar over a symbol, e.g. ``\bar{y}``.
 
-_**Non-Differentiable Data**_
+Note, however, that the sets involved are the same whether dealing with a derivative or its adjoint.
+Consequently, we use the same type to represent both.
 
-In the introduction to algorithmic differentiation, we assumed that the set from which the inputs / outputs of a function are drawn is the same as the tangent vectors.
-Things are complicated by the fact that not all data types in Julia can reasonably be thought of as forming a Hilbert space.
+
+_**A quick aside: Non-Differentiable Data**_
+
+In the introduction to algorithmic differentiation, we assumed that the domain / range of function are the same as that of its derivative.
+Unfortunately, this story is only partly true.
+Matters are complicated by the fact that not all data types in Julia can reasonably be thought of as forming a Hilbert space.
 e.g. the `String` type.
 
 Consequently we introduce the special type `NoTangent`, instances of which can be thought of as representing the set containing only a ``0`` tangent.
 Morally speaking, for any non-differentiable data `x`, `x + NoTangent() == x`.
 
 Other than non-differentiable data, the model of data in Julia as living in a real-valued finite dimensional Hilbert space is quite reasonable.
+Therefore, we hope readers will forgive us for largely ignoring the distinction between the domain and range of a function and that of its derivative in mathematical discussions, while simultaneously drawing a distinction when discussing code.
 
 
 _**Representing Tangents**_

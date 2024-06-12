@@ -10,6 +10,12 @@ The purpose of this section is to explain _what_ precisely is meant by this, and
 Since Tapir.jl supports in-place operations / mutation, these will push beyond what is encountered in Zygote / Diffractor / ChainRules.
 Consequently, while there is a great deal of overlap with these existing systems, you will need to read through this section of the docs in order to properly understand Tapir.jl.
 
+# Who Are These Docs For?
+
+These are primarily designed for anyone who is interested in contributing to Tapir.jl.
+They are also hopefully of interest to anyone how is interested in understanding AD more broadly.
+If you aren't interested in understanding how Tapir.jl and AD work, you don't need to have read them in order to make use of this package.
+
 # Prerequisites and Resources
 
 This introduction assumes familiarity with the differentiation of vector-valued functions -- familiarity with the gradient and Jacobian matrices is a given.
@@ -51,15 +57,20 @@ However, when we consider differentiating computer programmes, we will have to d
 While all of these data structures _can_ be mapped onto a flat vector in order to make sense of the Jacobian of a computer programme, this becomes very inconvenient very quickly.
 To see the problem, consider the Julia function whose input of type `Tuple{Tuple{Float64, Vector{Float64}}, Vector{Float64}, Float64}` and whose output is of type `Tuple{Vector{Float64}, Float64}`.
 What kind of object might be use to represent the derivative of a function mapping between these two spaces?
-We certainly _could_ treat these as fancy structured representations of "flat" `Vector{Float64}`s, and then define a Jacobian, but this is awkward.
-Rather, it will be much easier to avoid these kinds of "flattening" operations wherever possible.
+We certainly _can_ treat these as structured "view" into a "flat" `Vector{Float64}`s, and then define a Jacobian, but actually _finding_ this mapping is a tedious exercise even if it quite obviously exists.
 
 Similarly, while "vector-Jacobian" products are usually used to explain reverse-mode AD, a more general formulation of the derivative is used all the time -- the matrix calculus discussed by [giles2008extended](@cite) and [minka2000old](@cite) (to name a couple) make use of a generalised form of derivative in order to work with functions which map to and from matrices (despite slight differences in naming conventions from text to text).
 
-_**Functions on More General Spaces**_
+Consequently, it will be much easier to avoid these kinds of "flattening" operations wherever possible.
+In order to do so, we make use a generalised notion of the derivative.
+
+_**Functions Between More General Spaces**_
 
 In order to avoid the difficulties described above, we consider we consider functions ``f : \mathcal{X} \to \mathcal{Y}``, where ``\mathcal{X}`` and ``\mathcal{Y}`` are _finite_ dimensional real Hilbert spaces (read: finite-dimensional vector space with an inner product, and real-valued scalars).
-In this instance, the derivative of ``f`` at ``x \in \mathcal{X}`` is the linear operator (read: linear function) ``D f [x] : \mathcal{X} \to \mathcal{Y}`` satisfying
+This definition includes functions to / from ``\RR``, ``\RR^D``, but also real-valued matrices.
+Furthermore, we shall see later how we can model all sorts of structured representations of data directly as such spaces.
+
+For such spaces, the derivative of ``f`` at ``x \in \mathcal{X}`` is the linear operator (read: linear function) ``D f [x] : \mathcal{X} \to \mathcal{Y}`` satisfying
 ```math
 \text{d}f = D f [x] \, \text{d} x
 ```
@@ -79,6 +90,7 @@ So whenever you see the word "derivative", you should think "linear function".
 _**An aside: the definition of the Frechet Derivative**_
 
 This definition of the derivative has a name: the Frechet derivative.
+It is a generalisation of the Total Derivative.
 Formally, we say that a function ``f : \mathcal{X} \to \mathcal{Y}`` is differentiable at a point ``x \in \mathcal{X}`` if there exists a linear operator ``D f [x] : \mathcal{X} \to \mathcal{Y}`` (the derivative) satisfying
 ```math
 \lim_{\text{d} h \to 0} \frac{\| f(x + \text{d} h) - f(x) + D f [x] (\text{d} h)  \|_\mathcal{Y}}{\| \text{d}h \|_\mathcal{X}} = 0,
@@ -86,6 +98,7 @@ Formally, we say that a function ``f : \mathcal{X} \to \mathcal{Y}`` is differen
 where ``\| \cdot \|_\mathcal{X}`` and ``\| \cdot \|_\mathcal{Y}`` are the norms associated to Hilbert spaces ``\mathcal{X}`` and ``\mathcal{Y}`` respectively.
 It is a good idea to consider what this looks like when ``\mathcal{X} = \mathcal{Y} = \RR`` and when ``\mathcal{X} = \mathcal{Y} = \RR^D``.
 It is sometimes helpful to refer to this definition to e.g. verify the correctness of the derivative of a function -- as with single-variable calculus, however, this is rare.
+
 
 
 _**Another aside: what does Forwards-Mode AD compute?**_
@@ -331,6 +344,34 @@ So we can read off the adjoint to be
 D \phi_{\text{f!}} [x]^\ast (\bar{y}) = 2 (x \odot \bar{y}_1 + \bar{y}_2 x).
 ```
 
+# Directional Derivatives and Gradients
+
+It's worth taking a few minutes to consider the ideas discussed thus far relate to other similar ideas.
+
+The derivative discussed here can be used to compute directional derivatives.
+Consider a function ``f : \mathcal{X} \to \RR`` with Frechet derivative ``D f [x] : \mathcal{X} \to \RR`` at ``x \in \mathcal{X}``.
+Then ``D f[x](\dot{x})`` returns the directional derivative in direction ``\dot{x}``.
+
+Gradients are closely related to the adjoint of the derivative.
+Recall that the gradient of ``f`` at ``x`` is defined to be the vector ``\nabla f (x) \in \mathcal{X}`` such that ``\langle \nabla f (x), \dot{x} \rangle`` gives the directional derivative of ``f`` at ``x`` in direction ``\dot{x}``.
+Having noted that ``D f[x](\dot{x})`` is exactly this directional derivative, we can equivalently say that
+```math
+D f[x](\dot{x}) = \langle \nabla f (x), \dot{x} \rangle .
+```
+
+The role of the adjoint is revealed when we consider ``f := \mathcal{l} \circ g``, where ``g : \mathcal{X} \to \mathcal{Y}`` and ``\mathcal{l}(y) := \langle \bar{y}, y \rangle``, where ``\bar{y} \in \mathcal{Y}`` is some fixed vector.
+From the chain rule and noting that ``D \mathcal{l} [y](\dot{y}) = \langle \bar{y}, \dot{y} \rangle``, we obtain
+```math
+\begin{align}
+D f [x] (\dot{x}) &= [(D \mathcal{l} [g(x)]) \circ (D g [x])](\dot{x}) \nonumber \\
+    &= \langle \bar{y}, D g [x] (\dot{x}) \rangle \nonumber \\
+    &= \langle D g [x]^\ast (\bar{y}), \dot{x} \rangle, \nonumber
+\end{align}
+```
+from which we conclude that ``D g [x]^\ast (\bar{y})`` is the gradient of the composition ``l \circ g`` at ``x``.
+
+The consequence is that we can always view the computation performed by reverse-mode AD as computing the gradient of the composition of the function in question and an inner product with the argument to the adjoint.
+
 # Summary
 
 This document explains the core mathematical foundations of AD.
@@ -338,6 +379,7 @@ It focuses on _what_ AD does, without worrying about how it might go about it.
 Some basic examples are given which show how these mathematical foundations can be applied to differentiate functions of matrices, and Julia `function`s.
 
 Subsequent sections will build on these foundations.
+
 
 
 # Asides
