@@ -34,4 +34,4 @@ makedocs(
     ]
 )
 
-deploydocs(repo="github.com/withbayes/Tapir.jl.git", push_preview=true)
+deploydocs(repo="github.com/compintell/Tapir.jl.git", push_preview=true)

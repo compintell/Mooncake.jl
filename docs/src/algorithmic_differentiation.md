@@ -87,6 +87,20 @@ We do not define the derivative to _be_ ``\alpha`` or ``J[x]``, rather we define
 For the rest of this document we shall use this definition of the derivative.
 So whenever you see the word "derivative", you should think "linear function".
 
+_**The Chain Rule**_
+
+The chain rule is _the_ result which makes AD to work.
+Fortunately, it applies to this version of the derivative:
+```math
+f = g \circ h \implies D f [x] = (D g [h(x)]) \circ (D h [x])
+```
+This extends to a collection of ``N`` functions ``f_1, \dots, f_N``:
+```math
+f := f_N \circ \dots \circ f_1 \implies D f [x] = (D f_N [x_N]) \circ \dots \circ (D f_1 [x_1]),
+```
+where ``x_{n+1} := f(x_n)``, and ``x_1 := x``.
+
+
 _**An aside: the definition of the Frechet Derivative**_
 
 This definition of the derivative has a name: the Frechet derivative.
@@ -344,6 +358,59 @@ So we can read off the adjoint to be
 D \phi_{\text{f!}} [x]^\ast (\bar{y}) = 2 (x \odot \bar{y}_1 + \bar{y}_2 x).
 ```
 
+# Reverse-Mode AD: _how_ does it do it?
+
+Now that we know _what_ it is that AD computes, we need a rough understanding of _how_ it computes it.
+
+In short: we break down a "complicated" function ``f`` into the composition of a collection of "simple" functions ``f_1, \dots, f_N`` and apply the chain rule.
+
+Specifically, we assume that we can express any function ``f`` as ``f = f_N \circ \dots \circ f_1``, and that we can compute the adjoint of the derivative for each ``f_n``.
+From this, we can obtain the adjoint of ``f`` by applying the chain rule to the derivatives and taking the adjoint:
+```math
+D f [x]^\ast (\bar{y}) = (D f_1 [x_1]^\ast \circ \dots \circ D f_N [x_N]^\ast)(\bar{y})
+```
+
+For example, suppose that ``f(x) := \sin(\cos(\text{tr}(X^\top X)))``.
+One option to compute its adjoint is to figure it out by hand directly (probably using the chain rule somewhere).
+Instead, we could notice that ``f = f_4 \circ f_3 \circ f_2 \circ f_1`` where ``f_4 := \sin``, ``f_3 := \cos``, ``f_2 := \text{tr}`` and ``f_1(X) = X^\top X``.
+We could derive the adjoint for each of these functions (a fairly straightforward task), and then simply compute
+```math
+D f [x]^\ast (\bar{y}) = (D f_1 [x_1]^\ast \circ D f_2 [x_2]^\ast \circ D f_3 [x_3]^\ast \circ D f_4 [x_4]^\ast)(1)
+```
+in order to obtain the gradient of ``f``.
+
+Reverse-mode AD is performed (roughly speaking) as follows.
+
+Forwards-Pass:
+1. ``x_1 = x``, ``n = 1``
+2. construct ``D f_n [x_n]^\ast``
+3. let ``x_{n+1} = f_n (x_n)``
+4. let ``n = n + 1``
+5. if ``n < N + 1`` then go to 2
+
+Reverse-Pass:
+1. let ``\bar{x}_{N+1} = \bar{y}``
+2. let ``n = n - 1``
+3. let ``\bar{x}_{n} = D f_n [x_n]^\ast (\bar{x}_{n+1})``
+4. if ``n = 1`` return ``\bar{x}_1`` else go to 2.
+
+Reverse-mode AD essentially just does this.
+Modern systems have hand-written adjoints for (hopefully!) all of the "simple" functions you may wish to build a function such as ``f`` from (often there are hundreds of these), and composes them to compute the adjoint of ``f``.
+
+
+_**How does this relate to vector-Jacobian products?**_
+
+In Euclidean space we have the collection of Jacobians ``J_n[x_n]``. By the chain rule
+```math
+J[x] = J_N[x_N] \dots J_1[x_1] .
+```
+Taking the transpose and multiplying from the left by ``\bar{y}`` yields
+```math
+J[x]^\top \bar{y} = J[x_N]^\top_N \dots J[x_1]^\top_1 \bar{y} .
+```
+Comparing this with the expression in terms of adjoints and operators, we see that composition of adjoints of derivatives has been replaced with multiplying by transposed Jacobian matrices.
+This expression is likely familiar to many readers.
+
 # Directional Derivatives and Gradients
 
 Now we turn to using reverse-mode AD to compute the gradient of a function.
@@ -377,6 +444,9 @@ from which we conclude that ``D g [x]^\ast (\bar{y})`` is the gradient of the co
 The consequence is that we can always view the computation performed by reverse-mode AD as computing the gradient of the composition of the function in question and an inner product with the argument to the adjoint.
 
 The above shows that if ``Y = \RR`` and ``g`` is the function we wish to compute the gradient of, we can simply set ``\bar{y} = 1`` and compute ``D g [x]^\ast (\bar{y})`` to obtain the gradient of ``g`` at ``x``.
+
+
+
 
 # Summary
 
