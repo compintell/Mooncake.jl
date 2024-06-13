@@ -1,9 +1,17 @@
 # Tapir.jl's Mathematical Intepretation of Julia Functions
 
-The purpose of Tapir.jl is to differentiate Julia `function`s.
-There are two aspects of Julia `function`s which are relevant to our discussion here:
-1. how to represent gradients to inputs / outputs of `function`s, and
-2. how to model + differentiate the computation which a function performs.
+# A Mathematical Model for a Computer Programme
+
+In order to make sense of what it might mean to differentiate a computer programme, we need some kind of differentiable mathematical model for said programme.
+Pearlmutter [pearlmutter2008reverse](@cite) introduces such a model, which we present here.
+
+Think of a computer as a device which has a state, which we model as a vector in ``\RR^D``.
+When a programme `p` is run, it changes the state of the computer.
+We model the programme `p` with a "transition function" ``t : \RR^D \to \RR^D``, whose input is whatever the state is before running `p`, and whose output is whatever the state is after running `p`.
+If ``t`` is differentiable, then we can meaningfully discuss "differentiating `p`" by differentiating ``t``.
+In particular, when we talk about applying reverse-mode AD to a particular Julia `function`, what we mean is computing the adjoint ``D t [x]`` of the transition function ``t`` which describes `p` when the computer is in state ``x`` prior to running `p`.
+
+
 
 # Tangents
 

@@ -1,33 +1,7 @@
+# Algorithmic Differentiation
 
-# Tapir.jl and Reverse-Mode AD
-
-The point of Tapir.jl is to perform reverse-mode algorithmic differentiation (AD).
-The purpose of this section is to explain _what_ precisely is meant by this, and _how_ it can be interpreted mathematically.
-1. we recap what AD is, and introduce the mathematics necessary to understand is,
-1. explain how this mathematics relates to functions and data structures in Julia, and
-1. how this is handled in Tapir.jl.
-
-Since Tapir.jl supports in-place operations / mutation, these will push beyond what is encountered in Zygote / Diffractor / ChainRules.
-Consequently, while there is a great deal of overlap with these existing systems, you will need to read through this section of the docs in order to properly understand Tapir.jl.
-
-# Who Are These Docs For?
-
-These are primarily designed for anyone who is interested in contributing to Tapir.jl.
-They are also hopefully of interest to anyone how is interested in understanding AD more broadly.
-If you aren't interested in understanding how Tapir.jl and AD work, you don't need to have read them in order to make use of this package.
-
-# Prerequisites and Resources
-
-This introduction assumes familiarity with the differentiation of vector-valued functions -- familiarity with the gradient and Jacobian matrices is a given.
-
-In order to provide a convenient exposition of AD, we need to abstract a little further than this and make use of a slightly more general notion of the derivative, gradient, and "transposed Jacobian".
-Please note that, fortunately, we only ever have to handle finite dimensional objects when doing AD, so there is no need for any knowledge of functional analysis to understand what is going on here.
-The required concepts will be introduced here, but I cannot promise that these docs give the best exposition -- they're most appropriate as a refresher and to establish notation.
-Rather, I would recommend a couple of lectures from the "Matrix Calculus for Machine Learning and Beyond" course, which you can find [on MIT's OCW website](https://ocw.mit.edu/courses/18-s096-matrix-calculus-for-machine-learning-and-beyond-january-iap-2023/), delivered by Edelman and Johnson (who will be familiar faces to anyone who has spent much time in the Julia world!).
-It is designed for undergraduates, and is accessible to anyone with some undergraduate-level linear algebra and calculus.
-While I recommend the whole course, Lecture 1 part 2 and Lecture 4 part 1 are especially relevant to the problems we shall discuss -- you can skip to 11:30 in Lecture 4 part 1 if you're in a hurry.
-
-
+This section introduces the mathematics behind AD.
+Even if you have worked with AD before, we recommend reading in order to acclimatise yourself to the perspective that Tapir.jl takes on the subject.
 
 # Derivatives
 
@@ -356,24 +330,28 @@ D \phi_{\text{f!}} [x]^\ast (\bar{y}) = 2 (x \odot \bar{y}_1 + \bar{y}_2 x).
 
 Now that we know _what_ it is that AD computes, we need a rough understanding of _how_ it computes it.
 
-In short: we break down a "complicated" function ``f`` into the composition of a collection of "simple" functions ``f_1, \dots, f_N`` and apply the chain rule.
+In short: reverse-mode AD breaks down a "complicated" function ``f`` into the composition of a collection of "simple" functions ``f_1, \dots, f_N``, applies the chain rule, and takes the adjoint.
 
 Specifically, we assume that we can express any function ``f`` as ``f = f_N \circ \dots \circ f_1``, and that we can compute the adjoint of the derivative for each ``f_n``.
 From this, we can obtain the adjoint of ``f`` by applying the chain rule to the derivatives and taking the adjoint:
 ```math
-D f [x]^\ast (\bar{y}) = (D f_1 [x_1]^\ast \circ \dots \circ D f_N [x_N]^\ast)(\bar{y})
+\begin{align}
+D f [x]^\ast &= (D f_N [x_N] \circ \dots \circ D f_1 [x_1])^\ast \nonumber \\
+    &= D f_1 [x_1]^\ast \circ \dots \circ D f_N [x_N]^\ast \nonumber
+\end{align}
 ```
 
 For example, suppose that ``f(x) := \sin(\cos(\text{tr}(X^\top X)))``.
 One option to compute its adjoint is to figure it out by hand directly (probably using the chain rule somewhere).
 Instead, we could notice that ``f = f_4 \circ f_3 \circ f_2 \circ f_1`` where ``f_4 := \sin``, ``f_3 := \cos``, ``f_2 := \text{tr}`` and ``f_1(X) = X^\top X``.
-We could derive the adjoint for each of these functions (a fairly straightforward task), and then simply compute
+We could derive the adjoint for each of these functions (a fairly straightforward task), and then compute
 ```math
 D f [x]^\ast (\bar{y}) = (D f_1 [x_1]^\ast \circ D f_2 [x_2]^\ast \circ D f_3 [x_3]^\ast \circ D f_4 [x_4]^\ast)(1)
 ```
 in order to obtain the gradient of ``f``.
-
-Reverse-mode AD is performed (roughly speaking) as follows.
+Reverse-mode AD essentially just does this.
+Modern systems have hand-written adjoints for (hopefully!) all of the "simple" functions you may wish to build a function such as ``f`` from (often there are hundreds of these), and composes them to compute the adjoint of ``f``.
+A sketch of a more generic algorithm is as follows.
 
 Forwards-Pass:
 1. ``x_1 = x``, ``n = 1``
@@ -388,13 +366,13 @@ Reverse-Pass:
 3. let ``\bar{x}_{n} = D f_n [x_n]^\ast (\bar{x}_{n+1})``
 4. if ``n = 1`` return ``\bar{x}_1`` else go to 2.
 
-Reverse-mode AD essentially just does this.
-Modern systems have hand-written adjoints for (hopefully!) all of the "simple" functions you may wish to build a function such as ``f`` from (often there are hundreds of these), and composes them to compute the adjoint of ``f``.
+
 
 
 _**How does this relate to vector-Jacobian products?**_
 
-In Euclidean space we have the collection of Jacobians ``J_n[x_n]``. By the chain rule
+In Euclidean space, each derivative ``D f_n [x_n](\dot{x}_n) = J_n[x_n] \dot{x}_n``.
+Applying the chain rule to ``D f [x]`` and substituting this in yields
 ```math
 J[x] = J_N[x_N] \dots J_1[x_1] .
 ```
@@ -403,7 +381,7 @@ Taking the transpose and multiplying from the left by ``\bar{y}`` yields
 J[x]^\top \bar{y} = J[x_N]^\top_N \dots J[x_1]^\top_1 \bar{y} .
 ```
 Comparing this with the expression in terms of adjoints and operators, we see that composition of adjoints of derivatives has been replaced with multiplying by transposed Jacobian matrices.
-This expression is likely familiar to many readers.
+This "vector-Jacobian product" expression is commonly used to explain AD, and is likely familiar to many readers.
 
 # Directional Derivatives and Gradients
 
@@ -445,10 +423,10 @@ The above shows that if ``Y = \RR`` and ``g`` is the function we wish to compute
 # Summary
 
 This document explains the core mathematical foundations of AD.
-It focuses on _what_ AD does, without worrying about how it might go about it.
+It explains separately _what_ is does, and _how_ it goes about it.
 Some basic examples are given which show how these mathematical foundations can be applied to differentiate functions of matrices, and Julia `function`s.
 
-Subsequent sections will build on these foundations.
+Subsequent sections will build on these foundations, to provide a more general explanation of what AD looks like for a Julia programme.
 
 
 
