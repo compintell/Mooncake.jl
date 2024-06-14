@@ -32,7 +32,29 @@ __verify_sig(::typeof(rrule!!), fx::Tuple) = nothing
 """
     __value_and_gradient!!(rule, f::CoDual, x::CoDual...)
 
-Equivalent to `value_and_pullback(rule, 1.0, f, x...)` -- assumes `f` returns a `Float64`.
+Equivalent to `value_and_pullback!!(rule, 1.0, f, x...)` -- assumes `f` returns a `Float64`.
+
+```jldoctest
+# Set up the problem.
+f(x, y) = sum(x .* y)
+x = [2.0, 2.0]
+y = [1.0, 1.0]
+rule = build_rrule(f, x, y)
+
+# Allocate tangents. These will be written to in-place. You are free to re-use these if you
+# compute gradients multiple times.
+tf = zero_tangent(f)
+tx = zero_tangent(x)
+ty = zero_tangent(y)
+
+# Do AD.
+Tapir.__value_and_gradient!!(
+    rule, Tapir.CoDual(f, tf), Tapir.CoDual(x, tx), Tapir.CoDual(y, ty)
+)
+# output
+
+(4.0, (NoTangent(), [1.0, 1.0], [2.0, 2.0]))
+```
 """
 function __value_and_gradient!!(rule::R, fx::Vararg{CoDual, N}) where {R, N}
     return __value_and_pullback!!(rule, 1.0, fx...)
