@@ -378,7 +378,7 @@ J[x] = J_N[x_N] \dots J_1[x_1] .
 ```
 Taking the transpose and multiplying from the left by ``\bar{y}`` yields
 ```math
-J[x]^\top \bar{y} = J[x_N]^\top_N \dots J[x_1]^\top_1 \bar{y} .
+J[x]^\top \bar{y} = J[x_1]^\top_1 \dots J[x_N]^\top_N \bar{y} .
 ```
 Comparing this with the expression in terms of adjoints and operators, we see that composition of adjoints of derivatives has been replaced with multiplying by transposed Jacobian matrices.
 This "vector-Jacobian product" expression is commonly used to explain AD, and is likely familiar to many readers.
