@@ -3,14 +3,49 @@
 # A Mathematical Model for a Computer Programme
 
 In order to make sense of what it might mean to differentiate a computer programme, we need some kind of differentiable mathematical model for said programme.
-Pearlmutter [pearlmutter2008reverse](@cite) introduces such a model, which we present here.
+Pearlmutter [pearlmutter2008reverse](@cite) introduced such a model, which we expand on here.
 
 Think of a computer as a device which has a state, which we model as a vector in ``\RR^D``.
-When a programme `p` is run, it changes the state of the computer.
+When a programme `p` is run, it changes this state.
 We model the programme `p` with a "transition function" ``t : \RR^D \to \RR^D``, whose input is whatever the state is before running `p`, and whose output is whatever the state is after running `p`.
-If ``t`` is differentiable, then we can meaningfully discuss "differentiating `p`" by differentiating ``t``.
-In particular, when we talk about applying reverse-mode AD to a particular Julia `function`, what we mean is computing the adjoint ``D t [x]`` of the transition function ``t`` which describes `p` when the computer is in state ``x`` prior to running `p`.
+If ``t`` is differentiable, then we can meaningfully define "differentiating `p`" to mean "differentiating ``t``".
+In particular, when we talk about applying reverse-mode AD to a particular Julia `function` `p`, what we mean is computing the adjoint ``D t [x]`` of the transition function ``t`` which describes `p` when the computer is in state ``x`` prior to running `p`.
 
+Consider how we might model the Julia `function`
+```julia
+function f(x)
+    x1 = x
+    x2 = f1(x1)
+    x3 = f2(x1, x2)
+    ...
+    return fN(x1, x2, ..., xN)
+end
+```
+It can be thought of as a sequence of ``N`` programmes, which are run one after the other.
+If each `fn` is associated to transition functin ``t_n : \RR^D \to \RR^D`` then the transtion function associated to `f` is just ``t := t_N \circ \dots \circ t_1``.
+We can then compute the adjoint of ``t`` in the way described in the last section:
+```math
+D t [x]^\ast (\bar{y}) = [ D t_1 [x_1] \circ \dots \circ D t_N [x_N] ]^\ast (\bar{y})
+```
+
+_**A Simple Worked Example**_
+
+Consider applying this framework to the Julia function
+```julia
+f(x::Float64) = sin(cos(x))
+```
+We first find the transition operator associated to the primitives `sin(::Float64)` and `cos(::Float64)`, then look at 
+
+
+
+_**Advantages and Limitations**_
+
+In principle, we have now associated a precise meaning to applying reverse-mode AD to the Julia `function` `f` and shown how reverse-mode AD might be applied.
+This view has several advantages.
+It places sufficiently few restrictions on what a computer programme is allowed to do that we can imagine it being a good model for most computer programmes we shall encounter.
+Moreover, it gives us a precise meaning to "differentiating a computer programme".
+
+However, it has returned us to working with "flat" vector structures, rather than directly with the 
 
 
 # Tangents
@@ -200,7 +235,7 @@ Note that this very simple function does _not_ have a meaningful `ChainRules.rru
 
 # Asides
 
-### Why Uniqueness of Tangents / FData / RData?
+### Why Uniqueness of Type For Tangents / FData / RData?
 
 Why does Tapir.jl insist that each primal type `P` be paired with a single tangent type `T`, as opposed to being more permissive.
 There are a few notable reasons:
@@ -212,4 +247,4 @@ This topic, in particular what goes wrong with permissive tangent type systems l
 
 
 ### Why Unique Memory Address
-TODO
+
