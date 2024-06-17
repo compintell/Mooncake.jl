@@ -827,8 +827,8 @@ end
 end
 
 # Wrapper for `MistyClosure`s.
-function replace_captures(mc::MistyClosure, new_captures)
-    return MistyClosure(replace_captures(mc.oc, new_captures), mc.ir)
+function replace_captures(mc::Tmc, new_captures) where {Tmc<:MistyClosure}
+    return Tmc(replace_captures(mc.oc, new_captures), mc.ir)
 end
 
 const ADStmts = Vector{Tuple{ID, Vector{ADStmtInfo}}}
