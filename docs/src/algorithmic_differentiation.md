@@ -389,8 +389,6 @@ Now we turn to using reverse-mode AD to compute the gradient of a function.
 In short, given a function ``g : \mathcal{X} \to \RR`` with derivative ``D g [x]`` at ``x``, its gradient is equal to ``D g [x]^\ast (1)``.
 We explain why in this section.
 
-It's worth taking a few minutes to consider the ideas discussed thus far relate to other similar ideas.
-
 The derivative discussed here can be used to compute directional derivatives.
 Consider a function ``f : \mathcal{X} \to \RR`` with Frechet derivative ``D f [x] : \mathcal{X} \to \RR`` at ``x \in \mathcal{X}``.
 Then ``D f[x](\dot{x})`` returns the directional derivative in direction ``\dot{x}``.
