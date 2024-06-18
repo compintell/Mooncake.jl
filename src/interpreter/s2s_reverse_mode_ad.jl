@@ -706,15 +706,15 @@ function rule_type(interp::TapirInterpreter{C}, ::Type{sig}) where {C, sig}
     rvs_return_type = rdata_type(tangent_type(Treturn))
     if isconcretetype(fwds_return_codual)
         return DerivedRule{
-            Core.OpaqueClosure{arg_fwds_types, fwds_return_codual},
-            Core.OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types},
+            MistyClosure{OpaqueClosure{arg_fwds_types, fwds_return_codual}},
+            MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
             Val{isva},
             Val{length(ir.argtypes)},
         }
     else
         return DerivedRule{
-            Core.OpaqueClosure{arg_fwds_types, P} where {P<:fwds_return_codual},
-            Core.OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types},
+            MistyClosure{OpaqueClosure{arg_fwds_types, P}} where {P<:fwds_return_codual},
+            MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
             Val{isva},
             Val{length(ir.argtypes)},
         }
@@ -800,8 +800,14 @@ function build_rrule(
         # @show length(ir.stmts.inst)
         # @show length(optimised_fwds_ir.stmts.inst)
         # @show length(optimised_pb_ir.stmts.inst)
-        fwds_oc = OpaqueClosure(optimised_fwds_ir, shared_data...; do_compile=true)
-        pb_oc = OpaqueClosure(optimised_pb_ir, shared_data...; do_compile=true)
+        fwds_oc = MistyClosure(
+            OpaqueClosure(optimised_fwds_ir, shared_data...; do_compile=true),
+            optimised_fwds_ir,
+        )
+        pb_oc = MistyClosure(
+            OpaqueClosure(optimised_pb_ir, shared_data...; do_compile=true),
+            optimised_pb_ir,
+        )
         interp.oc_cache[(sig, safety_on)] = (fwds_oc, pb_oc)
     end
 
@@ -814,10 +820,15 @@ end
 # repeatedly with the same signature and intepreter, it is important to avoid recompiling
 # the `OpaqueClosure`s that it produces multiple times, because it can be quite expensive to
 # do so.
-@eval function replace_captures(oc::Toc, new_captures) where {Toc<:Core.OpaqueClosure}
+@eval function replace_captures(oc::Toc, new_captures) where {Toc<:OpaqueClosure}
     return $(Expr(
         :new, :(Toc), :new_captures, :(oc.world), :(oc.source), :(oc.invoke), :(oc.specptr)
     ))
+end
+
+# Wrapper for `MistyClosure`s.
+function replace_captures(mc::Tmc, new_captures) where {Tmc<:MistyClosure}
+    return Tmc(replace_captures(mc.oc, new_captures), mc.ir)
 end
 
 const ADStmts = Vector{Tuple{ID, Vector{ADStmtInfo}}}

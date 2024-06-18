@@ -9,6 +9,7 @@ using
     Graphs,
     InteractiveUtils,
     LinearAlgebra,
+    MistyClosures,
     Random,
     Setfield
 
