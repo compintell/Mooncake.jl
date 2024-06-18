@@ -92,7 +92,6 @@
             perf_flag=:none,
             interface_only,
             is_primitive=false,
-            safety_on=false,
         )
     end
 end
