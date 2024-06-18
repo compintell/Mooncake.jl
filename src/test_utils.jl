@@ -912,7 +912,9 @@ function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)
     test_cases, memory = Tapir.generate_hand_written_rrule!!_test_cases(rng_ctor, v)
     interp = Tapir.PInterp()
     GC.@preserve memory @testset "$f, $(_typeof(x))" for (interface_only, perf_flag, _, f, x...) in test_cases
-        test_derived_rule(rng_ctor(123), f, x...; interface_only, perf_flag, interp)
+        test_derived_rule(
+            rng_ctor(123), f, x...; interface_only, perf_flag, interp, safety_on=false
+        )
     end
 end
 
@@ -922,7 +924,8 @@ function run_derived_rrule!!_test_cases(rng_ctor, v::Val)
     GC.@preserve memory @testset "$f, $(typeof(x))" for
         (interface_only, perf_flag, _, f, x...) in test_cases
         test_derived_rule(
-            rng_ctor(123), f, x...; interp, interface_only, perf_flag, is_primitive=false
+            rng_ctor(123), f, x...;
+            interp, interface_only, perf_flag, is_primitive=false, safety_on=false,
         )
     end
 end
