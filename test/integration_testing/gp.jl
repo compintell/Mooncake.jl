@@ -42,7 +42,11 @@ using AbstractGPs, KernelFunctions
             @info typeof(x)
             TestUtils.test_derived_rule(
                 sr(123456), x...;
-                interp, perf_flag=:none, interface_only=true, is_primitive=false,
+                interp,
+                perf_flag=:none,
+                interface_only=true,
+                is_primitive=false,
+                safety_on=false,
             )
         end
     end
