@@ -441,7 +441,7 @@ which suggests the following algorithm:
 2. let ``\dot{x}_{n+1} = D f_n [x_n] (\dot{x}_n)``
 3. let ``x_{n+1} = f(x_n)``
 4. let ``n = n + 1``
-5. if ``n = N+1`` then return `\dot{x}_{N+1}`, otherwise go to 2.
+5. if ``n = N+1`` then return ``\dot{x}_{N+1}``, otherwise go to 2.
 
 When each function ``f_n`` maps between Euclidean spaces, the applications of derivatives ``D f_n [x_n] (\dot{x}_n)`` are given by ``J_n \dot{x}_n`` where ``J_n`` is the Jacobian of ``f_n`` at ``x_n``.v
 
