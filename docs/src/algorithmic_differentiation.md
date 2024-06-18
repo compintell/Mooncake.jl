@@ -317,8 +317,9 @@ Plugging this into an inner product with the derivative and rearranging yields
 ```math
 \begin{align}
     \langle (\bar{y}_1, \bar{y}_2), D \phi_{\text{f!}} [x] (\dot{x}) \rangle &= \langle (\bar{y}_1, \bar{y}_2), (2 x \odot \dot{x}, 2 \sum_{n=1}^N x_n \dot{x}_n) \rangle \nonumber \\
-        &= \langle (2 x \odot \bar{y}_1, 2 \bar{y}_2 x), (\text{d} x, \text{d} x) \rangle \nonumber \\
-        &= \langle 2 x \odot \bar{y}_1 + 2 \bar{y}_2 x, \text{d} x \rangle. \nonumber
+        &= \langle \bar{y}_1, 2 x \odot \dot{x} \rangle + \langle \bar{y}_2, 2 \sum_{n=1}^N x_n \dot{x}_n \rangle \nonumber \\
+        &= \langle 2x \odot \bar{y}_1, \dot{x} \rangle + \langle 2 \bar{y}_2 x, \dot{x} \rangle \nonumber \\
+        &= \langle 2 (x \odot \bar{y}_1 + \bar{y}_2 x), \dot{x} \rangle. \nonumber
 \end{align}
 ```
 So we can read off the adjoint to be
