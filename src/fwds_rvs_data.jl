@@ -603,6 +603,7 @@ struct LazyZeroRData{P, Tdata}
     data::Tdata
 end
 
+# Returns the type which must be output by LazyZeroRData whenever it is passed a `P`.
 @inline function lazy_zero_rdata_type(::Type{P}) where {P}
     Tdata = can_produce_zero_rdata_from_type(P) ? Nothing : rdata_type(tangent_type(P))
     return LazyZeroRData{P, Tdata}
