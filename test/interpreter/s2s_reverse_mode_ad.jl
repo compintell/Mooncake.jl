@@ -1,8 +1,16 @@
 module S2SGlobals
+    using LinearAlgebra
+
     non_const_global = 5.0
     const const_float = 5.0
     const const_int = 5
     const const_bool = true
+
+    # used for regression test for issue 184
+    struct A
+        data
+    end
+    f(a, x) = dot(a.data, x)
 end
 
 @testset "s2s_reverse_mode_ad" begin
@@ -219,5 +227,15 @@ end
         # f(rule, fwds_args, out) = rule(fwds_args...)[2]((Tapir.zero_rdata(primal(out))))
         # f(rule, fwds_args, out)
         # @profview(run_many_times(500, f, rule, fwds_args, out))
+    end
+
+    # Tests designed to prevent accidentally re-introducing issues which we have fixed.
+    @testset "regression tests" begin
+
+        # 184
+        TestUtils.test_derived_rule(
+            Xoshiro(123456), S2SGlobals.f, S2SGlobals.A(2 * ones(3)), ones(3);
+            interp, perf_flag=false, interface_only=false, is_primitive=false,
+        )
     end
 end
