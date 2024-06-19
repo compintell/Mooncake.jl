@@ -1139,6 +1139,8 @@ type_unstable_function_eval(f::Ref{Any}, x::Float64) = f[](x)
 
 type_unstable_argument_eval(@nospecialize(f), x::Float64) = f(x)
 
+abstractly_typed_unused_container(::StructFoo, x::Float64) = 5x
+
 function phi_const_bool_tester(x)
     if x > 0
         a = true
@@ -1445,6 +1447,10 @@ function generate_test_functions()
         (false, :allocs, nothing, bar, 5.0, 4.0),
         (false, :allocs, nothing, unused_expression, 5.0, 1),
         (false, :none, nothing, type_unstable_argument_eval, sin, 5.0),
+        (
+            false, :none, nothing,
+            abstractly_typed_unused_container, StructFoo(5.0, [4.0]), 5.0,
+        ),
         (false, :none, (lb=1, ub=1_000), pi_node_tester, Ref{Any}(5.0)),
         (false, :none, (lb=1, ub=1_000), pi_node_tester, Ref{Any}(5)),
         (false, :allocs, nothing, intrinsic_tester, 5.0),
