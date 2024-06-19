@@ -603,16 +603,20 @@ struct LazyZeroRData{P, Tdata}
     data::Tdata
 end
 
+@inline function lazy_zero_rdata_type(::Type{P}) where {P}
+    Tdata = can_produce_zero_rdata_from_type(P) ? Nothing : rdata_type(tangent_type(P))
+    return LazyZeroRData{P, Tdata}
+end
+
 # Be lazy if we can compute the zero element given only the type, otherwise just store the
 # zero element and use it later.
 @inline function LazyZeroRData(p::P) where {P}
-    if zero_rdata_from_type(P) isa CannotProduceZeroRDataFromType
-        rdata = zero_rdata(p)
-        return LazyZeroRData{P, _typeof(rdata)}(rdata)
-    else
-        return LazyZeroRData{P, Nothing}(nothing)
-    end
+    data = can_produce_zero_rdata_from_type(P) ? nothing : zero_rdata(p)
+    return lazy_zero_rdata_type(P)(data)
 end
+
+# Ensure proper specialisation on types.
+@inline LazyZeroRData(::Type{P}) where {P} = LazyZeroRData{Type{P}, Nothing}(nothing)
 
 @inline instantiate(::LazyZeroRData{P, Nothing}) where {P} = zero_rdata_from_type(P)
 @inline instantiate(r::LazyZeroRData) = r.data

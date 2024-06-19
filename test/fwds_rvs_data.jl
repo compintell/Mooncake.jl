@@ -29,10 +29,16 @@ end
             (StructFoo(5.0), false),
             (StructFoo(5.0, randn(4)), false),
             (Bool, true),
+            (Tapir.TestResources.StableFoo, true),
         ]
             @test fully_lazy == Base.issingletontype(typeof(LazyZeroRData(p)))
             @inferred Tapir.instantiate(LazyZeroRData(p))
+            @test typeof(LazyZeroRData(p)) == Tapir.lazy_zero_rdata_type(_typeof(p))
         end
+        @test isa(
+            LazyZeroRData(Tapir.TestResources.StableFoo),
+            LazyZeroRData{Type{Tapir.TestResources.StableFoo}},
+        )
     end
     @testset "misc fdata / rdata type checking" begin
         @test(==(
