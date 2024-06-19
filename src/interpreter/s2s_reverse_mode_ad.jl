@@ -109,6 +109,14 @@ codegen which produces the forwards- and reverse-passes.
     applied recursively, so that safe mode is also switched on in derived rules.
 - `is_used_dict`: for each `ID` associated to a line of code, is `false` if line is not used
     anywhere in any other line of code.
+- `zero_lazy_rdata_ref_id`: for any arguments whose type doesn't permit the construction of
+    a zero-valued rdata directly from the type alone (e.g. a struct with an abstractly-
+    typed field), we need to have a zero-valued rdata available on the reverse-pass so that
+    this zero-valued rdata can be returned if the argument (or a part of it) is never used
+    during the forwards-pass and consequently doesn't obtain a value on the reverse-pass.
+    To achieve this, we construct a `LazyZeroRData` for each of the arguments on the
+    forwards-pass, and make use of it on the reverse-pass. This field is the ID that will be
+    associated to this information.
 =#
 struct ADInfo
     interp::PInterp
@@ -122,6 +130,7 @@ struct ADInfo
     ssa_rdata_ref_ids::Dict{ID, ID}
     safety_on::Bool
     is_used_dict::Dict{ID, Bool}
+    lazy_zero_rdata_ref_id::ID
 end
 
 # The constructor that you should use for ADInfo if you don't have a BBCode lying around.
@@ -132,6 +141,7 @@ function ADInfo(
     ssa_insts::Dict{ID, NewInstruction},
     is_used_dict::Dict{ID, Bool},
     safety_on::Bool,
+    zero_lazy_rdata_ref::Ref{<:Tuple},
 )
     shared_data_pairs = SharedDataPairs()
     block_stack = BlockStack()
@@ -147,6 +157,7 @@ function ADInfo(
         Dict((k, ID()) for k in keys(ssa_insts)),
         safety_on,
         is_used_dict,
+        add_data!(shared_data_pairs, zero_lazy_rdata_ref),
     )
 end
 
@@ -159,7 +170,8 @@ function ADInfo(interp::PInterp, ir::BBCode, safety_on::Bool)
     stmts = collect_stmts(ir)
     ssa_insts = Dict{ID, NewInstruction}(stmts)
     is_used_dict = characterise_used_ids(stmts)
-    return ADInfo(interp, arg_types, ssa_insts, is_used_dict, safety_on)
+    zero_lazy_rdata_ref = Ref{Tuple{map(lazy_zero_rdata_type ∘ _type, ir.argtypes)...}}()
+    return ADInfo(interp, arg_types, ssa_insts, is_used_dict, safety_on, zero_lazy_rdata_ref)
 end
 
 # Shortcut for `add_data!(info.shared_data_pairs, data)`.
@@ -787,8 +799,8 @@ function build_rrule(
         fwds_ir = forwards_pass_ir(primal_ir, ad_stmts_blocks, info, _typeof(shared_data))
         pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, _typeof(shared_data))
 
-        optimised_fwds_ir = optimise_ir!(IRCode(fwds_ir); do_inline=true)
-        optimised_pb_ir = optimise_ir!(IRCode(pb_ir); do_inline=true)
+        optimised_fwds_ir = optimise_ir!(optimise_ir!(IRCode(fwds_ir); do_inline=true))
+        optimised_pb_ir = optimise_ir!(optimise_ir!(IRCode(pb_ir); do_inline=true))
         # @show sig
         # @show Treturn
         # @show safety_on
@@ -845,16 +857,25 @@ function forwards_pass_ir(ir::BBCode, ad_stmts_blocks::ADStmts, info::ADInfo, Ts
     # Insert a block at the start which extracts all items from the captures field of the
     # `OpaqueClosure`, which contains all of the data shared between the forwards- and
     # reverse-passes. These are assigned to the `ID`s given by the `SharedDataPairs`.
-    # Additionally, push the entry id onto the block stack if needed.
+    # Push the entry id onto the block stack if needed. Create `LazyZeroRData` for each
+    # argument, and put it in the `Ref` for use on the reverse-pass.
     sds = shared_data_stmts(info.shared_data_pairs)
     if pred_is_unique_pred[ir.blocks[1].id]
-        entry_stmts = sds
+        push_block_stack_insts = Tuple{ID, NewInstruction}[]
     else
         push_block_stack_stmt = Expr(
             :call, __push_blk_stack!, info.block_stack_id, info.entry_id.id
         )
-        entry_stmts = vcat(sds, (ID(), new_inst(push_block_stack_stmt)))
+        push_block_stack_insts = [(ID(), new_inst(push_block_stack_stmt))]
     end
+    lazy_zero_rdata_stmt = Expr(
+        :call,
+        __assemble_lazy_zero_rdata,
+        info.lazy_zero_rdata_ref_id,
+        map(n -> Argument(n + 1), 1:num_args(info))...,
+    )
+    lazy_zero_rdata_insts = [(ID(), new_inst(lazy_zero_rdata_stmt))]
+    entry_stmts = vcat(sds, lazy_zero_rdata_insts, push_block_stack_insts)
     entry_block = BBlock(info.entry_id, entry_stmts)
 
     # Construct augmented version of each basic block from the primal. For each block:
@@ -880,6 +901,11 @@ end
 # Going via this function, rather than just calling push!, makes it very straightforward to
 # figure out much time is spent pushing to the block stack when profiling AD.
 @inline __push_blk_stack!(block_stack::BlockStack, id::Int32) = push!(block_stack, id)
+
+@inline function __assemble_lazy_zero_rdata(r::Ref, args::Vararg{CoDual, N}) where {N}
+    r[] = tuple_map(arg -> LazyZeroRData(primal(arg)), args)
+    return nothing
+end
 
 #=
     pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, Tshared_data)
@@ -952,12 +978,59 @@ function pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, T
     end
     main_blocks = vcat(main_blocks...)
 
-    # Create an exit block. Dereferences reverse-data for arguments and returns it.
+    # Create an exit block. Dereferences reverse-data for arguments, increments a zero rdata
+    # against it to ensure that it is of the correct type, and returns it.
     arg_rdata_ref_ids = map(n -> info.arg_rdata_ref_ids[Argument(n)], 1:num_args(info))
+
+    # De-reference the lazy zero rdata.
+    lazy_zero_rdata_tuple_id = ID()
+    lazy_zero_rdata_tuple = new_inst(Expr(:call, getindex, info.lazy_zero_rdata_ref_id))
+
+    # For each argument, dereference its rdata, and increment said rdata against the zero
+    # rdata element.
+    final_ids = Vector{ID}()
+    rdata_extraction_stmts = map(eachindex(arg_rdata_ref_ids)) do n
+
+        # De-reference the nth rdata.
+        rdata_id = ID()
+        rdata = new_inst(Expr(:call, getindex, arg_rdata_ref_ids[n]))
+
+        # Get the nth lazy zero rdata.
+        lazy_zero_rdata_id = ID()
+        lazy_zero_rdata = new_inst(Expr(:call, getfield, lazy_zero_rdata_tuple_id, n))
+
+        # Instantiate the nth zero rdata.
+        zero_rdata_id = ID()
+        zero_rdata = new_inst(Expr(:call, instantiate, lazy_zero_rdata_id))
+
+        # Increment the rdata.
+        final_rdata_id = ID()
+        final_rdata = new_inst(Expr(:call, increment!!, rdata_id, zero_rdata_id))
+
+        # Log the ID of the rdata to return.
+        push!(final_ids, final_rdata_id)
+
+        return Tuple{ID, NewInstruction}[
+            (rdata_id, rdata),
+            (lazy_zero_rdata_id, lazy_zero_rdata),
+            (zero_rdata_id, zero_rdata),
+            (final_rdata_id, final_rdata),
+        ]
+    end
+
+    # Construct a tuple containing all of the rdata.
     deref_id = ID()
-    deref = new_inst(Expr(:call, __deref_arg_rev_data_refs, arg_rdata_ref_ids...))
+    deref = new_inst(Expr(:call, tuple, final_ids...))
+
     ret = new_inst(ReturnNode(deref_id))
-    exit_block = BBlock(info.entry_id, [(deref_id, deref), (ID(), ret)])
+    exit_block = BBlock(
+        info.entry_id,
+        vcat(
+            (lazy_zero_rdata_tuple_id, lazy_zero_rdata_tuple),
+            rdata_extraction_stmts...,
+            [(deref_id, deref), (ID(), ret)],
+        ),
+    )
 
     # Create and return `BBCode` for the pullback.
     blks = vcat(entry_block, main_blocks, exit_block)
@@ -1118,9 +1191,6 @@ end
 
 # Helper function emitted by `make_switch_stmts`.
 __switch_case(id::Int32, predecessor_id::Int32) = !(id === predecessor_id)
-
-# Helper function used by `pullback_ir`.
-@inline __deref_arg_rev_data_refs(arg_rev_data_refs...) = map(getindex, arg_rev_data_refs)
 
 #=
     DynamicDerivedRule(interp::TapirInterpreter, safety_on::Bool)

@@ -30,7 +30,8 @@ end
             id_ssa_2 => CC.NewInstruction(nothing, Any),
         )
         is_used_dict = Dict{ID, Bool}(id_ssa_1 => true, id_ssa_2 => true)
-        info = ADInfo(Tapir.PInterp(), arg_types, ssa_insts, is_used_dict, false)
+        rdata_ref = Ref{Tuple{map(Tapir.lazy_zero_rdata_type, (Float64, Int))...}}()
+        info = ADInfo(Tapir.PInterp(), arg_types, ssa_insts, is_used_dict, false, rdata_ref)
 
         # Verify that we can access the interpreter and terminator block ID.
         @test info.interp isa Tapir.PInterp
@@ -62,6 +63,7 @@ end
             ),
             Dict{ID, Bool}(id_line_1=>true, id_line_2=>true),
             false,
+            Ref{Tuple{map(Tapir.lazy_zero_rdata_type, (typeof(sin), Float64))...}}(),
         )
 
         @testset "Nothing" begin
@@ -235,7 +237,7 @@ end
         # 184
         TestUtils.test_derived_rule(
             Xoshiro(123456), S2SGlobals.f, S2SGlobals.A(2 * ones(3)), ones(3);
-            interp, perf_flag=false, interface_only=false, is_primitive=false,
+            interp, perf_flag=:none, interface_only=false, is_primitive=false,
         )
     end
 end
