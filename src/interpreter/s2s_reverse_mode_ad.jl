@@ -902,9 +902,16 @@ end
 # figure out much time is spent pushing to the block stack when profiling AD.
 @inline __push_blk_stack!(block_stack::BlockStack, id::Int32) = push!(block_stack, id)
 
-@inline function __assemble_lazy_zero_rdata(r::Ref, args::Vararg{CoDual, N}) where {N}
-    r[] = tuple_map(arg -> LazyZeroRData(primal(arg)), args)
+@inline function __assemble_lazy_zero_rdata(r::Ref{T}, args::Vararg{CoDual, N}) where {T<:Tuple, N}
+    r[] = __make_tuples(T, args)
     return nothing
+end
+
+@generated function __make_tuples(::Type{T}, args::Tuple) where {T}
+    lazy_exprs = map(eachindex(T.parameters)) do n
+        return :(LazyZeroRData($(T.parameters[n]), primal(args[$n])))
+    end
+    return Expr(:call, tuple, lazy_exprs...)
 end
 
 #=

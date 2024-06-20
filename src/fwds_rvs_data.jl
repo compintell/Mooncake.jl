@@ -619,6 +619,10 @@ end
 # Ensure proper specialisation on types.
 @inline LazyZeroRData(::Type{P}) where {P} = LazyZeroRData{Type{P}, Nothing}(nothing)
 
+@inline function LazyZeroRData(::Type{L}, p::P) where {L, P}
+    return L(can_produce_zero_rdata_from_type(P) ? nothing : zero_rdata(p))
+end
+
 @inline instantiate(::LazyZeroRData{P, Nothing}) where {P} = zero_rdata_from_type(P)
 @inline instantiate(r::LazyZeroRData) = r.data
 @inline instantiate(::NoRData) = NoRData()
