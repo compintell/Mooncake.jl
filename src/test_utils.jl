@@ -91,7 +91,7 @@ using Tapir:
     CoDual, NoTangent, rrule!!, is_init, zero_codual, DefaultCtx, @is_primitive, val,
     is_always_fully_initialised, get_tangent_field, set_tangent_field!, MutableTangent,
     Tangent, _typeof, rdata, NoFData, to_fwds, uninit_fdata, zero_rdata,
-    zero_rdata_from_type, CannotProduceZeroRDataFromType, LazyZeroRData, instantiate,
+    zero_rdata_from_type, CannotProduceZeroRDataFromType, lazy_zero_rdata, instantiate,
     can_produce_zero_rdata_from_type, increment_rdata!!, fcodual_type,
     verify_fdata_type, verify_rdata_type, verify_fdata_value, verify_rdata_value,
     InvalidFDataException, InvalidRDataException
@@ -900,8 +900,8 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
     @test can_make_zero != isa(rzero_from_type, CannotProduceZeroRDataFromType)
 
     # Check that we can produce a lazy zero rdata, and that it has the correct type.
-    JET.test_opt(LazyZeroRData, Tuple{P})
-    lazy_rzero = @inferred LazyZeroRData(p)
+    JET.test_opt(lazy_zero_rdata, Tuple{P})
+    lazy_rzero = @inferred lazy_zero_rdata(p)
     @test instantiate(lazy_rzero) isa R
 
     # Check incrementing the rdata component of a tangent yields the correct type.

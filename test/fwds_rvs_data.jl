@@ -31,12 +31,12 @@ end
             (Bool, true),
             (Tapir.TestResources.StableFoo, true),
         ]
-            @test fully_lazy == Base.issingletontype(typeof(LazyZeroRData(p)))
-            @inferred Tapir.instantiate(LazyZeroRData(p))
-            @test typeof(LazyZeroRData(p)) == Tapir.lazy_zero_rdata_type(_typeof(p))
+            @test fully_lazy == Base.issingletontype(typeof(lazy_zero_rdata(p)))
+            @inferred Tapir.instantiate(lazy_zero_rdata(p))
+            @test typeof(lazy_zero_rdata(p)) == Tapir.lazy_zero_rdata_type(_typeof(p))
         end
         @test isa(
-            LazyZeroRData(Tapir.TestResources.StableFoo),
+            lazy_zero_rdata(Tapir.TestResources.StableFoo),
             LazyZeroRData{Type{Tapir.TestResources.StableFoo}},
         )
     end

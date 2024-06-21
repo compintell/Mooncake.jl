@@ -610,18 +610,18 @@ end
 end
 
 # Be lazy if we can compute the zero element given only the type, otherwise just store the
-# zero element and use it later.
-@inline function LazyZeroRData(p::P) where {P}
-    data = can_produce_zero_rdata_from_type(P) ? nothing : zero_rdata(p)
-    return lazy_zero_rdata_type(P)(data)
-end
-
-# Ensure proper specialisation on types.
-@inline LazyZeroRData(::Type{P}) where {P} = LazyZeroRData{Type{P}, Nothing}(nothing)
-
-@inline function LazyZeroRData(::Type{L}, p::P) where {L, P}
+# zero element and use it later. L is the precise type of `LazyZeroRData` that you wish to
+# construct -- very occassionally you need complete control over this, but don't want to
+# figure out for yourself whether or not construction can be performed lazily.
+@inline function lazy_zero_rdata(::Type{L}, p::P) where {L<:LazyZeroRData, P}
     return L(can_produce_zero_rdata_from_type(P) ? nothing : zero_rdata(p))
 end
+
+# If type parameters for `LazyZeroRData` are not provided, use the defaults.
+@inline lazy_zero_rdata(p::P) where {P} = lazy_zero_rdata(lazy_zero_rdata_type(P), p)
+
+# Ensure proper specialisation on types.
+@inline lazy_zero_rdata(::Type{P}) where {P} = LazyZeroRData{Type{P}, Nothing}(nothing)
 
 @inline instantiate(::LazyZeroRData{P, Nothing}) where {P} = zero_rdata_from_type(P)
 @inline instantiate(r::LazyZeroRData) = r.data

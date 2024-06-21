@@ -71,7 +71,7 @@ lgetfield(x, ::Val{f}) where {f} = getfield(x, f)
             return NoRData(), NoRData(), NoRData()
         end
     else
-        dx_r = LazyZeroRData(primal(x))
+        dx_r = lazy_zero_rdata(primal(x))
         field = Val{f}()
         function immutable_lgetfield_pb!!(dy)
             return NoRData(), increment_field!!(instantiate(dx_r), dy, field), NoRData()
@@ -113,7 +113,7 @@ lgetfield(x, ::Val{f}, ::Val{order}) where {f, order} = getfield(x, f, order)
             return NoRData(), NoRData(), NoRData(), NoRData()
         end
     else
-        dx_r = LazyZeroRData(primal(x))
+        dx_r = lazy_zero_rdata(primal(x))
         function immutable_lgetfield_pb!!(dy)
             tmp = increment_field!!(instantiate(dx_r), dy, Val{f}())
             return NoRData(), tmp, NoRData(), NoRData()

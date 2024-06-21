@@ -242,7 +242,7 @@ end
 
 @inline function (rule::RRuleZeroWrapper{R})(f::F, args::Vararg{CoDual, N}) where {R, F, N}
     y, pb!! = rule.rule(f, args...)
-    l = LazyZeroRData(primal(y))
+    l = lazy_zero_rdata(primal(y))
     return y::CoDual, (pb!! isa NoPullback ? pb!! : RRuleWrapperPb(pb!!, l))
 end
 
@@ -909,7 +909,7 @@ end
 
 @generated function __make_tuples(::Type{T}, args::Tuple) where {T}
     lazy_exprs = map(eachindex(T.parameters)) do n
-        return :(LazyZeroRData($(T.parameters[n]), primal(args[$n])))
+        return :(lazy_zero_rdata($(T.parameters[n]), primal(args[$n])))
     end
     return Expr(:call, tuple, lazy_exprs...)
 end
