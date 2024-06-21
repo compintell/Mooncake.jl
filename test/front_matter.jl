@@ -53,6 +53,7 @@ using Tapir:
     zero_rdata,
     instantiate,
     LazyZeroRData,
+    lazy_zero_rdata,
     new_inst,
     characterise_unique_predecessor_blocks,
     NoPullback,
