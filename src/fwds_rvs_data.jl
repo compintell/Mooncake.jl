@@ -206,6 +206,12 @@ function _verify_fdata_value(p::Array, f::Array)
     return nothing
 end
 
+# (mutable) structs, Tuples, and NamedTuples all have slightly different storage.
+_get_fdata_field(f::NamedTuple, name) = getfield(f, name)
+_get_fdata_field(f::Tuple, name) = getfield(f, name)
+_get_fdata_field(f::FData, name) = val(getfield(f.data, name))
+_get_fdata_field(f::MutableTangent, name) = fdata(val(getfield(f.fields, name)))
+
 function _verify_fdata_value(p, f)
 
     # If f is a NoFData then there are no checks needed, because we have already verified
@@ -217,12 +223,6 @@ function _verify_fdata_value(p, f)
     # The rest of this method assumes p is an instance of a struct type, so we must error.
     P = _typeof(p)
     isprimitivetype(P) && error("Encountered primitive $p with fdata $f")
-
-    # (mutable) structs, Tuples, and NamedTuples all have slightly different storage.
-    _get_fdata_field(f::NamedTuple, name) = getfield(f, name)
-    _get_fdata_field(f::Tuple, name) = getfield(f, name)
-    _get_fdata_field(f::FData, name) = val(getfield(f.data, name))
-    _get_fdata_field(f::MutableTangent, name) = fdata(val(getfield(f.fields, name)))
 
     # Having excluded primitive types, we must have a (mutable) struct type. Recurse into
     # its fields and verify each of them.

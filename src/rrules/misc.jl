@@ -144,7 +144,7 @@ lsetfield!(value, ::Val{name}, x) where {name} = setfield!(value, name, x)
     old_dx = if F == NoFData
         NoFData()
     else
-        save ? val(getfield(tangent(value).fields, name)) : nothing
+        save ? get_tangent_field(tangent(value), name) : nothing
     end
     dvalue = tangent(value)
     pb!! = if F == NoFData
@@ -154,7 +154,7 @@ lsetfield!(value, ::Val{name}, x) where {name} = setfield!(value, name, x)
         end
     else
         function setfield!_pullback(dy)
-            new_dx = increment!!(dy, rdata(val(getfield(dvalue.fields, name))))
+            new_dx = increment!!(dy, rdata(get_tangent_field(dvalue, name)))
             old_x !== nothing && lsetfield!(primal(value), Val(name), old_x)
             old_x !== nothing && set_tangent_field!(dvalue, name, old_dx)
             return NoRData(), NoRData(), NoRData(), new_dx
