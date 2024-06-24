@@ -27,67 +27,6 @@ _scale(::Float64, t::TaskTangent) = t
 
 TestUtils.populate_address_map!(m::TestUtils.AddressMap, ::Task, ::TaskTangent) = m
 
-# function zero_tangent(p::Task)
-#     return TaskTangent(
-#         zero_tangent(p.next),
-#         zero_tangent(p.queue),
-#         zero_tangent(p.storage),
-#         zero_tangent(p.donenotify),
-#         zero_tangent(p.result),
-#         zero_tangent(p.logstate),
-#         zero_tangent(p.code),
-#         ntuple(n -> NoTangent(), 9)...,
-#     )
-# end
-
-# function randn_tangent(rng::AbstractRNG, p::Task)
-#     return TaskTangent(
-#         randn_tangent(rng, p.next),
-#         randn_tangent(rng, p.queue),
-#         randn_tangent(rng, p.storage),
-#         randn_tangent(rng, p.donenotify),
-#         randn_tangent(rng, p.result),
-#         randn_tangent(rng, p.logstate),
-#         randn_tangent(rng, p.code),
-#         ntuple(n -> NoTangent(), 9)...,
-#     )
-# end
-
-# function increment!!(t::TaskTangent, s::TaskTangent)
-#     t === s && return t
-#     t.next = increment!!(t.next, s.next)
-#     t.queue = increment!!(t.queue, s.queue)
-#     t.storage = increment!!(t.storage, s.storage)
-#     t.donenotify = increment!!(t.donenotify, s.donenotify)
-#     t.result = increment!!(t.result, s.result)
-#     t.logstate = increment!!(t.logstate, s.logstate)
-#     t.code = increment!!(t.code, s.code)
-#     return t
-# end
-
-# function set_to_zero!!(t::TaskTangent)
-#     t.next = set_to_zero!!(t.next)
-#     t.queue = set_to_zero!!(t.queue)
-#     t.storage = set_to_zero!!(t.storage)
-#     t.donenotify = set_to_zero!!(t.donenotify)
-#     t.result = set_to_zero!!(t.result)
-#     t.logstate = set_to_zero!!(t.logstate)
-#     t.code = set_to_zero!!(t.code)
-#     return t
-# end
-
-# function _add_to_primal(p::Task, t::TaskTangent)
-#     p.next = _add_to_primal(p.next, t.next)
-#     p.queue = _add_to_primal(p.queue, t.queue)
-#     p.storage = _add_to_primal(p.storage, t.storage)
-#     p.donenotify = _add_to_primal(p.donenotify, t.donenotify)
-#     p.result = _add_to_primal(p.result, t.result)
-#     p.logstate = _add_to_primal(p.logstate, t.logstate)
-#     p.code = _add_to_primal(p.code, t.code)
-#     return p
-# end
-
-
 fdata_type(::Type{TaskTangent}) = TaskTangent
 
 rdata_type(::Type{TaskTangent}) = NoRData

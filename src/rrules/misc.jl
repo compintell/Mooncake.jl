@@ -145,7 +145,6 @@ lsetfield!(value, ::Val{name}, x) where {name} = setfield!(value, name, x)
         NoFData()
     else
         save ? get_tangent_field(tangent(value), name) : nothing
-        # save ? val(getfield(tangent(value).fields, name)) : nothing
     end
     dvalue = tangent(value)
     pb!! = if F == NoFData
