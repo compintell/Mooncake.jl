@@ -521,8 +521,8 @@ function rrule!!(f::CoDual{typeof(Core.ifelse)}, cond, a::A, b::B) where {A, B}
     pb!! = if rdata_type(tangent_type(A)) == NoRData && rdata_type(tangent_type(B)) == NoRData
         NoPullback(f, cond, a, b)
     else
-        lazy_da = LazyZeroRData(p_a)
-        lazy_db = LazyZeroRData(p_b)
+        lazy_da = lazy_zero_rdata(p_a)
+        lazy_db = lazy_zero_rdata(p_b)
         function ifelse_pullback!!(dc)
             da = ifelse(_cond, dc, instantiate(lazy_da))
             db = ifelse(_cond, instantiate(lazy_db), dc)
@@ -561,7 +561,7 @@ function rrule!!(f::CoDual{typeof(getfield)}, x::CoDual{P}, name::CoDual) where 
         y = uninit_fcodual(getfield(primal(x), primal(name)))
         return y, NoPullback(f, x, name)
     elseif is_homogeneous_and_immutable(primal(x))
-        dx_r = LazyZeroRData(primal(x))
+        dx_r = lazy_zero_rdata(primal(x))
         _name = primal(name)
         function immutable_lgetfield_pb!!(dy)
             return NoRData(), increment_field!!(instantiate(dx_r), dy, _name), NoRData()
@@ -579,7 +579,7 @@ function rrule!!(f::CoDual{typeof(getfield)}, x::CoDual{P}, name::CoDual, order:
         y = uninit_fcodual(getfield(primal(x), primal(name)))
         return y, NoPullback(f, x, name, order)
     elseif is_homogeneous_and_immutable(primal(x))
-        dx_r = LazyZeroRData(primal(x))
+        dx_r = lazy_zero_rdata(primal(x))
         _name = primal(name)
         function immutable_lgetfield_pb!!(dy)
             tmp = increment_field!!(instantiate(dx_r), dy, _name)

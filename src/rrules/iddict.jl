@@ -79,8 +79,8 @@ function rrule!!(::CoDual{typeof(setindex!)}, d::CoDual{IdDict{K,V}}, val, key) 
     setindex!(primal(d), primal(val), k)
     setindex!(tangent(d), zero_tangent(primal(val), tangent(val)), k)
 
-    dval = LazyZeroRData(primal(val))
-    dkey = LazyZeroRData(primal(key))
+    dval = lazy_zero_rdata(primal(val))
+    dkey = lazy_zero_rdata(primal(key))
     function setindex_pb!!(::NoRData)
 
         # Increment tangent.
@@ -109,8 +109,8 @@ function rrule!!(
     y = has_key ? CoDual(primal(d)[k], fdata(tangent(d)[k])) : default
 
     dd = tangent(d)
-    dkey = LazyZeroRData(primal(key))
-    rdefault = LazyZeroRData(primal(default))
+    dkey = lazy_zero_rdata(primal(key))
+    rdefault = lazy_zero_rdata(primal(default))
     function get_pb!!(dy)
         if has_key
             dd[k] = increment_rdata!!(dd[k], dy)
@@ -129,7 +129,7 @@ function rrule!!(
 ) where {K, V}
     k = primal(key)
     y = CoDual(getindex(primal(d), k), fdata(getindex(tangent(d), k)))
-    dkey = LazyZeroRData(primal(key))
+    dkey = lazy_zero_rdata(primal(key))
     dd = tangent(d)
     function getindex_pb!!(dy)
         dd[k] = increment_rdata!!(dd[k], dy) 
