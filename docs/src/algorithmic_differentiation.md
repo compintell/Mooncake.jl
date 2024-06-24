@@ -46,9 +46,9 @@ Furthermore, we shall see later how we can model all sorts of structured represe
 
 For such spaces, the derivative of ``f`` at ``x \in \mathcal{X}`` is the linear operator (read: linear function) ``D f [x] : \mathcal{X} \to \mathcal{Y}`` satisfying
 ```math
-\text{d}f = D f [x] \, \text{d} x
+\text{d}f = D f [x] \, (\text{d} x)
 ```
-Please note that ``D f [x]`` is a single mathematical object, despite the fact that 3 separate symbols are used to denote it.
+Please note that ``D f [x]`` is a single mathematical object, despite the fact that 3 separate symbols are used to denote it -- ``D f [x] (\dot{x})`` denotes the application of the function ``D f [x]`` to argument ``\dot{x}``.
 
 So, instead of thinking of the derivative as a number or a matrix, we think about it as a _function_.
 We can express the previous notions of the derivative in this language.
