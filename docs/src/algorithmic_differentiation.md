@@ -48,13 +48,17 @@ For such spaces, the derivative of ``f`` at ``x \in \mathcal{X}`` is the linear 
 ```math
 \text{d}f = D f [x] \, \text{d} x
 ```
-That is, instead of thinking of the derivative as a number or a matrix, we think about it as a _function_.
+Please note that ``D f [x]`` is a single mathematical object, despite the fact that 3 separate symbols are used to denote it.
+
+So, instead of thinking of the derivative as a number or a matrix, we think about it as a _function_.
 We can express the previous notions of the derivative in this language.
 
 In the scalar case, rather than thinking of the derivative as _being_ ``\alpha``, we think of it is a the linear operator ``D f [x] (\dot{x}) := \alpha \dot{x}``.
 Put differently, rather than thinking of the derivative as the slope of the tangent to ``f`` at ``x``, think of it as the function decribing the tangent itself.
+Observe that up until now we had only considered inputs to ``D f [x]`` which were small (``\text{d} x``) -- here we extend it to the entire space ``\mathcal{X}`` and denote inputs in this space ``\dot{x}``.
+Inputs ``\dot{x}`` should be thoughts of as "directions", in the directional derivative sense (why this is true will be discussed later).
 
-Similarly, if ``\mathcal{X} = \RR^P`` and ``\mathcal{Y} = \RR^Q`` then this operator can be specified in terms of the Jacobian matrix: ``D f [x] (\dot{x}) := J[x] \dot{x}`` -- brackets are used to emphasise that ``D f [x]`` is a function, and is being applied to ``\dot{x}``.
+Similarly, if ``\mathcal{X} = \RR^P`` and ``\mathcal{Y} = \RR^Q`` then this operator can be specified in terms of the Jacobian matrix: ``D f [x] (\dot{x}) := J[x] \dot{x}`` -- brackets are used to emphasise that ``D f [x]`` is a function, and is being applied to ``\dot{x}``.[^note_for_geometers]
 
 The difference from usual is a little bit subtle.
 We do not define the derivative to _be_ ``\alpha`` or ``J[x]``, rather we define it to be "multiply by ``\alpha``" or "multiply by ``J[x]``".
@@ -448,3 +452,5 @@ When each function ``f_n`` maps between Euclidean spaces, the applications of de
 
 ```@bibliography
 ```
+
+[^note_for_geometers]: in AD we only really need to discuss differentiatiable functions between vector spaces that are isomorphic to Euclidean space. Consequently, a variety of considerations which are usually required in differential geometry are not required here. Notably, the tangent space is assumed to be the same everywhere, and to be the same as the domain of the function. Avoiding these additional considerations helps keep the mathematics as simple as possible.
