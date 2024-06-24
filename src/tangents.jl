@@ -70,7 +70,7 @@ const PossiblyMutableTangent{T} = Union{MutableTangent{T}, Tangent{T}}
 
 Gets the `i`th field of data in `t`.
 
-Has the same semantics that `setfield!` would have if the data in the `fields` field of `t`
+Has the same semantics that `getfield!` would have if the data in the `fields` field of `t`
 were actually fields of `t`. This is the moral equivalent of `getfield` for
 `MutableTangent`.
 """
