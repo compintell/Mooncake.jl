@@ -40,6 +40,8 @@ include("front_matter.jl")
             include(joinpath("rrules", "misc.jl"))
             @info "new"
             include(joinpath("rrules", "new.jl"))
+            @info "tasks"
+            include(joinpath("rrules", "tasks.jl"))
         end
         include("chain_rules_macro.jl")
     elseif test_group == "integration_testing/misc"

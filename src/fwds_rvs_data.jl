@@ -322,6 +322,12 @@ function _verify_fdata_value(p::Array, f::Array)
     return nothing
 end
 
+# (mutable) structs, Tuples, and NamedTuples all have slightly different storage.
+_get_fdata_field(f::NamedTuple, name) = getfield(f, name)
+_get_fdata_field(f::Tuple, name) = getfield(f, name)
+_get_fdata_field(f::FData, name) = val(getfield(f.data, name))
+_get_fdata_field(f::MutableTangent, name) = fdata(val(getfield(f.fields, name)))
+
 function _verify_fdata_value(p, f)
 
     # If f is a NoFData then there are no checks needed, because we have already verified
@@ -333,12 +339,6 @@ function _verify_fdata_value(p, f)
     # The rest of this method assumes p is an instance of a struct type, so we must error.
     P = _typeof(p)
     isprimitivetype(P) && error("Encountered primitive $p with fdata $f")
-
-    # (mutable) structs, Tuples, and NamedTuples all have slightly different storage.
-    _get_fdata_field(f::NamedTuple, name) = getfield(f, name)
-    _get_fdata_field(f::Tuple, name) = getfield(f, name)
-    _get_fdata_field(f::FData, name) = val(getfield(f.data, name))
-    _get_fdata_field(f::MutableTangent, name) = fdata(val(getfield(f.fields, name)))
 
     # Having excluded primitive types, we must have a (mutable) struct type. Recurse into
     # its fields and verify each of them.
@@ -727,16 +727,25 @@ struct LazyZeroRData{P, Tdata}
     data::Tdata
 end
 
-# Be lazy if we can compute the zero element given only the type, otherwise just store the
-# zero element and use it later.
-@inline function LazyZeroRData(p::P) where {P}
-    if zero_rdata_from_type(P) isa CannotProduceZeroRDataFromType
-        rdata = zero_rdata(p)
-        return LazyZeroRData{P, _typeof(rdata)}(rdata)
-    else
-        return LazyZeroRData{P, Nothing}(nothing)
-    end
+# Returns the type which must be output by LazyZeroRData whenever it is passed a `P`.
+@inline function lazy_zero_rdata_type(::Type{P}) where {P}
+    Tdata = can_produce_zero_rdata_from_type(P) ? Nothing : rdata_type(tangent_type(P))
+    return LazyZeroRData{P, Tdata}
 end
+
+# Be lazy if we can compute the zero element given only the type, otherwise just store the
+# zero element and use it later. L is the precise type of `LazyZeroRData` that you wish to
+# construct -- very occassionally you need complete control over this, but don't want to
+# figure out for yourself whether or not construction can be performed lazily.
+@inline function lazy_zero_rdata(::Type{L}, p::P) where {L<:LazyZeroRData, P}
+    return L(can_produce_zero_rdata_from_type(P) ? nothing : zero_rdata(p))
+end
+
+# If type parameters for `LazyZeroRData` are not provided, use the defaults.
+@inline lazy_zero_rdata(p::P) where {P} = lazy_zero_rdata(lazy_zero_rdata_type(P), p)
+
+# Ensure proper specialisation on types.
+@inline lazy_zero_rdata(::Type{P}) where {P} = LazyZeroRData{Type{P}, Nothing}(nothing)
 
 @inline instantiate(::LazyZeroRData{P, Nothing}) where {P} = zero_rdata_from_type(P)
 @inline instantiate(r::LazyZeroRData) = r.data

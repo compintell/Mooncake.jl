@@ -1,9 +1,9 @@
 # Tapir
 
-[![Build Status](https://github.com/withbayes/Tapir.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/withbayes/Tapir.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![Build Status](https://github.com/compintell/Tapir.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/compintell/Tapir.jl/actions/workflows/CI.yml?query=branch%3Amain)
 [![Code Style: Blue](https://img.shields.io/badge/code%20style-blue-4495d1.svg)](https://github.com/invenia/BlueStyle)
 [![ColPrac: Contributor's Guide on Collaborative Practices for Community Packages](https://img.shields.io/badge/ColPrac-Contributor's%20Guide-blueviolet)](https://github.com/SciML/ColPrac)
-[![](https://img.shields.io/badge/docs-blue.svg)](https://withbayes.github.io/Tapir.jl/dev)
+[![](https://img.shields.io/badge/docs-blue.svg)](https://compintell.github.io/Tapir.jl/dev)
 
 The goal of the `Tapir.jl` project is to produce a reverse-mode AD package which is written entirely in Julia, which improves over both `ReverseDiff.jl` and `Zygote.jl` in several ways, and is competitive with `Enzyme.jl`.
 
@@ -102,6 +102,9 @@ These two approaches entail different tradeoffs.
 
 Before an initial release, this package was called `Taped.jl`, but that name ceased to be helpful when we stopped using a classic "Wengert list"-style type to implement AD.
 For about 48 hours is was called `Phi.jl`, but the community guidelines state that the name of packages in the general registry should generally be at least 5 characters in length.
+
+Disambiguation: when choosing the name `Tapir.jl` we were only vaguely aware of other work [of the same name](https://github.com/wsmoses/Tapir-LLVM), and didn't feel that it presented a serious name clash as it isn't AD-specific or a Julia project.
+As it turns out, there has been significant work attempting to integrate the ideas from this work into the [Julia compiler](https://github.com/JuliaLang/julia/pull/39773), so it is possible that this package name _may_ change again at _some_ point in the future.
 
 # Project Status
 

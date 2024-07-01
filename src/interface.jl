@@ -16,7 +16,9 @@ function __value_and_pullback!!(rule::R, ȳ::T, fx::Vararg{CoDual, N}) where {R
     return v, tuple_map((f, r) -> tangent(fdata(tangent(f)), r), fx, pb!!(rdata(ȳ)))
 end
 
-function __verify_sig(::DerivedRule{<:OpaqueClosure{sig}}, ::Tfx) where {sig, Tfx}
+function __verify_sig(
+    ::DerivedRule{<:MistyClosure{<:OpaqueClosure{sig}}}, ::Tfx
+) where {sig, Tfx}
     if sig != Tfx
         msg = "signature of arguments, $Tfx, not equal to signature required by rule, $sig."
         throw(ArgumentError(msg))

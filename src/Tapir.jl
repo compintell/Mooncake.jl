@@ -9,6 +9,7 @@ using
     Graphs,
     InteractiveUtils,
     LinearAlgebra,
+    MistyClosures,
     Random,
     Setfield
 
@@ -82,6 +83,7 @@ include(joinpath("rrules", "lapack.jl"))
 include(joinpath("rrules", "low_level_maths.jl"))
 include(joinpath("rrules", "misc.jl"))
 include(joinpath("rrules", "new.jl"))
+include(joinpath("rrules", "tasks.jl"))
 
 include("chain_rules_macro.jl")
 include("interface.jl")

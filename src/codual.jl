@@ -55,7 +55,7 @@ means that AD can avoid generating a stack to store this pullback, which can res
 significant performance improvements.
 """
 function NoPullback(args::Vararg{CoDual, N}) where {N}
-    return NoPullback(tuple_map(LazyZeroRData ∘ primal, args))
+    return NoPullback(tuple_map(lazy_zero_rdata ∘ primal, args))
 end
 
 @inline (pb::NoPullback)(_) = tuple_map(instantiate, pb.r)

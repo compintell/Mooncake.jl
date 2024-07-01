@@ -91,7 +91,7 @@ using Tapir:
     CoDual, NoTangent, rrule!!, is_init, zero_codual, DefaultCtx, @is_primitive, val,
     is_always_fully_initialised, get_tangent_field, set_tangent_field!, MutableTangent,
     Tangent, _typeof, rdata, NoFData, to_fwds, uninit_fdata, zero_rdata,
-    zero_rdata_from_type, CannotProduceZeroRDataFromType, LazyZeroRData, instantiate,
+    zero_rdata_from_type, CannotProduceZeroRDataFromType, lazy_zero_rdata, instantiate,
     can_produce_zero_rdata_from_type, increment_rdata!!, fcodual_type,
     verify_fdata_type, verify_rdata_type, verify_fdata_value, verify_rdata_value,
     InvalidFDataException, InvalidRDataException
@@ -900,8 +900,8 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
     @test can_make_zero != isa(rzero_from_type, CannotProduceZeroRDataFromType)
 
     # Check that we can produce a lazy zero rdata, and that it has the correct type.
-    JET.test_opt(LazyZeroRData, Tuple{P})
-    lazy_rzero = @inferred LazyZeroRData(p)
+    JET.test_opt(lazy_zero_rdata, Tuple{P})
+    lazy_rzero = @inferred lazy_zero_rdata(p)
     @test instantiate(lazy_rzero) isa R
 
     # Check incrementing the rdata component of a tangent yields the correct type.
@@ -912,7 +912,9 @@ function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)
     test_cases, memory = Tapir.generate_hand_written_rrule!!_test_cases(rng_ctor, v)
     interp = Tapir.PInterp()
     GC.@preserve memory @testset "$f, $(_typeof(x))" for (interface_only, perf_flag, _, f, x...) in test_cases
-        test_derived_rule(rng_ctor(123), f, x...; interface_only, perf_flag, interp)
+        test_derived_rule(
+            rng_ctor(123), f, x...; interface_only, perf_flag, interp, safety_on=false
+        )
     end
 end
 
@@ -922,7 +924,8 @@ function run_derived_rrule!!_test_cases(rng_ctor, v::Val)
     GC.@preserve memory @testset "$f, $(typeof(x))" for
         (interface_only, perf_flag, _, f, x...) in test_cases
         test_derived_rule(
-            rng_ctor(123), f, x...; interp, interface_only, perf_flag, is_primitive=false
+            rng_ctor(123), f, x...;
+            interp, interface_only, perf_flag, is_primitive=false, safety_on=false,
         )
     end
 end
@@ -1135,6 +1138,8 @@ type_unstable_tester_3(x::Ref{Any}) = Foo(x[])
 type_unstable_function_eval(f::Ref{Any}, x::Float64) = f[](x)
 
 type_unstable_argument_eval(@nospecialize(f), x::Float64) = f(x)
+
+abstractly_typed_unused_container(::StructFoo, x::Float64) = 5x
 
 function phi_const_bool_tester(x)
     if x > 0
@@ -1442,6 +1447,10 @@ function generate_test_functions()
         (false, :allocs, nothing, bar, 5.0, 4.0),
         (false, :allocs, nothing, unused_expression, 5.0, 1),
         (false, :none, nothing, type_unstable_argument_eval, sin, 5.0),
+        (
+            false, :none, nothing,
+            abstractly_typed_unused_container, StructFoo(5.0, [4.0]), 5.0,
+        ),
         (false, :none, (lb=1, ub=1_000), pi_node_tester, Ref{Any}(5.0)),
         (false, :none, (lb=1, ub=1_000), pi_node_tester, Ref{Any}(5)),
         (false, :allocs, nothing, intrinsic_tester, 5.0),

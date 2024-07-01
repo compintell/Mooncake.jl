@@ -21,7 +21,11 @@ temporalgps_logpdf_tester(k, x, y, s) = logpdf(build_gp(k)(x, s), y)
         interp = Tapir.PInterp()
         TestUtils.test_derived_rule(
             Xoshiro(123456), f, k, x, y, s;
-            interp, perf_flag=:none, interface_only=false, is_primitive=false
+            interp,
+            perf_flag=:none,
+            interface_only=false,
+            is_primitive=false,
+            safety_on=false,
         )
     end
 end
