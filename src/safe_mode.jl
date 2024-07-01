@@ -55,8 +55,13 @@ In particular:
 - check that the fdata in the `CoDual` returned from the rule is of the correct type for the
     primal.
 
-Additionally, dynamic checks may be performed (e.g. that an fdata array of the same size as
-its primal).
+This happens recursively.
+For example, each element of a `Vector{Any}` is compared against each element of the
+associated fdata to ensure that its type is correct, as this cannot be guaranteed from the
+static type alone.
+
+Some additional dynamic checks are also performed (e.g. that an fdata array of the same size
+as its primal).
 
 Let `rule` return `y, pb!!`, then `SafeRRule(rule)` returns `y, SafePullback(pb!!)`.
 `SafePullback` inserts the same kind of checks as `SafeRRule`, but on the reverse-pass. See
