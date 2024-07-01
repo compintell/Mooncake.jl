@@ -29,7 +29,7 @@ makedocs(
         "Understanding Tapir.jl" => [
             "Introduction" => "understanding_intro.md",
             "Algorithmic Differentiation" => "algorithmic_differentiation.md",
-            "Tapir.jl's Mathematical Interpration of Julia Functions" => "mathematical_interpretation.md",
+            "Tapir.jl's Rule System" => "mathematical_interpretation.md",
             "AD Without Control Flow" => "single_block_rmad.md",
         ],
     ]
