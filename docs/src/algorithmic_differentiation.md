@@ -131,6 +131,10 @@ _**Reverse-Mode AD: what does it do in general?**_
 Equipped with adjoints, we can express reverse-mode AD only in terms of linear operators, dispensing with the need to express everything in terms of Jacobians.
 The goal of reverse-mode AD is as follows: given a differentiable function ``f : \mathcal{X} \to \mathcal{Y}``, compute ``D f [x]^\ast (\bar{y})`` for some ``\bar{y}``.
 
+Notation: ``D f [x]^\ast`` denotes the single mathematical object which is the adjoint of ``D f [x]``.
+It is a linear function from ``\mathcal{Y}`` to ``\mathcal{X}``.
+We may occassionally write it as ``(D f [x])^\ast`` if there is some risk of confusion.
+
 We will explain _how_ reverse-mode AD goes about computing this after some worked examples.
 
 ### Some Worked Examples
