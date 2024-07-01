@@ -31,17 +31,17 @@ However, when we consider differentiating computer programmes, we will have to d
 While all of these data structures _can_ be mapped onto a flat vector in order to make sense of the Jacobian of a computer programme, this becomes very inconvenient very quickly.
 To see the problem, consider the Julia function whose input is of type `Tuple{Tuple{Float64, Vector{Float64}}, Vector{Float64}, Float64}` and whose output is of type `Tuple{Vector{Float64}, Float64}`.
 What kind of object might be use to represent the derivative of a function mapping between these two spaces?
-We certainly _can_ treat these as structured "view" into a "flat" `Vector{Float64}`s, and then define a Jacobian, but actually _finding_ this mapping is a tedious exercise even if it quite obviously exists.
+We certainly _can_ treat these as structured "view" into a "flat" `Vector{Float64}`s, and then define a Jacobian, but actually _finding_ this mapping is a tedious exercise, even if it quite obviously exists.
 
-Similarly, while "vector-Jacobian" products are usually used to explain reverse-mode AD, a more general formulation of the derivative is used all the time -- the matrix calculus discussed by [giles2008extended](@cite) and [minka2000old](@cite) (to name a couple) make use of a generalised form of derivative in order to work with functions which map to and from matrices (despite slight differences in naming conventions from text to text).
+In fact, a more general formulation of the derivative is used all the time in the context of AD -- the matrix calculus discussed by [giles2008extended](@cite) and [minka2000old](@cite) (to name a couple) make use of a generalised form of the derivative in order to work with functions which map to and from matrices (albeit there are slight differences in naming conventions from text to text), without needing to "flatten" them into vectors in order to make sense of them.
 
-Consequently, it will be much easier to avoid these kinds of "flattening" operations wherever possible.
-In order to do so, we make use of a generalised notion of the derivative.
+In general, it will be much easier to avoid "flattening" operations wherever possible.
+In order to do so, we now introduce a generalised notion of the derivative.
 
 _**Functions Between More General Spaces**_
 
 In order to avoid the difficulties described above, we consider we consider functions ``f : \mathcal{X} \to \mathcal{Y}``, where ``\mathcal{X}`` and ``\mathcal{Y}`` are _finite_ dimensional real Hilbert spaces (read: finite-dimensional vector space with an inner product, and real-valued scalars).
-This definition includes functions to / from ``\RR``, ``\RR^D``, but also real-valued matrices.
+This definition includes functions to / from ``\RR``, ``\RR^D``, but also real-valued matrices, and any other "container" for collections of real numbers.
 Furthermore, we shall see later how we can model all sorts of structured representations of data directly as such spaces.
 
 For such spaces, the derivative of ``f`` at ``x \in \mathcal{X}`` is the linear operator (read: linear function) ``D f [x] : \mathcal{X} \to \mathcal{Y}`` satisfying

@@ -1,60 +1,288 @@
-# Tapir.jl's Mathematical Intepretation of Julia Functions
+# Tapir.jl's Rule System
 
-# A Mathematical Model for a Computer Programme
+Tapir.jl's approach to AD is recursive.
+It has a single specification for _what_ it means to differentiate a Julia callable, and basically two approaches to achieving this.
+This section of the documentation explains the former.
 
-In order to make sense of what it might mean to differentiate a computer programme, we need some kind of differentiable mathematical model for said programme.
-Pearlmutter [pearlmutter2008reverse](@cite) introduced such a model, which we expand on here.
+We take an iterative approach to this explanation, starting at a high-level and adding more depth as we go.
 
-Think of a computer as a device which has a state, which we model as a vector in ``\RR^D``.
-When a programme `p` is run, it changes this state.
-We model the programme `p` with a "transition function" ``t : \RR^D \to \RR^D``, whose input is whatever the state is before running `p`, and whose output is whatever the state is after running `p`.
-If ``t`` is differentiable, then we can meaningfully define "differentiating `p`" to mean "differentiating ``t``".
-In particular, when we talk about applying reverse-mode AD to a particular Julia `function` `p`, what we mean is computing the adjoint ``D t [x]`` of the transition function ``t`` which describes `p` when the computer is in state ``x`` prior to running `p`.
+# 10,000 Foot View
 
-Consider how we might model the Julia `function`
+A rule `r(f, x)` for a `function` `f(x)` "does reverse mode AD", and executes in two phases, known as the forwards pass and the reverse pass.
+In the forwards pass a rule executes the original `function`, and does some additional book-keeping in preparation for the reverse pass.
+On the reverse pass it undoes the computation from the forwards pass, "backpropagates" the gradient w.r.t. the output of the original function by applying the adjoint of the derivative of the original `function` to it, and writes the results of this computation to the correct places.
+
+A precise mathematical model for the original function is therefore entirely crucial to this discussion, as it is needed to understand what the adjoint of its derivative is.
+
+# A Model For A Julia Function
+
+Since Julia permits the in-place modification / mutation of many data structures, we cannot make a naive translation between a Julia function and a mathematical object.
+Rather, we will have to model the state of the arguments to a function both before and after execution.
+Moreover, since a function can allocate new memory as part of execution and return it to the calling scope, we must track that too.
+
+### Consider Only Externally-Visible Effects Of Function Evaluation
+
+We wish to treat a given `function` as a black box -- we care about _what_ a `function` does, not _how_ it does it -- so we consider only the externally-visible results of executing it.
+There are two ways in which changes can be made externally visible.
+
+_**Return Value**_
+
+(This point hardly requires explanation, but for the sake of completeness we do so anyway.)
+
+The most obvious way in which a result can be made visible outside of a `function` is via its return value.
+For example, letting `bar(x) = sin(x)`, consider the function
 ```julia
-function f(x)
-    x1 = x
-    x2 = f1(x1)
-    x3 = f2(x1, x2)
-    ...
-    return fN(x1, x2, ..., xN)
+function foo(x)
+    y = bar(x)
+    z = bar(y)
+    return z
 end
 ```
-It can be thought of as a sequence of ``N`` programmes, which are run one after the other.
-If each `fn` is associated to transition functin ``t_n : \RR^D \to \RR^D`` then the transtion function associated to `f` is just ``t := t_N \circ \dots \circ t_1``.
-We can then compute the adjoint of ``t`` in the way described in the last section:
-```math
-D t [x]^\ast (\bar{y}) = [ D t_1 [x_1] \circ \dots \circ D t_N [x_N] ]^\ast (\bar{y})
-```
+The communication between the two invocations of `bar` happen via the value it `return`s.
 
-_**A Simple Worked Example**_
 
-Consider applying this framework to the Julia function
+_**Modification of arguments**_
+
+In contrast to the above, changes made by one `function` can be made available to another implicitly if it modifies the values of its arguments, even if it doesn't return anything.
+For example, consider:
 ```julia
-f(x::Float64) = sin(cos(x))
+function bar(x::Vector{Float64})
+    x .*= 2
+    return nothing
+end
+
+function foo(x::Vector{Float64})
+    bar(x)
+    bar(x)
+    return x
+end
 ```
-We first find the transition operator associated to the primitives `sin(::Float64)` and `cos(::Float64)`, then look at 
+The second call to `bar` in `foo` sees the changes made to `x` by the first call to `bar`, despite not being explicitly returned.
+
+_**No Global Mutable State**_
+
+`function`s can in principle also communicate via `global` mutable state.
+We make the decision to _not_ support this.
+
+For example, we assume `function`s of the following form cannot be encountered:
+```julia
+const a = randn(10)
+
+function bar(x)
+    a .+= x
+    return nothing
+end
+
+function foo(x)
+    bar(x)
+    return a
+end
+```
+In this example, `a` is modified by `bar`, the effect of which is visible to `foo`.
+
+For a variety of reasons this is very awkward to handle well.
+Since it's largely considered poor practice anyway, we explicitly outlaw this mode of communication between `function`s.
+
+Note that this does not preclude the use of closed-over values or callable `struct`s.
+For example, something like
+```julia
+function foo(x)
+    function bar(y)
+        x .+= y
+        return nothing
+    end
+    return bar(x)
+end
+```
+is perfectly fine.
+
+### The Model
+
+It is helpful to have a concrete example which uses both of the permissible methods to make results externally visible.
+To this end, consider the following `function`:
+```julia
+function f(x::Vector{Float64}, y::Vector{Float64}, z::Vector{Float64})
+    z .= y .* x
+    return sum(z)
+end
+```
+We draw your attention to two features of this `function`:
+1. `z` is mutated, and
+2. we allocate a new value and return it (albeit, it is probably allocated on the stack).
+
+The model we adopt for `function` `f` is a function ``f : \mathcal{X} \to \mathcal{X} \times \mathcal{A}`` where ``\mathcal{X}`` is the real finite Hilbert space associated to the arguments to `f` prior to execution, and ``\mathcal{A}`` is the real finite Hilbert space associated to any newly allocated data during execution which is externally visible after execution -- any newly allocated data which is not made visible is of no concern.
+In this example, ``\mathcal{X} = \RR^D \times \RR^D \times \RR^D`` where ``D`` is the length of `x` / `y` / `z`, and ``\mathcal{A} = \RR``.
+
+The argument to ``f`` is the arguments to `f` _before_ execution, and the output is the 2-tuple comprising the same arguments _after_ execution and the values associated to any newly allocated / created data.
+Crucially, observe that we distinguish between the state of the arguments before and after execution.
+
+For our example, the exact form of ``f`` is
+```math
+f((x, y, z)) = ((x, y, x \odot y), \sum_{d=1}^D x \odot y)
+```
+Observe that ``f`` behaves a little like a transition operator, in the that the first element of the tuple returned is the updated state of the arguments.
+
+This model is good enough for the vast majority of functions.
+Unfortunately it isn't sufficient to describe a `function` when arguments alias each other (e.g. consider the way in which this particular model is wrong if `y` aliases `z`).
+Fortunately this is only a problem in a small fraction of all cases of aliasing, so we defer discussion of this until later on.
+
+It is helpful to first look at what this model implies about the derivatives and the associated adjoints of a few Julia functions.
+
+_**`sin(x::Float64)`**_
+
+``\mathcal{X} = \RR``, ``\mathcal{A} = \RR``, ``f(x) = (x, \sin(x))``.
+
+Thus the derivative is ``D f [x] (\dot{x}) = (\dot{x}, \cos(x) \dot{x})``, and its adjoint is ``D f [x]^\ast (\bar{y}) = \bar{y}_x + \bar{y}_a \cos(x)``, where ``\bar{y} = (\bar{y}_x, \bar{y}_a)``.
+
+Observe that this result is slightly different to the last example we saw involving `sin`.
+
+_**AD With Mutable Data**_
+
+Consider again
+```julia
+function f!(x::Vector{Float64})
+    x .*= x
+    return sum(x)
+end
+```
+Our framework is able to accomodate this function, and has essentially the same solution as the last time we saw this example:
+```math
+f(x) = (x \odot x, \sum_{n=1}^N x_n^2)
+```
+
+_**Non-Mutating Functions**_
+
+A very interesting class of functions are those which do not modify their arguments.
+These are interesting because they are common, and are all that many AD frameworks like ChainRules.jl / Zygote.jl support -- by considering this class of functions, we highlight some key similarities between these distinct rule systems.
+
+As always we can model these kinds of `function`s with a function ``f : \mathcal{X} \to \mathcal{X} \times \mathcal{A}``, but we additionally have that ``f`` must have the form
+```math
+f(x) = (x, \varphi(x))
+```
+for some function ``\varphi : \mathcal{X} \to \mathcal{A}``.
+The derivative is
+```math
+[D_x f] (\dot{x}) = (\dot{x}, [D_x \varphi](\dot{x})).
+```
+Consider the usual inner product to derive the adjoint:
+```math
+\begin{align}
+    \langle \bar{y}, [D_x f] (\dot{x}) \rangle &= \langle (\bar{y}_1, \bar{y}_2), (\dot{x}, [D_x \varphi](\dot{x})) \rangle \nonumber \\
+        &= \langle \bar{y}_1, \dot{x} \rangle + \langle [D_x \varphi]^\ast (\bar{y}_2), \dot{x} \rangle \nonumber \\
+        &= \langle \bar{y}_1 + [D_x \varphi]^\ast (\bar{y}_2), \dot{x} \rangle. \nonumber
+\end{align}
+```
+So the adjoint of the derivative is
+```math
+[D_x f]^\ast (\bar{y}) =  \bar{y}_1 + [D_x \varphi]^\ast (\bar{y}_2).
+```
+We see the correct thing to do is to increment the gradient of the output -- ``\bar{y}_1`` -- by the result of applying the adjoint of the derivative of ``\varphi`` to ``\bar{y}_2``.
+In a `ChainRules.rrule` the ``\bar{y}_1`` term is always zero, but the ``D \varphi [x]^\ast (\bar{y}_2)`` term is essentially the same.
 
 
 
-_**Advantages and Limitations**_
+# The Rule Interface (Round 1)
 
-In principle, we have now associated a precise meaning to applying reverse-mode AD to the Julia `function` `f` and shown how reverse-mode AD might be applied.
-This view has several advantages.
-It places sufficiently few restrictions on what a computer programme is allowed to do that we can imagine it being a good model for most computer programmes we shall encounter.
-Moreover, it gives us a precise meaning to "differentiating a computer programme".
+Having explained in principle what it is that a rule must do, we now take a first look at the interface we use to achieve this.
+A rule for a `function` `foo` with signature
+```julia
+Tuple{typeof(foo), Float64} -> Float64
+```
+must have signature
+```julia
+Tuple{Trule, CoDual{typeof(foo), NoFData}, CoDual{Float64, NoFData}} ->
+    Tuple{CoDual{Float64, NoFData}, Trvs_pass}
+```
+For example, if we call `foo(5.0)`, it rules would be called as `rule(CoDual(foo, NoFData()), CoDual(5.0, NoFData()))`.
+The precise definition and role of `NoFData` will be explained shortly, but the general scheme is that to a rule for `foo` you must pass `foo` itself, its arguments, and some additional data for book-keeping.
+`foo` and each of its arguments are paired with this additional book-keeping data via the `CoDual` type.
 
-However, it has returned us to working with "flat" vector structures, rather than directly with the 
+The rule returns another `CoDual` (it propagates book-keeping information forwards), along with a `function` which runs the reverse pass.
+
+In a little more depth:
 
 
-# Tangents
+### Forwards Pass
+
+_**Inputs**_
+
+Each piece of each input to the primal is paired with shadow data, if it has a fixed address.
+For example, a `Vector{Float64}` argument is paired with another `Vector{Float64}`.
+The adjoint of `f` is accumulated into this shadow vector on the reverse pass.
+However, a `Float64` argument gets paired with `NoFData()`, since it is a bits type and therefore has no fixed address.
+
+_**Outputs**_
+
+A rule must return a `Tuple` of two things.
+The first thing must be a `CoDual` containing the output of the primal computation and its shadow memory (if it has any).
+The second must be a function which runs the reverse pass of AD -- this will usually be a closure of some kind.
+
+_**Functionality**_
+
+A rule must
+1. ensure that the state of the primal components of all inputs / the output are as they would have been had the primal computation been run (up to differences due to finite precision arithmetic),
+2. propagate / construct the shadow memory associated to the output (initialised to zero), and
+3. construct the function to run the reverse pass -- typically this will involve storing some quantities computed during the forwards pass.
+
+### Reverse Pass
+
+The second element of the output of a rule is a function which runs the reverse pass.
+
+_**Inputs**_
+
+The "rdata" associated to the output of the primal.
+
+_**Outputs**_
+
+The "rdata" associated to the inputs of the primal.
+
+_**Functionality**_
+
+1. undo changes made to primal state on the forwards pass.
+2. apply adjoint of derivative of primal operation, putting the results in the correct place.
+
+This description should leave you with (at least) a couple of questions.
+What is "rdata", and what is "the correct place" to put the results of applying the adjoint of the derivative?
+In order to address these, we need to discuss the types that Tapir.jl uses to represent the results of AD, and to propagate results backwards on the reverse pass.
+
+
+
+
+
+# Representing Gradients
 
 We call the argument or output of a derivative ``D f [x] : \mathcal{X} \to \mathcal{Y}`` a _tangent_, and will usually denote it with a dot over a symbol, e.g. ``\dot{x}``.
 Conversely, we call an argument or output of the adjoint of this derivative ``D f [x]^\ast : \mathcal{Y} \to \mathcal{X}`` a _gradient_, and will usually denote it with a bar over a symbol, e.g. ``\bar{y}``.
 
 Note, however, that the sets involved are the same whether dealing with a derivative or its adjoint.
 Consequently, we use the same type to represent both.
+
+
+_**Representing Gradients**_
+
+This package assigns to each type in Julia a unique `tangent_type`, to purpose of which is to contain the gradients computed during reverse mode AD.
+The extended docstring for [`tangent_type`](@ref) provides the best introduction to the types which are used to represent tangents / gradients.
+
+```@docs
+tangent_type(P)
+```
+
+
+
+_**FData and RData**_
+
+While tangents are the things used to represent gradients and are what high-level interfaces will return, they are not what gets propagated forwards and backwards by rules during AD.
+
+Rather, during AD, Tapir.jl makes a fundamental distinction between data which is identified by its address in memory (`Array`s, `mutable struct`s, etc), and data which is identified by its value (is-bits types such as `Float64`, `Int`, and `struct`s thereof).
+In particular, memory which is identified by its address gets assigned a unique location in memory in which its gradient lives (that this "unique gradient address" system is essential will become apparent when we discuss aliasing later on).
+Conversely, the gradient w.r.t. a value type resides in another value type.
+
+The following docstring provides the best in-depth explanation.
+
+```@docs
+Tapir.fdata_type(T)
+```
+
 
 
 _**A quick aside: Non-Differentiable Data**_
@@ -70,162 +298,91 @@ Morally speaking, for any non-differentiable data `x`, `x + NoTangent() == x`.
 Other than non-differentiable data, the model of data in Julia as living in a real-valued finite dimensional Hilbert space is quite reasonable.
 Therefore, we hope readers will forgive us for largely ignoring the distinction between the domain and range of a function and that of its derivative in mathematical discussions, while simultaneously drawing a distinction when discussing code.
 
+TODO: update this to cast e.g. each possible `String` as its own vector space containing only the `0` element.
+This works, even if it seems a little contrived.
 
-_**Representing Tangents**_
+# The Rule Interface (Round 2)
 
-The extended docstring for [`tangent_type`](@ref) provides the best introduction to the types which are used to represent tangents.
+Now that you've seen what data structures are used to represent gradients, we can describe in more depth the detail of how fdata and rdata are used to propagate gradients backwards on the reverse pass.
 
-```@docs
-tangent_type(P)
-```
-
-
-
-_**FData and RData**_
-
-While tangents are the things used to represent gradients, they are not strictly what gets propagated forwards and backwards by rules during AD.
-Rather, they are split into fdata and rdata, and these are passed around.
-
-```@docs
-Tapir.fdata_type(T)
-```
-
-
-
-# The Rule Abstraction
-
-A rule must return a `CoDual` and a function to run the reverse-pass, known as the pullback.
-Upon exit from the rule, it must be true that
-1. the state of the arguments / output are the same as they would be had the primal been run, and
-2. the uniqueness of the mapping between address-identified primals and their fdata is maintained.
-
-Upon exit from the pullback, it must be true that
-1. the primal state is as it was before running the rule,
-2. the fdata for the arguments has been incremented by the fdata in ``D f[x]^\ast (\bar{y})``, and 
-3. the rdata for the arguments is equal to the rdata in ``D f[x]^\ast (\bar{y})``.
-
-
-Tapir.jl makes use of a rule system which is at first glance similar to the `rrule` function offered by ChainRules.jl.
-However, owing to Tapir.jl's support for mutation (e.g. differentiating through functions which write to arrays) and high degree of precision around the types used to represent (co)-tangent-like data, the number of situations in which the two are identical are actually rather small.
-
-Nevertheless, we begin this explanation with an example which should be familiar to anyone who has used ChainRules.jl and seen its rrule.
-Once this example has been explained, we move into new territory.
-
-### Functions of Scalars: from ChainRules.rrule to Tapir.rrule!!
-
-Consider the simple Julia function
+Consider the `function`
 ```julia
-mul(a::Float64, b::Float64) = a * b
+foo(x::Tuple{Float64, Vector{Float64}}) = x[1] + sum(x[2])
 ```
+The fdata for `x` is a `Tuple{NoFData, Vector{Float64}}`, and its rdata is a `Tuple{Float64, NoRData}`.
+The function returns a `Float64`, which has no fdata, and whose rdata is `Float64`.
+So on the forwards pass there is really nothing that needs to happen with the fdata for `x`.
 
-A `ChainRules.rrule` for this might look something like
-```julia
-function ChainRules.rrule(::typeof(mul), a::Float64, b::Float64)
-    mul_pullback(dc::Float64) = NoTangent(), dc * b, dc * a
-    return a * b, mul_pullback
-end
+Under the framework introduced above, the model for this `function` is
+```math
+f(x) = (x, x_1 + \sum_{n=1}^N (x_2)_n)
 ```
-
-The corresponding `Tapir.rrule!!` would be something like
-```julia
-function Tapir.rrule!!(::CoDual{typeof(mul)}, a::CoDual{Float64}, b::CoDual{Float64})
-    _a = primal(a)
-    _b = primal(b)
-    mul_pullback!!(dc::Float64) = NoRData(), dc * _b, dc * _a
-    return CoDual(_a * _b, NoFData()), mul_pullback!
-end
+where the vector in the second element of `x` is of length ``N``.
+Now, following our usual steps, the derivative is
+```math
+[D_x f](\dot{x}) = (\dot{x}, \dot{x}_1 + \sum_{n=1}^N (\dot{x}_2)_n)
 ```
-
-The core differences between the `rrule` and `rrule!!` are:
-1. each argument is a `CoDual`, which contains the primal and one other piece of data (more on this later),
-1. we must extract the primal values from `a` and `b` using the `primal` function in order to access them,
-1. `NoTangent()` is replaced by `NoRData()`, and
-1. we must return another `CoDual`, rather than just the primal value (more on this later).
-
-The point of this example is to highlight that `Tapir.rrule!!`s look a lot like `ChainRules.rrule`s in some situations, so some of your existing knowledge should transfer over.
-
-### Functions of Vectors
-
-We now turn to the obvious question: why do `Tapir.rrule!!`s differ from `ChainRules.rrule`s?
-The short answer is that Tapir.jl requires that each unique primal memory address associated to differentiable data be associated to a unique tangent (a.k.a. shadow) memory address.
-(See [Why Unique Memory Address](@ref) to understand why this is necessary.)
-
-To see how this is achieved, consider the function
-```julia
-function set_1!(x::Vector{Float64}, y::Float64)
-    x[1] = y
-    return x
-end
+A gradient for this is a tuple ``(\bar{y}_x, \bar{y}_a)`` where ``\bar{y}_a \in \RR`` and ``\bar{y}_x \in \RR \times \RR^N``.
+A quick derivation will show that the adjoint is
+```math
+[D_x f]^\ast(\bar{y}) = ((\bar{y}_x)_1 + \bar{y}_a, (\bar{y}_x)_2 + \bar{y}_a \mathbf{1})
 ```
-A valid `Tapir.rrule!!` for this function given below.
-There are a lot of concepts introduced here, so you'll need to hop back and forth between this and the text below which explains everything.
+where ``\mathbf{1}`` is the vector of length ``N`` in which each element is equal to ``1``.
+(Observe that this agrees with the result we derived earlier for functions which don't mutate their arguments).
+
+Now that we know what the adjoint is, we'll write down the `rrule!!`, and then explain what is going on in terms of the adjoint.
 ```julia
-function Tapir.rrule!!(
-    ::CoDual{typeof(set_1!)}, x::CoDual{Vector{Float64}}, y::CoDual{Float64}
-)
-    # Extract the primal and "fdata" from x.
-    px = primal(x)
-    dx = tangent(x)
-
-    # Store the current values.
-    px_1_old = px[1]
-    dx_1_old = dx[1]
-
-    # Set x_p[1] to `y` and zero-out x_f[1].
-    px[1] = primal(y)
-    dx[1] = 0.0
-
-    function set_1_pullback!!(::NoRData)
-
-        # The (co)tangent to `y` is just the value in the first position of x_f.
-        dy = dx
-
-        # We _must_ undo any changes which occur on the forwards-pass, both to the primal
-        # and the fdata (the forwards-component of the tangent).
-        px[1] = px_1_old
-        dx[1] = dx_1_old
-
-        # There's nothing to propagate backwards for `f` because it's non-differentiable.
-        # It has "no reverse data", hence `NoRData`.
-        df = NoRData()
-
-        # There's nothing to propagate backwards for `x`, because its tangent is entirely
-        # represented by `dx` on the forwards-pass, hence `NoRData`.
-        dx = NoRData()
-
-        return df, dx, dy
+function rrule!!(::CoDual{typeof(foo)}, x::CoDual{Tuple{Float64, Vector{Float64}}})
+    dx_fdata = x.tangent[2]
+    function dfoo_adjoint(dy::Float64)
+        dx_fdata[2] .+= dy
+        dx_1_rdata = dy
+        dx_rdata = (dx_1_rdata, NoRData())
+        return NoRData(), dx_rdata
     end
-
-    # Just return x (the CoDual) -- this propagates forwards the correct unique tangent
-    # memory for `x`.
-    return x, set_1_pullback!!
+    x_p = x.primal
+    return CoDual(x_p[1] + sum(x_p[2]), NoFData()), dfoo_adjoint
 end
 ```
-Let's unpack the above:
+where `dy` is the rdata for the output to `foo`.
 
-#### Memory Propagation
+Observe that the forwards pass:
+1. computes the result of the initial function, and
+2. pulls out the fdata for the `Vector{Float64}` component of the argument.
 
-We stated at the top of this section that each unique address associated to differentiable data must have a unique tangent memory address associated to it.
-To see how this rule preserves this, consider the function
-```julia
-g(x::Vector{Float64}, y::Float64) = x, set_1!(x, y)
-```
-The output of `g` is a `Tuple` with the same `Vector{Float64}` in each element.
-Therefore, during AD, they _must_ be associated to the same tangent address.
-Happily, simple by by returning `x` at the end of the `rrule!!` for `set_1!` we ensure that this happens.
+As promised, the forwards pass really has nothing to do with the adjoint.
+It's just book-keeping and running the primal computation.
 
-#### The other field in a `CoDual`
+The reverse pass:
+1. increments each element of `dx_fdata[2]` by `dy` -- this corresponds to ``(\bar{y}_x)_2 + \bar{y}_a \mathbf{1}`` in the adjoint,
+2. sets `dx_1_rdata` to `dy` -- this corresponds ``(\bar{y}_x)_1 + \bar{y}_a`` subject to the constraint that ``(\bar{y}_x)_1 = 0``,
+3. constructs the rdata for `x` -- this is essentially just book-keeping.
 
-In this example, the other field in the `CoDual` associated to `x` must contain a `Vector{Float64}`, which represents the tangent to `x`.
-We call this the _fdata_ ("forwards data") associated to `x`.
-We didn't show it, but the fdata associated to `y` is `NoFData` ("no forwards data"), indicating that there is no additional data associated to `y` on the forwards-pass.
+Each of these items serve to demonstrate more general points.
+The first that, upon entry into the reverse pass, all fdata values correspond to gradients for the arguments / output of `f` "upon exit" (for the components of these which are identified by their address), and once the reverse-pass finishes running, they must contain the gradients w.r.t. the arguments of `f` "upon entry".
 
-Why is this the case?
+The second that we always assume that the components of ``\bar{y}_x`` which are identified by their value have zero-rdata.
+
+The third is that the components of the arguments of `f` which are identified by their value must have rdata passed back explicitly by a rule, while the components of the arguments to `f` which are identified by their address get their gradients propagated back implicitly (i.e. via the in-place modification of fdata).
 
 
-#### Summary
+# Testing
 
-Note that this very simple function does _not_ have a meaningful `ChainRules.rrule` counterpart because it mutates (modifies) `x`, and `ChainRules.rrule` does not support mutation.
+Tapir.jl has an almost entirely automated system for testing rules -- `Tapir.TestUtils.test_rrule!!` and `Tapir.TestUtils.test_derived_rule`.
+You should absolutely make use of these when writing rules.
+
+TODO: improve docstring for testing functionality.
+
+
+
+# Summary
+
+In this section we have covered the rule system.
+Every callable object / function in the Julia language is differentiated using rules with this interface, whether they be hand-written `rrule!!`s, or rules derived by Tapir.jl.
+
+At this point you should be equipped with enough information to understand what a rule in Tapir.jl does, and how you can write your own ones.
+Later sections will explain how Tapir.jl goes about deriving rules itself in a recursive manner, and introduce you to some of the internals.
+
 
 
 
@@ -239,12 +396,10 @@ Note that this very simple function does _not_ have a meaningful `ChainRules.rru
 
 Why does Tapir.jl insist that each primal type `P` be paired with a single tangent type `T`, as opposed to being more permissive.
 There are a few notable reasons:
-1. To provide a precise interface. Rules pass fdata around on the forwards-pass and rdata on the reverse-pass -- being able to make strong assumptions about the type of the fdata / rdata given the primal type makes implementing rules much easier in practice.
-1. Conditional type stability. We wish to have a high degree of confidence that if the primal code is type-stable, then the AD code will also be. It is straightforward to construct type stable primal codes which have type-unstable forwards- and reverse-passes if you permit there to be more than one fdata / rdata type for a given primal. So while uniqueness is certainly not sufficient on its own to guarantee conditional type stability, it is probably necessary in general.
+1. To provide a precise interface. Rules pass fdata around on the forwards pass and rdata on the reverse pass -- being able to make strong assumptions about the type of the fdata / rdata given the primal type makes implementing rules much easier in practice.
+1. Conditional type stability. We wish to have a high degree of confidence that if the primal code is type-stable, then the AD code will also be. It is straightforward to construct type stable primal codes which have type-unstable forwards and reverse passes if you permit there to be more than one fdata / rdata type for a given primal. So while uniqueness is certainly not sufficient on its own to guarantee conditional type stability, it is probably necessary in general.
 1. Test-case generation and coverage. There being a unique tangent / fdata / rdata type for each primal makes being confident that a given rule is being tested thoroughly much easier. For a given primal, rather than there being many possible input / output types to consider, there is just one.
 
 This topic, in particular what goes wrong with permissive tangent type systems like those employed by ChainRules, deserves a more thorough treatment -- hopefully someone will write something more expansive on this topic at some point.
 
-
-### Why Unique Memory Address
 
