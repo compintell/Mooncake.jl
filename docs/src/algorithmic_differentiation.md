@@ -48,7 +48,10 @@ For such spaces, the derivative of ``f`` at ``x \in \mathcal{X}`` is the linear 
 ```math
 \text{d}f = D f [x] \, (\text{d} x)
 ```
+The purpose of this linear operator is to provide a linear approximation to ``f`` which is accurate for arguments which are very close to ``x``.
+
 Please note that ``D f [x]`` is a single mathematical object, despite the fact that 3 separate symbols are used to denote it -- ``D f [x] (\dot{x})`` denotes the application of the function ``D f [x]`` to argument ``\dot{x}``.
+Furthermore, the dot-notation (``\dot{x}``) does not have anything to do with time-derivatives, it is simply common notation used in the AD literature to denote the arguments of derivatives.
 
 So, instead of thinking of the derivative as a number or a matrix, we think about it as a _function_.
 We can express the previous notions of the derivative in this language.
