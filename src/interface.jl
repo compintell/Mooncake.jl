@@ -1,6 +1,8 @@
 """
     __value_and_pullback!!(rule, ȳ, f::CoDual, x::CoDual...)
 
+*Note:* this is not part of the public Tapir.jl interface, and may change without warning.
+
 In-place version of `value_and_pullback!!` in which the arguments have been wrapped in
 `CoDual`s. Note that any mutable data in `f` and `x` will be incremented in-place. As such,
 if calling this function multiple times with different values of `x`, should be careful to
@@ -34,7 +36,9 @@ __verify_sig(::typeof(rrule!!), fx::Tuple) = nothing
 """
     __value_and_gradient!!(rule, f::CoDual, x::CoDual...)
 
-Equivalent to `value_and_pullback!!(rule, 1.0, f, x...)` -- assumes `f` returns a `Float64`.
+*Note:* this is not part of the public Tapir.jl interface, and may change without warning.
+
+Equivalent to `__value_and_pullback!!(rule, 1.0, f, x...)` -- assumes `f` returns a `Float64`.
 
 ```jldoctest
 # Set up the problem.
