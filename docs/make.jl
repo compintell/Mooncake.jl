@@ -33,6 +33,7 @@ makedocs(
             "AD Without Control Flow" => "single_block_rmad.md",
         ],
         "Known Limitations" => "known_limitations.md",
+        "Safe Mode" => "safe_mode.md",
     ]
 )
 
