@@ -32,6 +32,7 @@ makedocs(
             "Tapir.jl's Rule System" => "mathematical_interpretation.md",
             "AD Without Control Flow" => "single_block_rmad.md",
         ],
+        "Known Limitations" => "known_limitations.md",
     ]
 )
 
