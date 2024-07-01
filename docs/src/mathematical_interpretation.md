@@ -162,19 +162,19 @@ f(x) = (x, \varphi(x))
 for some function ``\varphi : \mathcal{X} \to \mathcal{A}``.
 The derivative is
 ```math
-[D_x f] (\dot{x}) = (\dot{x}, [D_x \varphi](\dot{x})).
+D f [x] (\dot{x}) = (\dot{x}, D \varphi [x](\dot{x})).
 ```
 Consider the usual inner product to derive the adjoint:
 ```math
 \begin{align}
-    \langle \bar{y}, [D_x f] (\dot{x}) \rangle &= \langle (\bar{y}_1, \bar{y}_2), (\dot{x}, [D_x \varphi](\dot{x})) \rangle \nonumber \\
-        &= \langle \bar{y}_1, \dot{x} \rangle + \langle [D_x \varphi]^\ast (\bar{y}_2), \dot{x} \rangle \nonumber \\
-        &= \langle \bar{y}_1 + [D_x \varphi]^\ast (\bar{y}_2), \dot{x} \rangle. \nonumber
+    \langle \bar{y}, D f [x] (\dot{x}) \rangle &= \langle (\bar{y}_1, \bar{y}_2), (\dot{x}, D \varphi [x](\dot{x})) \rangle \nonumber \\
+        &= \langle \bar{y}_1, \dot{x} \rangle + \langle D \varphi [x]^\ast (\bar{y}_2), \dot{x} \rangle \nonumber \\
+        &= \langle \bar{y}_1 + D \varphi [x]^\ast (\bar{y}_2), \dot{x} \rangle. \nonumber
 \end{align}
 ```
 So the adjoint of the derivative is
 ```math
-[D_x f]^\ast (\bar{y}) =  \bar{y}_1 + [D_x \varphi]^\ast (\bar{y}_2).
+D f [x]^\ast (\bar{y}) =  \bar{y}_1 + D \varphi [x]^\ast (\bar{y}_2).
 ```
 We see the correct thing to do is to increment the gradient of the output -- ``\bar{y}_1`` -- by the result of applying the adjoint of the derivative of ``\varphi`` to ``\bar{y}_2``.
 In a `ChainRules.rrule` the ``\bar{y}_1`` term is always zero, but the ``D \varphi [x]^\ast (\bar{y}_2)`` term is essentially the same.
