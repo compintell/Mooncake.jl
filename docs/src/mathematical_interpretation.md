@@ -320,12 +320,12 @@ f(x) = (x, x_1 + \sum_{n=1}^N (x_2)_n)
 where the vector in the second element of `x` is of length ``N``.
 Now, following our usual steps, the derivative is
 ```math
-[D_x f](\dot{x}) = (\dot{x}, \dot{x}_1 + \sum_{n=1}^N (\dot{x}_2)_n)
+D f [x](\dot{x}) = (\dot{x}, \dot{x}_1 + \sum_{n=1}^N (\dot{x}_2)_n)
 ```
 A gradient for this is a tuple ``(\bar{y}_x, \bar{y}_a)`` where ``\bar{y}_a \in \RR`` and ``\bar{y}_x \in \RR \times \RR^N``.
 A quick derivation will show that the adjoint is
 ```math
-[D_x f]^\ast(\bar{y}) = ((\bar{y}_x)_1 + \bar{y}_a, (\bar{y}_x)_2 + \bar{y}_a \mathbf{1})
+D f [x]^\ast(\bar{y}) = ((\bar{y}_x)_1 + \bar{y}_a, (\bar{y}_x)_2 + \bar{y}_a \mathbf{1})
 ```
 where ``\mathbf{1}`` is the vector of length ``N`` in which each element is equal to ``1``.
 (Observe that this agrees with the result we derived earlier for functions which don't mutate their arguments).
