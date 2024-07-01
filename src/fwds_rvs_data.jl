@@ -39,7 +39,7 @@ Given a tangent type `T`, you can find out what type its fdata and rdata must be
 A consequence of this is that there is exactly one valid fdata type and rdata type for each primal type.
 
 Given a tangent `t`, you can get its fdata and rdata using `f = fdata(t)` and `r = rdata(t)` respectively.
-f can be re-combined to recover the original tangent using the binary version of `tangent`: `tangent(f, r)`.
+`f` and `r` can be re-combined to recover the original tangent using the binary version of `tangent`: `tangent(f, r)`.
 It must always hold that
 ```julia
 tangent(fdata(t), rdata(t)) === t
