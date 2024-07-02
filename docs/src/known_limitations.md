@@ -123,9 +123,6 @@ Instead, you will need to use lower-level (internal) functionality, such as `Tap
 
 Honestly, your best bet is just to avoid differentiating functions whose arguments are pointers if you can.
 
-
-
-
 ```@meta
 DocTestSetup = nothing
 ```

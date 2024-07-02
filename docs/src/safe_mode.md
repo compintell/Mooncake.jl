@@ -1,5 +1,11 @@
 # Safe Mode
 
+```@meta
+DocTestSetup = quote
+    using Tapir, ADTypes
+end
+```
+
 
 _**The Problem**_
 
@@ -24,7 +30,9 @@ Worst of all, in some cases it could plausibly cause a segfault, which is more-o
 
 _**The Solution**_
 
-Safe mode is implemented via `SafeRRule`:
+Check that the types of the fdata / rdata associated to arguments are exactly what `tangent_type` / `fdata_type` / `rdata_type` require upon entry to / exit from rules and pullbacks.
+
+This is implemented via `SafeRRule`:
 ```@docs
 Tapir.SafeRRule
 ```
@@ -32,4 +40,20 @@ Tapir.SafeRRule
 You can straightforwardly enable it when building a rule via the `safety_on` kwarg in the following:
 ```@docs
 Tapir.build_rrule
+```
+
+When using ADTypes.jl, you can choose whether or not to use it via the `safe_mode` kwarg:
+```jldoctest
+julia> AutoTapir(safe_mode=false)
+AutoTapir(safe_mode=false)
+```
+
+### When Should You Use Safe Mode?
+
+Only use `safe_mode` when debugging a problem.
+This is because is has substantial performance implications.
+
+
+```@meta
+DocTestSetup = nothing
 ```

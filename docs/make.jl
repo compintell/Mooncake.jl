@@ -5,7 +5,8 @@ DocMeta.setdocmeta!(
     :DocTestSetup,
     quote
         using Tapir
-    end,
+    end;
+    recursive=true,
 )
 
 makedocs(
