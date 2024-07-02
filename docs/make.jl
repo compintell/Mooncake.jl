@@ -30,7 +30,6 @@ makedocs(
             "Introduction" => "understanding_intro.md",
             "Algorithmic Differentiation" => "algorithmic_differentiation.md",
             "Tapir.jl's Rule System" => "mathematical_interpretation.md",
-            "AD Without Control Flow" => "single_block_rmad.md",
         ],
         "Known Limitations" => "known_limitations.md",
         "Safe Mode" => "safe_mode.md",
