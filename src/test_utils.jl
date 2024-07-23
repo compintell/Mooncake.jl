@@ -86,7 +86,7 @@ interfaces that this package defines have been implemented correctly.
 """
 module TestUtils
 
-using JET, Random, Tapir, Test, InteractiveUtils
+using Random, Tapir, Test, InteractiveUtils
 using Tapir:
     CoDual, NoTangent, rrule!!, is_init, zero_codual, DefaultCtx, @is_primitive, val,
     is_always_fully_initialised, get_tangent_field, set_tangent_field!, MutableTangent,
@@ -95,6 +95,16 @@ using Tapir:
     can_produce_zero_rdata_from_type, increment_rdata!!, fcodual_type,
     verify_fdata_type, verify_rdata_type, verify_fdata_value, verify_rdata_value,
     InvalidFDataException, InvalidRDataException
+
+struct Shim end
+
+function test_opt(::Any, args...)
+    throw(error("Load JET to use this function."))
+end
+
+function report_opt(::Any, tt)
+    throw(error("Load JET to use this function."))
+end
 
 has_equal_data(x::T, y::T; equal_undefs=true) where {T<:String} = x == y
 has_equal_data(x::Type, y::Type; equal_undefs=true) = x == y
@@ -384,15 +394,15 @@ function test_rrule_performance(
     if performance_checks_flag in (:stability, :stability_and_allocs)
 
         # Test primal stability.
-        JET.test_opt(primal(f_f̄), map(_typeof ∘ primal, x_x̄))
+        test_opt(Shim(), primal(f_f̄), map(_typeof ∘ primal, x_x̄))
 
         # Test forwards-pass stability.
-        JET.test_opt(rule, (_typeof(to_fwds(f_f̄)), map(_typeof ∘ to_fwds, x_x̄)...))
+        test_opt(Shim(), rule, (_typeof(to_fwds(f_f̄)), map(_typeof ∘ to_fwds, x_x̄)...))
 
         # Test reverse-pass stability.
         y_ȳ, pb!! = rule(to_fwds(f_f̄), map(to_fwds, _deepcopy(x_x̄))...)
         rvs_data = Tapir.rdata(zero_tangent(primal(y_ȳ), tangent(y_ȳ)))
-        JET.test_opt(pb!!, (_typeof(rvs_data), ))
+        test_opt(Shim(), pb!!, (_typeof(rvs_data), ))
     end
 
     if performance_checks_flag in (:allocs, :stability_and_allocs)
@@ -679,8 +689,8 @@ function test_tangent_performance(rng::AbstractRNG, p::P) where {P}
 
     # Check there are no allocations when there ought not to be.
     if !__tangent_generation_should_allocate(P)
-        JET.test_opt(Tuple{typeof(zero_tangent), P})
-        JET.test_opt(Tuple{typeof(randn_tangent), Xoshiro, P})
+        test_opt(Shim(), Tuple{typeof(zero_tangent), P})
+        test_opt(Shim(), Tuple{typeof(randn_tangent), Xoshiro, P})
     end
 
     # `increment!!` should always infer.
@@ -713,7 +723,10 @@ function test_set_tangent_field!_performance(t1::T, t2::T) where {V, T<:MutableT
 
         # Int mode.
         _set_tangent_field!(t1, Val(n), v)
-        JET.@report_opt _set_tangent_field!(t1, Val(n), v)
+        report_opt(
+            Shim(),
+            Tuple{typeof(_set_tangent_field!), typeof(t1), Val{n}, typeof(v)},
+        )
 
         if all(n -> !(fieldtype(V, n) <: Tapir.PossiblyUninitTangent), 1:fieldcount(V))
             i = Val(n)
@@ -724,7 +737,10 @@ function test_set_tangent_field!_performance(t1::T, t2::T) where {V, T<:MutableT
         # Symbol mode.
         s = Val(fieldname(V, n))
         @inferred _set_tangent_field!(t1, s, v)
-        JET.@report_opt _set_tangent_field!(t1, s, v)
+        report_opt(
+            Shim(),
+            Tuple{typeof(_set_tangent_field!), typeof(t1), typeof(s), typeof(v)},
+        )
 
         if all(n -> !(fieldtype(V, n) <: Tapir.PossiblyUninitTangent), 1:fieldcount(V))
             _set_tangent_field!(t1, s, v)
@@ -742,13 +758,13 @@ function test_get_tangent_field_performance(t::Union{MutableTangent, Tangent})
 
         # Int mode.
         i = Val(n)
-        JET.@report_opt _get_tangent_field(t, i)
+        report_opt(Shim(), Tuple{typeof(_get_tangent_field), typeof(t), typeof(i)})
         @inferred _get_tangent_field(t, i)
         @test count_allocs(_get_tangent_field, t, i) == 0
 
         # Symbol mode.
         s = Val(fieldname(V, n))
-        JET.@report_opt _get_tangent_field(t, s)
+        report_opt(Shim(), Tuple{typeof(_get_tangent_field), typeof(t), typeof(s)})
         @inferred _get_tangent_field(t, s)
         @test count_allocs(_get_tangent_field, t, s) == 0
     end
@@ -894,13 +910,13 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
 
     # Check that when the zero element is asked from the primal type alone, the result is
     # either an instance of R _or_ a `CannotProduceZeroRDataFromType`.
-    JET.test_opt(zero_rdata_from_type, Tuple{Type{P}})
+    test_opt(Shim(), zero_rdata_from_type, Tuple{Type{P}})
     rzero_from_type = @inferred zero_rdata_from_type(P)
     @test rzero_from_type isa R || rzero_from_type isa CannotProduceZeroRDataFromType
     @test can_make_zero != isa(rzero_from_type, CannotProduceZeroRDataFromType)
 
     # Check that we can produce a lazy zero rdata, and that it has the correct type.
-    JET.test_opt(lazy_zero_rdata, Tuple{P})
+    test_opt(Shim(), lazy_zero_rdata, Tuple{P})
     lazy_rzero = @inferred lazy_zero_rdata(p)
     @test instantiate(lazy_rzero) isa R
 
