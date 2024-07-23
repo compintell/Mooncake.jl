@@ -67,4 +67,6 @@ function ADgradient(x::ADTypes.AutoTapir, ℓ)
     return ADgradient(Val(:Tapir), ℓ; safety_on=x.safe_mode)
 end
 
+Base.parent(x::TapirGradientLogDensity) = Tapir.primal(x.ℓ)
+
 end
