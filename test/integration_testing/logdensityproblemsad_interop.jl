@@ -21,4 +21,5 @@ test_gradient(x) = -2 .* x
     end
 
     @test ADgradient(ADTypes.AutoTapir(safe_mode=false), l) isa typeof(∇l)
+    @test parent(∇l) === l
 end
