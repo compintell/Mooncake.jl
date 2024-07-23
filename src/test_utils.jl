@@ -713,7 +713,8 @@ function test_set_tangent_field!_performance(t1::T, t2::T) where {V, T<:MutableT
 
         # Int mode.
         _set_tangent_field!(t1, Val(n), v)
-        JET.@report_opt _set_tangent_field!(t1, Val(n), v)
+        # JET.@report_opt _set_tangent_field!(t1, Val(n), v)
+        JET.report_opt(Tuple{typeof(_set_tangent_field!), typeof(t1), Val{n}, typeof(v)})
 
         if all(n -> !(fieldtype(V, n) <: Tapir.PossiblyUninitTangent), 1:fieldcount(V))
             i = Val(n)
@@ -724,7 +725,8 @@ function test_set_tangent_field!_performance(t1::T, t2::T) where {V, T<:MutableT
         # Symbol mode.
         s = Val(fieldname(V, n))
         @inferred _set_tangent_field!(t1, s, v)
-        JET.@report_opt _set_tangent_field!(t1, s, v)
+        # JET.@report_opt _set_tangent_field!(t1, s, v)
+        JET.report_opt(Tuple{typeof(set_tangent_field!), typeof(t1), typeof(s), typeof(v)})
 
         if all(n -> !(fieldtype(V, n) <: Tapir.PossiblyUninitTangent), 1:fieldcount(V))
             _set_tangent_field!(t1, s, v)
@@ -742,13 +744,15 @@ function test_get_tangent_field_performance(t::Union{MutableTangent, Tangent})
 
         # Int mode.
         i = Val(n)
-        JET.@report_opt _get_tangent_field(t, i)
+        JET.report_opt(Tuple{typeof(_get_tangent_field), typeof(t), typeof(i)})
+        # JET.@report_opt _get_tangent_field(t, i)
         @inferred _get_tangent_field(t, i)
         @test count_allocs(_get_tangent_field, t, i) == 0
 
         # Symbol mode.
         s = Val(fieldname(V, n))
-        JET.@report_opt _get_tangent_field(t, s)
+        JET.report_opt(Tuple{typeof(_get_tangent_field), typeof(t), typeof(s)})
+        # JET.@report_opt _get_tangent_field(t, s)
         @inferred _get_tangent_field(t, s)
         @test count_allocs(_get_tangent_field, t, s) == 0
     end
