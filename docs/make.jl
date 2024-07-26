@@ -4,7 +4,7 @@ DocMeta.setdocmeta!(
     Tapir,
     :DocTestSetup,
     quote
-        using Tapir
+        using Random, Tapir
     end;
     recursive=true,
 )

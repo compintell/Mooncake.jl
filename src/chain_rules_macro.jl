@@ -1,7 +1,7 @@
 _to_rdata(::ChainRulesCore.NoTangent) = NoRData()
 _to_rdata(dx::Float64) = dx
 
-"""
+@doc"""
     @from_rrule ctx sig
 
 Creates a `Tapir.rrule!!` from a `ChainRulesCore.rrule`. `ctx` is the type of the context in
@@ -19,7 +19,7 @@ Use this function with care. It has only been tested for `Float64` arguments and
 whose `tangent_type` is `NoTangent`, and it is entirely probable that it won't work for
 arguments which aren't `Float64` or non-differentiable.
 
-You should definitely make use of `TestUtils.test_rrule!!` to verify that the rule created
+You should definitely make use of [`TestUtils.test_rule`](@ref) to verify that the rule created
 works as intended.
 """
 macro from_rrule(ctx, sig)

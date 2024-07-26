@@ -13,6 +13,6 @@
         (false, :stability, erfcx, 0.0),
         (false, :stability, erfcx, -0.5),
     ]
-        test_rrule!!(Xoshiro(123456), f, x...; interface_only, perf_flag)
+        test_rule(Xoshiro(123456), f, x...; interface_only, perf_flag)
     end
 end

@@ -40,7 +40,7 @@ using AbstractGPs, KernelFunctions
             (logpdf, fx, rand(fx)),
         ]
             @info typeof(x)
-            TestUtils.test_derived_rule(
+            TestUtils.test_rule(
                 sr(123456), x...;
                 interp,
                 perf_flag=:none,

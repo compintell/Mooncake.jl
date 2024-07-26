@@ -85,7 +85,7 @@
         end),
     )
         @info "$(_typeof((f, x...)))"
-        TestUtils.test_derived_rule(
+        TestUtils.test_rule(
             Xoshiro(123456), f, x...;
             safety_on=false,
             interp,

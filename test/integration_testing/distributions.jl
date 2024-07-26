@@ -216,7 +216,7 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
         (false, LKJ(5, 1.1), rand(sr(123456), LKJ(5, 1.1))),
     ]
         @info "$(map(typeof, (d, x)))"
-        TestUtils.test_derived_rule(
+        TestUtils.test_rule(
             sr(123456), logpdf, d, x;
             interp, perf_flag=:none, interface_only, is_primitive=false,
         )
@@ -263,7 +263,7 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
         ),
     ]
         @info "$name"
-        TestUtils.test_derived_rule(
+        TestUtils.test_rule(
             sr(123456), f, x...;
             interp, perf_flag=:none, interface_only, is_primitive=false,
         )

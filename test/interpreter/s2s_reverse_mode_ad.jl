@@ -199,7 +199,7 @@ end
 
         sig = _typeof((f, x...))
         @info "$n: $sig"
-        TestUtils.test_derived_rule(
+        TestUtils.test_rule(
             Xoshiro(123456), f, x...; interp, perf_flag, interface_only, is_primitive=false
         )
 
@@ -235,7 +235,7 @@ end
     @testset "regression tests" begin
 
         # 184
-        TestUtils.test_derived_rule(
+        TestUtils.test_rule(
             Xoshiro(123456), S2SGlobals.f, S2SGlobals.A(2 * ones(3)), ones(3);
             interp, perf_flag=:none, interface_only=false, is_primitive=false,
         )

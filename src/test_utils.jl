@@ -301,7 +301,7 @@ _deepcopy(x::Module) = x
 
 rrule_output_type(::Type{Ty}) where {Ty} = Tuple{Tapir.fcodual_type(Ty), Any}
 
-function test_rrule_interface(f_f̄, x_x̄...; is_primitive, ctx::C, rule) where {C}
+function test_rrule_interface(f_f̄, x_x̄...; rule)
     @nospecialize f_f̄ x_x̄
 
     # Pull out primals and run primal computation.
@@ -310,12 +310,6 @@ function test_rrule_interface(f_f̄, x_x̄...; is_primitive, ctx::C, rule) where
     x_x̄ = map(_deepcopy, x_x̄)
     x = map(primal, x_x̄)
     x̄ = map(tangent, x_x̄)
-
-    # Verify that the function to which the rrule applies is considered a primitive.
-    # It is not clear that this really belongs here to be frank.
-    if is_primitive
-        @test Tapir.is_primitive(C, _typeof((f, x...)))
-    end
 
     # Run the primal programme. Bail out early if this doesn't work.
     y = try
@@ -421,17 +415,17 @@ function test_rrule_performance(
     end
 end
 
-"""
-    test_rrule!!(
-        rng::AbstractRNG, x...;
+@doc"""
+    test_rule(
+        rng, x...;
         interface_only=false,
-        is_primitive=true,
+        has_rrule!!=true,
         perf_flag::Symbol,
         ctx=DefaultCtx(),
-        rule=rrule!!,
+        safety_on=false,
     )
 
-Run standardised tests on the `rrule!!` for `x`.
+Run standardised tests on the `rule` for `x`.
 The first element of `x` should be the primal function to test, and each other element a
 positional argument.
 In most cases, elements of `x` can just be the primal values, and `randn_tangent` can be
@@ -439,37 +433,39 @@ relied upon to generate an appropriate tangent to test. Some notable exceptions 
 though, in partcular `Ptr`s. In this case, the argument for which `randn_tangent` cannot be
 readily defined should be a `CoDual` containing the primal, and a _manually_ constructed
 tangent field.
+
+This function uses [`Tapir.build_rrule`](@ref) to construct a rule. This will use an
+`rrule!!` if one exists, and derive a rule otherwise.
 """
-function test_rrule!!(
+function test_rule(
     rng, x...;
-    interface_only=false,
-    is_primitive=true,
+    interface_only::Bool=false,
+    is_primitive::Bool=true,
     perf_flag::Symbol,
-    ctx=DefaultCtx(),
-    rule=rrule!!,
+    interp::Tapir.TapirInterpreter,
+    safety_on::Bool=false,
 )
     @nospecialize rng x
+
+    # Construct the rule.
+    rule = Tapir.build_rrule(interp, _typeof(__get_primals(x)); safety_on)
+
+    # If we're requiring `is_primitive`, then check that `rule == rrule!!`.
+    if is_primitive
+        @test rule === rrule!!
+    end
 
     # Generate random tangents for anything that is not already a CoDual.
     x_x̄ = map(x -> x isa CoDual ? x : zero_codual(x), x)
 
     # Test that the interface is basically satisfied (checks types / memory addresses).
-    test_rrule_interface(x_x̄...; is_primitive, ctx, rule)
+    test_rrule_interface(x_x̄...; rule)
 
     # Test that answers are numerically correct / consistent.
     interface_only || test_rrule_numerical_correctness(rng, x_x̄...; rule)
 
     # Test the performance of the rule.
     test_rrule_performance(perf_flag, rule, x_x̄...)
-end
-
-function test_derived_rule(rng::AbstractRNG, x...; safety_on=true, interp, kwargs...)
-    if safety_on
-        safe_rule = Tapir.build_rrule(interp, _typeof(__get_primals(x)); safety_on=true)
-        test_rrule!!(rng, x...; rule=safe_rule, interface_only=true, perf_flag=:none, is_primitive=false)
-    end
-    rule = Tapir.build_rrule(interp, _typeof(__get_primals(x)))
-    test_rrule!!(rng, x...; rule, kwargs...)
 end
 
 #
@@ -534,7 +530,7 @@ function test_rule_and_type_interactions(rng::AbstractRNG, x::P) where {P}
     @testset "$f" for f in fs
         arg_sets = generate_args(f, x)
         @testset for args in arg_sets
-            test_rrule!!(
+            test_rule(
                 rng, f, args...;
                 interface_only=false,
                 is_primitive=true,
@@ -798,12 +794,12 @@ function __is_completely_stable_type(::Type{P}) where {P}
     return all(__is_completely_stable_type, fieldtypes(P))
 end
 
-"""
+@doc"""
     test_tangent(rng::AbstractRNG, p::P, x::T, y::T, z_target::T) where {P, T}
 
 Verify that primal `p` with tangents `z_target`, `x`, and `y`, satisfies the tangent
-interface. If these tests pass, then it should be possible to write `rrule!!`s for primals
-of type `P`, and to test them using `test_rrule!!`.
+interface. If these tests pass, then it should be possible to write rules for primals
+of type `P`, and to test them using [`test_rule`](@ref).
 
 As always, there are limits to the errors that these tests can identify -- they form
 necessary but not sufficient conditions for the correctness of your code.
@@ -928,7 +924,7 @@ function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)
     test_cases, memory = Tapir.generate_hand_written_rrule!!_test_cases(rng_ctor, v)
     interp = Tapir.PInterp()
     GC.@preserve memory @testset "$f, $(_typeof(x))" for (interface_only, perf_flag, _, f, x...) in test_cases
-        test_derived_rule(
+        test_rule(
             rng_ctor(123), f, x...; interface_only, perf_flag, interp, safety_on=false
         )
     end
@@ -939,7 +935,7 @@ function run_derived_rrule!!_test_cases(rng_ctor, v::Val)
     test_cases, memory = Tapir.generate_derived_rrule!!_test_cases(rng_ctor, v)
     GC.@preserve memory @testset "$f, $(typeof(x))" for
         (interface_only, perf_flag, _, f, x...) in test_cases
-        test_derived_rule(
+        test_rule(
             rng_ctor(123), f, x...;
             interp, interface_only, perf_flag, is_primitive=false, safety_on=false,
         )
