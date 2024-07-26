@@ -294,6 +294,8 @@ tangent_type(::Type{Module}) = NoTangent
 
 tangent_type(::Type{Nothing}) = NoTangent
 
+tangent_type(::Type{Expr}) = NoTangent
+
 tangent_type(::Type{SimpleVector}) = Vector{Any}
 
 tangent_type(::Type{P}) where {P<:Union{UInt8, UInt16, UInt32, UInt64, UInt128}} = NoTangent
