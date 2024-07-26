@@ -12,6 +12,27 @@
 
 @is_primitive MinimalCtx Tuple{Core.Builtin, Vararg}
 
+struct MissingRuleForBuiltinException <: Exception
+    msg::String
+end
+
+function rrule!!(f::CoDual{<:Core.Builtin}, args...)
+    T_args = map(typeof ∘ primal, args)
+    throw(MissingRuleForBuiltinException(
+        "All built-in functions are primitives by default, as they do not have any Julia " *
+        "code to recurse into. This means that they must all have methods of `rrule!!` " *
+        "written for them by hand. " *
+        "The built-in $(primal(f)) has been called with arguments with types $T_args, " *
+        "but there is no specialised method of `rrule!!` for this built-in and these " *
+        "types. In order to fix this problem, you will either need to modify your code " *
+        "to avoid hitting this built-in function, or implement a method of `rrule!!` " *
+        "which is specialised to this case. " *
+        "Either way, please consider opening an issue at " *
+        "https://github.com/compintell/Tapir.jl/ so that the issue can be fixed more " *
+        "widely."
+    ))
+end
+
 module IntrinsicsWrappers
 
 using Base: IEEEFloat
@@ -402,13 +423,30 @@ end
 # Core._call_in_world
 # Core._call_in_world_total
 # Core._call_latest
-# Core._compute_sparams
+
+# Doesn't do anything differentiable.
+function rrule!!(f::CoDual{typeof(Core._compute_sparams)}, args::CoDual...)
+    return zero_fcodual(Core._compute_sparams(map(primal, args)...)), NoPullback(f, args...)
+end
+
 # Core._equiv_typedef
 # Core._expr
 # Core._primitivetype
 # Core._setsuper!
 # Core._structtype
 # Core._svec_ref
+
+# Verify that there thing at the index is non-differentiable. Otherwise error.
+function rrule!!(
+    f::CoDual{typeof(Core._svec_ref)}, v::CoDual{Core.SimpleVector}, _ind::CoDual{Int}
+)
+    ind = primal(_ind)
+    pv = Core._svec_ref(primal(v), ind)
+    tv = getindex(tangent(v), ind)
+    isa(tv, NoTangent) || error("expected non-differentiable thing in SimpleVector")
+    return zero_fcodual(pv), NoPullback(f, v, _ind)
+end
+
 # Core._typebody!
 # Core._typevar
 
@@ -816,7 +854,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         # Core._primitivetype -- NEEDS IMPLEMENTING AND TESTING
         # Core._setsuper! -- NEEDS IMPLEMENTING AND TESTING
         # Core._structtype -- NEEDS IMPLEMENTING AND TESTING
-        # Core._svec_ref -- NEEDS IMPLEMENTING AND TESTING
+        (false, :none, nothing, Core._svec_ref, svec(5, 4), 2),
         # Core._typebody! -- NEEDS IMPLEMENTING AND TESTING
         (false, :stability, nothing, <:, Float64, Int),
         (false, :stability, nothing, <:, Any, Float64),
