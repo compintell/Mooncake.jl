@@ -434,7 +434,6 @@ end
 # Core._primitivetype
 # Core._setsuper!
 # Core._structtype
-# Core._svec_ref
 
 # Verify that there thing at the index is non-differentiable. Otherwise error.
 function rrule!!(
@@ -848,7 +847,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         # Core._call_in_world -- NEEDS IMPLEMENTING AND TESTING
         # Core._call_in_world_total -- NEEDS IMPLEMENTING AND TESTING
         # Core._call_latest -- NEEDS IMPLEMENTING AND TESTING
-        # Core._compute_sparams -- NEEDS IMPLEMENTING AND TESTING
+        # Core._compute_sparams -- CONSIDER TESTING
         # Core._equiv_typedef -- NEEDS IMPLEMENTING AND TESTING
         # Core._expr -- NEEDS IMPLEMENTING AND TESTING
         # Core._primitivetype -- NEEDS IMPLEMENTING AND TESTING
