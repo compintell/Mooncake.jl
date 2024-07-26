@@ -126,7 +126,7 @@ end
         @info name
         rng = sr(123)
         f, x = build_turing_problem(rng, model, ex)
-        TestUtils.test_derived_rule(
+        TestUtils.test_rule(
             sr(123456), f, x;
             perf_flag=:none, interface_only=true, is_primitive=false, interp, safety_on=true
         )

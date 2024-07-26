@@ -70,7 +70,7 @@ Mutation support enables writing `rrule!!`s at a low-level (`Core.InstrincFuncti
 The simplicity of this low-level functionality makes implementing correct `rrule!!`s for it a simple task.
 In conjunction with being strict about the types used internally to represent (co)tangents, we have found this leads to `rrule!!`s composing very well, and AD being correct in practice as a consequence.
 
-Furthermore, the interfaces for `rrule!!` and the (co)tangent type system have been designed to make a reliable `test_rrule!!` function possible to create.
+Furthermore, the interfaces for `rrule!!` and the (co)tangent type system have been designed to make a reliable `test_rule` function possible to create.
 All of our testing is implemented via this (or via another function which calls this) which makes adding test-cases trivial, and has meant that we have produced a lot of test cases.
 
 This contrasts with `Zygote.jl` / `ChainRules.jl`, where the permissive (co)tangent type system complicates both composition of `rrule`s and testing.

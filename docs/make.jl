@@ -4,7 +4,7 @@ DocMeta.setdocmeta!(
     Tapir,
     :DocTestSetup,
     quote
-        using Tapir
+        using Random, Tapir
     end;
     recursive=true,
 )
@@ -34,6 +34,7 @@ makedocs(
         ],
         "Known Limitations" => "known_limitations.md",
         "Safe Mode" => "safe_mode.md",
+        "Debugging and MWEs" => "debugging_and_mwes.md",
     ]
 )
 

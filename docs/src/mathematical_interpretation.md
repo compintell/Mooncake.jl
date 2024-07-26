@@ -368,7 +368,7 @@ The third is that the components of the arguments of `f` which are identified by
 
 # Testing
 
-Tapir.jl has an almost entirely automated system for testing rules -- `Tapir.TestUtils.test_rrule!!` and `Tapir.TestUtils.test_derived_rule`.
+Tapir.jl has an almost entirely automated system for testing rules -- `Tapir.TestUtils.test_rule`.
 You should absolutely make use of these when writing rules.
 
 TODO: improve docstring for testing functionality.

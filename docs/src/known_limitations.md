@@ -115,7 +115,7 @@ _**The Solution**_
 
 This is only really a problem for tangent / fdata / rdata generation functionality, such as `zero_tangent`.
 As a work-around, AD testing functionality permits users to pass in `CoDual`s.
-So if you are testing something involving a pointer, you will need to construct its tangent yourself, and pass a `CoDual` to e.g. `Tapir.TestUtils.test_derived_rule`.
+So if you are testing something involving a pointer, you will need to construct its tangent yourself, and pass a `CoDual` to e.g. `Tapir.TestUtils.test_rule`.
 
 While pointers tend to be a low-level implementation detail in Julia code, you could in principle actually be interested in differentiating a function of a pointer.
 In this case, you will not be able to use `Tapir.value_and_gradient!!` as this requires the use of `zero_tangent`.

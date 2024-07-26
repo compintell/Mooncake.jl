@@ -63,7 +63,7 @@ using Tapir:
     verify_rdata_value
 
 using .TestUtils:
-    test_rrule!!,
+    test_rule,
     has_equal_data,
     AddressMap,
     populate_address_map!,
