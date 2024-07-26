@@ -535,6 +535,7 @@ function test_rule_and_type_interactions(rng::AbstractRNG, x::P) where {P}
                 interface_only=false,
                 is_primitive=true,
                 perf_flag=:none,
+                interp=Tapir.TapirInterpreter(),
             )
         end
     end
