@@ -1450,6 +1450,23 @@ end
 
 test_getfield_of_tuple_of_types(n::Int) = getfield((Float64, Float64), n)
 
+test_for_invoke(x) = 5x
+
+Tapir.is_primitive(::Type{MinimalCtx}, ::Type{<:Tuple{typeof(test_for_invoke), Any}}) = true
+
+function Tapir.rrule!!(::CoDual{typeof(test_for_invoke)}, x::CoDual)
+    test_for_invoke_pb!!(dy) = NoRData(), 5 * dy
+    return Tapir.zero_fcodual(5 * primal(x)), test_for_invoke_pb!!
+end
+
+test_for_invoke(x::Float64) = x
+
+function Tapir.is_primitive(
+    ::Type{MinimalCtx}, ::Type{<:Tuple{typeof(test_for_invoke), Float64}}
+)
+    return false
+end
+
 function generate_test_functions()
     return Any[
         (false, :allocs, nothing, const_tester),
@@ -1621,6 +1638,14 @@ function generate_test_functions()
         (false, :none, nothing, ArgumentError, "hi"),
         (false, :none, nothing, test_small_union, Ref{Union{Float64, Vector{Float64}}}(5.0)),
         (false, :none, nothing, test_small_union, Ref{Union{Float64, Vector{Float64}}}([1.0])),
+        (
+            false, :stability_and_allocs, nothing,
+            invoke, test_for_invoke, Tuple{Any}, 5.0,
+        ),
+        # (
+        #     false, :allocs, nothing,
+        #     invoke, test_for_invoke, Tuple{Float64}, 5.0,
+        # ),
     ]
 end
 
