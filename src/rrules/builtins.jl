@@ -652,7 +652,35 @@ function rrule!!(f::CoDual{typeof(getglobal)}, a, b)
     return zero_fcodual(getglobal(primal(a), primal(b))), NoPullback(f, a, b)
 end
 
-# invoke
+# invoke: see https://github.com/compintell/Tapir.jl/issues/206 for more info.
+for C in [:MinimalCtx, :DefaultCtx] # must iterate over contexts to avoid method ambiguities
+
+    # If we have a rule for the types provided to invoke, then we'll make use of that.
+    # This is achieved by returning true from is_primitive, and using the rrule!! below.
+    @eval function is_primitive(
+        ::Type{$C}, ::Type{<:Tuple{typeof(invoke), F, Type{TT}, Vararg{Any, N}}}
+    ) where {F, TT<:Tuple, N}
+        return is_primitive($C, Tuple{F, TT.parameters...})
+    end
+end
+
+@generated function codual_sig(::Type{sig}) where {sig<:Tuple}
+    return Tuple{map(codual_type, sig.parameters)...}
+end
+
+# If is_primitive returns true, then we have a hand-written rule for the Method
+# specified by the `TT` type parameter in is_primitive. This rule invokes it, and
+# processes its outputs.
+function rrule!!(
+    ::CoDual{typeof(invoke)}, f::F, ::CoDual{Type{PP}}, args::Vararg{CoDual, N}
+) where {F<:CoDual, PP<:Tuple, N}
+    out, pb!! = invoke(rrule!!, Tuple{F, codual_sig(PP).parameters...}, f, args...)
+    function invoke_pb!!(dout)
+        df, dargs... = pb!!(dout)
+        return NoRData(), df, NoRData(), dargs...
+    end
+    return out, invoke_pb!!
+end
 
 function rrule!!(f::CoDual{typeof(isa)}, x, T)
     return zero_fcodual(isa(primal(x), primal(T))), NoPullback(f, x, T)
@@ -955,7 +983,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :none, _range, getfield, UInt8, :hash),
         (false, :none, _range, getfield, UInt8, :flags),
         # getglobal requires compositional testing, because you can't deepcopy a module
-        # invoke -- NEEDS IMPLEMENTING AND TESTING
+        # invoke -- tested in s2s_reverse_mode_ad tests
         (false, :stability, nothing, isa, 5.0, Float64),
         (false, :stability, nothing, isa, 1, Float64),
         (false, :stability, nothing, isdefined, MutableFoo(5.0, randn(5)), :sim),
