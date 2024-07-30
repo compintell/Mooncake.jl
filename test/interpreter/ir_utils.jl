@@ -3,6 +3,9 @@ module IRUtilsGlobalRefs
     const __x_2 = 5.0
     __x_3::Float64 = 5.0
     const __x_4::Float64 = 5.0
+
+    foo(x) = x
+    foo(x::Float64) = 5x
 end
 
 @testset "ir_utils" begin
@@ -51,5 +54,21 @@ end
         id = ID()
         @test Tapir.inc_args(IDGotoIfNot(Argument(1), id)) == IDGotoIfNot(Argument(2), id)
         @test Tapir.inc_args(IDGotoNode(id)) == IDGotoNode(id)
+    end
+    @testset "lookup_invoke_ir" begin
+
+        # Bail out if a non-invoke signature is passed in.
+        @test_throws(
+            ArgumentError,
+            Tapir.lookup_invoke_ir(Tapir.TapirInterpreter(), Tuple{typeof(sin), Float64}),
+        )
+
+        ir = Tapir.lookup_invoke_ir(
+            Tapir.TapirInterpreter(),
+            Tuple{typeof(invoke), typeof(IRUtilsGlobalRefs.foo), Type{Tuple{Any}}, Float64},
+        )
+        oc = Core.OpaqueClosure(ir; do_compile=true)
+        @test oc(5.0) == 5.0
+        @test invoke(IRUtilsGlobalRefs.foo, Tuple{Any}, 5.0) == 5.0
     end
 end

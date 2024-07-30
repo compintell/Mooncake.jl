@@ -173,12 +173,19 @@ end
 """
     lookup_ir(interp::AbstractInterpreter, sig::Type{<:Tuple})::Tuple{IRCode, T}
 
-Get the IR unique IR associated to `sig` under `interp`. Throws `ArgumentError`s if there is
+Get the IR associated to `sig` under `interp`. Throws `ArgumentError`s if there is
 no code found, or if more than one `IRCode` instance returned.
 
 Returns a tuple containing the `IRCode` and its return type.
 """
 function lookup_ir(interp::CC.AbstractInterpreter, sig::Type{<:Tuple})
+
+    # If `invoke` is the function in question, then do something complicated.
+    if sig.parameters[1] == typeof(invoke)
+        return lookup_invoke_ir(interp, sig)
+    end
+
+    # Look up the `IRCode` using the standard mechanism.
     output = Base.code_ircode_by_type(sig; interp)
     if isempty(output)
         throw(ArgumentError("No methods found for signature $sig"))
@@ -186,6 +193,35 @@ function lookup_ir(interp::CC.AbstractInterpreter, sig::Type{<:Tuple})
         throw(ArgumentError("$(length(output)) methods found for signature $sig"))
     end
     return only(output)
+end
+
+"""
+    lookup_invoke_ir(interp::CC.AbstractInterpreter, sig::Type{<:Tuple})
+
+Looks up the `IRCode` associated to an `invoke` call. If the first parameter of `sig` is not
+`typeof(invoke)` then an `ArgumentError` is thrown. No other error checking is performed.
+"""
+function lookup_invoke_ir(interp::CC.AbstractInterpreter, sig::Type{<:Tuple})
+    if sig.parameters[1] != typeof(invoke)
+        throw(ArgumentError("Expected signature for a call to `invoke`."))
+    end
+
+    # Construct the static signature, and dynamic signature.
+    ps = sig.parameters
+    static_sig = Tuple{ps[2], ps[3].parameters[1].parameters...}
+    dynamic_sig = Tuple{ps[2], ps[4:end]...}
+
+    # Lookup all methods which could apply to the types provided in the signature, and pick
+    # the one which `which` says would get applied.
+    # Base on https://github.com/JuliaLang/julia/blob/v1.10.4/base/reflection.jl#L1485
+    matches = Base._methods_by_ftype(static_sig, #=lim=#-1, Base.get_world_counter())
+    m = which(static_sig)
+    match = only(filter(_m -> m === _m.method, matches))
+    meth = Base.func_for_method_checked(match.method, static_sig, match.sparams)
+    (code, _) = Core.Compiler.typeinf_ircode(
+        interp, meth, dynamic_sig, match.sparams, #=optimize_until=#nothing
+    )
+    return code
 end
 
 """
