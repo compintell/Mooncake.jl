@@ -1469,6 +1469,8 @@ end
 
 test_for_invoke(x::Float64, y::Float64, z::Float64...) = x + sum(y)
 
+inlinable_invoke_call(x::Float64) = invoke(test_for_invoke, Tuple{Float64}, x)
+
 function generate_test_functions()
     return Any[
         (false, :allocs, nothing, const_tester),

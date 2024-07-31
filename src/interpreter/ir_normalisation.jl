@@ -26,6 +26,7 @@ function normalise!(ir::IRCode, spnames::Vector{Symbol})
         inst = splatnew_to_call(inst)
         inst = intrinsic_to_function(inst)
         inst = lift_getfield_and_others(inst)
+        inst = invoke_to_invoke_wrapper(inst)
         ir.stmts.inst[n] = inst
     end
     return ir
@@ -182,3 +183,25 @@ end
 __get_arg(x::GlobalRef) = getglobal(x.mod, x.name)
 __get_arg(x::QuoteNode) = x.value
 __get_arg(x) = x
+
+"""
+    invoke_wrapper(f, TT, x::Vararg{Any, N}) where {N}
+
+Equivalent to `invoke(f, TT, x...)`, but is a primitive that won't get lowered / inlined
+away.
+"""
+invoke_wrapper(f, TT, x::Vararg{Any, N}) where {N} = invoke(f, TT, x...)
+
+@is_primitive MinimalCtx Tuple{typeof(invoke_wrapper), Vararg}
+
+"""
+    invoke_to_invoke_wrapper(inst)
+
+Replaces `:call`s to `Core.invoke` with calls to `Tapir.invoke_wrapper`. This done to
+prevent such calls being inlined / lowered away during optimisation, as access to them is
+required later on.
+"""
+function invoke_to_invoke_wrapper(inst)
+    (Meta.isexpr(inst, :call) && inst.args[1] == invoke) || return inst
+    return Expr(:call, invoke_wrapper, inst.args[2:end]...)
+end
