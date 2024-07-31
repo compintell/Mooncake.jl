@@ -192,7 +192,14 @@ function lookup_ir(interp::CC.AbstractInterpreter, sig::Type{<:Tuple})
     elseif length(output) > 1
         throw(ArgumentError("$(length(output)) methods found for signature $sig"))
     end
-    return only(output)
+    return only(output)[1]
+end
+
+is_invoke_sig(sig) = sig.parameters[1] == typeof(invoke)
+
+function static_sig(sig)
+    ps = sig.parameters
+    return is_invoke_sig(sig) ? Tuple{ps[2], ps[3].parameters[1].parameters...} : sig
 end
 
 """
@@ -208,16 +215,16 @@ function lookup_invoke_ir(interp::CC.AbstractInterpreter, sig::Type{<:Tuple})
 
     # Construct the static signature, and dynamic signature.
     ps = sig.parameters
-    static_sig = Tuple{ps[2], ps[3].parameters[1].parameters...}
+    _sig = static_sig(sig)
     dynamic_sig = Tuple{ps[2], ps[4:end]...}
 
     # Lookup all methods which could apply to the types provided in the signature, and pick
     # the one which `which` says would get applied.
     # Base on https://github.com/JuliaLang/julia/blob/v1.10.4/base/reflection.jl#L1485
-    matches = Base._methods_by_ftype(static_sig, #=lim=#-1, Base.get_world_counter())
-    m = which(static_sig)
+    matches = Base._methods_by_ftype(_sig, #=lim=#-1, Base.get_world_counter())
+    m = which(_sig)
     match = only(filter(_m -> m === _m.method, matches))
-    meth = Base.func_for_method_checked(match.method, static_sig, match.sparams)
+    meth = Base.func_for_method_checked(match.method, _sig, match.sparams)
     (code, _) = Core.Compiler.typeinf_ircode(
         interp, meth, dynamic_sig, match.sparams, #=optimize_until=#nothing
     )

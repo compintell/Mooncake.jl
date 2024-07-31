@@ -1467,6 +1467,8 @@ function Tapir.is_primitive(
     return false
 end
 
+test_for_invoke(x::Float64, y::Float64, z::Float64...) = x + sum(y)
+
 function generate_test_functions()
     return Any[
         (false, :allocs, nothing, const_tester),
@@ -1638,14 +1640,10 @@ function generate_test_functions()
         (false, :none, nothing, ArgumentError, "hi"),
         (false, :none, nothing, test_small_union, Ref{Union{Float64, Vector{Float64}}}(5.0)),
         (false, :none, nothing, test_small_union, Ref{Union{Float64, Vector{Float64}}}([1.0])),
-        (
-            false, :stability_and_allocs, nothing,
-            invoke, test_for_invoke, Tuple{Any}, 5.0,
-        ),
-        # (
-        #     false, :allocs, nothing,
-        #     invoke, test_for_invoke, Tuple{Float64}, 5.0,
-        # ),
+        (false, :stability_and_allocs, nothing, invoke, test_for_invoke, Tuple{Any}, 5.0),
+        (false, :allocs, nothing, invoke, test_for_invoke, Tuple{Float64}, 5.0),
+        (false, :allocs, nothing, invoke, test_for_invoke, Tuple{Float64, Float64, Float64}, 5.0, 4.0, 3.0),
+        (false, :allocs, nothing, hvcat, (2, 2), 3.0, 2.0, 0.0, 1.0),
     ]
 end
 

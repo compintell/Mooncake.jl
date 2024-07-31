@@ -124,7 +124,9 @@ function is_vararg_sig_and_sparam_names(sig)::Tuple{Bool, Vector{Symbol}}
     world = Base.get_world_counter()
     min = Base.RefValue{UInt}(typemin(UInt))
     max = Base.RefValue{UInt}(typemax(UInt))
-    ms = Base._methods_by_ftype(sig, nothing, -1, world, true, min, max, Ptr{Int32}(C_NULL))::Vector
+    ms = Base._methods_by_ftype(
+        static_sig(sig), nothing, -1, world, true, min, max, Ptr{Int32}(C_NULL)
+    )::Vector
     m = only(ms).method
     return m.isva, sparam_names(m)
 end

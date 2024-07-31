@@ -654,39 +654,51 @@ end
 # between differing varargs conventions.
 #
 
-struct Pullback{Tpb_oc, Tisva<:Val, Tnvargs<:Val}
+struct Pullback{Tpb_oc, Tisva<:Val, Tnvargs<:Val, Tis_invoke<:Val}
     pb_oc::Tpb_oc
     isva::Tisva
     nvargs::Tnvargs
+    is_invoke::Tis_invoke
 end
 
-@inline (pb::Pullback)(dy) = __flatten_varargs(pb.isva, pb.pb_oc(dy), pb.nvargs)
+@inline function (pb::Pullback)(dy)
+    return __flatten_varargs(pb.isva, pb.pb_oc(dy), pb.nvargs, pb.is_invoke)
+end
 
-struct DerivedRule{Tfwds_oc, Tpb_oc, Tisva<:Val, Tnargs<:Val}
+struct DerivedRule{Tfwds_oc, Tpb_oc, Tisva<:Val, Tnargs<:Val, Tis_invoke<:Val}
     fwds_oc::Tfwds_oc
     pb_oc::Tpb_oc
     isva::Tisva
     nargs::Tnargs
+    is_invoke::Tis_invoke
 end
 
 @inline function (fwds::DerivedRule{P, Q, S})(args::Vararg{CoDual, N}) where {P, Q, S, N}
-    uf_args = __unflatten_codual_varargs(fwds.isva, args, fwds.nargs)
-    pb!! = Pullback(fwds.pb_oc, fwds.isva, nvargs(length(args), fwds.nargs))
+    uf_args = __unflatten_codual_varargs(fwds.isva, args, fwds.nargs, fwds.is_invoke)
+    pb!! = Pullback(fwds.pb_oc, fwds.isva, nvargs(length(args), fwds.nargs), fwds.is_invoke)
     return fwds.fwds_oc(uf_args...)::CoDual, pb!!
 end
 
 @inline nvargs(n_flat, ::Val{nargs}) where {nargs} = Val(n_flat - nargs + 1)
 
 # If isva, inputs (5.0, (4.0, 3.0)) are transformed into (5.0, 4.0, 3.0).
-function __flatten_varargs(::Val{isva}, args, ::Val{nvargs}) where {isva, nvargs}
-    isva || return args
+function __flatten_varargs(
+    ::Val{isva}, args, ::Val{nvargs}, ::Val{is_invoke}
+) where {isva, nvargs, is_invoke}
+    isva || (return is_invoke ? __invoke_rdata(args) : args)
     last_el = isa(args[end], NoRData) ? ntuple(n -> NoRData(), nvargs) : args[end]
-    return (args[1:end-1]..., last_el...)
+    out_args = (args[1:end-1]..., last_el...)
+    return is_invoke ? __invoke_rdata(out_args) : out_args
 end
+
+__invoke_rdata(args) = (NoRData(), args[1], NoRData(), args[2:end]...)
 
 # If isva and nargs=2, then inputs `(CoDual(5.0, 0.0), CoDual(4.0, 0.0), CoDual(3.0, 0.0))`
 # are transformed into `(CoDual(5.0, 0.0), CoDual((5.0, 4.0), (0.0, 0.0)))`.
-function __unflatten_codual_varargs(::Val{isva}, args, ::Val{nargs}) where {isva, nargs}
+function __unflatten_codual_varargs(
+    ::Val{isva}, raw_args, ::Val{nargs}, ::Val{is_invoke}
+) where {isva, nargs, is_invoke}
+    args = is_invoke ? __args_from_invoke_call(raw_args) : raw_args
     isva || return args
     group_primal = map(primal, args[nargs:end])
     if fdata_type(tangent_type(_typeof(group_primal))) == NoFData
@@ -697,6 +709,8 @@ function __unflatten_codual_varargs(::Val{isva}, args, ::Val{nargs}) where {isva
     return (args[1:nargs-1]..., grouped_args)
 end
 
+__args_from_invoke_call(args) = (args[2], args[4:end]...)
+
 #
 # Rule derivation.
 #
@@ -705,9 +719,9 @@ end
 # important for performance in dynamic dispatch, and to ensure that recursion works
 # properly.
 function rule_type(interp::TapirInterpreter{C}, ::Type{sig}) where {C, sig}
-    is_primitive(C, sig) && return typeof(rrule!!)
+    has_hand_written_rule(C, sig) && return typeof(rrule!!)
 
-    ir, _ = lookup_ir(interp, sig)
+    ir = lookup_ir(interp, sig)
     Treturn = Base.Experimental.compute_ir_rettype(ir)
     isva, _ = is_vararg_sig_and_sparam_names(sig)
 
@@ -716,12 +730,14 @@ function rule_type(interp::TapirInterpreter{C}, ::Type{sig}) where {C, sig}
     arg_rvs_types = Tuple{map(rdata_type ∘ tangent_type, arg_types)...}
     fwds_return_codual = fcodual_type(Treturn)
     rvs_return_type = rdata_type(tangent_type(Treturn))
+
     if isconcretetype(fwds_return_codual)
         return DerivedRule{
             MistyClosure{OpaqueClosure{arg_fwds_types, fwds_return_codual}},
             MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
             Val{isva},
             Val{length(ir.argtypes)},
+            Val{is_invoke_sig(sig)},
         }
     else
         return DerivedRule{
@@ -729,6 +745,7 @@ function rule_type(interp::TapirInterpreter{C}, ::Type{sig}) where {C, sig}
             MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
             Val{isva},
             Val{length(ir.argtypes)},
+            Val{is_invoke_sig(sig)},
         }
     end
 end
@@ -741,6 +758,8 @@ Helper method. Only uses static information from `args`.
 function build_rrule(args...; safety_on=false)
     return build_rrule(PInterp(), _typeof(TestUtils.__get_primals(args)); safety_on)
 end
+
+has_hand_written_rule(C, sig) = is_primitive(C, static_sig(sig))
 
 """
     build_rrule(interp::PInterp{C}, sig::Type{<:Tuple}; safety_on=false) where {C}
@@ -764,10 +783,10 @@ function build_rrule(
     seed_id!()
 
     # If we have a hand-coded rule, just use that.
-    is_primitive(C, sig) && return (safety_on ? SafeRRule(rrule!!) : rrule!!)
+    has_hand_written_rule(C, sig) && return (safety_on ? SafeRRule(rrule!!) : rrule!!)
 
     # Grab code associated to the primal.
-    ir, _ = lookup_ir(interp, sig)
+    ir = lookup_ir(interp, sig)
     Treturn = Base.Experimental.compute_ir_rettype(ir)
 
     # Normalise the IR, and generated BBCode version of it.
@@ -823,7 +842,9 @@ function build_rrule(
         interp.oc_cache[(sig, safety_on)] = (fwds_oc, pb_oc)
     end
 
-    raw_rule = rule_type(interp, sig)(fwds_oc, pb_oc, Val(isva), Val(num_args(info)))
+    raw_rule = rule_type(interp, sig)(
+        fwds_oc, pb_oc, Val(isva), Val(num_args(info)), Val(is_invoke_sig(sig)),
+    )
     return safety_on ? SafeRRule(raw_rule) : raw_rule
 end
 

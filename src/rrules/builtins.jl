@@ -653,24 +653,14 @@ function rrule!!(f::CoDual{typeof(getglobal)}, a, b)
 end
 
 # invoke: see https://github.com/compintell/Tapir.jl/issues/206 for more info.
-for C in [:MinimalCtx, :DefaultCtx] # must iterate over contexts to avoid method ambiguities
-
-    # If we have a rule for the types provided to invoke, then we'll make use of that.
-    # This is achieved by returning true from is_primitive, and using the rrule!! below.
-    @eval function is_primitive(
-        ::Type{$C}, ::Type{<:Tuple{typeof(invoke), F, Type{TT}, Vararg{Any, N}}}
-    ) where {F, TT<:Tuple, N}
-        return is_primitive($C, Tuple{F, TT.parameters...})
-    end
-end
+@is_primitive MinimalCtx Tuple{typeof(invoke), Vararg}
 
 @generated function codual_sig(::Type{sig}) where {sig<:Tuple}
     return Tuple{map(codual_type, sig.parameters)...}
 end
 
-# If is_primitive returns true, then we have a hand-written rule for the Method
-# specified by the `TT` type parameter in is_primitive. This rule invokes it, and
-# processes its outputs.
+# An rrule!! which can be called if there is an `rrule!!` available for the `invoke`d
+# method of rrule.
 function rrule!!(
     ::CoDual{typeof(invoke)}, f::F, ::CoDual{Type{PP}}, args::Vararg{CoDual, N}
 ) where {F<:CoDual, PP<:Tuple, N}
