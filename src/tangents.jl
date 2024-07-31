@@ -411,17 +411,18 @@ zero_tangent(x)
 @inline zero_tangent(::Union{Int8, Int16, Int32, Int64, Int128}) = NoTangent()
 @inline zero_tangent(x::IEEEFloat) = zero(x)
 @inline function zero_tangent(x::SimpleVector)
-    return map!(n -> zero_tangent(x[n]), Vector{Any}(undef, length(x)), eachindex(x))
+    return map!(n -> zero_tangent_internal(x[n]), Vector{Any}(undef, length(x)), eachindex(x))
 end
 @inline function zero_tangent(x::Array{P, N}) where {P, N}
-    return _map_if_assigned!(zero_tangent, Array{tangent_type(P), N}(undef, size(x)...), x)
+    return _map_if_assigned!(zero_tangent_internal, Array{tangent_type(P), N}(undef, size(x)...), x)
 end
 @inline function zero_tangent(x::P) where {P<:Union{Tuple, NamedTuple}}
     return tangent_type(P) == NoTangent ? NoTangent() : tuple_map(zero_tangent, x)
 end
-@generated function zero_tangent(x::P) where {P}
-
-    tangent_type(P) == NoTangent && return NoTangent()
+function zero_tangent(x::P) where {P}
+    if tangent_type(P) == NoTangent
+        return NoTangent()
+    end
 
     # This method can only handle struct types. Tell user to implement tangent type
     # directly for primitive types.
@@ -429,19 +430,72 @@ end
         "$P is a primitive type. Implement a method of `zero_tangent` for it."
     ))
 
+    if isbitstype(P)
+        return zero_tangent_internal(x)
+    end
+    return zero_tangent_internal(x, IdDict())
+end
+
+@inline zero_tangent_internal(::Union{Int8, Int16, Int32, Int64, Int128}) = NoTangent()
+@inline zero_tangent_internal(x::IEEEFloat) = zero(x)
+@inline function zero_tangent_internal(x::SimpleVector)
+    return map!(n -> zero_tangent_internal(x[n]), Vector{Any}(undef, length(x)), eachindex(x))
+end
+@inline function zero_tangent_internal(x::Array{P, N}) where {P, N}
+    return _map_if_assigned!(zero_tangent_internal, Array{tangent_type(P), N}(undef, size(x)...), x)
+end
+@inline function zero_tangent_internal(x::P) where {P<:Union{Tuple, NamedTuple}}
+    return tangent_type(P) == NoTangent ? NoTangent() : tuple_map(zero_tangent_internal, x)
+end
+@generated function zero_tangent_internal(x::P) where P
     # Derive zero tangent. Tangent types of fields, and types of zeros need only agree
     # if field types are concrete.
     tangent_field_zeros_exprs = ntuple(fieldcount(P)) do n
         if tangent_field_type(P, n) <: PossiblyUninitTangent
             V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
-            return :(isdefined(x, $n) ? $V(zero_tangent(getfield(x, $n))) : $V())
+            return :(isdefined(x, $n) ? $V(zero_tangent_internal(getfield(x, $n))) : $V())
         else
-            return :(zero_tangent(getfield(x, $n)))
+            return :(zero_tangent_internal(getfield(x, $n)))
         end
     end
     backing_data_expr = Expr(:call, :tuple, tangent_field_zeros_exprs...)
     backing_expr = :($(backing_type(P))($backing_data_expr))
     return :($(tangent_type(P))($backing_expr))
+end
+
+@inline zero_tangent_internal(::Union{Int8, Int16, Int32, Int64, Int128}, ::IdDict) = NoTangent()
+@inline zero_tangent_internal(x::IEEEFloat, ::IdDict) = zero(x)
+@inline function zero_tangent_internal(x::SimpleVector, ::IdDict)
+    return zero_tangent_internal(x)
+end
+@inline function zero_tangent_internal(x::Array{P, N}, ::IdDict) where {P, N}
+    return zero_tangent_internal(x)
+end
+@inline function zero_tangent_internal(x::P, ::IdDict) where {P<:Union{Tuple, NamedTuple}}
+    return zero_tangent_internal(x)
+end
+function zero_tangent_internal(x::P, stackdict::IdDict) where {P}
+    if haskey(stackdict, x)
+        return stackdict[x]
+    end
+    zt = ntuple(fieldcount(P)) do n
+        if getfield(x, n) === x # circular reference, just return NoTangent
+            return NoTangent()
+        end
+        if tangent_field_type(P, n) <: PossiblyUninitTangent
+            V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
+            if isdefined(x, n)
+                return V(zero_tangent_internal(getfield(x, n), stackdict))
+            else
+                return V()
+            end
+        else
+            return zero_tangent_internal(getfield(x, n), stackdict)
+        end
+    end
+    zt = (tangent_type(P))((backing_type(P))(zt))
+    stackdict[x] = zt
+    return zt
 end
 
 """

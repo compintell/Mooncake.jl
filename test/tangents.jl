@@ -118,6 +118,30 @@
     end
 end
 
+@testset "zero_tangent" begin
+    @testset "circular reference" begin
+        mutable struct Foo
+            x
+            y::Float64
+        end
+        
+        foo = Foo(nothing, 5.0)
+        foo.x = foo
+        @test Tapir.zero_tangent(foo).fields.x == NoTangent()
+    end
+    
+    @testset "duplicate reference" begin
+        mutable struct Bar
+            x
+            y
+        end
+        
+        x = [1.0, 2.0, 3.0]
+        bar = Bar(view(x, 1:2), view(x, 1:2))
+        mt = Tapir.zero_tangent(bar)
+        @test mt.fields.x === mt.fields.y
+    end
+end
 
 # The goal of these tests is to check that we can indeed generate tangent types for anything
 # that we will encounter in the Julia language. We try to achieve this by pulling in types
