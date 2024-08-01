@@ -328,7 +328,7 @@ _**Step 2: Compute Derivative**_
 
 The derivative of ``\phi_{\text{f!}}`` is
 ```math
-D \phi_{\text{f!}} [x](\dot{x}) = (2 x \odot x, 2 \sum_{n=1}^N x_n \dot{x}_n).
+D \phi_{\text{f!}} [x](\dot{x}) = (2 x \odot \dot{x}, 2 \sum_{n=1}^N x_n \dot{x}_n).
 ```
 
 _**Step 3: Compute Adjoint of Derivative**_
