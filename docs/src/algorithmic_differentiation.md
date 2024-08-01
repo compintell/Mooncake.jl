@@ -107,7 +107,8 @@ For the interested reader we provide a high-level explanation of _how_ forwards-
 _**Another aside: notation**_
 
 You will have noticed that we typically denote the argument to a derivative with a "dot" over it, e.g. ``\dot{x}``.
-This is something that we will do consistently -- wherever you see a symbol with a "dot" over it, expect it to be an argument to a derivative / forwards-mode AD.
+This is something that we will do consistently, and we will use the same notation for the outputs of derivatives.
+Wherever you see a symbol with a "dot" over it, expect it to be an input or output of a derivative / forwards-mode AD.
 
 # Reverse-Mode AD: _what_ does it do?
 
@@ -147,7 +148,8 @@ _**Aside: Notation**_
 
 You will have noticed that arguments to adjoints have thus far always had a "bar" over them, e.g. ``\bar{y}``.
 This notation is common in the AD literature and will be used throughout.
-So wherever you see a symbol with a "bar" over it, think "argument to adjoint of derivative".
+Additionally, this "bar" notation will be used for the outputs of adjoints of derivatives.
+So wherever you see a symbol with a "bar" over it, think "input or output of adjoint of derivative".
 
 
 
