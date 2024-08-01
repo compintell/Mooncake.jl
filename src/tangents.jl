@@ -467,12 +467,11 @@ function zero_tangent_internal(x::P, stackdict::IdDict) where {P}
 
     tangent_type(P) == NoTangent && return NoTangent()
 
-    # This method can only handle struct types. Tell user to implement tangent type
-    # directly for primitive types.
-    isprimitivetype(P) && throw(error(
-        "$P is a primitive type. Implement a method of `zero_tangent` for it."
-    ))
-    
+    # TODO: this should be captured by `isbitstype`?
+    # isprimitivetype(P) && throw(error(
+    #     "$P is a primitive type. Implement a method of `zero_tangent` for it."
+    # ))
+
     zt = ntuple(fieldcount(P)) do n
         if getfield(x, n) === x # circular reference, just return NoTangent
             return NoTangent()
