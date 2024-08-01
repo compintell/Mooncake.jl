@@ -101,24 +101,28 @@ is perfectly fine.
 It is helpful to have a concrete example which uses both of the permissible methods to make results externally visible.
 To this end, consider the following `function`:
 ```julia
-function f(x::Vector{Float64}, y::Vector{Float64}, z::Vector{Float64})
-    z .= y .* x
+function f(x::Vector{Float64}, y::Vector{Float64}, z::Vector{Float64}, s::Ref{Vector{Float64}})
+    z .*= y .* x
+    s[] = 2z
     return sum(z)
 end
 ```
 We draw your attention to two features of this `function`:
-1. `z` is mutated, and
-2. we allocate a new value and return it (albeit, it is probably allocated on the stack).
+1. `z` is mutated,
+2. `s` is mutated to contain freshly allocated memory, and
+3. we allocate a new value and return it (albeit, it is probably allocated on the stack).
 
 The model we adopt for `function` `f` is a function ``f : \mathcal{X} \to \mathcal{X} \times \mathcal{A}`` where ``\mathcal{X}`` is the real finite Hilbert space associated to the arguments to `f` prior to execution, and ``\mathcal{A}`` is the real finite Hilbert space associated to any newly allocated data during execution which is externally visible after execution -- any newly allocated data which is not made visible is of no concern.
-In this example, ``\mathcal{X} = \RR^D \times \RR^D \times \RR^D`` where ``D`` is the length of `x` / `y` / `z`, and ``\mathcal{A} = \RR``.
+In this example, ``\mathcal{X} = \RR^D \times \RR^D \times \RR^D \times \RR^S`` where ``D`` is the length of `x` / `y` / `z`, and ``S`` the length of `s[]` prior to running `f`.
+``\mathcal{A} = \RR^D \times \RR``, where the ``\RR^D`` component corresponds to the value put in `s`, and ``\RR`` to the return value.
+In this example, some of the memory allocated during execution is made externally visible by modifying one of the arguments, not just via the return value.
 
 The argument to ``f`` is the arguments to `f` _before_ execution, and the output is the 2-tuple comprising the same arguments _after_ execution and the values associated to any newly allocated / created data.
 Crucially, observe that we distinguish between the state of the arguments before and after execution.
 
 For our example, the exact form of ``f`` is
 ```math
-f((x, y, z)) = ((x, y, x \odot y), \sum_{d=1}^D x \odot y)
+f((x, y, z)) = ((x, y, x \odot y), (2 x \odot y, \sum_{d=1}^D x \odot y))
 ```
 Observe that ``f`` behaves a little like a transition operator, in the that the first element of the tuple returned is the updated state of the arguments.
 
@@ -202,6 +206,10 @@ The rule returns another `CoDual` (it propagates book-keeping information forwar
 In a little more depth:
 
 
+_**Notation: primal**_
+
+Throughout the rest of this document, we will refer to the `function` being differentiated as the "primal" computation, and its arguments as the "primal" arguments.
+
 ### Forwards Pass
 
 _**Inputs**_
@@ -251,8 +259,8 @@ In order to address these, we need to discuss the types that Tapir.jl uses to re
 
 # Representing Gradients
 
-We call the argument or output of a derivative ``D f [x] : \mathcal{X} \to \mathcal{Y}`` a _tangent_, and will usually denote it with a dot over a symbol, e.g. ``\dot{x}``.
-Conversely, we call an argument or output of the adjoint of this derivative ``D f [x]^\ast : \mathcal{Y} \to \mathcal{X}`` a _gradient_, and will usually denote it with a bar over a symbol, e.g. ``\bar{y}``.
+We refer to both inputs and outputs of derivatives ``D f [x] : \mathcal{X} \to \mathcal{Y}`` as _tangents_, e.g. ``\dot{x}`` or ``\dot{y}``.
+Conversely, we refer to both inputs and outputs to the adjoint of this derivative ``D f [x]^\ast : \mathcal{Y} \to \mathcal{X}`` as _gradients_, e.g. ``\bar{y}`` and ``\bar{x}``.
 
 Note, however, that the sets involved are the same whether dealing with a derivative or its adjoint.
 Consequently, we use the same type to represent both.
@@ -365,6 +373,7 @@ The second that we always assume that the components of ``\bar{y}_x`` which are 
 
 The third is that the components of the arguments of `f` which are identified by their value must have rdata passed back explicitly by a rule, while the components of the arguments to `f` which are identified by their address get their gradients propagated back implicitly (i.e. via the in-place modification of fdata).
 
+_**Reminder**_: the first element of the tuple returned by `dfoo_adjoint` is the rdata associated to `foo` itself, hence it is `NoRData`.
 
 # Testing
 
@@ -403,3 +412,42 @@ There are a few notable reasons:
 This topic, in particular what goes wrong with permissive tangent type systems like those employed by ChainRules, deserves a more thorough treatment -- hopefully someone will write something more expansive on this topic at some point.
 
 
+### Why Support Closures But Not Mutable Globals
+
+First consider why closures are straightforward to support.
+Look at the type of the closure produced by `foo`:
+```jldoctest
+function foo(x)
+    function bar(y)
+        x .+= y
+        return nothing
+    end
+    return bar
+end
+bar = foo(randn(5))
+typeof(bar)
+
+# output
+var"#bar#1"{Vector{Float64}}
+```
+Observe that the `Vector{Float64}` that we passed to `foo`, and closed over in `bar`, is present in the type.
+This alludes to the fact that closures are basically just callable `struct`s whose fields are the closed-over variables.
+Since the function itself is an argument to its rule, everything enters the rule for `bar` via its arguments, and the rule system developed in this document applies straightforwardly.
+
+On the other hand, globals do not appear in the functions that they are a part of.
+For example,
+```jldoctest
+const a = randn(10)
+
+function g(x)
+    a .+= x
+    return nothing
+end
+
+typeof(g)
+
+# output
+typeof(g) (singleton type of function g, subtype of Function)
+```
+Neither the value nor type of `a` are present in `g`.
+Since `a` doesn't enter `g` via its arguments, it is unclear how it should be handled in general.
