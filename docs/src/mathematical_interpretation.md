@@ -259,8 +259,8 @@ In order to address these, we need to discuss the types that Tapir.jl uses to re
 
 # Representing Gradients
 
-We call the argument or output of a derivative ``D f [x] : \mathcal{X} \to \mathcal{Y}`` a _tangent_, and will usually denote it with a dot over a symbol, e.g. ``\dot{x}``.
-Conversely, we call an argument or output of the adjoint of this derivative ``D f [x]^\ast : \mathcal{Y} \to \mathcal{X}`` a _gradient_, and will usually denote it with a bar over a symbol, e.g. ``\bar{y}``.
+We refer to both inputs and outputs of derivatives ``D f [x] : \mathcal{X} \to \mathcal{Y}`` as _tangents_, e.g. ``\dot{x}`` or ``\dot{y}``.
+Conversely, we refer to both inputs and outputs to the adjoint of this derivative ``D f [x]^\ast : \mathcal{Y} \to \mathcal{X}`` as _gradients_, e.g. ``\bar{y}`` and ``\bar{x}``.
 
 Note, however, that the sets involved are the same whether dealing with a derivative or its adjoint.
 Consequently, we use the same type to represent both.
