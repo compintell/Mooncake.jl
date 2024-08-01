@@ -408,21 +408,17 @@ It is an error for the zero element of the tangent space of `x` to be represente
 anything other than that which this function returns.
 """
 zero_tangent(x)
-@inline zero_tangent(::Union{Int8, Int16, Int32, Int64, Int128}) = NoTangent()
-@inline zero_tangent(x::IEEEFloat) = zero(x)
-@inline function zero_tangent(x::SimpleVector)
-    return map!(n -> zero_tangent_internal(x[n]), Vector{Any}(undef, length(x)), eachindex(x))
-end
-@inline function zero_tangent(x::Array{P, N}) where {P, N}
-    return _map_if_assigned!(zero_tangent_internal, Array{tangent_type(P), N}(undef, size(x)...), x)
-end
-@inline function zero_tangent(x::P) where {P<:Union{Tuple, NamedTuple}}
-    return tangent_type(P) == NoTangent ? NoTangent() : tuple_map(zero_tangent, x)
-end
+T_SIMPLE_ZERO_TANGENT = Union{
+    Int8, Int16, Int32, Int64, Int128,
+    IEEEFloat,
+    SimpleVector,
+    Array,
+    Tuple, NamedTuple,
+}
+@inline zero_tangent(x::T_SIMPLE_ZERO_TANGENT) = zero_tangent_internal(x)
 function zero_tangent(x::P) where {P}
-    if tangent_type(P) == NoTangent
-        return NoTangent()
-    end
+
+    tangent_type(P) == NoTangent && return NoTangent()
 
     # This method can only handle struct types. Tell user to implement tangent type
     # directly for primitive types.
@@ -463,17 +459,7 @@ end
     return :($(tangent_type(P))($backing_expr))
 end
 
-@inline zero_tangent_internal(::Union{Int8, Int16, Int32, Int64, Int128}, ::IdDict) = NoTangent()
-@inline zero_tangent_internal(x::IEEEFloat, ::IdDict) = zero(x)
-@inline function zero_tangent_internal(x::SimpleVector, ::IdDict)
-    return zero_tangent_internal(x)
-end
-@inline function zero_tangent_internal(x::Array{P, N}, ::IdDict) where {P, N}
-    return zero_tangent_internal(x)
-end
-@inline function zero_tangent_internal(x::P, ::IdDict) where {P<:Union{Tuple, NamedTuple}}
-    return zero_tangent_internal(x)
-end
+@inline zero_tangent_internal(x::T_SIMPLE_ZERO_TANGENT, ::IdDict) = zero_tangent_internal(x)
 function zero_tangent_internal(x::P, stackdict::IdDict) where {P}
     if haskey(stackdict, x)
         return stackdict[x]
