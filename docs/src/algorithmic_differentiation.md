@@ -143,6 +143,14 @@ We may occassionally write it as ``(D f [x])^\ast`` if there is some risk of con
 
 We will explain _how_ reverse-mode AD goes about computing this after some worked examples.
 
+_**Aside: Notation**_
+
+You will have noticed that arguments to adjoints have thus far always had a "bar" over them, e.g. ``\bar{y}``.
+This notation is common in the AD literature and will be used throughout.
+So wherever you see a symbol with a "bar" over it, think "argument to adjoint of derivative".
+
+
+
 ### Some Worked Examples
 
 We now present some worked examples in order to prime intuition, and to introduce the important classes of problems that will be encountered when doing AD in the Julia language.
