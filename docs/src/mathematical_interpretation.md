@@ -430,9 +430,9 @@ typeof(bar)
 # output
 var"#bar#1"{Vector{Float64}}
 ```
-Observe that the `Vector{Float64}` that we passed in is present in the type.
-This is because closures are basically just callable `struct`s -- we can look inside them at what they close over.
-As such, since we draw no distinction between a closure and its arguments when writing a rule, there is no difficulty defining what a rule for a closure ought to do.
+Observe that the `Vector{Float64}` that we passed to `foo`, and closed over in `bar`, is present in the type.
+This alludes to the fact that closures are basically just callable `struct`s whose fields are the closed-over variables.
+Since the function itself is an argument to its rule, everything enters the rule for `bar` via its arguments, and the rule system developed in this document applies straightforwardly.
 
 On the other hand, globals do not appear in the functions that they are a part of.
 For example,
@@ -450,4 +450,4 @@ typeof(g)
 typeof(g) (singleton type of function g, subtype of Function)
 ```
 Neither the value nor type of `a` are present in `g`.
-This makes knowing how to treat `a` somewhat tricky -- it doesn't enter the function via the arguments.
+Since `a` doesn't enter `g` via its arguments, it is unclear how it should be handled in general.
