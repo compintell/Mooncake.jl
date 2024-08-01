@@ -467,7 +467,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         raw_rule = if is_primitive(context_type(info.interp), sig)
             rrule!! # intrinsic / builtin / thing we provably have rule for
         elseif is_invoke
-            LazyDerivedRule(info.interp, sig, info.safety_on) # Static dispatch
+            LazyDerivedRule(info.interp, stmt.args[1], info.safety_on) # Static dispatch
         else
             DynamicDerivedRule(info.interp, info.safety_on)  # Dynamic dispatch
         end
@@ -701,10 +701,12 @@ end
 # Rule derivation.
 #
 
+is_primitive(::Type{MinimalCtx}, ::Core.MethodInstance) = false
+
 # Compute the concrete type of the rule that will be returned from `build_rrule`. This is
 # important for performance in dynamic dispatch, and to ensure that recursion works
 # properly.
-function rule_type(interp::TapirInterpreter{C}, ::Type{sig}) where {C, sig}
+function rule_type(interp::TapirInterpreter{C}, sig) where {C}
     is_primitive(C, sig) && return typeof(rrule!!)
 
     ir, _ = lookup_ir(interp, sig)
@@ -751,7 +753,7 @@ for `rrule!!` for more info.
 If `safety_on` is `true`, then all calls to rules are replaced with calls to `SafeRRule`s.
 """
 function build_rrule(
-    interp::PInterp{C}, sig::Type{<:Tuple}; safety_on=false, silence_safety_messages=true
+    interp::PInterp{C}, sig; safety_on=false, silence_safety_messages=true
 ) where {C}
 
     # If we're compiling in safe mode, let the user know by default.
@@ -1242,19 +1244,20 @@ If `safety_on` is `true`, then the rule constructed will be a `SafeRRule`. This 
 when debugging, but should usually be switched off for production code as it (in general)
 incurs some runtime overhead.
 =#
-mutable struct LazyDerivedRule{sig, Tinterp<:TapirInterpreter, Trule}
+mutable struct LazyDerivedRule{Tinterp<:TapirInterpreter, Trule}
     interp::Tinterp
     safety_on::Bool
+    mi::Core.MethodInstance
     rule::Trule
-    function LazyDerivedRule(interp::A, ::Type{sig}, safety_on::Bool) where {A, sig}
-        rt = safety_on ? SafeRRule{rule_type(interp, sig)} : rule_type(interp, sig)
-        return new{sig, A, rt}(interp, safety_on)
+    function LazyDerivedRule(interp::A, mi::Core.MethodInstance, safety_on::Bool) where {A}
+        rt = rule_type(interp, mi)
+        return new{A, safety_on ? SafeRRule{rt} : rt}(interp, safety_on, mi)
     end
 end
 
-function (rule::LazyDerivedRule{sig})(args::Vararg{Any, N}) where {N, sig}
+function (rule::LazyDerivedRule)(args::Vararg{Any, N}) where {N}
     if !isdefined(rule, :rule)
-        rule.rule = build_rrule(rule.interp, sig; safety_on=rule.safety_on)
+        rule.rule = build_rrule(rule.interp, rule.mi; safety_on=rule.safety_on)
     end
     return rule.rule(args...)
 end

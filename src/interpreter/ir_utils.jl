@@ -189,6 +189,20 @@ function lookup_ir(interp::CC.AbstractInterpreter, sig::Type{<:Tuple})
 end
 
 """
+    lookup_ir(interp::AbstractInterpreter, mi::Core.MethodInstance)::Tuple{IRCode, T}
+
+Get the IR unique IR associated to `sig` under `interp`. Throws `ArgumentError`s if there is
+no code found, or if more than one `IRCode` instance returned.
+
+Returns a tuple containing the `IRCode` and its return type.
+"""
+function lookup_ir(interp::CC.AbstractInterpreter, mi::Core.MethodInstance)
+    return Core.Compiler.typeinf_ircode(
+        interp, mi.def, mi.specTypes, mi.sparam_vals, nothing
+    )::Tuple{IRCode, Any}
+end
+
+"""
     is_reachable_return_node(x::ReturnNode)
 
 Determine whether `x` is a `ReturnNode`, and if it is, if it is also reachable. This is

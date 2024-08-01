@@ -125,8 +125,13 @@ function is_vararg_sig_and_sparam_names(sig)::Tuple{Bool, Vector{Symbol}}
     min = Base.RefValue{UInt}(typemin(UInt))
     max = Base.RefValue{UInt}(typemax(UInt))
     ms = Base._methods_by_ftype(sig, nothing, -1, world, true, min, max, Ptr{Int32}(C_NULL))::Vector
-    m = only(ms).method
-    return m.isva, sparam_names(m)
+    return is_vararg_sig_and_sparam_names(only(ms).method)
+end
+
+is_vararg_sig_and_sparam_names(m::Method) = m.isva, sparam_names(m)
+
+function is_vararg_sig_and_sparam_names(mi::Core.MethodInstance)::Tuple{Bool, Vector{Symbol}}
+    return is_vararg_sig_and_sparam_names(mi.def)
 end
 
 # Returns the names of all of the static parameters in `m`.

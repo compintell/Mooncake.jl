@@ -737,8 +737,8 @@ end
 # zero element and use it later. L is the precise type of `LazyZeroRData` that you wish to
 # construct -- very occassionally you need complete control over this, but don't want to
 # figure out for yourself whether or not construction can be performed lazily.
-@inline function lazy_zero_rdata(::Type{L}, p::P) where {L<:LazyZeroRData, P}
-    return L(can_produce_zero_rdata_from_type(P) ? nothing : zero_rdata(p))
+@inline function lazy_zero_rdata(::Type{L}, p::P) where {S, L<:LazyZeroRData{S}, P}
+    return L(can_produce_zero_rdata_from_type(S) ? nothing : zero_rdata(p))
 end
 
 # If type parameters for `LazyZeroRData` are not provided, use the defaults.
