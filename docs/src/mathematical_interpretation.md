@@ -101,24 +101,28 @@ is perfectly fine.
 It is helpful to have a concrete example which uses both of the permissible methods to make results externally visible.
 To this end, consider the following `function`:
 ```julia
-function f(x::Vector{Float64}, y::Vector{Float64}, z::Vector{Float64})
-    z .= y .* x
+function f(x::Vector{Float64}, y::Vector{Float64}, z::Vector{Float64}, s::Ref{Vector{Float64}})
+    z .*= y .* x
+    s[] = 2z
     return sum(z)
 end
 ```
 We draw your attention to two features of this `function`:
-1. `z` is mutated, and
-2. we allocate a new value and return it (albeit, it is probably allocated on the stack).
+1. `z` is mutated,
+2. `s` is mutated to contain freshly allocated memory, and
+3. we allocate a new value and return it (albeit, it is probably allocated on the stack).
 
 The model we adopt for `function` `f` is a function ``f : \mathcal{X} \to \mathcal{X} \times \mathcal{A}`` where ``\mathcal{X}`` is the real finite Hilbert space associated to the arguments to `f` prior to execution, and ``\mathcal{A}`` is the real finite Hilbert space associated to any newly allocated data during execution which is externally visible after execution -- any newly allocated data which is not made visible is of no concern.
-In this example, ``\mathcal{X} = \RR^D \times \RR^D \times \RR^D`` where ``D`` is the length of `x` / `y` / `z`, and ``\mathcal{A} = \RR``.
+In this example, ``\mathcal{X} = \RR^D \times \RR^D \times \RR^D \times \RR^S`` where ``D`` is the length of `x` / `y` / `z`, and ``S`` the length of `s[]` prior to running `f`.
+``\mathcal{A} = \RR^D \times \RR``, where the ``\RR^D`` component corresponds to the value put in `s`, and ``\RR`` to the return value.
+In this example, some of the memory allocated during execution is made externally visible by modifying one of the arguments, not just via the return value.
 
 The argument to ``f`` is the arguments to `f` _before_ execution, and the output is the 2-tuple comprising the same arguments _after_ execution and the values associated to any newly allocated / created data.
 Crucially, observe that we distinguish between the state of the arguments before and after execution.
 
 For our example, the exact form of ``f`` is
 ```math
-f((x, y, z)) = ((x, y, x \odot y), \sum_{d=1}^D x \odot y)
+f((x, y, z)) = ((x, y, x \odot y), (2 x \odot y, \sum_{d=1}^D x \odot y))
 ```
 Observe that ``f`` behaves a little like a transition operator, in the that the first element of the tuple returned is the updated state of the arguments.
 
