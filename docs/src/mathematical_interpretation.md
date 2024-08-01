@@ -403,3 +403,42 @@ There are a few notable reasons:
 This topic, in particular what goes wrong with permissive tangent type systems like those employed by ChainRules, deserves a more thorough treatment -- hopefully someone will write something more expansive on this topic at some point.
 
 
+### Why Support Closures But Not Mutable Globals
+
+First consider why closures are straightforward to support.
+Look at the type of the closure produced by `foo`:
+```jldoctest
+function foo(x)
+    function bar(y)
+        x .+= y
+        return nothing
+    end
+    return bar
+end
+bar = foo(randn(5))
+typeof(bar)
+
+# output
+var"#bar#1"{Vector{Float64}}
+```
+Observe that the `Vector{Float64}` that we passed in is present in the type.
+This is because closures are basically just callable `struct`s -- we can look inside them at what they close over.
+As such, since we draw no distinction between a closure and its arguments when writing a rule, there is no difficulty defining what a rule for a closure ought to do.
+
+On the other hand, globals do not appear in the functions that they are a part of.
+For example,
+```jldoctest
+const a = randn(10)
+
+function g(x)
+    a .+= x
+    return nothing
+end
+
+typeof(g)
+
+# output
+typeof(g) (singleton type of function g, subtype of Function)
+```
+Neither the value nor type of `a` are present in `g`.
+This makes knowing how to treat `a` somewhat tricky -- it doesn't enter the function via the arguments.
