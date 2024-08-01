@@ -206,6 +206,10 @@ The rule returns another `CoDual` (it propagates book-keeping information forwar
 In a little more depth:
 
 
+_**Notation: primal**_
+
+Throughout the rest of this document, we will refer to the `function` being differentiated as the "primal" computation, and its arguments as the "primal" arguments.
+
 ### Forwards Pass
 
 _**Inputs**_
