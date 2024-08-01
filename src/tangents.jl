@@ -55,6 +55,8 @@ Base.:(==)(x::Tangent, y::Tangent) = x.fields == y.fields
 
 mutable struct MutableTangent{Tfields<:NamedTuple}
     fields::Tfields
+    MutableTangent{Tfields}() where {Tfields} = new{Tfields}()
+    MutableTangent(fields::Tfields) where {Tfields} = new{Tfields}(fields)
 end
 
 Base.:(==)(x::MutableTangent, y::MutableTangent) = x.fields == y.fields
@@ -408,14 +410,6 @@ It is an error for the zero element of the tangent space of `x` to be represente
 anything other than that which this function returns.
 """
 zero_tangent(x)
-T_SIMPLE_ZERO_TANGENT = Union{
-    Int8, Int16, Int32, Int64, Int128,
-    IEEEFloat,
-    SimpleVector,
-    Array,
-    Tuple, NamedTuple,
-}
-@inline zero_tangent(x::T_SIMPLE_ZERO_TANGENT) = zero_tangent_internal(x)
 function zero_tangent(x::P) where {P}
     if isbitstype(P)
         return zero_tangent_internal(x)
@@ -459,7 +453,7 @@ end
     return :($(tangent_type(P))($backing_expr))
 end
 
-@inline zero_tangent_internal(x::T_SIMPLE_ZERO_TANGENT, ::IdDict) = zero_tangent_internal(x)
+@inline zero_tangent_internal(x::Union{Int8,Int16,Int32,Int64,Int128,IEEEFloat}, ::IdDict) = zero_tangent_internal(x)
 function zero_tangent_internal(x::P, stackdict::IdDict) where {P}
     if haskey(stackdict, x)
         return stackdict[x]
@@ -472,23 +466,51 @@ function zero_tangent_internal(x::P, stackdict::IdDict) where {P}
     #     "$P is a primitive type. Implement a method of `zero_tangent` for it."
     # ))
 
-    zt = ntuple(fieldcount(P)) do n
-        if getfield(x, n) === x # circular reference, just return NoTangent
-            return NoTangent()
-        end
-        if tangent_field_type(P, n) <: PossiblyUninitTangent
-            V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
-            if isdefined(x, n)
-                return V(zero_tangent_internal(getfield(x, n), stackdict))
-            else
-                return V()
+    if ismutable(P)
+        mt = MutableTangent{P}()
+        stackdict[x] = mt
+        if isstructtype(P)
+            zt = ntuple(fieldcount(P)) do n 
+                if tangent_field_type(P, n) <: PossiblyUninitTangent
+                    V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
+                    if isdefined(x, n)
+                        return V(zero_tangent_internal(getfield(x, n), stackdict))
+                    else
+                        return V()
+                    end
+                else
+                    return zero_tangent_internal(getfield(x, n), stackdict)
+                end
             end
+            
+            stackdict[x].fields = zt
+            return stackdict[x]
+        elseif P <: AbstractArray
+            # TODO
         else
-            return zero_tangent_internal(getfield(x, n), stackdict)
         end
     end
-    zt = (tangent_type(P))((backing_type(P))(zt))
-    stackdict[x] = zt
+    
+    if isstructtype(P)
+        zt = ntuple(fieldcount(P)) do n 
+            if tangent_field_type(P, n) <: PossiblyUninitTangent
+                V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
+                if isdefined(x, n)
+                    return V(zero_tangent_internal(getfield(x, n), stackdict))
+                else
+                    return V()
+                end
+            else
+                return zero_tangent_internal(getfield(x, n), stackdict)
+            end
+        end
+        zt = (tangent_type(P))((backing_type(P))(zt))
+        stackdict[x] = zt
+    elseif P <: AbstractArray
+        # TODO
+    else
+
+    end
     return zt
 end
 
