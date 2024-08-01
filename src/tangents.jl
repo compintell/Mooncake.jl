@@ -417,15 +417,6 @@ T_SIMPLE_ZERO_TANGENT = Union{
 }
 @inline zero_tangent(x::T_SIMPLE_ZERO_TANGENT) = zero_tangent_internal(x)
 function zero_tangent(x::P) where {P}
-
-    tangent_type(P) == NoTangent && return NoTangent()
-
-    # This method can only handle struct types. Tell user to implement tangent type
-    # directly for primitive types.
-    isprimitivetype(P) && throw(error(
-        "$P is a primitive type. Implement a method of `zero_tangent` for it."
-    ))
-
     if isbitstype(P)
         return zero_tangent_internal(x)
     end
@@ -444,6 +435,15 @@ end
     return tangent_type(P) == NoTangent ? NoTangent() : tuple_map(zero_tangent_internal, x)
 end
 @generated function zero_tangent_internal(x::P) where P
+
+    tangent_type(P) == NoTangent && return NoTangent()
+
+    # This method can only handle struct types. Tell user to implement tangent type
+    # directly for primitive types.
+    isprimitivetype(P) && throw(error(
+        "$P is a primitive type. Implement a method of `zero_tangent` for it."
+    ))
+
     # Derive zero tangent. Tangent types of fields, and types of zeros need only agree
     # if field types are concrete.
     tangent_field_zeros_exprs = ntuple(fieldcount(P)) do n
@@ -464,6 +464,15 @@ function zero_tangent_internal(x::P, stackdict::IdDict) where {P}
     if haskey(stackdict, x)
         return stackdict[x]
     end
+
+    tangent_type(P) == NoTangent && return NoTangent()
+
+    # This method can only handle struct types. Tell user to implement tangent type
+    # directly for primitive types.
+    isprimitivetype(P) && throw(error(
+        "$P is a primitive type. Implement a method of `zero_tangent` for it."
+    ))
+    
     zt = ntuple(fieldcount(P)) do n
         if getfield(x, n) === x # circular reference, just return NoTangent
             return NoTangent()
