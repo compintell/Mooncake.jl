@@ -104,7 +104,10 @@ given a function ``f`` which is differentiable at a point ``x``, compute ``D f [
 If ``f : \RR^P \to \RR^Q``, this is equivalent to computing ``J[x] \dot{x}``, where ``J[x]`` is the Jacobian of ``f`` at ``x``.
 For the interested reader we provide a high-level explanation of _how_ forwards-mode AD does this in [_How_ does Forwards-Mode AD work?](@ref).
 
+_**Another aside: notation**_
 
+You will have noticed that we typically denote the argument to a derivative with a "dot" over it, e.g. ``\dot{x}``.
+This is something that we will do consistently -- wherever you see a symbol with a "dot" over it, expect it to be an argument to a derivative / forwards-mode AD.
 
 # Reverse-Mode AD: _what_ does it do?
 
