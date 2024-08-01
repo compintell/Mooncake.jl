@@ -373,6 +373,7 @@ The second that we always assume that the components of ``\bar{y}_x`` which are 
 
 The third is that the components of the arguments of `f` which are identified by their value must have rdata passed back explicitly by a rule, while the components of the arguments to `f` which are identified by their address get their gradients propagated back implicitly (i.e. via the in-place modification of fdata).
 
+_**Reminder**_: the first element of the tuple returned by `dfoo_adjoint` is the rdata associated to `foo` itself, hence it is `NoRData`.
 
 # Testing
 
