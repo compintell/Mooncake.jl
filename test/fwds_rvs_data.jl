@@ -20,20 +20,25 @@ end
     @testset "lazy construction checks" begin
         # Check that lazy construction is in fact lazy for some cases where performance
         # really matters -- floats, things with no rdata, etc.
-        @testset "$p" for (p, fully_lazy) in Any[
-            (5, true),
-            (Int32(5), true),
-            (5.0, true),
-            (5f0, true),
-            (Float16(5.0), true),
-            (StructFoo(5.0), false),
-            (StructFoo(5.0, randn(4)), false),
-            (Bool, true),
-            (Tapir.TestResources.StableFoo, true),
+        @testset "$p" for (P, p, fully_lazy) in Any[
+            (Int, 5, true),
+            (Int32, Int32(5), true),
+            (Float64, 5.0, true),
+            (Float32, 5f0, true),
+            (Float16, Float16(5.0), true),
+            (StructFoo, StructFoo(5.0), false),
+            (StructFoo, StructFoo(5.0, randn(4)), false),
+            (Type{Bool}, Bool, true),
+            (Type{Tapir.TestResources.StableFoo}, Tapir.TestResources.StableFoo, true),
+            (Tuple{Float64, Float64}, (5.0, 4.0), true),
+            (Tuple{Float64, Vararg{Float64}}, (5.0, 4.0, 3.0), false),
         ]
-            @test fully_lazy == Base.issingletontype(typeof(lazy_zero_rdata(p)))
-            @inferred Tapir.instantiate(lazy_zero_rdata(p))
-            @test typeof(lazy_zero_rdata(p)) == Tapir.lazy_zero_rdata_type(_typeof(p))
+            L = Tapir.lazy_zero_rdata_type(P)
+            @test fully_lazy == Base.issingletontype(typeof(lazy_zero_rdata(L, p)))
+            if isconcretetype(P)
+                @inferred Tapir.instantiate(lazy_zero_rdata(L, p))
+            end
+            @test typeof(lazy_zero_rdata(L, p)) == Tapir.lazy_zero_rdata_type(P)
         end
         @test isa(
             lazy_zero_rdata(Tapir.TestResources.StableFoo),
