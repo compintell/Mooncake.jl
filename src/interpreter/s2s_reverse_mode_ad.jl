@@ -702,14 +702,14 @@ end
 # Rule derivation.
 #
 
-# This is a bit of a hack -- if the user requests 
-is_primitive(::Type{MinimalCtx}, ::Core.MethodInstance) = false
+_is_primitive(C::Type, mi::Core.MethodInstance) = is_primitive(C, mi.specTypes)
+_is_primitive(C::Type, sig::Type) = is_primitive(C, sig)
 
 # Compute the concrete type of the rule that will be returned from `build_rrule`. This is
 # important for performance in dynamic dispatch, and to ensure that recursion works
 # properly.
 function rule_type(interp::TapirInterpreter{C}, sig_or_mi) where {C}
-    is_primitive(C, sig_or_mi) && return typeof(rrule!!)
+    _is_primitive(C, sig_or_mi) && return typeof(rrule!!)
 
     ir, _ = lookup_ir(interp, sig_or_mi)
     Treturn = Base.Experimental.compute_ir_rettype(ir)
@@ -768,7 +768,7 @@ function build_rrule(
     seed_id!()
 
     # If we have a hand-coded rule, just use that.
-    is_primitive(C, sig_or_mi) && return (safety_on ? SafeRRule(rrule!!) : rrule!!)
+    _is_primitive(C, sig_or_mi) && return (safety_on ? SafeRRule(rrule!!) : rrule!!)
 
     # Grab code associated to the primal.
     ir, _ = lookup_ir(interp, sig_or_mi)
