@@ -467,7 +467,8 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         raw_rule = if is_primitive(context_type(info.interp), sig)
             rrule!! # intrinsic / builtin / thing we provably have rule for
         elseif is_invoke
-            LazyDerivedRule(info.interp, stmt.args[1], info.safety_on) # Static dispatch
+            mi = stmt.args[1]::Core.MethodInstance
+            LazyDerivedRule(info.interp, mi, info.safety_on) # Static dispatch
         else
             DynamicDerivedRule(info.interp, info.safety_on)  # Dynamic dispatch
         end
