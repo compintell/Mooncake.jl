@@ -713,7 +713,7 @@ function rule_type(interp::TapirInterpreter{C}, sig_or_mi) where {C}
 
     ir, _ = lookup_ir(interp, sig_or_mi)
     Treturn = Base.Experimental.compute_ir_rettype(ir)
-    isva, _ = is_vararg_sig_and_sparam_names(sig_or_mi)
+    isva, _ = is_vararg_and_sparam_names(sig_or_mi)
 
     arg_types = map(_type, ir.argtypes)
     arg_fwds_types = Tuple{map(fcodual_type, arg_types)...}
@@ -775,7 +775,7 @@ function build_rrule(
     Treturn = Base.Experimental.compute_ir_rettype(ir)
 
     # Normalise the IR, and generated BBCode version of it.
-    isva, spnames = is_vararg_sig_and_sparam_names(sig_or_mi)
+    isva, spnames = is_vararg_and_sparam_names(sig_or_mi)
     ir = normalise!(ir, spnames)
     primal_ir = BBCode(ir)
 
