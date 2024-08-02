@@ -171,10 +171,13 @@ function optimise_ir!(ir::IRCode; show_ir=false, do_inline=true)
 end
 
 """
-    lookup_ir(interp::AbstractInterpreter, sig::Type{<:Tuple})::Tuple{IRCode, T}
+    lookup_ir(
+        interp::AbstractInterpreter,
+        sig_or_mi::Union{Type{<:Tuple}, Core.MethodInstance},
+    )::Tuple{IRCode, T}
 
-Get the IR unique IR associated to `sig` under `interp`. Throws `ArgumentError`s if there is
-no code found, or if more than one `IRCode` instance returned.
+Get the IR unique IR associated to `sig_or_mi` under `interp`. Throws `ArgumentError`s if
+there is no code found, or if more than one `IRCode` instance returned.
 
 Returns a tuple containing the `IRCode` and its return type.
 """
@@ -186,6 +189,10 @@ function lookup_ir(interp::CC.AbstractInterpreter, sig::Type{<:Tuple})
         throw(ArgumentError("$(length(output)) methods found for signature $sig"))
     end
     return only(output)
+end
+
+function lookup_ir(interp::CC.AbstractInterpreter, mi::Core.MethodInstance)
+    return CC.typeinf_ircode(interp, mi.def, mi.specTypes, mi.sparam_vals, nothing)
 end
 
 """

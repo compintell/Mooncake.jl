@@ -15,7 +15,7 @@ static parameter names have been translated into either types, or `:static_param
 expressions.
 
 Unfortunately, the static parameter names are not retained in `IRCode`, and the `Method`
-from which the `IRCode` is derived must be consulted. `Tapir.is_vararg_sig_and_sparam_names`
+from which the `IRCode` is derived must be consulted. `Tapir.is_vararg_and_sparam_names`
 provides a convenient way to do this.
 """
 function normalise!(ir::IRCode, spnames::Vector{Symbol})

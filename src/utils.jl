@@ -114,19 +114,33 @@ The usual function `map` doesn't enforce this for `Array`s.
 end
 
 #=
-    is_vararg_sig_and_sparam_names(sig)::Tuple{Bool, Vector{Symbol}}
+    is_vararg_and_sparam_names(m::Method)
 
-Returns a 2-tuple. The first element is true if the method associated to `sig` is a vararg
-method, and false if not. The second element contains all of the names of the static
-parameters associated to said method.
+Returns a 2-tuple. The first element is true if `m` is a vararg method, and false if not.
+The second element contains the names of the static parameters associated to `m`.
 =#
-function is_vararg_sig_and_sparam_names(sig)::Tuple{Bool, Vector{Symbol}}
+is_vararg_and_sparam_names(m::Method) = m.isva, sparam_names(m)
+
+#=
+    is_vararg_and_sparam_names(sig)::Tuple{Bool, Vector{Symbol}}
+
+Finds the method associated to `sig`, and calls `is_vararg_and_sparam_names` on it.
+=#
+function is_vararg_and_sparam_names(sig)::Tuple{Bool, Vector{Symbol}}
     world = Base.get_world_counter()
     min = Base.RefValue{UInt}(typemin(UInt))
     max = Base.RefValue{UInt}(typemax(UInt))
     ms = Base._methods_by_ftype(sig, nothing, -1, world, true, min, max, Ptr{Int32}(C_NULL))::Vector
-    m = only(ms).method
-    return m.isva, sparam_names(m)
+    return is_vararg_and_sparam_names(only(ms).method)
+end
+
+#=
+    is_vararg_and_sparam_names(mi::Core.MethodInstance)
+
+Calls `is_vararg_and_sparam_names` on `mi.def::Method`.
+=#
+function is_vararg_and_sparam_names(mi::Core.MethodInstance)::Tuple{Bool, Vector{Symbol}}
+    return is_vararg_and_sparam_names(mi.def)
 end
 
 # Returns the names of all of the static parameters in `m`.

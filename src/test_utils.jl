@@ -1450,6 +1450,18 @@ end
 
 test_getfield_of_tuple_of_types(n::Int) = getfield((Float64, Float64), n)
 
+test_for_invoke(x) = 5x
+
+inlinable_invoke_call(x::Float64) = invoke(test_for_invoke, Tuple{Float64}, x)
+
+vararg_test_for_invoke(n::Tuple{Int, Int}, x...) = sum(x) + n[1]
+
+function inlinable_vararg_invoke_call(
+    rows::Tuple{Vararg{Int}}, n1::N, ns::Vararg{N}
+) where {N}
+    return invoke(vararg_test_for_invoke, Tuple{typeof(rows), Vararg{N}}, rows, n1, ns...)
+end
+
 function generate_test_functions()
     return Any[
         (false, :allocs, nothing, const_tester),
@@ -1621,6 +1633,9 @@ function generate_test_functions()
         (false, :none, nothing, ArgumentError, "hi"),
         (false, :none, nothing, test_small_union, Ref{Union{Float64, Vector{Float64}}}(5.0)),
         (false, :none, nothing, test_small_union, Ref{Union{Float64, Vector{Float64}}}([1.0])),
+        (false, :allocs, nothing, inlinable_invoke_call, 5.0),
+        (false, :none, nothing, inlinable_vararg_invoke_call, (2, 2), 5.0, 4.0, 3.0, 2.0),
+        (false, :none, nothing, hvcat, (2, 2), 3.0, 2.0, 0.0, 1.0),
     ]
 end
 
