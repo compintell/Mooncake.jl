@@ -111,7 +111,7 @@ end
 # LEVEL 2
 #
 
-for (gemv, elty) in ((:dgemv_, :Float64), (:sgemm_, :Float32))
+for (gemv, elty) in ((:dgemv_, :Float64), (:sgemv_, :Float32))
     @eval @inline function rrule!!(
         ::CoDual{typeof(_foreigncall_)},
         ::CoDual{Val{$(blas_name(gemv))}},
