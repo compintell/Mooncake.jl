@@ -827,7 +827,7 @@ function build_rrule(
         interp.oc_cache[(sig_or_mi, safety_on)] = (fwds_oc, pb_oc)
     end
 
-    raw_rule = rule_type(interp, sig_or_mi)(fwds_oc, pb_oc, Val(isva), Val(num_args(info)))
+    raw_rule = DerivedRule(fwds_oc, pb_oc, Val(isva), Val(num_args(info)))
     return safety_on ? SafeRRule(raw_rule) : raw_rule
 end
 
@@ -1259,12 +1259,14 @@ end
 
 function (rule::LazyDerivedRule{T, Trule})(args::Vararg{Any, N}) where {N, T, Trule}
     if !isdefined(rule, :rule)
-        rule = build_rrule(rule.interp, rule.mi; safety_on=rule.safety_on)
-        if rule isa Trule
-            rule.rule = rule
+        derived_rule = build_rrule(rule.interp, rule.mi; safety_on=rule.safety_on)
+        if derived_rule isa Trule
+            rule.rule = derived_rule
         else
             @warn "Unable to put rule in rule field. Rule should error."
-            rule(args...)
+            @show typeof(rule)
+            @show Trule
+            derived_rule(args...)
             error("Rule with bad type ran without error.")
         end
     end
