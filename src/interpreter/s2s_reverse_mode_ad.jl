@@ -1257,9 +1257,16 @@ mutable struct LazyDerivedRule{Tinterp<:TapirInterpreter, Trule}
     end
 end
 
-function (rule::LazyDerivedRule)(args::Vararg{Any, N}) where {N}
+function (rule::LazyDerivedRule{T, Trule})(args::Vararg{Any, N}) where {N, T, Trule}
     if !isdefined(rule, :rule)
-        rule.rule = build_rrule(rule.interp, rule.mi; safety_on=rule.safety_on)
+        rule = build_rrule(rule.interp, rule.mi; safety_on=rule.safety_on)
+        if rule isa Trule
+            rule.rule = rule
+        else
+            @warn "Unable to put rule in rule field. Rule should error."
+            rule(args...)
+            error("Rule with bad type ran without error.")
+        end
     end
     return rule.rule(args...)
 end
