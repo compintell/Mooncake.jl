@@ -1264,8 +1264,12 @@ function (rule::LazyDerivedRule{T, Trule})(args::Vararg{Any, N}) where {N, T, Tr
             rule.rule = derived_rule
         else
             @warn "Unable to put rule in rule field. Rule should error."
-            @show typeof(derived_rule)
-            @show Trule
+            println("derived_rule is of type")
+            display(typeof(derived_rule))
+            println()
+            println("Expected type is")
+            display(Trule)
+            println()
             derived_rule(args...)
             error("Rule with bad type ran without error.")
         end
