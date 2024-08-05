@@ -56,6 +56,7 @@ Base.:(==)(x::Tangent, y::Tangent) = x.fields == y.fields
 mutable struct MutableTangent{Tfields<:NamedTuple}
     fields::Tfields
     MutableTangent(fields::Tfields) where {Tfields} = new{Tfields}(fields)
+    MutableTangent{Tfields}(fields::Tfields) where {Tfields} = new{Tfields}(fields)
     MutableTangent{Tfields}() where {Tfields} = new{Tfields}()
 end
 
@@ -460,10 +461,22 @@ end
     else
         stackdict[x] = Array{tangent_type(P), N}(undef, size(x)...)
         for i in eachindex(x)
-            stackdict[x][i] = zero_tangent_internal(x[i], stackdict)
+            if isassigned(x, i)
+                stackdict[x][i] = zero_tangent_internal(x[i], stackdict)
+            end
         end
         return stackdict[x]
     end
+end
+function zero_tangent_internal(x::P, stackdict::IdDict) where {P<:Union{Tuple, NamedTuple}}
+    if haskey(stackdict, x)
+        return stackdict[x]
+    end
+    if tangent_type(P) == NoTangent
+        return NoTangent()
+    end 
+    stackdict[x] = tuple_map(Base.Fix2(zero_tangent_internal, stackdict), x)
+    return stackdict[x]
 end
 function zero_tangent_internal(x::P, stackdict::IdDict) where {P}
     if haskey(stackdict, x)
