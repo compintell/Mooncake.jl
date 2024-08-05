@@ -127,7 +127,7 @@ end
         
         foo = Foo(nothing, 5.0)
         foo.x = foo
-        @test Tapir.zero_tangent(foo).fields.x == NoTangent()
+        @test .fields.x == NoTangent()
     end
     
     @testset "duplicate reference" begin
@@ -141,6 +141,11 @@ end
         mt = Tapir.zero_tangent(bar)
         @test mt.fields.x === mt.fields.y
     end
+
+    # indirect circular reference
+    m = Any[Any[1]]
+    m[1][1] = m
+    
 end
 
 # The goal of these tests is to check that we can indeed generate tangent types for anything
