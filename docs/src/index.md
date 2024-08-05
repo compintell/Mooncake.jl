@@ -1,8 +1,8 @@
 # Tapir.jl
 
-Documentation for Tapir.jl is on it's way!
+Documentation for Tapir.jl is on its way!
 
-Note 02/07/2024: The first round of documentation has arrived.
+Note (02/07/2024): The first round of documentation has arrived.
 This is largely targetted at those who are interested in contributing to Tapir.jl -- you can find this work in the "Understanding Tapir.jl" section of the docs.
 There is more to to do, but it should be sufficient to understand how AD works in principle, and the core abstractions underlying Tapir.jl.
 

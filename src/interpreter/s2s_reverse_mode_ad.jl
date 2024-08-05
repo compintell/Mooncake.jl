@@ -467,7 +467,8 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         raw_rule = if is_primitive(context_type(info.interp), sig)
             rrule!! # intrinsic / builtin / thing we provably have rule for
         elseif is_invoke
-            LazyDerivedRule(info.interp, sig, info.safety_on) # Static dispatch
+            mi = stmt.args[1]::Core.MethodInstance
+            LazyDerivedRule(info.interp, mi, info.safety_on) # Static dispatch
         else
             DynamicDerivedRule(info.interp, info.safety_on)  # Dynamic dispatch
         end
@@ -701,15 +702,18 @@ end
 # Rule derivation.
 #
 
+_is_primitive(C::Type, mi::Core.MethodInstance) = is_primitive(C, mi.specTypes)
+_is_primitive(C::Type, sig::Type) = is_primitive(C, sig)
+
 # Compute the concrete type of the rule that will be returned from `build_rrule`. This is
 # important for performance in dynamic dispatch, and to ensure that recursion works
 # properly.
-function rule_type(interp::TapirInterpreter{C}, ::Type{sig}) where {C, sig}
-    is_primitive(C, sig) && return typeof(rrule!!)
+function rule_type(interp::TapirInterpreter{C}, sig_or_mi) where {C}
+    _is_primitive(C, sig_or_mi) && return typeof(rrule!!)
 
-    ir, _ = lookup_ir(interp, sig)
+    ir, _ = lookup_ir(interp, sig_or_mi)
     Treturn = Base.Experimental.compute_ir_rettype(ir)
-    isva, _ = is_vararg_sig_and_sparam_names(sig)
+    isva, _ = is_vararg_and_sparam_names(sig_or_mi)
 
     arg_types = map(_type, ir.argtypes)
     arg_fwds_types = Tuple{map(fcodual_type, arg_types)...}
@@ -743,20 +747,20 @@ function build_rrule(args...; safety_on=false)
 end
 
 """
-    build_rrule(interp::PInterp{C}, sig::Type{<:Tuple}; safety_on=false) where {C}
+    build_rrule(interp::PInterp{C}, sig_or_mi; safety_on=false) where {C}
 
-Returns a `DerivedRule` which is an `rrule!!` for `sig` in context `C`. See the docstring
+Returns a `DerivedRule` which is an `rrule!!` for `sig_or_mi` in context `C`. See the docstring
 for `rrule!!` for more info.
 
 If `safety_on` is `true`, then all calls to rules are replaced with calls to `SafeRRule`s.
 """
 function build_rrule(
-    interp::PInterp{C}, sig::Type{<:Tuple}; safety_on=false, silence_safety_messages=true
+    interp::PInterp{C}, sig_or_mi; safety_on=false, silence_safety_messages=true
 ) where {C}
 
     # If we're compiling in safe mode, let the user know by default.
     if !silence_safety_messages && safety_on
-        @info "Compiling rule for $sig in safe mode. Disable for best performance."
+        @info "Compiling rule for $sig_or_mi in safe mode. Disable for best performance."
     end
 
     # Reset id count. This ensures that the IDs generated are the same each time this
@@ -764,14 +768,14 @@ function build_rrule(
     seed_id!()
 
     # If we have a hand-coded rule, just use that.
-    is_primitive(C, sig) && return (safety_on ? SafeRRule(rrule!!) : rrule!!)
+    _is_primitive(C, sig_or_mi) && return (safety_on ? SafeRRule(rrule!!) : rrule!!)
 
     # Grab code associated to the primal.
-    ir, _ = lookup_ir(interp, sig)
+    ir, _ = lookup_ir(interp, sig_or_mi)
     Treturn = Base.Experimental.compute_ir_rettype(ir)
 
     # Normalise the IR, and generated BBCode version of it.
-    isva, spnames = is_vararg_sig_and_sparam_names(sig)
+    isva, spnames = is_vararg_and_sparam_names(sig_or_mi)
     ir = normalise!(ir, spnames)
     primal_ir = BBCode(ir)
 
@@ -791,8 +795,8 @@ function build_rrule(
 
     # If we've already derived the OpaqueClosures and info, do not re-derive, just create a
     # copy and pass in new shared data.
-    if haskey(interp.oc_cache, (sig, safety_on))
-        existing_fwds_oc, existing_pb_oc = interp.oc_cache[(sig, safety_on)]
+    if haskey(interp.oc_cache, (sig_or_mi, safety_on))
+        existing_fwds_oc, existing_pb_oc = interp.oc_cache[(sig_or_mi, safety_on)]
         fwds_oc = replace_captures(existing_fwds_oc, shared_data)
         pb_oc = replace_captures(existing_pb_oc, shared_data)
     else
@@ -801,7 +805,7 @@ function build_rrule(
 
         optimised_fwds_ir = optimise_ir!(optimise_ir!(IRCode(fwds_ir); do_inline=true))
         optimised_pb_ir = optimise_ir!(optimise_ir!(IRCode(pb_ir); do_inline=true))
-        # @show sig
+        # @show sig_or_mi
         # @show Treturn
         # @show safety_on
         # display(ir)
@@ -820,10 +824,10 @@ function build_rrule(
             OpaqueClosure(optimised_pb_ir, shared_data...; do_compile=true),
             optimised_pb_ir,
         )
-        interp.oc_cache[(sig, safety_on)] = (fwds_oc, pb_oc)
+        interp.oc_cache[(sig_or_mi, safety_on)] = (fwds_oc, pb_oc)
     end
 
-    raw_rule = rule_type(interp, sig)(fwds_oc, pb_oc, Val(isva), Val(num_args(info)))
+    raw_rule = rule_type(interp, sig_or_mi)(fwds_oc, pb_oc, Val(isva), Val(num_args(info)))
     return safety_on ? SafeRRule(raw_rule) : raw_rule
 end
 
@@ -1230,7 +1234,7 @@ function (dynamic_rule::DynamicDerivedRule)(args::Vararg{Any, N}) where {N}
 end
 
 #=
-    LazyDerivedRule(interp, sig, safety_on::Bool)
+    LazyDerivedRule(interp, mi::Core.MethodInstance, safety_on::Bool)
 
 For internal use only.
 
@@ -1242,19 +1246,20 @@ If `safety_on` is `true`, then the rule constructed will be a `SafeRRule`. This 
 when debugging, but should usually be switched off for production code as it (in general)
 incurs some runtime overhead.
 =#
-mutable struct LazyDerivedRule{sig, Tinterp<:TapirInterpreter, Trule}
+mutable struct LazyDerivedRule{Tinterp<:TapirInterpreter, Trule}
     interp::Tinterp
     safety_on::Bool
+    mi::Core.MethodInstance
     rule::Trule
-    function LazyDerivedRule(interp::A, ::Type{sig}, safety_on::Bool) where {A, sig}
-        rt = safety_on ? SafeRRule{rule_type(interp, sig)} : rule_type(interp, sig)
-        return new{sig, A, rt}(interp, safety_on)
+    function LazyDerivedRule(interp::A, mi::Core.MethodInstance, safety_on::Bool) where {A}
+        rt = rule_type(interp, mi)
+        return new{A, safety_on ? SafeRRule{rt} : rt}(interp, safety_on, mi)
     end
 end
 
-function (rule::LazyDerivedRule{sig})(args::Vararg{Any, N}) where {N, sig}
+function (rule::LazyDerivedRule)(args::Vararg{Any, N}) where {N}
     if !isdefined(rule, :rule)
-        rule.rule = build_rrule(rule.interp, sig; safety_on=rule.safety_on)
+        rule.rule = build_rrule(rule.interp, rule.mi; safety_on=rule.safety_on)
     end
     return rule.rule(args...)
 end

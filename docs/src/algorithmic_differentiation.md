@@ -104,7 +104,11 @@ given a function ``f`` which is differentiable at a point ``x``, compute ``D f [
 If ``f : \RR^P \to \RR^Q``, this is equivalent to computing ``J[x] \dot{x}``, where ``J[x]`` is the Jacobian of ``f`` at ``x``.
 For the interested reader we provide a high-level explanation of _how_ forwards-mode AD does this in [_How_ does Forwards-Mode AD work?](@ref).
 
+_**Another aside: notation**_
 
+You will have noticed that we typically denote the argument to a derivative with a "dot" over it, e.g. ``\dot{x}``.
+This is something that we will do consistently, and we will use the same notation for the outputs of derivatives.
+Wherever you see a symbol with a "dot" over it, expect it to be an input or output of a derivative / forwards-mode AD.
 
 # Reverse-Mode AD: _what_ does it do?
 
@@ -139,6 +143,15 @@ It is a linear function from ``\mathcal{Y}`` to ``\mathcal{X}``.
 We may occassionally write it as ``(D f [x])^\ast`` if there is some risk of confusion.
 
 We will explain _how_ reverse-mode AD goes about computing this after some worked examples.
+
+_**Aside: Notation**_
+
+You will have noticed that arguments to adjoints have thus far always had a "bar" over them, e.g. ``\bar{y}``.
+This notation is common in the AD literature and will be used throughout.
+Additionally, this "bar" notation will be used for the outputs of adjoints of derivatives.
+So wherever you see a symbol with a "bar" over it, think "input or output of adjoint of derivative".
+
+
 
 ### Some Worked Examples
 
@@ -317,7 +330,7 @@ _**Step 2: Compute Derivative**_
 
 The derivative of ``\phi_{\text{f!}}`` is
 ```math
-D \phi_{\text{f!}} [x](\dot{x}) = (2 x \odot x, 2 \sum_{n=1}^N x_n \dot{x}_n).
+D \phi_{\text{f!}} [x](\dot{x}) = (2 x \odot \dot{x}, 2 \sum_{n=1}^N x_n \dot{x}_n).
 ```
 
 _**Step 3: Compute Adjoint of Derivative**_
@@ -444,7 +457,7 @@ Subsequent sections will build on these foundations, to provide a more general e
 
 ### _How_ does Forwards-Mode AD work?
 
-Forwards-mode AD achieves this by breaking down ``f`` into the composition ``f = f_N \circ \dots \circ f_1``, # where each ``f_n`` is a simple function whose derivative (function) ``D f_n [x_n]`` we know for any given ``x_n``. By the chain rule, we have that
+Forwards-mode AD achieves this by breaking down ``f`` into the composition ``f = f_N \circ \dots \circ f_1``, where each ``f_n`` is a simple function whose derivative (function) ``D f_n [x_n]`` we know for any given ``x_n``. By the chain rule, we have that
 ```math
 D f [x] (\dot{x}) = D f_N [x_N] \circ \dots \circ D f_1 [x_1] (\dot{x})
 ```
@@ -455,7 +468,7 @@ which suggests the following algorithm:
 4. let ``n = n + 1``
 5. if ``n = N+1`` then return ``\dot{x}_{N+1}``, otherwise go to 2.
 
-When each function ``f_n`` maps between Euclidean spaces, the applications of derivatives ``D f_n [x_n] (\dot{x}_n)`` are given by ``J_n \dot{x}_n`` where ``J_n`` is the Jacobian of ``f_n`` at ``x_n``.v
+When each function ``f_n`` maps between Euclidean spaces, the applications of derivatives ``D f_n [x_n] (\dot{x}_n)`` are given by ``J_n \dot{x}_n`` where ``J_n`` is the Jacobian of ``f_n`` at ``x_n``.
 
 ```@bibliography
 ```
