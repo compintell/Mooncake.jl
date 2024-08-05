@@ -120,32 +120,47 @@ end
 
 @testset "zero_tangent" begin
     @testset "circular reference" begin
-        mutable struct Foo
+        mutable struct CircRef
             x
             y::Float64
         end
         
-        foo = Foo(nothing, 5.0)
+        foo = CircRef(nothing, 5.0)
         foo.x = foo
-        @test .fields.x == NoTangent()
+        zt = Tapir.zero_tangent(foo)
+        @test zt.fields.x === zt
+    end
+
+    @testset "struct with non-concrete fields" begin
+        struct NonConcrete
+            x::Float64
+            y
+        end
+
+        bar = NonConcrete(5.0, 1.0)
+        zt = Tapir.zero_tangent(bar)
+        @test zt == Tangent{@NamedTuple{x::Float64, y}}(@NamedTuple{x::Float64, y}((0.0, 0.0)))
     end
     
     @testset "duplicate reference" begin
-        mutable struct Bar
+        mutable struct DupRef
             x
             y
         end
         
         x = [1.0, 2.0, 3.0]
-        bar = Bar(view(x, 1:2), view(x, 1:2))
+        bar = DupRef(view(x, 1:2), view(x, 1:2))
         mt = Tapir.zero_tangent(bar)
         @test mt.fields.x === mt.fields.y
     end
 
-    # indirect circular reference
-    m = Any[Any[1]]
-    m[1][1] = m
-    
+    @testset "indirect circular reference" begin
+        m = [Any[1], 2.0]
+        m[1][1] = m
+        zt = Tapir.zero_tangent(m)
+        @test zt[1][1] === zt
+    end
+
 end
 
 # The goal of these tests is to check that we can indeed generate tangent types for anything
