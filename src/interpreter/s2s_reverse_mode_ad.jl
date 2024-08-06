@@ -718,23 +718,13 @@ function rule_type(interp::TapirInterpreter{C}, sig_or_mi) where {C}
     arg_types = map(_type, ir.argtypes)
     arg_fwds_types = Tuple{map(fcodual_type, arg_types)...}
     arg_rvs_types = Tuple{map(rdata_type ∘ tangent_type, arg_types)...}
-    fwds_return_codual = fcodual_type(Treturn)
     rvs_return_type = rdata_type(tangent_type(Treturn))
-    if isconcretetype(fwds_return_codual)
-        return DerivedRule{
-            MistyClosure{OpaqueClosure{arg_fwds_types, fwds_return_codual}},
-            MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
-            Val{isva},
-            Val{length(ir.argtypes)},
-        }
-    else
-        return DerivedRule{
-            MistyClosure{OpaqueClosure{arg_fwds_types, P}} where {P<:fwds_return_codual},
-            MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
-            Val{isva},
-            Val{length(ir.argtypes)},
-        }
-    end
+    return DerivedRule{
+        MistyClosure{OpaqueClosure{arg_fwds_types, fcodual_type(Treturn)}},
+        MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
+        Val{isva},
+        Val{length(ir.argtypes)},
+    }
 end
 
 """
@@ -827,7 +817,7 @@ function build_rrule(
         interp.oc_cache[(sig_or_mi, safety_on)] = (fwds_oc, pb_oc)
     end
 
-    raw_rule = rule_type(interp, sig_or_mi)(fwds_oc, pb_oc, Val(isva), Val(num_args(info)))
+    raw_rule = DerivedRule(fwds_oc, pb_oc, Val(isva), Val(num_args(info)))
     return safety_on ? SafeRRule(raw_rule) : raw_rule
 end
 
@@ -1257,9 +1247,22 @@ mutable struct LazyDerivedRule{Tinterp<:TapirInterpreter, Trule}
     end
 end
 
-function (rule::LazyDerivedRule)(args::Vararg{Any, N}) where {N}
+function (rule::LazyDerivedRule{T, Trule})(args::Vararg{Any, N}) where {N, T, Trule}
     if !isdefined(rule, :rule)
-        rule.rule = build_rrule(rule.interp, rule.mi; safety_on=rule.safety_on)
+        derived_rule = build_rrule(rule.interp, rule.mi; safety_on=rule.safety_on)
+        if derived_rule isa Trule
+            rule.rule = derived_rule
+        else
+            @warn "Unable to put rule in rule field. Rule should error."
+            println("derived_rule is of type")
+            display(typeof(derived_rule))
+            println()
+            println("Expected type is")
+            display(Trule)
+            println()
+            derived_rule(args...)
+            error("Rule with bad type ran without error.")
+        end
     end
     return rule.rule(args...)
 end
