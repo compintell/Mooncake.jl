@@ -143,15 +143,26 @@ end
     end
     
     @testset "duplicate reference" begin
-        mutable struct DupRef
-            x
-            y
+        @testset "subarray" begin
+            mutable struct MutDupRefSubArray
+                x
+                y
+            end
+            
+            x = [1.0, 2.0, 3.0]
+            mut_struct = MutDupRefSubArray(view(x, 1:2), view(x, 1:2))
+            mt = Tapir.zero_tangent(mut_struct)
+            @test mt.fields.x === mt.fields.y
+
+            struct ImmutableDupRefSubArray
+                x
+                y
+            end
+
+            immutable_struct = ImmutableDupRefSubArray(view(x, 1:2), view(x, 1:2))
+            it = Tapir.zero_tangent(immutable_struct)
+            @test it.fields.x === it.fields.y
         end
-        
-        x = [1.0, 2.0, 3.0]
-        bar = DupRef(view(x, 1:2), view(x, 1:2))
-        mt = Tapir.zero_tangent(bar)
-        @test mt.fields.x === mt.fields.y
     end
 
     @testset "indirect circular reference" begin
@@ -160,7 +171,6 @@ end
         zt = Tapir.zero_tangent(m)
         @test zt[1][1] === zt
     end
-
 end
 
 # The goal of these tests is to check that we can indeed generate tangent types for anything

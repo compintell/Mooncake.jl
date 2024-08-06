@@ -453,7 +453,7 @@ end
 end
 @inline function zero_tangent_internal(x::Array{P, N}, stackdict::IdDict) where {P, N}
     if haskey(stackdict, x)
-        return stackdict[x]
+        return stackdict[x]::fdata_type(tangent_type(P))
     end
     if isbitstype(P)
         return _map_if_assigned!(Base.Fix2(zero_tangent_internal, stackdict), Array{tangent_type(P), N}(undef, size(x)...), x)
@@ -468,21 +468,22 @@ end
     end
 end
 function zero_tangent_internal(x::P, stackdict::IdDict) where {P<:Union{Tuple, NamedTuple}}
+    if tangent_type(P) == NoTangent
+        return NoTangent()
+    end
     if haskey(stackdict, x)
         return stackdict[x]::fdata_type(tangent_type(P))
     end
-    if tangent_type(P) == NoTangent
-        return NoTangent()
-    end 
     stackdict[x] = tuple_map(Base.Fix2(zero_tangent_internal, stackdict), x)
     return stackdict[x]
 end
 function zero_tangent_internal(x::P, stackdict::IdDict) where {P}
-    if haskey(stackdict, x)
-        return stackdict[x]
-    end
 
     tangent_type(P) == NoTangent && return NoTangent()
+
+    if haskey(stackdict, x)
+        return stackdict[x]::fdata_type(tangent_type(P))
+    end
 
     if tangent_type(P) <: MutableTangent
         stackdict[x] = tangent_type(P)()
