@@ -453,18 +453,21 @@ end
 end
 @inline function zero_tangent_internal(x::Array{P, N}, stackdict::IdDict) where {P, N}
     if haskey(stackdict, x)
-        return stackdict[x]::fdata_type(tangent_type(P))
+        return stackdict[x]::tangent_type(typeof(x))
     end
     if isbitstype(P)
-        return _map_if_assigned!(Base.Fix2(zero_tangent_internal, stackdict), Array{tangent_type(P), N}(undef, size(x)...), x)
+        zt = _map_if_assigned!(Base.Fix2(zero_tangent_internal, stackdict), Array{tangent_type(P), N}(undef, size(x)...), x)
+        stackdict[x] = zt
+        return zt
     else
-        stackdict[x] = Array{tangent_type(P), N}(undef, size(x)...)
+        zt = Array{tangent_type(P), N}(undef, size(x)...)
         for i in eachindex(x)
             if isassigned(x, i)
-                stackdict[x][i] = zero_tangent_internal(x[i], stackdict)
+                zt[i] = zero_tangent_internal(x[i], stackdict)
             end
         end
-        return stackdict[x]
+        stackdict[x] = zt
+        return zt
     end
 end
 function zero_tangent_internal(x::P, stackdict::IdDict) where {P<:Union{Tuple, NamedTuple}}
@@ -472,20 +475,20 @@ function zero_tangent_internal(x::P, stackdict::IdDict) where {P<:Union{Tuple, N
         return NoTangent()
     end
     if haskey(stackdict, x)
-        return stackdict[x]::fdata_type(tangent_type(P))
+        return stackdict[x]::tangent_type(P)
     end
-    stackdict[x] = tuple_map(Base.Fix2(zero_tangent_internal, stackdict), x)
-    return stackdict[x]
+    zt = tuple_map(Base.Fix2(zero_tangent_internal, stackdict), x)
+    stackdict[x] = zt
+    return zt
 end
 function zero_tangent_internal(x::P, stackdict::IdDict) where {P}
 
     tangent_type(P) == NoTangent && return NoTangent()
 
-    if haskey(stackdict, x)
-        return stackdict[x]::fdata_type(tangent_type(P))
-    end
-
     if tangent_type(P) <: MutableTangent
+        if haskey(stackdict, x)
+        return stackdict[x]::tangent_type(P)
+    end
         stackdict[x] = tangent_type(P)()
         zt = ntuple(fieldcount(P)) do n
             name = fieldname(P, n)
@@ -501,8 +504,11 @@ function zero_tangent_internal(x::P, stackdict::IdDict) where {P}
             end
         end
 
-        stackdict[x].fields = NamedTuple(zt)
-        return stackdict[x]
+        zt = NamedTuple(zt)
+        stackdict[x].fields = zt
+        return zt
+    elseif isbitstype(P)
+        return zero_tangent_internal(x)
     else
         zt = ntuple(fieldcount(P)) do n
             if tangent_field_type(P, n) <: PossiblyUninitTangent
@@ -516,8 +522,7 @@ function zero_tangent_internal(x::P, stackdict::IdDict) where {P}
                 return zero_tangent_internal(getfield(x, n), stackdict)
             end
         end
-        stackdict[x] = tangent_type(P)(backing_type(P)(zt))
-        return stackdict[x]
+        return tangent_type(P)(backing_type(P)(zt))
     end
 end
 

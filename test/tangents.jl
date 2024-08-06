@@ -160,10 +160,10 @@ end
                 y
             end
 
-            immutable_struct = ImmutableDupRefSubArray(view(x, 1:2), view(x, 1:2))
+            immutable_struct = ImmutableDupRefSubArray(view(x, 1:2), view(x, 1:1))
             it = Tapir.zero_tangent(immutable_struct)
             @test it isa Tapir.Tangent
-            @test it.fields.x === it.fields.y
+            @test it.fields.x.fields.parent === it.fields.y.fields.parent
         end
     end
 
