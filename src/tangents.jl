@@ -414,10 +414,7 @@ anything other than that which this function returns.
 """
 zero_tangent(x)
 function zero_tangent(x::P) where {P}
-    if isbitstype(P)
-        return zero_tangent_internal(x)
-    end
-    return zero_tangent_internal(x, IdDict())
+    return isbitstype(P) ? zero_tangent_internal(x) : zero_tangent_internal(x, IdDict())
 end
 
 @inline zero_tangent_internal(::Union{Int8, Int16, Int32, Int64, Int128}) = NoTangent()
