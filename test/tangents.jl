@@ -152,6 +152,7 @@ end
             x = [1.0, 2.0, 3.0]
             mut_struct = MutDupRefSubArray(view(x, 1:2), view(x, 1:2))
             mt = Tapir.zero_tangent(mut_struct)
+            @test mt isa Tapir.MutableTangent
             @test mt.fields.x === mt.fields.y
 
             struct ImmutableDupRefSubArray
@@ -161,6 +162,7 @@ end
 
             immutable_struct = ImmutableDupRefSubArray(view(x, 1:2), view(x, 1:2))
             it = Tapir.zero_tangent(immutable_struct)
+            @test it isa Tapir.Tangent
             @test it.fields.x === it.fields.y
         end
     end
