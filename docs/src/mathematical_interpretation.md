@@ -82,6 +82,7 @@ In this example, `a` is modified by `bar`, the effect of which is visible to `fo
 
 For a variety of reasons this is very awkward to handle well.
 Since it's largely considered poor practice anyway, we explicitly outlaw this mode of communication between `function`s.
+See [Why Support Closures But Not Mutable Globals](@ref) for more info.
 
 Note that this does not preclude the use of closed-over values or callable `struct`s.
 For example, something like
