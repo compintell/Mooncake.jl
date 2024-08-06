@@ -108,7 +108,7 @@ function f(x::Vector{Float64}, y::Vector{Float64}, z::Vector{Float64}, s::Ref{Ve
     return sum(z)
 end
 ```
-We draw your attention to two features of this `function`:
+We draw your attention to three features of this `function`:
 1. `z` is mutated,
 2. `s` is mutated to contain freshly allocated memory, and
 3. we allocate a new value and return it (albeit, it is probably allocated on the stack).
