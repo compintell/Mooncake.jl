@@ -469,7 +469,7 @@ end
 end
 function zero_tangent_internal(x::P, stackdict::IdDict) where {P<:Union{Tuple, NamedTuple}}
     if haskey(stackdict, x)
-        return stackdict[x]
+        return stackdict[x]::fdata_type(tangent_type(P))
     end
     if tangent_type(P) == NoTangent
         return NoTangent()
