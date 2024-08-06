@@ -82,6 +82,7 @@ In this example, `a` is modified by `bar`, the effect of which is visible to `fo
 
 For a variety of reasons this is very awkward to handle well.
 Since it's largely considered poor practice anyway, we explicitly outlaw this mode of communication between `function`s.
+See [Why Support Closures But Not Mutable Globals](@ref) for more info.
 
 Note that this does not preclude the use of closed-over values or callable `struct`s.
 For example, something like
@@ -107,7 +108,7 @@ function f(x::Vector{Float64}, y::Vector{Float64}, z::Vector{Float64}, s::Ref{Ve
     return sum(z)
 end
 ```
-We draw your attention to two features of this `function`:
+We draw your attention to three features of this `function`:
 1. `z` is mutated,
 2. `s` is mutated to contain freshly allocated memory, and
 3. we allocate a new value and return it (albeit, it is probably allocated on the stack).
