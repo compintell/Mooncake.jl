@@ -137,6 +137,8 @@ an array.
 """
 function generate_inter_framework_tests()
     return Any[
+        ("sum_1000", (sum, randn(1_000))),
+        ("_sum_1000", (_sum, randn(1_000))),
         ("sum_sin_1000", (x -> sum(sin, x), randn(1_000))),
         ("_sum_sin_1000", (x -> _sum(sin, x), randn(1_000))),
         ("kron_sum", (_kron_sum, randn(20, 20), randn(40, 40))),
