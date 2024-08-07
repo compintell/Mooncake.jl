@@ -42,14 +42,14 @@ should_run_benchmark(args...) = true
 # Test out the performance of a hand-written sum function, so we can be confident that there
 # is no rule. Note that ReverseDiff has a (seemingly not fantastic) hand-written rule for
 # sum.
-function _sum(x::AbstractArray{<:Real})
+function _sum(f::F, x::AbstractArray{<:Real}) where {F}
     y = 0.0
     n = 0
     while n < length(x)
         n += 1
-        y += x[n]
+        y += f(x[n])
     end
-    return sin(y)
+    return y
 end
 
 # Zygote has rules for both sum and kron, so it's interesting to compare this against the
@@ -137,25 +137,19 @@ an array.
 """
 function generate_inter_framework_tests()
     return Any[
-        ("sum_10", (x -> sin(sum(x)), randn(10))),
-        ("sum_100", (x -> sin(sum(x)), randn(100))),
-        ("sum_1000", (x -> sin(sum(x)), randn(1_000))),
-        ("sum_10000", (x -> sin(sum(x)), randn(10_000))),
-        # ("_sum_10", (_sum, randn(10))),
-        # ("_sum_100", (_sum, randn(100))),
-        # ("_sum_1000", (_sum, randn(1_000))),
-        # ("_sum_10000", (_sum, randn(10_000))),
-        # ("kron_sum", (_kron_sum, randn(20, 20), randn(40, 40))),
-        # ("kron_view_sum", (_kron_view_sum, randn(40, 30), randn(40, 40))),
-        # ("naive_map_sin_cos_exp", (_naive_map_sin_cos_exp, randn(10, 10))),
-        # ("map_sin_cos_exp", (_map_sin_cos_exp, randn(10, 10))),
-        # ("broadcast_sin_cos_exp", (_broadcast_sin_cos_exp, randn(10, 10))),
-        # (
-        #     "simple_mlp",
-        #     (_simple_mlp, randn(128, 256), randn(256, 128), randn(128, 70), randn(128, 70)),
-        # ),
-        # ("gp_lml", (_gp_lml, _generate_gp_inputs()...)),
-        # ("turing_broadcast_benchmark", build_turing_problem()),
+        ("sum_sin_1000", (x -> sum(sin, x), randn(1_000))),
+        ("_sum_sin_1000", (x -> _sum(sin, x), randn(1_000))),
+        ("kron_sum", (_kron_sum, randn(20, 20), randn(40, 40))),
+        ("kron_view_sum", (_kron_view_sum, randn(40, 30), randn(40, 40))),
+        ("naive_map_sin_cos_exp", (_naive_map_sin_cos_exp, randn(10, 10))),
+        ("map_sin_cos_exp", (_map_sin_cos_exp, randn(10, 10))),
+        ("broadcast_sin_cos_exp", (_broadcast_sin_cos_exp, randn(10, 10))),
+        (
+            "simple_mlp",
+            (_simple_mlp, randn(128, 256), randn(256, 128), randn(128, 70), randn(128, 70)),
+        ),
+        ("gp_lml", (_gp_lml, _generate_gp_inputs()...)),
+        ("turing_broadcast_benchmark", build_turing_problem()),
     ]
 end
 
