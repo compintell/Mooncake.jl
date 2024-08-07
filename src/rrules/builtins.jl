@@ -43,6 +43,16 @@ import ..Tapir:
     tangent_type, increment!!, @is_primitive, MinimalCtx, is_primitive, NoFData,
     zero_rdata, NoRData, tuple_map, fdata, NoRData, rdata, increment_rdata!!, zero_fcodual
 
+struct MissingIntrinsicWrapperException <: Exception
+    msg::String
+end
+
+function translate(f)
+    msg = "Unable to translate the intrinsic $f into a regular Julia function. " +
+        "Please see github.com/compintell/Tapir.jl/issues/208 for more discussion."
+    throw(MissingIntrinsicWrapperException(msg))
+end
+
 # Note: performance is not considered _at_ _all_ in this implementation.
 function rrule!!(f::CoDual{<:Core.IntrinsicFunction}, args...)
     return rrule!!(CoDual(translate(Val(primal(f))), tangent(f)), args...)
