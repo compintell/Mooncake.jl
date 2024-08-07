@@ -27,9 +27,9 @@ function rrule!!(f::CoDual{<:Core.Builtin}, args...)
         "types. In order to fix this problem, you will either need to modify your code " *
         "to avoid hitting this built-in function, or implement a method of `rrule!!` " *
         "which is specialised to this case. " *
-        "Either way, please consider opening an issue at " *
-        "https://github.com/compintell/Tapir.jl/ so that the issue can be fixed more " *
-        "widely."
+        "Either way, please consider commenting on " *
+        "https://github.com/compintell/Tapir.jl/issues/208/ so that the issue can be " *
+        "fixed more widely."
     ))
 end
 
