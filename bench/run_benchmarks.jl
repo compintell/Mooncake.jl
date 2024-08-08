@@ -42,12 +42,12 @@ should_run_benchmark(args...) = true
 # Test out the performance of a hand-written sum function, so we can be confident that there
 # is no rule. Note that ReverseDiff has a (seemingly not fantastic) hand-written rule for
 # sum.
-function _sum(x::AbstractArray{<:Real})
+function _sum(f::F, x::AbstractArray{<:Real}) where {F}
     y = 0.0
     n = 0
     while n < length(x)
         n += 1
-        y += x[n]
+        y += f(x[n])
     end
     return y
 end
@@ -137,8 +137,10 @@ an array.
 """
 function generate_inter_framework_tests()
     return Any[
-        ("sum", (sum, randn(100))),
-        ("_sum", (_sum, randn(100))),
+        ("sum_1000", (sum, randn(1_000))),
+        ("_sum_1000", (x -> _sum(identity, x), randn(1_000))),
+        ("sum_sin_1000", (x -> sum(sin, x), randn(1_000))),
+        ("_sum_sin_1000", (x -> _sum(sin, x), randn(1_000))),
         ("kron_sum", (_kron_sum, randn(20, 20), randn(40, 40))),
         ("kron_view_sum", (_kron_view_sum, randn(40, 30), randn(40, 40))),
         ("naive_map_sin_cos_exp", (_naive_map_sin_cos_exp, randn(10, 10))),
