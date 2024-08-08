@@ -43,6 +43,12 @@ plot_ratio_histogram!(df)
 ## Inter-framework Benchmarking
 
 This comprises a small suite of functions that we AD using `Tapir.jl`, `Zygote.jl`, `ReverseDiff.jl`, and `Enzyme.jl`.
+The primary purpose of this suite of benchmarks is to ensure that we're regularly comparing the performance of a range of reverse-mode ADs on a set of problems which are known to stretch them in various ways.
+For any given function in the suite, some frameworks might have rules for it, and some not.
+Consequently, they're not comparing the same thing in all cases.
+
+Please note that we have found that the results of the comparisons vary widely from machine to machine.
+
 This suite of benchmarks is also run as part of CI, and the output is recorded in two ways:
 1. a table of results is posted as comment in a PR
 1. the table and a corresponding graph are stored as github actions artifacts, and can be retrieved by going to the "Checks" tab of your PR, and clicking on the artifact button.
