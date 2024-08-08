@@ -422,18 +422,32 @@ function rrule!!(
     B, dB = viewify(B_dB)
     C, dC = viewify(C_dC)
 
-    # Copy state and run symm!.
+    # In this rule we optimise carefully for the special case a == 1 && b == 0, which
+    # corresponds to simply multiplying symm(A) and B together, and writing the result to C.
+    # This is an extremely common edge case, so it's important to do well for it.
     C_copy = copy(C)
-    BLAS.symm!(s, ul, α, A, B, β, C)
+    tmp_ref = Ref{Matrix{T}}()
+    if (α == 1 && β == 0)
+        BLAS.symm!(s, ul, α, A, B, β, C)
+    else
+        tmp = BLAS.symm(s, ul, one(T), A, B)
+        tmp_ref[] = tmp
+        BLAS.axpby!(α, tmp, β, C)
+    end
 
     function symm!_adjoint(::NoRData)
 
-        # Reset C.
-        C .= C_copy
+        if (α == 1 && β == 0)
+            dα = dot(dC, C)
+            BLAS.copyto!(C, C_copy)
+        else
+            # Reset C.
+            BLAS.copyto!(C, C_copy)
 
-        # gradient w.r.t. α. Safe to write into memory for copy of C.
-        BLAS.symm!(s, ul, one(T), A, B, zero(T), C_copy)
-        dα = dot(dC, C_copy)
+            # gradient w.r.t. α. Safe to write into memory for copy of C.
+            BLAS.symm!(s, ul, one(T), A, B, zero(T), C_copy)
+            dα = dot(dC, C_copy)
+        end
 
         # gradient w.r.t. A.
         dA_tmp = s == 'L' ? dC * B' : B' * dC
@@ -673,7 +687,7 @@ end
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
     t_flags = ['N', 'T', 'C']
-    alphas = [0.0, -0.25]
+    alphas = [1.0, -0.25]
     betas = [0.0, 0.33]
 
     test_cases = vcat(
