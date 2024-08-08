@@ -55,9 +55,13 @@ Base.:(==)(x::Tangent, y::Tangent) = x.fields == y.fields
 
 mutable struct MutableTangent{Tfields<:NamedTuple}
     fields::Tfields
-    MutableTangent(fields::Tfields) where {Tfields} = new{Tfields}(fields)
     MutableTangent{Tfields}(fields::Tfields) where {Tfields} = new{Tfields}(fields)
+    function MutableTangent{Tfields}(fields::NamedTuple{names}) where {Tfields, names}
+        @assert names == fieldnames(Tfields) "field names mismatch"
+        new{Tfields}(fields)
+    end
     MutableTangent{Tfields}() where {Tfields} = new{Tfields}()
+    MutableTangent(fields::Tfields) where {Tfields} = MutableTangent{Tfields}(fields)
 end
 
 Base.:(==)(x::MutableTangent, y::MutableTangent) = x.fields == y.fields
@@ -461,12 +465,12 @@ end
         return zt
     else
         zt = Array{tangent_type(P), N}(undef, size(x)...)
+        stackdict[x] = zt
         for i in eachindex(x)
             if isassigned(x, i)
                 zt[i] = zero_tangent_internal(x[i], stackdict)
             end
         end
-        stackdict[x] = zt
         return zt
     end
 end
