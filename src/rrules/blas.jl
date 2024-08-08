@@ -388,6 +388,78 @@ for (gemm, elty) in ((:dgemm_, :Float64), (:sgemm_, :Float32))
     end
 end
 
+@is_primitive(
+    MinimalCtx,
+    Tuple{
+        typeof(BLAS.symm!),
+        Char,
+        Char,
+        T,
+        MatrixOrView{T},
+        MatrixOrView{T},
+        T,
+        Matrix{T},
+    } where {T<:Union{Float32, Float64}},
+)
+
+function rrule!!(
+    ::CoDual{typeof(BLAS.symm!)},
+    side::CoDual{Char},
+    uplo::CoDual{Char},
+    alpha::CoDual{T},
+    A_dA::CoDual{<:MatrixOrView{T}},
+    B_dB::CoDual{<:MatrixOrView{T}},
+    beta::CoDual{T},
+    C_dC::CoDual{Matrix{T}},
+) where {T<:Union{Float32, Float64}}
+
+    # Extract primals.
+    s = primal(side)
+    ul = primal(uplo)
+    α = primal(alpha)
+    β = primal(beta)
+    A, dA = viewify(A_dA)
+    B, dB = viewify(B_dB)
+    C, dC = viewify(C_dC)
+
+    # Copy state and run symm!.
+    C_copy = copy(C)
+    BLAS.symm!(s, ul, α, A, B, β, C)
+
+    function symm!_adjoint(::NoRData)
+
+        # Reset C.
+        C .= C_copy
+
+        # gradient w.r.t. α. Safe to write into memory for copy of C.
+        BLAS.symm!(s, ul, one(T), A, B, zero(T), C_copy)
+        dα = dot(dC, C_copy)
+
+        # gradient w.r.t. A.
+        dA_tmp = s == 'L' ? dC * B' : B' * dC
+        if ul == 'L'
+            dA .+= α .* LowerTriangular(dA_tmp)
+            dA .+= α .* UpperTriangular(dA_tmp)'
+        else
+            dA .+= α .* LowerTriangular(dA_tmp)'
+            dA .+= α .* UpperTriangular(dA_tmp)
+        end
+        @inbounds for n in diagind(dA)
+            dA[n] -= α * dA_tmp[n]
+        end
+
+        # gradient w.r.t. B.
+        BLAS.symm!(s, ul, α, A, dC, one(T), dB)
+
+        # gradient w.r.t. beta.
+        dβ = dot(dC, C)
+
+        # gradient w.r.t. C.
+        dC .*= β
+        return NoRData(), NoRData(), NoRData(), dα, NoRData(), NoRData(), dβ, NoRData()
+    end
+    return C_dC, symm!_adjoint
+end
 
 for (syrk, elty) in ((:dsyrk_, :Float64), (:ssyrk_, :Float32))
     @eval function rrule!!(
@@ -625,6 +697,23 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
                     (false, :stability, nothing, BLAS.gemm!, tA, tB, a, A, B, b, C)
                 end
             end),
+        )),
+
+        # symm!
+        vec(reduce(
+            vcat,
+            vec(map(product(['L', 'R'], ['L', 'U'], alphas, betas)) do (side, uplo, α, β)
+                nA = side == 'L' ? 5 : 7
+                A = randn(nA, nA)
+                vA = view(randn(15, 15), 1:nA, 1:nA)
+                B = randn(5, 7)
+                vB = view(randn(15, 15), 1:5, 1:7)
+                C = randn(5, 7)
+                return Any[
+                    (false, :stability, nothing, BLAS.symm!, side, uplo, α, A, B, β, C),
+                    (false, :stability, nothing, BLAS.symm!, side, uplo, α, vA, vB, β, C),
+                ]
+            end)
         )),
     )
 
