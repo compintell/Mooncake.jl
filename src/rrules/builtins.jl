@@ -27,9 +27,9 @@ function rrule!!(f::CoDual{<:Core.Builtin}, args...)
         "types. In order to fix this problem, you will either need to modify your code " *
         "to avoid hitting this built-in function, or implement a method of `rrule!!` " *
         "which is specialised to this case. " *
-        "Either way, please consider opening an issue at " *
-        "https://github.com/compintell/Tapir.jl/ so that the issue can be fixed more " *
-        "widely."
+        "Either way, please consider commenting on " *
+        "https://github.com/compintell/Tapir.jl/issues/208/ so that the issue can be " *
+        "fixed more widely."
     ))
 end
 
@@ -42,6 +42,18 @@ import ..Tapir:
     rrule!!, CoDual, primal, tangent, zero_tangent, NoPullback,
     tangent_type, increment!!, @is_primitive, MinimalCtx, is_primitive, NoFData,
     zero_rdata, NoRData, tuple_map, fdata, NoRData, rdata, increment_rdata!!, zero_fcodual
+
+using Core.Intrinsics: atomic_pointerref
+
+struct MissingIntrinsicWrapperException <: Exception
+    msg::String
+end
+
+function translate(f)
+    msg = "Unable to translate the intrinsic $f into a regular Julia function. " *
+        "Please see github.com/compintell/Tapir.jl/issues/208 for more discussion."
+    throw(MissingIntrinsicWrapperException(msg))
+end
 
 # Note: performance is not considered _at_ _all_ in this implementation.
 function rrule!!(f::CoDual{<:Core.IntrinsicFunction}, args...)
@@ -105,7 +117,25 @@ end
 # atomic_pointermodify
 # atomic_pointerref
 # atomic_pointerreplace
-# atomic_pointerset
+
+@intrinsic atomic_pointerset
+function rrule!!(::CoDual{typeof(atomic_pointerset)}, p::CoDual{<:Ptr}, x::CoDual, order)
+    _p = primal(p)
+    _order = primal(order)
+    old_value = atomic_pointerref(_p, _order)
+    old_tangent = atomic_pointerref(tangent(p), _order)
+    dp = tangent(p)
+    function atomic_pointerset_pullback!!(::NoRData)
+        dx_r = atomic_pointerref(dp, _order)
+        atomic_pointerset(_p, old_value, _order)
+        atomic_pointerset(dp, old_tangent, _order)
+        return NoRData(), NoRData(), rdata(dx_r), NoRData()
+    end
+    atomic_pointerset(_p, primal(x), _order)
+    atomic_pointerset(dp, zero_tangent(primal(x)), _order)
+    return p, atomic_pointerset_pullback!!
+end
+
 # atomic_pointerswap
 
 @intrinsic bitcast
@@ -745,7 +775,10 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         # atomic_pointermodify -- NEEDS IMPLEMENTING AND TESTING
         # atomic_pointerref -- NEEDS IMPLEMENTING AND TESTING
         # atomic_pointerreplace -- NEEDS IMPLEMENTING AND TESTING
-        # atomic_pointerset -- NEEDS IMPLEMENTING AND TESTING
+        (
+            true, :none, nothing,
+            IntrinsicsWrappers.atomic_pointerset, CoDual(p, dp), 1.0, :monotonic,
+        ),
         # atomic_pointerswap -- NEEDS IMPLEMENTING AND TESTING
         (false, :stability, nothing, IntrinsicsWrappers.bitcast, Int64, 5.0),
         (false, :stability, nothing, IntrinsicsWrappers.bswap_int, 5),
@@ -1030,6 +1063,10 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :none, nothing, getindex, randn(5), [1, 2, 2]),
         (false, :none, nothing, setindex!, randn(5), [4.0, 5.0], [1, 1]),
         (false, :none, nothing, setindex!, randn(5), [4.0, 5.0, 6.0], [1, 2, 2]),
+        (
+            false, :none, nothing,
+            Base._unsafe_copyto!, fill!(Matrix{Real}(undef, 5, 4), 1.0), 3, randn(10), 2, 4,
+        ),
     ]
     memory = Any[]
     return test_cases, memory
