@@ -122,6 +122,6 @@ jobs:
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
-          body: "Performance Ratio:\nRatio of time to compute gradient and time to compute function.\nWarning: results are very approximate! See bench/README.md for more context.\n```\n${{ steps.read-file.outputs.table }}\n```"
+          body: "Performance Ratio:\nRatio of time to compute gradient and time to compute function.\nWarning: results are very approximate! See https://github.com/compintell/Tapir.jl/tree/main/bench for more context.\n```\n${{ steps.read-file.outputs.table }}\n```"
           comment-id: ${{ steps.fc.outputs.comment-id }}
           edit-mode: replace
