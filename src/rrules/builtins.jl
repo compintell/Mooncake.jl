@@ -1063,6 +1063,10 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :none, nothing, getindex, randn(5), [1, 2, 2]),
         (false, :none, nothing, setindex!, randn(5), [4.0, 5.0], [1, 1]),
         (false, :none, nothing, setindex!, randn(5), [4.0, 5.0, 6.0], [1, 2, 2]),
+        (
+            false, :none, nothing,
+            Base._unsafe_copyto!, fill!(Matrix{Real}(undef, 5, 4), 1.0), 3, randn(10), 2, 4,
+        ),
     ]
     memory = Any[]
     return test_cases, memory
