@@ -24,6 +24,18 @@
 
     TestUtils.run_rrule!!_test_cases(StableRNG, Val(:builtins))
 
+    # Unhandled built-in throws an intelligible error.
+    @test_throws(
+        Tapir.MissingRuleForBuiltinException,
+        invoke(Tapir.rrule!!, Tuple{CoDual{<:Core.Builtin}}, getfield),
+    )
+
+    # Unhandled intrinsic throws an intelligible error.
+    @test_throws(
+        Tapir.IntrinsicsWrappers.MissingIntrinsicWrapperException,
+        invoke(Tapir.IntrinsicsWrappers.translate, Tuple{Any}, Val(:foo)),
+    )
+
     @testset "Disable bitcast to differentiable type" begin
         @test_throws(
             ArgumentError,

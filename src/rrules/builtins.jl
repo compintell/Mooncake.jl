@@ -48,7 +48,7 @@ struct MissingIntrinsicWrapperException <: Exception
 end
 
 function translate(f)
-    msg = "Unable to translate the intrinsic $f into a regular Julia function. " +
+    msg = "Unable to translate the intrinsic $f into a regular Julia function. " *
         "Please see github.com/compintell/Tapir.jl/issues/208 for more discussion."
     throw(MissingIntrinsicWrapperException(msg))
 end
