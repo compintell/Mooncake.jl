@@ -455,7 +455,8 @@ function rrule!!(
         dβ = dot(dC, C)
 
         # gradient w.r.t. C.
-        dC .*= β
+        BLAS.scal!(β, dC)
+
         return NoRData(), NoRData(), NoRData(), dα, NoRData(), NoRData(), dβ, NoRData()
     end
     return C_dC, symm!_adjoint
