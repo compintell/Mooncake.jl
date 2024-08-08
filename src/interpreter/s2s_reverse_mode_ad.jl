@@ -1254,6 +1254,12 @@ function (rule::LazyDerivedRule{T, Trule})(args::Vararg{Any, N}) where {N, T, Tr
             rule.rule = derived_rule
         else
             @warn "Unable to put rule in rule field. Rule should error."
+            println("MethodInstance is")
+            display(rule.mi)
+            println()
+            println("with signature")
+            display(rule.mi.specTypes)
+            println()
             println("derived_rule is of type")
             display(typeof(derived_rule))
             println()
