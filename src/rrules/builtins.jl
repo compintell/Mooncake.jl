@@ -43,6 +43,8 @@ import ..Tapir:
     tangent_type, increment!!, @is_primitive, MinimalCtx, is_primitive, NoFData,
     zero_rdata, NoRData, tuple_map, fdata, NoRData, rdata, increment_rdata!!, zero_fcodual
 
+using Core.Intrinsics: atomic_pointerref
+
 struct MissingIntrinsicWrapperException <: Exception
     msg::String
 end
@@ -115,7 +117,25 @@ end
 # atomic_pointermodify
 # atomic_pointerref
 # atomic_pointerreplace
-# atomic_pointerset
+
+@intrinsic atomic_pointerset
+function rrule!!(::CoDual{typeof(atomic_pointerset)}, p::CoDual{<:Ptr}, x::CoDual, order)
+    _p = primal(p)
+    _order = primal(order)
+    old_value = atomic_pointerref(_p, _order)
+    old_tangent = atomic_pointerref(tangent(p), _order)
+    dp = tangent(p)
+    function atomic_pointerset_pullback!!(::NoRData)
+        dx_r = atomic_pointerref(dp, _order)
+        atomic_pointerset(_p, old_value, _order)
+        atomic_pointerset(dp, old_tangent, _order)
+        return NoRData(), NoRData(), rdata(dx_r), NoRData()
+    end
+    atomic_pointerset(_p, primal(x), _order)
+    atomic_pointerset(dp, zero_tangent(primal(x)), _order)
+    return p, atomic_pointerset_pullback!!
+end
+
 # atomic_pointerswap
 
 @intrinsic bitcast
@@ -755,7 +775,10 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         # atomic_pointermodify -- NEEDS IMPLEMENTING AND TESTING
         # atomic_pointerref -- NEEDS IMPLEMENTING AND TESTING
         # atomic_pointerreplace -- NEEDS IMPLEMENTING AND TESTING
-        # atomic_pointerset -- NEEDS IMPLEMENTING AND TESTING
+        (
+            true, :none, nothing,
+            IntrinsicsWrappers.atomic_pointerset, CoDual(p, dp), 1.0, :monotonic,
+        ),
         # atomic_pointerswap -- NEEDS IMPLEMENTING AND TESTING
         (false, :stability, nothing, IntrinsicsWrappers.bitcast, Int64, 5.0),
         (false, :stability, nothing, IntrinsicsWrappers.bswap_int, 5),

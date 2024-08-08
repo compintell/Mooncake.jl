@@ -27,7 +27,7 @@
     # Unhandled built-in throws an intelligible error.
     @test_throws(
         Tapir.MissingRuleForBuiltinException,
-        invoke(Tapir.rrule!!, Tuple{CoDual{<:Core.Builtin}}, getfield),
+        invoke(Tapir.rrule!!, Tuple{CoDual{<:Core.Builtin}}, zero_fcodual(getfield)),
     )
 
     # Unhandled intrinsic throws an intelligible error.
