@@ -487,30 +487,10 @@ function zero_tangent_internal(x::P, stackdict::IdDict) where {P}
 
     if tangent_type(P) <: MutableTangent
         if haskey(stackdict, x)
-        return stackdict[x]::tangent_type(P)
-    end
-        stackdict[x] = tangent_type(P)()
-        zt = ntuple(fieldcount(P)) do n
-            name = fieldname(P, n)
-            if tangent_field_type(P, n) <: PossiblyUninitTangent
-                V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
-                if isdefined(x, n)
-                    return (name => V(zero_tangent_internal(getfield(x, n), stackdict)))
-                else
-                    return (name => V())
-                end
-            else
-                return (name => zero_tangent_internal(getfield(x, n), stackdict))
-            end
+            return stackdict[x]::tangent_type(P)
         end
-
-        zt = NamedTuple(zt)
-        stackdict[x].fields = zt
-        return zt
-    elseif isbitstype(P)
-        return zero_tangent_internal(x)
-    else
-        zt = ntuple(fieldcount(P)) do n
+        stackdict[x] = tangent_type(P)()
+        zt_fields = ntuple(fieldcount(P)) do n
             if tangent_field_type(P, n) <: PossiblyUninitTangent
                 V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
                 if isdefined(x, n)
@@ -522,7 +502,29 @@ function zero_tangent_internal(x::P, stackdict::IdDict) where {P}
                 return zero_tangent_internal(getfield(x, n), stackdict)
             end
         end
-        return tangent_type(P)(backing_type(P)(zt))
+
+        zt = backing_type(P)(zt_fields)
+        stackdict[x].fields = zt
+        return stackdict[x]::tangent_type(P)
+    else
+        if isbitstype(P)
+            return zero_tangent_internal(x)
+        else
+            zt_fields = ntuple(fieldcount(P)) do n
+                if tangent_field_type(P, n) <: PossiblyUninitTangent
+                    V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
+                    if isdefined(x, n)
+                        return V(zero_tangent_internal(getfield(x, n), stackdict))
+                    else
+                        return V()
+                    end
+                else
+                    return zero_tangent_internal(getfield(x, n), stackdict)
+                end
+            end
+        
+            return tangent_type(P)(backing_type(P)(zt_fields))
+        end
     end
 end
 
