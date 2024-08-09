@@ -466,24 +466,11 @@ end
     else
         zt = Array{tangent_type(P), N}(undef, size(x)...)
         stackdict[x] = zt
-        for i in eachindex(x)
-            if isassigned(x, i)
-                zt[i] = zero_tangent_internal(x[i], stackdict)
-            end
-        end
-        return zt
+        return _map_if_assigned!(Base.Fix2(zero_tangent_internal, stackdict), zt, x)::Array{tangent_type(P), N}
     end
 end
-function zero_tangent_internal(x::P, stackdict::IdDict) where {P<:Union{Tuple, NamedTuple}}
-    if tangent_type(P) == NoTangent
-        return NoTangent()
-    end
-    if haskey(stackdict, x)
-        return stackdict[x]::tangent_type(P)
-    end
-    zt = tuple_map(Base.Fix2(zero_tangent_internal, stackdict), x)
-    stackdict[x] = zt
-    return zt
+@inline function zero_tangent_internal(x::P, stackdict::IdDict) where {P<:Union{Tuple, NamedTuple}}
+    return tangent_type(P) == NoTangent ? NoTangent() : tuple_map(Base.Fix2(zero_tangent_internal, stackdict), x)
 end
 function zero_tangent_internal(x::P, stackdict::IdDict) where {P}
 
