@@ -118,6 +118,8 @@
     end
 end
 
+# TODO: ideally we want to add the following test to the above testset (defined src/tangent.jl)
+# but we have to delay this until `randn_tangent` is implemented and working.
 @testset "zero_tangent" begin
     @testset "circular reference" begin
         foo = Tapir.TestResources.TypeUnstableMutableStruct(5.0, nothing)
