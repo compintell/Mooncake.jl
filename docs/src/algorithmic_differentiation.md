@@ -5,7 +5,6 @@ Even if you have worked with AD before, we recommend reading in order to acclima
 
 # Derivatives
 
-
 A foundation on which all of AD is built the the derivate -- we require a fairly general definition of it, which we build up to here.
 
 _**Scalar-to-Scalar Functions**_
@@ -64,24 +63,20 @@ Inputs ``\dot{x}`` should be thoughts of as "directions", in the directional der
 
 Similarly, if ``\mathcal{X} = \RR^P`` and ``\mathcal{Y} = \RR^Q`` then this operator can be specified in terms of the Jacobian matrix: ``D f [x] (\dot{x}) := J[x] \dot{x}`` -- brackets are used to emphasise that ``D f [x]`` is a function, and is being applied to ``\dot{x}``.[^note_for_geometers]
 
-The difference from usual is a little bit subtle.
-We do not define the derivative to _be_ ``\alpha`` or ``J[x]``, rather we define it to be "multiply by ``\alpha``" or "multiply by ``J[x]``".
-For the rest of this document we shall use this definition of the derivative.
+To reiterate, for the rest of this document, we define the derivative to be "multiply by ``\alpha``" or "multiply by ``J[x]``", rather than to _be_ ``\alpha`` or ``J[x]``.
 So whenever you see the word "derivative", you should think "linear function".
 
 _**The Chain Rule**_
 
-The chain rule is _the_ result which makes AD work.
-Fortunately, it applies to this version of the derivative:
+The chain rule is what makes AD work:
 ```math
 f = g \circ h \implies D f [x] = (D g [h(x)]) \circ (D h [x])
 ```
-By induction this extends to a collection of ``N`` functions ``f_1, \dots, f_N``:
+By induction, this extends to a collection of ``N`` functions ``f_1, \dots, f_N``:
 ```math
 f := f_N \circ \dots \circ f_1 \implies D f [x] = (D f_N [x_N]) \circ \dots \circ (D f_1 [x_1]),
 ```
 where ``x_{n+1} := f(x_n)``, and ``x_1 := x``.
-
 
 _**An aside: the definition of the Frechet Derivative**_
 
@@ -95,8 +90,6 @@ where ``\| \cdot \|_\mathcal{X}`` and ``\| \cdot \|_\mathcal{Y}`` are the norms 
 It is a good idea to consider what this looks like when ``\mathcal{X} = \mathcal{Y} = \RR`` and when ``\mathcal{X} = \mathcal{Y} = \RR^D``.
 It is sometimes helpful to refer to this definition to e.g. verify the correctness of the derivative of a function -- as with single-variable calculus, however, this is rare.
 
-
-
 _**Another aside: what does Forwards-Mode AD compute?**_
 
 At this point we have enough machinery to discuss forwards-mode AD.
@@ -105,21 +98,20 @@ given a function ``f`` which is differentiable at a point ``x``, compute ``D f [
 If ``f : \RR^P \to \RR^Q``, this is equivalent to computing ``J[x] \dot{x}``, where ``J[x]`` is the Jacobian of ``f`` at ``x``.
 For the interested reader we provide a high-level explanation of _how_ forwards-mode AD does this in [_How_ does Forwards-Mode AD work?](@ref).
 
-_**Another aside: notation**_
+_**Yet another aside: notation**_
 
-You will have noticed that we typically denote the argument to a derivative with a "dot" over it, e.g. ``\dot{x}``.
+You may have noticed that we typically denote the argument to a derivative with a "dot" over it, e.g. ``\dot{x}``.
 This is something that we will do consistently, and we will use the same notation for the outputs of derivatives.
 Wherever you see a symbol with a "dot" over it, expect it to be an input or output of a derivative / forwards-mode AD.
 
 # Reverse-Mode AD: _what_ does it do?
 
-In order to explain what reverse-mode AD does, we first consider the "vector-Jacobian product" definition in Euclidean space which will be familiar to many readers.
-We then generalise.
+In order to explain what reverse-mode AD does, we first consider the "vector-Jacobian product" definition in Euclidean space, and then generalise.
 
 _**Reverse-Mode AD: what does it do in Euclidean space?**_
 
 In this setting, the goal of reverse-mode AD is the following: given a function ``f : \RR^P \to \RR^Q`` which is differentiable at ``x \in \RR^P`` with Jacobian ``J[x]`` at ``x``, compute ``J[x]^\top \bar{y}`` for any ``\bar{y} \in \RR^Q``.
-This is useful because we can obtain the gradient from this when ``Q = 1`` by letting ``\bar{y} = 1``.
+A special case is: obtaining the gradient (of scalar output) correcponds to when ``Q = 1``, by letting ``\bar{y} = 1``.
 
 _**Adjoint Operators**_
 
