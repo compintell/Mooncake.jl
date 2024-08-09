@@ -16,7 +16,8 @@ Its derivative at ``x`` is usually thought of as the scalar ``\alpha \in \RR`` s
 \text{d}f = \alpha \, \text{d}x .
 ```
 Loosely speaking, by this notation we mean that for arbitrary small changes ``\text{d} x`` in the input to ``f``, the change in the output ``\text{d} f`` is ``\alpha \, \text{d}x``.
-We refer readers to the first few minutes of the first lecture mentioned above for a more careful explanation.
+We refer readers to the first few minutes of the [ for a more careful explanation.
+We refer readers to the first few minutes of the [first lecture mentioned before](https://ocw.mit.edu/courses/18-s096-matrix-calculus-for-machine-learning-and-beyond-january-iap-2023/resources/ocw_18s096_lecture01-part2_2023jan18_mp4/) for a more careful explanation.
 
 _**Vector-to-Vector Functions**_
 
@@ -40,7 +41,7 @@ In order to do so, we now introduce a generalised notion of the derivative.
 
 _**Functions Between More General Spaces**_
 
-In order to avoid the difficulties described above, we consider we consider functions ``f : \mathcal{X} \to \mathcal{Y}``, where ``\mathcal{X}`` and ``\mathcal{Y}`` are _finite_ dimensional real Hilbert spaces (read: finite-dimensional vector space with an inner product, and real-valued scalars).
+In order to avoid the difficulties described above, we consider functions ``f : \mathcal{X} \to \mathcal{Y}``, where ``\mathcal{X}`` and ``\mathcal{Y}`` are _finite_ dimensional real Hilbert spaces (read: finite-dimensional vector space with an inner product, and real-valued scalars).
 This definition includes functions to / from ``\RR``, ``\RR^D``, but also real-valued matrices, and any other "container" for collections of real numbers.
 Furthermore, we shall see later how we can model all sorts of structured representations of data directly as such spaces.
 
@@ -53,7 +54,7 @@ The purpose of this linear operator is to provide a linear approximation to ``f`
 Please note that ``D f [x]`` is a single mathematical object, despite the fact that 3 separate symbols are used to denote it -- ``D f [x] (\dot{x})`` denotes the application of the function ``D f [x]`` to argument ``\dot{x}``.
 Furthermore, the dot-notation (``\dot{x}``) does not have anything to do with time-derivatives, it is simply common notation used in the AD literature to denote the arguments of derivatives.
 
-So, instead of thinking of the derivative as a number or a matrix, we think about it as a _function_.
+So, instead of thinking of the derivative as a number or a matrix, we think of it as a _function_.
 We can express the previous notions of the derivative in this language.
 
 In the scalar case, rather than thinking of the derivative as _being_ ``\alpha``, we think of it is a the linear operator ``D f [x] (\dot{x}) := \alpha \dot{x}``.
