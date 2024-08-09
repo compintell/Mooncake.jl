@@ -120,26 +120,15 @@ end
 
 @testset "zero_tangent" begin
     @testset "circular reference" begin
-        mutable struct CircRef
-            x
-            y::Float64
-        end
-        
-        foo = CircRef(nothing, 5.0)
-        foo.x = foo
+        foo = Tapir.TestResources.TypeUnstableMutableStruct(5.0, nothing)
+        foo.b = foo
         zt = Tapir.zero_tangent(foo)
-        @test zt.fields.x === zt
+        @test zt.fields.b === zt
     end
 
     @testset "struct with non-concrete fields" begin
-        struct NonConcrete
-            x::Float64
-            y
-        end
-
-        bar = NonConcrete(5.0, 1.0)
-        zt = Tapir.zero_tangent(bar)
-        @test zt == Tangent{@NamedTuple{x::Float64, y}}(@NamedTuple{x::Float64, y}((0.0, 0.0)))
+        bar = Tapir.TestResources.TypeUnstableStruct(5.0, 1.0)
+        @test Tapir.zero_tangent(bar) == Tangent{@NamedTuple{a::Float64, b}}(@NamedTuple{a::Float64, b}((0.0, 0.0)))
     end
     
     @testset "duplicate reference" begin
