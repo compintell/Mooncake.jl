@@ -1236,18 +1236,18 @@ If `safety_on` is `true`, then the rule constructed will be a `SafeRRule`. This 
 when debugging, but should usually be switched off for production code as it (in general)
 incurs some runtime overhead.
 =#
-mutable struct LazyDerivedRule{Tinterp<:TapirInterpreter, Trule}
+mutable struct LazyDerivedRule{Tinterp<:TapirInterpreter, Tspec_types, Trule}
     interp::Tinterp
     safety_on::Bool
     mi::Core.MethodInstance
     rule::Trule
     function LazyDerivedRule(interp::A, mi::Core.MethodInstance, safety_on::Bool) where {A}
         rt = rule_type(interp, mi)
-        return new{A, safety_on ? SafeRRule{rt} : rt}(interp, safety_on, mi)
+        return new{A, mi.specTypes, safety_on ? SafeRRule{rt} : rt}(interp, safety_on, mi)
     end
 end
 
-function (rule::LazyDerivedRule{T, Trule})(args::Vararg{Any, N}) where {N, T, Trule}
+function (rule::LazyDerivedRule{T, sig, Trule})(args::Vararg{Any, N}) where {N, T, sig, Trule}
     if !isdefined(rule, :rule)
         derived_rule = build_rrule(rule.interp, rule.mi; safety_on=rule.safety_on)
         if derived_rule isa Trule
@@ -1258,7 +1258,7 @@ function (rule::LazyDerivedRule{T, Trule})(args::Vararg{Any, N}) where {N, T, Tr
             display(rule.mi)
             println()
             println("with signature")
-            display(rule.mi.specTypes)
+            display(sig)
             println()
             println("derived_rule is of type")
             display(typeof(derived_rule))
