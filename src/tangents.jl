@@ -451,6 +451,7 @@ end
     return :($(tangent_type(P))($backing_expr))
 end
 
+# the `stackdict` naming following Julia's `deepcopy` function https://github.com/JuliaLang/julia/blob/48d4fd48430af58502699fdf3504b90589df3852/base/deepcopy.jl#L35
 @inline zero_tangent_internal(x::Union{Int8,Int16,Int32,Int64,Int128,IEEEFloat}, ::IdDict) = zero_tangent_internal(x)
 @inline function zero_tangent_internal(x::SimpleVector, stackdict::IdDict)
     return map!(n -> zero_tangent_internal(x[n], stackdict), Vector{Any}(undef, length(x)), eachindex(x))
