@@ -1034,7 +1034,7 @@ function Base.:(==)(a::TypeUnstableMutableStruct, b::TypeUnstableMutableStruct)
 end
 
 struct TypeStableStruct{T}
-    a::Float64
+    a::Int
     b::T
     TypeStableStruct{T}(a::Float64) where {T} = new{T}(a)
     TypeStableStruct{T}(a::Float64, b::T) where {T} = new{T}(a, b)
