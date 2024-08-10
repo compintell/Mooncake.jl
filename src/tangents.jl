@@ -55,13 +55,9 @@ Base.:(==)(x::Tangent, y::Tangent) = x.fields == y.fields
 
 mutable struct MutableTangent{Tfields<:NamedTuple}
     fields::Tfields
-    MutableTangent{Tfields}(fields::Tfields) where {Tfields} = new{Tfields}(fields)
-    function MutableTangent{Tfields}(fields::NamedTuple{names}) where {Tfields, names}
-        @assert names == fieldnames(Tfields) "field names mismatch"
-        new{Tfields}(fields)
-    end
     MutableTangent{Tfields}() where {Tfields} = new{Tfields}()
     MutableTangent(fields::Tfields) where {Tfields} = MutableTangent{Tfields}(fields)
+    MutableTangent{Tfields}(fields::NamedTuple{names}) where {names, Tfields<:NamedTuple{names}} = new{Tfields}(fields)
 end
 
 Base.:(==)(x::MutableTangent, y::MutableTangent) = x.fields == y.fields
@@ -415,6 +411,12 @@ end
 Returns the unique zero element of the tangent space of `x`.
 It is an error for the zero element of the tangent space of `x` to be represented by
 anything other than that which this function returns.
+
+Internally, `zero_tangent` calls `zero_tangent_internal`, which handles different types of inputs differently.
+`zero_tangent_internal` has two variants:
+1. For `isbitstype` types, `zero_tangent_internal` takes one argument. 
+2. Otherwise, `zero_tangent_internal` takes another argument which is an `IdDict`, which solves the issue of circular references
+and also allows more efficient handling of aliased objects.
 """
 zero_tangent(x)
 function zero_tangent(x::P) where {P}
@@ -451,15 +453,15 @@ end
     return :($(tangent_type(P))($backing_expr))
 end
 
-# the `stackdict` naming following Julia's `deepcopy` function https://github.com/JuliaLang/julia/blob/48d4fd48430af58502699fdf3504b90589df3852/base/deepcopy.jl#L35
-@inline zero_tangent_internal(x::Union{Int8,Int16,Int32,Int64,Int128,IEEEFloat}, ::IdDict) = zero_tangent_internal(x)
+# the `stackdict` naming following convention of Julia's `deepcopy` and `deepcopy_internal`
+# https://github.com/JuliaLang/julia/blob/48d4fd48430af58502699fdf3504b90589df3852/base/deepcopy.jl#L35
+@inline zero_tangent_internal(x::Union{Int8,Int16,Int32,Int64,Int128,IEEEFloat}, stackdict::IdDict) = zero_tangent_internal(x)
 @inline function zero_tangent_internal(x::SimpleVector, stackdict::IdDict)
     return map!(n -> zero_tangent_internal(x[n], stackdict), Vector{Any}(undef, length(x)), eachindex(x))
 end
 @inline function zero_tangent_internal(x::Array{P, N}, stackdict::IdDict) where {P, N}
-    if haskey(stackdict, x)
-        return stackdict[x]::tangent_type(typeof(x))
-    end
+    haskey(stackdict, x) && return stackdict[x]::tangent_type(typeof(x))
+    
     zt = Array{tangent_type(P), N}(undef, size(x)...)
     stackdict[x] = zt
     return _map_if_assigned!(Base.Fix2(zero_tangent_internal, stackdict), zt, x)::Array{tangent_type(P), N}
