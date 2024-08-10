@@ -1235,8 +1235,13 @@ does not have to be derived.
 If `safety_on` is `true`, then the rule constructed will be a `SafeRRule`. This is useful
 when debugging, but should usually be switched off for production code as it (in general)
 incurs some runtime overhead.
+
+Note: the signature of the primal for which this is a rule is stored in the type. The only
+reason to keep this around is for debugging -- it is very helpful to have this type visible
+in the stack trace when something goes wrong, as it allows you to trivially determine which
+bit of your code is the culprit.
 =#
-mutable struct LazyDerivedRule{Tinterp<:TapirInterpreter, Tspec_types, Trule}
+mutable struct LazyDerivedRule{Tinterp<:TapirInterpreter, primal_sig, Trule}
     interp::Tinterp
     safety_on::Bool
     mi::Core.MethodInstance
