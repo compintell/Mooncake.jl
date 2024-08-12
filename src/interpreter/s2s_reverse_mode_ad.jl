@@ -1235,19 +1235,24 @@ does not have to be derived.
 If `safety_on` is `true`, then the rule constructed will be a `SafeRRule`. This is useful
 when debugging, but should usually be switched off for production code as it (in general)
 incurs some runtime overhead.
+
+Note: the signature of the primal for which this is a rule is stored in the type. The only
+reason to keep this around is for debugging -- it is very helpful to have this type visible
+in the stack trace when something goes wrong, as it allows you to trivially determine which
+bit of your code is the culprit.
 =#
-mutable struct LazyDerivedRule{Tinterp<:TapirInterpreter, Trule}
+mutable struct LazyDerivedRule{Tinterp<:TapirInterpreter, primal_sig, Trule}
     interp::Tinterp
     safety_on::Bool
     mi::Core.MethodInstance
     rule::Trule
     function LazyDerivedRule(interp::A, mi::Core.MethodInstance, safety_on::Bool) where {A}
         rt = rule_type(interp, mi)
-        return new{A, safety_on ? SafeRRule{rt} : rt}(interp, safety_on, mi)
+        return new{A, mi.specTypes, safety_on ? SafeRRule{rt} : rt}(interp, safety_on, mi)
     end
 end
 
-function (rule::LazyDerivedRule{T, Trule})(args::Vararg{Any, N}) where {N, T, Trule}
+function (rule::LazyDerivedRule{T, sig, Trule})(args::Vararg{Any, N}) where {N, T, sig, Trule}
     if !isdefined(rule, :rule)
         derived_rule = build_rrule(rule.interp, rule.mi; safety_on=rule.safety_on)
         if derived_rule isa Trule
@@ -1258,7 +1263,7 @@ function (rule::LazyDerivedRule{T, Trule})(args::Vararg{Any, N}) where {N, T, Tr
             display(rule.mi)
             println()
             println("with signature")
-            display(rule.mi.specTypes)
+            display(sig)
             println()
             println("derived_rule is of type")
             display(typeof(derived_rule))
