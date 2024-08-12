@@ -1024,6 +1024,15 @@ function Base.:(==)(a::TypeStableMutableStruct, b::TypeStableMutableStruct)
     return equal_field(a, b, :a) && equal_field(a, b, :b)
 end
 
+mutable struct TypeUnstableMutableStruct
+    a::Float64
+    b
+end
+
+function Base.:(==)(a::TypeUnstableMutableStruct, b::TypeUnstableMutableStruct)
+    return equal_field(a, b, :a) && equal_field(a, b, :b)
+end
+
 struct TypeStableStruct{T}
     a::Int
     b::T
@@ -1032,6 +1041,15 @@ struct TypeStableStruct{T}
 end
 
 function Base.:(==)(a::TypeStableStruct, b::TypeStableStruct)
+    return equal_field(a, b, :a) && equal_field(a, b, :b)
+end
+
+struct TypeUnstableStruct
+    a::Float64
+    b
+end
+
+function Base.:(==)(a::TypeUnstableStruct, b::TypeUnstableStruct)
     return equal_field(a, b, :a) && equal_field(a, b, :b)
 end
 

@@ -55,6 +55,9 @@ Base.:(==)(x::Tangent, y::Tangent) = x.fields == y.fields
 
 mutable struct MutableTangent{Tfields<:NamedTuple}
     fields::Tfields
+    MutableTangent{Tfields}() where {Tfields} = new{Tfields}()
+    MutableTangent(fields::Tfields) where {Tfields} = MutableTangent{Tfields}(fields)
+    MutableTangent{Tfields}(fields::NamedTuple{names}) where {names, Tfields<:NamedTuple{names}} = new{Tfields}(fields)
 end
 
 Base.:(==)(x::MutableTangent, y::MutableTangent) = x.fields == y.fields
@@ -408,20 +411,24 @@ end
 Returns the unique zero element of the tangent space of `x`.
 It is an error for the zero element of the tangent space of `x` to be represented by
 anything other than that which this function returns.
+
+Internally, `zero_tangent` calls `zero_tangent_internal`, which handles different types of inputs differently.
+`zero_tangent_internal` has two variants:
+1. For `isbitstype` types, `zero_tangent_internal` takes one argument. 
+2. Otherwise, `zero_tangent_internal` takes another argument which is an `IdDict`, which
+handles both circular references and aliasing correctly.
 """
 zero_tangent(x)
-@inline zero_tangent(::Union{Int8, Int16, Int32, Int64, Int128}) = NoTangent()
-@inline zero_tangent(x::IEEEFloat) = zero(x)
-@inline function zero_tangent(x::SimpleVector)
-    return map!(n -> zero_tangent(x[n]), Vector{Any}(undef, length(x)), eachindex(x))
+function zero_tangent(x::P) where {P}
+    return isbitstype(P) ? zero_tangent_internal(x) : zero_tangent_internal(x, IdDict())
 end
-@inline function zero_tangent(x::Array{P, N}) where {P, N}
-    return _map_if_assigned!(zero_tangent, Array{tangent_type(P), N}(undef, size(x)...), x)
+
+@inline zero_tangent_internal(::Union{Int8, Int16, Int32, Int64, Int128}) = NoTangent()
+@inline zero_tangent_internal(x::IEEEFloat) = zero(x)
+@inline function zero_tangent_internal(x::P) where {P<:Union{Tuple, NamedTuple}}
+    return tangent_type(P) == NoTangent ? NoTangent() : tuple_map(zero_tangent_internal, x)
 end
-@inline function zero_tangent(x::P) where {P<:Union{Tuple, NamedTuple}}
-    return tangent_type(P) == NoTangent ? NoTangent() : tuple_map(zero_tangent, x)
-end
-@generated function zero_tangent(x::P) where {P}
+@generated function zero_tangent_internal(x::P) where P
 
     tangent_type(P) == NoTangent && return NoTangent()
 
@@ -436,14 +443,68 @@ end
     tangent_field_zeros_exprs = ntuple(fieldcount(P)) do n
         if tangent_field_type(P, n) <: PossiblyUninitTangent
             V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
-            return :(isdefined(x, $n) ? $V(zero_tangent(getfield(x, $n))) : $V())
+            return :(isdefined(x, $n) ? $V(zero_tangent_internal(getfield(x, $n))) : $V())
         else
-            return :(zero_tangent(getfield(x, $n)))
+            return :(zero_tangent_internal(getfield(x, $n)))
         end
     end
     backing_data_expr = Expr(:call, :tuple, tangent_field_zeros_exprs...)
     backing_expr = :($(backing_type(P))($backing_data_expr))
     return :($(tangent_type(P))($backing_expr))
+end
+
+# the `stackdict` naming following convention of Julia's `deepcopy` and `deepcopy_internal`
+# https://github.com/JuliaLang/julia/blob/48d4fd48430af58502699fdf3504b90589df3852/base/deepcopy.jl#L35
+@inline zero_tangent_internal(x::Union{Int8,Int16,Int32,Int64,Int128,IEEEFloat}, stackdict::IdDict) = zero_tangent_internal(x)
+@inline function zero_tangent_internal(x::SimpleVector, stackdict::IdDict)
+    return map!(n -> zero_tangent_internal(x[n], stackdict), Vector{Any}(undef, length(x)), eachindex(x))
+end
+@inline function zero_tangent_internal(x::Array{P, N}, stackdict::IdDict) where {P, N}
+    haskey(stackdict, x) && return stackdict[x]::tangent_type(typeof(x))
+    
+    zt = Array{tangent_type(P), N}(undef, size(x)...)
+    stackdict[x] = zt
+    return _map_if_assigned!(Base.Fix2(zero_tangent_internal, stackdict), zt, x)::Array{tangent_type(P), N}
+end
+@inline function zero_tangent_internal(x::P, stackdict::IdDict) where {P<:Union{Tuple, NamedTuple}}
+    return tangent_type(P) == NoTangent ? NoTangent() : tuple_map(Base.Fix2(zero_tangent_internal, stackdict), x)
+end
+function zero_tangent_internal(x::P, stackdict::IdDict) where {P}
+
+    tangent_type(P) == NoTangent && return NoTangent()
+
+    if tangent_type(P) <: MutableTangent
+        if haskey(stackdict, x)
+            return stackdict[x]::tangent_type(P)
+        end
+        stackdict[x] = tangent_type(P)() # create a uninitialised MutableTangent
+        # if circular reference exists, then the recursive call will first look up the stackdict
+        # and return the uninitialised MutableTangent
+        # after the recursive call returns, the stackdict will be initialised
+        stackdict[x].fields = backing_type(P)(zero_tangent_struct_field(x, stackdict))
+        return stackdict[x]::tangent_type(P)
+    else
+        if isbitstype(P)
+            return zero_tangent_internal(x)
+        else
+            return tangent_type(P)(backing_type(P)(zero_tangent_struct_field(x, stackdict)))
+        end
+    end
+end
+
+@inline function zero_tangent_struct_field(x::P, stackdict::IdDict) where {P}
+    return ntuple(fieldcount(P)) do n
+        if tangent_field_type(P, n) <: PossiblyUninitTangent
+            V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
+            if isdefined(x, n)
+                return V(zero_tangent_internal(getfield(x, n), stackdict))
+            else
+                return V()
+            end
+        else
+            return zero_tangent_internal(getfield(x, n), stackdict)
+        end
+    end
 end
 
 """

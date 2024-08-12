@@ -118,6 +118,53 @@
     end
 end
 
+# TODO: ideally we want to add the following test to the above testset (defined src/tangent.jl)
+# but we have to delay this until `randn_tangent` is implemented and working.
+@testset "zero_tangent" begin
+    @testset "circular reference" begin
+        foo = Tapir.TestResources.TypeUnstableMutableStruct(5.0, nothing)
+        foo.b = foo
+        zt = Tapir.zero_tangent(foo)
+        @test zt.fields.b === zt
+    end
+
+    @testset "struct with non-concrete fields" begin
+        bar = Tapir.TestResources.TypeUnstableStruct(5.0, 1.0)
+        @test Tapir.zero_tangent(bar) == Tangent{@NamedTuple{a::Float64, b}}(@NamedTuple{a::Float64, b}((0.0, 0.0)))
+    end
+    
+    @testset "duplicate reference" begin
+        @testset "subarray" begin
+            mutable struct MutDupRefSubArray
+                x
+                y
+            end
+            
+            x = [1.0, 2.0, 3.0]
+            mut_struct = MutDupRefSubArray(view(x, 1:2), view(x, 1:2))
+            mt = Tapir.zero_tangent(mut_struct)
+            @test mt isa Tapir.MutableTangent
+            @test mt.fields.x === mt.fields.y
+
+            struct ImmutableDupRefSubArray
+                x
+                y
+            end
+
+            immutable_struct = ImmutableDupRefSubArray(view(x, 1:2), view(x, 1:1))
+            it = Tapir.zero_tangent(immutable_struct)
+            @test it isa Tapir.Tangent
+            @test it.fields.x.fields.parent === it.fields.y.fields.parent
+        end
+    end
+
+    @testset "indirect circular reference" begin
+        m = [Any[1], 2.0]
+        m[1][1] = m
+        zt = Tapir.zero_tangent(m)
+        @test zt[1][1] === zt
+    end
+end
 
 # The goal of these tests is to check that we can indeed generate tangent types for anything
 # that we will encounter in the Julia language. We try to achieve this by pulling in types

@@ -49,7 +49,7 @@
             p2 = [p, p]
             t2 = [t, t]
             @test length(populate_address_map(p2, t2)) == 4
-            @test_throws AssertionError populate_address_map(p2, zero_tangent(p2))
+            @test_throws AssertionError populate_address_map(p2, [zero_tangent(p), zero_tangent(p)])
         end
         @testset "immutable type" begin
             p = TestResources.StructFoo(5.0, randn(2))
@@ -68,11 +68,11 @@
             @test length(populate_address_map(p, t)) == 1
 
             p2 = (p, p)
-            @test_throws AssertionError populate_address_map(p2, zero_tangent(p2))
+            @test_throws AssertionError populate_address_map(p2, (zero_tangent(p), zero_tangent(p)))
 
             p = TestResources.MutableFoo(5.0, randn(2))
             p2 = (p, p)
-            @test_throws AssertionError populate_address_map(p2, zero_tangent(p2))
+            @test_throws AssertionError populate_address_map(p2, (zero_tangent(p), zero_tangent(p)))
         end
         @testset "views" begin
             p = view(randn(5, 4), 1:2, 1:3)
