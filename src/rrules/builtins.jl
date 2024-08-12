@@ -247,7 +247,13 @@ end
 @inactive_intrinsic fptosi
 @inactive_intrinsic fptoui
 
-# fptrunc -- maybe interesting
+@intrinsic fptrunc
+function rrule!!(
+    ::CoDual{typeof(fptrunc)}, ::CoDual{Type{Ptrunc}}, x::CoDual{P}
+) where {Ptrunc<:IEEEFloat, P<:IEEEFloat}
+    fptrunc_adjoint!!(dy) = NoRData(), NoRData(), convert(P, dy)
+    return zero_fcodual(fptrunc(Ptrunc, primal(x))), fptrunc_adjoint!!
+end
 
 @inactive_intrinsic have_fma
 @inactive_intrinsic le_float
@@ -821,7 +827,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability, nothing, IntrinsicsWrappers.fpiseq, 4.1, 4.0),
         (false, :stability, nothing, IntrinsicsWrappers.fptosi, UInt32, 4.1),
         (false, :stability, nothing, IntrinsicsWrappers.fptoui, Int32, 4.1),
-        # fptrunc -- maybe interesting
+        (true, :stability, nothing, IntrinsicsWrappers.fptrunc, Float32, 5.0),
         (true, :stability, nothing, IntrinsicsWrappers.have_fma, Float64),
         (false, :stability, nothing, IntrinsicsWrappers.le_float, 4.1, 4.0),
         (false, :stability, nothing, IntrinsicsWrappers.le_float_fast, 4.1, 4.0),
