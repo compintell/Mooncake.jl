@@ -830,7 +830,6 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability, nothing, IntrinsicsWrappers.floor_llvm, 4.1),
         (false, :stability, nothing, IntrinsicsWrappers.fma_float, 5.0, 4.0, 3.0),
         (true, :stability_and_allocs, nothing, IntrinsicsWrappers.fpext, Float64, 5f0),
-        # (true, :stability_and_allocs, nothing, Intrinsics.fpext, Float64, 5.0),
         (false, :stability, nothing, IntrinsicsWrappers.fpiseq, 4.1, 4.0),
         (false, :stability, nothing, IntrinsicsWrappers.fptosi, UInt32, 4.1),
         (false, :stability, nothing, IntrinsicsWrappers.fptoui, Int32, 4.1),
