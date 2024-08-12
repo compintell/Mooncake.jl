@@ -415,8 +415,8 @@ anything other than that which this function returns.
 Internally, `zero_tangent` calls `zero_tangent_internal`, which handles different types of inputs differently.
 `zero_tangent_internal` has two variants:
 1. For `isbitstype` types, `zero_tangent_internal` takes one argument. 
-2. Otherwise, `zero_tangent_internal` takes another argument which is an `IdDict`, which solves the issue of circular references
-and also allows more efficient handling of aliased objects.
+2. Otherwise, `zero_tangent_internal` takes another argument which is an `IdDict`, which
+handles both circular references and aliasing correctly.
 """
 zero_tangent(x)
 function zero_tangent(x::P) where {P}
