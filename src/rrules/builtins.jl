@@ -241,7 +241,13 @@ function rrule!!(::CoDual{typeof(fma_float)}, x, y, z)
     return CoDual(fma_float(_x, _y, primal(z)), NoFData()), fma_float_pullback!!
 end
 
-# fpext -- maybe interesting
+@intrinsic fpext
+function rrule!!(
+    ::CoDual{typeof(fpext)}, ::CoDual{Type{Pext}}, x::CoDual{P}
+) where {Pext<:IEEEFloat, P<:IEEEFloat}
+    fpext_adjoint!!(dy::Pext) = NoRData(), NoRData(), fptrunc(P, dy)
+    return zero_fcodual(fpext(Pext, primal(x))), fpext_adjoint!!
+end
 
 @inactive_intrinsic fpiseq
 @inactive_intrinsic fptosi
@@ -251,7 +257,7 @@ end
 function rrule!!(
     ::CoDual{typeof(fptrunc)}, ::CoDual{Type{Ptrunc}}, x::CoDual{P}
 ) where {Ptrunc<:IEEEFloat, P<:IEEEFloat}
-    fptrunc_adjoint!!(dy) = NoRData(), NoRData(), convert(P, dy)
+    fptrunc_adjoint!!(dy::Ptrunc) = NoRData(), NoRData(), convert(P, dy)
     return zero_fcodual(fptrunc(Ptrunc, primal(x))), fptrunc_adjoint!!
 end
 
@@ -823,7 +829,8 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability, nothing, IntrinsicsWrappers.flipsign_int, 4, -3),
         (false, :stability, nothing, IntrinsicsWrappers.floor_llvm, 4.1),
         (false, :stability, nothing, IntrinsicsWrappers.fma_float, 5.0, 4.0, 3.0),
-        # fpext -- NEEDS IMPLEMENTING AND TESTING
+        (true, :stability_and_allocs, nothing, IntrinsicsWrappers.fpext, Float64, 5f0),
+        # (true, :stability_and_allocs, nothing, Intrinsics.fpext, Float64, 5.0),
         (false, :stability, nothing, IntrinsicsWrappers.fpiseq, 4.1, 4.0),
         (false, :stability, nothing, IntrinsicsWrappers.fptosi, UInt32, 4.1),
         (false, :stability, nothing, IntrinsicsWrappers.fptoui, Int32, 4.1),
