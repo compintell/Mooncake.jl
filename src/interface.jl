@@ -67,8 +67,15 @@ function __value_and_gradient!!(rule::R, fx::Vararg{CoDual, N}) where {R, N}
     __verify_sig(rule, fx_fwds)
     out, pb!! = rule(fx_fwds...)
     y = primal(out)
-    @assert tangent(out) isa NoFData
+    if !(y isa IEEEFloat)
+        throw(error(
+            "When calling __value_and_gradient!!, return value of primal must be a " *
+            "subtype of IEEEFloat."
+        ))
+    end
     @assert y isa IEEEFloat
+    @assert tangent(out) isa NoFData
+
     return y, tuple_map((f, r) -> tangent(fdata(tangent(f)), r), fx, pb!!(one(y)))
 end
 
