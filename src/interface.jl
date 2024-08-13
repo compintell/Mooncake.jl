@@ -63,7 +63,13 @@ Tapir.__value_and_gradient!!(
 ```
 """
 function __value_and_gradient!!(rule::R, fx::Vararg{CoDual, N}) where {R, N}
-    return __value_and_pullback!!(rule, 1.0, fx...)
+    fx_fwds = tuple_map(to_fwds, fx)
+    __verify_sig(rule, fx_fwds)
+    out, pb!! = rule(fx_fwds...)
+    y = primal(out)
+    @assert tangent(out) isa NoFData
+    @assert y isa IEEEFloat
+    return y, tuple_map((f, r) -> tangent(fdata(tangent(f)), r), fx, pb!!(one(y)))
 end
 
 """

@@ -19,4 +19,22 @@
         rule = build_rrule(foo, 5.0)
         @test_throws ArgumentError value_and_pullback!!(rule, 1.0, foo, CoDual(5.0, 0.0))
     end
+    @testset "value_and_gradient!!" begin
+        @testset "($(typeof(fargs))" for fargs in Any[
+            (sin, randn(Float64)),
+            (sin, randn(Float32)),
+            (x -> sin(cos(x)), randn(Float64)),
+            (x -> sin(cos(x)), randn(Float32)),
+            ((x, y) -> x + sin(y), randn(Float64), randn(Float64)),
+            ((x, y) -> x + sin(y), randn(Float32), randn(Float32)),
+        ]
+            rule = build_rrule(fargs...)
+            f, args... = fargs
+            v, dfargs = value_and_gradient!!(rule, fargs...)
+            @test v == f(args...)
+            for (arg, darg) in zip(fargs, dfargs)
+                @test tangent_type(typeof(arg)) == typeof(darg)
+            end
+        end
+    end
 end
