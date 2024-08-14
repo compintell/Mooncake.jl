@@ -454,6 +454,21 @@ function rrule!!(
     return zero_fcodual(y), NoPullback(ntuple(_ -> NoRData(), length(args) + 8))
 end
 
+function rrule!!(
+    ::CoDual{typeof(_foreigncall_)},
+    ::CoDual{Val{:jl_type_unionall}},
+    ::CoDual{Val{Any}}, # return type
+    ::CoDual{Tuple{Val{Any}, Val{Any}}}, # arg types
+    ::CoDual{Val{0}}, # number of required args
+    ::CoDual{Val{:ccall}},
+    a::CoDual,
+    b::CoDual,
+    args...
+)
+    y = ccall(:jl_type_unionall, Any, (Any, Any), primal(a), primal(b))
+    return zero_fcodual(y), NoPullback(ntuple(_ -> NoRData(), length(args) + 8))
+end
+
 @is_primitive MinimalCtx Tuple{typeof(deepcopy), Any}
 function rrule!!(::CoDual{typeof(deepcopy)}, x::CoDual)
     fdx = tangent(x)
@@ -639,6 +654,10 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:foreigncall})
         ),
         (false, :none, nothing, isassigned, randn(5), 4),
         (false, :none, nothing, x -> (Base._growbeg!(x, 2); x[1:2] .= 2.0), randn(5)),
+        (
+            false, :none, nothing,
+            (t, v) -> ccall(:jl_type_unionall, Any, (Any, Any), t, v), TypeVar(:a), Real,
+        ),
     ]
     memory = Any[_x]
     return test_cases, memory
