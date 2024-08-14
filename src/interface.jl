@@ -33,6 +33,10 @@ __verify_sig(rule::SafeRRule, fx) = __verify_sig(rule.rule, fx)
 # check here.
 __verify_sig(::typeof(rrule!!), fx::Tuple) = nothing
 
+struct ValueAndGradientReturnTypeError <: Exception
+    msg::String
+end
+
 """
     __value_and_gradient!!(rule, f::CoDual, x::CoDual...)
 
@@ -63,7 +67,20 @@ Tapir.__value_and_gradient!!(
 ```
 """
 function __value_and_gradient!!(rule::R, fx::Vararg{CoDual, N}) where {R, N}
-    return __value_and_pullback!!(rule, 1.0, fx...)
+    fx_fwds = tuple_map(to_fwds, fx)
+    __verify_sig(rule, fx_fwds)
+    out, pb!! = rule(fx_fwds...)
+    y = primal(out)
+    if !(y isa IEEEFloat)
+        throw(ValueAndGradientReturnTypeError(
+            "When calling __value_and_gradient!!, return value of primal must be a " *
+            "subtype of IEEEFloat. Instead, found value of type $(typeof(y))."
+        ))
+    end
+    @assert y isa IEEEFloat
+    @assert tangent(out) isa NoFData
+
+    return y, tuple_map((f, r) -> tangent(fdata(tangent(f)), r), fx, pb!!(one(y)))
 end
 
 """
