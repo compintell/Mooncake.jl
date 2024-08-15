@@ -802,6 +802,8 @@ Verify that primal `p` with tangents `z_target`, `x`, and `y`, satisfies the tan
 interface. If these tests pass, then it should be possible to write rules for primals
 of type `P`, and to test them using [`test_rule`](@ref).
 
+It should be the case that `z_target` == `increment!!(x, y)`.
+
 As always, there are limits to the errors that these tests can identify -- they form
 necessary but not sufficient conditions for the correctness of your code.
 """

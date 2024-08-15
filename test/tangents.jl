@@ -126,11 +126,15 @@ end
         foo.b = foo
         zt = Tapir.zero_tangent(foo)
         @test zt.fields.b === zt
+        rt = Tapir.randn_tangent(Xoshiro(123456), foo)
+        @test rt.fields.b === rt
     end
 
     @testset "struct with non-concrete fields" begin
         bar = Tapir.TestResources.TypeUnstableStruct(5.0, 1.0)
         @test Tapir.zero_tangent(bar) == Tangent{@NamedTuple{a::Float64, b}}(@NamedTuple{a::Float64, b}((0.0, 0.0)))
+        rt = Tapir.randn_tangent(Xoshiro(123456), bar)
+        @test rt.fields.b === rt
     end
     
     @testset "duplicate reference" begin
@@ -146,6 +150,9 @@ end
             @test mt isa Tapir.MutableTangent
             @test mt.fields.x === mt.fields.y
 
+            rt = Tapir.randn_tangent(Xoshiro(123456), mut_struct)
+            @test rt.fields.x === rt.fields.y
+
             struct ImmutableDupRefSubArray
                 x
                 y
@@ -155,6 +162,8 @@ end
             it = Tapir.zero_tangent(immutable_struct)
             @test it isa Tapir.Tangent
             @test it.fields.x.fields.parent === it.fields.y.fields.parent
+            rt = Tapir.randn_tangent(Xoshiro(123456), immutable_struct)
+            @test rt.fields.x.fields.parent === rt.fields.y.fields.parent
         end
     end
 
@@ -163,6 +172,8 @@ end
         m[1][1] = m
         zt = Tapir.zero_tangent(m)
         @test zt[1][1] === zt
+        rt = Tapir.randn_tangent(Xoshiro(123456), m)
+        @test rt[1][1] === rt
     end
 end
 

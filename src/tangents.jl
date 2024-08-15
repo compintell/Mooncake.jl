@@ -521,6 +521,7 @@ details -- this docstring is intentionally non-specific in order to avoid becomi
 
 Required for testing.
 Generate a randomly-chosen tangent to `x`.
+The design is closely modelled after `zero_tangent`.
 """
 function randn_tangent(rng::AbstractRNG, x::T) where {T}
     return isbitstype(T) ? randn_tangent_internal(rng, x) : randn_tangent_internal(rng, x, IdDict())
@@ -831,7 +832,7 @@ for T in [Symbol, Int, Val]
     @eval increment_field!!(::NoTangent, ::NoTangent, f::Union{$T}) = NoTangent()
 end
 
-#=
+"""
     tangent_test_cases()
 
 Constructs a `Vector` of `Tuple`s containing test cases for the tangent infrastructure.
@@ -847,13 +848,9 @@ If the returned tuple has 5 elements, then the elements are interpreted as follo
 2 - primal value
 3, 4, 5 - tangents, where <5> == increment!!(<3>, <4>).
 
-Generally speaking, it's very straightforward to produce test cases in the first format,
-while the second requires more work. Consequently, at the time of writing there are many
-more instances of the first format than the second.
-
 Test cases in the first format make use of `zero_tangent` / `randn_tangent` etc to generate
 tangents, but they're unable to check that `increment!!` is correct in an absolute sense.
-=#
+"""
 function tangent_test_cases()
 
     N_large = 33
@@ -961,6 +958,14 @@ function tangent_test_cases()
                 build_tangent(TestResources.StructNoRvs, [4.0]),
                 build_tangent(TestResources.StructNoRvs, [9.0]),
             ),
+            let foo = (TestResources.TypeUnstableMutableStruct(5.0, nothing); foo.b=foo) 
+            (
+                foo,
+                build_tangent(TestResources.TypeUnstableMutableStruct, 3.0, nothing),
+                build_tangent(TestResources.TypeUnstableMutableStruct, 5.0, nothing),
+                build_tangent(TestResources.TypeUnstableMutableStruct, 8.0, nothing),
+            )
+            end,
             (UnitRange{Int}(5, 7), NoTangent(), NoTangent(), NoTangent()),
         ],
         map([
