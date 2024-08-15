@@ -126,11 +126,20 @@ function has_equal_data(x::T, y::T; equal_undefs=true) where {T<:Core.SimpleVect
 end
 function has_equal_data(x::T, y::T; equal_undefs=true) where {T}
     isprimitivetype(T) && return isequal(x, y)
-    if ismutabletype(x)
-        return all(map(
-            n -> isdefined(x, n) ? has_equal_data(getfield(x, n), getfield(y, n)) : true,
-            fieldnames(T),
-        ))
+    if ismutabletype(T)
+        fs = Bool[]
+        for n in fieldnames(T)
+            if isdefined(x, n)
+                if getfield(x, n) === x  # check for circular references
+                    return getfield(y, n) === y && x === y
+                else
+                    return has_equal_data(getfield(x, n), getfield(y, n))
+                end
+            else
+                return true
+            end
+        end
+        return all(fs)
     else
         for n in fieldnames(T)
             if isdefined(x, n)
