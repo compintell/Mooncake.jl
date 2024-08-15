@@ -522,26 +522,19 @@ details -- this docstring is intentionally non-specific in order to avoid becomi
 Required for testing.
 Generate a randomly-chosen tangent to `x`.
 """
-randn_tangent(::AbstractRNG, ::NoTangent) = NoTangent()
-randn_tangent(rng::AbstractRNG, ::T) where {T<:IEEEFloat} = randn(rng, T)
-function randn_tangent(rng::AbstractRNG, x::Array{T, N}) where {T, N}
-    dx = Array{tangent_type(T), N}(undef, size(x)...)
-    return _map_if_assigned!(Base.Fix1(randn_tangent, rng), dx, x)
-end
-function randn_tangent(rng::AbstractRNG, x::SimpleVector)
-    return map!(Vector{Any}(undef, length(x)), eachindex(x)) do n
-        return randn_tangent(rng, x[n])
-    end
-end
-function randn_tangent(rng::AbstractRNG, x::P) where {P <: Union{Tuple, NamedTuple}}
-    tangent_type(P) == NoTangent && return NoTangent()
-    return tuple_map(x -> randn_tangent(rng, x), x)
+function randn_tangent(rng::AbstractRNG, x::T) where {T}
+    return isbitstype(T) ? randn_tangent_internal(rng, x) : randn_tangent_internal(rng, x, IdDict())
 end
 function randn_tangent(rng::AbstractRNG, x::T) where {T<:Union{Tangent, MutableTangent}}
     return T(randn_tangent(rng, x.fields))
 end
-@generated function randn_tangent(rng::AbstractRNG, x::P) where {P}
 
+randn_tangent_internal(::AbstractRNG, ::NoTangent) = NoTangent()
+randn_tangent_internal(rng::AbstractRNG, ::T) where {T<:IEEEFloat} = randn(rng, T)
+function randn_tangent_internal(rng::AbstractRNG, x::T) where {T<:Union{Tuple, NamedTuple}}
+    return tangent_type(T) == NoTangent ? NoTangent() : tuple_map(x->randn_tangent_internal(rng, x), x)
+end
+@generated function randn_tangent_internal(rng::AbstractRNG, x::P) where {P}
     # If `P` doesn't have a tangent space, always return `NoTangent()`.
     tangent_type(P) === NoTangent && return NoTangent()
 
@@ -562,6 +555,59 @@ end
     end
     tangent_fields_expr = Expr(:call, :tuple, tangent_field_exprs...)
     return :($(tangent_type(P))($(backing_type(P))($tangent_fields_expr)))
+end
+
+function randn_tangent_internal(rng::AbstractRNG, x::Union{IEEEFloat, NoTangent}, stackdict::IdDict)
+    return randn_tangent(rng, x)
+end
+function randn_tangent_internal(rng::AbstractRNG, x::SimpleVector, stackdict::IdDict)
+    return map!(Vector{Any}(undef, length(x)), eachindex(x)) do n
+        return randn_tangent_internal(rng, x[n], stackdict)
+    end
+end
+function randn_tangent_internal(rng::AbstractRNG, x::Array{T, N}, stackdict::IdDict) where {T, N}
+    haskey(stackdict, x) && return stackdict[x]::tangent_type(typeof(x))
+    
+    dx = Array{tangent_type(T), N}(undef, size(x)...)
+    stackdict[x] = dx
+    return _map_if_assigned!(x -> randn_tangent_internal(rng, x, stackdict), dx, x)
+end
+function randn_tangent_internal(rng::AbstractRNG, x::P, stackdict::IdDict) where {P<:Union{Tuple, NamedTuple}}
+    return tangent_type(P) == NoTangent ? NoTangent() : tuple_map(x -> randn_tangent_internal(rng, x, stackdict), x)
+end
+function randn_tangent_internal(rng::AbstractRNG, x::P, stackdict::IdDict) where {P}
+
+    tangent_type(P) == NoTangent && return NoTangent()
+
+    if tangent_type(P) <: MutableTangent
+        if haskey(stackdict, x)
+            return stackdict[x]::tangent_type(P)
+        end
+        stackdict[x] = tangent_type(P)()
+        stackdict[x].fields = backing_type(P)(randn_tangent_struct_field(rng, x, stackdict))
+        return stackdict[x]::tangent_type(P)
+    else
+        if isbitstype(P)
+            return randn_tangent_internal(rng, x)
+        else
+            return tangent_type(P)(backing_type(P)(randn_tangent_struct_field(rng, x, stackdict)))
+        end
+    end
+end
+
+function randn_tangent_struct_field(rng::AbstractRNG, x::P, stackdict::IdDict) where {P}
+    return ntuple(fieldcount(P)) do n
+        if tangent_field_type(P, n) <: PossiblyUninitTangent
+            V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
+            if isdefined(x, n)
+                return V(randn_tangent_internal(rng, getfield(x, n), stackdict))
+            else
+                return V()
+            end
+        else
+            return randn_tangent_internal(rng, getfield(x, n), stackdict)
+        end
+    end
 end
 
 """
