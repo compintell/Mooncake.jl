@@ -213,9 +213,10 @@ end
 __ref(P) = new_inst(Expr(:call, __make_ref, P))
 
 # Helper for reverse_data_ref_stmts.
-@inline @generated function __make_ref(::Type{P}) where {P}
-    R = zero_like_rdata_type(P)
-    return :(Ref{$R}(Tapir.zero_like_rdata_from_type(P)))
+@inline @generated function __make_ref(p::Type{P}) where {P}
+    _P = @isdefined(P) ? P : _typeof(p)
+    R = zero_like_rdata_type(_P)
+    return :(Ref{$R}(Tapir.zero_like_rdata_from_type($_P)))
 end
 
 @inline __make_ref(::Type{Union{}}) = nothing
@@ -368,7 +369,7 @@ function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
     # Assemble the above lines and construct reverse-pass.
     return ad_stmt_info(
         line,
-        PiNode(stmt.val, fcodual_type(_type(stmt.typ))),
+        PiNode(__inc(stmt.val), fcodual_type(_type(stmt.typ))),
         Expr(:call, __pi_rvs!, P, val_rdata_ref_id, output_rdata_ref_id),
     )
 end
