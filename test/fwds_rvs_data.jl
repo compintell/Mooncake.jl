@@ -32,6 +32,7 @@ end
             (Type{Tapir.TestResources.StableFoo}, Tapir.TestResources.StableFoo, true),
             (Tuple{Float64, Float64}, (5.0, 4.0), true),
             (Tuple{Float64, Vararg{Float64}}, (5.0, 4.0, 3.0), false),
+            (Type{Type{Tuple{T}} where {T}}, Type{Tuple{T}} where {T}, true),
         ]
             L = Tapir.lazy_zero_rdata_type(P)
             @test fully_lazy == Base.issingletontype(typeof(lazy_zero_rdata(L, p)))
@@ -39,6 +40,7 @@ end
                 @inferred Tapir.instantiate(lazy_zero_rdata(L, p))
             end
             @test typeof(lazy_zero_rdata(L, p)) == Tapir.lazy_zero_rdata_type(P)
+            @test lazy_zero_rdata(p) isa LazyZeroRData{_typeof(p)}
         end
         @test isa(
             lazy_zero_rdata(Tapir.TestResources.StableFoo),
