@@ -14,8 +14,10 @@ produced, in the same way that seed for random number generators can be set.
 struct ID
     id::Int32
     function ID()
-        global _id_count[Threads.threadid()] += 1
-        return new(_id_count[Threads.threadid()])
+        current_thread_id = Threads.threadid()
+        id_count = get(_id_count, current_thread_id, Int32(0))
+        _id_count[current_thread_id] = id_count + Int32(1)
+        return new(id_count)
     end
 end
 
