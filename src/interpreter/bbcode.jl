@@ -1,6 +1,6 @@
 # See the docstring for `BBCode` for some context on this file.
 
-_id_count::Int32 = 0
+const _id_count::Dict{Int, Int32} = Dict{Int, Int32}()
 
 """
     ID()
@@ -14,8 +14,8 @@ produced, in the same way that seed for random number generators can be set.
 struct ID
     id::Int32
     function ID()
-        global _id_count += 1 
-        return new(_id_count)
+        global _id_count[Threads.threadid()] += 1
+        return new(_id_count[Threads.threadid()])
     end
 end
 
@@ -30,7 +30,7 @@ ensure determinism between two runs of the same function which makes use of `ID`
 This is akin to setting the random seed associated to a random number generator globally.
 """
 function seed_id!()
-    global _id_count = 0
+    global _id_count[Threads.threadid()] = 0
 end
 
 """
