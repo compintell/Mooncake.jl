@@ -1,7 +1,7 @@
 name = "Tapir"
 uuid = "07d77754-e150-4737-8c94-cd238a1fb45b"
 authors = ["Will Tebbutt, Hong Ge, and contributors"]
-version = "0.2.36"
+version = "0.2.37"
 
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
@@ -19,15 +19,15 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [weakdeps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
 LogDensityProblemsAD = "996a588d-648d-4e1f-a8f0-a84b347e47b1"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
-JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
 
 [extensions]
 TapirCUDAExt = "CUDA"
+TapirJETExt = "JET"
 TapirLogDensityProblemsADExt = "LogDensityProblemsAD"
 TapirSpecialFunctionsExt = "SpecialFunctions"
-TapirJETExt = "JET"
 
 [compat]
 ADTypes = "1.2"
@@ -60,8 +60,8 @@ DiffTests = "de460e47-3fe3-5279-bb4a-814414816d5d"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 FillArrays = "1a297f60-69ca-5386-bcde-b61e274b549b"
-KernelFunctions = "ec8451be-7e33-11e9-00cf-bbf324bd1392"
 JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
+KernelFunctions = "ec8451be-7e33-11e9-00cf-bbf324bd1392"
 LogDensityProblemsAD = "996a588d-648d-4e1f-a8f0-a84b347e47b1"
 PDMats = "90014a1f-27ba-587c-ab20-58faa44d9150"
 ReverseDiff = "37e2e3b7-166d-5795-8a7a-e32c996b4267"

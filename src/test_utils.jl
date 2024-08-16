@@ -1197,6 +1197,8 @@ function pi_node_tester(y::Ref{Any})
     return isa(x, Int) ? sin(x) : x
 end
 
+Base.@nospecializeinfer arg_in_pi_node(@nospecialize(x)) = x isa Bool ? x : false
+
 function avoid_throwing_path_tester(x)
     if x < 0
         Base.throw_boundserror(1:5, 6)
@@ -1496,6 +1498,7 @@ function generate_test_functions()
         ),
         (false, :none, (lb=1, ub=1_000), pi_node_tester, Ref{Any}(5.0)),
         (false, :none, (lb=1, ub=1_000), pi_node_tester, Ref{Any}(5)),
+        (false, :none, nothing, arg_in_pi_node, false),
         (false, :allocs, nothing, intrinsic_tester, 5.0),
         (false, :allocs, nothing, goto_tester, 5.0),
         (false, :allocs, nothing, new_tester, 5.0, :hello),
