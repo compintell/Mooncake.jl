@@ -106,57 +106,95 @@ function report_opt(::Any, tt)
     throw(error("Load JET to use this function."))
 end
 
-has_equal_data(x::T, y::T; equal_undefs=true) where {T<:String} = x == y
-has_equal_data(x::Type, y::Type; equal_undefs=true) = x == y
-has_equal_data(x::Core.TypeName, y::Core.TypeName; equal_undefs=true) = x == y
-has_equal_data(x::Module, y::Module; equal_undefs=true) = x == y
-function has_equal_data(x::T, y::T; equal_undefs=true) where {T<:Array}
+"""
+    has_equal_data(x, y; equal_undefs=true, visited=IdDict())
+
+Determine if two objects `x` and `y` have equivalent data.
+
+If `equal_undefs` is `true`, undefined elements in arrays or unassigned fields 
+in structs are considered equal. `visited` is a dictionary to track visited objects 
+and avoid infinite recursion in cases of circular references, whose key are the ids of the 
+pairs of objects being compared.
+"""
+function has_equal_data(x, y; equal_undefs=true)
+    return has_equal_data_internal(x, y, equal_undefs, Dict())
+end
+
+has_equal_data_internal(x::Type, y::Type, equal_undefs::Bool, d::Dict) = x == y
+has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict) where {T<:String} = x == y
+has_equal_data_internal(x::Core.TypeName, y::Core.TypeName, equal_undefs::Bool, d::Dict) = x == y
+function has_equal_data_internal(x::Float64, y::Float64, equal_undefs::Bool, d::Dict)
+    return (isapprox(x, y) && !isnan(x)) || (isnan(x) && isnan(y))
+end
+has_equal_data_internal(x::Module, y::Module, equal_undefs::Bool, d::Dict) = x == y
+function has_equal_data(x::GlobalRef, y::GlobalRef; equal_undefs=true)
+    return x.mod == y.mod && x.name == y.name
+end
+function has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict) where {T<:Array}
     size(x) != size(y) && return false
+    
+    if haskey(d, (id(x), id(y)))
+        return d[(id(x), id(y))]
+    end
+
     equality = map(1:length(x)) do n
-        (isassigned(x, n) != isassigned(y, n)) && return !equal_undefs
+        if isassigned(x, n) != isassigned(y, n)
+            return !equal_undefs
+        elseif !isassigned(x, n)
+            return true
+        else
+            id_pair = (id(x[n]), id(y[n]))
+            if haskey(d, id_pair)
+                return d[id_pair]
+            else
+                # TODO: what is the right behavior here? 
+                # for circular references, if a object has a reference to itself, say x.a = x and y.a = y,
+                # then we should return true, but this is tricky
+                # then what if x.a.a = x? and y.a.a = y?, the issue here is that we are not just compare two object, we are comparing the structure of the objects
+                d[id_pair] = x[n] === y[n]
+                has_equal_data(x[n], y[n], equal_undefs, d)
+                return d[id_pair]
+            end
+        end
         return (!isassigned(x, n) || has_equal_data(x[n], y[n]))
     end
     return all(equality)
 end
-function has_equal_data(x::Float64, y::Float64; equal_undefs=true)
-    return (isapprox(x, y) && !isnan(x)) || (isnan(x) && isnan(y))
+function has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict) where {T<:Core.SimpleVector}
+    return all(map((a, b) -> has_equal_data_internal(a, b, equal_undefs, d), x, y))
 end
-function has_equal_data(x::T, y::T; equal_undefs=true) where {T<:Core.SimpleVector}
-    return all(map((a, b) -> has_equal_data(a, b; equal_undefs), x, y))
-end
-function has_equal_data(x::T, y::T; equal_undefs=true) where {T}
+function has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict) where {T}
     isprimitivetype(T) && return isequal(x, y)
-    if ismutabletype(T)
-        fs = Bool[]
-        for n in fieldnames(T)
-            if isdefined(x, n)
-                if getfield(x, n) === x  # check for circular references
-                    return getfield(y, n) === y && x === y
-                else
-                    return has_equal_data(getfield(x, n), getfield(y, n))
-                end
-            else
-                return true
-            end
-        end
-        return all(fs)
-    else
-        for n in fieldnames(T)
-            if isdefined(x, n)
-                if isdefined(y, n) && has_equal_data(getfield(x, n), getfield(y, n))
-                    continue
-                else
-                    return false
-                end
-            else
-                return isdefined(y, n) ? false : true
-            end
-        end
-        return true
+
+    # a struct may contain circular references
+
+    id_pair = (id(x), id(y))
+    if haskey(d, id_pair)
+        return d[id_pair]
     end
-end
-function has_equal_data(x::GlobalRef, y::GlobalRef; equal_undefs=true)
-    return x.mod == y.mod && x.name == y.name
+
+    d[id_pair] = nothing
+
+    result = true
+    for n in fieldnames(T)
+        if isdefined(x, n) && isdefined(y, n)
+            x_field = getfield(x, n)
+            y_field = getfield(y, n)
+            if x_field === y_field
+                continue
+            end
+            if !has_equal_data_internal(x_field, y_field, equal_undefs, d)
+                result = false
+                break
+            end
+        elseif isdefined(x, n) != isdefined(y, n)
+            result = false
+            break
+        end
+    end
+
+    d[id_pair] = result
+    return result
 end
 
 has_equal_data_up_to_undefs(x::T, y::T) where {T} = has_equal_data(x, y; equal_undefs=false)
