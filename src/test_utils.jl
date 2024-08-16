@@ -132,31 +132,21 @@ function has_equal_data(x::GlobalRef, y::GlobalRef; equal_undefs=true)
 end
 function has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict) where {T<:Array}
     size(x) != size(y) && return false
-    
-    if haskey(d, (id(x), id(y)))
-        return d[(id(x), id(y))]
+
+    id_pair = (objectid(x), objectid(y))
+    if haskey(d, id_pair)
+        return d[id_pair]
     end
 
+    d[id_pair] = true
     equality = map(1:length(x)) do n
         if isassigned(x, n) != isassigned(y, n)
             return !equal_undefs
         elseif !isassigned(x, n)
             return true
         else
-            id_pair = (id(x[n]), id(y[n]))
-            if haskey(d, id_pair)
-                return d[id_pair]
-            else
-                # TODO: what is the right behavior here? 
-                # for circular references, if a object has a reference to itself, say x.a = x and y.a = y,
-                # then we should return true, but this is tricky
-                # then what if x.a.a = x? and y.a.a = y?, the issue here is that we are not just compare two object, we are comparing the structure of the objects
-                d[id_pair] = x[n] === y[n]
-                has_equal_data(x[n], y[n], equal_undefs, d)
-                return d[id_pair]
-            end
+            return has_equal_data(x[n], y[n], equal_undefs, d)
         end
-        return (!isassigned(x, n) || has_equal_data(x[n], y[n]))
     end
     return all(equality)
 end
@@ -166,35 +156,31 @@ end
 function has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict) where {T}
     isprimitivetype(T) && return isequal(x, y)
 
-    # a struct may contain circular references
-
-    id_pair = (id(x), id(y))
+    id_pair = (objectid(x), objectid(y))
     if haskey(d, id_pair)
         return d[id_pair]
     end
 
-    d[id_pair] = nothing
+    d[id_pair] = true
 
-    result = true
-    for n in fieldnames(T)
-        if isdefined(x, n) && isdefined(y, n)
-            x_field = getfield(x, n)
-            y_field = getfield(y, n)
-            if x_field === y_field
-                continue
+    if ismutabletype(x)
+        return all(map(fieldnames(T)) do n
+            isdefined(x, n) ? has_equal_data_internal(getfield(x, n), getfield(y, n), equal_undefs, d) : true
+        end)
+    else
+        for n in fieldnames(T)
+            if isdefined(x, n)
+                if isdefined(y, n) && has_equal_data_internal(getfield(x, n), getfield(y, n), equal_undefs, d)
+                    continue
+                else
+                    return false
+                end
+            else
+                return isdefined(y, n) ? false : true
             end
-            if !has_equal_data_internal(x_field, y_field, equal_undefs, d)
-                result = false
-                break
-            end
-        elseif isdefined(x, n) != isdefined(y, n)
-            result = false
-            break
         end
+        return true
     end
-
-    d[id_pair] = result
-    return result
 end
 
 has_equal_data_up_to_undefs(x::T, y::T) where {T} = has_equal_data(x, y; equal_undefs=false)
