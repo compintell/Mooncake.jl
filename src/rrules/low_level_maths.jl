@@ -5,16 +5,15 @@ for (M, f, arity) in DiffRules.diffrules(; filter_modules=nothing)
         continue  # Skip rules for methods not defined in the current scope
     end
     (f == :rem2pi || f == :ldexp) && continue # not designed for Float64s
-    (f in [:+, :*, :sin, :cos]) && continue # use intrinsics instead
-    P = Float64
+    (f in [:+, :*, :sin, :cos]) && continue # use other functionality to implement these
     if arity == 1
         dx = DiffRules.diffrule(M, f, :x)
         pb_name = Symbol("$(M).$(f)_pb!!")
         @eval begin
-            @is_primitive MinimalCtx Tuple{typeof($M.$f), $P}
-            function rrule!!(::CoDual{typeof($M.$f)}, _x::CoDual{$P})
+            @is_primitive MinimalCtx Tuple{typeof($M.$f), P} where {P<:IEEEFloat}
+            function rrule!!(::CoDual{typeof($M.$f)}, _x::CoDual{P}) where {P<:IEEEFloat}
                 x = primal(_x) # needed for dx expression
-                $pb_name(ȳ) = NoRData(), ȳ * $dx
+                $pb_name(ȳ::P) = NoRData(), ȳ * $dx
                 return CoDual(($M.$f)(x), NoFData()), $pb_name
             end
         end
@@ -22,49 +21,51 @@ for (M, f, arity) in DiffRules.diffrules(; filter_modules=nothing)
         da, db = DiffRules.diffrule(M, f, :a, :b)
         pb_name = Symbol("$(M).$(f)_pb!!")
         @eval begin
-            @is_primitive MinimalCtx Tuple{typeof($M.$f), $P, $P}
-            function rrule!!(::CoDual{typeof($M.$f)}, _a::CoDual{$P}, _b::CoDual{$P})
+            @is_primitive MinimalCtx Tuple{typeof($M.$f), P, P} where {P<:IEEEFloat}
+            function rrule!!(
+                ::CoDual{typeof($M.$f)}, _a::CoDual{P}, _b::CoDual{P}
+            ) where {P<:IEEEFloat}
                 a = primal(_a)
                 b = primal(_b)
-                $pb_name(ȳ) = NoRData(), ȳ * $da, ȳ * $db
+                $pb_name(ȳ::P) = NoRData(), ȳ * $da, ȳ * $db
                 return CoDual(($M.$f)(a, b), NoFData()), $pb_name
             end
         end
     end
 end
 
-@is_primitive MinimalCtx Tuple{typeof(sin), Float64}
-function rrule!!(::CoDual{typeof(sin), NoFData}, x::CoDual{Float64, NoFData})
+@is_primitive MinimalCtx Tuple{typeof(sin), <:IEEEFloat}
+function rrule!!(::CoDual{typeof(sin), NoFData}, x::CoDual{P, NoFData}) where {P<:IEEEFloat}
     s, c = sincos(primal(x))
-    sin_pullback!!(dy::Float64) = NoRData(), dy * c
+    sin_pullback!!(dy::P) = NoRData(), dy * c
     return CoDual(s, NoFData()), sin_pullback!!
 end
 
-@is_primitive MinimalCtx Tuple{typeof(cos), Float64}
-function rrule!!(::CoDual{typeof(cos), NoFData}, x::CoDual{Float64, NoFData})
+@is_primitive MinimalCtx Tuple{typeof(cos), <:IEEEFloat}
+function rrule!!(::CoDual{typeof(cos), NoFData}, x::CoDual{P, NoFData}) where {P<:IEEEFloat}
     s, c = sincos(primal(x))
-    cos_pullback!!(dy::Float64) = NoRData(), -dy * s
+    cos_pullback!!(dy::P) = NoRData(), -dy * s
     return CoDual(c, NoFData()), cos_pullback!!
 end
 
-rand_inputs(rng, f, arity) = randn(rng, arity)
-rand_inputs(rng, ::typeof(acosh), _) = (rand(rng) + 1 + 1e-3, )
-rand_inputs(rng, ::typeof(asech), _) = (rand(rng) * 0.9, )
-rand_inputs(rng, ::typeof(log), _) = (rand(rng) + 1e-3, )
-rand_inputs(rng, ::typeof(asin), _) = (rand(rng) * 0.9, )
-rand_inputs(rng, ::typeof(asecd), _) = (rand(rng) + 1, )
-rand_inputs(rng, ::typeof(log2), _) = (rand(rng) + 1e-3, )
-rand_inputs(rng, ::typeof(log10), _) = (rand(rng) + 1e-3, )
-rand_inputs(rng, ::typeof(acscd), _) = (rand(rng) + 1 + 1e-3, )
-rand_inputs(rng, ::typeof(log1p), _) = (rand(rng) + 1e-3, )
-rand_inputs(rng, ::typeof(acsc), _) = (rand(rng) + 1 + 1e-3, )
-rand_inputs(rng, ::typeof(atanh), _) = (2 * 0.9 * rand(rng) - 0.9, )
-rand_inputs(rng, ::typeof(acoth), _) = (rand(rng) + 1 + 1e-3, )
-rand_inputs(rng, ::typeof(asind), _) = (0.9 * rand(rng), )
-rand_inputs(rng, ::typeof(asec), _) = (rand(rng) + 1.001, )
-rand_inputs(rng, ::typeof(acosd), _) = (2 * 0.9 * rand(rng) - 0.9, )
-rand_inputs(rng, ::typeof(acos), _) = (2 * 0.9 * rand(rng) - 0.9, )
-rand_inputs(rng, ::typeof(sqrt), _) = (rand(rng) + 1e-3, )
+rand_inputs(rng, P::Type{<:IEEEFloat}, f, arity) = randn(rng, P, arity)
+rand_inputs(rng, P::Type{<:IEEEFloat}, ::typeof(acosh), _) = (rand(rng) + 1 + 1e-3, )
+rand_inputs(rng, P::Type{<:IEEEFloat}, ::typeof(asech), _) = (rand(rng) * 0.9, )
+rand_inputs(rng, P::Type{<:IEEEFloat}, ::typeof(log), _) = (rand(rng) + 1e-3, )
+rand_inputs(rng, P::Type{<:IEEEFloat}, ::typeof(asin), _) = (rand(rng) * 0.9, )
+rand_inputs(rng, P::Type{<:IEEEFloat}, ::typeof(asecd), _) = (rand(rng) + 1, )
+rand_inputs(rng, P::Type{<:IEEEFloat}, ::typeof(log2), _) = (rand(rng) + 1e-3, )
+rand_inputs(rng, P::Type{<:IEEEFloat}, ::typeof(log10), _) = (rand(rng) + 1e-3, )
+rand_inputs(rng, P::Type{<:IEEEFloat}, ::typeof(acscd), _) = (rand(rng) + 1 + 1e-3, )
+rand_inputs(rng, P::Type{<:IEEEFloat}, ::typeof(log1p), _) = (rand(rng) + 1e-3, )
+rand_inputs(rng, P::Type{<:IEEEFloat}, ::typeof(acsc), _) = (rand(rng) + 1 + 1e-3, )
+rand_inputs(rng, P::Type{<:IEEEFloat}, ::typeof(atanh), _) = (2 * 0.9 * rand(rng) - 0.9, )
+rand_inputs(rng, P::Type{<:IEEEFloat}, ::typeof(acoth), _) = (rand(rng) + 1 + 1e-3, )
+rand_inputs(rng, P::Type{<:IEEEFloat}, ::typeof(asind), _) = (0.9 * rand(rng), )
+rand_inputs(rng, P::Type{<:IEEEFloat}, ::typeof(asec), _) = (rand(rng) + 1.001, )
+rand_inputs(rng, P::Type{<:IEEEFloat}, ::typeof(acosd), _) = (2 * 0.9 * rand(rng) - 0.9, )
+rand_inputs(rng, P::Type{<:IEEEFloat}, ::typeof(acos), _) = (2 * 0.9 * rand(rng) - 0.9, )
+rand_inputs(rng, P::Type{<:IEEEFloat}, ::typeof(sqrt), _) = (rand(rng) + 1e-3, )
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:low_level_maths})
     rng = Xoshiro(123)
@@ -78,7 +79,8 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:low_level_mat
         (f == :rem2pi || f == :ldexp || f == :(^)) && return
         (f == :+ || f == :*) && return # use intrinsics instead
         f = @eval $M.$f
-        push!(test_cases, Any[false, :stability, nothing, f, rand_inputs(rng, f, arity)...])
+        push!(test_cases, Any[false, :stability, nothing, f, rand_inputs(rng, Float64, f, arity)...])
+        push!(test_cases, Any[true, :stability, nothing, f, rand_inputs(rng, Float32, f, arity)...])
     end
     memory = Any[]
     return test_cases, memory
