@@ -192,8 +192,20 @@ end
             end
         end
     end
+    @testset "rule_type $sig, $safety_on" for
+        sig in Any[
+            Tuple{typeof(getfield), Tuple{Float64}, 1},
+            Tuple{typeof(Tapir.TestResources.foo), Float64},
+            Tuple{typeof(Tapir.TestResources.type_unstable_tester_0), Ref{Any}},
+        ],
+        safety_on in [true, false]
 
-    interp = Tapir.PInterp()
+        interp = Tapir.TapirInterpreter()
+        rule = Tapir.build_rrule(interp, sig; safety_on)
+        @test rule isa Tapir.rule_type(interp, sig; safety_on)
+    end
+
+    interp = Tapir.TapirInterpreter()
     @testset "$(_typeof((f, x...)))" for (n, (interface_only, perf_flag, bnds, f, x...)) in
         collect(enumerate(TestResources.generate_test_functions()))
 
