@@ -709,8 +709,10 @@ _is_primitive(C::Type, sig::Type) = is_primitive(C, sig)
 # Compute the concrete type of the rule that will be returned from `build_rrule`. This is
 # important for performance in dynamic dispatch, and to ensure that recursion works
 # properly.
-function rule_type(interp::TapirInterpreter{C}, sig_or_mi) where {C}
-    _is_primitive(C, sig_or_mi) && return typeof(rrule!!)
+function rule_type(interp::TapirInterpreter{C}, sig_or_mi; safety_on) where {C}
+    if _is_primitive(C, sig_or_mi)
+        return safety_on ? SafeRRule{typeof(rrule!!)} : typeof(rrule!!)
+    end
 
     ir, _ = lookup_ir(interp, sig_or_mi)
     Treturn = Base.Experimental.compute_ir_rettype(ir)
@@ -721,19 +723,37 @@ function rule_type(interp::TapirInterpreter{C}, sig_or_mi) where {C}
     arg_rvs_types = Tuple{map(rdata_type ∘ tangent_type, arg_types)...}
     rvs_return_type = rdata_type(tangent_type(Treturn))
     return if isconcretetype(Treturn)
-        DerivedRule{
-            MistyClosure{OpaqueClosure{arg_fwds_types, fcodual_type(Treturn)}},
-            MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
-            Val{isva},
-            Val{length(ir.argtypes)},
-        }
+        if safety_on
+            SafeRRule{DerivedRule{
+                MistyClosure{OpaqueClosure{arg_fwds_types, fcodual_type(Treturn)}},
+                MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
+                Val{isva},
+                Val{length(ir.argtypes)},
+            }}
+        else
+            DerivedRule{
+                MistyClosure{OpaqueClosure{arg_fwds_types, fcodual_type(Treturn)}},
+                MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
+                Val{isva},
+                Val{length(ir.argtypes)},
+            }
+        end
     else
-        return DerivedRule{
-            MistyClosure{OpaqueClosure{arg_fwds_types, Tfcodual_ret}},
-            MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
-            Val{isva},
-            Val{length(ir.argtypes)},
-        } where {Tfcodual_ret <: fcodual_type(Treturn)}
+        if safety_on
+            SafeRRule{DerivedRule{
+                MistyClosure{OpaqueClosure{arg_fwds_types, Tfcodual_ret}},
+                MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
+                Val{isva},
+                Val{length(ir.argtypes)},
+            }} where {Tfcodual_ret <: fcodual_type(Treturn)}
+        else
+            DerivedRule{
+                MistyClosure{OpaqueClosure{arg_fwds_types, Tfcodual_ret}},
+                MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
+                Val{isva},
+                Val{length(ir.argtypes)},
+            } where {Tfcodual_ret <: fcodual_type(Treturn)}
+        end
     end
 end
 
@@ -1257,7 +1277,7 @@ mutable struct LazyDerivedRule{Tinterp<:TapirInterpreter, primal_sig, Trule}
     mi::Core.MethodInstance
     rule::Trule
     function LazyDerivedRule(interp::A, mi::Core.MethodInstance, safety_on::Bool) where {A}
-        rt = rule_type(interp, mi)
+        rt = rule_type(interp, mi; safety_on)
         return new{A, mi.specTypes, safety_on ? SafeRRule{rt} : rt}(interp, safety_on, mi)
     end
 end
