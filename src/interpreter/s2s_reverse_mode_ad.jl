@@ -1277,8 +1277,7 @@ mutable struct LazyDerivedRule{Tinterp<:TapirInterpreter, primal_sig, Trule}
     mi::Core.MethodInstance
     rule::Trule
     function LazyDerivedRule(interp::A, mi::Core.MethodInstance, safety_on::Bool) where {A}
-        rt = rule_type(interp, mi; safety_on)
-        return new{A, mi.specTypes, safety_on ? SafeRRule{rt} : rt}(interp, safety_on, mi)
+        return new{A, mi.specTypes, rule_type(interp, mi; safety_on)}(interp, safety_on, mi)
     end
 end
 
