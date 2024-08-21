@@ -23,7 +23,7 @@ end
 function _scale(a::Float64, t::IdDict{K, V}) where {K, V}
     return IdDict{K, V}([k => _scale(a, v) for (k, v) in t])
 end
-_dot(p::T, q::T) where {T<:IdDict} = sum([_dot(p[k], q[k]) for k in keys(p)])
+_dot(p::T, q::T) where {T<:IdDict} = sum([_dot(p[k], q[k]) for k in keys(p)]; init=0.0)
 function _add_to_primal(p::IdDict{K, V}, t::IdDict{K}) where {K, V}
     ks = intersect(keys(p), keys(t))
     return IdDict{K, V}([k => _add_to_primal(p[k], t[k]) for k in ks])
@@ -146,6 +146,11 @@ for name in [
     end
 end
 
+@is_primitive MinimalCtx Tuple{Type{IdDict{K, V}} where {K, V}}
+function rrule!!(f::CoDual{Type{IdDict{K, V}}}) where {K, V}
+    return CoDual(IdDict{K, V}(), IdDict{K, tangent_type(V)}()), NoPullback(f)
+end
+
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:iddict})
     test_cases = Any[
         (false, :stability, nothing, Base.rehash!, IdDict(true => 5.0, false => 4.0), 10),
@@ -154,6 +159,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:iddict})
         (false, :none, nothing, get, IdDict(true => 5.0, false => 4.0), false, 2.0),
         (false, :none, nothing, get, IdDict(true => 5.0), false, 2.0),
         (false, :none, nothing, getindex, IdDict(true => 5.0, false => 4.0), true),
+        (false, :none, nothing, IdDict{Any, Any}),
     ]
     memory = Any[]
     return test_cases, memory
