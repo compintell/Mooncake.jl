@@ -665,16 +665,28 @@ end
 
 Set `x` to its zero element (`x` should be a tangent, so the zero must exist).
 """
-set_to_zero!!(::NoTangent) = NoTangent()
-set_to_zero!!(x::Base.IEEEFloat) = zero(x)
-set_to_zero!!(x::Union{Tuple, NamedTuple}) = map(set_to_zero!!, x)
-set_to_zero!!(x::Array) = _map_if_assigned!(set_to_zero!!, x, x)
-function set_to_zero!!(x::T) where {T<:PossiblyUninitTangent}
-    return is_init(x) ? T(set_to_zero!!(val(x))) : x
+set_to_zero!!(x) = set_to_zero_internal!!(x, IdDict())
+
+set_to_zero_internal!!(::NoTangent, ::IdDict) = NoTangent()
+set_to_zero_internal!!(x::Base.IEEEFloat, ::IdDict) = zero(x)
+set_to_zero_internal!!(x::Union{Tuple, NamedTuple}, stackdict::IdDict) = map(x -> set_to_zero_internal!!(x, stackdict), x)
+function set_to_zero_internal!!(x::Array, stackdict::IdDict)
+    if haskey(stackdict, x)
+        return stackdict[x]::tangent_type(typeof(x))
+    end
+    stackdict[x] = x
+    return _map_if_assigned!(set_to_zero_internal!!, x, x, stackdict)
 end
-set_to_zero!!(x::T) where {T<:Tangent} = T(set_to_zero!!(x.fields))
-function set_to_zero!!(x::MutableTangent)
-    x.fields = set_to_zero!!(x.fields)
+function set_to_zero_internal!!(x::T, stackdict::IdDict) where {T<:PossiblyUninitTangent}
+    return is_init(x) ? T(set_to_zero_internal!!(val(x), stackdict)) : x
+end
+set_to_zero_internal!!(x::T, stackdict::IdDict) where {T<:Tangent} = T(set_to_zero_internal!!(x.fields, stackdict))
+function set_to_zero_internal!!(x::MutableTangent, stackdict::IdDict)
+    if haskey(stackdict, x)
+        return stackdict[x]::typeof(x)
+    end
+    stackdict[x] = x
+    x.fields = set_to_zero_internal!!(x.fields, stackdict)
     return x
 end
 
@@ -687,17 +699,30 @@ Should be defined for all standard tangent types.
 Multiply tangent `t` by scalar `a`. Always possible because any given tangent type must
 correspond to a vector field. Not using `*` in order to avoid piracy.
 """
-_scale(::Float64, ::NoTangent) = NoTangent()
-_scale(a::Float64, t::T) where {T<:IEEEFloat} = T(a * t)
-function _scale(a::Float64, t::Array{T, N}) where {T, N}
+_scale(a, t) = _scale_internal(a, t, IdDict())
+
+_scale_internal(::Float64, ::NoTangent, ::IdDict) = NoTangent()
+_scale_internal(a::Float64, t::T, stackdict::IdDict) where {T<:IEEEFloat} = T(a * t)
+function _scale_internal(a::Float64, t::Array{T, N}, stackdict::IdDict) where {T, N}
+    if haskey(stackdict, t)
+        return stackdict[t]::T
+    end
+    stackdict[t] = t
     t′ = Array{T, N}(undef, size(t)...)
-    return _map_if_assigned!(Base.Fix1(_scale, a), t′, t)
+    return _map_if_assigned!(t -> _scale_internal(a, t, stackdict), t′, t)
 end
-_scale(a::Float64, t::Union{Tuple, NamedTuple}) = map(Base.Fix1(_scale, a), t)
-function _scale(a::Float64, t::T) where {T<:PossiblyUninitTangent}
-    return is_init(t) ? T(_scale(a, val(t))) : T()
+_scale_internal(a::Float64, t::Union{Tuple, NamedTuple}, stackdict::IdDict) = map(t -> _scale_internal(a, t, stackdict), t)
+function _scale_internal(a::Float64, t::T, stackdict::IdDict) where {T<:PossiblyUninitTangent}
+    return is_init(t) ? T(_scale_internal(a, val(t), stackdict)) : T()
 end
-_scale(a::Float64, t::T) where {T<:Union{Tangent, MutableTangent}} = T(_scale(a, t.fields))
+function _scale_internal(a::Float64, t::T, stackdict::IdDict) where {T<:Union{Tangent, MutableTangent}}
+    if haskey(stackdict, t)
+        return stackdict[t]::T
+    end
+    stackdict[t] = t
+    t.fields = _scale_internal(a, t.fields, stackdict)
+    return t
+end
 
 struct FieldUndefined end
 
@@ -710,23 +735,38 @@ Should be defined for all standard tangent types.
 Inner product between tangents `t` and `s`. Must return a `Float64`.
 Always available because all tangent types correspond to finite-dimensional vector spaces.
 """
-_dot(::NoTangent, ::NoTangent) = 0.0
-_dot(t::T, s::T) where {T<:IEEEFloat} = Float64(t * s)
-function _dot(t::T, s::T) where {T<:Array}
-    isbitstype(T) && return sum(_map(_dot, t, s))
+_dot(t, s) = _dot_internal(t, s, Dict{Tuple{UInt, UInt}, Any}())
+
+_dot_internal(::NoTangent, ::NoTangent, ::Dict{Tuple{UInt, UInt}, Any}) = 0.0
+_dot_internal(t::T, s::T, ::Dict{Tuple{UInt, UInt}, Any}) where {T<:IEEEFloat} = Float64(t * s)
+function _dot_internal(t::T, s::T, stackdict::Dict{Tuple{UInt, UInt}, Any}) where {T<:Array}
+    id_pair = (objectid(t), objectid(s))
+    if haskey(stackdict, id_pair)
+        return stackdict[id_pair]::Float64
+    end
+    stackdict[id_pair] = 0.0
+
+    isbitstype(T) && return sum(map((t, s) -> _dot_internal(t, s, stackdict), t, s))
     return sum(
         _map(eachindex(t)) do n
-            (isassigned(t, n) && isassigned(s, n)) ? _dot(t[n], s[n]) : 0.0
+            (isassigned(t, n) && isassigned(s, n)) ? _dot_internal(t[n], s[n], stackdict) : 0.0
         end
     )
 end
-_dot(t::T, s::T) where {T<:Union{Tuple, NamedTuple}} = sum(map(_dot, t, s); init=0.0)
-function _dot(t::T, s::T) where {T<:PossiblyUninitTangent}
-    is_init(t) && is_init(s) && return _dot(val(t), val(s))
+function _dot_internal(t::T, s::T, stackdict::Dict{Tuple{UInt, UInt}, Any}) where {T<:Union{Tuple, NamedTuple}}
+    return sum(map((t, s) -> _dot_internal(t, s, stackdict), t, s); init=0.0)
+end
+function _dot_internal(t::T, s::T, stackdict::Dict{Tuple{UInt, UInt}, Any}) where {T<:PossiblyUninitTangent}
+    is_init(t) && is_init(s) && return _dot_internal(val(t), val(s), stackdict)
     return 0.0
 end
-function _dot(t::T, s::T) where {T<:Union{Tangent, MutableTangent}}
-    return sum(_map(_dot, t.fields, s.fields); init=0.0)
+function _dot_internal(t::T, s::T, stackdict::Dict{Tuple{UInt, UInt}, Any}) where {T<:Union{Tangent, MutableTangent}}
+    id_pair = (objectid(t), objectid(s))
+    if haskey(stackdict, id_pair)
+        return stackdict[id_pair]::Float64
+    end
+    stackdict[id_pair] = 0.0
+    return sum(map((t, s) -> _dot_internal(t, s, stackdict), t.fields, s.fields); init=0.0)
 end
 
 """
@@ -739,28 +779,43 @@ a particular primal-tangent pair.
 
 Adds `t` to `p`, returning a `P`. It must be the case that `tangent_type(P) == T`.
 """
-_add_to_primal(x, ::NoTangent) = x
-_add_to_primal(x::T, t::T) where {T<:IEEEFloat} = x + t
-function _add_to_primal(x::Array{P, N}, t::Array{<:Any, N}) where {P, N}
-    x′ = Array{P, N}(undef, size(x)...)
-    return _map_if_assigned!(_add_to_primal, x′, x, t)
-end
-function _add_to_primal(x::SimpleVector, t::Vector{Any})
-    return svec(map(n -> _add_to_primal(x[n], t[n]), eachindex(x))...)
-end
-_add_to_primal(x::Tuple, t::Tuple) = _map(_add_to_primal, x, t)
-_add_to_primal(x::NamedTuple, t::NamedTuple) = _map(_add_to_primal, x, t)
-_add_to_primal(x, ::Tangent{NamedTuple{(), Tuple{}}}) = x
+_add_to_primal(p, t) = _add_to_primal_internal(p, t, Dict{Tuple{UInt, UInt}, Any}())
 
-function _add_to_primal(p::P, t::T) where {P, T<:Union{Tangent, MutableTangent}}
+_add_to_primal_internal(x, ::NoTangent, ::Dict{Tuple{UInt, UInt}, Any}) = x
+_add_to_primal_internal(x::T, t::T, ::Dict{Tuple{UInt, UInt}, Any}) where {T<:IEEEFloat} = x + t
+function _add_to_primal_internal(x::Array{P, N}, t::Array{<:Any, N}, stackdict::Dict{Tuple{UInt, UInt}, Any}) where {P, N}
+    id_pair = (objectid(x), objectid(t))
+    if haskey(stackdict, id_pair)
+        return stackdict[id_pair]::typeof(x)
+    end
+    stackdict[id_pair] = x
+    x′ = Array{P, N}(undef, size(x)...)
+    return _map_if_assigned!((x, t) -> _add_to_primal_internal(x, t, stackdict), x′, x, t)
+end
+function _add_to_primal_internal(x::SimpleVector, t::Vector{Any}, stackdict::Dict{Tuple{UInt, UInt}, Any})
+    return svec(map(n -> _add_to_primal_internal(x[n], t[n], stackdict), eachindex(x))...)
+end
+function _add_to_primal_internal(x::T, t::T, stackdict::Dict{Tuple{UInt, UInt}, Any}) where {T<:Union{Tuple, NamedTuple}}
+    return _map(x -> _add_to_primal_internal(x, t, stackdict), x, t)
+end
+_add_to_primal_internal(x, ::Tangent{NamedTuple{(), Tuple{}}}, ::Dict{Tuple{UInt, UInt}, Any}) = x
+function _add_to_primal_internal(p::P, t::T, stackdict::Dict{Tuple{UInt, UInt}, Any}) where {P, T<:Union{Tangent, MutableTangent}}
     Tt = tangent_type(P)
     if Tt != typeof(t)
         throw(ArgumentError("p of type $P has tangent_type $Tt, but t is of type $T"))
     end
     tmp = map(fieldnames(P)) do f
         tf = getfield(t.fields, f)
-        isdefined(p, f) && is_init(tf) && return _add_to_primal(getfield(p, f), val(tf)) 
         !isdefined(p, f) && !is_init(tf) && return FieldUndefined()
+        if isdefined(p, f) && is_init(tf)
+            pf = getfield(p, f)
+            id_pair = (objectid(pf), objectid(tf))
+            if haskey(stackdict, id_pair)
+                return stackdict[id_pair]::typeof(pf)
+            end
+            stackdict[id_pair] = pf
+            return _add_to_primal_internal(pf, val(tf), stackdict) 
+        end
         throw(error("unable to handle undefined-ness"))
     end
     i = findfirst(==(FieldUndefined()), tmp)
@@ -775,28 +830,44 @@ Required for testing.
 Computes the difference between `p` and `q`, which _must_ be of the same type, `P`.
 Returns a tangent of type `tangent_type(P)`.
 """
-function _diff(p::P, q::P) where {P}
+_diff(p, q) = _diff_internal(p, q, Dict{Tuple{UInt, UInt}, Any}())
+
+function _diff_internal(p::P, q::P, stackdict::Dict{Tuple{UInt, UInt}, Any}) where {P}
     tangent_type(P) === NoTangent && return NoTangent()
     T = Tangent{NamedTuple{(), Tuple{}}}
     tangent_type(P) === T && return T((;))
-    return _containerlike_diff(p, q)
+    return _containerlike_diff(p, q, stackdict)
 end
-_diff(p::P, q::P) where {P<:IEEEFloat} = p - q
-function _diff(p::P, q::P) where {V, N, P<:Array{V, N}}
+_diff_internal(p::P, q::P, stackdict::Dict{Tuple{UInt, UInt}, Any}) where {P<:IEEEFloat} = p - q
+function _diff_internal(p::P, q::P, stackdict::Dict{Tuple{UInt, UInt}, Any}) where {V, N, P<:Array{V, N}}
+    id_pair = (objectid(p), objectid(q))
+    if haskey(stackdict, id_pair)
+        return stackdict[id_pair]::typeof(p)
+    end
+    stackdict[id_pair] = p
     t = Array{tangent_type(V), N}(undef, size(p))
-    return _map_if_assigned!(_diff, t, p, q)
+    return _map_if_assigned!((p, q) -> _diff_internal(p, q, stackdict), t, p, q)
 end
-function _diff(p::P, q::P) where {P<:SimpleVector}
-    return Any[_diff(a, b) for (a, b) in zip(p, q)]
+function _diff_internal(p::P, q::P, stackdict::Dict{Tuple{UInt, UInt}, Any}) where {P<:SimpleVector}
+    return Any[_diff_internal(a, b, stackdict) for (a, b) in zip(p, q)]
 end
-function _diff(p::P, q::P) where {P<:Union{Tuple, NamedTuple}}
-    return tangent_type(P) == NoTangent ? NoTangent() : _map(_diff, p, q)
+function _diff_internal(p::P, q::P, stackdict::Dict{Tuple{UInt, UInt}, Any}) where {P<:Union{Tuple, NamedTuple}}
+    return tangent_type(P) == NoTangent ? NoTangent() : _map(_diff_internal, p, q, stackdict)
 end
 
-function _containerlike_diff(p::P, q::P) where {P}
+function _containerlike_diff(p::P, q::P, stackdict::Dict{Tuple{UInt, UInt}, Any}) where {P}
     diffed_fields = map(fieldnames(P)) do f
-        isdefined(p, f) && isdefined(q, f) && return _diff(getfield(p, f), getfield(q, f))
         !isdefined(p, f) && !isdefined(q, f) && return FieldUndefined()
+        if isdefined(p, f) && isdefined(q, f)
+            pf, qf = getfield(p, f), getfield(q, f)
+            id_pair = (objectid(pf), objectid(qf))
+            if haskey(stackdict, id_pair)
+                return stackdict[id_pair]::typeof(pf)
+            end
+            stackdict[id_pair] = pf
+            return _diff_internal(getfield(p, f), getfield(q, f), stackdict)
+        end
+        
         throw(error("Unhandleable undefinedness"))
     end
     i = findfirst(==(FieldUndefined()), diffed_fields)
