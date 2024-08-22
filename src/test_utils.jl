@@ -107,31 +107,42 @@ function report_opt(::Any, tt)
 end
 
 """
-    has_equal_data(x, y; equal_undefs=true, visited=IdDict())
+    has_equal_data(x, y; equal_undefs=true)
 
-Determine if two objects `x` and `y` have equivalent data.
+Determine if two objects `x` and `y` have equivalent data. If `equal_undefs` 
+is `true`, undefined elements in arrays or unassigned fields in structs are 
+considered equal.
 
-If `equal_undefs` is `true`, undefined elements in arrays or unassigned fields 
-in structs are considered equal. `visited` is a dictionary to track visited objects 
-and avoid infinite recursion in cases of circular references, whose key are the ids of the 
-pairs of objects being compared.
+The main logic is implemented in `has_equal_data_internal`, which is a recursive function
+that takes an additional `visited` dictionary to track visited objects and avoid infinite
+recursion in cases of circular references.
 """
 function has_equal_data(x, y; equal_undefs=true)
-    return has_equal_data_internal(x, y, equal_undefs, Dict())
+    return has_equal_data_internal(x, y, equal_undefs, Dict{Tuple{UInt, UInt}, Bool}())
 end
 
-has_equal_data_internal(x::Type, y::Type, equal_undefs::Bool, d::Dict) = x == y
-has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict) where {T<:String} = x == y
-has_equal_data_internal(x::Core.TypeName, y::Core.TypeName, equal_undefs::Bool, d::Dict) = x == y
-function has_equal_data_internal(x::Float64, y::Float64, equal_undefs::Bool, d::Dict)
+has_equal_data_internal(x::Type, y::Type, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}) = x == y
+has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}) where {T<:String} = x == y
+has_equal_data_internal(x::Core.TypeName, y::Core.TypeName, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}) = x == y
+function has_equal_data_internal(x::Float64, y::Float64, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool})
     return (isapprox(x, y) && !isnan(x)) || (isnan(x) && isnan(y))
 end
-has_equal_data_internal(x::Module, y::Module, equal_undefs::Bool, d::Dict) = x == y
-function has_equal_data(x::GlobalRef, y::GlobalRef; equal_undefs=true)
+has_equal_data_internal(x::Module, y::Module, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}) = x == y
+function has_equal_data(x::GlobalRef, y::GlobalRef; equal_undefs=true, d::Dict{Tuple{UInt, UInt}, Bool})
     return x.mod == y.mod && x.name == y.name
 end
-function has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict) where {T<:Array}
+function has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}) where {T<:Array}
     size(x) != size(y) && return false
+
+    # the purpose of the dictionary is to catch circular references.
+    # for example, say x.a.a === x and y.a.a === y
+    # in this case, x.a.a !== y.a.a, but we want to return true
+    # the method here is: the first time we see a pair of objects that may contain circular references,
+    # we store the pair in the dictionary and mark true, this doesn't necessarily mean that the objects are equal,
+    # it just means that we have seen this pair before.
+    # as we iterate through the subcomponents of x and y
+    # if we see a pair of objects that we have seen before, then they are both circular references to themselves
+    # and we can return true, but they may not have the same data, as the rest of the subcomponents may be different.
 
     id_pair = (objectid(x), objectid(y))
     if haskey(d, id_pair)
@@ -145,15 +156,15 @@ function has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict) where 
         elseif !isassigned(x, n)
             return true
         else
-            return has_equal_data(x[n], y[n], equal_undefs, d)
+            return has_equal_data_internal(x[n], y[n], equal_undefs, d)
         end
     end
     return all(equality)
 end
-function has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict) where {T<:Core.SimpleVector}
+function has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}) where {T<:Core.SimpleVector}
     return all(map((a, b) -> has_equal_data_internal(a, b, equal_undefs, d), x, y))
 end
-function has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict) where {T}
+function has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}) where {T}
     isprimitivetype(T) && return isequal(x, y)
 
     id_pair = (objectid(x), objectid(y))
