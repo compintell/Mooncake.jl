@@ -212,12 +212,20 @@ Fills `m` with pairs mapping from memory addresses in `primal` to corresponding 
 addresses in `tangent`. If the same memory address appears multiple times in `primal`,
 throws an `AssertionError` if the same address is not mapped to in `tangent` each time.
 """
-function populate_address_map!(m::AddressMap, primal::P, tangent::T) where {P, T}
+populate_address_map!(m::AddressMap, primal, tangent) = populate_address_map_internal!(m, primal, tangent, IdDict())
+
+function populate_address_map_internal!(m::AddressMap, primal::P, tangent::T, stackdict::IdDict) where {P, T}
     isprimitivetype(P) && return m
     T === NoTangent && return m
     T === NoFData && return m
     if ismutabletype(P)
         @assert T <: MutableTangent
+        
+        if haskey(stackdict, primal)
+            return stackdict[primal]
+        end
+        stackdict[primal] = m
+
         k = pointer_from_objref(primal)
         v = pointer_from_objref(tangent)
         haskey(m, k) && (@assert (m[k] == v))
@@ -226,7 +234,7 @@ function populate_address_map!(m::AddressMap, primal::P, tangent::T) where {P, T
     foreach(fieldnames(P)) do n
         t_field = __get_data_field(tangent, n)
         if isdefined(primal, n) && is_init(t_field)
-            populate_address_map!(m, getfield(primal, n), val(t_field))
+            populate_address_map_internal!(m, getfield(primal, n), val(t_field), stackdict)
         elseif isdefined(primal, n) && !is_init(t_field)
             throw(error("unhandled defined-ness"))
         elseif !isdefined(primal, n) && is_init(t_field)
@@ -239,32 +247,36 @@ end
 __get_data_field(t::Union{Tangent, MutableTangent}, n) = getfield(t.fields, n)
 __get_data_field(t::Union{Tapir.FData, Tapir.RData}, n) = getfield(t.data, n)
 
-function populate_address_map!(m::AddressMap, p::P, t) where {P<:Union{Tuple, NamedTuple}}
+function populate_address_map_internal!(m::AddressMap, p::P, t, stackdict::IdDict) where {P<:Union{Tuple, NamedTuple}}
     t isa NoFData && return m
     t isa NoTangent && return m
-    foreach(n -> populate_address_map!(m, getfield(p, n), getfield(t, n)), fieldnames(P))
+    foreach(n -> populate_address_map_internal!(m, getfield(p, n), getfield(t, n), stackdict), fieldnames(P))
     return m
 end
 
-function populate_address_map!(m::AddressMap, p::Array, t::Array)
+function populate_address_map_internal!(m::AddressMap, p::Array, t::Array, stackdict::IdDict)
+    if haskey(stackdict, p)
+        return stackdict[p]
+    end
+    stackdict[p] = m
     k = pointer_from_objref(p)
     v = pointer_from_objref(t)
     haskey(m, k) && (@assert m[k] == v)
     m[k] = v
-    foreach(n -> isassigned(p, n) && populate_address_map!(m, p[n], t[n]), eachindex(p))
+    foreach(n -> isassigned(p, n) && populate_address_map_internal!(m, p[n], t[n], stackdict), eachindex(p))
     return m
 end
 
-function populate_address_map!(m::AddressMap, p::Core.SimpleVector, t::Vector{Any})
+function populate_address_map_internal!(m::AddressMap, p::Core.SimpleVector, t::Vector{Any}, stackdict::IdDict)
     k = pointer_from_objref(p)
     v = pointer_from_objref(t)
     haskey(m, k) && (@assert m[k] == v)
     m[k] = v
-    foreach(n -> populate_address_map!(m, p[n], t[n]), eachindex(p))
+    foreach(n -> populate_address_map_internal!(m, p[n], t[n], stackdict), eachindex(p))
     return m
 end
 
-populate_address_map!(m::AddressMap, p::Union{Core.TypeName, Type, Symbol, String}, t) = m
+populate_address_map_internal!(m::AddressMap, p::Union{Core.TypeName, Type, Symbol, String}, t, stackdict::IdDict) = m
 
 """
     address_maps_are_consistent(x::AddressMap, y::AddressMap)
