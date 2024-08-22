@@ -395,7 +395,7 @@ function rrule!!(
     ::CoDual{Tuple{Val{Any}}},
     ::CoDual, # nreq
     ::CoDual, # calling convention
-    a::CoDual{<:Array{T}, <:Array{V}}
+    a::CoDual{<:Array{T}, <:Array{V}},
 ) where {T, V}
     y = CoDual(
         ccall(:jl_array_ptr, Ptr{T}, (Any, ), primal(a)),
@@ -442,15 +442,17 @@ end
 function rrule!!(
     ::CoDual{typeof(_foreigncall_)},
     ::CoDual{Val{:jl_array_isassigned}},
-    ::CoDual, # return type is Int32
-    ::CoDual, # arg types are (Any, UInt64)
-    ::CoDual, # nreq
-    ::CoDual, # calling convention
+    ::CoDual{RT}, # return type is Int32
+    arg_types::CoDual{AT}, # arg types are (Any, UInt64)
+    ::CoDual{nreq}, # nreq
+    ::CoDual{calling_convention}, # calling convention
     a::CoDual{<:Array},
     ii::CoDual{UInt},
     args...,
-)
-    y = ccall(:jl_array_isassigned, Cint, (Any, UInt), primal(a), primal(ii))
+) where {RT, AT, nreq, calling_convention}
+    GC.@preserve args begin
+        y = ccall(:jl_array_isassigned, Cint, (Any, UInt), primal(a), primal(ii))
+    end
     return zero_fcodual(y), NoPullback(ntuple(_ -> NoRData(), length(args) + 8))
 end
 
@@ -463,10 +465,9 @@ function rrule!!(
     ::CoDual{Val{:ccall}},
     a::CoDual,
     b::CoDual,
-    args...
 )
     y = ccall(:jl_type_unionall, Any, (Any, Any), primal(a), primal(b))
-    return zero_fcodual(y), NoPullback(ntuple(_ -> NoRData(), length(args) + 8))
+    return zero_fcodual(y), NoPullback(ntuple(_ -> NoRData(), 8))
 end
 
 @is_primitive MinimalCtx Tuple{typeof(deepcopy), Any}
