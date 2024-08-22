@@ -618,24 +618,45 @@ Add `x` to `y`. If `ismutabletype(T)`, then `increment!!(x, y) === x` must hold.
 That is, `increment!!` will mutate `x`.
 This must apply recursively if `T` is a composite type whose fields are mutable.
 """
-increment!!(::NoTangent, ::NoTangent) = NoTangent()
-increment!!(x::T, y::T) where {T<:IEEEFloat} = x + y
-increment!!(x::Ptr{T}, y::Ptr{T}) where {T} = x === y ? x : throw(error("eurgh"))
-function increment!!(x::T, y::T) where {P, N, T<:Array{P, N}}
-    return x === y ? x : _map_if_assigned!(increment!!, x, x, y)
+increment!!(x, y) = increment_internal!!(x, y, Dict{Tuple{UInt, UInt}, Any}())
+
+increment_internal!!(::NoTangent, ::NoTangent, ::Dict{Tuple{UInt, UInt}, Any}) = NoTangent()
+increment_internal!!(x::T, y::T, ::Dict{Tuple{UInt, UInt}, Any}) where {T<:IEEEFloat} = x + y
+increment_internal!!(x::Ptr{T}, y::Ptr{T}, ::Dict{Tuple{UInt, UInt}, Any}) where {T} = x === y ? x : throw(error("eurgh"))
+function increment_internal!!(x::T, y::T, stackdict::Dict{Tuple{UInt, UInt}, Any}) where {P,N,T<:Array{P,N}}
+    if x === y
+        return x
+    end
+
+    id_pair = (objectid(x), objectid(y))
+    if haskey(stackdict, id_pair)
+        return stackdict[id_pair]::tangent_type(T)
+    end
+    stackdict[id_pair] = x
+
+    return _map_if_assigned!(increment!!, x, x, y)
 end
-increment!!(x::T, y::T) where {T<:Tuple} = tuple_map(increment!!, x, y)::T
-increment!!(x::T, y::T) where {T<:NamedTuple} = T(increment!!(Tuple(x), Tuple(y)))
-function increment!!(x::T, y::T) where {T<:PossiblyUninitTangent}
-    is_init(x) && is_init(y) && return T(increment!!(val(x), val(y)))
+increment_internal!!(x::T, y::T, stackdict::Dict{Tuple{UInt,UInt},Any}) where {T<:Tuple} = tuple_map((x, y) -> increment_internal!!(x, y, stackdict), x, y)::T
+increment_internal!!(x::T, y::T, stackdict::Dict{Tuple{UInt,UInt},Any}) where {T<:NamedTuple} = T(increment_internal!!(Tuple(x), Tuple(y), stackdict))
+function increment_internal!!(x::T, y::T, stackdict::Dict{Tuple{UInt,UInt},Any}) where {T<:PossiblyUninitTangent}
+    is_init(x) && is_init(y) && return T(increment_internal!!(val(x), val(y), stackdict))
     is_init(x) && !is_init(y) && error("x is initialised, but y is not")
     !is_init(x) && is_init(y) && error("x is not initialised, but y is")
     return x
 end
-increment!!(x::T, y::T) where {T<:Tangent} = T(increment!!(x.fields, y.fields))
-function increment!!(x::T, y::T) where {T<:MutableTangent}
-    x === y && return x
-    x.fields = increment!!(x.fields, y.fields)
+increment_internal!!(x::T, y::T, stackdict::Dict{Tuple{UInt, UInt}, Any}) where {T<:Tangent} = T(increment_internal!!(x.fields, y.fields, stackdict))
+function increment_internal!!(x::T, y::T, stackdict::Dict{Tuple{UInt, UInt}, Any}) where {T<:MutableTangent}
+    if x === y
+        return x
+    end
+
+    id_pair = (objectid(x), objectid(y))
+    if haskey(stackdict, id_pair)
+        return stackdict[id_pair]::T
+    end
+    stackdict[id_pair] = x
+
+    x.fields = increment_internal!!(x.fields, y.fields, stackdict)
     return x
 end
 
@@ -959,12 +980,12 @@ function tangent_test_cases()
                 build_tangent(TestResources.StructNoRvs, [9.0]),
             ),
             let foo = (TestResources.TypeUnstableMutableStruct(5.0, nothing); foo.b=foo) 
-            (
-                foo,
-                build_tangent(TestResources.TypeUnstableMutableStruct, 3.0, nothing),
-                build_tangent(TestResources.TypeUnstableMutableStruct, 5.0, nothing),
-                build_tangent(TestResources.TypeUnstableMutableStruct, 8.0, nothing),
-            )
+                (
+                    foo,
+                    build_tangent(TestResources.TypeUnstableMutableStruct, 3.0, nothing),
+                    build_tangent(TestResources.TypeUnstableMutableStruct, 5.0, nothing),
+                    build_tangent(TestResources.TypeUnstableMutableStruct, 8.0, nothing),
+                )
             end,
             (UnitRange{Int}(5, 7), NoTangent(), NoTangent(), NoTangent()),
         ],
