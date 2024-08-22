@@ -40,24 +40,30 @@ for (fname, elty) in ((:cblas_ddot, :Float64), (:cblas_sdot, :Float32))
         _incy::CoDual{BLAS.BlasInt},
         args::Vararg{Any, N},
     ) where {N}
-        # Load in values from pointers.
-        n, incx, incy = map(primal, (_n, _incx, _incy))
-        xinds = 1:incx:incx * n
-        yinds = 1:incy:incy * n
-        DX = view(unsafe_wrap(Vector{$elty}, primal(_DX), n * incx), xinds)
-        DY = view(unsafe_wrap(Vector{$elty}, primal(_DY), n * incy), yinds)
+        GC.@preserve args begin
+            # Load in values from pointers.
+            n, incx, incy = map(primal, (_n, _incx, _incy))
+            xinds = 1:incx:incx * n
+            yinds = 1:incy:incy * n
+            DX = view(unsafe_wrap(Vector{$elty}, primal(_DX), n * incx), xinds)
+            DY = view(unsafe_wrap(Vector{$elty}, primal(_DY), n * incy), yinds)
 
-        _dDX = view(unsafe_wrap(Vector{$elty}, tangent(_DX), n * incx), xinds)
-        _dDY = view(unsafe_wrap(Vector{$elty}, tangent(_DY), n * incy), yinds)
+            _dDX = view(unsafe_wrap(Vector{$elty}, tangent(_DX), n * incx), xinds)
+            _dDY = view(unsafe_wrap(Vector{$elty}, tangent(_DY), n * incy), yinds)
+
+            out = dot(DX, DY)
+        end
 
         function ddot_pb!!(dv)
-            _dDX .+= DY .* dv
-            _dDY .+= DX .* dv
+            GC.@preserve args begin
+                _dDX .+= DY .* dv
+                _dDY .+= DX .* dv
+            end
             return tuple_fill(NoRData(), Val(N + 11))
         end
 
         # Run primal computation.
-        return zero_fcodual(dot(DX, DY)), ddot_pb!!
+        return zero_fcodual(out), ddot_pb!!
     end
 end
 
@@ -75,29 +81,37 @@ for (fname, elty) in ((:dscal_, :Float64), (:sscal_, :Float32))
         incx::CoDual{Ptr{BLAS.BlasInt}},
         args::Vararg{Any, N},
     ) where {N}
-        # Load in values from pointers, and turn pointers to memory buffers into Vectors.
-        _n = unsafe_load(primal(n))
-        _incx = unsafe_load(primal(incx))
-        _DA = unsafe_load(primal(DA))
-        _DX = unsafe_wrap(Vector{$elty}, primal(DX), _n * _incx)
-        _DX_s = unsafe_wrap(Vector{$elty}, tangent(DX), _n * _incx)
 
-        inds = 1:_incx:(_incx * _n)
-        DX_copy = _DX[inds]
-        BLAS.scal!(_n, _DA, _DX, _incx)
+        GC.@preserve args begin
 
-        dDA = tangent(DA)
-        dDX = tangent(DX)
+            # Load in values from pointers, and turn pointers to memory buffers into Vectors.
+            _n = unsafe_load(primal(n))
+            _incx = unsafe_load(primal(incx))
+            _DA = unsafe_load(primal(DA))
+            _DX = unsafe_wrap(Vector{$elty}, primal(DX), _n * _incx)
+            _DX_s = unsafe_wrap(Vector{$elty}, tangent(DX), _n * _incx)
+
+            inds = 1:_incx:(_incx * _n)
+            DX_copy = _DX[inds]
+            BLAS.scal!(_n, _DA, _DX, _incx)
+
+            dDA = tangent(DA)
+            dDX = tangent(DX)
+        end
+
         function dscal_pullback!!(::NoRData)
 
-            # Set primal to previous state.
-            _DX[inds] .= DX_copy
+            GC.@preserve args begin
 
-            # Compute cotangent w.r.t. scaling.
-            unsafe_store!(dDA, BLAS.dot(_n, _DX, _incx, dDX, _incx) + unsafe_load(dDA))
+                # Set primal to previous state.
+                _DX[inds] .= DX_copy
 
-            # Compute cotangent w.r.t. DX.
-            BLAS.scal!(_n, _DA, _DX_s, _incx)
+                # Compute cotangent w.r.t. scaling.
+                unsafe_store!(dDA, BLAS.dot(_n, _DX, _incx, dDX, _incx) + unsafe_load(dDA))
+
+                # Compute cotangent w.r.t. DX.
+                BLAS.scal!(_n, _DA, _DX_s, _incx)
+            end
 
             return tuple_fill(NoRData(), Val(10 + N))
         end
@@ -133,43 +147,50 @@ for (gemv, elty) in ((:dgemv_, :Float64), (:sgemv_, :Float32))
         args::Vararg{Any, Nargs}
     ) where {Nargs}
 
-        # Load in data.
-        tA = Char(unsafe_load(primal(_tA)))
-        M, N, lda, incx, incy = map(unsafe_load ∘ primal, (_M, _N, _lda, _incx, _incy))
-        alpha = unsafe_load(primal(_alpha))
-        beta = unsafe_load(primal(_beta))
+        GC.@preserve args begin
 
-        # Run primal.
-        A = wrap_ptr_as_view(primal(_A), lda, M, N)
-        Nx = tA == 'N' ? N : M
-        Ny = tA == 'N' ? M : N
-        x = view(unsafe_wrap(Vector{$elty}, primal(_x), incx * Nx), 1:incx:incx * Nx)
-        y = view(unsafe_wrap(Vector{$elty}, primal(_y), incy * Ny), 1:incy:incy * Ny)
-        y_copy = copy(y)
+            # Load in data.
+            tA = Char(unsafe_load(primal(_tA)))
+            M, N, lda, incx, incy = map(unsafe_load ∘ primal, (_M, _N, _lda, _incx, _incy))
+            alpha = unsafe_load(primal(_alpha))
+            beta = unsafe_load(primal(_beta))
 
-        BLAS.gemv!(tA, alpha, A, x, beta, y)
+            # Run primal.
+            A = wrap_ptr_as_view(primal(_A), lda, M, N)
+            Nx = tA == 'N' ? N : M
+            Ny = tA == 'N' ? M : N
+            x = view(unsafe_wrap(Vector{$elty}, primal(_x), incx * Nx), 1:incx:incx * Nx)
+            y = view(unsafe_wrap(Vector{$elty}, primal(_y), incy * Ny), 1:incy:incy * Ny)
+            y_copy = copy(y)
 
-        dalpha = tangent(_alpha)
-        dbeta = tangent(_beta)
-        _dA = tangent(_A)
-        _dx = tangent(_x)
-        _dy = tangent(_y)
+            BLAS.gemv!(tA, alpha, A, x, beta, y)
+
+            dalpha = tangent(_alpha)
+            dbeta = tangent(_beta)
+            _dA = tangent(_A)
+            _dx = tangent(_x)
+            _dy = tangent(_y)
+        end
+
         function gemv_pb!!(::NoRData)
 
-            # Load up the tangents.
-            dA = wrap_ptr_as_view(_dA, lda, M, N)
-            dx = view(unsafe_wrap(Vector{$elty}, _dx, incx * Nx), 1:incx:incx * Nx)
-            dy = view(unsafe_wrap(Vector{$elty}, _dy, incy * Ny), 1:incy:incy * Ny)
+            GC.@preserve args begin
 
-            # Increment the tangents.
-            unsafe_store!(dalpha, unsafe_load(dalpha) + dot(dy, _trans(tA, A), x))
-            dA .+= _trans(tA, alpha * dy * x')
-            dx .+= alpha * _trans(tA, A)'dy
-            unsafe_store!(dbeta, unsafe_load(dbeta) + dot(y_copy, dy))
-            dy .*= beta
+                # Load up the tangents.
+                dA = wrap_ptr_as_view(_dA, lda, M, N)
+                dx = view(unsafe_wrap(Vector{$elty}, _dx, incx * Nx), 1:incx:incx * Nx)
+                dy = view(unsafe_wrap(Vector{$elty}, _dy, incy * Ny), 1:incy:incy * Ny)
 
-            # Restore the original value of `y`.
-            y .= y_copy
+                # Increment the tangents.
+                unsafe_store!(dalpha, unsafe_load(dalpha) + dot(dy, _trans(tA, A), x))
+                dA .+= _trans(tA, alpha * dy * x')
+                dx .+= alpha * _trans(tA, A)'dy
+                unsafe_store!(dbeta, unsafe_load(dbeta) + dot(y_copy, dy))
+                dy .*= beta
+
+                # Restore the original value of `y`.
+                y .= y_copy
+            end
 
             return tuple_fill(NoRData(), Val(17 + Nargs))
         end
@@ -195,30 +216,37 @@ for (trmv, elty) in ((:dtrmv_, :Float64), (:strmv_, :Float32))
         _incx::CoDual{Ptr{BLAS.BlasInt}},
         args::Vararg{Any, Nargs},
     ) where {Nargs}
-        # Load in data.
-        uplo, trans, diag = map(Char ∘ unsafe_load ∘ primal, (_uplo, _trans, _diag))
-        N, lda, incx = map(unsafe_load ∘ primal, (_N, _lda, _incx))
-        A = wrap_ptr_as_view(primal(_A), lda, N, N)
-        x = wrap_ptr_as_view(primal(_x), N, incx)
-        x_copy = copy(x)
 
-        # Run primal computation.
-        BLAS.trmv!(uplo, trans, diag, A, x)
+        GC.@preserve args begin
+            # Load in data.
+            uplo, trans, diag = map(Char ∘ unsafe_load ∘ primal, (_uplo, _trans, _diag))
+            N, lda, incx = map(unsafe_load ∘ primal, (_N, _lda, _incx))
+            A = wrap_ptr_as_view(primal(_A), lda, N, N)
+            x = wrap_ptr_as_view(primal(_x), N, incx)
+            x_copy = copy(x)
 
-        _dA = tangent(_A)
-        _dx = tangent(_x)
+            # Run primal computation.
+            BLAS.trmv!(uplo, trans, diag, A, x)
+
+            _dA = tangent(_A)
+            _dx = tangent(_x)
+        end
+
         function trmv_pb!!(::NoRData)
 
-            # Load up the tangents.
-            dA = wrap_ptr_as_view(_dA, lda, N, N)
-            dx = wrap_ptr_as_view(_dx, N, incx)
+            GC.@preserve args begin
 
-            # Restore the original value of x.
-            x .= x_copy
+                # Load up the tangents.
+                dA = wrap_ptr_as_view(_dA, lda, N, N)
+                dx = wrap_ptr_as_view(_dx, N, incx)
 
-            # Increment the tangents.
-            dA .+= tri!(trans == 'N' ? dx * x' : x * dx', uplo, diag)
-            BLAS.trmv!(uplo, trans == 'N' ? 'T' : 'N', diag, A, dx)
+                # Restore the original value of x.
+                x .= x_copy
+
+                # Increment the tangents.
+                dA .+= tri!(trans == 'N' ? dx * x' : x * dx', uplo, diag)
+                BLAS.trmv!(uplo, trans == 'N' ? 'T' : 'N', diag, A, dx)
+            end
 
             return tuple_fill(NoRData(), Val(14 + Nargs))
         end
@@ -258,7 +286,6 @@ function rrule!!(
     beta::CoDual{T},
     C::CoDual{Matrix{T}},
 ) where {T<:Union{Float32, Float64}}
-
     tA = primal(transA)
     tB = primal(transB)
     a = primal(alpha)
@@ -338,49 +365,55 @@ for (gemm, elty) in ((:dgemm_, :Float64), (:sgemm_, :Float32))
         LDC::CoDual{Ptr{BLAS.BlasInt}},
         args::Vararg{Any, Nargs},
     ) where {Nargs}
-        _tA = Char(unsafe_load(primal(tA)))
-        _tB = Char(unsafe_load(primal(tB)))
-        _m = unsafe_load(primal(m))
-        _n = unsafe_load(primal(n))
-        _ka = unsafe_load(primal(ka))
-        _alpha = unsafe_load(primal(alpha))
-        _A = primal(A)
-        _LDA = unsafe_load(primal(LDA))
-        _B = primal(B)
-        _LDB = unsafe_load(primal(LDB))
-        _beta = unsafe_load(primal(beta))
-        _C = primal(C)
-        _LDC = unsafe_load(primal(LDC))
 
-        A_mat = wrap_ptr_as_view(primal(A), _LDA, (_tA == 'N' ? (_m, _ka) : (_ka, _m))...)
-        B_mat = wrap_ptr_as_view(primal(B), _LDB, (_tB == 'N' ? (_ka, _n) : (_n, _ka))...)
-        C_mat = wrap_ptr_as_view(primal(C), _LDC, _m, _n)
-        C_copy = collect(C_mat)
+        GC.@preserve args begin
+            _tA = Char(unsafe_load(primal(tA)))
+            _tB = Char(unsafe_load(primal(tB)))
+            _m = unsafe_load(primal(m))
+            _n = unsafe_load(primal(n))
+            _ka = unsafe_load(primal(ka))
+            _alpha = unsafe_load(primal(alpha))
+            _A = primal(A)
+            _LDA = unsafe_load(primal(LDA))
+            _B = primal(B)
+            _LDB = unsafe_load(primal(LDB))
+            _beta = unsafe_load(primal(beta))
+            _C = primal(C)
+            _LDC = unsafe_load(primal(LDC))
 
-        BLAS.gemm!(_tA, _tB, _alpha, A_mat, B_mat, _beta, C_mat)
+            A_mat = wrap_ptr_as_view(primal(A), _LDA, (_tA == 'N' ? (_m, _ka) : (_ka, _m))...)
+            B_mat = wrap_ptr_as_view(primal(B), _LDB, (_tB == 'N' ? (_ka, _n) : (_n, _ka))...)
+            C_mat = wrap_ptr_as_view(primal(C), _LDC, _m, _n)
+            C_copy = collect(C_mat)
 
-        dalpha = tangent(alpha)
-        dA = tangent(A)
-        dB = tangent(B)
-        dbeta = tangent(beta)
-        dC = tangent(C)
+            BLAS.gemm!(_tA, _tB, _alpha, A_mat, B_mat, _beta, C_mat)
+
+            dalpha = tangent(alpha)
+            dA = tangent(A)
+            dB = tangent(B)
+            dbeta = tangent(beta)
+            dC = tangent(C)
+        end
+
         function gemm!_pullback!!(::NoRData)
 
-            # Restore previous state.
-            C_mat .= C_copy
+            GC.@preserve args begin
+                # Restore previous state.
+                C_mat .= C_copy
 
-            # Convert pointers to views.
-            dA_mat = wrap_ptr_as_view(dA, _LDA, (_tA == 'N' ? (_m, _ka) : (_ka, _m))...)
-            dB_mat = wrap_ptr_as_view(dB, _LDB, (_tB == 'N' ? (_ka, _n) : (_n, _ka))...)
-            dC_mat = wrap_ptr_as_view(dC, _LDC, _m, _n)
+                # Convert pointers to views.
+                dA_mat = wrap_ptr_as_view(dA, _LDA, (_tA == 'N' ? (_m, _ka) : (_ka, _m))...)
+                dB_mat = wrap_ptr_as_view(dB, _LDB, (_tB == 'N' ? (_ka, _n) : (_n, _ka))...)
+                dC_mat = wrap_ptr_as_view(dC, _LDC, _m, _n)
 
-            # Increment cotangents.
-            unsafe_store!(dbeta, unsafe_load(dbeta) + tr(dC_mat' * C_mat))
-            dalpha_inc = tr(dC_mat' * _trans(_tA, A_mat) * _trans(_tB, B_mat))
-            unsafe_store!(dalpha, unsafe_load(dalpha) + dalpha_inc)
-            dA_mat .+= _alpha * transpose(_trans(_tA, _trans(_tB, B_mat) * transpose(dC_mat)))
-            dB_mat .+= _alpha * transpose(_trans(_tB, transpose(dC_mat) * _trans(_tA, A_mat)))
-            dC_mat .*= _beta
+                # Increment cotangents.
+                unsafe_store!(dbeta, unsafe_load(dbeta) + tr(dC_mat' * C_mat))
+                dalpha_inc = tr(dC_mat' * _trans(_tA, A_mat) * _trans(_tB, B_mat))
+                unsafe_store!(dalpha, unsafe_load(dalpha) + dalpha_inc)
+                dA_mat .+= _alpha * transpose(_trans(_tA, _trans(_tB, B_mat) * transpose(dC_mat)))
+                dB_mat .+= _alpha * transpose(_trans(_tB, transpose(dC_mat) * _trans(_tA, A_mat)))
+                dC_mat .*= _beta
+            end
 
             return tuple_fill(NoRData(), Val(19 + Nargs))
         end
@@ -496,43 +529,48 @@ for (syrk, elty) in ((:dsyrk_, :Float64), (:ssyrk_, :Float32))
         LDC::CoDual{Ptr{BLAS.BlasInt}},
         args::Vararg{Any, Nargs},
     ) where {Nargs}
-        _uplo = Char(unsafe_load(primal(uplo)))
-        _t = Char(unsafe_load(primal(trans)))
-        _n = unsafe_load(primal(n))
-        _k = unsafe_load(primal(k))
-        _alpha = unsafe_load(primal(alpha))
-        _A = primal(A)
-        _LDA = unsafe_load(primal(LDA))
-        _beta = unsafe_load(primal(beta))
-        _C = primal(C)
-        _LDC = unsafe_load(primal(LDC))
+        GC.@preserve args begin
+            _uplo = Char(unsafe_load(primal(uplo)))
+            _t = Char(unsafe_load(primal(trans)))
+            _n = unsafe_load(primal(n))
+            _k = unsafe_load(primal(k))
+            _alpha = unsafe_load(primal(alpha))
+            _A = primal(A)
+            _LDA = unsafe_load(primal(LDA))
+            _beta = unsafe_load(primal(beta))
+            _C = primal(C)
+            _LDC = unsafe_load(primal(LDC))
 
-        A_mat = wrap_ptr_as_view(primal(A), _LDA, (_t == 'N' ? (_n, _k) : (_k, _n))...)
-        C_mat = wrap_ptr_as_view(primal(C), _LDC, _n, _n)
-        C_copy = collect(C_mat)
+            A_mat = wrap_ptr_as_view(primal(A), _LDA, (_t == 'N' ? (_n, _k) : (_k, _n))...)
+            C_mat = wrap_ptr_as_view(primal(C), _LDC, _n, _n)
+            C_copy = collect(C_mat)
 
-        BLAS.syrk!(_uplo, _t, _alpha, A_mat, _beta, C_mat)
+            BLAS.syrk!(_uplo, _t, _alpha, A_mat, _beta, C_mat)
 
-        dalpha = tangent(alpha)
-        dA = tangent(A)
-        dbeta = tangent(beta)
-        dC = tangent(C)
+            dalpha = tangent(alpha)
+            dA = tangent(A)
+            dbeta = tangent(beta)
+            dC = tangent(C)
+        end
+
         function syrk!_pullback!!(::NoRData)
 
-            # Restore previous state.
-            C_mat .= C_copy
+            GC.@preserve args begin
+                # Restore previous state.
+                C_mat .= C_copy
 
-            # Convert pointers to views.
-            dA_mat = wrap_ptr_as_view(dA, _LDA, (_t == 'N' ? (_n, _k) : (_k, _n))...)
-            dC_mat = wrap_ptr_as_view(dC, _LDC, _n, _n)
+                # Convert pointers to views.
+                dA_mat = wrap_ptr_as_view(dA, _LDA, (_t == 'N' ? (_n, _k) : (_k, _n))...)
+                dC_mat = wrap_ptr_as_view(dC, _LDC, _n, _n)
 
-            # Increment cotangents.
-            B = _uplo == 'U' ? triu(dC_mat) : tril(dC_mat)
-            unsafe_store!(dbeta, unsafe_load(dbeta) + sum(B .* C_mat))
-            dalpha_inc = tr(B' * _trans(_t, A_mat) * _trans(_t, A_mat)')
-            unsafe_store!(dalpha, unsafe_load(dalpha) + dalpha_inc)
-            dA_mat .+= _alpha * (_t == 'N' ? (B + B') * A_mat : A_mat * (B + B'))
-            dC_mat .= (_uplo == 'U' ? tril!(dC_mat, -1) : triu!(dC_mat, 1)) .+ _beta .* B
+                # Increment cotangents.
+                B = _uplo == 'U' ? triu(dC_mat) : tril(dC_mat)
+                unsafe_store!(dbeta, unsafe_load(dbeta) + sum(B .* C_mat))
+                dalpha_inc = tr(B' * _trans(_t, A_mat) * _trans(_t, A_mat)')
+                unsafe_store!(dalpha, unsafe_load(dalpha) + dalpha_inc)
+                dA_mat .+= _alpha * (_t == 'N' ? (B + B') * A_mat : A_mat * (B + B'))
+                dC_mat .= (_uplo == 'U' ? tril!(dC_mat, -1) : triu!(dC_mat, 1)) .+ _beta .* B
+            end
 
             return tuple_fill(NoRData(), Val(16 + Nargs))
         end
@@ -561,42 +599,49 @@ for (trmm, elty) in ((:dtrmm_, :Float64), (:strmm_, :Float32))
         _ldb::CoDual{Ptr{BLAS.BlasInt}},
         args::Vararg{Any, Nargs},
     ) where {Nargs}
-        # Load in data and store B for the reverse-pass.
-        side, ul, tA, diag = map(Char ∘ unsafe_load ∘ primal, (_side, _uplo, _trans, _diag))
-        M, N, lda, ldb = map(unsafe_load ∘ primal, (_M, _N, _lda, _ldb))
-        alpha = unsafe_load(primal(_alpha))
-        R = side == 'L' ? M : N
-        A = wrap_ptr_as_view(primal(_A), lda, R, R)
-        B = wrap_ptr_as_view(primal(_B), ldb, M, N)
-        B_copy = copy(B)
 
-        # Run primal.
-        BLAS.trmm!(side, ul, tA, diag, alpha, A, B)
+        GC.@preserve args begin
 
-        dalpha = tangent(_alpha)
-        _dA = tangent(_A)
-        _dB = tangent(_B)
+            # Load in data and store B for the reverse-pass.
+            side, ul, tA, diag = map(Char ∘ unsafe_load ∘ primal, (_side, _uplo, _trans, _diag))
+            M, N, lda, ldb = map(unsafe_load ∘ primal, (_M, _N, _lda, _ldb))
+            alpha = unsafe_load(primal(_alpha))
+            R = side == 'L' ? M : N
+            A = wrap_ptr_as_view(primal(_A), lda, R, R)
+            B = wrap_ptr_as_view(primal(_B), ldb, M, N)
+            B_copy = copy(B)
+
+            # Run primal.
+            BLAS.trmm!(side, ul, tA, diag, alpha, A, B)
+
+            dalpha = tangent(_alpha)
+            _dA = tangent(_A)
+            _dB = tangent(_B)
+        end
+
         function trmm!_pullback!!(::NoRData)
 
-            # Convert pointers to views.
-            dA = wrap_ptr_as_view(_dA, lda, R, R)
-            dB = wrap_ptr_as_view(_dB, ldb, M, N)
+            GC.@preserve args begin
+                # Convert pointers to views.
+                dA = wrap_ptr_as_view(_dA, lda, R, R)
+                dB = wrap_ptr_as_view(_dB, ldb, M, N)
 
-            # Increment alpha tangent.
-            alpha != 0 && unsafe_store!(dalpha, unsafe_load(dalpha) + tr(dB'B) / alpha)
+                # Increment alpha tangent.
+                alpha != 0 && unsafe_store!(dalpha, unsafe_load(dalpha) + tr(dB'B) / alpha)
 
-            # Restore initial state.
-            B .= B_copy
+                # Restore initial state.
+                B .= B_copy
 
-            # Increment cotangents.
-            if side == 'L'
-                dA .+= alpha .* tri!(tA == 'N' ? dB * B' : B * dB', ul, diag)
-            else
-                dA .+= alpha .* tri!(tA == 'N' ? B'dB : dB'B, ul, diag)
+                # Increment cotangents.
+                if side == 'L'
+                    dA .+= alpha .* tri!(tA == 'N' ? dB * B' : B * dB', ul, diag)
+                else
+                    dA .+= alpha .* tri!(tA == 'N' ? B'dB : dB'B, ul, diag)
+                end
+
+                # Compute dB tangent.
+                BLAS.trmm!(side, ul, tA == 'N' ? 'T' : 'N', diag, alpha, A, dB)
             end
-
-            # Compute dB tangent.
-            BLAS.trmm!(side, ul, tA == 'N' ? 'T' : 'N', diag, alpha, A, dB)
 
             return tuple_fill(NoRData(), Val(17 + Nargs))
         end
@@ -626,58 +671,64 @@ for (trsm, elty) in ((:dtrsm_, :Float64), (:strsm_, :Float32))
         _ldb::CoDual{Ptr{BLAS.BlasInt}},
         args::Vararg{Any, Nargs},
     ) where {Nargs}
-        side = Char(unsafe_load(primal(_side)))
-        uplo = Char(unsafe_load(primal(_uplo)))
-        trans = Char(unsafe_load(primal(_trans)))
-        diag = Char(unsafe_load(primal(_diag)))
-        M = unsafe_load(primal(_M))
-        N = unsafe_load(primal(_N))
-        R = side == 'L' ? M : N
-        alpha = unsafe_load(primal(_alpha))
-        lda = unsafe_load(primal(_lda))
-        ldb = unsafe_load(primal(_ldb))
-        A = wrap_ptr_as_view(primal(_A), lda, R, R)
-        B = wrap_ptr_as_view(primal(_B), ldb, M, N)
-        B_copy = copy(B)
 
-        trsm!(side, uplo, trans, diag, alpha, A, B)
+        GC.@preserve args begin
+            side = Char(unsafe_load(primal(_side)))
+            uplo = Char(unsafe_load(primal(_uplo)))
+            trans = Char(unsafe_load(primal(_trans)))
+            diag = Char(unsafe_load(primal(_diag)))
+            M = unsafe_load(primal(_M))
+            N = unsafe_load(primal(_N))
+            R = side == 'L' ? M : N
+            alpha = unsafe_load(primal(_alpha))
+            lda = unsafe_load(primal(_lda))
+            ldb = unsafe_load(primal(_ldb))
+            A = wrap_ptr_as_view(primal(_A), lda, R, R)
+            B = wrap_ptr_as_view(primal(_B), ldb, M, N)
+            B_copy = copy(B)
 
-        dalpha = tangent(_alpha)
-        _dA = tangent(_A)
-        _dB = tangent(_B)
+            trsm!(side, uplo, trans, diag, alpha, A, B)
+
+            dalpha = tangent(_alpha)
+            _dA = tangent(_A)
+            _dB = tangent(_B)
+        end
+
         function trsm_pb!!(::NoRData)
 
-            # Convert pointers to views.
-            dA = wrap_ptr_as_view(_dA, lda, R, R)
-            dB = wrap_ptr_as_view(_dB, ldb, M, N)
+            GC.@preserve args begin
+                # Convert pointers to views.
+                dA = wrap_ptr_as_view(_dA, lda, R, R)
+                dB = wrap_ptr_as_view(_dB, ldb, M, N)
 
-            # Increment alpha tangent.
-            alpha != 0 && unsafe_store!(dalpha, unsafe_load(dalpha) + tr(dB'B) / alpha)
+                # Increment alpha tangent.
+                alpha != 0 && unsafe_store!(dalpha, unsafe_load(dalpha) + tr(dB'B) / alpha)
 
-            # Increment cotangents.
-            if side == 'L'
-                if trans == 'N'
-                    tmp = trsm!('L', uplo, 'T', diag, -one($elty), A, dB * B')
-                    dA .+= tri!(tmp, uplo, diag)
+                # Increment cotangents.
+                if side == 'L'
+                    if trans == 'N'
+                        tmp = trsm!('L', uplo, 'T', diag, -one($elty), A, dB * B')
+                        dA .+= tri!(tmp, uplo, diag)
+                    else
+                        tmp = trsm!('R', uplo, 'T', diag, -one($elty), A, B * dB')
+                        dA .+= tri!(tmp, uplo, diag)
+                    end
                 else
-                    tmp = trsm!('R', uplo, 'T', diag, -one($elty), A, B * dB')
-                    dA .+= tri!(tmp, uplo, diag)
+                    if trans == 'N'
+                        tmp = trsm!('R', uplo, 'T', diag, -one($elty), A, B'dB)
+                        dA .+= tri!(tmp, uplo, diag)
+                    else
+                        tmp = trsm!('L', uplo, 'T', diag, -one($elty), A, dB'B)
+                        dA .+= tri!(tmp, uplo, diag)
+                    end
                 end
-            else
-                if trans == 'N'
-                    tmp = trsm!('R', uplo, 'T', diag, -one($elty), A, B'dB)
-                    dA .+= tri!(tmp, uplo, diag)
-                else
-                    tmp = trsm!('L', uplo, 'T', diag, -one($elty), A, dB'B)
-                    dA .+= tri!(tmp, uplo, diag)
-                end
+
+                # Restore initial state.
+                B .= B_copy
+
+                # Compute dB tangent.
+                BLAS.trsm!(side, uplo, trans == 'N' ? 'T' : 'N', diag, alpha, A, dB)
             end
-
-            # Restore initial state.
-            B .= B_copy
-
-            # Compute dB tangent.
-            BLAS.trsm!(side, uplo, trans == 'N' ? 'T' : 'N', diag, alpha, A, dB)
 
             return tuple_fill(NoRData(), Val(17 + Nargs))
         end
