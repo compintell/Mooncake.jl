@@ -766,6 +766,8 @@ function build_rrule(args...; safety_on=false)
     return build_rrule(PInterp(), _typeof(TestUtils.__get_primals(args)); safety_on)
 end
 
+const TAPIR_INFERENCE_LOCK = ReentrantLock()
+
 """
     build_rrule(interp::PInterp{C}, sig_or_mi; safety_on=false) where {C}
 
@@ -794,61 +796,66 @@ function build_rrule(
     ir, _ = lookup_ir(interp, sig_or_mi)
     Treturn = Base.Experimental.compute_ir_rettype(ir)
 
-    # Normalise the IR, and generated BBCode version of it.
-    isva, spnames = is_vararg_and_sparam_names(sig_or_mi)
-    ir = normalise!(ir, spnames)
-    primal_ir = BBCode(ir)
+    lock(TAPIR_INFERENCE_LOCK)
+    try
+        # Normalise the IR, and generated BBCode version of it.
+        isva, spnames = is_vararg_and_sparam_names(sig_or_mi)
+        ir = normalise!(ir, spnames)
+        primal_ir = BBCode(ir)
 
-    # Compute global info.
-    info = ADInfo(interp, primal_ir, safety_on)
+        # Compute global info.
+        info = ADInfo(interp, primal_ir, safety_on)
 
-    # For each block in the fwds and pullback BBCode, translate all statements. Running this
-    # will, in general, push items to `info.shared_data_pairs`.
-    ad_stmts_blocks = map(primal_ir.blocks) do primal_blk
-        ids = primal_blk.inst_ids
-        primal_stmts = map(x -> x.stmt, primal_blk.insts)
-        return (primal_blk.id, make_ad_stmts!.(primal_stmts, ids, Ref(info)))
+        # For each block in the fwds and pullback BBCode, translate all statements. Running this
+        # will, in general, push items to `info.shared_data_pairs`.
+        ad_stmts_blocks = map(primal_ir.blocks) do primal_blk
+            ids = primal_blk.inst_ids
+            primal_stmts = map(x -> x.stmt, primal_blk.insts)
+            return (primal_blk.id, make_ad_stmts!.(primal_stmts, ids, Ref(info)))
+        end
+
+        # Make shared data, and construct BBCode for forwards-pass and pullback.
+        shared_data = shared_data_tuple(info.shared_data_pairs)
+
+        # If we've already derived the OpaqueClosures and info, do not re-derive, just create a
+        # copy and pass in new shared data.
+        if haskey(interp.oc_cache, (sig_or_mi, safety_on))
+            existing_fwds_oc, existing_pb_oc = interp.oc_cache[(sig_or_mi, safety_on)]
+            fwds_oc = replace_captures(existing_fwds_oc, shared_data)
+            pb_oc = replace_captures(existing_pb_oc, shared_data)
+        else
+            fwds_ir = forwards_pass_ir(primal_ir, ad_stmts_blocks, info, _typeof(shared_data))
+            pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, _typeof(shared_data))
+
+            optimised_fwds_ir = optimise_ir!(optimise_ir!(IRCode(fwds_ir); do_inline=true))
+            optimised_pb_ir = optimise_ir!(optimise_ir!(IRCode(pb_ir); do_inline=true))
+            # @show sig_or_mi
+            # @show Treturn
+            # @show safety_on
+            # display(ir)
+            # display(IRCode(fwds_ir))
+            # display(IRCode(pb_ir))
+            # display(optimised_fwds_ir)
+            # display(optimised_pb_ir)
+            # @show length(ir.stmts.inst)
+            # @show length(optimised_fwds_ir.stmts.inst)
+            # @show length(optimised_pb_ir.stmts.inst)
+            fwds_oc = MistyClosure(
+                OpaqueClosure(optimised_fwds_ir, shared_data...; do_compile=true),
+                optimised_fwds_ir,
+            )
+            pb_oc = MistyClosure(
+                OpaqueClosure(optimised_pb_ir, shared_data...; do_compile=true),
+                optimised_pb_ir,
+            )
+            interp.oc_cache[(sig_or_mi, safety_on)] = (fwds_oc, pb_oc)
+        end
+
+        raw_rule = DerivedRule(fwds_oc, pb_oc, Val(isva), Val(num_args(info)))
+        return safety_on ? SafeRRule(raw_rule) : raw_rule
+    finally
+        unlock(TAPIR_INFERENCE_LOCK)
     end
-
-    # Make shared data, and construct BBCode for forwards-pass and pullback.
-    shared_data = shared_data_tuple(info.shared_data_pairs)
-
-    # If we've already derived the OpaqueClosures and info, do not re-derive, just create a
-    # copy and pass in new shared data.
-    if haskey(interp.oc_cache, (sig_or_mi, safety_on))
-        existing_fwds_oc, existing_pb_oc = interp.oc_cache[(sig_or_mi, safety_on)]
-        fwds_oc = replace_captures(existing_fwds_oc, shared_data)
-        pb_oc = replace_captures(existing_pb_oc, shared_data)
-    else
-        fwds_ir = forwards_pass_ir(primal_ir, ad_stmts_blocks, info, _typeof(shared_data))
-        pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, _typeof(shared_data))
-
-        optimised_fwds_ir = optimise_ir!(optimise_ir!(IRCode(fwds_ir); do_inline=true))
-        optimised_pb_ir = optimise_ir!(optimise_ir!(IRCode(pb_ir); do_inline=true))
-        # @show sig_or_mi
-        # @show Treturn
-        # @show safety_on
-        # display(ir)
-        # display(IRCode(fwds_ir))
-        # display(IRCode(pb_ir))
-        # display(optimised_fwds_ir)
-        # display(optimised_pb_ir)
-        # @show length(ir.stmts.inst)
-        # @show length(optimised_fwds_ir.stmts.inst)
-        # @show length(optimised_pb_ir.stmts.inst)
-        fwds_oc = MistyClosure(
-            OpaqueClosure(optimised_fwds_ir, shared_data...; do_compile=true),
-            optimised_fwds_ir,
-        )
-        pb_oc = MistyClosure(
-            OpaqueClosure(optimised_pb_ir, shared_data...; do_compile=true),
-            optimised_pb_ir,
-        )
-        interp.oc_cache[(sig_or_mi, safety_on)] = (fwds_oc, pb_oc)
-    end
-
-    raw_rule = DerivedRule(fwds_oc, pb_oc, Val(isva), Val(num_args(info)))
-    return safety_on ? SafeRRule(raw_rule) : raw_rule
 end
 
 # Given an `OpaqueClosure` `oc`, create a new `OpaqueClosure` of the same type, but with new
