@@ -745,7 +745,10 @@ end
 @inline lazy_zero_rdata(p::P) where {P} = lazy_zero_rdata(lazy_zero_rdata_type(P), p)
 
 # Ensure proper specialisation on types.
-@inline lazy_zero_rdata(::Type{P}) where {P} = LazyZeroRData{Type{P}, Nothing}(nothing)
+@inline function lazy_zero_rdata(p::Type{P}) where {P}
+    Rtype = @isdefined(P) ? Type{P} : _typeof(p)
+    return LazyZeroRData{Rtype, Nothing}(nothing)
+end
 
 @inline instantiate(::LazyZeroRData{P, Nothing}) where {P} = zero_rdata_from_type(P)
 @inline instantiate(r::LazyZeroRData) = r.data

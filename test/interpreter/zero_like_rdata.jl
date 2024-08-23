@@ -6,6 +6,7 @@
             Float64,
             Int,
             Vector{Float64},
+            TypeVar(:a),
         ]
             @test Tapir.zero_like_rdata_from_type(P) isa Tapir.zero_like_rdata_type(P)
         end

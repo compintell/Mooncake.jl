@@ -224,6 +224,7 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
     @testset "$name" for (interface_only, name, f, x) in Any[
         (false, "InverseGamma", (a, b, x) -> logpdf(InverseGamma(a, b), x), (1.5, 1.4, 0.4)),
         (false, "NormalCanon", (m, s, x) -> logpdf(NormalCanon(m, s), x), (0.1, 1.0, -0.5)),
+        (false, "Categorical", x -> logpdf(Categorical(x, 1 - x), 1), 0.3),
         (
             false,
             "MvLogitNormal",

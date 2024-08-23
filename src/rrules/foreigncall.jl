@@ -395,7 +395,7 @@ function rrule!!(
     ::CoDual{Tuple{Val{Any}}},
     ::CoDual, # nreq
     ::CoDual, # calling convention
-    a::CoDual{<:Array{T}, <:Array{V}}
+    a::CoDual{<:Array{T}, <:Array{V}},
 ) where {T, V}
     y = CoDual(
         ccall(:jl_array_ptr, Ptr{T}, (Any, ), primal(a)),
@@ -442,16 +442,32 @@ end
 function rrule!!(
     ::CoDual{typeof(_foreigncall_)},
     ::CoDual{Val{:jl_array_isassigned}},
-    ::CoDual, # return type is Int32
-    ::CoDual, # arg types are (Any, UInt64)
-    ::CoDual, # nreq
-    ::CoDual, # calling convention
+    ::CoDual{RT}, # return type is Int32
+    arg_types::CoDual{AT}, # arg types are (Any, UInt64)
+    ::CoDual{nreq}, # nreq
+    ::CoDual{calling_convention}, # calling convention
     a::CoDual{<:Array},
     ii::CoDual{UInt},
     args...,
-)
-    y = ccall(:jl_array_isassigned, Cint, (Any, UInt), primal(a), primal(ii))
+) where {RT, AT, nreq, calling_convention}
+    GC.@preserve args begin
+        y = ccall(:jl_array_isassigned, Cint, (Any, UInt), primal(a), primal(ii))
+    end
     return zero_fcodual(y), NoPullback(ntuple(_ -> NoRData(), length(args) + 8))
+end
+
+function rrule!!(
+    ::CoDual{typeof(_foreigncall_)},
+    ::CoDual{Val{:jl_type_unionall}},
+    ::CoDual{Val{Any}}, # return type
+    ::CoDual{Tuple{Val{Any}, Val{Any}}}, # arg types
+    ::CoDual{Val{0}}, # number of required args
+    ::CoDual{Val{:ccall}},
+    a::CoDual,
+    b::CoDual,
+)
+    y = ccall(:jl_type_unionall, Any, (Any, Any), primal(a), primal(b))
+    return zero_fcodual(y), NoPullback(ntuple(_ -> NoRData(), 8))
 end
 
 @is_primitive MinimalCtx Tuple{typeof(deepcopy), Any}
@@ -639,6 +655,10 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:foreigncall})
         ),
         (false, :none, nothing, isassigned, randn(5), 4),
         (false, :none, nothing, x -> (Base._growbeg!(x, 2); x[1:2] .= 2.0), randn(5)),
+        (
+            false, :none, nothing,
+            (t, v) -> ccall(:jl_type_unionall, Any, (Any, Any), t, v), TypeVar(:a), Real,
+        ),
     ]
     memory = Any[_x]
     return test_cases, memory

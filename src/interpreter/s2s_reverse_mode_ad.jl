@@ -213,9 +213,10 @@ end
 __ref(P) = new_inst(Expr(:call, __make_ref, P))
 
 # Helper for reverse_data_ref_stmts.
-@inline @generated function __make_ref(::Type{P}) where {P}
-    R = zero_like_rdata_type(P)
-    return :(Ref{$R}(Tapir.zero_like_rdata_from_type(P)))
+@inline @generated function __make_ref(p::Type{P}) where {P}
+    _P = @isdefined(P) ? P : _typeof(p)
+    R = zero_like_rdata_type(_P)
+    return :(Ref{$R}(Tapir.zero_like_rdata_from_type($_P)))
 end
 
 @inline __make_ref(::Type{Union{}}) = nothing
@@ -368,7 +369,7 @@ function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
     # Assemble the above lines and construct reverse-pass.
     return ad_stmt_info(
         line,
-        PiNode(stmt.val, fcodual_type(_type(stmt.typ))),
+        PiNode(__inc(stmt.val), fcodual_type(_type(stmt.typ))),
         Expr(:call, __pi_rvs!, P, val_rdata_ref_id, output_rdata_ref_id),
     )
 end
@@ -708,8 +709,10 @@ _is_primitive(C::Type, sig::Type) = is_primitive(C, sig)
 # Compute the concrete type of the rule that will be returned from `build_rrule`. This is
 # important for performance in dynamic dispatch, and to ensure that recursion works
 # properly.
-function rule_type(interp::TapirInterpreter{C}, sig_or_mi) where {C}
-    _is_primitive(C, sig_or_mi) && return typeof(rrule!!)
+function rule_type(interp::TapirInterpreter{C}, sig_or_mi; safety_on) where {C}
+    if _is_primitive(C, sig_or_mi)
+        return safety_on ? SafeRRule{typeof(rrule!!)} : typeof(rrule!!)
+    end
 
     ir, _ = lookup_ir(interp, sig_or_mi)
     Treturn = Base.Experimental.compute_ir_rettype(ir)
@@ -719,12 +722,39 @@ function rule_type(interp::TapirInterpreter{C}, sig_or_mi) where {C}
     arg_fwds_types = Tuple{map(fcodual_type, arg_types)...}
     arg_rvs_types = Tuple{map(rdata_type ∘ tangent_type, arg_types)...}
     rvs_return_type = rdata_type(tangent_type(Treturn))
-    return DerivedRule{
-        MistyClosure{OpaqueClosure{arg_fwds_types, fcodual_type(Treturn)}},
-        MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
-        Val{isva},
-        Val{length(ir.argtypes)},
-    }
+    return if isconcretetype(Treturn)
+        if safety_on
+            SafeRRule{DerivedRule{
+                MistyClosure{OpaqueClosure{arg_fwds_types, fcodual_type(Treturn)}},
+                MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
+                Val{isva},
+                Val{length(ir.argtypes)},
+            }}
+        else
+            DerivedRule{
+                MistyClosure{OpaqueClosure{arg_fwds_types, fcodual_type(Treturn)}},
+                MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
+                Val{isva},
+                Val{length(ir.argtypes)},
+            }
+        end
+    else
+        if safety_on
+            SafeRRule{DerivedRule{
+                MistyClosure{OpaqueClosure{arg_fwds_types, Tfcodual_ret}},
+                MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
+                Val{isva},
+                Val{length(ir.argtypes)},
+            }} where {Tfcodual_ret <: fcodual_type(Treturn)}
+        else
+            DerivedRule{
+                MistyClosure{OpaqueClosure{arg_fwds_types, Tfcodual_ret}},
+                MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
+                Val{isva},
+                Val{length(ir.argtypes)},
+            } where {Tfcodual_ret <: fcodual_type(Treturn)}
+        end
+    end
 end
 
 """
@@ -735,6 +765,8 @@ Helper method. Only uses static information from `args`.
 function build_rrule(args...; safety_on=false)
     return build_rrule(PInterp(), _typeof(TestUtils.__get_primals(args)); safety_on)
 end
+
+const TAPIR_INFERENCE_LOCK = ReentrantLock()
 
 """
     build_rrule(interp::PInterp{C}, sig_or_mi; safety_on=false) where {C}
@@ -764,61 +796,66 @@ function build_rrule(
     ir, _ = lookup_ir(interp, sig_or_mi)
     Treturn = Base.Experimental.compute_ir_rettype(ir)
 
-    # Normalise the IR, and generated BBCode version of it.
-    isva, spnames = is_vararg_and_sparam_names(sig_or_mi)
-    ir = normalise!(ir, spnames)
-    primal_ir = BBCode(ir)
+    lock(TAPIR_INFERENCE_LOCK)
+    try
+        # Normalise the IR, and generated BBCode version of it.
+        isva, spnames = is_vararg_and_sparam_names(sig_or_mi)
+        ir = normalise!(ir, spnames)
+        primal_ir = BBCode(ir)
 
-    # Compute global info.
-    info = ADInfo(interp, primal_ir, safety_on)
+        # Compute global info.
+        info = ADInfo(interp, primal_ir, safety_on)
 
-    # For each block in the fwds and pullback BBCode, translate all statements. Running this
-    # will, in general, push items to `info.shared_data_pairs`.
-    ad_stmts_blocks = map(primal_ir.blocks) do primal_blk
-        ids = primal_blk.inst_ids
-        primal_stmts = map(x -> x.stmt, primal_blk.insts)
-        return (primal_blk.id, make_ad_stmts!.(primal_stmts, ids, Ref(info)))
+        # For each block in the fwds and pullback BBCode, translate all statements. Running this
+        # will, in general, push items to `info.shared_data_pairs`.
+        ad_stmts_blocks = map(primal_ir.blocks) do primal_blk
+            ids = primal_blk.inst_ids
+            primal_stmts = map(x -> x.stmt, primal_blk.insts)
+            return (primal_blk.id, make_ad_stmts!.(primal_stmts, ids, Ref(info)))
+        end
+
+        # Make shared data, and construct BBCode for forwards-pass and pullback.
+        shared_data = shared_data_tuple(info.shared_data_pairs)
+
+        # If we've already derived the OpaqueClosures and info, do not re-derive, just create a
+        # copy and pass in new shared data.
+        if haskey(interp.oc_cache, (sig_or_mi, safety_on))
+            existing_fwds_oc, existing_pb_oc = interp.oc_cache[(sig_or_mi, safety_on)]
+            fwds_oc = replace_captures(existing_fwds_oc, shared_data)
+            pb_oc = replace_captures(existing_pb_oc, shared_data)
+        else
+            fwds_ir = forwards_pass_ir(primal_ir, ad_stmts_blocks, info, _typeof(shared_data))
+            pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, _typeof(shared_data))
+
+            optimised_fwds_ir = optimise_ir!(optimise_ir!(IRCode(fwds_ir); do_inline=true))
+            optimised_pb_ir = optimise_ir!(optimise_ir!(IRCode(pb_ir); do_inline=true))
+            # @show sig_or_mi
+            # @show Treturn
+            # @show safety_on
+            # display(ir)
+            # display(IRCode(fwds_ir))
+            # display(IRCode(pb_ir))
+            # display(optimised_fwds_ir)
+            # display(optimised_pb_ir)
+            # @show length(ir.stmts.inst)
+            # @show length(optimised_fwds_ir.stmts.inst)
+            # @show length(optimised_pb_ir.stmts.inst)
+            fwds_oc = MistyClosure(
+                OpaqueClosure(optimised_fwds_ir, shared_data...; do_compile=true),
+                optimised_fwds_ir,
+            )
+            pb_oc = MistyClosure(
+                OpaqueClosure(optimised_pb_ir, shared_data...; do_compile=true),
+                optimised_pb_ir,
+            )
+            interp.oc_cache[(sig_or_mi, safety_on)] = (fwds_oc, pb_oc)
+        end
+
+        raw_rule = DerivedRule(fwds_oc, pb_oc, Val(isva), Val(num_args(info)))
+        return safety_on ? SafeRRule(raw_rule) : raw_rule
+    finally
+        unlock(TAPIR_INFERENCE_LOCK)
     end
-
-    # Make shared data, and construct BBCode for forwards-pass and pullback.
-    shared_data = shared_data_tuple(info.shared_data_pairs)
-
-    # If we've already derived the OpaqueClosures and info, do not re-derive, just create a
-    # copy and pass in new shared data.
-    if haskey(interp.oc_cache, (sig_or_mi, safety_on))
-        existing_fwds_oc, existing_pb_oc = interp.oc_cache[(sig_or_mi, safety_on)]
-        fwds_oc = replace_captures(existing_fwds_oc, shared_data)
-        pb_oc = replace_captures(existing_pb_oc, shared_data)
-    else
-        fwds_ir = forwards_pass_ir(primal_ir, ad_stmts_blocks, info, _typeof(shared_data))
-        pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, _typeof(shared_data))
-
-        optimised_fwds_ir = optimise_ir!(optimise_ir!(IRCode(fwds_ir); do_inline=true))
-        optimised_pb_ir = optimise_ir!(optimise_ir!(IRCode(pb_ir); do_inline=true))
-        # @show sig_or_mi
-        # @show Treturn
-        # @show safety_on
-        # display(ir)
-        # display(IRCode(fwds_ir))
-        # display(IRCode(pb_ir))
-        # display(optimised_fwds_ir)
-        # display(optimised_pb_ir)
-        # @show length(ir.stmts.inst)
-        # @show length(optimised_fwds_ir.stmts.inst)
-        # @show length(optimised_pb_ir.stmts.inst)
-        fwds_oc = MistyClosure(
-            OpaqueClosure(optimised_fwds_ir, shared_data...; do_compile=true),
-            optimised_fwds_ir,
-        )
-        pb_oc = MistyClosure(
-            OpaqueClosure(optimised_pb_ir, shared_data...; do_compile=true),
-            optimised_pb_ir,
-        )
-        interp.oc_cache[(sig_or_mi, safety_on)] = (fwds_oc, pb_oc)
-    end
-
-    raw_rule = DerivedRule(fwds_oc, pb_oc, Val(isva), Val(num_args(info)))
-    return safety_on ? SafeRRule(raw_rule) : raw_rule
 end
 
 # Given an `OpaqueClosure` `oc`, create a new `OpaqueClosure` of the same type, but with new
@@ -1247,8 +1284,7 @@ mutable struct LazyDerivedRule{Tinterp<:TapirInterpreter, primal_sig, Trule}
     mi::Core.MethodInstance
     rule::Trule
     function LazyDerivedRule(interp::A, mi::Core.MethodInstance, safety_on::Bool) where {A}
-        rt = rule_type(interp, mi)
-        return new{A, mi.specTypes, safety_on ? SafeRRule{rt} : rt}(interp, safety_on, mi)
+        return new{A, mi.specTypes, rule_type(interp, mi; safety_on)}(interp, safety_on, mi)
     end
 end
 
