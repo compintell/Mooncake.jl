@@ -118,9 +118,8 @@
     end
 end
 
-# TODO: ideally we want to add the following test to the above testset (defined src/tangent.jl)
-# but we have to delay this until `randn_tangent` is implemented and working.
-@testset "zero_tangent" begin
+# TODO: add the following test to `tangent_test_cases`
+@testset "zero_tangent and randn_tangent" begin
     @testset "circular reference" begin
         foo = Tapir.TestResources.TypeUnstableMutableStruct(5.0, nothing)
         foo.b = foo
@@ -133,8 +132,6 @@ end
     @testset "struct with non-concrete fields" begin
         bar = Tapir.TestResources.TypeUnstableStruct(5.0, 1.0)
         @test Tapir.zero_tangent(bar) == Tangent{@NamedTuple{a::Float64, b}}(@NamedTuple{a::Float64, b}((0.0, 0.0)))
-        rt = Tapir.randn_tangent(Xoshiro(123456), bar)
-        @test rt.fields.b === rt
     end
     
     @testset "duplicate reference" begin
