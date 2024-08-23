@@ -134,15 +134,17 @@ end
 function has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}) where {T<:Array}
     size(x) != size(y) && return false
 
-    # the purpose of the dictionary is to catch circular references.
-    # for example, say x.a.a === x and y.a.a === y
-    # in this case, x.a.a !== y.a.a, but we want to return true
-    # the method here is: the first time we see a pair of objects that may contain circular references,
-    # we store the pair in the dictionary and mark true, this doesn't necessarily mean that the objects are equal,
-    # it just means that we have seen this pair before.
-    # as we iterate through the subcomponents of x and y
-    # if we see a pair of objects that we have seen before, then they are both circular references to themselves
-    # and we can return true, but they may not have the same data, as the rest of the subcomponents may be different.
+    # The dictionary is used to detect circular references in the data structures.
+    # For example, if x.a.a === x and y.a.a === y, we want to consider them to have equal data.
+    #
+    # When we first encounter a pair of objects:
+    # 1. We add them to the dictionary, marking that we've seen them.
+    # 2. This doesn't guarantee they're equal, just that we've encountered them.
+    #
+    # As we recursively compare x and y:
+    # - If we see a pair we've seen before, it indicates circular references.
+    # - We consider "circular references to itself" as equal data for this subcomponent.
+    # - However, other parts of x and y may still differ, so we continue checking.
 
     id_pair = (objectid(x), objectid(y))
     if haskey(d, id_pair)
