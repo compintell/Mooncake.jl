@@ -7,7 +7,8 @@ unchanged, but makes AD more straightforward. In particular, replace
 2. `:new` `Expr`s with `:call`s to `Tapir._new_`,
 3. `:splatnew` Expr`s with `:call`s to `Tapir._splat_new_`,
 4. `Core.IntrinsicFunction`s with counterparts from `Tapir.IntrinsicWrappers`,
-5. `getfield(x, 1)` with `lgetfield(x, Val(1))`, and related transformations.
+5. `getfield(x, 1)` with `lgetfield(x, Val(1))`, and related transformations,
+6. `gc_preserve_begin` / `gc_preserve_end` exprs so that memory release is delayed.
 
 `spnames` are the names associated to the static parameters of `ir`. These are needed when
 handling `:foreigncall` expressions, in which it is not necessarily the case that all
@@ -26,6 +27,7 @@ function normalise!(ir::IRCode, spnames::Vector{Symbol})
         inst = splatnew_to_call(inst)
         inst = intrinsic_to_function(inst)
         inst = lift_getfield_and_others(inst)
+        inst = lift_gc_preservation(inst)
         ir.stmts.inst[n] = inst
     end
     return ir
@@ -137,9 +139,7 @@ function intrinsic_to_function(inst)
 end
 
 lift_intrinsic(x...) = x
-function lift_intrinsic(x::GlobalRef, args...)
-    return lift_intrinsic(getglobal(x.mod, x.name), args...)
-end
+lift_intrinsic(x::GlobalRef, args...) = lift_intrinsic(getglobal(x.mod, x.name), args...)
 function lift_intrinsic(x::Core.IntrinsicFunction, v, args...)
     if x === cglobal
         return IntrinsicsWrappers.__cglobal, __extract_foreigncall_name(v), args...
@@ -147,9 +147,7 @@ function lift_intrinsic(x::Core.IntrinsicFunction, v, args...)
         return IntrinsicsWrappers.translate(Val(x)), v, args...
     end
 end
-function lift_intrinsic(::typeof(Core._apply_iterate), args...)
-    return _apply_iterate_equivalent, args...
-end
+lift_intrinsic(::typeof(Core._apply_iterate), args...) = _apply_iterate_equivalent, args...
 
 """
     lift_getfield_and_others(inst)
@@ -182,3 +180,69 @@ end
 __get_arg(x::GlobalRef) = getglobal(x.mod, x.name)
 __get_arg(x::QuoteNode) = x.value
 __get_arg(x) = x
+
+"""
+    gc_preserve(xs...)
+
+A no-op function. Its `rrule!!` ensures that the memory associated to `xs` is not freed
+until the pullback that it returns is run.
+"""
+@inline gc_preserve(xs...) = nothing
+
+@is_primitive MinimalCtx Tuple{typeof(gc_preserve), Vararg{Any, N}} where {N}
+
+function rrule!!(f::CoDual{typeof(gc_preserve)}, xs::CoDual...)
+    pb = NoPullback(f, xs...)
+    gc_preserve_pb!!(::NoRData) = GC.@preserve xs pb(NoRData())
+    return zero_fcodual(nothing), gc_preserve_pb!!
+end
+
+"""
+    lift_gc_preserve(inst)
+
+Expressions of the form
+```julia
+y = GC.@preserve x1 x2 foo(args...)
+```
+get lowered to
+```julia
+token = Expr(:gc_preserve_begin, x1, x2)
+y = expr
+Expr(:gc_preserve_end, token)
+```
+These expressions guarantee that any memory associated `x1` and `x2` not be freed until
+the `:gc_preserve_end` expression is reached.
+
+In the context of reverse-mode AD, we must ensure that the memory associated to `x1`, `x2`
+and their fdata is available during the reverse pass code associated to `expr`.
+We do this by preventing the memory from being freed until the `:gc_preserve_begin` is
+reached on the reverse pass.
+
+To achieve this, we replace the primal code with
+```julia
+# store `x` in `pb_gc_preserve` to prevent it from being freed.
+_, pb_gc_preserve = rrule!!(zero_fcodual(gc_preserve), x1, x2)
+
+# Differentiate the `:call` expression in the usual way.
+y, foo_pb = rrule!!(zero_fcodual(foo), args...)
+
+# Do not permit the GC to free `x` here.
+nothing
+```
+The pullback should be something along the lines of
+```julia
+# no pullback associated to `nothing`.
+nothing
+
+# Run the pullback associated to `foo` in the usual manner. `x` must be available.
+_, dargs... = foo_pb(dy)
+
+# No-op pullback associated to `gc_preserve`.
+pb_gc_preserve(NoRData())
+```
+"""
+function lift_gc_preservation(inst)
+    Meta.isexpr(inst, :gc_preserve_begin) && return Expr(:call, gc_preserve, inst.args...)
+    Meta.isexpr(inst, :gc_preserve_end) && return nothing
+    return inst
+end
