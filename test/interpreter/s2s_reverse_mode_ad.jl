@@ -166,6 +166,12 @@ end
             )
         end
         @testset "Expr" begin
+            @testset "assignment to GlobalRef" begin
+                @test_throws(
+                    Tapir.UnhandledLanguageFeatureException,
+                    make_ad_stmts!(Expr(:(=), GlobalRef(Main, :a), 5.0), ID(), info)
+                )
+            end
             @testset "copyast" begin
                 stmt = Expr(:copyast, QuoteNode(:(hi)))
                 ad_stmts = make_ad_stmts!(stmt, ID(), info)
