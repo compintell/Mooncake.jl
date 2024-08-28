@@ -594,7 +594,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
             "Cannot differentiate through assignments to globals. " *
             "Please refactor your code to avoid assigning to a global, for example by " *
             "passing the variable in to the function as an argument."
-        throw(UnhandledLanguageFeatureException(msg))
+        unhandled_feature(msg)
     else
         # Encountered an expression that we've not seen before.
         throw(error("Unrecognised expression $stmt"))
