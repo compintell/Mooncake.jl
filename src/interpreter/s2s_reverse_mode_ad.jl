@@ -417,7 +417,7 @@ end
 # and the ID associated to it in the forwards- and reverse-passes returned.
 function const_codual(stmt, info::ADInfo)
     x = uninit_fcodual(get_const_primal_value(stmt))
-    return isbitstype(_typeof(x)) ? x : add_data!(info, x)
+    return (isbits(x) || x isa CoDual{<:Type}) ? x : add_data!(info, x)
 end
 
 # Get the value associated to `x`. For `GlobalRef`s, verify that `x` is indeed a constant.
