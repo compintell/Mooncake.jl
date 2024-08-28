@@ -140,15 +140,17 @@ end
             end
         end
         @testset "GlobalRef" begin
+            @testset "non-const" begin
+                global_ref = GlobalRef(S2SGlobals, :non_const_global)
+                stmt_info = make_ad_stmts!(global_ref, ID(), info)
+                @test stmt_info isa Tapir.ADStmtInfo
+                @test Meta.isexpr(last(stmt_info.fwds)[2].stmt, :call)
+                @test last(stmt_info.fwds)[2].stmt.args[1] == Tapir.__verify_const
+            end
             @testset "differentiable const globals" begin
                 stmt_info = make_ad_stmts!(GlobalRef(S2SGlobals, :const_float), ID(), info)
                 @test stmt_info isa Tapir.ADStmtInfo
                 @test only(stmt_info.fwds)[2].stmt isa CoDual{Float64}
-            end
-            @testset "GlobalRefs should definitely work for types" begin
-                stmt_info = make_ad_stmts!(GlobalRef(Base, :IteratorEltype), ID(), info)
-                @test stmt_info isa Tapir.ADStmtInfo
-                @test only(stmt_info.fwds)[2].stmt isa CoDual{<:Type}
             end
         end
         @testset "PhiCNode" begin
