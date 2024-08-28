@@ -1482,13 +1482,6 @@ function inlinable_vararg_invoke_call(
     return invoke(vararg_test_for_invoke, Tuple{typeof(rows), Vararg{N}}, rows, n1, ns...)
 end
 
-# build_rrule should error for this function, because it references a non-isbits global ref.
-const __x_for_mutable_global_ref = Ref(1.0)
-function mutable_global_ref(y::Float64)
-    __x_for_mutable_global_ref[] = y
-    return __x_for_mutable_global_ref[]
-end
-
 # build_rrule should error for this function, because it references a non-const global ref.
 __x_for_non_const_global_ref::Float64 = 5.0
 function non_const_global_ref(y::Float64)

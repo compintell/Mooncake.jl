@@ -383,20 +383,15 @@ end
 # assuming that they are constant, and creating a CoDual with the value. We then check at
 # run-time that the value has not changed.
 function make_ad_stmts!(stmt::GlobalRef, line::ID, info::ADInfo)
+    isconst(stmt) && return const_ad_stmt(stmt, line, info)
 
-    # Constant isbits globals are safe to work with.
-    x = getglobal(stmt.mod, stmt.name)
-    if isconst(stmt) && (isbits(x) || x isa Type)
-        return const_ad_stmt(stmt, line, info)
-    end
-
-    # Anything else can potentially be mutated, and is therefore unsafe.
-    unhandled_feature(
-        "Global variable $stmt is either not isbits, or not declared to be a constant. " *
-        "Such globals are not supported. " *
-        "Please refactor your code to avoid assigning to a global, for example by " *
-        "passing the variable in to the function as an argument."
-    )
+    x = const_codual(getglobal(stmt.mod, stmt.name), info)
+    globalref_id = ID()
+    fwds = [
+        (globalref_id, new_inst(stmt)),
+        (line, new_inst(Expr(:call, __verify_const, globalref_id, x))),
+    ]
+    return ad_stmt_info(line, fwds, nothing)
 end
 
 # Helper used by `make_ad_stmts! ` for `GlobalRef`. Noinline to avoid IR bloat.
