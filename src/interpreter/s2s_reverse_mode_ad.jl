@@ -384,7 +384,8 @@ end
 # run-time that the value has not changed.
 function make_ad_stmts!(stmt::GlobalRef, line::ID, info::ADInfo)
 
-    # Constant isbits globals are safe to work with.
+    # Constant isbits globals are safe to work with. Types are a special case, in that they
+    # aren't bits types, but certainly don't ever get modified.
     x = getglobal(stmt.mod, stmt.name)
     if isconst(stmt) && (isbits(x) || x isa Type)
         return const_ad_stmt(stmt, line, info)
