@@ -249,6 +249,23 @@ end
         # @profview(run_many_times(500, f, rule, fwds_args, out))
     end
 
+    @testset "integration testing for invalid global ref errors" begin
+        @test_throws(
+            Tapir.UnhandledLanguageFeatureException,
+            Tapir.build_rrule(
+                Tapir.TapirInterpreter(),
+                Tuple{typeof(Tapir.TestResources.mutable_global_ref), Float64},
+            ),
+        )
+        @test_throws(
+            Tapir.UnhandledLanguageFeatureException,
+            Tapir.build_rrule(
+                Tapir.TapirInterpreter(),
+                Tuple{typeof(Tapir.TestResources.non_const_global_ref), Float64},
+            )
+        )
+    end
+
     # Tests designed to prevent accidentally re-introducing issues which we have fixed.
     @testset "regression tests" begin
 
