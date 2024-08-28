@@ -2,6 +2,39 @@
 
 Tapir.jl has a number of known qualitative limitations, which we document here.
 
+## Mutation of Global Variables
+
+```@meta
+DocTestSetup = quote
+    using Tapir
+end
+```
+
+While great care is taken in this package to prevent silent errors, this is one edge case that we have yet to provide a satisfactory solution for.
+Consider a function of the form:
+```jldoctest bad_globalref
+julia> const x = Ref(1.0);
+
+julia> function foo(y::Float64)
+           x[] = y
+           return x[]
+       end
+foo (generic function with 1 method)
+```
+`x` is a global variable (if you refer to it in your code, it appears as a `GlobalRef` in the AST or lowered code).
+For some technical reasons that are beyond the scope of this section, this package cannot propagate gradient information through `x`.
+`foo` is the identity function, so it should have gradient `1.0`.
+However, if you differentiate this example, you'll see:
+```jldoctest bad_globalref
+julia> rule = Tapir.build_rrule(foo, 2.0);
+
+julia> Tapir.value_and_gradient!!(rule, foo, 2.0)
+(2.0, (NoTangent(), 0.0))
+```
+Observe that while it has correctly computed the identity function, the gradient is zero.
+
+The takehome: do not attempt to differentiate functions which modify global state. Uses of globals which does not involve mutating them is fine though.
+
 ## Circular References
 
 To a large extent, Tapir.jl does not presently support circular references in an automatic fashion.
@@ -77,12 +110,6 @@ If we gain evidence that this _is_ often a problem in practice, we'll look into 
 
 
 ## Tangent Generation and Pointers
-
-```@meta
-DocTestSetup = quote
-    using Tapir
-end
-```
 
 _**The Problem**_
 
