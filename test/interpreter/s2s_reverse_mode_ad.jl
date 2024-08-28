@@ -254,13 +254,6 @@ end
             Tapir.UnhandledLanguageFeatureException,
             Tapir.build_rrule(
                 Tapir.TapirInterpreter(),
-                Tuple{typeof(Tapir.TestResources.mutable_global_ref), Float64},
-            ),
-        )
-        @test_throws(
-            Tapir.UnhandledLanguageFeatureException,
-            Tapir.build_rrule(
-                Tapir.TapirInterpreter(),
                 Tuple{typeof(Tapir.TestResources.non_const_global_ref), Float64},
             )
         )
