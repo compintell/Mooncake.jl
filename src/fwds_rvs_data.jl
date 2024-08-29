@@ -6,6 +6,8 @@ in addition to the primal data.
 """
 struct NoFData end
 
+Base.copy(::NoFData) = NoFData()
+
 increment!!(::NoFData, ::NoFData) = NoFData()
 
 """
@@ -19,6 +21,8 @@ associated `FData`.
 struct FData{T<:NamedTuple}
     data::T
 end
+
+_copy(x::P) where {P<:FData} = P(_copy(x.data))
 
 fields_type(::Type{FData{T}}) where {T<:NamedTuple} = T
 

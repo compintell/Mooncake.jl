@@ -689,11 +689,15 @@ function _copy(x::P) where {P<:DerivedRule}
     return P(new_fwds_oc, new_pb_oc, x.isva, x.nargs)
 end
 
+_copy(x::Symbol) = x
+
 _copy(x::Tuple) = map(_copy, x)
 
 _copy(x::NamedTuple) = map(_copy, x)
 
 _copy(x::Ref{T}) where {T} = isassigned(x) ? Ref{T}(_copy(x[])) : Ref{T}()
+
+_copy(x::Type) = x
 
 _copy(x) = copy(x)
 
