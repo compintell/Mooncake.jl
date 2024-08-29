@@ -143,6 +143,7 @@ end
             @testset "non-const" begin
                 global_ref = GlobalRef(S2SGlobals, :non_const_global)
                 stmt_info = make_ad_stmts!(global_ref, ID(), info)
+                @test Tapir.TestResources.non_const_global_ref(5.0) == 5.0 # run primal
                 @test stmt_info isa Tapir.ADStmtInfo
                 @test Meta.isexpr(last(stmt_info.fwds)[2].stmt, :call)
                 @test last(stmt_info.fwds)[2].stmt.args[1] == Tapir.__verify_const
@@ -166,6 +167,12 @@ end
             )
         end
         @testset "Expr" begin
+            @testset "assignment to GlobalRef" begin
+                @test_throws(
+                    Tapir.UnhandledLanguageFeatureException,
+                    make_ad_stmts!(Expr(:(=), GlobalRef(Main, :a), 5.0), ID(), info)
+                )
+            end
             @testset "copyast" begin
                 stmt = Expr(:copyast, QuoteNode(:(hi)))
                 ad_stmts = make_ad_stmts!(stmt, ID(), info)
@@ -241,6 +248,16 @@ end
         # f(rule, fwds_args, out) = rule(fwds_args...)[2]((Tapir.zero_rdata(primal(out))))
         # f(rule, fwds_args, out)
         # @profview(run_many_times(500, f, rule, fwds_args, out))
+    end
+
+    @testset "integration testing for invalid global ref errors" begin
+        @test_throws(
+            Tapir.UnhandledLanguageFeatureException,
+            Tapir.build_rrule(
+                Tapir.TapirInterpreter(),
+                Tuple{typeof(Tapir.TestResources.non_const_global_ref), Float64},
+            )
+        )
     end
 
     # Tests designed to prevent accidentally re-introducing issues which we have fixed.

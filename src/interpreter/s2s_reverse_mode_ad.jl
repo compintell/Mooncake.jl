@@ -588,6 +588,13 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
     ]
         # Expressions which do not require any special treatment.
         return ad_stmt_info(line, stmt, nothing)
+
+    elseif stmt.head == :(=) && stmt.args[1] isa GlobalRef
+        msg = "Encountered assignment to global variable: $(stmt.args[1]). " *
+            "Cannot differentiate through assignments to globals. " *
+            "Please refactor your code to avoid assigning to a global, for example by " *
+            "passing the variable in to the function as an argument."
+        unhandled_feature(msg)
     else
         # Encountered an expression that we've not seen before.
         throw(error("Unrecognised expression $stmt"))
