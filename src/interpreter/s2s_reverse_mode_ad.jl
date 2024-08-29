@@ -801,8 +801,6 @@ function build_rrule(
         oc_cache_key = ClosureCacheKey(interp.world, (sig_or_mi, safety_on))
         if haskey(interp.oc_cache, oc_cache_key)
             return deepcopy(interp.oc_cache[oc_cache_key])
-            # fwds_oc = replace_captures(existing_fwds_oc, shared_data)
-            # pb_oc = replace_captures(existing_pb_oc, shared_data)
         else
 
             # Reset id count. This ensures that the IDs generated are the same each time this
