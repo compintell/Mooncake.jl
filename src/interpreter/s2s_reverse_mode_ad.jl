@@ -778,8 +778,8 @@ const TAPIR_INFERENCE_LOCK = ReentrantLock()
 """
     build_rrule(interp::PInterp{C}, sig_or_mi; safety_on=false) where {C}
 
-Returns a `DerivedRule` which is an `rrule!!` for `sig_or_mi` in context `C`. See the docstring
-for `rrule!!` for more info.
+Returns a `DerivedRule` which is an `rrule!!` for `sig_or_mi` in context `C`. See the
+docstring for `rrule!!` for more info.
 
 If `safety_on` is `true`, then all calls to rules are replaced with calls to `SafeRRule`s.
 """
