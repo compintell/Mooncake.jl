@@ -41,6 +41,15 @@ struct TapirInterpreter{C} <: CC.AbstractInterpreter
     end
 end
 
+# Don't print out the IRCode object, because this tends to pollute the REPL. Just make it
+# clear that this is a MistyClosure, which contains an OpaqueClosure.
+Base.show(io::IO, mime::MIME"text/plain", mc::TapirInterpreter) = _show_tapir_interp(io, mime, mc)
+Base.show(io::IO, mc::TapirInterpreter) = _show_tapir_interp(io, MIME"text/plain"(), mc)
+
+function _show_tapir_interp(io::IO, mime::MIME"text/plain", mc::TapirInterpreter)
+    print(io, "TapirInterpreter()")
+end
+
 TapirInterpreter() = TapirInterpreter(DefaultCtx)
 
 const PInterp = TapirInterpreter
