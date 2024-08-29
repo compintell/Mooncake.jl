@@ -143,6 +143,7 @@ end
             @testset "non-const" begin
                 global_ref = GlobalRef(S2SGlobals, :non_const_global)
                 stmt_info = make_ad_stmts!(global_ref, ID(), info)
+                @test Tapir.TestResources.non_const_global_ref(5.0) == 5.0 # run primal
                 @test stmt_info isa Tapir.ADStmtInfo
                 @test Meta.isexpr(last(stmt_info.fwds)[2].stmt, :call)
                 @test last(stmt_info.fwds)[2].stmt.args[1] == Tapir.__verify_const
