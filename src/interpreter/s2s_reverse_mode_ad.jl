@@ -109,7 +109,7 @@ codegen which produces the forwards- and reverse-passes.
     applied recursively, so that safe mode is also switched on in derived rules.
 - `is_used_dict`: for each `ID` associated to a line of code, is `false` if line is not used
     anywhere in any other line of code.
-- `zero_lazy_rdata_ref_id`: for any arguments whose type doesn't permit the construction of
+- `lazy_zero_rdata_ref_id`: for any arguments whose type doesn't permit the construction of
     a zero-valued rdata directly from the type alone (e.g. a struct with an abstractly-
     typed field), we need to have a zero-valued rdata available on the reverse-pass so that
     this zero-valued rdata can be returned if the argument (or a part of it) is never used
@@ -792,45 +792,47 @@ function build_rrule(
         @info "Compiling rule for $sig_or_mi in safe mode. Disable for best performance."
     end
 
-    # Reset id count. This ensures that the IDs generated are the same each time this
-    # function runs.
-    seed_id!()
-
     # If we have a hand-coded rule, just use that.
     _is_primitive(C, sig_or_mi) && return (safety_on ? SafeRRule(rrule!!) : rrule!!)
-
-    # Grab code associated to the primal.
-    ir, _ = lookup_ir(interp, sig_or_mi)
-    Treturn = Base.Experimental.compute_ir_rettype(ir)
-
     lock(TAPIR_INFERENCE_LOCK)
     try
-        # Normalise the IR, and generated BBCode version of it.
-        isva, spnames = is_vararg_and_sparam_names(sig_or_mi)
-        ir = normalise!(ir, spnames)
-        primal_ir = BBCode(ir)
-
-        # Compute global info.
-        info = ADInfo(interp, primal_ir, safety_on)
-
-        # For each block in the fwds and pullback BBCode, translate all statements. Running this
-        # will, in general, push items to `info.shared_data_pairs`.
-        ad_stmts_blocks = map(primal_ir.blocks) do primal_blk
-            ids = primal_blk.inst_ids
-            primal_stmts = map(x -> x.stmt, primal_blk.insts)
-            return (primal_blk.id, make_ad_stmts!.(primal_stmts, ids, Ref(info)))
-        end
-
-        # Make shared data, and construct BBCode for forwards-pass and pullback.
-        shared_data = shared_data_tuple(info.shared_data_pairs)
-
         # If we've already derived the OpaqueClosures and info, do not re-derive, just create a
         # copy and pass in new shared data.
-        if haskey(interp.oc_cache, (sig_or_mi, safety_on))
-            existing_fwds_oc, existing_pb_oc = interp.oc_cache[(sig_or_mi, safety_on)]
-            fwds_oc = replace_captures(existing_fwds_oc, shared_data)
-            pb_oc = replace_captures(existing_pb_oc, shared_data)
+        oc_cache_key = ClosureCacheKey(interp.world, (sig_or_mi, safety_on))
+        if haskey(interp.oc_cache, oc_cache_key)
+            return deepcopy(interp.oc_cache[oc_cache_key])
+            # fwds_oc = replace_captures(existing_fwds_oc, shared_data)
+            # pb_oc = replace_captures(existing_pb_oc, shared_data)
         else
+
+            # Reset id count. This ensures that the IDs generated are the same each time this
+            # function runs.
+            seed_id!()
+
+            # Grab code associated to the primal.
+            ir, _ = lookup_ir(interp, sig_or_mi)
+            Treturn = Base.Experimental.compute_ir_rettype(ir)
+
+            # Normalise the IR, and generated BBCode version of it.
+            isva, spnames = is_vararg_and_sparam_names(sig_or_mi)
+            ir = normalise!(ir, spnames)
+            primal_ir = BBCode(ir)
+
+            # Compute global info.
+            info = ADInfo(interp, primal_ir, safety_on)
+
+            # For each block in the fwds and pullback BBCode, translate all statements. Running this
+            # will, in general, push items to `info.shared_data_pairs`.
+            ad_stmts_blocks = map(primal_ir.blocks) do primal_blk
+                ids = primal_blk.inst_ids
+                primal_stmts = map(x -> x.stmt, primal_blk.insts)
+                return (primal_blk.id, make_ad_stmts!.(primal_stmts, ids, Ref(info)))
+            end
+
+            # Make shared data, and construct BBCode for forwards-pass and pullback.
+            shared_data = shared_data_tuple(info.shared_data_pairs)
+
+
             fwds_ir = forwards_pass_ir(primal_ir, ad_stmts_blocks, info, _typeof(shared_data))
             pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, _typeof(shared_data))
 
@@ -855,11 +857,12 @@ function build_rrule(
                 OpaqueClosure(optimised_pb_ir, shared_data...; do_compile=true),
                 optimised_pb_ir,
             )
-            interp.oc_cache[(sig_or_mi, safety_on)] = (fwds_oc, pb_oc)
-        end
 
-        raw_rule = DerivedRule(fwds_oc, pb_oc, Val(isva), Val(num_args(info)))
-        return safety_on ? SafeRRule(raw_rule) : raw_rule
+            raw_rule = DerivedRule(fwds_oc, pb_oc, Val(isva), Val(num_args(info)))
+            rule = safety_on ? SafeRRule(raw_rule) : raw_rule
+            interp.oc_cache[oc_cache_key] = rule
+            return rule
+        end
     finally
         unlock(TAPIR_INFERENCE_LOCK)
     end
@@ -1257,6 +1260,10 @@ function DynamicDerivedRule(interp::TapirInterpreter, safety_on::Bool)
     return DynamicDerivedRule(interp, Dict{Any, Any}(), safety_on)
 end
 
+function Base.deepcopy_internal(x::P, ::IdDict) where {P<:DynamicDerivedRule}
+    return P(x.interp, Dict{Any, Any}(), x.safety_on)
+end
+
 function (dynamic_rule::DynamicDerivedRule)(args::Vararg{Any, N}) where {N}
     sig = Tuple{map(_typeof ∘ primal, args)...}
     rule = get(dynamic_rule.cache, sig, nothing)
@@ -1293,6 +1300,15 @@ mutable struct LazyDerivedRule{Tinterp<:TapirInterpreter, primal_sig, Trule}
     function LazyDerivedRule(interp::A, mi::Core.MethodInstance, safety_on::Bool) where {A}
         return new{A, mi.specTypes, rule_type(interp, mi; safety_on)}(interp, safety_on, mi)
     end
+    function LazyDerivedRule{Tinterp, Tprimal_sig, Trule}(
+        interp::Tinterp, mi::Core.MethodInstance, safety_on::Bool
+    ) where {Tinterp, Tprimal_sig, Trule}
+        return new{Tinterp, Tprimal_sig, Trule}(interp, safety_on, mi)
+    end
+end
+
+function Base.deepcopy_internal(x::P, ::IdDict) where {P<:LazyDerivedRule}
+    return P(x.interp, x.mi, x.safety_on)
 end
 
 function (rule::LazyDerivedRule{T, sig, Trule})(args::Vararg{Any, N}) where {N, T, sig, Trule}
