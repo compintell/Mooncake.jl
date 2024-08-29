@@ -363,6 +363,8 @@ Nothing to propagate backwards on the reverse-pass.
 """
 struct NoRData end
 
+Base.copy(::NoRData) = NoRData()
+
 @inline increment!!(::NoRData, ::NoRData) = NoRData()
 
 @inline increment_field!!(::NoRData, y, ::Val) = NoRData()
@@ -370,6 +372,8 @@ struct NoRData end
 struct RData{T<:NamedTuple}
     data::T
 end
+
+_copy(x::P) where {P<:RData} = P(_copy(x.data))
 
 fields_type(::Type{RData{T}}) where {T<:NamedTuple} = T
 
@@ -726,6 +730,8 @@ performed in AD.
 struct LazyZeroRData{P, Tdata}
     data::Tdata
 end
+
+_copy(x::P) where {P<:LazyZeroRData} = P(_copy(x.data))
 
 # Returns the type which must be output by LazyZeroRData whenever it is passed a `P`.
 @inline function lazy_zero_rdata_type(::Type{P}) where {P}

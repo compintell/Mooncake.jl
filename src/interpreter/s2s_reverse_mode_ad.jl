@@ -234,6 +234,8 @@ struct RRuleZeroWrapper{Trule}
     rule::Trule
 end
 
+_copy(x::P) where {P<:RRuleZeroWrapper} = P(_copy(x.rule))
+
 struct RRuleWrapperPb{Tpb!!, Tl}
     pb!!::Tpb!!
     l::Tl
@@ -678,6 +680,23 @@ struct DerivedRule{Tfwds_oc, Tpb_oc, Tisva<:Val, Tnargs<:Val}
     nargs::Tnargs
 end
 
+_copy(::Nothing) = nothing
+
+function _copy(x::P) where {P<:DerivedRule}
+    new_captures = _copy(x.fwds_oc.oc.captures)
+    new_fwds_oc = replace_captures(x.fwds_oc, new_captures)
+    new_pb_oc = replace_captures(x.pb_oc, new_captures)
+    return P(new_fwds_oc, new_pb_oc, x.isva, x.nargs)
+end
+
+_copy(x::Tuple) = map(_copy, x)
+
+_copy(x::NamedTuple) = map(_copy, x)
+
+_copy(x::Ref{T}) where {T} = isassigned(x) ? Ref{T}(_copy(x[])) : Ref{T}()
+
+_copy(x) = copy(x)
+
 @inline function (fwds::DerivedRule{P, Q, S})(args::Vararg{CoDual, N}) where {P, Q, S, N}
     uf_args = __unflatten_codual_varargs(fwds.isva, args, fwds.nargs)
     pb!! = Pullback(fwds.pb_oc, fwds.isva, nvargs(length(args), fwds.nargs))
@@ -800,7 +819,7 @@ function build_rrule(
         # copy and pass in new shared data.
         oc_cache_key = ClosureCacheKey(interp.world, (sig_or_mi, safety_on))
         if haskey(interp.oc_cache, oc_cache_key)
-            return deepcopy(interp.oc_cache[oc_cache_key])
+            return _copy(interp.oc_cache[oc_cache_key])
         else
 
             # Reset id count. This ensures that the IDs generated are the same each time this
@@ -829,8 +848,6 @@ function build_rrule(
 
             # Make shared data, and construct BBCode for forwards-pass and pullback.
             shared_data = shared_data_tuple(info.shared_data_pairs)
-
-
             fwds_ir = forwards_pass_ir(primal_ir, ad_stmts_blocks, info, _typeof(shared_data))
             pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, _typeof(shared_data))
 
@@ -1258,9 +1275,7 @@ function DynamicDerivedRule(interp::TapirInterpreter, safety_on::Bool)
     return DynamicDerivedRule(interp, Dict{Any, Any}(), safety_on)
 end
 
-function Base.deepcopy_internal(x::P, ::IdDict) where {P<:DynamicDerivedRule}
-    return P(x.interp, Dict{Any, Any}(), x.safety_on)
-end
+_copy(x::P) where {P<:DynamicDerivedRule} = P(x.interp, Dict{Any, Any}(), x.safety_on)
 
 function (dynamic_rule::DynamicDerivedRule)(args::Vararg{Any, N}) where {N}
     sig = Tuple{map(_typeof ∘ primal, args)...}
@@ -1305,9 +1320,7 @@ mutable struct LazyDerivedRule{Tinterp<:TapirInterpreter, primal_sig, Trule}
     end
 end
 
-function Base.deepcopy_internal(x::P, ::IdDict) where {P<:LazyDerivedRule}
-    return P(x.interp, x.mi, x.safety_on)
-end
+_copy(x::P) where {P<:LazyDerivedRule} = P(x.interp, x.mi, x.safety_on)
 
 function (rule::LazyDerivedRule{T, sig, Trule})(args::Vararg{Any, N}) where {N, T, sig, Trule}
     if !isdefined(rule, :rule)

@@ -466,6 +466,10 @@ function test_rule(
 
     # Test the performance of the rule.
     test_rrule_performance(perf_flag, rule, x_x̄...)
+
+    # Test the interface again, in order to verify that caching is working correctly.
+    rule_2 = Tapir.build_rrule(interp, _typeof(__get_primals(x)); safety_on)
+    test_rrule_interface(x_x̄..., rule=rule_2)
 end
 
 #
