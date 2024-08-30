@@ -11,6 +11,8 @@ mutable struct Stack{T}
     Stack{T}() where {T} = new{T}(Vector{T}(undef, 0), 0)
 end
 
+_copy(::Stack{T}) where {T} = Stack{T}()
+
 @inline function Base.push!(x::Stack{T}, val::T) where {T}
     position = x.position + 1
     memory = x.memory

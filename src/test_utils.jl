@@ -512,6 +512,10 @@ function test_rule(
 
     # Test the performance of the rule.
     test_rrule_performance(perf_flag, rule, x_x̄...)
+
+    # Test the interface again, in order to verify that caching is working correctly.
+    rule_2 = Tapir.build_rrule(interp, _typeof(__get_primals(x)); safety_on)
+    test_rrule_interface(x_x̄..., rule=rule_2)
 end
 
 #
@@ -1528,6 +1532,13 @@ function inlinable_vararg_invoke_call(
     rows::Tuple{Vararg{Int}}, n1::N, ns::Vararg{N}
 ) where {N}
     return invoke(vararg_test_for_invoke, Tuple{typeof(rows), Vararg{N}}, rows, n1, ns...)
+end
+
+# build_rrule should error for this function, because it references a non-const global ref.
+__x_for_non_const_global_ref::Float64 = 5.0
+function non_const_global_ref(y::Float64)
+    global __x_for_non_const_global_ref = y
+    return __x_for_non_const_global_ref
 end
 
 function generate_test_functions()

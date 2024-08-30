@@ -5,6 +5,14 @@
 # The most important bit of this code is `inlining_policy` -- the rest is copy + pasted
 # boiler plate, largely taken from https://github.com/JuliaLang/julia/blob/2fe4190b3d26b4eee52b2b1b1054ddd6e38a941e/test/compiler/newinterp.jl#L11
 
+
+struct ClosureCacheKey
+    world_age::UInt
+    key::Any
+end
+
+const GLOBAL_CLOSURE_CACHE = Dict{ClosureCacheKey, Any}()
+
 struct TICache
     dict::IdDict{Core.MethodInstance, Core.CodeInstance}
 end
@@ -18,7 +26,7 @@ struct TapirInterpreter{C} <: CC.AbstractInterpreter
     opt_params::CC.OptimizationParams
     inf_cache::Vector{CC.InferenceResult}
     code_cache::TICache
-    oc_cache::Dict{Any, Any}
+    oc_cache::Dict{ClosureCacheKey, Any}
     function TapirInterpreter(
         ::Type{C};
         meta=nothing,
@@ -27,9 +35,19 @@ struct TapirInterpreter{C} <: CC.AbstractInterpreter
         opt_params::CC.OptimizationParams=CC.OptimizationParams(),
         inf_cache::Vector{CC.InferenceResult}=CC.InferenceResult[], 
         code_cache::TICache=TICache(),
+        oc_cache::Dict{ClosureCacheKey, Any}=GLOBAL_CLOSURE_CACHE,
     ) where {C}
-        return new{C}(meta, world, inf_params, opt_params, inf_cache, code_cache, Dict())
+        return new{C}(meta, world, inf_params, opt_params, inf_cache, code_cache, oc_cache)
     end
+end
+
+# Don't print out the IRCode object, because this tends to pollute the REPL. Just make it
+# clear that this is a MistyClosure, which contains an OpaqueClosure.
+Base.show(io::IO, mime::MIME"text/plain", mc::TapirInterpreter) = _show_tapir_interp(io, mime, mc)
+Base.show(io::IO, mc::TapirInterpreter) = _show_tapir_interp(io, MIME"text/plain"(), mc)
+
+function _show_tapir_interp(io::IO, mime::MIME"text/plain", mc::TapirInterpreter)
+    print(io, "TapirInterpreter()")
 end
 
 TapirInterpreter() = TapirInterpreter(DefaultCtx)
