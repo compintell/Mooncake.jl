@@ -182,14 +182,16 @@ function has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict{Tuple{U
         end)
     else
         for n in fieldnames(T)
-            if isdefined(x, n)
-                if isdefined(y, n) && has_equal_data_internal(getfield(x, n), getfield(y, n), equal_undefs, d)
+            if !isdefined(x, n) && !isdefined(y, n)
+                continue # consider undefined fields as equal
+            elseif isdefined(x, n) && isdefined(y, n)
+                if has_equal_data_internal(getfield(x, n), getfield(y, n), equal_undefs, d)
                     continue
                 else
                     return false
                 end
-            else
-                return isdefined(y, n) ? false : true
+            else # one is defined and the other is not
+                return false
             end
         end
         return true
@@ -1079,10 +1081,18 @@ end
 mutable struct TypeUnstableMutableStruct
     a::Float64
     b
+    TypeUnstableMutableStruct() = new()
+    TypeUnstableMutableStruct(a::Float64) = new(a)
+    TypeUnstableMutableStruct(a::Float64, b) = new(a, b)
 end
 
 function Base.:(==)(a::TypeUnstableMutableStruct, b::TypeUnstableMutableStruct)
     return equal_field(a, b, :a) && equal_field(a, b, :b)
+end
+
+mutable struct TypeUnstableMutableStruct2
+    a
+    b
 end
 
 struct TypeStableStruct{T}
@@ -1096,9 +1106,17 @@ function Base.:(==)(a::TypeStableStruct, b::TypeStableStruct)
     return equal_field(a, b, :a) && equal_field(a, b, :b)
 end
 
+struct TypeUnstableStruct2
+    a
+    b
+end
+
 struct TypeUnstableStruct
     a::Float64
     b
+    TypeUnstableStruct() = new()
+    TypeUnstableStruct(a::Float64) = new(a)
+    TypeUnstableStruct(a::Float64, b) = new(a, b)
 end
 
 function Base.:(==)(a::TypeUnstableStruct, b::TypeUnstableStruct)
@@ -1120,6 +1138,36 @@ end
 
 struct StructNoRvs
     x::Vector{Float64}
+end
+
+#
+# generate test cases for circular references
+#
+
+function make_circular_reference_struct()
+    c = TypeUnstableMutableStruct(1.0, nothing)
+    c.b = c
+    return c
+end
+
+function make_indirect_circular_reference_struct()
+    c = TypeUnstableMutableStruct(1.0)
+    _c = TypeUnstableMutableStruct(1.0, c)
+    c.b = _c
+    return c
+end
+
+function make_circular_reference_array()
+    a = Any[1.0, 2.0, 3.0]
+    a[1] = a
+    return a
+end
+
+function make_indirect_circular_reference_array()
+    a = Any[1.0, 2.0, 3.0]
+    b = Any[a, 4.0]
+    a[1] = b
+    return a
 end
 
 #

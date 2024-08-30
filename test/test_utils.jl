@@ -1,47 +1,4 @@
 @testset "test_utils" begin
-    struct TesterStruct
-        x
-        y::Float64
-        TesterStruct() = new()
-        TesterStruct(x) = new(x)
-        TesterStruct(x, y) = new(x, y)
-    end
-
-    mutable struct MutableTesterStruct
-        x
-        y
-        MutableTesterStruct() = new()
-        MutableTesterStruct(x, y) = new(x, y)
-    end
-
-    function make_circular_reference_struct()
-        c = MutableTesterStruct()
-        c.x = c
-        c.y = 1.0
-        return c
-    end
-
-    function make_indirect_circular_reference_struct()
-        c = MutableTesterStruct()
-        _c = MutableTesterStruct(c, 1.0)
-        c.x = _c
-        c.y = 2.0
-        return c
-    end
-
-    function make_circular_reference_array()
-        a = Any[1.0, 2.0, 3.0]
-        a[1] = a
-        return a
-    end
-
-    function make_indirect_circular_reference_array()
-        a = Any[1.0, 2.0, 3.0]
-        b = Any[a, 4.0]
-        a[1] = b
-        return a
-    end
-
     @testset "has_equal_data" begin
         @test !has_equal_data(5.0, 4.0)
         @test has_equal_data(5.0, 5.0)
@@ -60,16 +17,16 @@
         @test has_equal_data(Diagonal(ones(5)), Diagonal(ones(5)))
         @test has_equal_data("hello", "hello")
         @test !has_equal_data("hello", "goodbye")
-        @test has_equal_data(TesterStruct(), TesterStruct())
-        @test has_equal_data(TesterStruct(5, 4.0), TesterStruct(5, 4.0))
-        @test !has_equal_data(TesterStruct(), TesterStruct(5))
+        @test has_equal_data(TypeUnstableStruct(), TypeUnstableStruct())
+        @test has_equal_data(TypeUnstableStruct(4.0, 5), TypeUnstableStruct(4.0, 5))
+        @test !has_equal_data(TypeUnstableStruct(), TypeUnstableStruct(4.0))
         @test has_equal_data(make_circular_reference_struct(), make_circular_reference_struct())
         @test has_equal_data(make_indirect_circular_reference_struct(), make_indirect_circular_reference_struct())
         @test has_equal_data(make_circular_reference_array(), make_circular_reference_array())
         @test has_equal_data(make_indirect_circular_reference_array(), make_indirect_circular_reference_array())
-        @test !has_equal_data((s = make_circular_reference_struct(); s.y = 1.0; s), (t = make_circular_reference_struct(); t.y = 2.0; t))
+        @test !has_equal_data((s = make_circular_reference_struct(); s.a = 1.0; s), (t = make_circular_reference_struct(); t.a = 2.0; t))
         @test !has_equal_data((a = make_indirect_circular_reference_array(); a[1][1] = 1.0; a), (b = make_indirect_circular_reference_array(); b[1][1] = 2.0; b))
-        @test !has_equal_data((s = make_indirect_circular_reference_struct(); s.x.y = 1.0; s), (t = make_indirect_circular_reference_struct(); t.x.y = 2.0; t))
+        @test !has_equal_data((s = make_indirect_circular_reference_struct(); s.b.a = 1.0; s), (t = make_indirect_circular_reference_struct(); t.b.a = 2.0; t))
         @test !has_equal_data((a = make_indirect_circular_reference_array(); a[1][1] = 1.0; a), (b = make_indirect_circular_reference_array(); b[1][1] = 2.0; b))
     end
     @testset "populate_address_map" begin

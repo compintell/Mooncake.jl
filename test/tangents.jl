@@ -121,52 +121,39 @@ end
 # TODO: add the following test to `tangent_test_cases`
 @testset "zero_tangent and randn_tangent" begin
     @testset "circular reference" begin
-        foo = Tapir.TestResources.TypeUnstableMutableStruct(5.0, nothing)
-        foo.b = foo
+        foo = make_circular_reference_struct()
         zt = Tapir.zero_tangent(foo)
-        @test zt.fields.b === zt
+        @test zt.fields.b.tangent === zt
         rt = Tapir.randn_tangent(Xoshiro(123456), foo)
-        @test rt.fields.b === rt
+        @test rt.fields.b.tangent === rt
     end
 
     @testset "struct with non-concrete fields" begin
         bar = Tapir.TestResources.TypeUnstableStruct(5.0, 1.0)
-        @test Tapir.zero_tangent(bar) == Tangent{@NamedTuple{a::Float64, b}}(@NamedTuple{a::Float64, b}((0.0, 0.0)))
+        @test Tapir.zero_tangent(bar) == Tangent{@NamedTuple{a::PossiblyUninitTangent{Float64}, b::PossiblyUninitTangent{Any}}}((a=PossiblyUninitTangent{Float64}(0.0), b=PossiblyUninitTangent{Any}(0.0)))
     end
     
     @testset "duplicate reference" begin
         @testset "subarray" begin
-            mutable struct MutDupRefSubArray
-                x
-                y
-            end
-            
             x = [1.0, 2.0, 3.0]
-            mut_struct = MutDupRefSubArray(view(x, 1:2), view(x, 1:2))
-            mt = Tapir.zero_tangent(mut_struct)
-            @test mt isa Tapir.MutableTangent
-            @test mt.fields.x === mt.fields.y
-
-            rt = Tapir.randn_tangent(Xoshiro(123456), mut_struct)
-            @test rt.fields.x === rt.fields.y
-
-            struct ImmutableDupRefSubArray
-                x
-                y
-            end
-
-            immutable_struct = ImmutableDupRefSubArray(view(x, 1:2), view(x, 1:1))
-            it = Tapir.zero_tangent(immutable_struct)
-            @test it isa Tapir.Tangent
-            @test it.fields.x.fields.parent === it.fields.y.fields.parent
+            immutable_struct = TypeUnstableStruct2(view(x, 1:2), view(x, 1:2))
+            mt = Tapir.zero_tangent(immutable_struct)
+            @test mt isa Tapir.Tangent
+            @test mt.fields.a === mt.fields.b
             rt = Tapir.randn_tangent(Xoshiro(123456), immutable_struct)
-            @test rt.fields.x.fields.parent === rt.fields.y.fields.parent
+            @test rt.fields.a === rt.fields.b
+
+            mutable_struct = TypeUnstableMutableStruct2(view(x, 1:2), view(x, 1:2))
+            mt = Tapir.zero_tangent(mutable_struct)
+            @test mt isa Tapir.MutableTangent
+            @test mt.fields.a.fields.parent === mt.fields.b.fields.parent
+            rt = Tapir.randn_tangent(Xoshiro(123456), mutable_struct)
+            @test rt.fields.a.fields.parent === rt.fields.b.fields.parent
         end
     end
 
     @testset "indirect circular reference" begin
-        m = [Any[1], 2.0]
-        m[1][1] = m
+        m = make_indirect_circular_reference_array()
         zt = Tapir.zero_tangent(m)
         @test zt[1][1] === zt
         rt = Tapir.randn_tangent(Xoshiro(123456), m)
