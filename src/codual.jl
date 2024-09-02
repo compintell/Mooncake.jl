@@ -15,7 +15,7 @@ end
 primal(x::CoDual) = x.x
 tangent(x::CoDual) = x.dx
 Base.copy(x::CoDual) = CoDual(copy(primal(x)), copy(tangent(x)))
-_copy(x::P) where {P<:CoDual} = P(_copy(x.x), _copy(x.dx))
+_copy(x::P) where {P<:CoDual} = x
 
 """
     zero_codual(x)
