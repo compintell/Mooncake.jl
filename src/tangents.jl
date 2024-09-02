@@ -335,7 +335,7 @@ function is_concrete_or_typelike(P::DataType)
     if P <: Tuple
         P == Tuple && return false
         return all(is_concrete_or_typelike, P.parameters)
-    elseif P <: DataType
+    elseif P <: Type
         return true
     else
         return isconcretetype(P)
