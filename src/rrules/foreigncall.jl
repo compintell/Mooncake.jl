@@ -489,12 +489,11 @@ function rrule!!(f::CoDual{<:Type{UnionAll}}, x::CoDual{<:TypeVar}, y::CoDual{<:
     return zero_fcodual(UnionAll(primal(x), primal(y))), NoPullback(f, x, y)
 end
 
-@is_primitive MinimalCtx Tuple{typeof(hash), Union{String, SubString{String}}, UInt}
-function rrule!!(
-    f::CoDual{typeof(hash)}, s::CoDual{P}, h::CoDual{UInt}
-) where {P<:Union{String, SubString{String}}}
-    return zero_fcodual(hash(primal(s), primal(h))), NoPullback(f, s, h)
+@is_primitive MinimalCtx Tuple{typeof(hash), Vararg}
+function rrule!!(f::CoDual{typeof(hash)}, x::Vararg{CoDual, N}) where {N}
+    return zero_fcodual(hash(map(primal, x)...)), NoPullback(f, x...)
 end
+
 
 function rrule!!(
     ::CoDual{typeof(_foreigncall_)}, ::CoDual{Val{:jl_string_ptr}}, args::Vararg{CoDual, N}
