@@ -613,6 +613,8 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:foreigncall})
         (false, :stability, nothing, deepcopy, (a=5.0, b=randn(5))),
         (false, :none, nothing, UnionAll, TypeVar(:a), Real),
         (false, :none, nothing, hash, "5", UInt(3)),
+        (false, :none, nothing, hash, Float64, UInt(5)),
+        (false, :none, nothing, hash, Float64),
         (
             true, :none, nothing,
             _foreigncall_,
