@@ -546,6 +546,17 @@ function test_rule_and_type_interactions(rng::AbstractRNG, x::P) where {P}
 end
 
 """
+    test_tangent_type(primal_type, expected_tangent_type)
+
+Checks that `tangent_type(primal_type)` yields `expected_tangent_type`, and that everything
+infers / optimises away.
+"""
+function test_tangent_type(primal_type::Type, expected_tangent_type::Type)
+    @test tangent_type(primal_type) == expected_tangent_type
+    test_opt(Shim(), tangent_type, Tuple{_typeof(primal_type)})
+end
+
+"""
     test_tangent_consistency(rng::AbstractRNG, p::P; interface_only=false) where {P}
 
 Like `test_tangent`, but relies on `zero_tangent` and `randn_tangent` to generate test
