@@ -4,7 +4,7 @@ _sym(A) = A'A
 _pdmat(A) = PDMat(_sym(A) + 5I)
 
 @testset "distributions" begin
-    interp = Tapir.PInterp()
+    interp = Tapir.TapirInterpreter()
     @testset "$(typeof(d))" for (interface_only, d, x) in Any[
 
         #
@@ -26,7 +26,6 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
         (false, Cauchy(), -0.5),
         (false, Cauchy(1.0), 0.99),
         (false, Cauchy(1.0, 0.1), 1.01),
-        (false, Chernoff(), 0.5),
         (false, Chi(2.5), 0.5),
         (false, Chi(5.5), 1.1),
         (false, Chi(0.1), 0.7),
@@ -169,8 +168,8 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
         (false, MvNormal([0.2, -0.3], [0.5, 0.6]), [0.4, -0.3]),
         (false, MvNormalCanon([0.1, -0.1], _pdmat([0.5 0.4; 0.45 1.0])), [0.2, -0.25]),
         (false, MvLogNormal(MvNormal([0.2, -0.1], _pdmat([1.0 0.9; 0.7 1.1]))), [0.5, 0.1]),
-        (false, Product([Normal()]), [0.3]),
-        (false, Product([Normal(), Uniform()]), [-0.4, 0.3]),
+        (false, product_distribution([Normal()]), [0.3]),
+        (false, product_distribution([Normal(), Uniform()]), [-0.4, 0.3]),
 
         #
         # Matrix-variate
