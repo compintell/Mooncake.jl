@@ -444,8 +444,10 @@ rdata_type(::Type{<:Ptr}) = NoRData
     isa(P, Union) && return Union{rdata_type(P.a), rdata_type(P.b)}
     isempty(P.parameters) && return NoRData
     isa(last(P.parameters), Core.TypeofVararg) && return Any
-    all(p -> rdata_type(p) == NoRData, P.parameters) && return NoRData
-    return Tuple{map(rdata_type, fieldtypes(P))...}
+    nordata_tuple = Tuple{Vararg{NoRData, length(P.parameters)}}
+    rdata_type_tuple = Tuple{map(rdata_type, fieldtypes(P))...}
+    rdata_type_tuple <: nordata_tuple && return NoRData
+    return nordata_tuple <: rdata_type_tuple ? Union{NoRData, rdata_type_tuple} : rdata_type_tuple
 end
 
 function rdata_type(::Type{NamedTuple{names, T}}) where {names, T<:Tuple}
