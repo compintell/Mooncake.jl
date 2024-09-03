@@ -15,7 +15,6 @@ Its derivative at ``x`` is usually thought of as the scalar ``\alpha \in \RR`` s
 \text{d}f = \alpha \, \text{d}x .
 ```
 Loosely speaking, by this notation we mean that for arbitrary small changes ``\text{d} x`` in the input to ``f``, the change in the output ``\text{d} f`` is ``\alpha \, \text{d}x``.
-We refer readers to the first few minutes of the [ for a more careful explanation.
 We refer readers to the first few minutes of the [first lecture mentioned before](https://ocw.mit.edu/courses/18-s096-matrix-calculus-for-machine-learning-and-beyond-january-iap-2023/resources/ocw_18s096_lecture01-part2_2023jan18_mp4/) for a more careful explanation.
 
 _**Vector-to-Vector Functions**_
