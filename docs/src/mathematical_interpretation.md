@@ -269,7 +269,7 @@ Consequently, we use the same type to represent both.
 
 _**Representing Gradients**_
 
-This package assigns to each type in Julia a unique `tangent_type`, to purpose of which is to contain the gradients computed during reverse mode AD.
+This package assigns to each type in Julia a unique `tangent_type`, the purpose of which is to contain the gradients computed during reverse mode AD.
 The extended docstring for [`tangent_type`](@ref) provides the best introduction to the types which are used to represent tangents / gradients.
 
 ```@docs
