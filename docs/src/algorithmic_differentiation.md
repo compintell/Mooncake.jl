@@ -52,7 +52,7 @@ The purpose of this linear operator is to provide a linear approximation to ``f`
 Please note that ``D f [x]`` is a single mathematical object, despite the fact that 3 separate symbols are used to denote it -- ``D f [x] (\dot{x})`` denotes the application of the function ``D f [x]`` to argument ``\dot{x}``.
 Furthermore, the dot-notation (``\dot{x}``) does not have anything to do with time-derivatives, it is simply common notation used in the AD literature to denote the arguments of derivatives.
 
-So, instead of thinking of the derivative as a number or a matrix, we think of it as a _function_.
+So, instead of thinking of the derivative as a number or a matrix, we think about it as a _function_.
 We can express the previous notions of the derivative in this language.
 
 In the scalar case, rather than thinking of the derivative as _being_ ``\alpha``, we think of it is a the linear operator ``D f [x] (\dot{x}) := \alpha \dot{x}``.
@@ -67,7 +67,8 @@ So whenever you see the word "derivative", you should think "linear function".
 
 _**The Chain Rule**_
 
-The chain rule is what makes AD work:
+The chain rule is _the_ result which makes AD work.
+Fortunately, it applies to this version of the derivative:
 ```math
 f = g \circ h \implies D f [x] = (D g [h(x)]) \circ (D h [x])
 ```
@@ -76,6 +77,7 @@ By induction, this extends to a collection of ``N`` functions ``f_1, \dots, f_N`
 f := f_N \circ \dots \circ f_1 \implies D f [x] = (D f_N [x_N]) \circ \dots \circ (D f_1 [x_1]),
 ```
 where ``x_{n+1} := f(x_n)``, and ``x_1 := x``.
+
 
 _**An aside: the definition of the Frechet Derivative**_
 
@@ -89,6 +91,8 @@ where ``\| \cdot \|_\mathcal{X}`` and ``\| \cdot \|_\mathcal{Y}`` are the norms 
 It is a good idea to consider what this looks like when ``\mathcal{X} = \mathcal{Y} = \RR`` and when ``\mathcal{X} = \mathcal{Y} = \RR^D``.
 It is sometimes helpful to refer to this definition to e.g. verify the correctness of the derivative of a function -- as with single-variable calculus, however, this is rare.
 
+
+
 _**Another aside: what does Forwards-Mode AD compute?**_
 
 At this point we have enough machinery to discuss forwards-mode AD.
@@ -97,7 +101,7 @@ given a function ``f`` which is differentiable at a point ``x``, compute ``D f [
 If ``f : \RR^P \to \RR^Q``, this is equivalent to computing ``J[x] \dot{x}``, where ``J[x]`` is the Jacobian of ``f`` at ``x``.
 For the interested reader we provide a high-level explanation of _how_ forwards-mode AD does this in [_How_ does Forwards-Mode AD work?](@ref).
 
-_**Yet another aside: notation**_
+_**Another aside: notation**_
 
 You may have noticed that we typically denote the argument to a derivative with a "dot" over it, e.g. ``\dot{x}``.
 This is something that we will do consistently, and we will use the same notation for the outputs of derivatives.
@@ -105,7 +109,8 @@ Wherever you see a symbol with a "dot" over it, expect it to be an input or outp
 
 # Reverse-Mode AD: _what_ does it do?
 
-In order to explain what reverse-mode AD does, we first consider the "vector-Jacobian product" definition in Euclidean space, and then generalise.
+In order to explain what reverse-mode AD does, we first consider the "vector-Jacobian product" definition in Euclidean space which will be familiar to many readers.
+We then generalise.
 
 _**Reverse-Mode AD: what does it do in Euclidean space?**_
 
@@ -144,12 +149,14 @@ This notation is common in the AD literature and will be used throughout.
 Additionally, this "bar" notation will be used for the outputs of adjoints of derivatives.
 So wherever you see a symbol with a "bar" over it, think "input or output of adjoint of derivative".
 
+
+
 ### Some Worked Examples
 
 We now present some worked examples in order to prime intuition, and to introduce the important classes of problems that will be encountered when doing AD in the Julia language.
 We will put all of these problems in a single general framework later on.
 
-#### An example with Matrix Calculus
+#### An Example with Matrix Calculus
 
 We have introduced some mathematical abstraction in order to simplify the calculations involved in AD.
 To this end, we consider differentiating ``f(X) := X^\top X``.
@@ -284,6 +291,7 @@ You should verify that the following follows quickly from the definition of the 
 D f [x, y]^\ast (\bar{f}) =  (\bar{f}, (\bar{f} y_2, \bar{f} y_1))
 ```
 
+
 #### AD with mutable data
 
 In the previous two examples there was an obvious mathematical model for the Julia `function`.
@@ -311,6 +319,7 @@ where ``\odot`` denotes the Hadamard / element-wise product (corresponds to line
 The point here is that the inputs to ``\phi_{\text{f!}}`` are the inputs to `x` upon entry to `f!`, and the value returned from ``\phi_{\text{f!}}`` is a tuple containing the both the inputs upon exit from `f!` and the value returned by `f!`.
 
 The remaining steps are straightforward now that we have the model.
+
 
 _**Step 2: Compute Derivative**_
 
