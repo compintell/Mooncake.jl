@@ -30,6 +30,7 @@ for name in [
     :(Base.check_reducedims),
     :(Base.throw_boundserror),
     :(Base.Broadcast.eltypes),
+    :(Base.eltype),
 ]
     @eval @is_primitive DefaultCtx Tuple{typeof($name), Vararg}
     @eval function rrule!!(f::CoDual{_typeof($name)}, args::Vararg{CoDual, N}) where {N}
@@ -212,6 +213,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
             LinearAlgebra.chkstride1, randn(3, 3), randn(2, 2),
         ),
         (false, :allocs, nothing, Threads.nthreads),
+        (false, :none, nothing, Base.eltype, randn(1)),
 
         # Literal replacement for setfield!.
         (

@@ -550,6 +550,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
                 :call,
                 __rvs_pass!,
                 get_primal_type(info, line),
+                sig,
                 pb_stack_id,
                 get_rev_data_id(info, line),
                 map(Base.Fix1(get_rev_data_id, info), args)...,
@@ -631,7 +632,7 @@ __make_codual(x::P) where {P} = (P <: CoDual ? x : uninit_fcodual(x))::CoDual
 @inline __push_pb_stack!(stack, pb!!) = push!(stack, pb!!)
 
 # Used in `make_ad_stmts!` method for `Expr(:call, ...)` and `Expr(:invoke, ...)`.
-@inline function __rvs_pass!(P, pb_stack, ret_rev_data_ref, arg_rev_data_refs...)::Nothing
+@inline function __rvs_pass!(::Type{P}, ::Type{sig}, pb_stack, ret_rev_data_ref, arg_rev_data_refs...)::Nothing where {sig, P}
     __run_rvs_pass!(P, __pop_pb_stack!(pb_stack), ret_rev_data_ref, arg_rev_data_refs...)
 end
 
@@ -665,19 +666,31 @@ end
 # between differing varargs conventions.
 #
 
-struct Pullback{Tpb_oc, Tisva<:Val, Tnvargs<:Val}
+struct Pullback{Tprimal, Tpb_oc, Tisva<:Val, Tnvargs<:Val}
     pb_oc::Tpb_oc
     isva::Tisva
     nvargs::Tnvargs
 end
 
+function Pullback(
+    Tprimal, pb_oc::Tpb_oc, isva::Tisva, nvargs::Tnvargs
+) where {Tpb_oc, Tisva, Tnvargs}
+    return Pullback{Tprimal, Tpb_oc, Tisva, Tnvargs}(pb_oc, isva, nvargs)
+end
+
 @inline (pb::Pullback)(dy) = __flatten_varargs(pb.isva, pb.pb_oc(dy), pb.nvargs)
 
-struct DerivedRule{Tfwds_oc, Tpb_oc, Tisva<:Val, Tnargs<:Val}
+struct DerivedRule{Tprimal, Tfwds_oc, Tpb_oc, Tisva<:Val, Tnargs<:Val}
     fwds_oc::Tfwds_oc
     pb_oc::Tpb_oc
     isva::Tisva
     nargs::Tnargs
+end
+
+function DerivedRule(
+    Tprimal, fwds_oc::Tfwds_oc, pb_oc::Tpb_oc, isva::Tisva, nargs::Tnargs
+) where {Tfwds_oc, Tpb_oc, Tisva, Tnargs}
+    return DerivedRule{Tprimal, Tfwds_oc, Tpb_oc, Tisva, Tnargs}(fwds_oc, pb_oc, isva, nargs)
 end
 
 _copy(::Nothing) = nothing
@@ -703,7 +716,7 @@ _copy(x) = copy(x)
 
 @inline function (fwds::DerivedRule{P, Q, S})(args::Vararg{CoDual, N}) where {P, Q, S, N}
     uf_args = __unflatten_codual_varargs(fwds.isva, args, fwds.nargs)
-    pb!! = Pullback(fwds.pb_oc, fwds.isva, nvargs(length(args), fwds.nargs))
+    pb!! = Pullback(P, fwds.pb_oc, fwds.isva, nvargs(length(args), fwds.nargs))
     return fwds.fwds_oc(uf_args...)::CoDual, pb!!
 end
 
@@ -740,6 +753,7 @@ _is_primitive(C::Type, sig::Type) = is_primitive(C, sig)
 # important for performance in dynamic dispatch, and to ensure that recursion works
 # properly.
 function rule_type(interp::TapirInterpreter{C}, sig_or_mi; safety_on) where {C}
+
     if _is_primitive(C, sig_or_mi)
         return safety_on ? SafeRRule{typeof(rrule!!)} : typeof(rrule!!)
     end
@@ -749,12 +763,14 @@ function rule_type(interp::TapirInterpreter{C}, sig_or_mi; safety_on) where {C}
     isva, _ = is_vararg_and_sparam_names(sig_or_mi)
 
     arg_types = map(_type, ir.argtypes)
+    primal_sig = Tuple{arg_types...}
     arg_fwds_types = Tuple{map(fcodual_type, arg_types)...}
     arg_rvs_types = Tuple{map(rdata_type ∘ tangent_type, arg_types)...}
     rvs_return_type = rdata_type(tangent_type(Treturn))
     return if isconcretetype(Treturn)
         if safety_on
             SafeRRule{DerivedRule{
+                primal_sig,
                 MistyClosure{OpaqueClosure{arg_fwds_types, fcodual_type(Treturn)}},
                 MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
                 Val{isva},
@@ -762,6 +778,7 @@ function rule_type(interp::TapirInterpreter{C}, sig_or_mi; safety_on) where {C}
             }}
         else
             DerivedRule{
+                primal_sig,
                 MistyClosure{OpaqueClosure{arg_fwds_types, fcodual_type(Treturn)}},
                 MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
                 Val{isva},
@@ -771,6 +788,7 @@ function rule_type(interp::TapirInterpreter{C}, sig_or_mi; safety_on) where {C}
     else
         if safety_on
             SafeRRule{DerivedRule{
+                primal_sig,
                 MistyClosure{OpaqueClosure{arg_fwds_types, Tfcodual_ret}},
                 MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
                 Val{isva},
@@ -778,6 +796,7 @@ function rule_type(interp::TapirInterpreter{C}, sig_or_mi; safety_on) where {C}
             }} where {Tfcodual_ret <: fcodual_type(Treturn)}
         else
             DerivedRule{
+                primal_sig,
                 MistyClosure{OpaqueClosure{arg_fwds_types, Tfcodual_ret}},
                 MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
                 Val{isva},
@@ -857,6 +876,8 @@ function build_rrule(
 
             optimised_fwds_ir = optimise_ir!(optimise_ir!(IRCode(fwds_ir); do_inline=true))
             optimised_pb_ir = optimise_ir!(optimise_ir!(IRCode(pb_ir); do_inline=true))
+            # optimised_fwds_ir = optimise_ir!(IRCode(fwds_ir); do_inline=false)
+            # optimised_pb_ir = optimise_ir!(IRCode(pb_ir); do_inline=true)
             # @show sig_or_mi
             # @show Treturn
             # @show safety_on
@@ -877,7 +898,14 @@ function build_rrule(
                 optimised_pb_ir,
             )
 
-            raw_rule = DerivedRule(fwds_oc, pb_oc, Val(isva), Val(num_args(info)))
+            # Compute the signature. Needs careful handling with varargs.
+            sig = sig_or_mi isa Core.MethodInstance ? sig_or_mi.specTypes : sig_or_mi
+            nargs = num_args(info)
+            if isva
+                sig = Tuple{sig.parameters[1:nargs-1]..., Tuple{sig.parameters[nargs:end]...}}
+            end
+
+            raw_rule = DerivedRule(sig, fwds_oc, pb_oc, Val(isva), Val(num_args(info)))
             rule = safety_on ? SafeRRule(raw_rule) : raw_rule
             interp.oc_cache[oc_cache_key] = rule
             return rule

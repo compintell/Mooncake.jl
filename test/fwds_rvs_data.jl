@@ -3,6 +3,21 @@ module FwdsRvsDataTestResources
 end
 
 @testset "fwds_rvs_data" begin
+    @testset "fdata_type / rdata_type($P)" for (P, F, R) in Any[
+        (
+            Tuple{Any, Vector{Float64}},
+            Tuple{Any, Vector{Float64}},
+            Union{NoRData, Tuple{Any, NoRData}},
+        ),
+        (
+            Tuple{Any, Float64},
+            Union{NoFData, Tuple{Any, NoFData}},
+            Tuple{Any, Float64},
+        ),
+    ]
+        @test fdata_type(tangent_type(P)) == F
+        @test rdata_type(tangent_type(P)) == R
+    end
     @testset "$(typeof(p))" for (_, p, _...) in Tapir.tangent_test_cases()
         TestUtils.test_fwds_rvs_data(Xoshiro(123456), p)
     end

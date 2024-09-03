@@ -19,7 +19,7 @@ function __value_and_pullback!!(rule::R, ȳ::T, fx::Vararg{CoDual, N}) where {R
 end
 
 function __verify_sig(
-    ::DerivedRule{<:MistyClosure{<:OpaqueClosure{sig}}}, ::Tfx
+    ::DerivedRule{<:Any, <:MistyClosure{<:OpaqueClosure{sig}}}, ::Tfx
 ) where {sig, Tfx}
     if sig != Tfx
         msg = "signature of arguments, $Tfx, not equal to signature required by rule, $sig."
