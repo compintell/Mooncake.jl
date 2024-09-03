@@ -1,7 +1,3 @@
-mutable struct MutableSelfRef
-    x::Any
-end
-
 @testset "interface" begin
     @testset "$(typeof((f, x...)))" for (ȳ, f, x...) in Any[
         (1.0, (x, y) -> x * y + sin(x) * cos(y), 5.0, 4.0),
@@ -23,15 +19,28 @@ end
         rule = build_rrule(foo, 5.0)
         @test_throws ArgumentError value_and_pullback!!(rule, 1.0, foo, CoDual(5.0, 0.0))
     end
-    @testset "sensible error occurs when self-reference found" begin
-        rule = build_rrule(Tapir.PInterp(), Tuple{typeof(identity), MutableSelfRef})
-        v = MutableSelfRef(nothing)
-        v.x = v
+    @testset "value_and_gradient!!" begin
+        @testset "($(typeof(fargs))" for fargs in Any[
+            (sin, randn(Float64)),
+            (sin, randn(Float32)),
+            (x -> sin(cos(x)), randn(Float64)),
+            (x -> sin(cos(x)), randn(Float32)),
+            ((x, y) -> x + sin(y), randn(Float64), randn(Float64)),
+            ((x, y) -> x + sin(y), randn(Float32), randn(Float32)),
+        ]
+            rule = build_rrule(fargs...)
+            f, args... = fargs
+            v, dfargs = value_and_gradient!!(rule, fargs...)
+            @test v == f(args...)
+            for (arg, darg) in zip(fargs, dfargs)
+                @test tangent_type(typeof(arg)) == typeof(darg)
+            end
+        end
 
-        # Check that zero_tangent for v does indeed cause a stack overflow.
-        @test_throws StackOverflowError zero_tangent(v)
-
-        # Check that we're catching the stack overflow.
-        @test_throws ErrorException value_and_pullback!!(rule, identity, v)
+        rule = build_rrule(identity, (5.0, 4.0))
+        @test_throws(
+            Tapir.ValueAndGradientReturnTypeError,
+            value_and_gradient!!(rule, identity, (5.0, 4.0)),
+        )
     end
 end

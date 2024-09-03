@@ -1,5 +1,87 @@
 @testset "tangents" begin
 
+    @testset "tangent_type($primal_type)" for (primal_type, expected_tangent_type) in Any[
+
+        ## Tuples
+
+        # Unions of Tuples.
+        (Union{Tuple{Float64}, Tuple{Float32}}, Union{Tuple{Float64}, Tuple{Float32}}),
+        (Union{Tuple{Float64}, Tuple{Int}}, Union{Tuple{Float64}, NoTangent}),
+        (Union{Tuple{}, Tuple{Int}}, NoTangent),
+        (
+            Union{Tuple{Float64}, Tuple{Int}, Tuple{Float64, Int}},
+            Union{Tuple{Float64}, NoTangent, Tuple{Float64, NoTangent}},
+        ),
+        (Union{Tuple{Float64}, Tuple{Any}}, Union{NoTangent, Tuple{Any}}),
+
+        # UnionAlls of Tuples.
+        (Tuple{T} where {T}, Union{NoTangent, Tuple{Any}}),
+        (Tuple{T, T} where {T<:Real}, Union{NoTangent, Tuple{Any, Any}}),
+        (Tuple{Float64, T} where {T<:Int}, Tuple{Float64, NoTangent}),
+
+        # Edge case: (provably) empty Tuple.
+        (Tuple{}, NoTangent),
+
+        # Vararg Tuples
+        (Tuple, Any),
+        (Tuple{Float64, Vararg}, Any),
+        (Tuple{Float64, Vararg{Int}}, Any),
+        (Tuple{Vararg{Int}}, Any),
+        (Tuple{Int, Vararg{Int}}, Any),
+
+        # Simple Tuples.
+        (Tuple{Int}, NoTangent),
+        (Tuple{Vararg{Int, 250}}, NoTangent),
+        (Tuple{Int, Int}, NoTangent),
+        (Tuple{DataType, Int}, NoTangent),
+        (Tuple{DataType, Vararg{Int, 100}}, NoTangent),
+        (Tuple{DataType, Type{Float64}}, NoTangent),
+        (Tuple{DataType, Vararg{Type{Float64}, 100}}, NoTangent),
+        (Tuple{Any}, Union{NoTangent, Tuple{Any}}),
+        (Tuple{Any, Any}, Union{NoTangent, Tuple{Any, Any}}),
+        (Tuple{Int, Any}, Union{NoTangent, Tuple{NoTangent, Any}}),
+        (Tuple{Int, Float64}, Tuple{NoTangent, Float64}),
+        (Tuple{Int, Vararg{Float64, 100}}, Tuple{NoTangent, Vararg{Float64, 100}}),
+        (Tuple{Type{Float64}, Float64}, Tuple{NoTangent, Float64}),
+        (Tuple{DataType, Vararg{Float32, 100}}, Tuple{NoTangent, Vararg{Float32, 100}}),
+        (Tuple{Tuple{Type{Int}}, Float64}, Tuple{NoTangent, Float64}),
+
+        ## NamedTuple
+
+        # Unions of NamedTuples.
+        (
+            Union{@NamedTuple{a::Float64}, @NamedTuple{b::Float64}},
+            Union{@NamedTuple{a::Float64}, @NamedTuple{b::Float64}},
+        ),
+        (
+            Union{@NamedTuple{a::Float64}, @NamedTuple{}},
+            Union{@NamedTuple{a::Float64}, NoTangent},
+        ),
+        (Union{@NamedTuple{a::Float64}, @NamedTuple{a::Any}}, Any),
+
+        # UnionAlls of NamedTuples.
+        (@NamedTuple{a::T} where {T}, Union{NoTangent, NamedTuple{(:a,)}}),
+        (@NamedTuple{a::T, b::T} where {T<:Real}, Union{NoTangent, NamedTuple{(:a, :b)}}),
+        (@NamedTuple{a::Float64, b::T} where {T<:Int}, Union{NoTangent, NamedTuple{(:a, :b)}}),
+
+        # Edge case
+        (@NamedTuple{}, NoTangent),
+
+        # Simple Tuples.
+        (@NamedTuple{a::Int}, NoTangent),
+        (@NamedTuple{a::Int, b::Int}, NoTangent),
+        (@NamedTuple{a::DataType, b::Int}, NoTangent),
+        (@NamedTuple{a::DataType, b::Type{Float64}}, NoTangent),
+        (@NamedTuple{a::Any}, Any),
+        (@NamedTuple{a::Any, b::Any}, Any),
+        (@NamedTuple{a::Int, b::Any}, Any),
+        (@NamedTuple{b::Int, a::Float64}, @NamedTuple{b::NoTangent, a::Float64}),
+        (@NamedTuple{a::Type{Float64}, b::Float64}, @NamedTuple{a::NoTangent, b::Float64}),
+        (@NamedTuple{a::Tuple{Type{Int}}, b::Float64}, @NamedTuple{a::NoTangent, b::Float64}),
+    ]
+        TestUtils.test_tangent_type(primal_type, expected_tangent_type)
+    end
+
     @testset "$(typeof(data))" for (interface_only, data...) in Tapir.tangent_test_cases()
         test_tangent(Xoshiro(123456), data...; interface_only)
     end
@@ -79,45 +161,55 @@
             end
         end
     end
-
-    # The main tangent testing functionality really needs refactoring -- currently it's
-    # not possible to properly test tangents because you can't separately specify the
-    # static and dynamic types.
-    @testset "extra tuple tests" begin
-        @testset "is_concrete_or_typelike" begin
-            @test Tapir.is_concrete_or_typelike(Float64)
-            @test !Tapir.is_concrete_or_typelike(Any)
-            @test Tapir.is_concrete_or_typelike(Type{Float64})
-            @test Tapir.is_concrete_or_typelike(DataType)
-            @test Tapir.is_concrete_or_typelike(Tuple{})
-            @test Tapir.is_concrete_or_typelike(Tuple{Float64})
-            @test Tapir.is_concrete_or_typelike(Tuple{Float64, Type{Float64}})
-            @test Tapir.is_concrete_or_typelike(Tuple{Float64, Tuple{Type{Float64}}})
-            @test !Tapir.is_concrete_or_typelike(Tuple)
-            @test Tapir.is_concrete_or_typelike(Union{Float64, Float32})
-            @test !Tapir.is_concrete_or_typelike(Tuple{T} where {T<:Any})
-        end
-        @test tangent_type(Tuple) == Any
-        @test tangent_type(Tuple{}) == NoTangent
-        @test tangent_type(Tuple{Float64, Vararg}) == Any
-        @test tangent_type(Tuple{Float64}) == Tuple{Float64}
-        @test tangent_type(Tuple{Float64, Int}) == Tuple{Float64, NoTangent}
-        @test tangent_type(Tuple{Int, Int}) == NoTangent
-        @test tangent_type(Tuple{DataType, Type{Float64}}) == NoTangent
-        @test tangent_type(Tuple{Type{Float64}, Float64}) == Tuple{NoTangent, Float64}
-        @test tangent_type(Tuple{Tuple{Type{Int}}, Float64}) == Tuple{NoTangent, Float64}
-        @test ==(
-            tangent_type(Union{Tuple{Float64}, Tuple{Int}}),
-            Union{Tuple{Float64}, NoTangent},
-        )
-        @test ==(
-            tangent_type(Union{Tuple{Float64}, Tuple{Int}, Tuple{Float64, Int}}),
-            Union{Tuple{Float64}, NoTangent, Tuple{Float64, NoTangent}},
-        )
-        @test tangent_type(Tuple{Any, Any}) == Any
-    end
 end
 
+# TODO: ideally we want to add the following test to the above testset (defined src/tangent.jl)
+# but we have to delay this until `randn_tangent` is implemented and working.
+@testset "zero_tangent" begin
+    @testset "circular reference" begin
+        foo = Tapir.TestResources.TypeUnstableMutableStruct(5.0, nothing)
+        foo.b = foo
+        zt = Tapir.zero_tangent(foo)
+        @test zt.fields.b === zt
+    end
+
+    @testset "struct with non-concrete fields" begin
+        bar = Tapir.TestResources.TypeUnstableStruct(5.0, 1.0)
+        @test Tapir.zero_tangent(bar) == Tangent{@NamedTuple{a::Float64, b}}(@NamedTuple{a::Float64, b}((0.0, 0.0)))
+    end
+    
+    @testset "duplicate reference" begin
+        @testset "subarray" begin
+            mutable struct MutDupRefSubArray
+                x
+                y
+            end
+            
+            x = [1.0, 2.0, 3.0]
+            mut_struct = MutDupRefSubArray(view(x, 1:2), view(x, 1:2))
+            mt = Tapir.zero_tangent(mut_struct)
+            @test mt isa Tapir.MutableTangent
+            @test mt.fields.x === mt.fields.y
+
+            struct ImmutableDupRefSubArray
+                x
+                y
+            end
+
+            immutable_struct = ImmutableDupRefSubArray(view(x, 1:2), view(x, 1:1))
+            it = Tapir.zero_tangent(immutable_struct)
+            @test it isa Tapir.Tangent
+            @test it.fields.x.fields.parent === it.fields.y.fields.parent
+        end
+    end
+
+    @testset "indirect circular reference" begin
+        m = [Any[1], 2.0]
+        m[1][1] = m
+        zt = Tapir.zero_tangent(m)
+        @test zt[1][1] === zt
+    end
+end
 
 # The goal of these tests is to check that we can indeed generate tangent types for anything
 # that we will encounter in the Julia language. We try to achieve this by pulling in types

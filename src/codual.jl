@@ -15,6 +15,7 @@ end
 primal(x::CoDual) = x.x
 tangent(x::CoDual) = x.dx
 Base.copy(x::CoDual) = CoDual(copy(primal(x)), copy(tangent(x)))
+_copy(x::P) where {P<:CoDual} = x
 
 """
     zero_codual(x)
@@ -35,11 +36,15 @@ function codual_type(::Type{P}) where {P}
     return isconcretetype(P) ? CoDual{P, tangent_type(P)} : CoDual
 end
 
-codual_type(::Type{Type{P}}) where {P} = CoDual{Type{P}, NoTangent}
+function codual_type(p::Type{Type{P}}) where {P}
+    return @isdefined(P) ? CoDual{Type{P}, NoTangent} : CoDual{_typeof(p), NoTangent}
+end
 
 struct NoPullback{R<:Tuple}
     r::R
 end
+
+_copy(x::P) where {P<:NoPullback} = P(_copy(x.r))
 
 """
     NoPullback(args::CoDual...)
@@ -86,6 +91,8 @@ function fcodual_type(::Type{P}) where {P}
     return isconcretetype(P) ? CoDual{P, fdata_type(tangent_type(P))} : CoDual
 end
 
-fcodual_type(::Type{Type{P}}) where {P} = CoDual{Type{P}, NoFData}
+function fcodual_type(p::Type{Type{P}}) where {P}
+    return @isdefined(P) ? CoDual{Type{P}, NoFData} : CoDual{_typeof(p), NoFData}
+end
 
 zero_rdata(x::CoDual) = zero_rdata(primal(x))

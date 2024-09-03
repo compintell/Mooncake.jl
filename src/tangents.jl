@@ -20,6 +20,8 @@ struct PossiblyUninitTangent{T}
     PossiblyUninitTangent{T}() where {T} = new{T}()
 end
 
+_copy(x::P) where {P<:PossiblyUninitTangent} = is_init(x) ? P(_copy(x.tangent)) : P()
+
 @inline PossiblyUninitTangent(tangent::T) where {T} = PossiblyUninitTangent{T}(tangent)
 @inline PossiblyUninitTangent(T::Type) = PossiblyUninitTangent{T}()
 
@@ -55,6 +57,9 @@ Base.:(==)(x::Tangent, y::Tangent) = x.fields == y.fields
 
 mutable struct MutableTangent{Tfields<:NamedTuple}
     fields::Tfields
+    MutableTangent{Tfields}() where {Tfields} = new{Tfields}()
+    MutableTangent(fields::Tfields) where {Tfields} = MutableTangent{Tfields}(fields)
+    MutableTangent{Tfields}(fields::NamedTuple{names}) where {names, Tfields<:NamedTuple{names}} = new{Tfields}(fields)
 end
 
 Base.:(==)(x::MutableTangent, y::MutableTangent) = x.fields == y.fields
@@ -326,38 +331,44 @@ tangent_type(::Type{DimensionMismatch}) = NoTangent
 
 tangent_type(::Type{Method}) = NoTangent
 
-function is_concrete_or_typelike(P::DataType)
-    if P <: Tuple
-        P == Tuple && return false
-        return all(is_concrete_or_typelike, P.parameters)
-    elseif P <: DataType
-        return true
-    else
-        return isconcretetype(P)
-    end
+@inline function tangent_type(::Type{P}) where {P<:Tuple}
+
+    # As with other types, tangent type of Union is Union of tangent types.
+    P isa Union && return Union{tangent_type(P.a), tangent_type(P.b)}
+
+    # Determine whether P isa a Tuple with a Vararg, e.g, Tuple, or Tuple{Float64, Vararg}.
+    # Need to exclude `UnionAll`s from this, by checking `isa(P, DataType)`, in order to
+    # ensure that `Base.datatype_fieldcount(P)` will run successfully.
+    isa(P, DataType) && Base.datatype_fieldcount(P) === nothing && return Any
+
+    # Tuple{} can only have `NoTangent` as its tangent type. As before, verify we don't have
+    # a UnionAll before running to ensure that datatype_fieldcount will run.
+    isa(P, DataType) && Base.datatype_fieldcount(P) == 0 && return NoTangent
+
+    # If tangent types for all fields is NoTangent, then overall type is `NoTangent`.
+
+    # Get tangent types for all fields. If they're all `NoTangent`, return `NoTangent`.
+    # i.e. if `P = Tuple{Int, Int}`, do not return `Tuple{NoTangent, NoTangent}`. Simplify
+    # and return `NoTangent`.
+    tangent_types = tuple_map(tangent_type, fieldtypes(P))
+    T = Tuple{tangent_types...}
+    T_all_notangent = Tuple{Vararg{NoTangent, length(tangent_types)}}
+    T <: T_all_notangent && return NoTangent
+
+    # If it's _possible_ for a subtype of `P` to have tangent type `NoTangent`, then we must
+    # account for that by returning the union of `NoTangent` and `T`. For example, if
+    # `P = Tuple{Any, Int}`, then `P2 = Tuple{Int, Int}` is a subtype. Since `P2` has
+    # tangent type `NoTangent`, it must be true that `NoTangent <: tangent_type(P)`.
+    # If, on the other hand, it's not possible for `NoTangent` to be the tangent type, e.g.
+    # for `Tuple{Float64, Any}`, then there's no need to take the union.
+    return T_all_notangent <: T ? Union{T, NoTangent} : T
 end
 
-is_concrete_or_typelike(::Union) = true
-is_concrete_or_typelike(::UnionAll) = false
-is_concrete_or_typelike(::Core.TypeofVararg) = true
-
-@generated function tangent_type(::Type{P}) where {P<:Tuple}
-    isa(P, Union) && return Union{tangent_type(P.a), tangent_type(P.b)}
-    isempty(P.parameters) && return NoTangent
-    isa(last(P.parameters), Core.TypeofVararg) && return Any
-    all(p -> tangent_type(p) == NoTangent, P.parameters) && return NoTangent
-    all(is_concrete_or_typelike, P.parameters) || return Any
-    return Tuple{map(tangent_type, fieldtypes(P))...}
-end
-
-@generated function tangent_type(::Type{NamedTuple{N, T}}) where {N, T<:Tuple}
-    if tangent_type(T) == NoTangent
-        return NoTangent
-    elseif isconcretetype(tangent_type(T))
-        return NamedTuple{N, tangent_type(T)}
-    else
-        return Any
-    end
+function tangent_type(::Type{P}) where {N, T<:Tuple, P<:NamedTuple{N, T}}
+    !isconcretetype(P) && return Union{NamedTuple{N}, NoTangent}
+    TT = tangent_type(T)
+    TT == NoTangent && return NoTangent
+    return isconcretetype(TT) ? NamedTuple{N, TT} : Any
 end
 
 function backing_type(::Type{P}) where {P}
@@ -408,20 +419,24 @@ end
 Returns the unique zero element of the tangent space of `x`.
 It is an error for the zero element of the tangent space of `x` to be represented by
 anything other than that which this function returns.
+
+Internally, `zero_tangent` calls `zero_tangent_internal`, which handles different types of inputs differently.
+`zero_tangent_internal` has two variants:
+1. For `isbitstype` types, `zero_tangent_internal` takes one argument. 
+2. Otherwise, `zero_tangent_internal` takes another argument which is an `IdDict`, which
+handles both circular references and aliasing correctly.
 """
 zero_tangent(x)
-@inline zero_tangent(::Union{Int8, Int16, Int32, Int64, Int128}) = NoTangent()
-@inline zero_tangent(x::IEEEFloat) = zero(x)
-@inline function zero_tangent(x::SimpleVector)
-    return map!(n -> zero_tangent(x[n]), Vector{Any}(undef, length(x)), eachindex(x))
+function zero_tangent(x::P) where {P}
+    return isbitstype(P) ? zero_tangent_internal(x) : zero_tangent_internal(x, IdDict())
 end
-@inline function zero_tangent(x::Array{P, N}) where {P, N}
-    return _map_if_assigned!(zero_tangent, Array{tangent_type(P), N}(undef, size(x)...), x)
+
+@inline zero_tangent_internal(::Union{Int8, Int16, Int32, Int64, Int128}) = NoTangent()
+@inline zero_tangent_internal(x::IEEEFloat) = zero(x)
+@inline function zero_tangent_internal(x::P) where {P<:Union{Tuple, NamedTuple}}
+    return tangent_type(P) == NoTangent ? NoTangent() : tuple_map(zero_tangent_internal, x)
 end
-@inline function zero_tangent(x::P) where {P<:Union{Tuple, NamedTuple}}
-    return tangent_type(P) == NoTangent ? NoTangent() : tuple_map(zero_tangent, x)
-end
-@generated function zero_tangent(x::P) where {P}
+@generated function zero_tangent_internal(x::P) where P
 
     tangent_type(P) == NoTangent && return NoTangent()
 
@@ -436,14 +451,68 @@ end
     tangent_field_zeros_exprs = ntuple(fieldcount(P)) do n
         if tangent_field_type(P, n) <: PossiblyUninitTangent
             V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
-            return :(isdefined(x, $n) ? $V(zero_tangent(getfield(x, $n))) : $V())
+            return :(isdefined(x, $n) ? $V(zero_tangent_internal(getfield(x, $n))) : $V())
         else
-            return :(zero_tangent(getfield(x, $n)))
+            return :(zero_tangent_internal(getfield(x, $n)))
         end
     end
     backing_data_expr = Expr(:call, :tuple, tangent_field_zeros_exprs...)
     backing_expr = :($(backing_type(P))($backing_data_expr))
     return :($(tangent_type(P))($backing_expr))
+end
+
+# the `stackdict` naming following convention of Julia's `deepcopy` and `deepcopy_internal`
+# https://github.com/JuliaLang/julia/blob/48d4fd48430af58502699fdf3504b90589df3852/base/deepcopy.jl#L35
+@inline zero_tangent_internal(x::Union{Int8,Int16,Int32,Int64,Int128,IEEEFloat}, stackdict::IdDict) = zero_tangent_internal(x)
+@inline function zero_tangent_internal(x::SimpleVector, stackdict::IdDict)
+    return map!(n -> zero_tangent_internal(x[n], stackdict), Vector{Any}(undef, length(x)), eachindex(x))
+end
+@inline function zero_tangent_internal(x::Array{P, N}, stackdict::IdDict) where {P, N}
+    haskey(stackdict, x) && return stackdict[x]::tangent_type(typeof(x))
+    
+    zt = Array{tangent_type(P), N}(undef, size(x)...)
+    stackdict[x] = zt
+    return _map_if_assigned!(Base.Fix2(zero_tangent_internal, stackdict), zt, x)::Array{tangent_type(P), N}
+end
+@inline function zero_tangent_internal(x::P, stackdict::IdDict) where {P<:Union{Tuple, NamedTuple}}
+    return tangent_type(P) == NoTangent ? NoTangent() : tuple_map(Base.Fix2(zero_tangent_internal, stackdict), x)
+end
+function zero_tangent_internal(x::P, stackdict::IdDict) where {P}
+
+    tangent_type(P) == NoTangent && return NoTangent()
+
+    if tangent_type(P) <: MutableTangent
+        if haskey(stackdict, x)
+            return stackdict[x]::tangent_type(P)
+        end
+        stackdict[x] = tangent_type(P)() # create a uninitialised MutableTangent
+        # if circular reference exists, then the recursive call will first look up the stackdict
+        # and return the uninitialised MutableTangent
+        # after the recursive call returns, the stackdict will be initialised
+        stackdict[x].fields = backing_type(P)(zero_tangent_struct_field(x, stackdict))
+        return stackdict[x]::tangent_type(P)
+    else
+        if isbitstype(P)
+            return zero_tangent_internal(x)
+        else
+            return tangent_type(P)(backing_type(P)(zero_tangent_struct_field(x, stackdict)))
+        end
+    end
+end
+
+@inline function zero_tangent_struct_field(x::P, stackdict::IdDict) where {P}
+    return ntuple(fieldcount(P)) do n
+        if tangent_field_type(P, n) <: PossiblyUninitTangent
+            V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
+            if isdefined(x, n)
+                return V(zero_tangent_internal(getfield(x, n), stackdict))
+            else
+                return V()
+            end
+        else
+            return zero_tangent_internal(getfield(x, n), stackdict)
+        end
+    end
 end
 
 """

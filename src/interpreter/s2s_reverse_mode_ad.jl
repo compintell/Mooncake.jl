@@ -109,7 +109,7 @@ codegen which produces the forwards- and reverse-passes.
     applied recursively, so that safe mode is also switched on in derived rules.
 - `is_used_dict`: for each `ID` associated to a line of code, is `false` if line is not used
     anywhere in any other line of code.
-- `zero_lazy_rdata_ref_id`: for any arguments whose type doesn't permit the construction of
+- `lazy_zero_rdata_ref_id`: for any arguments whose type doesn't permit the construction of
     a zero-valued rdata directly from the type alone (e.g. a struct with an abstractly-
     typed field), we need to have a zero-valued rdata available on the reverse-pass so that
     this zero-valued rdata can be returned if the argument (or a part of it) is never used
@@ -213,9 +213,10 @@ end
 __ref(P) = new_inst(Expr(:call, __make_ref, P))
 
 # Helper for reverse_data_ref_stmts.
-@inline @generated function __make_ref(::Type{P}) where {P}
-    R = zero_like_rdata_type(P)
-    return :(Ref{$R}(Tapir.zero_like_rdata_from_type(P)))
+@inline @generated function __make_ref(p::Type{P}) where {P}
+    _P = @isdefined(P) ? P : _typeof(p)
+    R = zero_like_rdata_type(_P)
+    return :(Ref{$R}(Tapir.zero_like_rdata_from_type($_P)))
 end
 
 @inline __make_ref(::Type{Union{}}) = nothing
@@ -232,6 +233,8 @@ num_args(info::ADInfo) = length(info.arg_types)
 struct RRuleZeroWrapper{Trule}
     rule::Trule
 end
+
+_copy(x::P) where {P<:RRuleZeroWrapper} = P(_copy(x.rule))
 
 struct RRuleWrapperPb{Tpb!!, Tl}
     pb!!::Tpb!!
@@ -368,7 +371,7 @@ function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
     # Assemble the above lines and construct reverse-pass.
     return ad_stmt_info(
         line,
-        PiNode(stmt.val, fcodual_type(_type(stmt.typ))),
+        PiNode(__inc(stmt.val), fcodual_type(_type(stmt.typ))),
         Expr(:call, __pi_rvs!, P, val_rdata_ref_id, output_rdata_ref_id),
     )
 end
@@ -547,6 +550,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
                 :call,
                 __rvs_pass!,
                 get_primal_type(info, line),
+                sig,
                 pb_stack_id,
                 get_rev_data_id(info, line),
                 map(Base.Fix1(get_rev_data_id, info), args)...,
@@ -587,6 +591,13 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
     ]
         # Expressions which do not require any special treatment.
         return ad_stmt_info(line, stmt, nothing)
+
+    elseif stmt.head == :(=) && stmt.args[1] isa GlobalRef
+        msg = "Encountered assignment to global variable: $(stmt.args[1]). " *
+            "Cannot differentiate through assignments to globals. " *
+            "Please refactor your code to avoid assigning to a global, for example by " *
+            "passing the variable in to the function as an argument."
+        unhandled_feature(msg)
     else
         # Encountered an expression that we've not seen before.
         throw(error("Unrecognised expression $stmt"))
@@ -621,7 +632,7 @@ __make_codual(x::P) where {P} = (P <: CoDual ? x : uninit_fcodual(x))::CoDual
 @inline __push_pb_stack!(stack, pb!!) = push!(stack, pb!!)
 
 # Used in `make_ad_stmts!` method for `Expr(:call, ...)` and `Expr(:invoke, ...)`.
-@inline function __rvs_pass!(P, pb_stack, ret_rev_data_ref, arg_rev_data_refs...)::Nothing
+@inline function __rvs_pass!(::Type{P}, ::Type{sig}, pb_stack, ret_rev_data_ref, arg_rev_data_refs...)::Nothing where {sig, P}
     __run_rvs_pass!(P, __pop_pb_stack!(pb_stack), ret_rev_data_ref, arg_rev_data_refs...)
 end
 
@@ -655,24 +666,57 @@ end
 # between differing varargs conventions.
 #
 
-struct Pullback{Tpb_oc, Tisva<:Val, Tnvargs<:Val}
+struct Pullback{Tprimal, Tpb_oc, Tisva<:Val, Tnvargs<:Val}
     pb_oc::Tpb_oc
     isva::Tisva
     nvargs::Tnvargs
 end
 
+function Pullback(
+    Tprimal, pb_oc::Tpb_oc, isva::Tisva, nvargs::Tnvargs
+) where {Tpb_oc, Tisva, Tnvargs}
+    return Pullback{Tprimal, Tpb_oc, Tisva, Tnvargs}(pb_oc, isva, nvargs)
+end
+
 @inline (pb::Pullback)(dy) = __flatten_varargs(pb.isva, pb.pb_oc(dy), pb.nvargs)
 
-struct DerivedRule{Tfwds_oc, Tpb_oc, Tisva<:Val, Tnargs<:Val}
+struct DerivedRule{Tprimal, Tfwds_oc, Tpb_oc, Tisva<:Val, Tnargs<:Val}
     fwds_oc::Tfwds_oc
     pb_oc::Tpb_oc
     isva::Tisva
     nargs::Tnargs
 end
 
+function DerivedRule(
+    Tprimal, fwds_oc::Tfwds_oc, pb_oc::Tpb_oc, isva::Tisva, nargs::Tnargs
+) where {Tfwds_oc, Tpb_oc, Tisva, Tnargs}
+    return DerivedRule{Tprimal, Tfwds_oc, Tpb_oc, Tisva, Tnargs}(fwds_oc, pb_oc, isva, nargs)
+end
+
+_copy(::Nothing) = nothing
+
+function _copy(x::P) where {P<:DerivedRule}
+    new_captures = _copy(x.fwds_oc.oc.captures)
+    new_fwds_oc = replace_captures(x.fwds_oc, new_captures)
+    new_pb_oc = replace_captures(x.pb_oc, new_captures)
+    return P(new_fwds_oc, new_pb_oc, x.isva, x.nargs)
+end
+
+_copy(x::Symbol) = x
+
+_copy(x::Tuple) = map(_copy, x)
+
+_copy(x::NamedTuple) = map(_copy, x)
+
+_copy(x::Ref{T}) where {T} = isassigned(x) ? Ref{T}(_copy(x[])) : Ref{T}()
+
+_copy(x::Type) = x
+
+_copy(x) = copy(x)
+
 @inline function (fwds::DerivedRule{P, Q, S})(args::Vararg{CoDual, N}) where {P, Q, S, N}
     uf_args = __unflatten_codual_varargs(fwds.isva, args, fwds.nargs)
-    pb!! = Pullback(fwds.pb_oc, fwds.isva, nvargs(length(args), fwds.nargs))
+    pb!! = Pullback(P, fwds.pb_oc, fwds.isva, nvargs(length(args), fwds.nargs))
     return fwds.fwds_oc(uf_args...)::CoDual, pb!!
 end
 
@@ -708,23 +752,58 @@ _is_primitive(C::Type, sig::Type) = is_primitive(C, sig)
 # Compute the concrete type of the rule that will be returned from `build_rrule`. This is
 # important for performance in dynamic dispatch, and to ensure that recursion works
 # properly.
-function rule_type(interp::TapirInterpreter{C}, sig_or_mi) where {C}
-    _is_primitive(C, sig_or_mi) && return typeof(rrule!!)
+function rule_type(interp::TapirInterpreter{C}, sig_or_mi; safety_on) where {C}
+
+    if _is_primitive(C, sig_or_mi)
+        return safety_on ? SafeRRule{typeof(rrule!!)} : typeof(rrule!!)
+    end
 
     ir, _ = lookup_ir(interp, sig_or_mi)
     Treturn = Base.Experimental.compute_ir_rettype(ir)
     isva, _ = is_vararg_and_sparam_names(sig_or_mi)
 
     arg_types = map(_type, ir.argtypes)
+    primal_sig = Tuple{arg_types...}
     arg_fwds_types = Tuple{map(fcodual_type, arg_types)...}
     arg_rvs_types = Tuple{map(rdata_type ∘ tangent_type, arg_types)...}
     rvs_return_type = rdata_type(tangent_type(Treturn))
-    return DerivedRule{
-        MistyClosure{OpaqueClosure{arg_fwds_types, fcodual_type(Treturn)}},
-        MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
-        Val{isva},
-        Val{length(ir.argtypes)},
-    }
+    return if isconcretetype(Treturn)
+        if safety_on
+            SafeRRule{DerivedRule{
+                primal_sig,
+                MistyClosure{OpaqueClosure{arg_fwds_types, fcodual_type(Treturn)}},
+                MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
+                Val{isva},
+                Val{length(ir.argtypes)},
+            }}
+        else
+            DerivedRule{
+                primal_sig,
+                MistyClosure{OpaqueClosure{arg_fwds_types, fcodual_type(Treturn)}},
+                MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
+                Val{isva},
+                Val{length(ir.argtypes)},
+            }
+        end
+    else
+        if safety_on
+            SafeRRule{DerivedRule{
+                primal_sig,
+                MistyClosure{OpaqueClosure{arg_fwds_types, Tfcodual_ret}},
+                MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
+                Val{isva},
+                Val{length(ir.argtypes)},
+            }} where {Tfcodual_ret <: fcodual_type(Treturn)}
+        else
+            DerivedRule{
+                primal_sig,
+                MistyClosure{OpaqueClosure{arg_fwds_types, Tfcodual_ret}},
+                MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
+                Val{isva},
+                Val{length(ir.argtypes)},
+            } where {Tfcodual_ret <: fcodual_type(Treturn)}
+        end
+    end
 end
 
 """
@@ -736,11 +815,13 @@ function build_rrule(args...; safety_on=false)
     return build_rrule(PInterp(), _typeof(TestUtils.__get_primals(args)); safety_on)
 end
 
+const TAPIR_INFERENCE_LOCK = ReentrantLock()
+
 """
     build_rrule(interp::PInterp{C}, sig_or_mi; safety_on=false) where {C}
 
-Returns a `DerivedRule` which is an `rrule!!` for `sig_or_mi` in context `C`. See the docstring
-for `rrule!!` for more info.
+Returns a `DerivedRule` which is an `rrule!!` for `sig_or_mi` in context `C`. See the
+docstring for `rrule!!` for more info.
 
 If `safety_on` is `true`, then all calls to rules are replaced with calls to `SafeRRule`s.
 """
@@ -753,72 +834,85 @@ function build_rrule(
         @info "Compiling rule for $sig_or_mi in safe mode. Disable for best performance."
     end
 
-    # Reset id count. This ensures that the IDs generated are the same each time this
-    # function runs.
-    seed_id!()
-
     # If we have a hand-coded rule, just use that.
     _is_primitive(C, sig_or_mi) && return (safety_on ? SafeRRule(rrule!!) : rrule!!)
+    lock(TAPIR_INFERENCE_LOCK)
+    try
+        # If we've already derived the OpaqueClosures and info, do not re-derive, just create a
+        # copy and pass in new shared data.
+        oc_cache_key = ClosureCacheKey(interp.world, (sig_or_mi, safety_on))
+        if haskey(interp.oc_cache, oc_cache_key)
+            return _copy(interp.oc_cache[oc_cache_key])
+        else
 
-    # Grab code associated to the primal.
-    ir, _ = lookup_ir(interp, sig_or_mi)
-    Treturn = Base.Experimental.compute_ir_rettype(ir)
+            # Reset id count. This ensures that the IDs generated are the same each time this
+            # function runs.
+            seed_id!()
 
-    # Normalise the IR, and generated BBCode version of it.
-    isva, spnames = is_vararg_and_sparam_names(sig_or_mi)
-    ir = normalise!(ir, spnames)
-    primal_ir = BBCode(ir)
+            # Grab code associated to the primal.
+            ir, _ = lookup_ir(interp, sig_or_mi)
+            Treturn = Base.Experimental.compute_ir_rettype(ir)
 
-    # Compute global info.
-    info = ADInfo(interp, primal_ir, safety_on)
+            # Normalise the IR, and generated BBCode version of it.
+            isva, spnames = is_vararg_and_sparam_names(sig_or_mi)
+            ir = normalise!(ir, spnames)
+            primal_ir = BBCode(ir)
 
-    # For each block in the fwds and pullback BBCode, translate all statements. Running this
-    # will, in general, push items to `info.shared_data_pairs`.
-    ad_stmts_blocks = map(primal_ir.blocks) do primal_blk
-        ids = primal_blk.inst_ids
-        primal_stmts = map(x -> x.stmt, primal_blk.insts)
-        return (primal_blk.id, make_ad_stmts!.(primal_stmts, ids, Ref(info)))
+            # Compute global info.
+            info = ADInfo(interp, primal_ir, safety_on)
+
+            # For each block in the fwds and pullback BBCode, translate all statements. Running this
+            # will, in general, push items to `info.shared_data_pairs`.
+            ad_stmts_blocks = map(primal_ir.blocks) do primal_blk
+                ids = primal_blk.inst_ids
+                primal_stmts = map(x -> x.stmt, primal_blk.insts)
+                return (primal_blk.id, make_ad_stmts!.(primal_stmts, ids, Ref(info)))
+            end
+
+            # Make shared data, and construct BBCode for forwards-pass and pullback.
+            shared_data = shared_data_tuple(info.shared_data_pairs)
+            fwds_ir = forwards_pass_ir(primal_ir, ad_stmts_blocks, info, _typeof(shared_data))
+            pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, _typeof(shared_data))
+
+            optimised_fwds_ir = optimise_ir!(optimise_ir!(IRCode(fwds_ir); do_inline=true))
+            optimised_pb_ir = optimise_ir!(optimise_ir!(IRCode(pb_ir); do_inline=true))
+            # optimised_fwds_ir = optimise_ir!(IRCode(fwds_ir); do_inline=false)
+            # optimised_pb_ir = optimise_ir!(IRCode(pb_ir); do_inline=true)
+            # @show sig_or_mi
+            # @show Treturn
+            # @show safety_on
+            # display(ir)
+            # display(IRCode(fwds_ir))
+            # display(IRCode(pb_ir))
+            # display(optimised_fwds_ir)
+            # display(optimised_pb_ir)
+            # @show length(ir.stmts.inst)
+            # @show length(optimised_fwds_ir.stmts.inst)
+            # @show length(optimised_pb_ir.stmts.inst)
+            fwds_oc = MistyClosure(
+                OpaqueClosure(optimised_fwds_ir, shared_data...; do_compile=true),
+                optimised_fwds_ir,
+            )
+            pb_oc = MistyClosure(
+                OpaqueClosure(optimised_pb_ir, shared_data...; do_compile=true),
+                optimised_pb_ir,
+            )
+
+            # Compute the signature. Needs careful handling with varargs.
+            sig = sig_or_mi isa Core.MethodInstance ? sig_or_mi.specTypes : sig_or_mi
+            nargs = num_args(info)
+            if isva
+                sig = Tuple{sig.parameters[1:nargs-1]..., Tuple{sig.parameters[nargs:end]...}}
+            end
+
+            raw_rule = DerivedRule(sig, fwds_oc, pb_oc, Val(isva), Val(num_args(info)))
+            rule = safety_on ? SafeRRule(raw_rule) : raw_rule
+            interp.oc_cache[oc_cache_key] = rule
+            return rule
+        end
+    finally
+        unlock(TAPIR_INFERENCE_LOCK)
     end
-
-    # Make shared data, and construct BBCode for forwards-pass and pullback.
-    shared_data = shared_data_tuple(info.shared_data_pairs)
-
-    # If we've already derived the OpaqueClosures and info, do not re-derive, just create a
-    # copy and pass in new shared data.
-    if haskey(interp.oc_cache, (sig_or_mi, safety_on))
-        existing_fwds_oc, existing_pb_oc = interp.oc_cache[(sig_or_mi, safety_on)]
-        fwds_oc = replace_captures(existing_fwds_oc, shared_data)
-        pb_oc = replace_captures(existing_pb_oc, shared_data)
-    else
-        fwds_ir = forwards_pass_ir(primal_ir, ad_stmts_blocks, info, _typeof(shared_data))
-        pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, _typeof(shared_data))
-
-        optimised_fwds_ir = optimise_ir!(optimise_ir!(IRCode(fwds_ir); do_inline=true))
-        optimised_pb_ir = optimise_ir!(optimise_ir!(IRCode(pb_ir); do_inline=true))
-        # @show sig_or_mi
-        # @show Treturn
-        # @show safety_on
-        # display(ir)
-        # display(IRCode(fwds_ir))
-        # display(IRCode(pb_ir))
-        # display(optimised_fwds_ir)
-        # display(optimised_pb_ir)
-        # @show length(ir.stmts.inst)
-        # @show length(optimised_fwds_ir.stmts.inst)
-        # @show length(optimised_pb_ir.stmts.inst)
-        fwds_oc = MistyClosure(
-            OpaqueClosure(optimised_fwds_ir, shared_data...; do_compile=true),
-            optimised_fwds_ir,
-        )
-        pb_oc = MistyClosure(
-            OpaqueClosure(optimised_pb_ir, shared_data...; do_compile=true),
-            optimised_pb_ir,
-        )
-        interp.oc_cache[(sig_or_mi, safety_on)] = (fwds_oc, pb_oc)
-    end
-
-    raw_rule = DerivedRule(fwds_oc, pb_oc, Val(isva), Val(num_args(info)))
-    return safety_on ? SafeRRule(raw_rule) : raw_rule
 end
 
 # Given an `OpaqueClosure` `oc`, create a new `OpaqueClosure` of the same type, but with new
@@ -1213,6 +1307,8 @@ function DynamicDerivedRule(interp::TapirInterpreter, safety_on::Bool)
     return DynamicDerivedRule(interp, Dict{Any, Any}(), safety_on)
 end
 
+_copy(x::P) where {P<:DynamicDerivedRule} = P(x.interp, Dict{Any, Any}(), x.safety_on)
+
 function (dynamic_rule::DynamicDerivedRule)(args::Vararg{Any, N}) where {N}
     sig = Tuple{map(_typeof ∘ primal, args)...}
     rule = get(dynamic_rule.cache, sig, nothing)
@@ -1235,19 +1331,30 @@ does not have to be derived.
 If `safety_on` is `true`, then the rule constructed will be a `SafeRRule`. This is useful
 when debugging, but should usually be switched off for production code as it (in general)
 incurs some runtime overhead.
+
+Note: the signature of the primal for which this is a rule is stored in the type. The only
+reason to keep this around is for debugging -- it is very helpful to have this type visible
+in the stack trace when something goes wrong, as it allows you to trivially determine which
+bit of your code is the culprit.
 =#
-mutable struct LazyDerivedRule{Tinterp<:TapirInterpreter, Trule}
+mutable struct LazyDerivedRule{Tinterp<:TapirInterpreter, primal_sig, Trule}
     interp::Tinterp
     safety_on::Bool
     mi::Core.MethodInstance
     rule::Trule
     function LazyDerivedRule(interp::A, mi::Core.MethodInstance, safety_on::Bool) where {A}
-        rt = rule_type(interp, mi)
-        return new{A, safety_on ? SafeRRule{rt} : rt}(interp, safety_on, mi)
+        return new{A, mi.specTypes, rule_type(interp, mi; safety_on)}(interp, safety_on, mi)
+    end
+    function LazyDerivedRule{Tinterp, Tprimal_sig, Trule}(
+        interp::Tinterp, mi::Core.MethodInstance, safety_on::Bool
+    ) where {Tinterp, Tprimal_sig, Trule}
+        return new{Tinterp, Tprimal_sig, Trule}(interp, safety_on, mi)
     end
 end
 
-function (rule::LazyDerivedRule{T, Trule})(args::Vararg{Any, N}) where {N, T, Trule}
+_copy(x::P) where {P<:LazyDerivedRule} = P(x.interp, x.mi, x.safety_on)
+
+function (rule::LazyDerivedRule{T, sig, Trule})(args::Vararg{Any, N}) where {N, T, sig, Trule}
     if !isdefined(rule, :rule)
         derived_rule = build_rrule(rule.interp, rule.mi; safety_on=rule.safety_on)
         if derived_rule isa Trule
@@ -1258,7 +1365,7 @@ function (rule::LazyDerivedRule{T, Trule})(args::Vararg{Any, N}) where {N, T, Tr
             display(rule.mi)
             println()
             println("with signature")
-            display(rule.mi.specTypes)
+            display(sig)
             println()
             println("derived_rule is of type")
             display(typeof(derived_rule))

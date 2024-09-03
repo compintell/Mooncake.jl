@@ -466,6 +466,10 @@ function test_rule(
 
     # Test the performance of the rule.
     test_rrule_performance(perf_flag, rule, x_x̄...)
+
+    # Test the interface again, in order to verify that caching is working correctly.
+    rule_2 = Tapir.build_rrule(interp, _typeof(__get_primals(x)); safety_on)
+    test_rrule_interface(x_x̄..., rule=rule_2)
 end
 
 #
@@ -539,6 +543,17 @@ function test_rule_and_type_interactions(rng::AbstractRNG, x::P) where {P}
             )
         end
     end
+end
+
+"""
+    test_tangent_type(primal_type, expected_tangent_type)
+
+Checks that `tangent_type(primal_type)` yields `expected_tangent_type`, and that everything
+infers / optimises away.
+"""
+function test_tangent_type(primal_type::Type, expected_tangent_type::Type)
+    @test tangent_type(primal_type) == expected_tangent_type
+    test_opt(Shim(), tangent_type, Tuple{_typeof(primal_type)})
 end
 
 """
@@ -1024,6 +1039,15 @@ function Base.:(==)(a::TypeStableMutableStruct, b::TypeStableMutableStruct)
     return equal_field(a, b, :a) && equal_field(a, b, :b)
 end
 
+mutable struct TypeUnstableMutableStruct
+    a::Float64
+    b
+end
+
+function Base.:(==)(a::TypeUnstableMutableStruct, b::TypeUnstableMutableStruct)
+    return equal_field(a, b, :a) && equal_field(a, b, :b)
+end
+
 struct TypeStableStruct{T}
     a::Int
     b::T
@@ -1032,6 +1056,15 @@ struct TypeStableStruct{T}
 end
 
 function Base.:(==)(a::TypeStableStruct, b::TypeStableStruct)
+    return equal_field(a, b, :a) && equal_field(a, b, :b)
+end
+
+struct TypeUnstableStruct
+    a::Float64
+    b
+end
+
+function Base.:(==)(a::TypeUnstableStruct, b::TypeUnstableStruct)
     return equal_field(a, b, :a) && equal_field(a, b, :b)
 end
 
@@ -1178,6 +1211,8 @@ function pi_node_tester(y::Ref{Any})
     x = y[]
     return isa(x, Int) ? sin(x) : x
 end
+
+Base.@nospecializeinfer arg_in_pi_node(@nospecialize(x)) = x isa Bool ? x : false
 
 function avoid_throwing_path_tester(x)
     if x < 0
@@ -1462,6 +1497,13 @@ function inlinable_vararg_invoke_call(
     return invoke(vararg_test_for_invoke, Tuple{typeof(rows), Vararg{N}}, rows, n1, ns...)
 end
 
+# build_rrule should error for this function, because it references a non-const global ref.
+__x_for_non_const_global_ref::Float64 = 5.0
+function non_const_global_ref(y::Float64)
+    global __x_for_non_const_global_ref = y
+    return __x_for_non_const_global_ref
+end
+
 function generate_test_functions()
     return Any[
         (false, :allocs, nothing, const_tester),
@@ -1478,6 +1520,7 @@ function generate_test_functions()
         ),
         (false, :none, (lb=1, ub=1_000), pi_node_tester, Ref{Any}(5.0)),
         (false, :none, (lb=1, ub=1_000), pi_node_tester, Ref{Any}(5)),
+        (false, :none, nothing, arg_in_pi_node, false),
         (false, :allocs, nothing, intrinsic_tester, 5.0),
         (false, :allocs, nothing, goto_tester, 5.0),
         (false, :allocs, nothing, new_tester, 5.0, :hello),

@@ -31,9 +31,11 @@ end
 
 Gradient using algorithmic/automatic differentiation via Tapir.
 """
-function ADgradient(::Val{:Tapir}, ℓ; safety_on::Bool=false)
-    primal_sig = Tuple{typeof(logdensity), typeof(ℓ), Vector{Float64}}
-    rule = Tapir.build_rrule(Tapir.TapirInterpreter(), primal_sig; safety_on)
+function ADgradient(::Val{:Tapir}, ℓ; safety_on::Bool=false, rule=nothing)
+    if isnothing(rule)
+        primal_sig = Tuple{typeof(logdensity), typeof(ℓ), Vector{Float64}}
+        rule = Tapir.build_rrule(Tapir.TapirInterpreter(), primal_sig; safety_on)
+    end
     return TapirGradientLogDensity(rule, Tapir.uninit_fcodual(ℓ))
 end
 
