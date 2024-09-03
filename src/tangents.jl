@@ -526,43 +526,11 @@ Generate a randomly-chosen tangent to `x`.
 The design is closely modelled after `zero_tangent`.
 """
 function randn_tangent(rng::AbstractRNG, x::T) where {T}
-    return isbitstype(T) ? randn_tangent_internal(rng, x) : randn_tangent_internal(rng, x, IdDict())
-end
-function randn_tangent(rng::AbstractRNG, x::T) where {T<:Union{Tangent, MutableTangent}}
-    return T(randn_tangent(rng, x.fields))
+    return randn_tangent_internal(rng, x, isbitstype(T) ? nothing : IdDict())
 end
 
-randn_tangent_internal(::AbstractRNG, ::NoTangent) = NoTangent()
-randn_tangent_internal(rng::AbstractRNG, ::T) where {T<:IEEEFloat} = randn(rng, T)
-function randn_tangent_internal(rng::AbstractRNG, x::T) where {T<:Union{Tuple, NamedTuple}}
-    return tangent_type(T) == NoTangent ? NoTangent() : tuple_map(x->randn_tangent_internal(rng, x), x)
-end
-@generated function randn_tangent_internal(rng::AbstractRNG, x::P) where {P}
-    # If `P` doesn't have a tangent space, always return `NoTangent()`.
-    tangent_type(P) === NoTangent && return NoTangent()
-
-    # This method can only handle struct types. Tell user to implement tangent type
-    # directly for primitive types.
-    isprimitivetype(P) && throw(error(
-        "$P is a primitive type. Implement a method of `randn_tangent` for it."
-    ))
-
-    # Assume `P` is a generic struct type, and derive the tangent recursively.
-    tangent_field_exprs = map(1:fieldcount(P)) do n
-        if tangent_field_type(P, n) <: PossiblyUninitTangent
-            V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
-            return :(isdefined(x, $n) ? $V(randn_tangent(rng, getfield(x, $n))) : $V())
-        else
-            return :(randn_tangent(rng, getfield(x, $n)))
-        end
-    end
-    tangent_fields_expr = Expr(:call, :tuple, tangent_field_exprs...)
-    return :($(tangent_type(P))($(backing_type(P))($tangent_fields_expr)))
-end
-
-function randn_tangent_internal(rng::AbstractRNG, x::Union{IEEEFloat, NoTangent}, stackdict::IdDict)
-    return randn_tangent(rng, x)
-end
+randn_tangent_internal(::AbstractRNG, ::NoTangent, ::Any) = NoTangent()
+randn_tangent_internal(rng::AbstractRNG, ::T, ::Any) where {T<:IEEEFloat} = randn(rng, T)
 function randn_tangent_internal(rng::AbstractRNG, x::SimpleVector, stackdict::IdDict)
     return map!(Vector{Any}(undef, length(x)), eachindex(x)) do n
         return randn_tangent_internal(rng, x[n], stackdict)
@@ -575,14 +543,15 @@ function randn_tangent_internal(rng::AbstractRNG, x::Array{T, N}, stackdict::IdD
     stackdict[x] = dx
     return _map_if_assigned!(x -> randn_tangent_internal(rng, x, stackdict), dx, x)
 end
-function randn_tangent_internal(rng::AbstractRNG, x::P, stackdict::IdDict) where {P<:Union{Tuple, NamedTuple}}
+function randn_tangent_internal(rng::AbstractRNG, x::P, stackdict::Any) where {P<:Union{Tuple, NamedTuple}}
     return tangent_type(P) == NoTangent ? NoTangent() : tuple_map(x -> randn_tangent_internal(rng, x, stackdict), x)
 end
-function randn_tangent_internal(rng::AbstractRNG, x::P, stackdict::IdDict) where {P}
+function randn_tangent_internal(rng::AbstractRNG, x::P, stackdict) where {P}
 
     tangent_type(P) == NoTangent && return NoTangent()
 
     if tangent_type(P) <: MutableTangent
+        stackdict isa IdDict || error("...")
         if haskey(stackdict, x)
             return stackdict[x]::tangent_type(P)
         end
@@ -590,15 +559,11 @@ function randn_tangent_internal(rng::AbstractRNG, x::P, stackdict::IdDict) where
         stackdict[x].fields = backing_type(P)(randn_tangent_struct_field(rng, x, stackdict))
         return stackdict[x]::tangent_type(P)
     else
-        if isbitstype(P)
-            return randn_tangent_internal(rng, x)
-        else
-            return tangent_type(P)(backing_type(P)(randn_tangent_struct_field(rng, x, stackdict)))
-        end
+        return tangent_type(P)(backing_type(P)(randn_tangent_struct_field(rng, x, stackdict)))
     end
 end
 
-function randn_tangent_struct_field(rng::AbstractRNG, x::P, stackdict::IdDict) where {P}
+function randn_tangent_struct_field(rng::AbstractRNG, x::P, stackdict) where {P}
     return ntuple(fieldcount(P)) do n
         if tangent_field_type(P, n) <: PossiblyUninitTangent
             V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
