@@ -115,7 +115,7 @@ We then generalise.
 _**Reverse-Mode AD: what does it do in Euclidean space?**_
 
 In this setting, the goal of reverse-mode AD is the following: given a function ``f : \RR^P \to \RR^Q`` which is differentiable at ``x \in \RR^P`` with Jacobian ``J[x]`` at ``x``, compute ``J[x]^\top \bar{y}`` for any ``\bar{y} \in \RR^Q``.
-A special case is: obtaining the gradient (of scalar output) correcponds to when ``Q = 1``, by letting ``\bar{y} = 1``.
+This is useful because we can obtain the gradient from this when ``Q = 1`` by letting ``\bar{y} = 1``.
 
 _**Adjoint Operators**_
 
@@ -258,7 +258,7 @@ As before, we work through in detail.
 
 _**Step 1: Differentiable Mathematical Model**_
 
-There are a couple of aspects of `f` which require thoughts:
+There are a couple of aspects of `f` which require thought:
 1. it has two arguments -- we've only handled single argument functions previously, and
 2. the second argument is a `Tuple` -- we've not yet decided how to model this.
 
