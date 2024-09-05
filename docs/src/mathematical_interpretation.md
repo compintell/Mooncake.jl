@@ -341,7 +341,7 @@ where ``\mathbf{1}`` is the vector of length ``N`` in which each element is equa
 (Observe that this agrees with the result we derived earlier for functions which don't mutate their arguments).
 
 Now that we know what the adjoint is, we'll write down the `rrule!!`, and then explain what is going on in terms of the adjoint.
-Tapir.jl will generate `rrule!!`s of similar effect (mostly) automatically, but it is good to see a manual implementation for understanding.
+This hand-written implementation is to aid your understanding -- Tapir.jl should be relied upon to generate this code automatically in practice.
 ```julia
 function rrule!!(::CoDual{typeof(foo)}, x::CoDual{Tuple{Float64, Vector{Float64}}})
     dx_fdata = x.tangent[2]
