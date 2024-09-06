@@ -441,8 +441,8 @@ function test_rule(
     rng, x...;
     interface_only::Bool=false,
     is_primitive::Bool=true,
-    perf_flag::Symbol,
-    interp::Tapir.TapirInterpreter,
+    perf_flag::Symbol=:none,
+    interp::Tapir.TapirInterpreter=Tapir.TapirInterpreter(),
     safety_on::Bool=false,
 )
     @nospecialize rng x
