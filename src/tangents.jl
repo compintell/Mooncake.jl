@@ -500,7 +500,7 @@ function zero_tangent_internal(x::P, stackdict::IdDict) where {P}
     end
 end
 
-@inline function zero_tangent_struct_field(x::P, stackdict::IdDict) where {P}
+function zero_tangent_struct_field(x::P, stackdict::IdDict) where {P}
     return ntuple(fieldcount(P)) do n
         if tangent_field_type(P, n) <: PossiblyUninitTangent
             V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
@@ -553,7 +553,6 @@ function randn_tangent_internal(rng::AbstractRNG, x::P, stackdict::Any) where {P
     return tangent_type(P) == NoTangent ? NoTangent() : tuple_map(x -> randn_tangent_internal(rng, x, stackdict), x)
 end
 function randn_tangent_internal(rng::AbstractRNG, x::P, stackdict) where {P}
-
     tangent_type(P) == NoTangent && return NoTangent()
 
     if tangent_type(P) <: MutableTangent
@@ -562,26 +561,24 @@ function randn_tangent_internal(rng::AbstractRNG, x::P, stackdict) where {P}
             return stackdict[x]::tangent_type(P)
         end
         stackdict[x] = tangent_type(P)()
-        stackdict[x].fields = backing_type(P)(randn_tangent_struct_field(rng, x, stackdict))
+        stackdict[x].fields = randn_tangent_struct_field(rng, x, stackdict)
         return stackdict[x]::tangent_type(P)
     else
-        return tangent_type(P)(backing_type(P)(randn_tangent_struct_field(rng, x, stackdict)))
+        return tangent_type(P)(randn_tangent_struct_field(rng, x, stackdict))
     end
 end
 
-function randn_tangent_struct_field(rng::AbstractRNG, x::P, stackdict) where {P}
-    return ntuple(fieldcount(P)) do n
+@generated function randn_tangent_struct_field(rng::AbstractRNG, x::P, stackdict::Union{IdDict, Nothing}) where {P}    
+    tangent_field_exprs = map(1:fieldcount(P)) do n
         if tangent_field_type(P, n) <: PossiblyUninitTangent
             V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
-            if isdefined(x, n)
-                return V(randn_tangent_internal(rng, getfield(x, n), stackdict))
-            else
-                return V()
-            end
+            return :(isdefined(x, $n) ? $V(randn_tangent_internal(rng, getfield(x, $n), stackdict)) : $V())
         else
-            return randn_tangent_internal(rng, getfield(x, n), stackdict)
+            return :(randn_tangent_internal(rng, getfield(x, $n), stackdict))
         end
     end
+    tangent_fields_expr = Expr(:call, :tuple, tangent_field_exprs...)
+    return :($(backing_type(P))($tangent_fields_expr))
 end
 
 """
