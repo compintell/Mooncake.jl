@@ -2,13 +2,13 @@ module TapirDynamicPPLExt
 
 if isdefined(Base, :get_extension)
     using DynamicPPL: DynamicPPL
-    using Tapir: Tapir, simple_zero_adjoint
+    using Tapir: Tapir
 else
     using ..DynamicPPL: DynamicPPL
-    using ..Tapir: Tapir, simple_zero_adjoint
+    using ..Tapir: Tapir
 end
 
-using Tapir: DefaultCtx, CoDual, NoPullback, primal, zero_fcodual
+using Tapir: DefaultCtx, CoDual, simple_zero_adjoint
 
 # This is purely an optimisation.
 Tapir.@is_primitive DefaultCtx Tuple{typeof(DynamicPPL.istrans), Vararg}
