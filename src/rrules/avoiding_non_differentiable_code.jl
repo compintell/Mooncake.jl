@@ -8,8 +8,7 @@ end
 
 @is_primitive MinimalCtx Tuple{typeof(randn), AbstractRNG, Vararg}
 function rrule!!(f::CoDual{typeof(randn)}, rng::CoDual{<:AbstractRNG}, args::CoDual...)
-    x = randn(primal(rng), map(primal, args)...)
-    return zero_fcodual(x), NoPullback(f, rng, args...)
+    return simple_zero_adjoint(f, rng, args...)
 end
 
 function generate_hand_written_rrule!!_test_cases(

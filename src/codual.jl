@@ -65,6 +65,10 @@ end
 
 @inline (pb::NoPullback)(_) = tuple_map(instantiate, pb.r)
 
+@inline function simple_zero_adjoint(f::CoDual, x::Vararg{CoDual, N}) where {N}
+    return zero_fcodual(primal(f)(map(primal, x)...)), NoPullback(f, x...)
+end
+
 to_fwds(x::CoDual) = CoDual(primal(x), fdata(tangent(x)))
 
 to_fwds(x::CoDual{Type{P}}) where {P} = CoDual{Type{P}, NoFData}(primal(x), NoFData())
