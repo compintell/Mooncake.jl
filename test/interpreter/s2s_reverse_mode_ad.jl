@@ -212,14 +212,13 @@ end
         @test rule isa Tapir.rule_type(interp, sig; safety_on)
     end
 
-    interp = Tapir.TapirInterpreter()
     @testset "$(_typeof((f, x...)))" for (n, (interface_only, perf_flag, bnds, f, x...)) in
         collect(enumerate(TestResources.generate_test_functions()))
 
         sig = _typeof((f, x...))
         @info "$n: $sig"
         TestUtils.test_rule(
-            Xoshiro(123456), f, x...; interp, perf_flag, interface_only, is_primitive=false
+            Xoshiro(123456), f, x...; perf_flag, interface_only, is_primitive=false
         )
 
         # codual_args = map(zero_codual, (f, x...))
@@ -266,7 +265,7 @@ end
         # 184
         TestUtils.test_rule(
             Xoshiro(123456), S2SGlobals.f, S2SGlobals.A(2 * ones(3)), ones(3);
-            interp, perf_flag=:none, interface_only=false, is_primitive=false,
+            interface_only=false, is_primitive=false,
         )
     end
 end
