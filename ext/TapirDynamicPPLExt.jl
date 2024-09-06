@@ -2,10 +2,10 @@ module TapirDynamicPPLExt
 
 if isdefined(Base, :get_extension)
     using DynamicPPL: DynamicPPL
-    using Tapir: Tapir
+    using Tapir: Tapir, simple_zero_adjoint
 else
     using ..DynamicPPL: DynamicPPL
-    using ..Tapir: Tapir
+    using ..Tapir: Tapir, simple_zero_adjoint
 end
 
 using Tapir: DefaultCtx, CoDual, NoPullback, primal, zero_fcodual
