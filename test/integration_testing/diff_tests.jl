@@ -6,9 +6,6 @@
         TestResources.DIFFTESTS_FUNCTIONS[91:end], # SKIPPING SPARSE_LDIV
     ))
         @info "$n: $(_typeof((f, x...)))"
-        TestUtils.test_rule(
-            sr(123456), f, x...;
-            perf_flag=:none, interface_only=false, is_primitive=false,
-        )
+        test_rule(sr(123456), f, x...; interface_only=false, is_primitive=false)
     end
 end

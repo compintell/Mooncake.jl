@@ -210,7 +210,7 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
         (:none, LKJ(5, 1.1), rand(sr(123456), LKJ(5, 1.1))),
     ]
         @info "$(map(typeof, (d, x)))"
-        TestUtils.test_rule(sr(123456), logpdf, d, x; perf_flag, is_primitive=false)
+        test_rule(sr(123456), logpdf, d, x; perf_flag, is_primitive=false)
     end
     
     @testset "$name" for (perf_flag, name, f, x) in Any[
@@ -263,6 +263,6 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
         ),
     ]
         @info "$name"
-        TestUtils.test_rule(sr(123456), f, x...; perf_flag=perf_flag, is_primitive=false)
+        test_rule(sr(123456), f, x...; perf_flag=perf_flag, is_primitive=false)
     end
 end

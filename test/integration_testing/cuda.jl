@@ -10,8 +10,8 @@ using CUDA
     )
 
     # Check we can instantiate a CuArray.
-    TestUtils.test_rule(
+    test_rule(
         sr(123456), CuArray{Float32, 1, CUDA.Mem.DeviceBuffer}, undef, 256;
-        perf_flag=:none, interface_only=true, is_primitive=true,
+        interface_only=true, is_primitive=true,
     )
 end
