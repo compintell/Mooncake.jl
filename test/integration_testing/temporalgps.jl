@@ -18,14 +18,8 @@ temporalgps_logpdf_tester(k, x, y, s) = logpdf(build_gp(k)(x, s), y)
         f = temporalgps_logpdf_tester
         sig = _typeof((temporalgps_logpdf_tester, k, x, y, s))
         @info "$sig"
-        interp = Tapir.PInterp()
         TestUtils.test_rule(
-            Xoshiro(123456), f, k, x, y, s;
-            interp,
-            perf_flag=:none,
-            interface_only=false,
-            is_primitive=false,
-            safety_on=false,
+            Xoshiro(123456), f, k, x, y, s; is_primitive=false, safety_on=false,
         )
     end
 end

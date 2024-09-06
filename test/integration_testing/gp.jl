@@ -1,7 +1,6 @@
 using AbstractGPs, KernelFunctions
 
 @testset "gp" begin
-    interp = Tapir.PInterp()
     base_kernels = Any[
         ZeroKernel(),
         ConstantKernel(; c=1.0),
@@ -42,7 +41,6 @@ using AbstractGPs, KernelFunctions
             @info typeof(x)
             TestUtils.test_rule(
                 sr(123456), x...;
-                interp,
                 perf_flag=:none,
                 interface_only=true,
                 is_primitive=false,
