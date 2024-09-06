@@ -123,7 +123,7 @@ Crucially, observe that we distinguish between the state of the arguments before
 
 For our example, the exact form of ``f`` is
 ```math
-f((x, y, z)) = ((x, y, x \odot y), (2 x \odot y, \sum_{d=1}^D x \odot y))
+f((x, y, z, s)) = ((x, y, x \odot y, 2 x \odot y), (2 x \odot y, \sum_{d=1}^D x \odot y))
 ```
 Observe that ``f`` behaves a little like a transition operator, in the that the first element of the tuple returned is the updated state of the arguments.
 
@@ -173,7 +173,8 @@ Consider the usual inner product to derive the adjoint:
 ```math
 \begin{align}
     \langle \bar{y}, D f [x] (\dot{x}) \rangle &= \langle (\bar{y}_1, \bar{y}_2), (\dot{x}, D \varphi [x](\dot{x})) \rangle \nonumber \\
-        &= \langle \bar{y}_1, \dot{x} \rangle + \langle D \varphi [x]^\ast (\bar{y}_2), \dot{x} \rangle \nonumber \\
+        &= \langle \bar{y}_1, \dot{x} \rangle + \langle \bar{y}_2, D \varphi [x](\dot{x}) \rangle \nonumber \\
+        &= \langle \bar{y}_1, \dot{x} \rangle + \langle D \varphi [x]^\ast (\bar{y}_2), \dot{x} \rangle \nonumber \quad \text{(by definition of the adjoint)} \\
         &= \langle \bar{y}_1 + D \varphi [x]^\ast (\bar{y}_2), \dot{x} \rangle. \nonumber
 \end{align}
 ```
@@ -269,7 +270,7 @@ Consequently, we use the same type to represent both.
 
 _**Representing Gradients**_
 
-This package assigns to each type in Julia a unique `tangent_type`, to purpose of which is to contain the gradients computed during reverse mode AD.
+This package assigns to each type in Julia a unique `tangent_type`, the purpose of which is to contain the gradients computed during reverse mode AD.
 The extended docstring for [`tangent_type`](@ref) provides the best introduction to the types which are used to represent tangents / gradients.
 
 ```@docs
@@ -340,6 +341,7 @@ where ``\mathbf{1}`` is the vector of length ``N`` in which each element is equa
 (Observe that this agrees with the result we derived earlier for functions which don't mutate their arguments).
 
 Now that we know what the adjoint is, we'll write down the `rrule!!`, and then explain what is going on in terms of the adjoint.
+This hand-written implementation is to aid your understanding -- Tapir.jl should be relied upon to generate this code automatically in practice.
 ```julia
 function rrule!!(::CoDual{typeof(foo)}, x::CoDual{Tuple{Float64, Vector{Float64}}})
     dx_fdata = x.tangent[2]
