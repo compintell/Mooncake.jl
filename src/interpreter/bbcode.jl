@@ -761,3 +761,56 @@ function _find_id_uses!(d::Dict{ID, Bool}, x::ReturnNode)
 end
 _find_id_uses!(d::Dict{ID, Bool}, x::QuoteNode) = nothing
 _find_id_uses!(d::Dict{ID, Bool}, x) = nothing
+
+"""
+    remove_dead_blocks(ir::BBCode)
+
+Produce a new `BBCode` in which any blocks which cannot be reached in `ir` are removed.
+"""
+remove_dead_blocks(ir::BBCode) = BBCode(ir, _remove_dead_blocks(ir.blocks))
+
+# Implements functionality for `remove_dead_blocks`.
+function _remove_dead_blocks(blks::Vector{BBlock})
+
+    # Set up the removal.
+    entry_id = blks[1].id
+    predecessors = _compute_all_predecessors(blks)
+    successors = _compute_all_successors(blks)
+    dead_block_ids = findall(isempty, predecessors)
+    block_is_dead = fill(false, length(blks))
+    id_to_position = Dict(zip(map(x -> x.id, blks), eachindex(blks)))
+
+    # The entry block never has any predecessors. By setting old_dead_length to 1, we will
+    # run at least one iteration of this procedure provided that there is at least one other
+    # block which is dead.
+    old_dead_length = 1
+
+    # After this procedure, the only block without a predecessor should be the entry block.
+    while length(dead_block_ids) > old_dead_length
+        old_dead_length = length(dead_block_ids)
+
+        # Remove all blocks in the dead_blocks list which aren't the entry block.
+        for blk_id in dead_block_ids
+            # If we already know to remove this block, don't do any more work.
+            block_is_dead[id_to_position[blk_id]] == true && continue
+
+            # We don't want to remove the entry block.
+            blk_id == entry_id && continue
+
+            # Flag the block for removal.
+            block_is_dead[id_to_position[blk_id]] = true
+
+            # For all successors, remove this block as one of their predecessors.
+            for successor_id in successors[blk_id]
+                preds = predecessors[successor_id]
+                ind = only(findall(==(blk_id), preds))
+                deleteat!(preds, ind)
+            end
+        end
+
+        # Recompute the dead block ids.
+        dead_block_ids = findall(isempty, predecessors)
+    end
+
+    return blks[.!block_is_dead]
+end

@@ -1062,14 +1062,15 @@ function pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, T
     main_blocks = map(ad_stmts_blocks, enumerate(ir.blocks)) do (blk_id, ad_stmts), (n, blk)
         if is_unreachable_return_node(terminator(blk))
             rvs_stmts = [(ID(), new_inst(nothing))]
+            return BBlock(blk_id, rvs_stmts)
         else
-            rvs_stmts = reduce(vcat, [x.rvs for x in reverse(ad_stmts)])
+            rvs_ad_stmts = reduce(vcat, [x.rvs for x in reverse(ad_stmts)])
+            pred_ids = vcat(ps[blk.id], n == 1 ? [info.entry_id] : ID[])
+            tmp = pred_is_unique_pred[blk_id]
+            additional_stmts, new_blocks = conclude_rvs_block(blk, pred_ids, tmp, info)
+            rvs_block = BBlock(blk_id, vcat(rvs_ad_stmts, additional_stmts))
+            return vcat(rvs_block, new_blocks)
         end
-        pred_ids = vcat(ps[blk.id], n == 1 ? [info.entry_id] : ID[])
-        tmp = pred_is_unique_pred[blk_id]
-        additional_stmts, new_blocks = conclude_rvs_block(blk, pred_ids, tmp, info)
-        rvs_block = BBlock(blk_id, vcat(rvs_stmts, additional_stmts))
-        return vcat(rvs_block, new_blocks)
     end
     main_blocks = vcat(main_blocks...)
 
@@ -1127,9 +1128,13 @@ function pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, T
         ),
     )
 
-    # Create and return `BBCode` for the pullback.
+    # Create and return `BBCode` for the pullback. Sort the blocks and remove any blocks
+    # which are unreachable, in the sense that they have no predecessors (except the entry
+    # block). This ought not to be necessary, but _appears_ to be necessary in order to
+    # avoid annoying the Julia compiler.
     blks = vcat(entry_block, main_blocks, exit_block)
-    return _sort_blocks!(BBCode(blks, arg_types, ir.sptypes, ir.linetable, ir.meta))
+    pb_ir = BBCode(blks, arg_types, ir.sptypes, ir.linetable, ir.meta)
+    return remove_dead_blocks(_sort_blocks!(pb_ir))
 end
 
 #=
@@ -1156,6 +1161,12 @@ function conclude_rvs_block(
     deref_stmts = map(phi_ids, rdata_ids) do phi_id, deref_id
         P = get_primal_type(info, phi_id)
         r = get_rev_data_id(info, phi_id)
+        # z_id = ID()
+        # return [
+        #     (deref_id, new_inst(Expr(:call, getfield, r, QuoteNode(:x)))),
+        #     (z_id, new_inst(Expr(:call, Tapir.zero_like_rdata_from_type, P))),
+        #     (ID(), new_inst(Expr(:call, setfield!, r, QuoteNode(:x), z_id))),
+        # ]
         return (deref_id, new_inst(Expr(:call, __deref_and_zero, P, r)))
     end
 
