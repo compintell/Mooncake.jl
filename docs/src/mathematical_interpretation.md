@@ -123,7 +123,7 @@ Crucially, observe that we distinguish between the state of the arguments before
 
 For our example, the exact form of ``f`` is
 ```math
-f((x, y, z, s)) = ((x, y, x \odot y, \text{Ref}(2 x \odot y)), (2 x \odot y, \sum_{d=1}^D x \odot y))
+f((x, y, z, s)) = ((x, y, x \odot y, 2 x \odot y), (2 x \odot y, \sum_{d=1}^D x \odot y))
 ```
 Observe that ``f`` behaves a little like a transition operator, in the that the first element of the tuple returned is the updated state of the arguments.
 
