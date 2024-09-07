@@ -1,3 +1,3 @@
 @testset "DynamicPPLTapirExt" begin
-    test_rule(Xoshiro(123456), DynamicPPL.istrans, DynamicPPL.VarInfo())
+    test_rule(sr(123456), DynamicPPL.istrans, DynamicPPL.VarInfo(); interface_only=true)
 end
