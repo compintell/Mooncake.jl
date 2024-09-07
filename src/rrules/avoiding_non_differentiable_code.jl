@@ -49,7 +49,7 @@ function generate_hand_written_rrule!!_test_cases(
         ),
 
         # Rules to make string-related functionality work properly.
-        (false, :stability_and_allocs, nothing, string, 'H'),
+        (false, :stability, nothing, string, 'H'),
 
         # Rules to make Symbol-related functionality work properly.
         (false, :stability_and_allocs, nothing, Symbol, "hello"),
