@@ -170,18 +170,24 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
             primals = map(x -> x isa CoDual ? primal(x) : x, args)
             suite["primal"] = Chairmarks.benchmark(
                 () -> primals,
-                primals -> (Ref(primals[1]), Ref(_deepcopy(primals[2:end]))),
-                (a -> a[1][]((a[2][]...))),
+                primals -> (primals[1], _deepcopy(primals[2:end])),
+                (a -> a[1]((a[2]...))),
                 _ -> true,
                 evals=1,
             )
 
-            # Benchmark AD via Tapir.
-            @info "Tapir"
-            rule = Ref(Tapir.build_rrule(args...))
-            coduals = Ref(map(x -> x isa CoDual ? x : zero_codual(x), args))
-            to_benchmark(rule[], coduals[]...)
-            suite["tapir"] = @be(_, _, to_benchmark(rule[], coduals[]...), _, evals=1)
+            # # Benchmark AD via Tapir.
+            # @info "Tapir"
+            # rule = Tapir.build_rrule(args...)
+            # coduals = map(x -> x isa CoDual ? x : zero_codual(x), args)
+            # to_benchmark(rule, coduals...)
+            # suite["tapir"] = Chairmarks.benchmark(
+            #     () -> (rule, coduals),
+            #     identity,
+            #     a -> to_benchmark(a[1], a[2]...),
+            #     _ -> true,
+            #     evals=1,
+            # )
 
             if include_other_frameworks
 
@@ -214,7 +220,6 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
                 end
             end
 
-            GC.gc()
             return (args, suite)
         end
     end
