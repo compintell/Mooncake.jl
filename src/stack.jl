@@ -13,7 +13,7 @@ end
 
 _copy(::Stack{T}) where {T} = Stack{T}()
 
-@inline function Base.push!(x::Stack{T}, val::T) where {T}
+@noinline function Base.push!(x::Stack{T}, val::T) where {T}
     position = x.position + 1
     memory = x.memory
     x.position = position
