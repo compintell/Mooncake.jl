@@ -612,8 +612,50 @@ function _remove_double_edges(ir::BBCode)
     return BBCode(ir, new_blks)
 end
 
+"""
+    _build_graph_of_cfg(blks::Vector{BBlock})::Tuple{SimpleDiGraph, Dict{ID, Int}}
+
+Builds a `SimpleDiGraph`, `g`, representing of the CFG associated to `blks`, where `blks`
+comprises the collection of basic blocks associated to a `BBCode`.
+This is a type from Graphs.jl, so constructing `g` makes it straightforward to analyse the
+control flow structure of `ir` using algorithms from Graphs.jl.
+
+Returns a 2-tuple, whose first element is `g`, and whose second element is a map from
+the `ID` associated to each basic block in `ir`, to the `Int` corresponding to its node
+index in `g`.
+"""
+function _build_graph_of_cfg(blks::Vector{BBlock})::Tuple{SimpleDiGraph, Dict{ID, Int}}
+    node_ints = collect(eachindex(blks))
+    id_to_int = Dict(zip(map(blk -> blk.id, blks), node_ints))
+    successors = _compute_all_successors(blks)
+    g = SimpleDiGraph(length(blks))
+    for blk in blks, successor in successors[blk.id]
+        add_edge!(g, id_to_int[blk.id], id_to_int[successor])
+    end
+    return g, id_to_int
+end
+
+"""
+    _distance_to_entry(blks::Vector{BBlock})::Vector{Int}
+
+For each basic block in `blks`, compute the distance from it to the entry point (the first
+block. The distance is `typemax(Int)` if no path from the entry point to a given node.
+"""
+function _distance_to_entry(blks::Vector{BBlock})::Vector{Int}
+    g, id_to_int = _build_graph_of_cfg(blks)
+    return dijkstra_shortest_paths(g, id_to_int[blks[1].id]).dists
+end
+
+"""
+    _is_reachable(blks::Vector{BBlock})::Vector{Bool}
+
+Computes a `Vector` whose length is `length(blks)`. The `n`th element is `true` iff it is
+possible for control flow to reach the `n`th block.
+"""
+_is_reachable(blks::Vector{BBlock})::Vector{Bool} = _distance_to_entry(blks) .< typemax(Int)
+
 #=
-    _sort_blocks!(ir::BBCode)
+    _sort_blocks!(ir::BBCode)::BBCode
 
 Ensure that blocks appear in order of distance-from-entry-point, where distance the
 distance from block b to the entry point is defined to be the minimum number of basic
@@ -627,17 +669,8 @@ WARNING: use with care. Only use if you are confident that arbitrary re-ordering
 blocks in `ir` is valid. Notably, this does not hold if you have any `IDGotoIfNot` nodes in
 `ir`.
 =#
-function _sort_blocks!(ir::BBCode)
-
-    node_ints = collect(eachindex(ir.blocks))
-    id_to_int = Dict(zip(map(blk -> blk.id, ir.blocks), node_ints))
-    ps = compute_all_predecessors(ir)
-    direct_predecessors = map(ir.blocks) do blk
-        return map(b -> Edge(id_to_int[b], id_to_int[blk.id]), ps[blk.id])
-    end
-    g = SimpleDiGraph(reduce(vcat, direct_predecessors))
-
-    d = dijkstra_shortest_paths(g, id_to_int[ir.blocks[1].id]).dists
+function _sort_blocks!(ir::BBCode)::BBCode
+    d = _distance_to_entry(ir.blocks)
     I = sortperm(d)
     ir.blocks .= ir.blocks[I]
     return ir
@@ -763,54 +796,31 @@ _find_id_uses!(d::Dict{ID, Bool}, x::QuoteNode) = nothing
 _find_id_uses!(d::Dict{ID, Bool}, x) = nothing
 
 """
-    remove_dead_blocks(ir::BBCode)
+    remove_unreachable_blocks(ir::BBCode)::BBCode
 
-Produce a new `BBCode` in which any blocks which cannot be reached in `ir` are removed.
+If a basic block in `ir` cannot possibly be reached during execution, then it can be safely
+removed from `ir` without changing its functionality.
+A block is unreachable if either:
+1. it has no predecessors _and_ it is not the first block, or
+2. all of its predecessors are themselves unreachable.
+
+For example, consider the following IR:
+```jldoctest remove_unreachable_blocks
+julia> ir = Tapir.ircode(
+           Any[ReturnNode(nothing), Expr(:call, sin, Argument(2)), ReturnNode(SSAValue(2))],
+           Any[Any, Any, Any],
+       )
+1 1 ─      return nothing                                                                                                                                                   │
+  2 ─ %2 = (sin)(_2)::Any                                                                                                                                                   │
+  └──      return %2
+```
+There is no possible way to reach the second basic block (lines 2 and 3). Applying this
+function will therefore remove it, simplifying the resulting IR as follows:
+```jldoctest remove_unreachable_blocks
+julia> IRCode(remove_unreachable_blocks(BBCode(ir)))
+1 1 ─     return nothing
+```
 """
-remove_dead_blocks(ir::BBCode) = BBCode(ir, _remove_dead_blocks(ir.blocks))
+remove_unreachable_blocks(ir::BBCode) = BBCode(ir, _remove_unreachable_blocks(ir.blocks))
 
-# Implements functionality for `remove_dead_blocks`.
-function _remove_dead_blocks(blks::Vector{BBlock})
-
-    # Set up the removal.
-    entry_id = blks[1].id
-    predecessors = _compute_all_predecessors(blks)
-    successors = _compute_all_successors(blks)
-    dead_block_ids = findall(isempty, predecessors)
-    block_is_dead = fill(false, length(blks))
-    id_to_position = Dict(zip(map(x -> x.id, blks), eachindex(blks)))
-
-    # The entry block never has any predecessors. By setting old_dead_length to 1, we will
-    # run at least one iteration of this procedure provided that there is at least one other
-    # block which is dead.
-    old_dead_length = 1
-
-    # After this procedure, the only block without a predecessor should be the entry block.
-    while length(dead_block_ids) > old_dead_length
-        old_dead_length = length(dead_block_ids)
-
-        # Remove all blocks in the dead_blocks list which aren't the entry block.
-        for blk_id in dead_block_ids
-            # If we already know to remove this block, don't do any more work.
-            block_is_dead[id_to_position[blk_id]] == true && continue
-
-            # We don't want to remove the entry block.
-            blk_id == entry_id && continue
-
-            # Flag the block for removal.
-            block_is_dead[id_to_position[blk_id]] = true
-
-            # For all successors, remove this block as one of their predecessors.
-            for successor_id in successors[blk_id]
-                preds = predecessors[successor_id]
-                ind = only(findall(==(blk_id), preds))
-                deleteat!(preds, ind)
-            end
-        end
-
-        # Recompute the dead block ids.
-        dead_block_ids = findall(isempty, predecessors)
-    end
-
-    return blks[.!block_is_dead]
-end
+_remove_unreachable_blocks(blks::Vector{BBlock}) = blks[_is_reachable(blks)]

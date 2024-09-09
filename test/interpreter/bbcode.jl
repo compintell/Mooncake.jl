@@ -204,4 +204,16 @@ end
             @test result[id_3] == false
         end
     end
+    @testset "_is_reachable" begin
+        ir = Tapir.ircode(
+            Any[
+                ReturnNode(nothing),
+                Expr(:call, sin, 5),
+                Core.GotoNode(4),
+                ReturnNode(SSAValue(2)),
+            ],
+            Any[Any for _ in 1:4],
+        )
+        @test Tapir._is_reachable(BBCode(ir).blocks) == [true, false, false]
+    end
 end
