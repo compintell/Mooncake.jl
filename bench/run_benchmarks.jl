@@ -23,7 +23,6 @@ using Tapir:
     generate_hand_written_rrule!!_test_cases,
     generate_derived_rrule!!_test_cases,
     TestUtils,
-    PInterp,
     _typeof
 
 using Tapir.TestUtils: _deepcopy, to_benchmark

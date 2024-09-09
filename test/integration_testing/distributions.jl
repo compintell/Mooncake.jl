@@ -4,7 +4,7 @@ _sym(A) = A'A
 _pdmat(A) = PDMat(_sym(A) + 5I)
 
 @testset "distributions" begin
-    @testset "$(typeof(d))" for (perf_flag, d, x) in Any[
+    logpdf_test_cases = Any[
 
         #
         # Univariate
@@ -209,11 +209,7 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
         ),
         (:none, LKJ(5, 1.1), rand(sr(123456), LKJ(5, 1.1))),
     ]
-        @info "$(map(typeof, (d, x)))"
-        test_rule(sr(123456), logpdf, d, x; perf_flag, is_primitive=false)
-    end
-    
-    @testset "$name" for (perf_flag, name, f, x) in Any[
+    work_around_test_cases = Any[
         (:allocs, "InverseGamma", (a, b, x) -> logpdf(InverseGamma(a, b), x), (1.5, 1.4, 0.4)),
         (:allocs, "NormalCanon", (m, s, x) -> logpdf(NormalCanon(m, s), x), (0.1, 1.0, -0.5)),
         (:none, "Categorical", x -> logpdf(Categorical(x, 1 - x), 1), 0.3),
@@ -262,6 +258,13 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
             (randn(2, 2), 1.1),
         ),
     ]
+
+    @testset "$(typeof(d))" for (perf_flag, d, x) in logpdf_test_cases
+        @info "$(map(typeof, (d, x)))"
+        test_rule(sr(123456), logpdf, d, x; perf_flag, is_primitive=false)
+    end
+
+    @testset "$name" for (perf_flag, name, f, x) in work_around_test_cases
         @info "$name"
         test_rule(sr(123456), f, x...; perf_flag=perf_flag, is_primitive=false)
     end

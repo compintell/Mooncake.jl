@@ -31,10 +31,10 @@ end
         )
         is_used_dict = Dict{ID, Bool}(id_ssa_1 => true, id_ssa_2 => true)
         rdata_ref = Ref{Tuple{map(Tapir.lazy_zero_rdata_type, (Float64, Int))...}}()
-        info = ADInfo(Tapir.PInterp(), arg_types, ssa_insts, is_used_dict, false, rdata_ref)
+        info = ADInfo(Tapir.TapirInterpreter(), arg_types, ssa_insts, is_used_dict, false, rdata_ref)
 
         # Verify that we can access the interpreter and terminator block ID.
-        @test info.interp isa Tapir.PInterp
+        @test info.interp isa Tapir.TapirInterpreter
 
         # Verify that we can get the type associated to Arguments, IDs, and others.
         global ___x = 5.0
@@ -55,7 +55,7 @@ end
         id_line_1 = ID()
         id_line_2 = ID()
         info = ADInfo(
-            Tapir.PInterp(),
+            Tapir.TapirInterpreter(),
             Dict{Argument, Any}(Argument(1) => typeof(sin), Argument(2) => Float64),
             Dict{ID, CC.NewInstruction}(
                 id_line_1 => new_inst(Expr(:invoke, nothing, cos, Argument(2)), Float64),
@@ -253,7 +253,7 @@ end
         @test_throws(
             Tapir.UnhandledLanguageFeatureException,
             Tapir.build_rrule(
-                Tapir.TapirInterpreter(),
+                Tapir.get_tapir_interpreter(),
                 Tuple{typeof(Tapir.TestResources.non_const_global_ref), Float64},
             )
         )
