@@ -79,8 +79,8 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:low_level_mat
         (f == :rem2pi || f == :ldexp || f == :(^)) && return
         (f == :+ || f == :*) && return # use intrinsics instead
         f = @eval $M.$f
-        push!(test_cases, Any[false, :stability, nothing, f, rand_inputs(rng, Float64, f, arity)...])
-        push!(test_cases, Any[true, :stability, nothing, f, rand_inputs(rng, Float32, f, arity)...])
+        push!(test_cases, (false, :stability, nothing, f, rand_inputs(rng, Float64, f, arity)...))
+        push!(test_cases, (true, :stability, nothing, f, rand_inputs(rng, Float32, f, arity)...))
     end
     memory = Any[]
     return test_cases, memory
