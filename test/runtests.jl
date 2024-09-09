@@ -62,6 +62,8 @@ include("front_matter.jl")
         include(joinpath("integration_testing", "turing.jl"))
     elseif test_group == "integration_testing/temporalgps"
         include(joinpath("integration_testing", "temporalgps.jl"))
+    elseif test_group == "integration_testing/dynamic_ppl"
+        include(joinpath("integration_testing", "dynamic_ppl.jl"))
     elseif test_group == "interface"
         include("interface.jl")
     elseif test_group == "gpu"

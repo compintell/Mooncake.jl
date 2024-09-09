@@ -56,9 +56,7 @@ end
 set_tangent_field!(t::TaskTangent, f, ::NoTangent) = NoTangent()
 
 @is_primitive MinimalCtx Tuple{typeof(current_task)}
-function rrule!!(f::CoDual{typeof(current_task)})
-    return zero_fcodual(current_task()), NoPullback(f)
-end
+rrule!!(f::CoDual{typeof(current_task)}) = simple_zero_adjoint(f)
 
 _verify_fdata_value(::Task, ::TaskTangent) = nothing
 

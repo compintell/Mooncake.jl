@@ -119,7 +119,7 @@ codegen which produces the forwards- and reverse-passes.
     associated to this information.
 =#
 struct ADInfo
-    interp::PInterp
+    interp::TapirInterpreter
     block_stack_id::ID
     block_stack::BlockStack
     entry_id::ID
@@ -136,7 +136,7 @@ end
 # The constructor that you should use for ADInfo if you don't have a BBCode lying around.
 # See the definition of the ADInfo struct for info on the arguments.
 function ADInfo(
-    interp::PInterp,
+    interp::TapirInterpreter,
     arg_types::Dict{Argument, Any},
     ssa_insts::Dict{ID, NewInstruction},
     is_used_dict::Dict{ID, Bool},
@@ -163,7 +163,7 @@ end
 
 # The constructor you should use for ADInfo if you _do_ have a BBCode lying around. See the
 # ADInfo struct for information regarding `interp` and `safety_on`.
-function ADInfo(interp::PInterp, ir::BBCode, safety_on::Bool)
+function ADInfo(interp::TapirInterpreter, ir::BBCode, safety_on::Bool)
     arg_types = Dict{Argument, Any}(
         map(((n, t),) -> (Argument(n) => _type(t)), enumerate(ir.argtypes))
     )
@@ -812,13 +812,14 @@ end
 Helper method. Only uses static information from `args`.
 """
 function build_rrule(args...; safety_on=false)
-    return build_rrule(PInterp(), _typeof(TestUtils.__get_primals(args)); safety_on)
+    interp = get_tapir_interpreter()
+    return build_rrule(interp, _typeof(TestUtils.__get_primals(args)); safety_on)
 end
 
 const TAPIR_INFERENCE_LOCK = ReentrantLock()
 
 """
-    build_rrule(interp::PInterp{C}, sig_or_mi; safety_on=false) where {C}
+    build_rrule(interp::TapirInterpreter{C}, sig_or_mi; safety_on=false) where {C}
 
 Returns a `DerivedRule` which is an `rrule!!` for `sig_or_mi` in context `C`. See the
 docstring for `rrule!!` for more info.
@@ -826,8 +827,17 @@ docstring for `rrule!!` for more info.
 If `safety_on` is `true`, then all calls to rules are replaced with calls to `SafeRRule`s.
 """
 function build_rrule(
-    interp::PInterp{C}, sig_or_mi; safety_on=false, silence_safety_messages=true
+    interp::TapirInterpreter{C}, sig_or_mi; safety_on=false, silence_safety_messages=true
 ) where {C}
+
+    # To avoid segfaults, ensure that we bail out if the interpreter's world age is greater
+    # than the current world age.
+    if Base.get_world_counter() > interp.world
+        throw(ArgumentError(
+            "World age associated to interp is behind current world age. Please " *
+            "a new interpreter for the current world age."
+        ))
+    end
 
     # If we're compiling in safe mode, let the user know by default.
     if !silence_safety_messages && safety_on
@@ -1062,14 +1072,15 @@ function pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, T
     main_blocks = map(ad_stmts_blocks, enumerate(ir.blocks)) do (blk_id, ad_stmts), (n, blk)
         if is_unreachable_return_node(terminator(blk))
             rvs_stmts = [(ID(), new_inst(nothing))]
+            return BBlock(blk_id, rvs_stmts)
         else
-            rvs_stmts = reduce(vcat, [x.rvs for x in reverse(ad_stmts)])
+            rvs_ad_stmts = reduce(vcat, [x.rvs for x in reverse(ad_stmts)])
+            pred_ids = vcat(ps[blk.id], n == 1 ? [info.entry_id] : ID[])
+            tmp = pred_is_unique_pred[blk_id]
+            additional_stmts, new_blocks = conclude_rvs_block(blk, pred_ids, tmp, info)
+            rvs_block = BBlock(blk_id, vcat(rvs_ad_stmts, additional_stmts))
+            return vcat(rvs_block, new_blocks)
         end
-        pred_ids = vcat(ps[blk.id], n == 1 ? [info.entry_id] : ID[])
-        tmp = pred_is_unique_pred[blk_id]
-        additional_stmts, new_blocks = conclude_rvs_block(blk, pred_ids, tmp, info)
-        rvs_block = BBlock(blk_id, vcat(rvs_stmts, additional_stmts))
-        return vcat(rvs_block, new_blocks)
     end
     main_blocks = vcat(main_blocks...)
 
@@ -1127,9 +1138,13 @@ function pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, T
         ),
     )
 
-    # Create and return `BBCode` for the pullback.
+    # Create and return `BBCode` for the pullback. Sort the blocks and remove any blocks
+    # which are unreachable, in the sense that they have no predecessors (except the entry
+    # block). This ought not to be necessary, but _appears_ to be necessary in order to
+    # avoid annoying the Julia compiler.
     blks = vcat(entry_block, main_blocks, exit_block)
-    return _sort_blocks!(BBCode(blks, arg_types, ir.sptypes, ir.linetable, ir.meta))
+    pb_ir = BBCode(blks, arg_types, ir.sptypes, ir.linetable, ir.meta)
+    return remove_unreachable_blocks(_sort_blocks!(pb_ir))
 end
 
 #=

@@ -75,7 +75,7 @@ macro inactive_intrinsic(name)
         (is_primitive)(::Type{MinimalCtx}, ::Type{<:Tuple{typeof($name), Vararg}}) = true
         translate(::Val{Intrinsics.$name}) = $name
         function rrule!!(f::CoDual{typeof($name)}, args::Vararg{Any, N}) where {N}
-            return zero_fcodual($name(map(primal, args)...)), NoPullback(f, args...)
+            return Tapir.simple_zero_adjoint(f, args...)
         end
     end
     return esc(expr)
@@ -418,13 +418,9 @@ end
 
 end # IntrinsicsWrappers
 
-function rrule!!(f::CoDual{typeof(<:)}, T1, T2)
-    return zero_fcodual(<:(primal(T1), primal(T2))), NoPullback(f, T1, T2)
-end
+rrule!!(f::CoDual{typeof(<:)}, T1, T2) = simple_zero_adjoint(f, T1, T2)
 
-function rrule!!(f::CoDual{typeof(===)}, x, y)
-    return zero_fcodual(primal(x) === primal(y)), NoPullback(f, x, y)
-end
+rrule!!(f::CoDual{typeof(===)}, x, y) = simple_zero_adjoint(f, x, y)
 
 # Core._abstracttype
 
@@ -468,7 +464,7 @@ end
 
 # Doesn't do anything differentiable.
 function rrule!!(f::CoDual{typeof(Core._compute_sparams)}, args::CoDual...)
-    return zero_fcodual(Core._compute_sparams(map(primal, args)...)), NoPullback(f, args...)
+    return simple_zero_adjoint(f, args...)
 end
 
 # Core._equiv_typedef
@@ -619,20 +615,14 @@ end
 
 # Core.set_binding_type!
 
-function rrule!!(f::CoDual{typeof(Core.sizeof)}, x)
-    return zero_fcodual(Core.sizeof(primal(x))), NoPullback(f, x)
-end
+rrule!!(f::CoDual{typeof(Core.sizeof)}, x) = simple_zero_adjoint(f, x)
 
 # Core.svec
 
-function rrule!!(_f::CoDual{typeof(applicable)}, f, args...)
-    pb!! = NoPullback(_f, f, args...)
-    return zero_fcodual(applicable(primal(f), map(primal, args)...)), pb!!
-end
+rrule!!(_f::CoDual{typeof(applicable)}, f, args...) = simple_zero_adjoint(_f, f, args...)
 
 function rrule!!(f::CoDual{typeof(Core.fieldtype)}, args::Vararg{Any, N}) where {N}
-    arg_primals = tuple_map(primal, args)
-    return CoDual(Core.fieldtype(arg_primals...), NoFData()), NoPullback(f, args...)
+    return simple_zero_adjoint(f, args...)
 end
 
 function rrule!!(f::CoDual{typeof(getfield)}, x::CoDual{P}, name::CoDual) where {P}
@@ -690,23 +680,17 @@ is_homogeneous_and_immutable(::Any) = false
 #     return y, pb!!
 # end
 
-function rrule!!(f::CoDual{typeof(getglobal)}, a, b)
-    return zero_fcodual(getglobal(primal(a), primal(b))), NoPullback(f, a, b)
-end
+rrule!!(f::CoDual{typeof(getglobal)}, a, b) = simple_zero_adjoint(f, a, b)
 
 # invoke
 
-function rrule!!(f::CoDual{typeof(isa)}, x, T)
-    return zero_fcodual(isa(primal(x), primal(T))), NoPullback(f, x, T)
-end
+rrule!!(f::CoDual{typeof(isa)}, x, T) = simple_zero_adjoint(f, x, T)
 
-function rrule!!(f::CoDual{typeof(isdefined)}, args...)
-    return zero_fcodual(isdefined(map(primal, args)...)), NoPullback(f, args...)
-end
+rrule!!(f::CoDual{typeof(isdefined)}, args...) = simple_zero_adjoint(f, args...)
 
 # modifyfield!
 
-rrule!!(f::CoDual{typeof(nfields)}, x) = zero_fcodual(nfields(primal(x))), NoPullback(f, x)
+rrule!!(f::CoDual{typeof(nfields)}, x) = simple_zero_adjoint(f, x)
 
 # replacefield!
 
@@ -748,9 +732,7 @@ function rrule!!(::CoDual{typeof(typeassert)}, x::CoDual, type::CoDual)
     return CoDual(typeassert(primal(x), primal(type)), tangent(x)), typeassert_pullback
 end
 
-function rrule!!(f::CoDual{typeof(typeof)}, x::CoDual)
-    return zero_fcodual(typeof(primal(x))), NoPullback(f, x)
-end
+rrule!!(f::CoDual{typeof(typeof)}, x::CoDual) = simple_zero_adjoint(f, x)
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
 
