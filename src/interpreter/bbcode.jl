@@ -806,17 +806,14 @@ A block is unreachable if either:
 For example, consider the following IR:
 ```jldoctest remove_unreachable_blocks
 julia> ir = Tapir.ircode(
-           Any[ReturnNode(nothing), Expr(:call, sin, Argument(2)), ReturnNode(SSAValue(2))],
+           Any[Core.ReturnNode(nothing), Expr(:call, sin, 5), Core.ReturnNode(Core.SSAValue(2))],
            Any[Any, Any, Any],
-       )
-1 1 ─      return nothing                                                                                                                                                   │
-  2 ─ %2 = (sin)(_2)::Any                                                                                                                                                   │
-  └──      return %2
+       );
 ```
 There is no possible way to reach the second basic block (lines 2 and 3). Applying this
-function will therefore remove it, simplifying the resulting IR as follows:
+function will therefore remove it, yielding the following:
 ```jldoctest remove_unreachable_blocks
-julia> IRCode(remove_unreachable_blocks(BBCode(ir)))
+julia> Tapir.IRCode(Tapir.remove_unreachable_blocks(Tapir.BBCode(ir)))
 1 1 ─     return nothing
 ```
 """
