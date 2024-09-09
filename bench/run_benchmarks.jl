@@ -166,6 +166,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
             suite = Dict()
 
             # Benchmark primal.
+            @info "Primal"
             primals = map(x -> x isa CoDual ? primal(x) : x, args)
             suite["primal"] = Chairmarks.benchmark(
                 () -> primals,
@@ -176,6 +177,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
             )
 
             # Benchmark AD via Tapir.
+            @info "Tapir"
             rule = Ref(Tapir.build_rrule(args...))
             coduals = Ref(map(x -> x isa CoDual ? x : zero_codual(x), args))
             to_benchmark(rule[], coduals[]...)
@@ -184,6 +186,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
             if include_other_frameworks
 
                 if should_run_benchmark(Val(:zygote), args...)
+                    @info "Zygote"
                     suite["zygote"] = @be(
                         _, _, zygote_to_benchmark($(Zygote.Context()), $primals...), _,
                         evals=1,
@@ -191,6 +194,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
                 end
 
                 if should_run_benchmark(Val(:reverse_diff), args...)
+                    @info "ReverseDiff"
                     tape = ReverseDiff.GradientTape(primals[1], primals[2:end])
                     compiled_tape = ReverseDiff.compile(tape)
                     result = map(x -> randn(size(x)), primals[2:end])
@@ -201,6 +205,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
                 end
 
                 if should_run_benchmark(Val(:enzyme), args...)
+                    @info "Enzyme"
                     dup_args = map(x -> Duplicated(x, randn(size(x))), primals[2:end])
                     suite["enzyme"] = @be(
                         _, _, autodiff(Reverse, $primals[1], Active, $dup_args...), _,
