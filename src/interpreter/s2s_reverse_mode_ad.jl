@@ -1161,12 +1161,6 @@ function conclude_rvs_block(
     deref_stmts = map(phi_ids, rdata_ids) do phi_id, deref_id
         P = get_primal_type(info, phi_id)
         r = get_rev_data_id(info, phi_id)
-        # z_id = ID()
-        # return [
-        #     (deref_id, new_inst(Expr(:call, getfield, r, QuoteNode(:x)))),
-        #     (z_id, new_inst(Expr(:call, Tapir.zero_like_rdata_from_type, P))),
-        #     (ID(), new_inst(Expr(:call, setfield!, r, QuoteNode(:x), z_id))),
-        # ]
         return (deref_id, new_inst(Expr(:call, __deref_and_zero, P, r)))
     end
 

@@ -670,8 +670,7 @@ blocks in `ir` is valid. Notably, this does not hold if you have any `IDGotoIfNo
 `ir`.
 =#
 function _sort_blocks!(ir::BBCode)::BBCode
-    d = _distance_to_entry(ir.blocks)
-    I = sortperm(d)
+    I = sortperm(_distance_to_entry(ir.blocks))
     ir.blocks .= ir.blocks[I]
     return ir
 end
