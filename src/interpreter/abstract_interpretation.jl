@@ -63,7 +63,6 @@ approach taken the the closure cache.
 """
 function get_tapir_interpreter()
     if GLOBAL_INTERPRETER[].world != Base.get_world_counter()
-        @info "Refreshing the global interpreter"
         GLOBAL_INTERPRETER[] = TapirInterpreter()
     end
     return GLOBAL_INTERPRETER[]
