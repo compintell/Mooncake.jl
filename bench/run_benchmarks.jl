@@ -3,7 +3,7 @@ Pkg.develop(path=joinpath(@__DIR__, ".."))
 
 using
     AbstractGPs,
-    BenchmarkTools,
+    Chairmarks,
     CSV,
     DataFrames,
     Enzyme,
@@ -23,7 +23,6 @@ using Tapir:
     generate_hand_written_rrule!!_test_cases,
     generate_derived_rrule!!_test_cases,
     TestUtils,
-    PInterp,
     _typeof
 
 using Tapir.TestUtils: _deepcopy, to_benchmark
@@ -168,49 +167,48 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
 
             # Benchmark primal.
             primals = map(x -> x isa CoDual ? primal(x) : x, args)
-            @info "primal"
-            suite["primal"] = @benchmark(
-                (a[1][])((a[2][])...);
-                setup=(a = (Ref($primals[1]), Ref(_deepcopy($primals[2:end])))),
+            suite["primal"] = Chairmarks.benchmark(
+                () -> primals,
+                primals -> (Ref(primals[1]), Ref(_deepcopy(primals[2:end]))),
+                (a -> a[1][]((a[2][]...))),
+                _ -> true,
                 evals=1,
             )
 
             # Benchmark AD via Tapir.
-            @info "tapir"
-            rule = Tapir.build_rrule(args...)
-            coduals = map(x -> x isa CoDual ? x : zero_codual(x), args)
-            to_benchmark(rule, coduals...)
-            suite["tapir"] = @benchmark(to_benchmark($rule, $coduals...))
+            rule = Ref(Tapir.build_rrule(args...))
+            coduals = Ref(map(x -> x isa CoDual ? x : zero_codual(x), args))
+            to_benchmark(rule[], coduals[]...)
+            suite["tapir"] = @be(_, _, to_benchmark(rule[], coduals[]...), _, evals=1)
 
             if include_other_frameworks
 
                 if should_run_benchmark(Val(:zygote), args...)
-                    @info "zygote"
-                    suite["zygote"] = @benchmark(
-                        zygote_to_benchmark($(Zygote.Context()), $primals...)
+                    suite["zygote"] = @be(
+                        _, _, zygote_to_benchmark($(Zygote.Context()), $primals...), _,
+                        evals=1,
                     )
                 end
 
                 if should_run_benchmark(Val(:reverse_diff), args...)
-                    @info "reversediff"
                     tape = ReverseDiff.GradientTape(primals[1], primals[2:end])
                     compiled_tape = ReverseDiff.compile(tape)
                     result = map(x -> randn(size(x)), primals[2:end])
-                    suite["rd"] = @benchmark(
-                        rd_to_benchmark!($result, $compiled_tape, $primals[2:end])
+                    suite["rd"] = @be(
+                        _, _, rd_to_benchmark!($result, $compiled_tape, $primals[2:end]), _,
+                        evals=1,
                     )
                 end
 
                 if should_run_benchmark(Val(:enzyme), args...)
-                    @info "enzyme"
                     dup_args = map(x -> Duplicated(x, randn(size(x))), primals[2:end])
-                    suite["enzyme"] = @benchmark(
-                        autodiff(Reverse, $primals[1], Active, $dup_args...)
+                    suite["enzyme"] = @be(
+                        _, _, autodiff(Reverse, $primals[1], Active, $dup_args...), _,
+                        evals=1,
                     )
                 end
             end
 
-            @info "running"
             return (args, suite)
         end
     end
@@ -219,11 +217,11 @@ end
 
 function combine_results(result, tag, _range, default_range)
     d = result[2]
-    primal_time = time(minimum(d["primal"]))
-    tapir_time = time(minimum(d["tapir"]))
-    zygote_time = in("zygote", keys(d)) ? time(minimum(d["zygote"])) : missing
-    rd_time = in("rd", keys(d)) ? time(minimum(d["rd"])) : missing
-    ez_time = in("enzyme", keys(d)) ? time(minimum(d["enzyme"])) : missing
+    primal_time = minimum(d["primal"]).time
+    tapir_time = minimum(d["tapir"]).time
+    zygote_time = in("zygote", keys(d)) ? minimum(d["zygote"]).time : missing
+    rd_time = in("rd", keys(d)) ? minimum(d["rd"]).time : missing
+    ez_time = in("enzyme", keys(d)) ? minimum(d["enzyme"]).time : missing
     fallback_tag = string((result[1][1], map(Tapir._typeof, result[1][2:end])...))
     return (
         tag=tag === nothing ? fallback_tag : tag,
