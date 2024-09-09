@@ -419,10 +419,10 @@ end
     test_rule(
         rng, x...;
         interface_only=false,
-        has_rrule!!=true,
-        perf_flag::Symbol,
-        ctx=DefaultCtx(),
-        safety_on=false,
+        is_primitive::Bool=true,
+        perf_flag::Symbol=:none,
+        interp::Tapir.TapirInterpreter=Tapir.get_tapir_interpreter(),
+        safety_on::Bool=false,
     )
 
 Run standardised tests on the `rule` for `x`.
