@@ -191,6 +191,17 @@ Returns the terminator associated to `bb`. If the last instruction in `bb` isa
 terminator(bb::BBlock) = isa(bb.insts[end].stmt, Terminator) ? bb.insts[end].stmt : nothing
 
 """
+    insert_before_terminator!(bb::BBlock, id::ID, inst::NewInstruction)::Nothing
+
+If the final instruction in `bb` is a `Terminator`, insert `inst` immediately before it.
+Otherwise, insert `inst` at the end of the block.
+"""
+function insert_before_terminator!(bb::BBlock, id::ID, inst::NewInstruction)::Nothing
+    insert!(bb, length(bb.insts) + (terminator(bb) === nothing ? 1 : 0), id, inst)
+    return nothing
+end
+
+"""
     collect_stmts(bb::BBlock)::Vector{Tuple{ID, NewInstruction}}
 
 Returns a `Vector` containing the `ID`s and instructions associated to each line in `bb`.
