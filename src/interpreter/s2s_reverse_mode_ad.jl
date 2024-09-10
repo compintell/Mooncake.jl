@@ -254,23 +254,41 @@ end
 
 Data structure which contains the result of `make_ad_stmts!`. Fields are
 - `line`: the ID associated to the primal line from which this is derived
+- `comms_id`: an `ID` from one of the lines in `fwds`, whose value will be made
+    available on the reverse-pass in the same `ID`. Nothing is asserted about _how_ this
+    value is made available on the reverse-pass of AD, so this package is free to do this in
+    whichever way is most efficient, in particular to group these communication `ID` on a
+    per-block basis.
 - `fwds`: the instructions which run the forwards-pass of AD
 - `rvs`: the instructions which run the reverse-pass of AD / the pullback
 =#
 struct ADStmtInfo
     line::ID
+    comms_id::Union{ID, Nothing}
     fwds::Vector{Tuple{ID, NewInstruction}}
     rvs::Vector{Tuple{ID, NewInstruction}}
 end
 
 # Convenient constructor for `ADStmtInfo`. If either `fwds` or `rvs` is not a vector,
 # `__vec` promotes it to a single-element `Vector`.
-ad_stmt_info(line::ID, fwds, rvs) = ADStmtInfo(line, __vec(line, fwds), __vec(line, rvs))
+function ad_stmt_info(line::ID, comms_id::Union{ID, Nothing}, fwds, rvs)
+    if !(comms_id === nothing || in(comms_id, map(first, __vec(line, fwds))))
+        throw(ArgumentError("comms_id not found in IDs of `fwds` instructions."))
+    end
+    return ADStmtInfo(line, comms_id, __vec(line, fwds), __vec(line, rvs))
+end
 
 __vec(line::ID, x::Any) = __vec(line, new_inst(x))
 __vec(line::ID, x::NewInstruction) = Tuple{ID, NewInstruction}[(line, x)]
 __vec(line::ID, x::Vector{Tuple{ID, Any}}) = throw(error("boooo"))
 __vec(line::ID, x::Vector{Tuple{ID, NewInstruction}}) = x
+
+# Return the element of `fwds` whose `ID` is the communcation `ID`. Returns `Nothing` if
+# `comms_id` is `nothing`.
+function comms_channel(info::ADStmtInfo)
+    info.comms_id === nothing && return nothing
+    return only(filter(x -> x[1] == info.comms_id, info.fwds))
+end
 
 #=
     make_ad_stmts(inst::NewInstruction, line::ID, info::ADInfo)::ADStmtInfo
@@ -291,12 +309,14 @@ function make_ad_stmts! end
 
 # `nothing` as a statement in Julia IR indicates the presence of a line which will later be
 # removed. We emit a no-op on both the forwards- and reverse-passes. No shared data.
-make_ad_stmts!(::Nothing, line::ID, ::ADInfo) = ad_stmt_info(line, nothing, nothing)
+function make_ad_stmts!(::Nothing, line::ID, ::ADInfo)
+    return ad_stmt_info(line, nothing, nothing, nothing)
+end
 
 # `ReturnNode`s have a single field, `val`, for which there are three cases to consider:
 #
 # 1. `val` is undefined: this `ReturnNode` is unreachable. Consequently, we'll never hit the
-#   associated statements on the forwards-pass of pullback. We just return the original
+#   associated statements on the forwards-pass or pullback. We just return the original
 #   statement on the forwards-pass, and `nothing` on the reverse-pass.
 # 2. `val isa Union{Argument, ID}`: this is an active piece of data. Consequently, we know
 #   that it will be an `CoDual` already, and can just return it. Therefore `stmt`
@@ -307,19 +327,22 @@ make_ad_stmts!(::Nothing, line::ID, ::ADInfo) = ad_stmt_info(line, nothing, noth
 #   constant -- build a constant CoDual and return that. There is nothing to do on the
 #   reverse pass.
 function make_ad_stmts!(stmt::ReturnNode, line::ID, info::ADInfo)
-    is_reachable_return_node(stmt) || return ad_stmt_info(line, inc_args(stmt), nothing)
+    if !is_reachable_return_node(stmt)
+        return ad_stmt_info(line, nothing, inc_args(stmt), nothing)
+    end
     if is_active(stmt.val)
         rdata_id = get_rev_data_id(info, stmt.val)
         rvs = new_inst(Expr(:call, increment_ref!, rdata_id, Argument(2)))
-        return ad_stmt_info(line, inc_args(stmt), rvs)
+        return ad_stmt_info(line, nothing, inc_args(stmt), rvs)
     else
-        return ad_stmt_info(line, ReturnNode(const_codual(stmt.val, info)), nothing)
+        fwds = ReturnNode(const_codual(stmt.val, info))
+        return ad_stmt_info(line, nothing, fwds, nothing)
     end
 end
 
 # Identity forwards-pass, no-op reverse. No shared data.
 function make_ad_stmts!(stmt::IDGotoNode, line::ID, ::ADInfo)
-    return ad_stmt_info(line, inc_args(stmt), nothing)
+    return ad_stmt_info(line, nothing, inc_args(stmt), nothing)
 end
 
 # Identity forwards-pass, no-op reverse. No shared data.
@@ -327,7 +350,7 @@ function make_ad_stmts!(stmt::IDGotoIfNot, line::ID, ::ADInfo)
     stmt = inc_args(stmt)
 
     # If cond is not going to be wrapped in a `CoDual`, so just return the stmt.
-    is_active(stmt.cond) || return ad_stmt_info(line, stmt, nothing)
+    is_active(stmt.cond) || return ad_stmt_info(line, nothing, stmt, nothing)
 
     # stmt.cond is active, so primal must be extracted from `CoDual`.
     cond_id = ID()
@@ -335,7 +358,7 @@ function make_ad_stmts!(stmt::IDGotoIfNot, line::ID, ::ADInfo)
         (cond_id, new_inst(Expr(:call, primal, stmt.cond))),
         (line, new_inst(IDGotoIfNot(cond_id, stmt.dest), Any)),
     ]
-    return ad_stmt_info(line, fwds, nothing)
+    return ad_stmt_info(line, nothing, fwds, nothing)
 end
 
 # Identity forwards-pass, no-op reverse. No shared data.
@@ -353,7 +376,7 @@ function make_ad_stmts!(stmt::IDPhiNode, line::ID, info::ADInfo)
     # CC.IR_FLAG_REFINED. To avoid this we directly tell the compiler what the type is.
     new_type = fcodual_type(get_primal_type(info, line))
     _inst = new_inst(IDPhiNode(stmt.edges, new_vals), new_type, info.ssa_insts[line].flag)
-    return ad_stmt_info(line, _inst, nothing)
+    return ad_stmt_info(line, nothing, _inst, nothing)
 end
 
 function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
@@ -371,6 +394,7 @@ function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
     # Assemble the above lines and construct reverse-pass.
     return ad_stmt_info(
         line,
+        nothing,
         PiNode(__inc(stmt.val), fcodual_type(_type(stmt.typ))),
         Expr(:call, __pi_rvs!, P, val_rdata_ref_id, output_rdata_ref_id),
     )
@@ -393,7 +417,7 @@ function make_ad_stmts!(stmt::GlobalRef, line::ID, info::ADInfo)
         (globalref_id, new_inst(stmt)),
         (line, new_inst(Expr(:call, __verify_const, globalref_id, x))),
     ]
-    return ad_stmt_info(line, fwds, nothing)
+    return ad_stmt_info(line, nothing, fwds, nothing)
 end
 
 # Helper used by `make_ad_stmts! ` for `GlobalRef`. Noinline to avoid IR bloat.
@@ -411,7 +435,7 @@ make_ad_stmts!(stmt, line::ID, info::ADInfo) = const_ad_stmt(stmt, line, info)
 # `make_ad_stmts!` for constants.
 function const_ad_stmt(stmt, line::ID, info::ADInfo)
     x = const_codual(stmt, info)
-    return ad_stmt_info(line, x isa ID ? Expr(:call, identity, x) : x, nothing)
+    return ad_stmt_info(line, nothing, x isa ID ? Expr(:call, identity, x) : x, nothing)
 end
 
 # Build a `CoDual` from `stmt`, with zero / uninitialised fdata. If the resulting CoDual is
@@ -462,7 +486,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         # time of writing this comment, it's unclear whether or not this is the case.
         if !is_used(info, line) && get_const_primal_value(args[1]) == getfield
             fwds = new_inst(Expr(:call, __fwds_pass_no_ad!, map(__inc, args)...))
-            return ad_stmt_info(line, fwds, nothing)
+            return ad_stmt_info(line, nothing, fwds, nothing)
         end
 
         # Construct signature, and determine how the rrule is to be computed.
@@ -490,7 +514,6 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         # If the type of the pullback is a singleton type, then there is no need to store it
         # in the shared data, it can be interpolated directly into the generated IR.
         T_pb!! = pullback_type(_typeof(rule), arg_types)
-        pb_stack_id = add_data_if_not_singleton!(info, build_pb_stack(T_pb!!))
 
         #
         # Write forwards-pass. These statements are written out manually, as writing them
@@ -516,10 +539,6 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         pb_id = ID()
         pb = Expr(:call, getfield, rule_call_id, 2)
 
-        # Push the pullback stack.
-        push_pb_stack_id = ID()
-        push_pb_stack = Expr(:call, __push_pb_stack!, pb_stack_id, pb_id)
-
         # Provide a type assertion to help the compiler out. Doing it this way, rather than
         # directly changing the inferred type of the instruction associated to raw_output,
         # has the advantage of not introducing the possibility of segfaults. It will still
@@ -535,8 +554,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
             Tuple{ID, NewInstruction}[
                 (rule_call_id, new_inst(rule_call)),
                 (raw_output_id, new_inst(raw_output)),
-                (pb_id, new_inst(pb)),
-                (push_pb_stack_id, new_inst(push_pb_stack)),
+                (pb_id, new_inst(pb, T_pb!!)),
                 (output_id, new_inst(output)),
             ],
         )
@@ -548,38 +566,38 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         else
             Expr(
                 :call,
-                __rvs_pass!,
+                __run_rvs_pass!,
                 get_primal_type(info, line),
                 sig,
-                pb_stack_id,
+                pb_id,
                 get_rev_data_id(info, line),
                 map(Base.Fix1(get_rev_data_id, info), args)...,
             )
         end
-        return ad_stmt_info(line, fwds, new_inst(rvs_pass))
+        return ad_stmt_info(line, pb_id, fwds, new_inst(rvs_pass))
 
     elseif Meta.isexpr(stmt, :boundscheck)
         # For some reason the compiler cannot handle boundscheck statements when we run it
         # again. Consequently, emit `true` to be safe. Ideally we would handle this in a
         # more natural way, but I'm not sure how to do that.
-        return ad_stmt_info(line, zero_fcodual(true), nothing)
+        return ad_stmt_info(line, nothing, zero_fcodual(true), nothing)
 
     elseif Meta.isexpr(stmt, :code_coverage_effect)
         # Code coverage irrelevant for derived code, and really inflates it in some
         # situations. Since code coverage is usually only requrested during CI, including
         # these effects also creates differences between the code generated when developing
         # and the code generated in CI, which occassionally creates hard-to-debug issues.
-        return ad_stmt_info(line, nothing, nothing)
+        return ad_stmt_info(line, nothing, nothing, nothing)
 
     elseif Meta.isexpr(stmt, :copyast)
         # Get constant out and shove it in shared storage.
         x = const_codual(stmt.args[1], info)
-        return ad_stmt_info(line, Expr(:call, identity, x), nothing)
+        return ad_stmt_info(line, nothing, Expr(:call, identity, x), nothing)
 
     elseif Meta.isexpr(stmt, :loopinfo)
         # Cannot pass loopinfo back through the optimiser for some reason.
         # At the time of writing, I am unclear why this is not possible.
-        return ad_stmt_info(line, nothing, nothing)
+        return ad_stmt_info(line, nothing, nothing, nothing)
 
     elseif stmt.head in [
         :enter,
@@ -590,7 +608,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         :throw_undef_if_not,
     ]
         # Expressions which do not require any special treatment.
-        return ad_stmt_info(line, stmt, nothing)
+        return ad_stmt_info(line, nothing, stmt, nothing)
 
     elseif stmt.head == :(=) && stmt.args[1] isa GlobalRef
         msg = "Encountered assignment to global variable: $(stmt.args[1]). " *
@@ -632,16 +650,7 @@ __make_codual(x::P) where {P} = (P <: CoDual ? x : uninit_fcodual(x))::CoDual
 @inline __push_pb_stack!(stack, pb!!) = push!(stack, pb!!)
 
 # Used in `make_ad_stmts!` method for `Expr(:call, ...)` and `Expr(:invoke, ...)`.
-@inline function __rvs_pass!(::Type{P}, ::Type{sig}, pb_stack, ret_rev_data_ref, arg_rev_data_refs...)::Nothing where {sig, P}
-    __run_rvs_pass!(P, __pop_pb_stack!(pb_stack), ret_rev_data_ref, arg_rev_data_refs...)
-end
-
-# If `NoPullback` is the pullback, then there is nothing to do. Moreover, since the
-# reverse-data accumulated in the `ret_rev_data_ref` is never used, we don't even need to
-# bother reseting it's value to zero.
-@inline __run_rvs_pass!(::Any, ::NoPullback, ::Ref, arg_rev_data_refs...) = nothing
-
-@inline function __run_rvs_pass!(P, pb!!, ret_rev_data_ref::Ref, arg_rev_data_refs...)
+@inline function __run_rvs_pass!(::Type{P}, ::Type{sig}, pb!!, ret_rev_data_ref::Ref, arg_rev_data_refs...) where {P, sig}
     tuple_map(increment_if_ref!, arg_rev_data_refs, pb!!(ret_rev_data_ref[]))
     set_ret_ref_to_zero!!(P, ret_rev_data_ref)
     return nothing
@@ -880,9 +889,15 @@ function build_rrule(
             end
 
             # Make shared data, and construct BBCode for forwards-pass and pullback.
+            fwds_stack_insts, pb_stack_insts = create_comms_stacks!(ad_stmts_blocks, info)
             shared_data = shared_data_tuple(info.shared_data_pairs)
-            fwds_ir = forwards_pass_ir(primal_ir, ad_stmts_blocks, info, _typeof(shared_data))
-            pb_ir = pullback_ir(primal_ir, Treturn, ad_stmts_blocks, info, _typeof(shared_data))
+            Tshared_data = _typeof(shared_data)
+            fwds_ir = forwards_pass_ir(
+                primal_ir, ad_stmts_blocks, fwds_stack_insts, info, Tshared_data
+            )
+            pb_ir = pullback_ir(
+                primal_ir, Treturn, ad_stmts_blocks, pb_stack_insts, info, Tshared_data
+            )
 
             optimised_fwds_ir = optimise_ir!(optimise_ir!(IRCode(fwds_ir); do_inline=true))
             optimised_pb_ir = optimise_ir!(optimise_ir!(IRCode(pb_ir); do_inline=true))
@@ -944,11 +959,52 @@ end
 const ADStmts = Vector{Tuple{ID, Vector{ADStmtInfo}}}
 
 #=
+    create_comms_stacks(ad_stmts_blocks::ADStmts, info::ADInfo)
+
+For each basic block, create a stack which can be put in shared data, and used to implement
+the communcation contract between the forwards- and reverse-passes.
+=#
+function create_comms_stacks!(ad_stmts_blocks::ADStmts, info::ADInfo)
+    insts = map(ad_stmts_blocks) do (_, ad_stmts)
+
+        # Get the communication channel for each stmt which has one.
+        comms_channels = filter(!=(nothing), map(comms_channel, ad_stmts))
+        comms_ids = map(first, comms_channels)
+
+        # Determine the type of the tuple which will contain these, and create a stack which
+        # can hold such tuples. Put this stack in shared data, and get its `ID`.
+        TT = Tuple{map(x -> x[2].type, comms_channels)...}
+        stack = Base.issingletontype(TT) ? SingletonStack{TT}() : Stack{TT}()
+        comms_stack_id = add_data_if_not_singleton!(info, stack)
+
+        # Create instructions for forwards-pass to create tuple + push onto comms stack.
+        tuple_id = ID()
+        fwds_insts = [
+            (tuple_id, new_inst(Expr(:call, tuple, comms_ids...))),
+            (ID(), new_inst(Expr(:call, push!, comms_stack_id, tuple_id))),
+        ]
+
+        # Create instructions for reverse-pass to pop comms stack and expand tuple.
+        rvs_insts = [
+            (tuple_id, new_inst(Expr(:call, pop!, comms_stack_id))),
+            map(enumerate(comms_ids)) do (n, id)
+                (id, new_inst(Expr(:call, getfield, tuple_id, n)))
+            end...,
+        ]
+
+        return fwds_insts, rvs_insts
+    end
+    return map(first, insts), map(last, insts)
+end
+
+#=
     forwards_pass_ir(ir::BBCode, ad_stmts_blocks::ADStmts, info::ADInfo, Tshared_data)
 
 Produce the IR associated to the `OpaqueClosure` which runs most of the forwards-pass.
 =#
-function forwards_pass_ir(ir::BBCode, ad_stmts_blocks::ADStmts, info::ADInfo, Tshared_data)
+function forwards_pass_ir(
+    ir::BBCode, ad_stmts_blocks::ADStmts, fwds_stack_insts, info::ADInfo, Tshared_data
+)
 
     is_unique_pred, pred_is_unique_pred = characterise_unique_predecessor_blocks(ir.blocks)
 
@@ -978,17 +1034,31 @@ function forwards_pass_ir(ir::BBCode, ad_stmts_blocks::ADStmts, info::ADInfo, Ts
 
     # Construct augmented version of each basic block from the primal. For each block:
     # 1. pull the translated basic block statements from ad_stmts_blocks,
-    # 2. insert a statement which logs the ID of the current block if necessary, and
-    # 3. construct and return a BBlock.
-    blocks = map(ad_stmts_blocks) do (block_id, ad_stmts)
-        fwds_stmts = reduce(vcat, map(x -> x.fwds, ad_stmts))
-        if !is_unique_pred[block_id]
-            ins_loc = length(fwds_stmts) + (isa(fwds_stmts[end][2].stmt, Terminator) ? 0 : 1)
-            ins_stmt = Expr(:call, __push_blk_stack!, info.block_stack_id, block_id.id)
-            ins_inst = (ID(), new_inst(ins_stmt))
-            insert!(fwds_stmts, ins_loc, ins_inst)
+    # 2. insert a series of statements to log the contents of the `comms_id`s -- see
+    #   the `comms_id` field of `ADStmtInfo`,
+    # 3. insert a statement which logs the ID of the current block (if necessary to know
+    #   how to perform the reverse-pass),
+    # 4. return the BBlock.
+    blocks = map(ad_stmts_blocks, fwds_stack_insts) do (block_id, ad_stmts), stack_insts
+
+        # Extract the `fwds` fields from the stmts, and create the block for the fwds pass.
+        blk = BBlock(block_id, reduce(vcat, map(x -> x.fwds, ad_stmts)))
+
+        # Insert communcation instructions. See `create_comms_stacks` for an explanation.
+        for stack_inst in stack_insts
+            insert_before_terminator!(blk, stack_inst[1], stack_inst[2])
         end
-        return BBlock(block_id, fwds_stmts)
+
+        # Log the ID of the current basic block. This is needed to know which basic block to
+        # jump to during the reverse-pass if the current block is not the unique predecessor
+        # of each of its successors (in which case there is no need to log that control
+        # passed through this block as opposed to any other).
+        if !is_unique_pred[block_id]
+            ins_stmt = Expr(:call, __push_blk_stack!, info.block_stack_id, block_id.id)
+            insert_before_terminator!(blk, ID(), new_inst(ins_stmt))
+        end
+
+        return blk
     end
 
     # Create and return the `BBCode` for the forwards-pass.
@@ -1017,7 +1087,9 @@ end
 
 Produce the IR associated to the `OpaqueClosure` which runs most of the pullback.
 =#
-function pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, Tshared_data)
+function pullback_ir(
+    ir::BBCode, Tret, ad_stmts_blocks::ADStmts, pb_comms_stmt_blocks, info::ADInfo, Tshared_data
+)
 
     # Compute the argument types associated to the reverse-pass.
     arg_types = vcat(Tshared_data, rdata_type(tangent_type(Tret)))
@@ -1058,29 +1130,38 @@ function pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, T
     #   translated basic block statements, in reverse.
     # 2. if, on the other hand, the block is provably not reachable on the reverse-pass,
     #   return a block with nothing in it. At present we only assert that a block is not
-    #   reachable if it ends with an unreachable return node.
+    #   reachable if it ends with an unreachable `Core.ReturnNode`.
     # 3. if we need to pop the predecessor stack, pop it. We don't need to pop it if there
     #   is only a single predecessor to this block, and said predecessor is a _unique_
     #   _predecessor_ (see characterise_unique_predecessor_blocks for more info), as its
     #   ID is uniquely determined, and nothing will have been put on to the block stack
     #   during the forwards-pass (see how the output of
     #   characterise_unique_predecessor_blocks is used in forwards_pass_ir).
-    # 4. if the block began with one or more PhiNodes, then handle their tangents.
-    # 5. jump to the predecessor block
+    # 4. if the block began with one or more PhiNodes, then handle their rdata.
+    # 5. jump to the predecessor block.
     ps = compute_all_predecessors(ir)
     _, pred_is_unique_pred = characterise_unique_predecessor_blocks(ir.blocks)
-    main_blocks = map(ad_stmts_blocks, enumerate(ir.blocks)) do (blk_id, ad_stmts), (n, blk)
+    main_blocks = map(
+        ad_stmts_blocks, enumerate(ir.blocks), pb_comms_stmt_blocks
+    ) do (blk_id, ad_stmts), (n, blk), pb_comms_stmts
+
+        # Short-circuit if we know that this block cannot be reached on the reverse-pass.
         if is_unreachable_return_node(terminator(blk))
-            rvs_stmts = [(ID(), new_inst(nothing))]
-            return BBlock(blk_id, rvs_stmts)
-        else
-            rvs_ad_stmts = reduce(vcat, [x.rvs for x in reverse(ad_stmts)])
-            pred_ids = vcat(ps[blk.id], n == 1 ? [info.entry_id] : ID[])
-            tmp = pred_is_unique_pred[blk_id]
-            additional_stmts, new_blocks = conclude_rvs_block(blk, pred_ids, tmp, info)
-            rvs_block = BBlock(blk_id, vcat(rvs_ad_stmts, additional_stmts))
-            return vcat(rvs_block, new_blocks)
+            return BBlock(blk_id, [(ID(), new_inst(nothing))])
         end
+
+        # Extract reverse-stmts from ad_stmts.
+        rvs_ad_stmts = reduce(vcat, [x.rvs for x in reverse(ad_stmts)])
+
+        # Conclude the block.
+        pred_ids = vcat(ps[blk.id], n == 1 ? [info.entry_id] : ID[])
+        tmp = pred_is_unique_pred[blk_id]
+        additional_stmts, new_blocks = conclude_rvs_block(blk, pred_ids, tmp, info)
+
+        # Combine all blocks and return. See `create_comms_stacks` for more info regarding
+        # `pb_comms_stmts`.
+        rvs_block = BBlock(blk_id, vcat(pb_comms_stmts, rvs_ad_stmts, additional_stmts))
+        return vcat(rvs_block, new_blocks)
     end
     main_blocks = vcat(main_blocks...)
 
