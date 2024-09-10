@@ -501,8 +501,11 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         end
 
         # Wrap the raw rule in a struct which ensures that any `ZeroRData`s are stripped
-        # away before the raw_rule is called.
-        zero_safe_rule = RRuleZeroWrapper(raw_rule)
+        # away before the raw_rule is called. Only do this if we cannot prove that the
+        # output of `can_produce_zero_rdata_from_type(P)`, where `P` is the type of the
+        # value returned by this line.
+        tmp = can_produce_zero_rdata_from_type(get_primal_type(info, line))
+        zero_safe_rule = tmp ? raw_rule : RRuleZeroWrapper(raw_rule)
 
         # If safe mode has been requested, use a safe rule.
         rule = info.safety_on ? SafeRRule(zero_safe_rule) : zero_safe_rule
