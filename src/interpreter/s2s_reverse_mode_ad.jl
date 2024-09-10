@@ -538,9 +538,17 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         raw_output_id = ID()
         raw_output = Expr(:call, getfield, rule_call_id, 1)
 
-        # Extract the pullback from the returned tuple.
-        pb_id = ID()
-        pb = Expr(:call, getfield, rule_call_id, 2)
+        # Extract the pullback from the returned tuple. Specialise on the case that the
+        # pullback is provably a singleton type.
+        if Base.issingletontype(T_pb!!)
+            pb = T_pb!!.instance
+            pb_stmt = (ID(), new_inst(nothing))
+            comms_id = nothing
+        else
+            pb = ID()
+            pb_stmt = (pb, new_inst(Expr(:call, getfield, rule_call_id, 2), T_pb!!))
+            comms_id = pb
+        end
 
         # Provide a type assertion to help the compiler out. Doing it this way, rather than
         # directly changing the inferred type of the instruction associated to raw_output,
@@ -557,7 +565,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
             Tuple{ID, NewInstruction}[
                 (rule_call_id, new_inst(rule_call)),
                 (raw_output_id, new_inst(raw_output)),
-                (pb_id, new_inst(pb, T_pb!!)),
+                pb_stmt,
                 (output_id, new_inst(output)),
             ],
         )
@@ -572,12 +580,12 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
                 __run_rvs_pass!,
                 get_primal_type(info, line),
                 sig,
-                pb_id,
+                pb,
                 get_rev_data_id(info, line),
                 map(Base.Fix1(get_rev_data_id, info), args)...,
             )
         end
-        return ad_stmt_info(line, pb_id, fwds, new_inst(rvs_pass))
+        return ad_stmt_info(line, comms_id, fwds, new_inst(rvs_pass))
 
     elseif Meta.isexpr(stmt, :boundscheck)
         # For some reason the compiler cannot handle boundscheck statements when we run it
@@ -892,6 +900,7 @@ function build_rrule(
             fwds_stack_insts, pb_stack_insts = create_comms_stacks!(ad_stmts_blocks, info)
             shared_data = shared_data_tuple(info.shared_data_pairs)
             Tshared_data = _typeof(shared_data)
+
             fwds_ir = forwards_pass_ir(
                 primal_ir, ad_stmts_blocks, fwds_stack_insts, info, Tshared_data
             )
