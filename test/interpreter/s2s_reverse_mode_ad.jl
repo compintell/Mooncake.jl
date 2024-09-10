@@ -48,6 +48,11 @@ end
         @test Tapir.get_primal_type(info, 5) == Int
         @test Tapir.get_primal_type(info, QuoteNode(:hello)) == Symbol
     end
+    @testset "ADStmtInfo" begin
+        # If the ID passes as the comms channel doesn't appear in the stmts for the forwards
+        # pass, then this constructor ought to error.
+        @test_throws ArgumentError ad_stmt_info(ID(), ID(), nothing, nothing)
+    end
     @testset "make_ad_stmts!" begin
 
         # Set up ADInfo -- this state is required by `make_ad_stmts!`, and the
