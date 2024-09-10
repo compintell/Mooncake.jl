@@ -646,9 +646,6 @@ __get_primal(x) = x
 # Helper used in make_ad_stmts! for call / invoke.
 __make_codual(x::P) where {P} = (P <: CoDual ? x : uninit_fcodual(x))::CoDual
 
-# Useful to have this function call for debugging when looking at the generated IRCode.
-@inline __push_pb_stack!(stack, pb!!) = push!(stack, pb!!)
-
 # Used in `make_ad_stmts!` method for `Expr(:call, ...)` and `Expr(:invoke, ...)`.
 @inline function __run_rvs_pass!(::Type{P}, ::Type{sig}, pb!!, ret_rev_data_ref::Ref, arg_rev_data_refs...) where {P, sig}
     tuple_map(increment_if_ref!, arg_rev_data_refs, pb!!(ret_rev_data_ref[]))
