@@ -893,15 +893,15 @@ function build_rrule(
             end
 
             # Make shared data, and construct BBCode for forwards-pass and pullback.
-            fwds_stack_insts, pb_stack_insts = create_comms_stacks!(ad_stmts_blocks, info)
+            fwds_comms_insts, pb_comms_insts = create_comms_insts!(ad_stmts_blocks, info)
             shared_data = shared_data_tuple(info.shared_data_pairs)
             Tshared_data = _typeof(shared_data)
 
             fwds_ir = forwards_pass_ir(
-                primal_ir, ad_stmts_blocks, fwds_stack_insts, info, Tshared_data
+                primal_ir, ad_stmts_blocks, fwds_comms_insts, info, Tshared_data
             )
             pb_ir = pullback_ir(
-                primal_ir, Treturn, ad_stmts_blocks, pb_stack_insts, info, Tshared_data
+                primal_ir, Treturn, ad_stmts_blocks, pb_comms_insts, info, Tshared_data
             )
 
             optimised_fwds_ir = optimise_ir!(optimise_ir!(IRCode(fwds_ir); do_inline=true))
@@ -964,7 +964,7 @@ end
 const ADStmts = Vector{Tuple{ID, Vector{ADStmtInfo}}}
 
 #=
-    create_comms_stacks(ad_stmts_blocks::ADStmts, info::ADInfo)
+    create_comms_insts!(ad_stmts_blocks::ADStmts, info::ADInfo)
 
 This function produces code which can be inserted into the forwards-pass and reverse-pass at
 specific locations to implement the promise associated to the `comms_id` field of the
@@ -986,7 +986,7 @@ Returns two a `Tuple{Vector{IDInstPair}, Vector{IDInstPair}`. The nth element of
 `Vector` corresponds to the instructions to be inserted into the forwards- and reverse
 passes resp. for the nth block in `ad_stmts_blocks`.
 =#
-function create_comms_stacks!(ad_stmts_blocks::ADStmts, info::ADInfo)
+function create_comms_insts!(ad_stmts_blocks::ADStmts, info::ADInfo)
     insts = map(ad_stmts_blocks) do (_, ad_stmts)
 
         # Get the communication channel for each stmt which has one.
@@ -1030,7 +1030,7 @@ end
 Produce the IR associated to the `OpaqueClosure` which runs most of the forwards-pass.
 =#
 function forwards_pass_ir(
-    ir::BBCode, ad_stmts_blocks::ADStmts, fwds_stack_insts, info::ADInfo, Tshared_data
+    ir::BBCode, ad_stmts_blocks::ADStmts, fwds_comms_insts, info::ADInfo, Tshared_data
 )
 
     is_unique_pred, pred_is_unique_pred = characterise_unique_predecessor_blocks(ir.blocks)
@@ -1066,13 +1066,13 @@ function forwards_pass_ir(
     # 3. insert a statement which logs the ID of the current block (if necessary to know
     #   how to perform the reverse-pass),
     # 4. return the BBlock.
-    blocks = map(ad_stmts_blocks, fwds_stack_insts) do (block_id, ad_stmts), stack_insts
+    blocks = map(ad_stmts_blocks, fwds_comms_insts) do (block_id, ad_stmts), comms_insts
 
         # Extract the `fwds` fields from the stmts, and create the block for the fwds pass.
         blk = BBlock(block_id, reduce(vcat, map(x -> x.fwds, ad_stmts)))
 
-        # Insert communcation instructions. See `create_comms_stacks` for an explanation.
-        for stack_inst in stack_insts
+        # Insert communcation instructions. See `create_comms_insts!` for an explanation.
+        for stack_inst in comms_insts
             insert_before_terminator!(blk, stack_inst[1], stack_inst[2])
         end
 
@@ -1115,7 +1115,7 @@ end
 Produce the IR associated to the `OpaqueClosure` which runs most of the pullback.
 =#
 function pullback_ir(
-    ir::BBCode, Tret, ad_stmts_blocks::ADStmts, pb_comms_stmt_blocks, info::ADInfo, Tshared_data
+    ir::BBCode, Tret, ad_stmts_blocks::ADStmts, pb_comms_insts, info::ADInfo, Tshared_data
 )
 
     # Compute the argument types associated to the reverse-pass.
@@ -1169,8 +1169,8 @@ function pullback_ir(
     ps = compute_all_predecessors(ir)
     _, pred_is_unique_pred = characterise_unique_predecessor_blocks(ir.blocks)
     main_blocks = map(
-        ad_stmts_blocks, enumerate(ir.blocks), pb_comms_stmt_blocks
-    ) do (blk_id, ad_stmts), (n, blk), pb_comms_stmts
+        ad_stmts_blocks, enumerate(ir.blocks), pb_comms_insts
+    ) do (blk_id, ad_stmts), (n, blk), comms_insts
 
         # Short-circuit if we know that this block cannot be reached on the reverse-pass.
         if is_unreachable_return_node(terminator(blk))
@@ -1185,9 +1185,9 @@ function pullback_ir(
         tmp = pred_is_unique_pred[blk_id]
         additional_stmts, new_blocks = conclude_rvs_block(blk, pred_ids, tmp, info)
 
-        # Combine all blocks and return. See `create_comms_stacks` for more info regarding
-        # `pb_comms_stmts`.
-        rvs_block = BBlock(blk_id, vcat(pb_comms_stmts, rvs_ad_stmts, additional_stmts))
+        # Combine all blocks and return. See `create_comms_insts!` for more info regarding
+        # `comms_insts`.
+        rvs_block = BBlock(blk_id, vcat(comms_insts, rvs_ad_stmts, additional_stmts))
         return vcat(rvs_block, new_blocks)
     end
     main_blocks = vcat(main_blocks...)
