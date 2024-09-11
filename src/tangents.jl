@@ -20,6 +20,8 @@ struct PossiblyUninitTangent{T}
     PossiblyUninitTangent{T}() where {T} = new{T}()
 end
 
+_copy(x::P) where {P<:PossiblyUninitTangent} = is_init(x) ? P(_copy(x.tangent)) : P()
+
 @inline PossiblyUninitTangent(tangent::T) where {T} = PossiblyUninitTangent{T}(tangent)
 @inline PossiblyUninitTangent(T::Type) = PossiblyUninitTangent{T}()
 
@@ -329,38 +331,44 @@ tangent_type(::Type{DimensionMismatch}) = NoTangent
 
 tangent_type(::Type{Method}) = NoTangent
 
-function is_concrete_or_typelike(P::DataType)
-    if P <: Tuple
-        P == Tuple && return false
-        return all(is_concrete_or_typelike, P.parameters)
-    elseif P <: DataType
-        return true
-    else
-        return isconcretetype(P)
-    end
+@inline function tangent_type(::Type{P}) where {P<:Tuple}
+
+    # As with other types, tangent type of Union is Union of tangent types.
+    P isa Union && return Union{tangent_type(P.a), tangent_type(P.b)}
+
+    # Determine whether P isa a Tuple with a Vararg, e.g, Tuple, or Tuple{Float64, Vararg}.
+    # Need to exclude `UnionAll`s from this, by checking `isa(P, DataType)`, in order to
+    # ensure that `Base.datatype_fieldcount(P)` will run successfully.
+    isa(P, DataType) && Base.datatype_fieldcount(P) === nothing && return Any
+
+    # Tuple{} can only have `NoTangent` as its tangent type. As before, verify we don't have
+    # a UnionAll before running to ensure that datatype_fieldcount will run.
+    isa(P, DataType) && Base.datatype_fieldcount(P) == 0 && return NoTangent
+
+    # If tangent types for all fields is NoTangent, then overall type is `NoTangent`.
+
+    # Get tangent types for all fields. If they're all `NoTangent`, return `NoTangent`.
+    # i.e. if `P = Tuple{Int, Int}`, do not return `Tuple{NoTangent, NoTangent}`. Simplify
+    # and return `NoTangent`.
+    tangent_types = tuple_map(tangent_type, fieldtypes(P))
+    T = Tuple{tangent_types...}
+    T_all_notangent = Tuple{Vararg{NoTangent, length(tangent_types)}}
+    T <: T_all_notangent && return NoTangent
+
+    # If it's _possible_ for a subtype of `P` to have tangent type `NoTangent`, then we must
+    # account for that by returning the union of `NoTangent` and `T`. For example, if
+    # `P = Tuple{Any, Int}`, then `P2 = Tuple{Int, Int}` is a subtype. Since `P2` has
+    # tangent type `NoTangent`, it must be true that `NoTangent <: tangent_type(P)`.
+    # If, on the other hand, it's not possible for `NoTangent` to be the tangent type, e.g.
+    # for `Tuple{Float64, Any}`, then there's no need to take the union.
+    return T_all_notangent <: T ? Union{T, NoTangent} : T
 end
 
-is_concrete_or_typelike(::Union) = true
-is_concrete_or_typelike(::UnionAll) = false
-is_concrete_or_typelike(::Core.TypeofVararg) = true
-
-@generated function tangent_type(::Type{P}) where {P<:Tuple}
-    isa(P, Union) && return Union{tangent_type(P.a), tangent_type(P.b)}
-    isempty(P.parameters) && return NoTangent
-    isa(last(P.parameters), Core.TypeofVararg) && return Any
-    all(p -> tangent_type(p) == NoTangent, P.parameters) && return NoTangent
-    all(is_concrete_or_typelike, P.parameters) || return Any
-    return Tuple{map(tangent_type, fieldtypes(P))...}
-end
-
-@generated function tangent_type(::Type{NamedTuple{N, T}}) where {N, T<:Tuple}
-    if tangent_type(T) == NoTangent
-        return NoTangent
-    elseif isconcretetype(tangent_type(T))
-        return NamedTuple{N, tangent_type(T)}
-    else
-        return Any
-    end
+function tangent_type(::Type{P}) where {N, T<:Tuple, P<:NamedTuple{N, T}}
+    !isconcretetype(P) && return Union{NamedTuple{N}, NoTangent}
+    TT = tangent_type(T)
+    TT == NoTangent && return NoTangent
+    return isconcretetype(TT) ? NamedTuple{N, TT} : Any
 end
 
 function backing_type(::Type{P}) where {P}

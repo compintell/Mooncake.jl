@@ -15,6 +15,7 @@ end
 primal(x::CoDual) = x.x
 tangent(x::CoDual) = x.dx
 Base.copy(x::CoDual) = CoDual(copy(primal(x)), copy(tangent(x)))
+_copy(x::P) where {P<:CoDual} = x
 
 """
     zero_codual(x)
@@ -43,6 +44,8 @@ struct NoPullback{R<:Tuple}
     r::R
 end
 
+_copy(x::P) where {P<:NoPullback} = P(_copy(x.r))
+
 """
     NoPullback(args::CoDual...)
 
@@ -61,6 +64,23 @@ function NoPullback(args::Vararg{CoDual, N}) where {N}
 end
 
 @inline (pb::NoPullback)(_) = tuple_map(instantiate, pb.r)
+
+"""
+    simple_zero_adjoint(f::CoDual, x::Vararg{CoDual, N}) where {N}
+
+Utility functionality for constructing `rrule!!`s for functions which produce adjoints which
+always return zero. Equivalent to:
+```julia
+zero_fcodual(primal(f)(map(primal, x)...)), NoPullback(f, x...)
+```
+
+WARNING: this is only correct if the output of `primal(f)(map(primal, x)...)` does not alias
+anything in `f` or `x`. This is always the case if the result is a bits type, but more care
+may be required if it is not.
+"""
+@inline function simple_zero_adjoint(f::CoDual, x::Vararg{CoDual, N}) where {N}
+    return zero_fcodual(primal(f)(map(primal, x)...)), NoPullback(f, x...)
+end
 
 to_fwds(x::CoDual) = CoDual(primal(x), fdata(tangent(x)))
 

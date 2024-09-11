@@ -31,10 +31,10 @@ end
         )
         is_used_dict = Dict{ID, Bool}(id_ssa_1 => true, id_ssa_2 => true)
         rdata_ref = Ref{Tuple{map(Tapir.lazy_zero_rdata_type, (Float64, Int))...}}()
-        info = ADInfo(Tapir.PInterp(), arg_types, ssa_insts, is_used_dict, false, rdata_ref)
+        info = ADInfo(Tapir.TapirInterpreter(), arg_types, ssa_insts, is_used_dict, false, rdata_ref)
 
         # Verify that we can access the interpreter and terminator block ID.
-        @test info.interp isa Tapir.PInterp
+        @test info.interp isa Tapir.TapirInterpreter
 
         # Verify that we can get the type associated to Arguments, IDs, and others.
         global ___x = 5.0
@@ -48,6 +48,11 @@ end
         @test Tapir.get_primal_type(info, 5) == Int
         @test Tapir.get_primal_type(info, QuoteNode(:hello)) == Symbol
     end
+    @testset "ADStmtInfo" begin
+        # If the ID passes as the comms channel doesn't appear in the stmts for the forwards
+        # pass, then this constructor ought to error.
+        @test_throws ArgumentError ad_stmt_info(ID(), ID(), nothing, nothing)
+    end
     @testset "make_ad_stmts!" begin
 
         # Set up ADInfo -- this state is required by `make_ad_stmts!`, and the
@@ -55,7 +60,7 @@ end
         id_line_1 = ID()
         id_line_2 = ID()
         info = ADInfo(
-            Tapir.PInterp(),
+            Tapir.TapirInterpreter(),
             Dict{Argument, Any}(Argument(1) => typeof(sin), Argument(2) => Float64),
             Dict{ID, CC.NewInstruction}(
                 id_line_1 => new_inst(Expr(:invoke, nothing, cos, Argument(2)), Float64),
@@ -70,7 +75,7 @@ end
             line = ID()
             @test TestUtils.has_equal_data(
                 make_ad_stmts!(nothing, line, info),
-                ad_stmt_info(line, nothing, nothing),
+                ad_stmt_info(line, nothing, nothing, nothing),
             )
         end
         @testset "ReturnNode" begin
@@ -78,7 +83,7 @@ end
             @testset "unreachable" begin
                 @test TestUtils.has_equal_data(
                     make_ad_stmts!(ReturnNode(), line, info),
-                    ad_stmt_info(line, ReturnNode(), nothing),
+                    ad_stmt_info(line, nothing, ReturnNode(), nothing),
                 )
             end
             @testset "Argument" begin
@@ -104,7 +109,7 @@ end
             line = ID()
             stmt = IDGotoNode(ID())
             @test TestUtils.has_equal_data(
-                make_ad_stmts!(stmt, line, info), ad_stmt_info(line, stmt, nothing)
+                make_ad_stmts!(stmt, line, info), ad_stmt_info(line, nothing, stmt, nothing)
             )
         end
         @testset "IDGotoIfNot" begin
@@ -143,6 +148,7 @@ end
             @testset "non-const" begin
                 global_ref = GlobalRef(S2SGlobals, :non_const_global)
                 stmt_info = make_ad_stmts!(global_ref, ID(), info)
+                @test Tapir.TestResources.non_const_global_ref(5.0) == 5.0 # run primal
                 @test stmt_info isa Tapir.ADStmtInfo
                 @test Meta.isexpr(last(stmt_info.fwds)[2].stmt, :call)
                 @test last(stmt_info.fwds)[2].stmt.args[1] == Tapir.__verify_const
@@ -166,6 +172,12 @@ end
             )
         end
         @testset "Expr" begin
+            @testset "assignment to GlobalRef" begin
+                @test_throws(
+                    Tapir.UnhandledLanguageFeatureException,
+                    make_ad_stmts!(Expr(:(=), GlobalRef(Main, :a), 5.0), ID(), info)
+                )
+            end
             @testset "copyast" begin
                 stmt = Expr(:copyast, QuoteNode(:(hi)))
                 ad_stmts = make_ad_stmts!(stmt, ID(), info)
@@ -176,9 +188,10 @@ end
             @testset "throw_undef_if_not" begin
                 cond_id = ID()
                 line = ID()
+                fwds = Expr(:throw_undef_if_not, :x, cond_id)
                 @test TestUtils.has_equal_data(
                     make_ad_stmts!(Expr(:throw_undef_if_not, :x, cond_id), line, info),
-                    ad_stmt_info(line, Expr(:throw_undef_if_not, :x, cond_id), nothing),
+                    ad_stmt_info(line, nothing, fwds, nothing),
                 )
             end
             @testset "$stmt" for stmt in [
@@ -187,7 +200,7 @@ end
                 line = ID()
                 @test TestUtils.has_equal_data(
                     make_ad_stmts!(stmt, line, info),
-                    ad_stmt_info(line, stmt, nothing),
+                    ad_stmt_info(line, nothing, stmt, nothing),
                 )
             end
         end
@@ -205,16 +218,16 @@ end
         @test rule isa Tapir.rule_type(interp, sig; safety_on)
     end
 
-    interp = Tapir.TapirInterpreter()
     @testset "$(_typeof((f, x...)))" for (n, (interface_only, perf_flag, bnds, f, x...)) in
         collect(enumerate(TestResources.generate_test_functions()))
 
         sig = _typeof((f, x...))
         @info "$n: $sig"
         TestUtils.test_rule(
-            Xoshiro(123456), f, x...; interp, perf_flag, interface_only, is_primitive=false
+            Xoshiro(123456), f, x...; perf_flag, interface_only, is_primitive=false
         )
 
+        # interp = Tapir.get_tapir_interpreter()
         # codual_args = map(zero_codual, (f, x...))
         # fwds_args = map(Tapir.to_fwds, codual_args)
         # rule = Tapir.build_rrule(interp, sig)
@@ -243,13 +256,23 @@ end
         # @profview(run_many_times(500, f, rule, fwds_args, out))
     end
 
+    @testset "integration testing for invalid global ref errors" begin
+        @test_throws(
+            Tapir.UnhandledLanguageFeatureException,
+            Tapir.build_rrule(
+                Tapir.get_tapir_interpreter(),
+                Tuple{typeof(Tapir.TestResources.non_const_global_ref), Float64},
+            )
+        )
+    end
+
     # Tests designed to prevent accidentally re-introducing issues which we have fixed.
     @testset "regression tests" begin
 
         # 184
         TestUtils.test_rule(
             Xoshiro(123456), S2SGlobals.f, S2SGlobals.A(2 * ones(3)), ones(3);
-            interp, perf_flag=:none, interface_only=false, is_primitive=false,
+            interface_only=false, is_primitive=false,
         )
     end
 end

@@ -6,6 +6,8 @@ in addition to the primal data.
 """
 struct NoFData end
 
+Base.copy(::NoFData) = NoFData()
+
 increment!!(::NoFData, ::NoFData) = NoFData()
 
 """
@@ -19,6 +21,8 @@ associated `FData`.
 struct FData{T<:NamedTuple}
     data::T
 end
+
+_copy(x::P) where {P<:FData} = P(_copy(x.data))
 
 fields_type(::Type{FData{T}}) where {T<:NamedTuple} = T
 
@@ -196,8 +200,10 @@ fdata_type(::Type{T}) where {T<:Ptr} = T
     isa(P, Union) && return Union{fdata_type(P.a), fdata_type(P.b)}
     isempty(P.parameters) && return NoFData
     isa(last(P.parameters), Core.TypeofVararg) && return Any
-    all(p -> fdata_type(p) == NoFData, P.parameters) && return NoFData
-    return Tuple{map(fdata_type, fieldtypes(P))...}
+    nofdata_tt = Tuple{Vararg{NoFData, length(P.parameters)}}
+    fdata_tt = Tuple{map(fdata_type, fieldtypes(P))...}
+    fdata_tt <: nofdata_tt && return NoFData
+    return nofdata_tt <: fdata_tt ? Union{NoFData, fdata_tt} : fdata_tt
 end
 
 @generated function fdata_type(::Type{NamedTuple{names, T}}) where {names, T<:Tuple}
@@ -363,6 +369,8 @@ Nothing to propagate backwards on the reverse-pass.
 """
 struct NoRData end
 
+Base.copy(::NoRData) = NoRData()
+
 @inline increment!!(::NoRData, ::NoRData) = NoRData()
 
 @inline increment_field!!(::NoRData, y, ::Val) = NoRData()
@@ -370,6 +378,8 @@ struct NoRData end
 struct RData{T<:NamedTuple}
     data::T
 end
+
+_copy(x::P) where {P<:RData} = P(_copy(x.data))
 
 fields_type(::Type{RData{T}}) where {T<:NamedTuple} = T
 
@@ -436,8 +446,10 @@ rdata_type(::Type{<:Ptr}) = NoRData
     isa(P, Union) && return Union{rdata_type(P.a), rdata_type(P.b)}
     isempty(P.parameters) && return NoRData
     isa(last(P.parameters), Core.TypeofVararg) && return Any
-    all(p -> rdata_type(p) == NoRData, P.parameters) && return NoRData
-    return Tuple{map(rdata_type, fieldtypes(P))...}
+    nordata_tt = Tuple{Vararg{NoRData, length(P.parameters)}}
+    rdata_tt = Tuple{map(rdata_type, fieldtypes(P))...}
+    rdata_tt <: nordata_tt && return NoRData
+    return nordata_tt <: rdata_tt ? Union{NoRData, rdata_tt} : rdata_tt
 end
 
 function rdata_type(::Type{NamedTuple{names, T}}) where {names, T<:Tuple}
@@ -726,6 +738,8 @@ performed in AD.
 struct LazyZeroRData{P, Tdata}
     data::Tdata
 end
+
+_copy(x::P) where {P<:LazyZeroRData} = P(_copy(x.data))
 
 # Returns the type which must be output by LazyZeroRData whenever it is passed a `P`.
 @inline function lazy_zero_rdata_type(::Type{P}) where {P}

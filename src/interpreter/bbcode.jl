@@ -144,12 +144,17 @@ mutable struct BBlock
 end
 
 """
-    BBlock(id::ID, inst_pairs::Vector{Tuple{ID, NewInstruction}})
+    const IDInstPair = Tuple{ID, NewInstruction}
+"""
+const IDInstPair = Tuple{ID, NewInstruction}
+
+"""
+    BBlock(id::ID, inst_pairs::Vector{IDInstPair})
 
 Convenience constructor -- splits `inst_pairs` into a `Vector{ID}` and `InstVector` in order
 to build a `BBlock`.
 """
-function BBlock(id::ID, inst_pairs::Vector{Tuple{ID, NewInstruction}})
+function BBlock(id::ID, inst_pairs::Vector{IDInstPair})
     return BBlock(id, first.(inst_pairs), last.(inst_pairs))
 end
 
@@ -191,14 +196,23 @@ Returns the terminator associated to `bb`. If the last instruction in `bb` isa
 terminator(bb::BBlock) = isa(bb.insts[end].stmt, Terminator) ? bb.insts[end].stmt : nothing
 
 """
-    collect_stmts(bb::BBlock)::Vector{Tuple{ID, NewInstruction}}
+    insert_before_terminator!(bb::BBlock, id::ID, inst::NewInstruction)::Nothing
+
+If the final instruction in `bb` is a `Terminator`, insert `inst` immediately before it.
+Otherwise, insert `inst` at the end of the block.
+"""
+function insert_before_terminator!(bb::BBlock, id::ID, inst::NewInstruction)::Nothing
+    insert!(bb, length(bb.insts) + (terminator(bb) === nothing ? 1 : 0), id, inst)
+    return nothing
+end
+
+"""
+    collect_stmts(bb::BBlock)::Vector{IDInstPair}
 
 Returns a `Vector` containing the `ID`s and instructions associated to each line in `bb`.
 These should be assumed to be ordered.
 """
-function collect_stmts(bb::BBlock)::Vector{Tuple{ID, NewInstruction}}
-    return collect(zip(bb.inst_ids, bb.insts))
-end
+collect_stmts(bb::BBlock)::Vector{IDInstPair} = collect(zip(bb.inst_ids, bb.insts))
 
 """
     BBCode(
@@ -317,15 +331,13 @@ function _compute_all_predecessors(blks::Vector{BBlock})::Dict{ID, Vector{ID}}
 end
 
 """
-    collect_stmts(ir::BBCode)::Vector{Tuple{ID, CC.NewInstruction}}
+    collect_stmts(ir::BBCode)::Vector{IDInstPair}
 
 Produce a `Vector` containing all of the statements in `ir`. These are returned in
 order, so it is safe to assume that element `n` refers to the `nth` element of the `IRCode`
 associated to `ir`. 
 """
-function collect_stmts(ir::BBCode)::Vector{Tuple{ID, NewInstruction}}
-    return reduce(vcat, map(collect_stmts, ir.blocks))
-end
+collect_stmts(ir::BBCode)::Vector{IDInstPair} = reduce(vcat, map(collect_stmts, ir.blocks))
 
 """
     id_to_line_map(ir::BBCode)
@@ -612,8 +624,50 @@ function _remove_double_edges(ir::BBCode)
     return BBCode(ir, new_blks)
 end
 
+"""
+    _build_graph_of_cfg(blks::Vector{BBlock})::Tuple{SimpleDiGraph, Dict{ID, Int}}
+
+Builds a `SimpleDiGraph`, `g`, representing of the CFG associated to `blks`, where `blks`
+comprises the collection of basic blocks associated to a `BBCode`.
+This is a type from Graphs.jl, so constructing `g` makes it straightforward to analyse the
+control flow structure of `ir` using algorithms from Graphs.jl.
+
+Returns a 2-tuple, whose first element is `g`, and whose second element is a map from
+the `ID` associated to each basic block in `ir`, to the `Int` corresponding to its node
+index in `g`.
+"""
+function _build_graph_of_cfg(blks::Vector{BBlock})::Tuple{SimpleDiGraph, Dict{ID, Int}}
+    node_ints = collect(eachindex(blks))
+    id_to_int = Dict(zip(map(blk -> blk.id, blks), node_ints))
+    successors = _compute_all_successors(blks)
+    g = SimpleDiGraph(length(blks))
+    for blk in blks, successor in successors[blk.id]
+        add_edge!(g, id_to_int[blk.id], id_to_int[successor])
+    end
+    return g, id_to_int
+end
+
+"""
+    _distance_to_entry(blks::Vector{BBlock})::Vector{Int}
+
+For each basic block in `blks`, compute the distance from it to the entry point (the first
+block. The distance is `typemax(Int)` if no path from the entry point to a given node.
+"""
+function _distance_to_entry(blks::Vector{BBlock})::Vector{Int}
+    g, id_to_int = _build_graph_of_cfg(blks)
+    return dijkstra_shortest_paths(g, id_to_int[blks[1].id]).dists
+end
+
+"""
+    _is_reachable(blks::Vector{BBlock})::Vector{Bool}
+
+Computes a `Vector` whose length is `length(blks)`. The `n`th element is `true` iff it is
+possible for control flow to reach the `n`th block.
+"""
+_is_reachable(blks::Vector{BBlock})::Vector{Bool} = _distance_to_entry(blks) .< typemax(Int)
+
 #=
-    _sort_blocks!(ir::BBCode)
+    _sort_blocks!(ir::BBCode)::BBCode
 
 Ensure that blocks appear in order of distance-from-entry-point, where distance the
 distance from block b to the entry point is defined to be the minimum number of basic
@@ -627,18 +681,8 @@ WARNING: use with care. Only use if you are confident that arbitrary re-ordering
 blocks in `ir` is valid. Notably, this does not hold if you have any `IDGotoIfNot` nodes in
 `ir`.
 =#
-function _sort_blocks!(ir::BBCode)
-
-    node_ints = collect(eachindex(ir.blocks))
-    id_to_int = Dict(zip(map(blk -> blk.id, ir.blocks), node_ints))
-    ps = compute_all_predecessors(ir)
-    direct_predecessors = map(ir.blocks) do blk
-        return map(b -> Edge(id_to_int[b], id_to_int[blk.id]), ps[blk.id])
-    end
-    g = SimpleDiGraph(reduce(vcat, direct_predecessors))
-
-    d = dijkstra_shortest_paths(g, id_to_int[ir.blocks[1].id]).dists
-    I = sortperm(d)
+function _sort_blocks!(ir::BBCode)::BBCode
+    I = sortperm(_distance_to_entry(ir.blocks))
     ir.blocks .= ir.blocks[I]
     return ir
 end
@@ -716,13 +760,13 @@ function characterise_unique_predecessor_blocks(
 end
 
 """
-    characterise_used_ids(blks::Vector{BBlock})::Dict{ID, Bool}
+    characterise_used_ids(stmts::Vector{IDInstPair})::Dict{ID, Bool}
 
-For each line in `blks`, determine whether it is referenced anywhere else in the code.
+For each line in `stmts`, determine whether it is referenced anywhere else in the code.
 Returns a dictionary containing the results. An element is `false` if the corresponding
 `ID` is unused, and `true` if is used.
 """
-function characterise_used_ids(stmts::Vector{Tuple{ID, NewInstruction}})::Dict{ID, Bool}
+function characterise_used_ids(stmts::Vector{IDInstPair})::Dict{ID, Bool}
     ids = first.(stmts)
     insts = last.(stmts)
 
@@ -761,3 +805,30 @@ function _find_id_uses!(d::Dict{ID, Bool}, x::ReturnNode)
 end
 _find_id_uses!(d::Dict{ID, Bool}, x::QuoteNode) = nothing
 _find_id_uses!(d::Dict{ID, Bool}, x) = nothing
+
+"""
+    remove_unreachable_blocks(ir::BBCode)::BBCode
+
+If a basic block in `ir` cannot possibly be reached during execution, then it can be safely
+removed from `ir` without changing its functionality.
+A block is unreachable if either:
+1. it has no predecessors _and_ it is not the first block, or
+2. all of its predecessors are themselves unreachable.
+
+For example, consider the following IR:
+```jldoctest remove_unreachable_blocks
+julia> ir = Tapir.ircode(
+           Any[Core.ReturnNode(nothing), Expr(:call, sin, 5), Core.ReturnNode(Core.SSAValue(2))],
+           Any[Any, Any, Any],
+       );
+```
+There is no possible way to reach the second basic block (lines 2 and 3). Applying this
+function will therefore remove it, yielding the following:
+```jldoctest remove_unreachable_blocks
+julia> Tapir.IRCode(Tapir.remove_unreachable_blocks(Tapir.BBCode(ir)))
+1 1 ─     return nothing
+```
+"""
+remove_unreachable_blocks(ir::BBCode) = BBCode(ir, _remove_unreachable_blocks(ir.blocks))
+
+_remove_unreachable_blocks(blks::Vector{BBlock}) = blks[_is_reachable(blks)]

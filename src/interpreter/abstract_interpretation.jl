@@ -5,6 +5,12 @@
 # The most important bit of this code is `inlining_policy` -- the rest is copy + pasted
 # boiler plate, largely taken from https://github.com/JuliaLang/julia/blob/2fe4190b3d26b4eee52b2b1b1054ddd6e38a941e/test/compiler/newinterp.jl#L11
 
+
+struct ClosureCacheKey
+    world_age::UInt
+    key::Any
+end
+
 struct TICache
     dict::IdDict{Core.MethodInstance, Core.CodeInstance}
 end
@@ -18,7 +24,7 @@ struct TapirInterpreter{C} <: CC.AbstractInterpreter
     opt_params::CC.OptimizationParams
     inf_cache::Vector{CC.InferenceResult}
     code_cache::TICache
-    oc_cache::Dict{Any, Any}
+    oc_cache::Dict{ClosureCacheKey, Any}
     function TapirInterpreter(
         ::Type{C};
         meta=nothing,
@@ -27,20 +33,46 @@ struct TapirInterpreter{C} <: CC.AbstractInterpreter
         opt_params::CC.OptimizationParams=CC.OptimizationParams(),
         inf_cache::Vector{CC.InferenceResult}=CC.InferenceResult[], 
         code_cache::TICache=TICache(),
+        oc_cache::Dict{ClosureCacheKey, Any}=Dict{ClosureCacheKey, Any}(),
     ) where {C}
-        return new{C}(meta, world, inf_params, opt_params, inf_cache, code_cache, Dict())
+        return new{C}(meta, world, inf_params, opt_params, inf_cache, code_cache, oc_cache)
     end
+end
+
+# Don't print out the IRCode object, because this tends to pollute the REPL. Just make it
+# clear that this is a MistyClosure, which contains an OpaqueClosure.
+Base.show(io::IO, mime::MIME"text/plain", mc::TapirInterpreter) = _show_tapir_interp(io, mime, mc)
+Base.show(io::IO, mc::TapirInterpreter) = _show_tapir_interp(io, MIME"text/plain"(), mc)
+
+function _show_tapir_interp(io::IO, mime::MIME"text/plain", mc::TapirInterpreter)
+    print(io, "TapirInterpreter()")
 end
 
 TapirInterpreter() = TapirInterpreter(DefaultCtx)
 
-const PInterp = TapirInterpreter
+# Globally cached interpreter. Should only be accessed via `get_tapir_interpreter`.
+const GLOBAL_INTERPRETER = Ref(TapirInterpreter())
 
-CC.InferenceParams(interp::PInterp) = interp.inf_params
-CC.OptimizationParams(interp::PInterp) = interp.opt_params
-CC.get_world_counter(interp::PInterp) = interp.world
-CC.get_inference_cache(interp::PInterp) = interp.inf_cache
-function CC.code_cache(interp::PInterp)
+"""
+    get_tapir_interpreter()
+
+Returns a `TapirInterpreter` appropriate for the current world age. Will use a cached
+interpreter if one already exists for the current world age, otherwise creates a new one.
+This is a very conservative approach to caching the interpreter, which reflects the
+approach taken the the closure cache.
+"""
+function get_tapir_interpreter()
+    if GLOBAL_INTERPRETER[].world != Base.get_world_counter()
+        GLOBAL_INTERPRETER[] = TapirInterpreter()
+    end
+    return GLOBAL_INTERPRETER[]
+end
+
+CC.InferenceParams(interp::TapirInterpreter) = interp.inf_params
+CC.OptimizationParams(interp::TapirInterpreter) = interp.opt_params
+CC.get_world_counter(interp::TapirInterpreter) = interp.world
+CC.get_inference_cache(interp::TapirInterpreter) = interp.inf_cache
+function CC.code_cache(interp::TapirInterpreter)
     return CC.WorldView(interp.code_cache, CC.WorldRange(interp.world))
 end
 function CC.get(wvc::CC.WorldView{TICache}, mi::Core.MethodInstance, default)
@@ -85,4 +117,4 @@ function CC.inlining_policy(
     )
 end
 
-context_type(::PInterp{C}) where {C} = C
+context_type(::TapirInterpreter{C}) where {C} = C

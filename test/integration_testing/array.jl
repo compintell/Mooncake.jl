@@ -499,15 +499,8 @@ _getter() = 5.0
             (false, zero, randn(sr(2), 2, 3)),
         ]
     )
-    for (interface_only, f, x...) in test_cases
-        f(deepcopy(x)...)
-    end
-    interp = Tapir.PInterp()
     @testset for (interface_only, f, x...) in test_cases
         @info _typeof((f, x...))
-        TestUtils.test_rule(
-            sr(123456), f, x...;
-            interp, perf_flag=:none, interface_only, is_primitive=false, safety_on=false,
-        )
+        test_rule(sr(123456), f, x...; interface_only, is_primitive=false, safety_on=false)
     end
 end

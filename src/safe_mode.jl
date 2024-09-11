@@ -81,6 +81,8 @@ struct SafeRRule{Trule}
     rule::Trule
 end
 
+_copy(x::P) where {P<:SafeRRule} = P(_copy(x.rule))
+
 """
     (rule::SafeRRule)(x::CoDual...)
 
