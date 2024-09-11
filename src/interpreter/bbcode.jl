@@ -144,12 +144,17 @@ mutable struct BBlock
 end
 
 """
-    BBlock(id::ID, inst_pairs::Vector{Tuple{ID, NewInstruction}})
+    const IDInstPair = Tuple{ID, NewInstruction}
+"""
+const IDInstPair = Tuple{ID, NewInstruction}
+
+"""
+    BBlock(id::ID, inst_pairs::Vector{IDInstPair})
 
 Convenience constructor -- splits `inst_pairs` into a `Vector{ID}` and `InstVector` in order
 to build a `BBlock`.
 """
-function BBlock(id::ID, inst_pairs::Vector{Tuple{ID, NewInstruction}})
+function BBlock(id::ID, inst_pairs::Vector{IDInstPair})
     return BBlock(id, first.(inst_pairs), last.(inst_pairs))
 end
 
@@ -202,14 +207,12 @@ function insert_before_terminator!(bb::BBlock, id::ID, inst::NewInstruction)::No
 end
 
 """
-    collect_stmts(bb::BBlock)::Vector{Tuple{ID, NewInstruction}}
+    collect_stmts(bb::BBlock)::Vector{IDInstPair}
 
 Returns a `Vector` containing the `ID`s and instructions associated to each line in `bb`.
 These should be assumed to be ordered.
 """
-function collect_stmts(bb::BBlock)::Vector{Tuple{ID, NewInstruction}}
-    return collect(zip(bb.inst_ids, bb.insts))
-end
+collect_stmts(bb::BBlock)::Vector{IDInstPair} = collect(zip(bb.inst_ids, bb.insts))
 
 """
     BBCode(
@@ -328,15 +331,13 @@ function _compute_all_predecessors(blks::Vector{BBlock})::Dict{ID, Vector{ID}}
 end
 
 """
-    collect_stmts(ir::BBCode)::Vector{Tuple{ID, CC.NewInstruction}}
+    collect_stmts(ir::BBCode)::Vector{IDInstPair}
 
 Produce a `Vector` containing all of the statements in `ir`. These are returned in
 order, so it is safe to assume that element `n` refers to the `nth` element of the `IRCode`
 associated to `ir`. 
 """
-function collect_stmts(ir::BBCode)::Vector{Tuple{ID, NewInstruction}}
-    return reduce(vcat, map(collect_stmts, ir.blocks))
-end
+collect_stmts(ir::BBCode)::Vector{IDInstPair} = reduce(vcat, map(collect_stmts, ir.blocks))
 
 """
     id_to_line_map(ir::BBCode)
@@ -759,13 +760,13 @@ function characterise_unique_predecessor_blocks(
 end
 
 """
-    characterise_used_ids(blks::Vector{BBlock})::Dict{ID, Bool}
+    characterise_used_ids(stmts::Vector{IDInstPair})::Dict{ID, Bool}
 
-For each line in `blks`, determine whether it is referenced anywhere else in the code.
+For each line in `stmts`, determine whether it is referenced anywhere else in the code.
 Returns a dictionary containing the results. An element is `false` if the corresponding
 `ID` is unused, and `true` if is used.
 """
-function characterise_used_ids(stmts::Vector{Tuple{ID, NewInstruction}})::Dict{ID, Bool}
+function characterise_used_ids(stmts::Vector{IDInstPair})::Dict{ID, Bool}
     ids = first.(stmts)
     insts = last.(stmts)
 
