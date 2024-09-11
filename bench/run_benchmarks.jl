@@ -124,6 +124,10 @@ should_run_benchmark(
     ::Val{:enzyme}, ::Base.Fix1{<:typeof(Turing.LogDensityProblems.logdensity)}, x...
 ) = false
 
+@inline g(x, a, ::Val{N}) where {N} = N > 0 ? g(x * a, a, Val(N-1)) : x
+
+large_single_block(x::AbstractVector{<:Real}) = g(x[1], x[2], Val(150))
+
 """
     generate_inter_framework_tests()
 
@@ -136,21 +140,22 @@ an array.
 """
 function generate_inter_framework_tests()
     return Any[
-        ("sum_1000", (sum, randn(1_000))),
-        ("_sum_1000", (x -> _sum(identity, x), randn(1_000))),
-        ("sum_sin_1000", (x -> sum(sin, x), randn(1_000))),
-        ("_sum_sin_1000", (x -> _sum(sin, x), randn(1_000))),
-        ("kron_sum", (_kron_sum, randn(20, 20), randn(40, 40))),
-        ("kron_view_sum", (_kron_view_sum, randn(40, 30), randn(40, 40))),
-        ("naive_map_sin_cos_exp", (_naive_map_sin_cos_exp, randn(10, 10))),
-        ("map_sin_cos_exp", (_map_sin_cos_exp, randn(10, 10))),
-        ("broadcast_sin_cos_exp", (_broadcast_sin_cos_exp, randn(10, 10))),
-        (
-            "simple_mlp",
-            (_simple_mlp, randn(128, 256), randn(256, 128), randn(128, 70), randn(128, 70)),
-        ),
-        ("gp_lml", (_gp_lml, _generate_gp_inputs()...)),
-        ("turing_broadcast_benchmark", build_turing_problem()),
+        # ("sum_1000", (sum, randn(1_000))),
+        # ("_sum_1000", (x -> _sum(identity, x), randn(1_000))),
+        # ("sum_sin_1000", (x -> sum(sin, x), randn(1_000))),
+        # ("_sum_sin_1000", (x -> _sum(sin, x), randn(1_000))),
+        # ("kron_sum", (_kron_sum, randn(20, 20), randn(40, 40))),
+        # ("kron_view_sum", (_kron_view_sum, randn(40, 30), randn(40, 40))),
+        # ("naive_map_sin_cos_exp", (_naive_map_sin_cos_exp, randn(10, 10))),
+        # ("map_sin_cos_exp", (_map_sin_cos_exp, randn(10, 10))),
+        # ("broadcast_sin_cos_exp", (_broadcast_sin_cos_exp, randn(10, 10))),
+        # (
+        #     "simple_mlp",
+        #     (_simple_mlp, randn(128, 256), randn(256, 128), randn(128, 70), randn(128, 70)),
+        # ),
+        # ("gp_lml", (_gp_lml, _generate_gp_inputs()...)),
+        # ("turing_broadcast_benchmark", build_turing_problem()),
+        ("large_single_block", (large_single_block, [0.9, 0.99])),
     ]
 end
 
