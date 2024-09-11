@@ -126,7 +126,7 @@ should_run_benchmark(
 
 @inline g(x, a, ::Val{N}) where {N} = N > 0 ? g(x * a, a, Val(N-1)) : x
 
-large_single_block(x::AbstractVector{<:Real}) = g(x[1], x[2], Val(150))
+large_single_block(x::AbstractVector{<:Real}) = g(x[1], x[2], Val(400))
 
 """
     generate_inter_framework_tests()
