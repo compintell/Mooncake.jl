@@ -48,6 +48,11 @@ end
         @test Tapir.get_primal_type(info, 5) == Int
         @test Tapir.get_primal_type(info, QuoteNode(:hello)) == Symbol
     end
+    @testset "ADStmtInfo" begin
+        # If the ID passes as the comms channel doesn't appear in the stmts for the forwards
+        # pass, then this constructor ought to error.
+        @test_throws ArgumentError ad_stmt_info(ID(), ID(), nothing, nothing)
+    end
     @testset "make_ad_stmts!" begin
 
         # Set up ADInfo -- this state is required by `make_ad_stmts!`, and the
@@ -70,7 +75,7 @@ end
             line = ID()
             @test TestUtils.has_equal_data(
                 make_ad_stmts!(nothing, line, info),
-                ad_stmt_info(line, nothing, nothing),
+                ad_stmt_info(line, nothing, nothing, nothing),
             )
         end
         @testset "ReturnNode" begin
@@ -78,7 +83,7 @@ end
             @testset "unreachable" begin
                 @test TestUtils.has_equal_data(
                     make_ad_stmts!(ReturnNode(), line, info),
-                    ad_stmt_info(line, ReturnNode(), nothing),
+                    ad_stmt_info(line, nothing, ReturnNode(), nothing),
                 )
             end
             @testset "Argument" begin
@@ -104,7 +109,7 @@ end
             line = ID()
             stmt = IDGotoNode(ID())
             @test TestUtils.has_equal_data(
-                make_ad_stmts!(stmt, line, info), ad_stmt_info(line, stmt, nothing)
+                make_ad_stmts!(stmt, line, info), ad_stmt_info(line, nothing, stmt, nothing)
             )
         end
         @testset "IDGotoIfNot" begin
@@ -183,9 +188,10 @@ end
             @testset "throw_undef_if_not" begin
                 cond_id = ID()
                 line = ID()
+                fwds = Expr(:throw_undef_if_not, :x, cond_id)
                 @test TestUtils.has_equal_data(
                     make_ad_stmts!(Expr(:throw_undef_if_not, :x, cond_id), line, info),
-                    ad_stmt_info(line, Expr(:throw_undef_if_not, :x, cond_id), nothing),
+                    ad_stmt_info(line, nothing, fwds, nothing),
                 )
             end
             @testset "$stmt" for stmt in [
@@ -194,7 +200,7 @@ end
                 line = ID()
                 @test TestUtils.has_equal_data(
                     make_ad_stmts!(stmt, line, info),
-                    ad_stmt_info(line, stmt, nothing),
+                    ad_stmt_info(line, nothing, stmt, nothing),
                 )
             end
         end
@@ -221,6 +227,7 @@ end
             Xoshiro(123456), f, x...; perf_flag, interface_only, is_primitive=false
         )
 
+        # interp = Tapir.get_tapir_interpreter()
         # codual_args = map(zero_codual, (f, x...))
         # fwds_args = map(Tapir.to_fwds, codual_args)
         # rule = Tapir.build_rrule(interp, sig)

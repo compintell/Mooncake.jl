@@ -5,7 +5,7 @@ for (M, f, arity) in DiffRules.diffrules(; filter_modules=nothing)
         continue  # Skip rules for methods not defined in the current scope
     end
     (f == :rem2pi || f == :ldexp) && continue # not designed for Float64s
-    (f in [:+, :*, :sin, :cos]) && continue # use other functionality to implement these
+    (f in [:+, :*, :sin, :cos, :exp]) && continue # use other functionality to implement these
     if arity == 1
         dx = DiffRules.diffrule(M, f, :x)
         pb_name = Symbol("$(M).$(f)_pb!!")
@@ -46,6 +46,13 @@ function rrule!!(::CoDual{typeof(cos), NoFData}, x::CoDual{P, NoFData}) where {P
     s, c = sincos(primal(x))
     cos_pullback!!(dy::P) = NoRData(), -dy * s
     return CoDual(c, NoFData()), cos_pullback!!
+end
+
+@is_primitive MinimalCtx Tuple{typeof(exp), <:IEEEFloat}
+function rrule!!(::CoDual{typeof(exp)}, x::CoDual{P}) where {P<:IEEEFloat}
+    y = exp(primal(x))
+    exp_pb!!(dy::P) = NoRData(), dy * y
+    return zero_fcodual(y), exp_pb!!
 end
 
 rand_inputs(rng, P::Type{<:IEEEFloat}, f, arity) = randn(rng, P, arity)
