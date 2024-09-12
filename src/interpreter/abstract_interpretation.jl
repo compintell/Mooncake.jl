@@ -58,8 +58,8 @@ const GLOBAL_INTERPRETER = Ref(TapirInterpreter())
 
 Returns a `TapirInterpreter` appropriate for the current world age. Will use a cached
 interpreter if one already exists for the current world age, otherwise creates a new one.
-This is a very conservative approach to caching the interpreter, which reflects the
-approach taken the the closure cache.
+
+This should be prefered over constructing a `TapirInterpreter` directly.
 """
 function get_tapir_interpreter()
     if GLOBAL_INTERPRETER[].world != Base.get_world_counter()

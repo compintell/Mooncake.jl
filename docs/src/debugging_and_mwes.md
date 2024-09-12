@@ -26,10 +26,7 @@ end
 For example
 ```julia
 f(x) = Core.bitcast(Float64, x)
-Tapir.TestUtils.test_rule(
-    Random.Xoshiro(123), f, 3;
-    is_primitive=false, perf_flag=:none, interp=Tapir.TapirInterpreter(),
-)
+Tapir.TestUtils.test_rule(Random.Xoshiro(123), f, 3; is_primitive=false)
 ```
 will error.
 (In this particular case, it is caused by Tapir.jl preventing you from doing (potentially) unsafe casting. In this particular instance, Tapir.jl just fails to compile, but in other instances other things can happen.)
