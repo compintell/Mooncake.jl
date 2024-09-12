@@ -904,8 +904,8 @@ function build_rrule(
                 primal_ir, Treturn, ad_stmts_blocks, pb_comms_insts, info, Tshared_data
             )
 
-            optimised_fwds_ir = optimise_ir!(optimise_ir!(IRCode(fwds_ir); do_inline=true))
-            optimised_pb_ir = optimise_ir!(optimise_ir!(IRCode(pb_ir); do_inline=true))
+            optimised_fwds_ir = optimise_ir!(IRCode(fwds_ir); do_inline=true)
+            optimised_pb_ir = optimise_ir!(IRCode(pb_ir); do_inline=true)
             # optimised_fwds_ir = optimise_ir!(IRCode(fwds_ir); do_inline=false)
             # optimised_pb_ir = optimise_ir!(IRCode(pb_ir); do_inline=true)
             # @show sig_or_mi
