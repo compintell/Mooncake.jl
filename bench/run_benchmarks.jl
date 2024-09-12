@@ -167,7 +167,6 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
     tags = reduce(vcat, map(x -> x[4], test_case_data))
     GC.@preserve memory begin
         return map(enumerate(test_cases)) do (n, args)
-            GC.gc(true)
 
             @info "$n / $(length(test_cases))", _typeof(args)
             suite = Dict()
