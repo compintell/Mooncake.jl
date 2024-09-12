@@ -495,9 +495,9 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
             rrule!! # intrinsic / builtin / thing we provably have rule for
         elseif is_invoke
             mi = stmt.args[1]::Core.MethodInstance
-            LazyDerivedRule(info.interp, mi, info.safety_on) # Static dispatch
+            LazyDerivedRule(mi, info.safety_on) # Static dispatch
         else
-            DynamicDerivedRule(info.interp, info.safety_on)  # Dynamic dispatch
+            DynamicDerivedRule(info.safety_on)  # Dynamic dispatch
         end
 
         # Wrap the raw rule in a struct which ensures that any `ZeroRData`s are stripped
@@ -1420,23 +1420,20 @@ of its arguments. Stores rules in an internal cache to avoid re-deriving.
 
 This is used to implement dynamic dispatch.
 =#
-struct DynamicDerivedRule{T, V}
-    interp::T
+struct DynamicDerivedRule{V}
     cache::V
     safety_on::Bool
 end
 
-function DynamicDerivedRule(interp::TapirInterpreter, safety_on::Bool)
-    return DynamicDerivedRule(interp, Dict{Any, Any}(), safety_on)
-end
+DynamicDerivedRule(safety_on::Bool) = DynamicDerivedRule(Dict{Any, Any}(), safety_on)
 
-_copy(x::P) where {P<:DynamicDerivedRule} = P(x.interp, Dict{Any, Any}(), x.safety_on)
+_copy(x::P) where {P<:DynamicDerivedRule} = P(Dict{Any, Any}(), x.safety_on)
 
 function (dynamic_rule::DynamicDerivedRule)(args::Vararg{Any, N}) where {N}
     sig = Tuple{map(_typeof ∘ primal, args)...}
     rule = get(dynamic_rule.cache, sig, nothing)
     if rule === nothing
-        rule = build_rrule(dynamic_rule.interp, sig; safety_on=dynamic_rule.safety_on)
+        rule = build_rrule(get_tapir_interpreter(), sig; safety_on=dynamic_rule.safety_on)
         dynamic_rule.cache[sig] = rule
     end
     return rule(args...)
@@ -1460,26 +1457,27 @@ reason to keep this around is for debugging -- it is very helpful to have this t
 in the stack trace when something goes wrong, as it allows you to trivially determine which
 bit of your code is the culprit.
 =#
-mutable struct LazyDerivedRule{Tinterp<:TapirInterpreter, primal_sig, Trule}
-    interp::Tinterp
+mutable struct LazyDerivedRule{primal_sig, Trule}
     safety_on::Bool
     mi::Core.MethodInstance
     rule::Trule
-    function LazyDerivedRule(interp::A, mi::Core.MethodInstance, safety_on::Bool) where {A}
-        return new{A, mi.specTypes, rule_type(interp, mi; safety_on)}(interp, safety_on, mi)
+    function LazyDerivedRule(mi::Core.MethodInstance, safety_on::Bool)
+        interp = get_tapir_interpreter()
+        return new{mi.specTypes, rule_type(interp, mi; safety_on)}(safety_on, mi)
     end
-    function LazyDerivedRule{Tinterp, Tprimal_sig, Trule}(
-        interp::Tinterp, mi::Core.MethodInstance, safety_on::Bool
-    ) where {Tinterp, Tprimal_sig, Trule}
-        return new{Tinterp, Tprimal_sig, Trule}(interp, safety_on, mi)
+    function LazyDerivedRule{Tprimal_sig, Trule}(
+        mi::Core.MethodInstance, safety_on::Bool
+    ) where {Tprimal_sig, Trule}
+        return new{Tprimal_sig, Trule}(safety_on, mi)
     end
 end
 
-_copy(x::P) where {P<:LazyDerivedRule} = P(x.interp, x.mi, x.safety_on)
+_copy(x::P) where {P<:LazyDerivedRule} = P(x.mi, x.safety_on)
 
-function (rule::LazyDerivedRule{T, sig, Trule})(args::Vararg{Any, N}) where {N, T, sig, Trule}
+function (rule::LazyDerivedRule{sig, Trule})(args::Vararg{Any, N}) where {N, sig, Trule}
     if !isdefined(rule, :rule)
-        derived_rule = build_rrule(rule.interp, rule.mi; safety_on=rule.safety_on)
+        interp = get_tapir_interpreter()
+        derived_rule = build_rrule(interp, rule.mi; safety_on=rule.safety_on)
         if derived_rule isa Trule
             rule.rule = derived_rule
         else

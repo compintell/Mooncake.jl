@@ -274,5 +274,11 @@ end
             Xoshiro(123456), S2SGlobals.f, S2SGlobals.A(2 * ones(3)), ones(3);
             interface_only=false, is_primitive=false,
         )
+
+        # BenchmarkTools not working due to world age problems. Provided that this code
+        # runs successfully, everything is okay -- no need to check anything specific.
+        f(x) = sin(cos(x))
+        rule = Tapir.build_rrule(f, 0.0)
+        @benchmark Tapir.value_and_gradient!!($rule, $f, $(Ref(0.0))[])
     end
 end
