@@ -31,7 +31,7 @@ end
         )
         is_used_dict = Dict{ID, Bool}(id_ssa_1 => true, id_ssa_2 => true)
         rdata_ref = Ref{Tuple{map(Tapir.lazy_zero_rdata_type, (Float64, Int))...}}()
-        info = ADInfo(Tapir.TapirInterpreter(), arg_types, ssa_insts, is_used_dict, false, rdata_ref)
+        info = ADInfo(get_tapir_interpreter(), arg_types, ssa_insts, is_used_dict, false, rdata_ref)
 
         # Verify that we can access the interpreter and terminator block ID.
         @test info.interp isa Tapir.TapirInterpreter
@@ -60,7 +60,7 @@ end
         id_line_1 = ID()
         id_line_2 = ID()
         info = ADInfo(
-            Tapir.TapirInterpreter(),
+            get_tapir_interpreter(),
             Dict{Argument, Any}(Argument(1) => typeof(sin), Argument(2) => Float64),
             Dict{ID, CC.NewInstruction}(
                 id_line_1 => new_inst(Expr(:invoke, nothing, cos, Argument(2)), Float64),
@@ -213,7 +213,7 @@ end
         ],
         safety_on in [true, false]
 
-        interp = Tapir.TapirInterpreter()
+        interp = get_tapir_interpreter()
         rule = Tapir.build_rrule(interp, sig; safety_on)
         @test rule isa Tapir.rule_type(interp, sig; safety_on)
     end
