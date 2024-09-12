@@ -170,29 +170,29 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
             @info "$n / $(length(test_cases))", _typeof(args)
             suite = Dict()
 
-            # Benchmark primal.
-            @info "Primal"
-            primals = map(x -> x isa CoDual ? primal(x) : x, args)
-            suite["primal"] = Chairmarks.benchmark(
-                () -> primals,
-                primals -> (primals[1], _deepcopy(primals[2:end])),
-                (a -> a[1]((a[2]...))),
-                _ -> true,
-                evals=1,
-            )
-
-            # # Benchmark AD via Tapir.
-            # @info "Tapir"
-            # rule = Tapir.build_rrule(args...)
-            # coduals = map(x -> x isa CoDual ? x : zero_codual(x), args)
-            # to_benchmark(rule, coduals...)
-            # suite["tapir"] = Chairmarks.benchmark(
-            #     () -> (rule, coduals),
-            #     identity,
-            #     a -> to_benchmark(a[1], a[2]...),
+            # # Benchmark primal.
+            # @info "Primal"
+            # primals = map(x -> x isa CoDual ? primal(x) : x, args)
+            # suite["primal"] = Chairmarks.benchmark(
+            #     () -> primals,
+            #     primals -> (primals[1], _deepcopy(primals[2:end])),
+            #     (a -> a[1]((a[2]...))),
             #     _ -> true,
             #     evals=1,
             # )
+
+            # Benchmark AD via Tapir.
+            @info "Tapir"
+            rule = Tapir.build_rrule(args...)
+            coduals = map(x -> x isa CoDual ? x : zero_codual(x), args)
+            to_benchmark(rule, coduals...)
+            suite["tapir"] = Chairmarks.benchmark(
+                () -> (rule, coduals),
+                identity,
+                a -> to_benchmark(a[1], a[2]...),
+                _ -> true,
+                evals=1,
+            )
 
             if include_other_frameworks
 
