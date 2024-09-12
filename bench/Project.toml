@@ -1,7 +1,7 @@
 [deps]
 AbstractGPs = "99985d1d-32ba-4be9-9821-2ec096f28918"
-BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+Chairmarks = "0ca39b1e-fe0b-4e98-acfc-b1656634c4de"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
 KernelFunctions = "ec8451be-7e33-11e9-00cf-bbf324bd1392"
