@@ -131,7 +131,7 @@ function foo(x::Vector{Float64})
     return unsafe_load(p)
 end
 
-rule = build_rrule(Tapir.TapirInterpreter(), Tuple{typeof(foo), Vector{Float64}})
+rule = build_rrule(get_tapir_interpreter(), Tuple{typeof(foo), Vector{Float64}})
 Tapir.value_and_gradient!!(rule, foo, [5.0, 4.0])
 
 # output
