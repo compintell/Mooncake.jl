@@ -90,6 +90,9 @@
     end
     @testset "gc_preserve_begin and gc_preserve_end" begin
 
+        # Check that the placeholder function added to Tapir.jl behaves as expected.
+        @test Tapir.gc_preserve(5.0) === nothing
+
         # Thanks to maleadt for this suggestion. For more info, see:
         # https://discourse.julialang.org/t/testing-gc-preserve-when-doing-compiler-passes/102241
         mutable struct FinalizerObject
