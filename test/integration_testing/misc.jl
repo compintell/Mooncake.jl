@@ -1,5 +1,4 @@
 @testset "integration_testing" begin
-    interp = Tapir.PInterp()
     @testset for (interface_only, f, x...) in vcat(
         [
             (false, getindex, randn(5), 4),
@@ -85,13 +84,6 @@
         end),
     )
         @info "$(_typeof((f, x...)))"
-        TestUtils.test_rule(
-            Xoshiro(123456), f, x...;
-            safety_on=false,
-            interp,
-            perf_flag=:none,
-            interface_only,
-            is_primitive=false,
-        )
+        test_rule(Xoshiro(123456), f, x...; interface_only, is_primitive=false)
     end
 end

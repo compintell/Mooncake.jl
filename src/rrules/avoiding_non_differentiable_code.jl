@@ -8,9 +8,14 @@ end
 
 @is_primitive MinimalCtx Tuple{typeof(randn), AbstractRNG, Vararg}
 function rrule!!(f::CoDual{typeof(randn)}, rng::CoDual{<:AbstractRNG}, args::CoDual...)
-    x = randn(primal(rng), map(primal, args)...)
-    return zero_fcodual(x), NoPullback(f, rng, args...)
+    return simple_zero_adjoint(f, rng, args...)
 end
+
+@is_primitive MinimalCtx Tuple{typeof(string), Vararg}
+rrule!!(f::CoDual{typeof(string)}, x::CoDual...) = simple_zero_adjoint(f, x...)
+
+@is_primitive MinimalCtx Tuple{Type{Symbol}, Vararg}
+rrule!!(f::CoDual{Type{Symbol}}, x::CoDual...) = simple_zero_adjoint(f, x...)
 
 function generate_hand_written_rrule!!_test_cases(
     rng_ctor, ::Val{:avoiding_non_differentiable_code}
@@ -42,6 +47,13 @@ function generate_hand_written_rrule!!_test_cases(
                 ]
             end,
         ),
+
+        # Rules to make string-related functionality work properly.
+        (false, :stability, nothing, string, 'H'),
+
+        # Rules to make Symbol-related functionality work properly.
+        (false, :stability_and_allocs, nothing, Symbol, "hello"),
+        (false, :stability_and_allocs, nothing, Symbol, UInt8[1, 2]),
     )
     memory = Any[_x, _dx]
     return test_cases, memory

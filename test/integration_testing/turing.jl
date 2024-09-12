@@ -98,7 +98,6 @@ function build_turing_problem(rng, model, example=nothing)
 end
 
 @testset "turing" begin
-    interp = Tapir.PInterp()
     @testset "$(typeof(model))" for (interface_only, name, model, ex) in vcat(
         Any[
             (false, "simple_model", simple_model(), nothing),
@@ -126,10 +125,7 @@ end
         @info name
         rng = sr(123)
         f, x = build_turing_problem(rng, model, ex)
-        TestUtils.test_rule(
-            sr(123456), f, x;
-            perf_flag=:none, interface_only=true, is_primitive=false, interp, safety_on=true
-        )
+        test_rule(sr(123456), f, x; interface_only=true, is_primitive=false, safety_on=true)
 
         # rule = build_rrule(interp, _typeof((f, x)))
         # codualed_args = map(zero_codual, (f, x))

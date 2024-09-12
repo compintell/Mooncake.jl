@@ -33,6 +33,16 @@ end
         @test bb_copy.inst_ids !== bb.inst_ids
 
         @test Tapir.terminator(bb) === nothing
+
+        # Final statment is regular instruction, so newly inserted instruction should go at
+        # the end of the block.
+        @test Tapir.insert_before_terminator!(bb, ID(), new_inst(ReturnNode(5))) === nothing
+        @test bb.insts[end].stmt === ReturnNode(5)
+
+        # Final statement is now a Terminator, so insertion should happen before it.
+        @test Tapir.insert_before_terminator!(bb, ID(), new_inst(nothing)) === nothing
+        @test bb.insts[end].stmt === ReturnNode(5)
+        @test bb.insts[end-1].stmt === nothing
     end
     @testset "BBCode $f" for (f, P) in [
         (TestResources.test_while_loop, Tuple{Float64}),
@@ -203,5 +213,17 @@ end
             @test result[id_2] == true
             @test result[id_3] == false
         end
+    end
+    @testset "_is_reachable" begin
+        ir = Tapir.ircode(
+            Any[
+                ReturnNode(nothing),
+                Expr(:call, sin, 5),
+                Core.GotoNode(4),
+                ReturnNode(SSAValue(2)),
+            ],
+            Any[Any for _ in 1:4],
+        )
+        @test Tapir._is_reachable(BBCode(ir).blocks) == [true, false, false]
     end
 end

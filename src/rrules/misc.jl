@@ -34,13 +34,13 @@ for name in [
 ]
     @eval @is_primitive DefaultCtx Tuple{typeof($name), Vararg}
     @eval function rrule!!(f::CoDual{_typeof($name)}, args::Vararg{CoDual, N}) where {N}
-        return zero_fcodual($name(map(primal, args)...)), NoPullback(f, args...)
+        return simple_zero_adjoint(f, args...)
     end
 end
 
 @is_primitive MinimalCtx Tuple{Type, TypeVar, Type}
 function rrule!!(x::CoDual{<:Type}, y::CoDual{<:TypeVar}, z::CoDual{<:Type})
-    return zero_fcodual(primal(x)(primal(y), primal(z))), NoPullback(x, y, z)
+    return simple_zero_adjoint(x, y, z)
 end
 
 """
