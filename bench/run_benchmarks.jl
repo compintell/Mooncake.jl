@@ -167,6 +167,8 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
     tags = reduce(vcat, map(x -> x[4], test_case_data))
     GC.@preserve memory begin
         results = map(enumerate(test_cases)) do (n, args)
+            GC.gc(true)
+
             @info "$n / $(length(test_cases))", _typeof(args)
             suite = Dict()
 
@@ -184,8 +186,11 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
             # Benchmark AD via Tapir.
             @info "Tapir"
             rule = Tapir.build_rrule(args...)
+            @info "rule built"
             coduals = map(x -> x isa CoDual ? x : zero_codual(x), args)
+            @info "make coduals"
             to_benchmark(rule, coduals...)
+            @info "run a single benchmark"
             suite["tapir"] = Chairmarks.benchmark(
                 () -> (rule, coduals),
                 identity,
@@ -193,6 +198,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
                 _ -> true,
                 evals=1,
             )
+            @info "run entire suite"
 
             if include_other_frameworks
 
@@ -224,7 +230,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
                     )
                 end
             end
-
+            
             return (args, suite)
         end
     end
