@@ -19,7 +19,21 @@ function tri!(A, u::Char, d::Char)
     return u == 'L' ? tril!(A, d == 'U' ? -1 : 0) : triu!(A, d == 'U' ? 1 : 0)
 end
 
+#
+# Utility
+#
 
+@is_primitive MinimalCtx Tuple{typeof(BLAS.get_num_threads)}
+rrule!!(f::CoDual{typeof(BLAS.get_num_threads)}) = simple_zero_adjoint(f)
+
+@is_primitive MinimalCtx Tuple{typeof(BLAS.lbt_get_num_threads)}
+rrule!!(f::CoDual{typeof(BLAS.lbt_get_num_threads)}) = simple_zero_adjoint(f)
+
+@is_primitive MinimalCtx Tuple{typeof(BLAS.set_num_threads), Union{Integer, Nothing}}
+rrule!!(f::CoDual{typeof(BLAS.set_num_threads)}, x::CoDual) = simple_zero_adjoint(f, x)
+
+@is_primitive MinimalCtx Tuple{typeof(BLAS.lbt_set_num_threads), Any}
+rrule!!(f::CoDual{typeof(BLAS.lbt_set_num_threads)}, x::CoDual) = simple_zero_adjoint(f, x)
 
 #
 # LEVEL 1
@@ -792,6 +806,12 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
     aliased_gemm! = (tA, tB, a, b, A, C) -> BLAS.gemm!(tA, tB, a, A, A, b, C)
 
     test_cases = vcat(
+
+        # Utility
+        (false, :stability, nothing, BLAS.get_num_threads),
+        (false, :stability, nothing, BLAS.lbt_get_num_threads),
+        (false, :stability, nothing, BLAS.set_num_threads, 1),
+        (false, :stability, nothing, BLAS.lbt_set_num_threads, 1),
 
         #
         # BLAS LEVEL 1
