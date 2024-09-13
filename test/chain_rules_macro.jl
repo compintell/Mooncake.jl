@@ -17,10 +17,7 @@ function ChainRulesCore.rrule(::typeof(test_sum), x::AbstractArray{<:Real})
     return test_sum(x), test_sum_pb
 end
 
-Tapir.@is_primitive DefaultCtx Tuple{typeof(test_sum), Array{<:Base.IEEEFloat}}
-function Tapir.rrule!!(f::CoDual{typeof(test_sum)}, x::CoDual{<:Array{<:Base.IEEEFloat}})
-    return Tapir.rrule_wrapper_implementation(f, x)
-end
+Tapir.@from_rrule DefaultCtx Tuple{typeof(test_sum), Array{<:Base.IEEEFloat}}
 
 @testset "chain_rules_macro" begin
     @testset "to_cr_tangent and to_tapir_tangent" for (t, t_cr) in Any[
