@@ -92,7 +92,7 @@ macro from_rrule(ctx, sig)
     )
 
     ex = quote
-        Tapir.is_primitive(::Type{$ctx}, ::Type{$sig}) = true
+        Tapir.is_primitive(::Type{$ctx}, ::Type{<:$sig}) = true
         $rule_expr
     end
     return esc(ex)

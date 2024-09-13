@@ -14,7 +14,7 @@ using
 
 import ChainRulesCore
 
-using Base: unsafe_load, pointer_from_objref
+using Base: unsafe_load, pointer_from_objref, IEEEFloat
 using Base.Iterators: product
 using Core:
     bitcast, svec, ReturnNode, PhiNode, PiNode, GotoIfNot, GotoNode, SSAValue, Argument
