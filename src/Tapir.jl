@@ -13,6 +13,7 @@ using
     Random,
     Setfield
 
+# There are many clashing names, so we will always qualify uses of names from CRC.
 import ChainRulesCore
 
 using Base:

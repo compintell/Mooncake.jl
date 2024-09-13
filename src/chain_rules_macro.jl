@@ -1,5 +1,55 @@
-_to_rdata(::ChainRulesCore.NoTangent) = NoRData()
-_to_rdata(dx::Float64) = dx
+"""
+    to_cr_tangent(t)
+
+Convert a Tapir tangent into a type that ChainRules.jl `rrule`s expect to see.
+Inverse of `to_tapir_tangent`.
+"""
+to_cr_tangent(t::IEEEFloat) = t
+to_cr_tangent(t::Array{<:IEEEFloat}) = t
+to_cr_tangent(::NoTangent) = ChainRulesCore.NoTangent()
+
+"""
+    to_tapir_tangent(cr_t)
+
+Convert a ChainRules.jl tangent, `cr_t`, into the corresponding Tapir tangent.
+Inverse of `to_cr_tangent`.
+"""
+to_tapir_tangent(t::IEEEFloat) = t
+to_tapir_tangent(t::Array{<:IEEEFloat}) = t
+to_tapir_tangent(::ChainRulesCore.NoTangent) = NoTangent()
+
+"""
+    rrule_wrapper_implementation(fargs::Vararg{CoDual, N}) where {N}
+
+Used to implement `rrule!!`s via `ChainRulesCore.rrule`.
+
+Given a function `foo`, argument types `arg_types`, and a method `ChainRulesCore.rrule` of
+which applies to these, you can make use of this function as follows:
+```julia
+Tapir.@is_primitive DefaultCtx Tuple{typeof(foo), arg_types...}
+function Tapir.rrule!!(f::CoDual{typeof(foo)}, args::CoDual...)
+    return rrule_wrapper_implementation(f, args...)
+end
+```
+Assumes that methods of `to_cr_tangent` and `to_tapir_tangent` are defined such that you
+can convert between the different representations of tangents that Tapir and ChainRulesCore
+expect.
+
+Subject to some constraints, you can use the [`@from_rrule`](@ref) macro to reduce the
+amount of boilerplate code that you are required to write even further.
+"""
+function rrule_wrapper_implementation(fargs::Vararg{CoDual, N}) where {N}
+    y_primal, cr_pb = ChainRulesCore.rrule(tuple_map(primal, fargs)...)
+    y_fdata = fdata(zero_tangent(y_primal))
+    function pb!!(y_rdata)
+        cr_tangent = to_cr_tangent(tangent(y_fdata, y_rdata))
+        cr_dfargs = cr_pb(cr_tangent)
+        dfargs = tuple_map(to_tapir_tangent, cr_dfargs)
+        tuple_map((x, dx) -> increment!!(tangent(x), fdata(dx)), fargs, dfargs)
+        return tuple_map(rdata, dfargs)
+    end
+    return CoDual(y_primal, y_fdata), pb!!
+end
 
 @doc"""
     @from_rrule ctx sig
@@ -32,37 +82,12 @@ macro from_rrule(ctx, sig)
     arg_types = map(t -> :(Tapir.CoDual{<:$t}), arg_type_symbols)
     arg_exprs = map((n, t) -> :($n::$t), arg_names, arg_types)
 
-    call_rrule = Expr(
-        :call,
-        :(Tapir.ChainRulesCore.rrule),
-        map(n -> :(Tapir.primal($n)), arg_names)...,
-    )
-
-    pb_output_names = map(n -> Symbol("dx_$(n)_inc"), eachindex(arg_names))
-
-    call_pb = Expr(:(=), Expr(:tuple, pb_output_names...), :(pb(dy)))
-    incrementers = Expr(:tuple, map(b -> :(Tapir._to_rdata($b)), pb_output_names)...)
-
-    pb = ExprTools.combinedef(Dict(
-        :head => :function,
-        :name => :pb!!,
-        :args => [:dy],
-        :body => quote
-            $call_pb
-            return $incrementers
-        end,
-    ))
-
     rule_expr = ExprTools.combinedef(
         Dict(
             :head => :function,
             :name => :(Tapir.rrule!!),
             :args => arg_exprs,
-            :body => quote
-                y, pb = $call_rrule
-                $pb
-                return Tapir.zero_fcodual(y), pb!!
-            end,
+            :body => Expr(:call, rrule_wrapper_implementation, arg_names...),
         )
     )
 
