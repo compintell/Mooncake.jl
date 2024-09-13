@@ -39,12 +39,15 @@ Subject to some constraints, you can use the [`@from_rrule`](@ref) macro to redu
 amount of boilerplate code that you are required to write even further.
 """
 function rrule_wrapper_implementation(fargs::Vararg{CoDual, N}) where {N}
-    y_primal, cr_pb = ChainRulesCore.rrule(tuple_map(primal, fargs)...)
+    primals = tuple_map(primal, fargs)
+    tangent_types = tuple_map(x -> tangent_type(typeof(x)), primals)
+    y_primal, cr_pb = ChainRulesCore.rrule(primals...)
     y_fdata = fdata(zero_tangent(y_primal))
     function pb!!(y_rdata)
         cr_tangent = to_cr_tangent(tangent(y_fdata, y_rdata))
         cr_dfargs = cr_pb(cr_tangent)
-        dfargs = tuple_map(to_tapir_tangent, cr_dfargs)
+        dfargs_unvalidated = tuple_map(to_tapir_tangent, cr_dfargs)
+        dfargs = tuple_map(typeassert, dfargs_unvalidated, tangent_types)
         tuple_map((x, dx) -> increment!!(tangent(x), fdata(dx)), fargs, dfargs)
         return tuple_map(rdata, dfargs)
     end

@@ -50,6 +50,19 @@ end
 
 @from_rrule DefaultCtx Tuple{typeof(test_nothing)}
 
+# Test case in which ChainRulesCore returns a tangent which is of the "wrong" type from the
+# perspective of Tapir.jl. In this instance, some kind of error should be thrown, rather
+# than it being possible for the error to propagate.
+
+test_bad_rdata(x::Real) = 5x
+
+function ChainRulesCore.rrule(::typeof(test_bad_rdata), x::Float64)
+    test_bad_rdata_pb(dy::Float64) = ChainRulesCore.NoTangent(), Float32(dy * 5)
+    return 5x, test_bad_rdata_pb
+end
+
+@from_rrule DefaultCtx Tuple{typeof(test_bad_rdata), Float64}
+
 end
 
 @testset "chain_rules_macro" begin
@@ -70,5 +83,10 @@ end
         (ChainRulesInteropTestResources.test_nothing,),
     ]
         test_rule(sr(1), fargs...; perf_flag=:stability, is_primitive=true)
+    end
+    @testset "bad rdata" begin
+        f = ChainRulesInteropTestResources.test_bad_rdata
+        out, pb!! = Tapir.rrule!!(zero_fcodual(f), zero_fcodual(3.0))
+        @test_throws TypeError pb!!(5.0)
     end
 end
