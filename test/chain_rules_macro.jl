@@ -23,6 +23,18 @@ function Tapir.rrule!!(f::CoDual{typeof(test_sum)}, x::CoDual{<:Array{<:Base.IEE
 end
 
 @testset "chain_rules_macro" begin
-    Tapir.TestUtils.test_rule(Xoshiro(1), bleh, 5.0, 4; perf_flag=:stability)
-    Tapir.TestUtils.test_rule(Xoshiro(1), test_sum, ones(5); perf_flag=:stability)
+    @testset "to_cr_tangent and to_tapir_tangent" for (t, t_cr) in Any[
+        (5.0, 5.0),
+        (ones(5), ones(5)),
+        (NoTangent(), ChainRulesCore.NoTangent()),
+    ]
+        @test Tapir.to_cr_tangent(t) == t_cr
+        @test Tapir.to_tapir_tangent(t_cr) == t
+        @test Tapir.to_tapir_tangent(Tapir.to_cr_tangent(t)) == t
+        @test Tapir.to_cr_tangent(Tapir.to_tapir_tangent(t_cr)) == t_cr
+    end
+    @testset "rules" begin
+        Tapir.TestUtils.test_rule(Xoshiro(1), bleh, 5.0, 4; perf_flag=:stability)
+        Tapir.TestUtils.test_rule(Xoshiro(1), test_sum, ones(5); perf_flag=:stability)
+    end
 end
