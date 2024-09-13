@@ -1,12 +1,7 @@
 module TapirDynamicPPLExt
 
-if isdefined(Base, :get_extension)
-    using DynamicPPL: DynamicPPL, istrans
-    using Tapir: Tapir
-else
-    using ..DynamicPPL: DynamicPPL, istrans
-    using ..Tapir: Tapir
-end
+using DynamicPPL: DynamicPPL, istrans
+using Tapir: Tapir
 
 using Tapir: DefaultCtx, CoDual, simple_zero_adjoint
 

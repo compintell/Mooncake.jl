@@ -3,17 +3,10 @@
 
 module TapirLogDensityProblemsADExt
 
-if isdefined(Base, :get_extension)
-    using ADTypes
-    using LogDensityProblemsAD: ADGradientWrapper
-    import LogDensityProblemsAD: ADgradient, logdensity_and_gradient, dimension, logdensity
-    import Tapir
-else
-    using ADTypes
-    using ..LogDensityProblemsAD: ADGradientWrapper
-    import ..LogDensityProblemsAD: ADgradient, logdensity_and_gradient, dimension, logdensity
-    import ..Tapir
-end
+using ADTypes
+using LogDensityProblemsAD: ADGradientWrapper
+import LogDensityProblemsAD: ADgradient, logdensity_and_gradient, dimension, logdensity
+import Tapir
 
 struct TapirGradientLogDensity{Trule, L} <: ADGradientWrapper
     rule::Trule
