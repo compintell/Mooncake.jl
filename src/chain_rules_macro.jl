@@ -38,17 +38,39 @@ expect.
 Subject to some constraints, you can use the [`@from_rrule`](@ref) macro to reduce the
 amount of boilerplate code that you are required to write even further.
 """
-function rrule_wrapper_implementation(fargs::Vararg{CoDual, N}) where {N}
+@inline function rrule_wrapper_implementation(fargs::Vararg{CoDual, N}) where {N}
+
+    # Run forwards-pass.
     primals = tuple_map(primal, fargs)
-    tangent_types = tuple_map(x -> tangent_type(typeof(x)), primals)
     y_primal, cr_pb = ChainRulesCore.rrule(primals...)
     y_fdata = fdata(zero_tangent(y_primal))
+
+    # Construct functions which, when applied to the tangent types returned on the
+    # reverse-pass, will check that they are of the expected type. This will pick up on
+    # obvious problems, but is intended to be fast / optimised away when things go well.
+    # As such, you should think of this as a lightweight version of "debug_mode".
+    tangent_type_assertions = tuple_map(
+        x -> Base.Fix2(typeassert, tangent_type(typeof(x))), primals
+    )
+
     function pb!!(y_rdata)
+
+        # Construct tangent w.r.t. output.
         cr_tangent = to_cr_tangent(tangent(y_fdata, y_rdata))
+
+        # Run reverse-pass using ChainRules.
         cr_dfargs = cr_pb(cr_tangent)
+
+        # Convert output into tangent types appropriate for Tapir.
         dfargs_unvalidated = tuple_map(to_tapir_tangent, cr_dfargs)
-        dfargs = tuple_map(typeassert, dfargs_unvalidated, tangent_types)
+
+        # Apply type assertions.
+        dfargs = tuple_map((x, T) -> T(x), dfargs_unvalidated, tangent_type_assertions)
+
+        # Increment the fdata.
         tuple_map((x, dx) -> increment!!(tangent(x), fdata(dx)), fargs, dfargs)
+
+        # Return the rdata.
         return tuple_map(rdata, dfargs)
     end
     return CoDual(y_primal, y_fdata), pb!!
