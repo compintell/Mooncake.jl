@@ -94,8 +94,8 @@ Use this function with care. It has only been tested for `Float64` arguments and
 whose `tangent_type` is `NoTangent`, and it is entirely probable that it won't work for
 arguments which aren't `Float64` or non-differentiable.
 
-You should definitely make use of [`TestUtils.test_rule`](@ref) to verify that the rule created
-works as intended.
+You should definitely make use of [`TestUtils.test_rule`](@ref) to verify that the rule
+created works as intended.
 """
 macro from_rrule(ctx, sig)
 
