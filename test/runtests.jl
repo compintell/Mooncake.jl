@@ -49,6 +49,7 @@ include("front_matter.jl")
         include(joinpath("integration_testing", "battery_tests.jl"))
         include(joinpath("integration_testing", "dynamic_ppl.jl"))
         include(joinpath("integration_testing", "logdensityproblemsad_interop.jl"))
+        include(joinpath("integration_testing", "nnlib.jl"))
         include(joinpath("integration_testing", "special_functions.jl"))
     elseif test_group == "integration_testing/misc_abstract_array"
         include(joinpath("integration_testing", "misc_abstract_array.jl"))

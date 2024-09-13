@@ -5,6 +5,7 @@ using
     FillArrays,
     JET,
     LinearAlgebra,
+    NNlib,
     PDMats,
     Random,
     SpecialFunctions,
