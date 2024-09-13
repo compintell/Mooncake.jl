@@ -20,7 +20,7 @@ to_tapir_tangent(::ChainRulesCore.NoTangent) = NoTangent()
 to_tapir_tangent(t::ChainRulesCore.Thunk) = to_tapir_tangent(ChainRulesCore.unthunk(t))
 
 @doc"""
-    rrule_wrapper_implementation(f::CoDual, args::CoDual...)
+    rrule_wrapper(f::CoDual, args::CoDual...)
 
 Used to implement `rrule!!`s via `ChainRulesCore.rrule`.
 
@@ -29,7 +29,7 @@ which applies to these, you can make use of this function as follows:
 ```julia
 Tapir.@is_primitive DefaultCtx Tuple{typeof(foo), arg_types...}
 function Tapir.rrule!!(f::CoDual{typeof(foo)}, args::CoDual...)
-    return rrule_wrapper_implementation(f, args...)
+    return rrule_wrapper(f, args...)
 end
 ```
 Assumes that methods of `to_cr_tangent` and `to_tapir_tangent` are defined such that you
@@ -43,7 +43,7 @@ Furthermore, it is _essential_ that
 Subject to some constraints, you can use the [`@from_rrule`](@ref) macro to reduce the
 amount of boilerplate code that you are required to write even further.
 """
-@inline function rrule_wrapper_implementation(fargs::Vararg{CoDual, N}) where {N}
+function rrule_wrapper(fargs::Vararg{CoDual, N}) where {N}
 
     # Run forwards-pass.
     primals = tuple_map(primal, fargs)
@@ -81,11 +81,50 @@ amount of boilerplate code that you are required to write even further.
     return CoDual(y_primal, y_fdata), pb!!
 end
 
+function rrule_wrapper(::CoDual{typeof(Core.kwcall)}, fargs::Vararg{CoDual, N}) where {N}
+
+    # Run forwards-pass.
+    primals = tuple_map(primal, fargs)
+    y_primal, cr_pb = Core.kwcall(primals[1], ChainRulesCore.rrule, primals[2:end]...)
+    y_fdata = fdata(zero_tangent(y_primal))
+
+    # Construct functions which, when applied to the tangent types returned on the
+    # reverse-pass, will check that they are of the expected type. This will pick up on
+    # obvious problems, but is intended to be fast / optimised away when things go well.
+    # As such, you should think of this as a lightweight version of "debug_mode".
+    tangent_type_assertions = tuple_map(
+        x -> Base.Fix2(typeassert, tangent_type(typeof(x))), primals[2:end]
+    )
+
+    function pb!!(y_rdata)
+
+        # Construct tangent w.r.t. output.
+        cr_tangent = to_cr_tangent(tangent(y_fdata, y_rdata))
+
+        # Run reverse-pass using ChainRules.
+        cr_dfargs = cr_pb(cr_tangent)
+
+        # Convert output into tangent types appropriate for Tapir.
+        dfargs_unvalidated = tuple_map(to_tapir_tangent, cr_dfargs)
+
+        # Apply type assertions.
+        dfargs = tuple_map((x, T) -> T(x), dfargs_unvalidated, tangent_type_assertions)
+
+        # Increment the fdata.
+        tuple_map((x, dx) -> increment!!(tangent(x), fdata(dx)), fargs[2:end], dfargs)
+
+        # Return the rdata.
+        kwargs_rdata = rdata(zero_tangent(fargs[1]))
+        return NoRData(), kwargs_rdata, tuple_map(rdata, dfargs)...
+    end
+    return CoDual(y_primal, y_fdata), pb!!
+end
+
 @doc"""
     @from_rrule ctx sig
 
 Convenience functionality to assist in using `ChainRulesCore.rrule`s to write `rrule!!`s.
-This macro is a thin wrapper around [`rrule_wrapper_implementation`](@ref).
+This macro is a thin wrapper around [`rrule_wrapper`](@ref).
 
 For example,
 ```julia
@@ -141,7 +180,7 @@ macro from_rrule(ctx, sig)
             :head => :function,
             :name => :(Tapir.rrule!!),
             :args => arg_exprs,
-            :body => Expr(:call, rrule_wrapper_implementation, arg_names...),
+            :body => Expr(:call, rrule_wrapper, arg_names...),
         )
     )
 
