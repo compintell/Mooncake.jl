@@ -32,9 +32,12 @@ makedocs(
             "Algorithmic Differentiation" => "algorithmic_differentiation.md",
             "Tapir.jl's Rule System" => "mathematical_interpretation.md",
         ],
+        "Utilities" => [
+            "Using ChainRules" => "using_chain_rules.md",
+            "Safe Mode" => "safe_mode.md",
+            "Debugging and MWEs" => "debugging_and_mwes.md",
+        ],
         "Known Limitations" => "known_limitations.md",
-        "Safe Mode" => "safe_mode.md",
-        "Debugging and MWEs" => "debugging_and_mwes.md",
     ]
 )
 

@@ -102,6 +102,28 @@ fundamental, whereas the first two points are more basic points.
 
 As with all hand-written rules, you should definitely make use of
 [`TestUtils.test_rule`](@ref) to verify correctness on some test cases.
+
+# A Note On Type Constraints
+
+Many methods of `ChainRuleCore.rrule` are implemented with very loose type constraints.
+For example, it would not be surprising to see a method of rrule with the signature
+```julia
+Tuple{typeof(rrule), typeof(foo), Real, AbstractVector{<:Real}}
+```
+There are a variety of reasons for this way of doing things, and whether it is a good idea
+to write rules for such generic objects has been debated at length.
+
+Suffice it to say, you should not write rules for this package which are so generically
+typed.
+Rather, you should create rules for the subset of types for which you believe that the
+`ChainRulesCore.rrule` will work correctly, and leave this package to derive rules for the
+rest.
+For example, in the above case you might be confident that the rule will behave correctly
+for input types `Tuple{typeof(foo), IEEEFloat, Vector{<:IEEEFloat}}`. You should therefore
+only write a rule for these types:
+```julia
+@from_rrule DefaultCtx Tuple{typeof(foo), IEEEFloat, Vector{<:IEEEFloat}}
+```
 """
 macro from_rrule(ctx, sig)
 
