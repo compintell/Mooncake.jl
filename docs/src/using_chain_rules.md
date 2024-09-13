@@ -9,5 +9,5 @@ The docstrings below explain this functionality, and how it should / should not 
 
 ```@docs
 Tapir.@from_rrule
-Tapir.rrule_wrapper_implementation
+Tapir.rrule_wrapper
 ```
