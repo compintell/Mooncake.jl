@@ -18,8 +18,8 @@ to_tapir_tangent(t::IEEEFloat) = t
 to_tapir_tangent(t::Array{<:IEEEFloat}) = t
 to_tapir_tangent(::ChainRulesCore.NoTangent) = NoTangent()
 
-"""
-    rrule_wrapper_implementation(fargs::Vararg{CoDual, N}) where {N}
+@doc"""
+    rrule_wrapper_implementation(f::CoDual, args::CoDual...)
 
 Used to implement `rrule!!`s via `ChainRulesCore.rrule`.
 
@@ -34,6 +34,10 @@ end
 Assumes that methods of `to_cr_tangent` and `to_tapir_tangent` are defined such that you
 can convert between the different representations of tangents that Tapir and ChainRulesCore
 expect.
+
+Furthermore, it is _essential_ that
+1. `f(args)` does not mutate `f` or `args`, and
+2. the result of `f(args)` does not alias any data stored in `f` or `args`.
 
 Subject to some constraints, you can use the [`@from_rrule`](@ref) macro to reduce the
 amount of boilerplate code that you are required to write even further.
@@ -79,9 +83,8 @@ end
 @doc"""
     @from_rrule ctx sig
 
-Creates a `Tapir.rrule!!` from a `ChainRulesCore.rrule`. `ctx` is the type of the context in
-which this rule should apply, and `sig` is the type-tuple which specifies which primal the
-rule should apply to.
+Convenience functionality to assist in using `ChainRulesCore.rrule`s to write `rrule!!`s.
+This macro is a thin wrapper around [`rrule_wrapper_implementation`](@ref).
 
 For example,
 ```julia
@@ -89,13 +92,16 @@ For example,
 ```
 would define a `Tapir.rrule!!` for `sin` of `Float64`s, by calling `ChainRulesCore.rrule`.
 
-Health warning:
-Use this function with care. It has only been tested for `Float64` arguments and arguments
-whose `tangent_type` is `NoTangent`, and it is entirely probable that it won't work for
-arguments which aren't `Float64` or non-differentiable.
+Limitations: it is your responsibility to ensure that
+1. calls with signature `sig` do not mutate their arguments,
+2. the output of calls with signature `sig` does not alias any of the inputs,
+3. `sig` is a `Tuple{...}`, not a `Tuple{...} where {...}`.
 
-You should definitely make use of [`TestUtils.test_rule`](@ref) to verify that the rule
-created works as intended.
+This last point is a limitation of the current implementation, rather than something
+fundamental, whereas the first two points are more basic points.
+
+As with all hand-written rules, you should definitely make use of
+[`TestUtils.test_rule`](@ref) to verify correctness on some test cases.
 """
 macro from_rrule(ctx, sig)
 
