@@ -17,6 +17,7 @@ Inverse of `to_cr_tangent`.
 to_tapir_tangent(t::IEEEFloat) = t
 to_tapir_tangent(t::Array{<:IEEEFloat}) = t
 to_tapir_tangent(::ChainRulesCore.NoTangent) = NoTangent()
+to_tapir_tangent(t::ChainRulesCore.Thunk) = to_tapir_tangent(ChainRulesCore.unthunk(t))
 
 @doc"""
     rrule_wrapper_implementation(f::CoDual, args::CoDual...)
