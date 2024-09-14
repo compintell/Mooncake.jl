@@ -1,3 +1,6 @@
+env:
+  SECRET_CODECOV_TOKEN: "M+fbiuiAVojU6VIquhJ6+oC/EI4hL8Jfubdnc03HV1t0Fpn//CxfnTZi/lT8SoBromLOCIYhQdhCrKla8VgnWVPNmcmrpBkEHtJJ6egmclwwYQGsPAsFrubosSquhK3IGgr2JOxQo4Aa9t5tx1yahEeRxQOKKhgF4pKIscGCz7OYGTIivOMg69AFPKl91i/8rtwVjS4Q2cBj0+reA8jx0DiM70tQe0ceYdXOCczfSkE1iegpSzreYTPoKc6DDt0keTr6FqRlUPKr4TuqA+smYV91MY7OUwi1w7kb0nkzPyCES72T9i1RBAHhC0p28WVRUEkOn7X/V4nhiZOodaStRw==;U2FsdGVkX18+XJdcOzrVVhv3a6+jf7qxRz0TxBPNLyXzoom+BTQu+CKUjld70VdDUGSUseqiNXS9ZdnNIAV53w=="
+
 steps:
   - label: "Julia v1"
     plugins:
@@ -13,5 +16,3 @@ steps:
     timeout_in_minutes: 60
     env:
       TEST_GROUP: "gpu"
-env:
-  SECRET_CODECOV_TOKEN: "M+fbiuiAVojU6VIquhJ6+oC/EI4hL8Jfubdnc03HV1t0Fpn//CxfnTZi/lT8SoBromLOCIYhQdhCrKla8VgnWVPNmcmrpBkEHtJJ6egmclwwYQGsPAsFrubosSquhK3IGgr2JOxQo4Aa9t5tx1yahEeRxQOKKhgF4pKIscGCz7OYGTIivOMg69AFPKl91i/8rtwVjS4Q2cBj0+reA8jx0DiM70tQe0ceYdXOCczfSkE1iegpSzreYTPoKc6DDt0keTr6FqRlUPKr4TuqA+smYV91MY7OUwi1w7kb0nkzPyCES72T9i1RBAHhC0p28WVRUEkOn7X/V4nhiZOodaStRw==;U2FsdGVkX18+XJdcOzrVVhv3a6+jf7qxRz0TxBPNLyXzoom+BTQu+CKUjld70VdDUGSUseqiNXS9ZdnNIAV53w=="
