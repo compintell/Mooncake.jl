@@ -63,6 +63,16 @@ end
 
 @from_rrule DefaultCtx Tuple{typeof(test_bad_rdata), Float64}
 
+# Test case for rule with kwargs.
+test_kwargs(x; y::Bool) = y ? x : 2x
+
+function ChainRulesCore.rrule(::typeof(test_kwargs), x::Float64; y::Bool)
+    test_kwargs_pb(dz::Float64) = ChainRulesCore.NoTangent(), y ? dz : 2dz
+    return y ? x : 2x, test_kwargs_pb
+end
+
+@from_rrule DefaultCtx Tuple{typeof(Core.kwcall), NamedTuple, typeof(test_kwargs), Float64}
+
 end
 
 @testset "chain_rules_macro" begin
@@ -87,12 +97,14 @@ end
         (ChainRulesInteropTestResources.test_sum, ones(5)),
         (ChainRulesInteropTestResources.test_scale, 5.0, randn(3)),
         (ChainRulesInteropTestResources.test_nothing,),
+        (Core.kwcall, (y=true, ), ChainRulesInteropTestResources.test_kwargs, 5.0),
+        (Core.kwcall, (y=false, ), ChainRulesInteropTestResources.test_kwargs, 5.0),
     ]
         test_rule(sr(1), fargs...; perf_flag=:stability, is_primitive=true)
     end
     @testset "bad rdata" begin
         f = ChainRulesInteropTestResources.test_bad_rdata
         out, pb!! = Tapir.rrule!!(zero_fcodual(f), zero_fcodual(3.0))
-        @test_throws TypeError pb!!(5.0)
+        @test_throws MethodError pb!!(5.0)
     end
 end

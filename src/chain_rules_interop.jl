@@ -1,23 +1,25 @@
-"""
+ """
     to_cr_tangent(t)
 
 Convert a Tapir tangent into a type that ChainRules.jl `rrule`s expect to see.
-Inverse of `to_tapir_tangent`.
 """
 to_cr_tangent(t::IEEEFloat) = t
 to_cr_tangent(t::Array{<:IEEEFloat}) = t
 to_cr_tangent(::NoTangent) = ChainRulesCore.NoTangent()
 
 """
-    to_tapir_tangent(cr_t)
+    increment_and_get_rdata!(fdata, rdata, cr_tangent)
 
-Convert a ChainRules.jl tangent, `cr_t`, into the corresponding Tapir tangent.
-Inverse of `to_cr_tangent`.
 """
-to_tapir_tangent(t::IEEEFloat) = t
-to_tapir_tangent(t::Array{<:IEEEFloat}) = t
-to_tapir_tangent(::ChainRulesCore.NoTangent) = NoTangent()
-to_tapir_tangent(t::ChainRulesCore.Thunk) = to_tapir_tangent(ChainRulesCore.unthunk(t))
+increment_and_get_rdata!(::NoFData, r::T, t::T) where {T<:IEEEFloat} = r + t
+function increment_and_get_rdata!(f::Array{P}, ::NoRData, t::Array{P}) where {P<:IEEEFloat}
+    increment!!(f, t)
+    return NoRData()
+end
+increment_and_get_rdata!(::Any, r, ::ChainRulesCore.NoTangent) = r
+function increment_and_get_rdata!(f, r, t::ChainRulesCore.Thunk)
+    return increment_and_get_rdata!(f, r, ChainRulesCore.unthunk(t))
+end
 
 @doc"""
     rrule_wrapper(f::CoDual, args::CoDual...)
@@ -47,16 +49,9 @@ function rrule_wrapper(fargs::Vararg{CoDual, N}) where {N}
 
     # Run forwards-pass.
     primals = tuple_map(primal, fargs)
+    lazy_rdata = tuple_map(Tapir.lazy_zero_rdata, primals)
     y_primal, cr_pb = ChainRulesCore.rrule(primals...)
     y_fdata = fdata(zero_tangent(y_primal))
-
-    # Construct functions which, when applied to the tangent types returned on the
-    # reverse-pass, will check that they are of the expected type. This will pick up on
-    # obvious problems, but is intended to be fast / optimised away when things go well.
-    # As such, you should think of this as a lightweight version of "debug_mode".
-    tangent_type_assertions = tuple_map(
-        x -> Base.Fix2(typeassert, tangent_type(typeof(x))), primals
-    )
 
     function pb!!(y_rdata)
 
@@ -66,17 +61,10 @@ function rrule_wrapper(fargs::Vararg{CoDual, N}) where {N}
         # Run reverse-pass using ChainRules.
         cr_dfargs = cr_pb(cr_tangent)
 
-        # Convert output into tangent types appropriate for Tapir.
-        dfargs_unvalidated = tuple_map(to_tapir_tangent, cr_dfargs)
-
-        # Apply type assertions.
-        dfargs = tuple_map((x, T) -> T(x), dfargs_unvalidated, tangent_type_assertions)
-
-        # Increment the fdata.
-        tuple_map((x, dx) -> increment!!(tangent(x), fdata(dx)), fargs, dfargs)
-
-        # Return the rdata.
-        return tuple_map(rdata, dfargs)
+        # Increment fdata and get rdata.
+        return map(fargs, lazy_rdata, cr_dfargs) do x, l_rdata, cr_dx
+            return increment_and_get_rdata!(tangent(x), instantiate(l_rdata), cr_dx)
+        end
     end
     return CoDual(y_primal, y_fdata), pb!!
 end
@@ -85,16 +73,9 @@ function rrule_wrapper(::CoDual{typeof(Core.kwcall)}, fargs::Vararg{CoDual, N}) 
 
     # Run forwards-pass.
     primals = tuple_map(primal, fargs)
+    lazy_rdata = tuple_map(lazy_zero_rdata, primals)
     y_primal, cr_pb = Core.kwcall(primals[1], ChainRulesCore.rrule, primals[2:end]...)
     y_fdata = fdata(zero_tangent(y_primal))
-
-    # Construct functions which, when applied to the tangent types returned on the
-    # reverse-pass, will check that they are of the expected type. This will pick up on
-    # obvious problems, but is intended to be fast / optimised away when things go well.
-    # As such, you should think of this as a lightweight version of "debug_mode".
-    tangent_type_assertions = tuple_map(
-        x -> Base.Fix2(typeassert, tangent_type(typeof(x))), primals[2:end]
-    )
 
     function pb!!(y_rdata)
 
@@ -104,18 +85,12 @@ function rrule_wrapper(::CoDual{typeof(Core.kwcall)}, fargs::Vararg{CoDual, N}) 
         # Run reverse-pass using ChainRules.
         cr_dfargs = cr_pb(cr_tangent)
 
-        # Convert output into tangent types appropriate for Tapir.
-        dfargs_unvalidated = tuple_map(to_tapir_tangent, cr_dfargs)
-
-        # Apply type assertions.
-        dfargs = tuple_map((x, T) -> T(x), dfargs_unvalidated, tangent_type_assertions)
-
-        # Increment the fdata.
-        tuple_map((x, dx) -> increment!!(tangent(x), fdata(dx)), fargs[2:end], dfargs)
-
-        # Return the rdata.
+        # Increment fdata and compute rdata.
         kwargs_rdata = rdata(zero_tangent(fargs[1]))
-        return NoRData(), kwargs_rdata, tuple_map(rdata, dfargs)...
+        args_rdata = map(fargs[2:end], lazy_rdata[2:end], cr_dfargs) do x, l_rdata, cr_dx
+            return increment_and_get_rdata!(tangent(x), instantiate(l_rdata), cr_dx)
+        end
+        return NoRData(), kwargs_rdata, args_rdata...
     end
     return CoDual(y_primal, y_fdata), pb!!
 end
