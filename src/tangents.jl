@@ -452,7 +452,13 @@ function zero_tangent_internal(x::P, stackdict) where {P}
     tangent_type(P) == NoTangent && return NoTangent()
 
     if tangent_type(P) <: MutableTangent
-        stackdict isa IdDict || error("...")
+        if !(stackdict isa IdDict)
+            throw(
+                ArgumentError(
+                    "Internal error: stackdict must be an IdDict for mutable structs, not $(typeof(stackdict)). Please report this issue."
+                )
+            )
+        end
         if haskey(stackdict, x)
             return stackdict[x]::tangent_type(P)
         end
@@ -467,7 +473,7 @@ function zero_tangent_internal(x::P, stackdict) where {P}
     end
 end
 
-@generated function zero_tangent_struct_field(x::P, stackdict::Union{IdDict, Nothing}) where {P}
+@generated function zero_tangent_struct_field(x::P, stackdict) where {P}
     tangent_field_zeros_exprs = ntuple(fieldcount(P)) do n
         if tangent_field_type(P, n) <: PossiblyUninitTangent
             V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
@@ -521,7 +527,13 @@ function randn_tangent_internal(rng::AbstractRNG, x::P, stackdict) where {P}
     tangent_type(P) == NoTangent && return NoTangent()
 
     if tangent_type(P) <: MutableTangent
-        stackdict isa IdDict || error("...")
+        if !(stackdict isa IdDict)
+            throw(
+                ArgumentError(
+                    "Internal error: stackdict must be an IdDict for mutable structs, not $(typeof(stackdict)). Please report this issue."
+                )
+            )
+        end
         if haskey(stackdict, x)
             return stackdict[x]::tangent_type(P)
         end
@@ -533,7 +545,7 @@ function randn_tangent_internal(rng::AbstractRNG, x::P, stackdict) where {P}
     end
 end
 
-@generated function randn_tangent_struct_field(rng::AbstractRNG, x::P, stackdict::Union{IdDict, Nothing}) where {P}    
+@generated function randn_tangent_struct_field(rng::AbstractRNG, x::P, stackdict) where {P}
     tangent_field_exprs = map(1:fieldcount(P)) do n
         if tangent_field_type(P, n) <: PossiblyUninitTangent
             V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
