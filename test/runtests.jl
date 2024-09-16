@@ -47,10 +47,11 @@ include("front_matter.jl")
         include("chain_rules_interop.jl")
     elseif test_group == "integration_testing/misc"
         include(joinpath("integration_testing", "battery_tests.jl"))
-        include(joinpath("integration_testing", "dynamic_ppl.jl"))
-        include(joinpath("integration_testing", "logdensityproblemsad_interop.jl"))
-        include(joinpath("integration_testing", "nnlib.jl"))
-        include(joinpath("integration_testing", "special_functions.jl"))
+        include(joinpath("ext", "dynamic_ppl.jl"))
+        include(joinpath("ext", "logdensityproblemsad.jl"))
+        include(joinpath("ext", "luxlib.jl"))
+        include(joinpath("ext", "nnlib.jl"))
+        include(joinpath("ext", "special_functions.jl"))
     elseif test_group == "integration_testing/misc_abstract_array"
         include(joinpath("integration_testing", "misc_abstract_array.jl"))
     elseif test_group == "integration_testing/diff_tests"
@@ -66,7 +67,7 @@ include("front_matter.jl")
     elseif test_group == "integration_testing/temporalgps"
         include(joinpath("integration_testing", "temporalgps.jl"))
     elseif test_group == "gpu"
-        include(joinpath("integration_testing", "cuda.jl"))
+        include(joinpath("ext", "cuda.jl"))
     else
         throw(error("test_group=$(test_group) is not recognised"))
     end

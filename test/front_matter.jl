@@ -5,6 +5,8 @@ using
     FillArrays,
     JET,
     LinearAlgebra,
+    Lux,
+    LuxLib,
     NNlib,
     PDMats,
     Random,
