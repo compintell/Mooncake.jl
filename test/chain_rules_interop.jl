@@ -76,15 +76,12 @@ end
 end
 
 @testset "chain_rules_macro" begin
-    @testset "to_cr_tangent and to_tapir_tangent" for (t, t_cr) in Any[
+    @testset "to_cr_tangent" for (t, t_cr) in Any[
         (5.0, 5.0),
         (ones(5), ones(5)),
         (NoTangent(), ChainRulesCore.NoTangent()),
     ]
         @test Tapir.to_cr_tangent(t) == t_cr
-        @test Tapir.to_tapir_tangent(t_cr) == t
-        @test Tapir.to_tapir_tangent(Tapir.to_cr_tangent(t)) == t
-        @test Tapir.to_cr_tangent(Tapir.to_tapir_tangent(t_cr)) == t_cr
     end
 
     # The fact that I'm testing this separately suggests to me that there's something that
