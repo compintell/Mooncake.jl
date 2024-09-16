@@ -11,7 +11,12 @@
         @test !has_equal_data(ones(1), ones(2))
         @test !has_equal_data(randn(5), randn(5))
         @test has_equal_data(ones(5), ones(5))
-        @test has_equal_data(Complex(5.0, 4.0), Complex(5.0, 4.0))
+        @test has_equal_data(Base, Base)
+        @test !has_equal_data(Base, Core)
+        @test has_equal_data(GlobalRef(Base, :sin), GlobalRef(Base, :sin))
+        @test !has_equal_data(GlobalRef(Base, :sin), GlobalRef(Base, :cos))
+        @test !has_equal_data(GlobalRef(Base, :sin), GlobalRef(Core, :sin))
+        @test has_equal_data(Complex(5.0, 4.0), Complex(5.0, 4.0))[]
         @test !has_equal_data(Complex(5.0, 4.0), Complex(5.0, 5.0))
         @test !has_equal_data(Diagonal(randn(5)), Diagonal(randn(5)))
         @test has_equal_data(Diagonal(ones(5)), Diagonal(ones(5)))

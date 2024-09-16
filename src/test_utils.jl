@@ -128,7 +128,7 @@ function has_equal_data_internal(x::Float64, y::Float64, equal_undefs::Bool, d::
     return (isapprox(x, y) && !isnan(x)) || (isnan(x) && isnan(y))
 end
 has_equal_data_internal(x::Module, y::Module, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}) = x == y
-function has_equal_data(x::GlobalRef, y::GlobalRef; equal_undefs=true, d::Dict{Tuple{UInt, UInt}, Bool})
+function has_equal_data_internal(x::GlobalRef, y::GlobalRef; equal_undefs=true, d::Dict{Tuple{UInt, UInt}, Bool})
     return x.mod == y.mod && x.name == y.name
 end
 function has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}) where {T<:Array}
@@ -197,6 +197,7 @@ function has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict{Tuple{U
         return true
     end
 end
+has_equal_data_internal(x::T, y::P, equal_undefs::Bool, d::Dict{Tuple{UInt,UInt},Bool}) where {T,P} = false
 
 has_equal_data_up_to_undefs(x::T, y::T) where {T} = has_equal_data(x, y; equal_undefs=false)
 
@@ -1085,13 +1086,8 @@ end
 mutable struct TypeUnstableMutableStruct
     a::Float64
     b
-    TypeUnstableMutableStruct() = new()
     TypeUnstableMutableStruct(a::Float64) = new(a)
     TypeUnstableMutableStruct(a::Float64, b) = new(a, b)
-end
-
-function Base.:(==)(a::TypeUnstableMutableStruct, b::TypeUnstableMutableStruct)
-    return equal_field(a, b, :a) && equal_field(a, b, :b)
 end
 
 mutable struct TypeUnstableMutableStruct2
@@ -1106,10 +1102,6 @@ struct TypeStableStruct{T}
     TypeStableStruct{T}(a::Float64, b::T) where {T} = new{T}(a, b)
 end
 
-function Base.:(==)(a::TypeStableStruct, b::TypeStableStruct)
-    return equal_field(a, b, :a) && equal_field(a, b, :b)
-end
-
 struct TypeUnstableStruct2
     a
     b
@@ -1118,7 +1110,6 @@ end
 struct TypeUnstableStruct
     a::Float64
     b
-    TypeUnstableStruct() = new()
     TypeUnstableStruct(a::Float64) = new(a)
     TypeUnstableStruct(a::Float64, b) = new(a, b)
 end
