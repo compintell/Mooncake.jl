@@ -467,10 +467,10 @@ end
     test_rule(
         rng, x...;
         interface_only=false,
-        has_rrule!!=true,
-        perf_flag::Symbol,
-        ctx=DefaultCtx(),
-        safety_on=false,
+        is_primitive::Bool=true,
+        perf_flag::Symbol=:none,
+        interp::Tapir.TapirInterpreter=Tapir.get_tapir_interpreter(),
+        safety_on::Bool=false,
     )
 
 Run standardised tests on the `rule` for `x`.
@@ -489,8 +489,8 @@ function test_rule(
     rng, x...;
     interface_only::Bool=false,
     is_primitive::Bool=true,
-    perf_flag::Symbol,
-    interp::Tapir.TapirInterpreter,
+    perf_flag::Symbol=:none,
+    interp::Tapir.TapirInterpreter=Tapir.get_tapir_interpreter(),
     safety_on::Bool=false,
 )
     @nospecialize rng x
@@ -587,7 +587,7 @@ function test_rule_and_type_interactions(rng::AbstractRNG, x::P) where {P}
                 interface_only=false,
                 is_primitive=true,
                 perf_flag=:none,
-                interp=Tapir.TapirInterpreter(),
+                interp=Tapir.get_tapir_interpreter(),
             )
         end
     end
@@ -988,23 +988,16 @@ end
 
 function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)
     test_cases, memory = Tapir.generate_hand_written_rrule!!_test_cases(rng_ctor, v)
-    interp = Tapir.PInterp()
     GC.@preserve memory @testset "$f, $(_typeof(x))" for (interface_only, perf_flag, _, f, x...) in test_cases
-        test_rule(
-            rng_ctor(123), f, x...; interface_only, perf_flag, interp, safety_on=false
-        )
+        test_rule(rng_ctor(123), f, x...; interface_only, perf_flag)
     end
 end
 
 function run_derived_rrule!!_test_cases(rng_ctor, v::Val)
-    interp = Tapir.PInterp()
     test_cases, memory = Tapir.generate_derived_rrule!!_test_cases(rng_ctor, v)
     GC.@preserve memory @testset "$f, $(typeof(x))" for
         (interface_only, perf_flag, _, f, x...) in test_cases
-        test_rule(
-            rng_ctor(123), f, x...;
-            interp, interface_only, perf_flag, is_primitive=false, safety_on=false,
-        )
+        test_rule(rng_ctor(123), f, x...; interface_only, perf_flag, is_primitive=false)
     end
 end
 

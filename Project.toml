@@ -1,7 +1,7 @@
 name = "Tapir"
 uuid = "07d77754-e150-4737-8c94-cd238a1fb45b"
 authors = ["Will Tebbutt, Hong Ge, and contributors"]
-version = "0.2.45"
+version = "0.2.51"
 
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
@@ -19,12 +19,14 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [weakdeps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+DynamicPPL = "366bfd00-2699-11ea-058f-f148b4cae6d8"
 JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
 LogDensityProblemsAD = "996a588d-648d-4e1f-a8f0-a84b347e47b1"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 
 [extensions]
 TapirCUDAExt = "CUDA"
+TapirDynamicPPLExt = "DynamicPPL"
 TapirJETExt = "JET"
 TapirLogDensityProblemsADExt = "LogDensityProblemsAD"
 TapirSpecialFunctionsExt = "SpecialFunctions"
@@ -38,6 +40,7 @@ DiffRules = "1"
 DiffTests = "0.1"
 Distributions = "0.25"
 Documenter = "1"
+DynamicPPL = "0.28"
 ExprTools = "0.1"
 FillArrays = "1"
 Graphs = "1"
@@ -49,7 +52,7 @@ Setfield = "1"
 SpecialFunctions = "2"
 StableRNGs = "1"
 TemporalGPs = "0.6"
-Turing = "0.32"
+Turing = "0.34"
 julia = "1.10"
 
 [extras]
@@ -59,6 +62,7 @@ CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 DiffTests = "de460e47-3fe3-5279-bb4a-814414816d5d"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+DynamicPPL = "366bfd00-2699-11ea-058f-f148b4cae6d8"
 FillArrays = "1a297f60-69ca-5386-bcde-b61e274b549b"
 JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
 KernelFunctions = "ec8451be-7e33-11e9-00cf-bbf324bd1392"
@@ -72,4 +76,4 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
 
 [targets]
-test = ["AbstractGPs", "BenchmarkTools", "CUDA", "DiffTests", "Distributions", "Documenter", "FillArrays", "KernelFunctions", "JET", "LogDensityProblemsAD", "PDMats", "ReverseDiff", "SpecialFunctions", "StableRNGs", "Test", "Turing", "TemporalGPs"]
+test = ["AbstractGPs", "BenchmarkTools", "CUDA", "DiffTests", "Distributions", "Documenter", "DynamicPPL", "FillArrays", "KernelFunctions", "JET", "LogDensityProblemsAD", "PDMats", "ReverseDiff", "SpecialFunctions", "StableRNGs", "Test", "Turing", "TemporalGPs"]

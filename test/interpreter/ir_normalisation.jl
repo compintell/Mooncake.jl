@@ -88,4 +88,47 @@
     ]
         @test Tapir.lift_getfield_and_others(ex) == target
     end
+    @testset "gc_preserve_begin and gc_preserve_end" begin
+
+        # Check that the placeholder function added to Tapir.jl behaves as expected.
+        @test Tapir.gc_preserve(5.0) === nothing
+
+        # Thanks to maleadt for this suggestion. For more info, see:
+        # https://discourse.julialang.org/t/testing-gc-preserve-when-doing-compiler-passes/102241
+        mutable struct FinalizerObject
+            finalized::Bool
+            @noinline function FinalizerObject()
+                return finalizer(new(false)) do obj
+                    obj.finalized = true
+                end
+            end
+        end
+
+        # Check that after running the primal, the object can be freed.
+        function test_no_preserve()
+            x = FinalizerObject()
+            ptr = convert(Ptr{Bool}, Base.pointer_from_objref(x))
+            GC.gc(true)
+            unsafe_load(ptr)
+        end
+        @test test_no_preserve()
+
+        # Check that if you insert a call to `gc_preserve`, the object is not finalised.
+        function test_preserved()
+            x = FinalizerObject()
+            _, pb!! = Tapir.rrule!!(zero_fcodual(Tapir.gc_preserve), Tapir.zero_fcodual(x))
+            ptr = convert(Ptr{Bool}, Base.pointer_from_objref(x))
+            GC.gc(true)
+            return unsafe_load(ptr), pb!!
+        end
+        finalised, pb!! = test_preserved()
+        @test !finalised
+
+        # Check that translation of expressions happens correctly.
+        @test ==(
+            Tapir.lift_gc_preservation(Expr(:gc_preserve_begin, Argument(1), SSAValue(2))),
+            Expr(:call, Tapir.gc_preserve, Argument(1), SSAValue(2)),
+        )
+        @test Tapir.lift_gc_preservation(Expr(:gc_preserve_end, SSAValue(2))) === nothing
+    end
 end

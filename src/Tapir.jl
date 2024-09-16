@@ -115,6 +115,7 @@ export
     fdata_type,
     rdata_type,
     fdata,
-    rdata
+    rdata,
+    get_tapir_interpreter
 
 end
