@@ -175,7 +175,12 @@ end
 
     @testset "struct with non-concrete fields" begin
         bar = Tapir.TestResources.TypeUnstableStruct(5.0, 1.0)
-        @test Tapir.zero_tangent(bar) == Tangent{@NamedTuple{a::PossiblyUninitTangent{Float64}, b::PossiblyUninitTangent{Any}}}((a=PossiblyUninitTangent{Float64}(0.0), b=PossiblyUninitTangent{Any}(0.0)))
+@test ==(
+    Tapir.zero_tangent(bar),
+    Tangent{@NamedTuple{a::PossiblyUninitTangent{Float64}, b::PossiblyUninitTangent{Any}}}(
+        (a=PossiblyUninitTangent{Float64}(0.0), b=PossiblyUninitTangent{Any}(0.0))
+    )
+)
     end
     
     @testset "duplicate reference" begin
