@@ -44,7 +44,7 @@ include("front_matter.jl")
             @info "tasks"
             include(joinpath("rrules", "tasks.jl"))
         end
-        include("chain_rules_macro.jl")
+        include("chain_rules_interop.jl")
     elseif test_group == "integration_testing/misc"
         include(joinpath("integration_testing", "battery_tests.jl"))
         include(joinpath("integration_testing", "dynamic_ppl.jl"))

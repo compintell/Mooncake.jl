@@ -86,7 +86,7 @@ include(joinpath("rrules", "misc.jl"))
 include(joinpath("rrules", "new.jl"))
 include(joinpath("rrules", "tasks.jl"))
 
-include("chain_rules_macro.jl")
+include("chain_rules_interop.jl")
 include("interface.jl")
 
 export
