@@ -8,8 +8,10 @@ to_cr_tangent(t::Array{<:IEEEFloat}) = t
 to_cr_tangent(::NoTangent) = ChainRulesCore.NoTangent()
 
 """
-    increment_and_get_rdata!(fdata, rdata, cr_tangent)
+    increment_and_get_rdata!(fdata, zero_rdata, cr_tangent)
 
+Increment `fdata` by the fdata component of the ChainRules.jl-style tangent, `cr_tangent`,
+and return the rdata component of `cr_tangent` by adding it to `zero_rdata`.
 """
 increment_and_get_rdata!(::NoFData, r::T, t::T) where {T<:IEEEFloat} = r + t
 function increment_and_get_rdata!(f::Array{P}, ::NoRData, t::Array{P}) where {P<:IEEEFloat}
