@@ -843,8 +843,6 @@ function build_rrule(
     interp::TapirInterpreter{C}, sig_or_mi; safety_on=false, silence_safety_messages=true
 ) where {C}
 
-    @show sig_or_mi
-
     # To avoid segfaults, ensure that we bail out if the interpreter's world age is greater
     # than the current world age.
     if Base.get_world_counter() > interp.world
