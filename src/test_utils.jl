@@ -106,49 +106,98 @@ function report_opt(::Any, tt)
     throw(error("Load JET to use this function."))
 end
 
-has_equal_data(x::T, y::T; equal_undefs=true) where {T<:String} = x == y
-has_equal_data(x::Type, y::Type; equal_undefs=true) = x == y
-has_equal_data(x::Core.TypeName, y::Core.TypeName; equal_undefs=true) = x == y
-has_equal_data(x::Module, y::Module; equal_undefs=true) = x == y
-function has_equal_data(x::T, y::T; equal_undefs=true) where {T<:Array}
+"""
+    has_equal_data(x, y; equal_undefs=true)
+
+Determine if two objects `x` and `y` have equivalent data. If `equal_undefs` 
+is `true`, undefined elements in arrays or unassigned fields in structs are 
+considered equal.
+
+The main logic is implemented in `has_equal_data_internal`, which is a recursive function
+that takes an additional `visited` dictionary to track visited objects and avoid infinite
+recursion in cases of circular references.
+"""
+function has_equal_data(x, y; equal_undefs=true)
+    return has_equal_data_internal(x, y, equal_undefs, Dict{Tuple{UInt, UInt}, Bool}())
+end
+
+has_equal_data_internal(x::Type, y::Type, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}) = x == y
+has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}) where {T<:String} = x == y
+has_equal_data_internal(x::Core.TypeName, y::Core.TypeName, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}) = x == y
+function has_equal_data_internal(x::Float64, y::Float64, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool})
+    return (isapprox(x, y) && !isnan(x)) || (isnan(x) && isnan(y))
+end
+has_equal_data_internal(x::Module, y::Module, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}) = x == y
+function has_equal_data_internal(x::GlobalRef, y::GlobalRef; equal_undefs=true, d::Dict{Tuple{UInt, UInt}, Bool})
+    return x.mod == y.mod && x.name == y.name
+end
+function has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}) where {T<:Array}
     size(x) != size(y) && return false
+
+    # The dictionary is used to detect circular references in the data structures.
+    # For example, if x.a.a === x and y.a.a === y, we want to consider them to have equal data.
+    #
+    # When we first encounter a pair of objects:
+    # 1. We add them to the dictionary, marking that we've seen them.
+    # 2. This doesn't guarantee they're equal, just that we've encountered them.
+    #
+    # As we recursively compare x and y:
+    # - If we see a pair we've seen before, it indicates circular references.
+    # - We consider "circular references to itself" as equal data for this subcomponent.
+    # - However, other parts of x and y may still differ, so we continue checking.
+
+    id_pair = (objectid(x), objectid(y))
+    if haskey(d, id_pair)
+        return d[id_pair]
+    end
+
+    d[id_pair] = true
     equality = map(1:length(x)) do n
-        (isassigned(x, n) != isassigned(y, n)) && return !equal_undefs
-        return (!isassigned(x, n) || has_equal_data(x[n], y[n]))
+        if isassigned(x, n) != isassigned(y, n)
+            return !equal_undefs
+        elseif !isassigned(x, n)
+            return true
+        else
+            return has_equal_data_internal(x[n], y[n], equal_undefs, d)
+        end
     end
     return all(equality)
 end
-function has_equal_data(x::Float64, y::Float64; equal_undefs=true)
-    return (isapprox(x, y) && !isnan(x)) || (isnan(x) && isnan(y))
+function has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}) where {T<:Core.SimpleVector}
+    return all(map((a, b) -> has_equal_data_internal(a, b, equal_undefs, d), x, y))
 end
-function has_equal_data(x::T, y::T; equal_undefs=true) where {T<:Core.SimpleVector}
-    return all(map((a, b) -> has_equal_data(a, b; equal_undefs), x, y))
-end
-function has_equal_data(x::T, y::T; equal_undefs=true) where {T}
+function has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}) where {T}
     isprimitivetype(T) && return isequal(x, y)
+
+    id_pair = (objectid(x), objectid(y))
+    if haskey(d, id_pair)
+        return d[id_pair]
+    end
+
+    d[id_pair] = true
+
     if ismutabletype(x)
-        return all(map(
-            n -> isdefined(x, n) ? has_equal_data(getfield(x, n), getfield(y, n)) : true,
-            fieldnames(T),
-        ))
+        return all(map(fieldnames(T)) do n
+            isdefined(x, n) ? has_equal_data_internal(getfield(x, n), getfield(y, n), equal_undefs, d) : true
+        end)
     else
         for n in fieldnames(T)
-            if isdefined(x, n)
-                if isdefined(y, n) && has_equal_data(getfield(x, n), getfield(y, n))
+            if !isdefined(x, n) && !isdefined(y, n)
+                continue # consider undefined fields as equal
+            elseif isdefined(x, n) && isdefined(y, n)
+                if has_equal_data_internal(getfield(x, n), getfield(y, n), equal_undefs, d)
                     continue
                 else
                     return false
                 end
-            else
-                return isdefined(y, n) ? false : true
+            else # one is defined and the other is not
+                return false
             end
         end
         return true
     end
 end
-function has_equal_data(x::GlobalRef, y::GlobalRef; equal_undefs=true)
-    return x.mod == y.mod && x.name == y.name
-end
+has_equal_data_internal(x::T, y::P, equal_undefs::Bool, d::Dict{Tuple{UInt,UInt},Bool}) where {T,P} = false
 
 has_equal_data_up_to_undefs(x::T, y::T) where {T} = has_equal_data(x, y; equal_undefs=false)
 
@@ -817,6 +866,8 @@ Verify that primal `p` with tangents `z_target`, `x`, and `y`, satisfies the tan
 interface. If these tests pass, then it should be possible to write rules for primals
 of type `P`, and to test them using [`test_rule`](@ref).
 
+It should be the case that `z_target` == `increment!!(x, y)`.
+
 As always, there are limits to the errors that these tests can identify -- they form
 necessary but not sufficient conditions for the correctness of your code.
 """
@@ -1035,10 +1086,13 @@ end
 mutable struct TypeUnstableMutableStruct
     a::Float64
     b
+    TypeUnstableMutableStruct(a::Float64) = new(a)
+    TypeUnstableMutableStruct(a::Float64, b) = new(a, b)
 end
 
-function Base.:(==)(a::TypeUnstableMutableStruct, b::TypeUnstableMutableStruct)
-    return equal_field(a, b, :a) && equal_field(a, b, :b)
+mutable struct TypeUnstableMutableStruct2
+    a
+    b
 end
 
 struct TypeStableStruct{T}
@@ -1048,13 +1102,16 @@ struct TypeStableStruct{T}
     TypeStableStruct{T}(a::Float64, b::T) where {T} = new{T}(a, b)
 end
 
-function Base.:(==)(a::TypeStableStruct, b::TypeStableStruct)
-    return equal_field(a, b, :a) && equal_field(a, b, :b)
+struct TypeUnstableStruct2
+    a
+    b
 end
 
 struct TypeUnstableStruct
     a::Float64
     b
+    TypeUnstableStruct(a::Float64) = new(a)
+    TypeUnstableStruct(a::Float64, b) = new(a, b)
 end
 
 function Base.:(==)(a::TypeUnstableStruct, b::TypeUnstableStruct)
@@ -1076,6 +1133,36 @@ end
 
 struct StructNoRvs
     x::Vector{Float64}
+end
+
+#
+# generate test cases for circular references
+#
+
+function make_circular_reference_struct()
+    c = TypeUnstableMutableStruct(1.0, nothing)
+    c.b = c
+    return c
+end
+
+function make_indirect_circular_reference_struct()
+    c = TypeUnstableMutableStruct(1.0)
+    _c = TypeUnstableMutableStruct(1.0, c)
+    c.b = _c
+    return c
+end
+
+function make_circular_reference_array()
+    a = Any[1.0, 2.0, 3.0]
+    a[1] = a
+    return a
+end
+
+function make_indirect_circular_reference_array()
+    a = Any[1.0, 2.0, 3.0]
+    b = Any[a, 4.0]
+    a[1] = b
+    return a
 end
 
 #
