@@ -6,10 +6,10 @@ module TapirLuxLibExt
     import LuxLib.Impl: matmul, matmuladd, fused_dense
     import Tapir: @from_rrule, DefaultCtx
 
-    @from_rrule DefaultCtx Tuple{typeof(matmul), Array{<:IEEEFloat}, Array{<:IEEEFloat}}
+    @from_rrule(DefaultCtx, Tuple{typeof(matmul), Array{P}, Array{P}} where {P<:IEEEFloat})
     @from_rrule(
         DefaultCtx,
-        Tuple{typeof(matmuladd), Array{<:IEEEFloat}, Array{<:IEEEFloat}, Vector{<:IEEEFloat}},
+        Tuple{typeof(matmuladd), Array{P}, Array{P}, Vector{P}} where {P<:IEEEFloat},
     )
 
     # The implementations of rrules for fused operations are not straightforward to

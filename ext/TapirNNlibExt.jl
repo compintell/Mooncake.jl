@@ -12,30 +12,12 @@ module TapirNNlibExt
     )
     @from_rrule(
         DefaultCtx,
-        Tuple{
-            typeof(Core.kwcall),
-            NamedTuple,
-            typeof(dropout),
-            AbstractRNG,
-            Array{P},
-            P,
-        } where {P<:IEEEFloat},
+        Tuple{typeof(dropout), AbstractRNG, Array{P}, P} where {P<:IEEEFloat},
+        true,
     )
-    @from_rrule(DefaultCtx, Tuple{typeof(softmax), Array{<:IEEEFloat}})
-    @from_rrule(
-        DefaultCtx,
-        Tuple{typeof(Core.kwcall), NamedTuple, typeof(softmax), Array{<:IEEEFloat}},
-    )
-    @from_rrule(DefaultCtx, Tuple{typeof(logsoftmax), Array{<:IEEEFloat}})
-    @from_rrule(
-        DefaultCtx,
-        Tuple{typeof(Core.kwcall), NamedTuple, typeof(logsoftmax), Array{<:IEEEFloat}},
-    )
-    @from_rrule(DefaultCtx, Tuple{typeof(logsumexp), Array{<:IEEEFloat}})
-    @from_rrule(
-        DefaultCtx,
-        Tuple{typeof(Core.kwcall), NamedTuple, typeof(logsumexp), Array{<:IEEEFloat}},
-    )
+    @from_rrule(DefaultCtx, Tuple{typeof(softmax), Array{<:IEEEFloat}}, true)
+    @from_rrule(DefaultCtx, Tuple{typeof(logsoftmax), Array{<:IEEEFloat}}, true)
+    @from_rrule(DefaultCtx, Tuple{typeof(logsumexp), Array{<:IEEEFloat}}, true)
     @from_rrule(
         DefaultCtx,
         Tuple{typeof(upsample_nearest), Array{<:IEEEFloat}, NTuple{N, Int} where {N}},
@@ -43,64 +25,30 @@ module TapirNNlibExt
     @from_rrule(
         DefaultCtx,
         Tuple{
-            typeof(NNlib.fold),
-            Array{<:IEEEFloat},
-            NTuple{N, Int} where {N},
-            DenseConvDims,
+            typeof(NNlib.fold), Array{<:IEEEFloat}, NTuple{N, Int} where {N}, DenseConvDims,
         },
     )
-    @from_rrule(DefaultCtx, Tuple{typeof(NNlib.unfold), Array{<:IEEEFloat}, DenseConvDims})
+    @from_rrule(
+        DefaultCtx, Tuple{typeof(NNlib.unfold), Array{<:IEEEFloat}, DenseConvDims}
+    )
     @from_rrule(
         DefaultCtx,
         Tuple{typeof(NNlib.scatter), Any, Array, Array{<:Union{Integer, Tuple}}},
+        true,
     )
-    @from_rrule(
-        DefaultCtx,
-        Tuple{
-            typeof(Core.kwcall),
-            NamedTuple,
-            typeof(NNlib.scatter),
-            Any,
-            Array,
-            Array{<:Union{Integer, Tuple}},
-        },
-    )
-
     for backend in (Symbol(), :_direct, :_im2col), name in (:conv, :depthwiseconv)
-        @eval @from_rrule(
-            DefaultCtx,
-            Tuple{
-                typeof(Core.kwcall),
-                NamedTuple,
-                typeof(NNlib.$(Symbol("$name$(backend)"))),
-                Array{P},
-                Array{P},
-                ConvDims,
-            } where {P<:IEEEFloat},
-        )
         @eval @from_rrule(
             DefaultCtx,
             Tuple{
                 typeof(NNlib.$(Symbol("$name$(backend)"))), Array{P}, Array{P}, ConvDims,
             } where {P<:IEEEFloat},
+            true,
         )
     end
     for pool in [:maxpool, :meanpool]
-        @eval @from_rrule(DefaultCtx, Tuple{typeof($pool), Array{<:IEEEFloat}, PoolDims})
         @eval @from_rrule(
-            DefaultCtx,
-            Tuple{
-                typeof(Core.kwcall),
-                NamedTuple,
-                typeof($pool),
-                Array{<:IEEEFloat},
-                PoolDims,
-            },
+            DefaultCtx, Tuple{typeof($pool), Array{<:IEEEFloat}, PoolDims}, true
         )
     end
-    @from_rrule(DefaultCtx, Tuple{typeof(pad_constant), Array, Any, Any})
-    @from_rrule(
-        DefaultCtx,
-        Tuple{typeof(Core.kwcall), NamedTuple, typeof(pad_constant), Array, Any, Any},
-    )
+    @from_rrule(DefaultCtx, Tuple{typeof(pad_constant), Array, Any, Any}, true)
 end

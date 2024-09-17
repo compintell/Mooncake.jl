@@ -96,7 +96,7 @@ function rrule_wrapper(::CoDual{typeof(Core.kwcall)}, fargs::Vararg{CoDual, N}) 
 end
 
 @doc"""
-    @from_rrule ctx sig
+    @from_rrule ctx sig [has_kwargs=false]
 
 Convenience functionality to assist in using `ChainRulesCore.rrule`s to write `rrule!!`s.
 This macro is a thin wrapper around [`rrule_wrapper`](@ref).
@@ -106,6 +106,11 @@ For example,
 @from_rrule DefaultCtx Tuple{typeof(sin), Float64}
 ```
 would define a `Tapir.rrule!!` for `sin` of `Float64`s, by calling `ChainRulesCore.rrule`.
+
+```julia
+@from_rrule DefaultCtx Tuple{typeof(foo), Float64} true
+```
+would define a method of `Tapir.rrule!!` which can handle keyword arguments.
 
 Limitations: it is your responsibility to ensure that
 1. calls with signature `sig` do not mutate their arguments,
@@ -136,8 +141,9 @@ only write a rule for these types:
 @from_rrule DefaultCtx Tuple{typeof(foo), IEEEFloat, Vector{<:IEEEFloat}}
 ```
 """
-macro from_rrule(ctx, sig)
+macro from_rrule(ctx, sig::Expr, has_kwargs::Bool=false)
 
+    # Different parsing is required for `Tuple{...}` vs `Tuple{...} where ...`.
     if sig.head == :curly
         @assert sig.args[1] == :Tuple
         arg_type_symbols = sig.args[2:end]
@@ -152,8 +158,35 @@ macro from_rrule(ctx, sig)
 
     arg_names = map(n -> Symbol("x_$n"), eachindex(arg_type_symbols))
     arg_types = map(t -> :(Tapir.CoDual{<:$t}), arg_type_symbols)
-    arg_exprs = map((n, t) -> :($n::$t), arg_names, arg_types)
+    rule_expr = construct_def(arg_names, arg_types, where_params)
 
+    if has_kwargs
+        kw_sig = Expr(:curly, :Tuple, :(typeof(Core.kwcall)), :NamedTuple, arg_type_symbols...)
+        kw_sig = where_params === nothing ? kw_sig : Expr(:where, kw_sig, where_params...)
+        kw_is_primitive = :(Tapir.is_primitive(::Type{$ctx}, ::Type{<:$kw_sig}) = true)
+        kwcall_type = :(Tapir.CoDual{typeof(Core.kwcall)})
+        nt_type = :(Tapir.CoDual{<:NamedTuple})
+        kwargs_rule_expr = construct_def(
+            vcat(:_kwcall, :kwargs, arg_names),
+            vcat(kwcall_type, nt_type, arg_types),
+            where_params,
+        )
+    else
+        kw_is_primitive = nothing
+        kwargs_rule_expr = nothing
+    end
+
+    ex = quote
+        Tapir.is_primitive(::Type{$ctx}, ::Type{<:$sig}) = true
+        $rule_expr
+        $kw_is_primitive
+        $kwargs_rule_expr
+    end
+    return esc(ex)
+end
+
+function construct_def(arg_names, arg_types, where_params)
+    arg_exprs = map((n, t) -> :($n::$t), arg_names, arg_types)
     def = Dict(
         :head => :function,
         :name => :(Tapir.rrule!!),
@@ -163,11 +196,5 @@ macro from_rrule(ctx, sig)
     if where_params !== nothing
         def[:whereparams] = where_params
     end
-    rule_expr = ExprTools.combinedef(def)
-
-    ex = quote
-        Tapir.is_primitive(::Type{$ctx}, ::Type{<:$sig}) = true
-        $rule_expr
-    end
-    return esc(ex)
+    return ExprTools.combinedef(def)
 end

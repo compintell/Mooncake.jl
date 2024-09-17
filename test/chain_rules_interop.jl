@@ -13,7 +13,7 @@ function ChainRulesCore.rrule(::typeof(bleh), x::Float64, y::Int)
     return x * y, dz -> (ChainRulesCore.NoTangent(), dz * y, ChainRulesCore.NoTangent())
 end
 
-@from_rrule DefaultCtx Tuple{typeof(bleh), Float64, Int}
+@from_rrule DefaultCtx Tuple{typeof(bleh), Float64, Int} false
 
 # Test case with heap-allocated input.
 
@@ -24,7 +24,7 @@ function ChainRulesCore.rrule(::typeof(test_sum), x::AbstractArray{<:Real})
     return test_sum(x), test_sum_pb
 end
 
-@from_rrule DefaultCtx Tuple{typeof(test_sum), Array{<:Base.IEEEFloat}}
+@from_rrule DefaultCtx Tuple{typeof(test_sum), Array{<:Base.IEEEFloat}} false
 
 # Test case with heap-allocated output.
 
@@ -37,7 +37,9 @@ function ChainRulesCore.rrule(::typeof(test_scale), x::Real, y::AbstractVector{<
     return x * y, test_scale_pb
 end
 
-@from_rrule DefaultCtx Tuple{typeof(test_scale), Base.IEEEFloat, Vector{<:Base.IEEEFloat}}
+@from_rrule(
+    DefaultCtx, Tuple{typeof(test_scale), Base.IEEEFloat, Vector{<:Base.IEEEFloat}}, false
+)
 
 # Test case with non-differentiable type as output.
 
@@ -48,7 +50,7 @@ function ChainRulesCore.rrule(::typeof(test_nothing))
     return nothing, test_nothing_pb
 end
 
-@from_rrule DefaultCtx Tuple{typeof(test_nothing)}
+@from_rrule DefaultCtx Tuple{typeof(test_nothing)} false
 
 # Test case in which ChainRulesCore returns a tangent which is of the "wrong" type from the
 # perspective of Tapir.jl. In this instance, some kind of error should be thrown, rather
@@ -61,7 +63,7 @@ function ChainRulesCore.rrule(::typeof(test_bad_rdata), x::Float64)
     return 5x, test_bad_rdata_pb
 end
 
-@from_rrule DefaultCtx Tuple{typeof(test_bad_rdata), Float64}
+@from_rrule DefaultCtx Tuple{typeof(test_bad_rdata), Float64} false
 
 # Test case for rule with diagonal dispatch.
 test_add(x, y) = x + y
@@ -69,7 +71,7 @@ function ChainRulesCore.rrule(::typeof(test_add), x, y)
     test_add_pb(dout) = ChainRulesCore.NoTangent(), dout, dout
     return x + y, test_add_pb
 end
-@from_rrule DefaultCtx Tuple{typeof(test_add), T, T} where {T<:IEEEFloat}
+@from_rrule DefaultCtx Tuple{typeof(test_add), T, T} where {T<:IEEEFloat} false
 
 # Test case for rule with kwargs.
 test_kwargs(x; y::Bool) = y ? x : 2x
@@ -79,7 +81,7 @@ function ChainRulesCore.rrule(::typeof(test_kwargs), x::Float64; y::Bool)
     return y ? x : 2x, test_kwargs_pb
 end
 
-@from_rrule DefaultCtx Tuple{typeof(Core.kwcall), NamedTuple, typeof(test_kwargs), Float64}
+@from_rrule(DefaultCtx, Tuple{typeof(test_kwargs), Float64}, true)
 
 end
 
