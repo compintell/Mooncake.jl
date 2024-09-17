@@ -74,9 +74,9 @@ end
 @from_rrule DefaultCtx Tuple{typeof(test_add), T, T} where {T<:IEEEFloat} false
 
 # Test case for rule with kwargs.
-test_kwargs(x; y::Bool) = y ? x : 2x
+test_kwargs(x; y::Bool=false) = y ? x : 2x
 
-function ChainRulesCore.rrule(::typeof(test_kwargs), x::Float64; y::Bool)
+function ChainRulesCore.rrule(::typeof(test_kwargs), x::Float64; y::Bool=false)
     test_kwargs_pb(dz::Float64) = ChainRulesCore.NoTangent(), y ? dz : 2dz
     return y ? x : 2x, test_kwargs_pb
 end
@@ -100,6 +100,7 @@ end
         (ChainRulesInteropTestResources.test_nothing,),
         (Core.kwcall, (y=true, ), ChainRulesInteropTestResources.test_kwargs, 5.0),
         (Core.kwcall, (y=false, ), ChainRulesInteropTestResources.test_kwargs, 5.0),
+        (ChainRulesInteropTestResources.test_kwargs, 5.0),
     ]
         test_rule(sr(1), fargs...; perf_flag=:stability, is_primitive=true)
     end
