@@ -85,6 +85,7 @@
         (false, :none, false, x -> pad_constant(x, 1, 2.0), x),
         (false, :none, false, x -> pad_constant(x, 1, 2.0; dims=:), x),
     ]
+        @info "$(typeof(fargs))"
         test_rule(sr(1), fargs...; perf_flag, is_primitive, interface_only)
     end
 end

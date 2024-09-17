@@ -2,11 +2,13 @@ module TapirNNlibExt
 
     using NNlib, Random, Tapir
     using Base: IEEEFloat
+    using NNlib: dropout
 
     import Tapir: @from_rrule, DefaultCtx
 
     @from_rrule(
-        DefaultCtx, Tuple{typeof(batched_mul), Array{<:IEEEFloat, 3}, Array{<:IEEEFloat, 3}}
+        DefaultCtx,
+        Tuple{typeof(batched_mul), Array{P, 3}, Array{P, 3}} where {P<:IEEEFloat},
     )
     @from_rrule(
         DefaultCtx,
@@ -15,9 +17,9 @@ module TapirNNlibExt
             NamedTuple,
             typeof(dropout),
             AbstractRNG,
-            Array{<:IEEEFloat},
-            IEEEFloat,
-        },
+            Array{P},
+            P,
+        } where {P<:IEEEFloat},
     )
     @from_rrule(DefaultCtx, Tuple{typeof(softmax), Array{<:IEEEFloat}})
     @from_rrule(
@@ -71,19 +73,16 @@ module TapirNNlibExt
                 typeof(Core.kwcall),
                 NamedTuple,
                 typeof(NNlib.$(Symbol("$name$(backend)"))),
-                Array{<:IEEEFloat},
-                Array{<:IEEEFloat},
+                Array{P},
+                Array{P},
                 ConvDims,
-            },
+            } where {P<:IEEEFloat},
         )
         @eval @from_rrule(
             DefaultCtx,
             Tuple{
-                typeof(NNlib.$(Symbol("$name$(backend)"))),
-                Array{<:IEEEFloat},
-                Array{<:IEEEFloat},
-                ConvDims,
-            },
+                typeof(NNlib.$(Symbol("$name$(backend)"))), Array{P}, Array{P}, ConvDims,
+            } where {P<:IEEEFloat},
         )
     end
     for pool in [:maxpool, :meanpool]
