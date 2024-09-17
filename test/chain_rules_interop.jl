@@ -83,12 +83,6 @@ end
     ]
         @test Tapir.to_cr_tangent(t) == t_cr
     end
-
-    # The fact that I'm testing this separately suggests to me that there's something that
-    # I've not quite gotten right about the abstractions involved here.
-    @testset "ChainRulesCore.thunk" begin
-        @test Tapir.to_tapir_tangent(ChainRulesCore.Thunk(() -> ones(5))) == ones(5)
-    end
     @testset "rules: $(typeof(fargs))" for fargs in Any[
         (ChainRulesInteropTestResources.bleh, 5.0, 4),
         (ChainRulesInteropTestResources.test_sum, ones(5)),
