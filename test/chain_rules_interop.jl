@@ -63,6 +63,14 @@ end
 
 @from_rrule DefaultCtx Tuple{typeof(test_bad_rdata), Float64}
 
+# Test case for rule with diagonal dispatch.
+test_add(x, y) = x + y
+function ChainRulesCore.rrule(::typeof(test_add), x, y)
+    test_add_pb(dout) = ChainRulesCore.NoTangent(), dout, dout
+    return x + y, test_add_pb
+end
+@from_rrule DefaultCtx Tuple{typeof(test_add), T, T} where {T<:IEEEFloat}
+
 # Test case for rule with kwargs.
 test_kwargs(x; y::Bool) = y ? x : 2x
 

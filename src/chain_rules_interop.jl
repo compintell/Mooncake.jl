@@ -109,11 +109,7 @@ would define a `Tapir.rrule!!` for `sin` of `Float64`s, by calling `ChainRulesCo
 
 Limitations: it is your responsibility to ensure that
 1. calls with signature `sig` do not mutate their arguments,
-2. the output of calls with signature `sig` does not alias any of the inputs,
-3. `sig` is a `Tuple{...}`, not a `Tuple{...} where {...}`.
-
-This last point is a limitation of the current implementation, rather than something
-fundamental, whereas the first two points are more basic points.
+2. the output of calls with signature `sig` does not alias any of the inputs.
 
 As with all hand-written rules, you should definitely make use of
 [`TestUtils.test_rule`](@ref) to verify correctness on some test cases.
@@ -142,22 +138,32 @@ only write a rule for these types:
 """
 macro from_rrule(ctx, sig)
 
-    @assert sig.head == :curly
-    @assert sig.args[1] == :Tuple
-    arg_type_symbols = sig.args[2:end]
+    if sig.head == :curly
+        @assert sig.args[1] == :Tuple
+        arg_type_symbols = sig.args[2:end]
+        where_params = nothing
+    elseif sig.head == :where
+        @assert sig.args[1].args[1] == :Tuple
+        arg_type_symbols = sig.args[1].args[2:end]
+        where_params = sig.args[2:end]
+    else
+        throw(ArgumentError("Expected either a `Tuple{...}` or `Tuple{...} where {...}"))
+    end
 
     arg_names = map(n -> Symbol("x_$n"), eachindex(arg_type_symbols))
     arg_types = map(t -> :(Tapir.CoDual{<:$t}), arg_type_symbols)
     arg_exprs = map((n, t) -> :($n::$t), arg_names, arg_types)
 
-    rule_expr = ExprTools.combinedef(
-        Dict(
-            :head => :function,
-            :name => :(Tapir.rrule!!),
-            :args => arg_exprs,
-            :body => Expr(:call, rrule_wrapper, arg_names...),
-        )
+    def = Dict(
+        :head => :function,
+        :name => :(Tapir.rrule!!),
+        :args => arg_exprs,
+        :body => Expr(:call, rrule_wrapper, arg_names...),
     )
+    if where_params !== nothing
+        def[:whereparams] = where_params
+    end
+    rule_expr = ExprTools.combinedef(def)
 
     ex = quote
         Tapir.is_primitive(::Type{$ctx}, ::Type{<:$sig}) = true
