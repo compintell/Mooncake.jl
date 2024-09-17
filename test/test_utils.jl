@@ -22,6 +22,8 @@
         @test has_equal_data(Diagonal(ones(5)), Diagonal(ones(5)))
         @test has_equal_data("hello", "hello")
         @test !has_equal_data("hello", "goodbye")
+        @test has_equal_data(TypeUnstableMutableStruct(4.0, 5), TypeUnstableMutableStruct(4.0, 5))
+        @test !has_equal_data(TypeUnstableMutableStruct(4.0, 5), TypeUnstableMutableStruct(4.0, 6))
         @test has_equal_data(TypeUnstableStruct(4.0, 5), TypeUnstableStruct(4.0, 5))
         @test !has_equal_data(TypeUnstableStruct(0.0), TypeUnstableStruct(4.0))
         @test has_equal_data(make_circular_reference_struct(), make_circular_reference_struct())
