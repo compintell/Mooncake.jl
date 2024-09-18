@@ -8,6 +8,12 @@
 
 The goal of the `Mooncake.jl` project is to produce a reverse-mode AD package which is written entirely in Julia, which improves over both `ReverseDiff.jl` and `Zygote.jl` in several ways, and is competitive with `Enzyme.jl`.
 
+## Note on renaming
+
+On 18/09/2024 this package was renamed from `Tapir.jl` to `Mooncake.jl`.
+The last version until the name `Tapir.jl` was version 0.2.51.
+Upon renaming, the version was bumped to 0.3.0.
+
 ## Note on project status
 
 `Mooncake.jl` is under active development.
