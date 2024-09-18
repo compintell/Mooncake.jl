@@ -58,16 +58,16 @@ function logdensity_and_gradient(∇l::MooncakeGradientLogDensity, x::Vector{Flo
     return Mooncake.primal(y), dx
 end
 
-# Interop with ADTypes.
-function ADgradient(x::ADTypes.AutoMooncake, ℓ)
-    if x.safe_mode
-        msg = "Running Mooncake in safe mode. This mode is computationally expensive, " *
-            "should only be used when debugging a problem with AD, and turned off in " *
-            "general use. Do this by using AutoMooncake(safe_mode=false)."
-        @info msg
-    end
-    return ADgradient(Val(:Mooncake), ℓ; safety_on=x.safe_mode)
-end
+# # Interop with ADTypes.
+# function ADgradient(x::ADTypes.AutoMooncake, ℓ)
+#     if x.safe_mode
+#         msg = "Running Mooncake in safe mode. This mode is computationally expensive, " *
+#             "should only be used when debugging a problem with AD, and turned off in " *
+#             "general use. Do this by using AutoMooncake(safe_mode=false)."
+#         @info msg
+#     end
+#     return ADgradient(Val(:Mooncake), ℓ; safety_on=x.safe_mode)
+# end
 
 Base.parent(x::MooncakeGradientLogDensity) = Mooncake.primal(x.ℓ)
 
