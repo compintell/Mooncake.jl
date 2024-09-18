@@ -10,9 +10,12 @@ The goal of the `Mooncake.jl` project is to produce a reverse-mode AD package wh
 
 ## Note on renaming
 
-On 18/09/2024 this package was renamed from `Tapir.jl` to `Mooncake.jl`.
-The last version until the name `Tapir.jl` was version 0.2.51.
+On 18/09/2024 this package was renamed from Tapir.jl to Mooncake.jl.
+The last version while the package was called Tapir.jl was 0.2.51.
 Upon renaming, the version was bumped to 0.3.0.
+
+We are currently going through the renaming process, and expect it to be complete in a few days.
+During this time, there will be no new releases of Mooncake.jl, and there will be issues with its interaction with ADTypes.jl, LogDensityProblemsAD.jl, and possibly other things that we haven't thought of.
 
 ## Note on project status
 
