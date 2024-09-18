@@ -23,7 +23,7 @@ struct MooncakeInterpreter{C} <: CC.AbstractInterpreter
     inf_params::CC.InferenceParams
     opt_params::CC.OptimizationParams
     inf_cache::Vector{CC.InferenceResult}
-    code_cache::TICache
+    code_cache::MooncakeCache
     oc_cache::Dict{ClosureCacheKey, Any}
     function MooncakeInterpreter(
         ::Type{C};
@@ -32,7 +32,7 @@ struct MooncakeInterpreter{C} <: CC.AbstractInterpreter
         inf_params::CC.InferenceParams=CC.InferenceParams(),
         opt_params::CC.OptimizationParams=CC.OptimizationParams(),
         inf_cache::Vector{CC.InferenceResult}=CC.InferenceResult[], 
-        code_cache::TICache=TICache(),
+        code_cache::MooncakeCache=MooncakeCache(),
         oc_cache::Dict{ClosureCacheKey, Any}=Dict{ClosureCacheKey, Any}(),
     ) where {C}
         return new{C}(meta, world, inf_params, opt_params, inf_cache, code_cache, oc_cache)
@@ -77,15 +77,17 @@ CC.get_inference_cache(interp::MooncakeInterpreter) = interp.inf_cache
 function CC.code_cache(interp::MooncakeInterpreter)
     return CC.WorldView(interp.code_cache, CC.WorldRange(interp.world))
 end
-function CC.get(wvc::CC.WorldView{TICache}, mi::Core.MethodInstance, default)
+function CC.get(wvc::CC.WorldView{MooncakeCache}, mi::Core.MethodInstance, default)
     return get(wvc.cache.dict, mi, default)
 end
-function CC.getindex(wvc::CC.WorldView{TICache}, mi::Core.MethodInstance)
+function CC.getindex(wvc::CC.WorldView{MooncakeCache}, mi::Core.MethodInstance)
     return getindex(wvc.cache.dict, mi)
 end
-CC.haskey(wvc::CC.WorldView{TICache}, mi::Core.MethodInstance) = haskey(wvc.cache.dict, mi)
+function CC.haskey(wvc::CC.WorldView{MooncakeCache}, mi::Core.MethodInstance)
+    return haskey(wvc.cache.dict, mi)
+end
 function CC.setindex!(
-    wvc::CC.WorldView{TICache}, ci::Core.CodeInstance, mi::Core.MethodInstance
+    wvc::CC.WorldView{MooncakeCache}, ci::Core.CodeInstance, mi::Core.MethodInstance
 )
     return setindex!(wvc.cache.dict, ci, mi)
 end
