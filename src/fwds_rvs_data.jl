@@ -35,7 +35,7 @@ Returns the type of the forwards data associated to a tangent of type `T`.
 
 # Extended help
 
-Rules in Tapir.jl do not operate on tangents directly.
+Rules in Mooncake.jl do not operate on tangents directly.
 Rather, functionality is defined to split each tangent into two components, that we call _fdata_ (forwards-pass data) and _rdata_ (reverse-pass data).
 In short, any component of a tangent which is identified by its address (e.g. a `mutable struct`s or an `Array`) gets passed around on the forwards-pass of AD and is incremented in-place on the reverse-pass, while components of tangents identified by their value get propagated and accumulated only on the reverse-pass.
 
@@ -117,7 +117,7 @@ Tangent{@NamedTuple{x::Float64, y, z::NoTangent}}
 Its fdata and rdata are given by special `FData` and `RData` types:
 ```jldoctest foo_fdata
 julia> (fdata_type(tangent_type(Foo)), rdata_type(tangent_type(Foo)))
-(Tapir.FData{@NamedTuple{x::NoFData, y, z::NoFData}}, Tapir.RData{@NamedTuple{x::Float64, y, z::NoRData}})
+(Mooncake.FData{@NamedTuple{x::NoFData, y, z::NoFData}}, Mooncake.RData{@NamedTuple{x::Float64, y, z::NoRData}})
 ```
 Practically speaking, `FData` and `RData` both have the same structure as `Tangent`s and are just used in different contexts.
 

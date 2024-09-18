@@ -1,19 +1,19 @@
-# Tapir.jl and Reverse-Mode AD
+# Mooncake.jl and Reverse-Mode AD
 
-The point of Tapir.jl is to perform reverse-mode algorithmic differentiation (AD).
+The point of Mooncake.jl is to perform reverse-mode algorithmic differentiation (AD).
 The purpose of this section is to explain _what_ precisely is meant by this, and _how_ it can be interpreted mathematically.
 1. we recap what AD is, and introduce the mathematics necessary to understand is,
 1. explain how this mathematics relates to functions and data structures in Julia, and
-1. how this is handled in Tapir.jl.
+1. how this is handled in Mooncake.jl.
 
-Since Tapir.jl supports in-place operations / mutation, these will push beyond what is encountered in Zygote / Diffractor / ChainRules.
-Consequently, while there is a great deal of overlap with these existing systems, you will need to read through this section of the docs in order to properly understand Tapir.jl.
+Since Mooncake.jl supports in-place operations / mutation, these will push beyond what is encountered in Zygote / Diffractor / ChainRules.
+Consequently, while there is a great deal of overlap with these existing systems, you will need to read through this section of the docs in order to properly understand Mooncake.jl.
 
 # Who Are These Docs For?
 
-These are primarily designed for anyone who is interested in contributing to Tapir.jl.
+These are primarily designed for anyone who is interested in contributing to Mooncake.jl.
 They are also hopefully of interest to anyone how is interested in understanding AD more broadly.
-If you aren't interested in understanding how Tapir.jl and AD work, you don't need to have read them in order to make use of this package.
+If you aren't interested in understanding how Mooncake.jl and AD work, you don't need to have read them in order to make use of this package.
 
 # Prerequisites and Resources
 

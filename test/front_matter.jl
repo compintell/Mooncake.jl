@@ -9,7 +9,7 @@ using
     Random,
     SpecialFunctions,
     StableRNGs,
-    Tapir,
+    Mooncake,
     Test
 
 import ChainRulesCore
@@ -20,7 +20,7 @@ using Core:
     bitcast, svec, ReturnNode, PhiNode, PiNode, GotoIfNot, GotoNode, SSAValue, Argument
 using Core.Intrinsics: pointerref, pointerset
 
-using Tapir:
+using Mooncake:
     CC,
     IntrinsicsWrappers,
     TestUtils,
@@ -95,6 +95,6 @@ const test_group = get(ENV, "TEST_GROUP", "basic")
 sr(n::Int) = StableRNG(n)
 
 # This is annoying and hacky and should be improved.
-if isempty(Tapir.TestTypes.PRIMALS)
-    Tapir.TestTypes.generate_primals()
+if isempty(Mooncake.TestTypes.PRIMALS)
+    Mooncake.TestTypes.generate_primals()
 end

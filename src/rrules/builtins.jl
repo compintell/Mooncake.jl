@@ -28,7 +28,7 @@ function rrule!!(f::CoDual{<:Core.Builtin}, args...)
         "to avoid hitting this built-in function, or implement a method of `rrule!!` " *
         "which is specialised to this case. " *
         "Either way, please consider commenting on " *
-        "https://github.com/compintell/Tapir.jl/issues/208/ so that the issue can be " *
+        "https://github.com/compintell/Mooncake.jl/issues/208/ so that the issue can be " *
         "fixed more widely."
     ))
 end
@@ -37,8 +37,8 @@ module IntrinsicsWrappers
 
 using Base: IEEEFloat
 using Core: Intrinsics
-using Tapir
-import ..Tapir:
+using Mooncake
+import ..Mooncake:
     rrule!!, CoDual, primal, tangent, zero_tangent, NoPullback,
     tangent_type, increment!!, @is_primitive, MinimalCtx, is_primitive, NoFData,
     zero_rdata, NoRData, tuple_map, fdata, NoRData, rdata, increment_rdata!!, zero_fcodual
@@ -51,7 +51,7 @@ end
 
 function translate(f)
     msg = "Unable to translate the intrinsic $f into a regular Julia function. " *
-        "Please see github.com/compintell/Tapir.jl/issues/208 for more discussion."
+        "Please see github.com/compintell/Mooncake.jl/issues/208 for more discussion."
     throw(MissingIntrinsicWrapperException(msg))
 end
 
@@ -75,7 +75,7 @@ macro inactive_intrinsic(name)
         (is_primitive)(::Type{MinimalCtx}, ::Type{<:Tuple{typeof($name), Vararg}}) = true
         translate(::Val{Intrinsics.$name}) = $name
         function rrule!!(f::CoDual{typeof($name)}, args::Vararg{Any, N}) where {N}
-            return Tapir.simple_zero_adjoint(f, args...)
+            return Mooncake.simple_zero_adjoint(f, args...)
         end
     end
     return esc(expr)
@@ -170,17 +170,17 @@ pointer to, is known statically. In this regard it is like foreigncalls.
 
 As a consequence, it requires special handling. The name is converted into a `Val` so that
 it is available statically, and the function into which `cglobal` calls are converted is
-named `Tapir.IntrinsicsWrappers.__cglobal`, rather than `Tapir.IntrinsicsWrappers.cglobal`.
+named `Mooncake.IntrinsicsWrappers.__cglobal`, rather than `Mooncake.IntrinsicsWrappers.cglobal`.
 
-If you examine the code associated with `Tapir.intrinsic_to_function`, you will see that
+If you examine the code associated with `Mooncake.intrinsic_to_function`, you will see that
 special handling of `cglobal` is used.
 =#
 __cglobal(::Val{s}, x::Vararg{Any, N}) where {s, N} = cglobal(s, x...)
 
 translate(::Val{Intrinsics.cglobal}) = __cglobal
-Tapir.is_primitive(::Type{MinimalCtx}, ::Type{<:Tuple{typeof(__cglobal), Vararg}}) = true
+Mooncake.is_primitive(::Type{MinimalCtx}, ::Type{<:Tuple{typeof(__cglobal), Vararg}}) = true
 function rrule!!(f::CoDual{typeof(__cglobal)}, args...)
-    return Tapir.uninit_fcodual(__cglobal(map(primal, args)...)), NoPullback(f, args...)
+    return Mooncake.uninit_fcodual(__cglobal(map(primal, args)...)), NoPullback(f, args...)
 end
 
 @inactive_intrinsic checked_sadd_int
@@ -327,7 +327,7 @@ function rrule!!(::CoDual{typeof(pointerref)}, x, y, z)
     _z = primal(z)
     dx = tangent(x)
     a = CoDual(pointerref(_x, _y, _z), fdata(pointerref(dx, _y, _z)))
-    if Tapir.rdata_type(tangent_type(Tapir._typeof(primal(a)))) == NoRData
+    if Mooncake.rdata_type(tangent_type(Mooncake._typeof(primal(a)))) == NoRData
         return a, NoPullback((NoRData(), NoRData(), NoRData(), NoRData()))
     else
         function pointerref_pullback!!(da)

@@ -4,7 +4,7 @@ _to_rdata(dx::Float64) = dx
 @doc"""
     @from_rrule ctx sig
 
-Creates a `Tapir.rrule!!` from a `ChainRulesCore.rrule`. `ctx` is the type of the context in
+Creates a `Mooncake.rrule!!` from a `ChainRulesCore.rrule`. `ctx` is the type of the context in
 which this rule should apply, and `sig` is the type-tuple which specifies which primal the
 rule should apply to.
 
@@ -12,7 +12,7 @@ For example,
 ```julia
 @from_rrule DefaultCtx Tuple{typeof(sin), Float64}
 ```
-would define a `Tapir.rrule!!` for `sin` of `Float64`s, by calling `ChainRulesCore.rrule`.
+would define a `Mooncake.rrule!!` for `sin` of `Float64`s, by calling `ChainRulesCore.rrule`.
 
 Health warning:
 Use this function with care. It has only been tested for `Float64` arguments and arguments
@@ -29,19 +29,19 @@ macro from_rrule(ctx, sig)
     arg_type_symbols = sig.args[2:end]
 
     arg_names = map(n -> Symbol("x_$n"), eachindex(arg_type_symbols))
-    arg_types = map(t -> :(Tapir.CoDual{<:$t}), arg_type_symbols)
+    arg_types = map(t -> :(Mooncake.CoDual{<:$t}), arg_type_symbols)
     arg_exprs = map((n, t) -> :($n::$t), arg_names, arg_types)
 
     call_rrule = Expr(
         :call,
-        :(Tapir.ChainRulesCore.rrule),
-        map(n -> :(Tapir.primal($n)), arg_names)...,
+        :(Mooncake.ChainRulesCore.rrule),
+        map(n -> :(Mooncake.primal($n)), arg_names)...,
     )
 
     pb_output_names = map(n -> Symbol("dx_$(n)_inc"), eachindex(arg_names))
 
     call_pb = Expr(:(=), Expr(:tuple, pb_output_names...), :(pb(dy)))
-    incrementers = Expr(:tuple, map(b -> :(Tapir._to_rdata($b)), pb_output_names)...)
+    incrementers = Expr(:tuple, map(b -> :(Mooncake._to_rdata($b)), pb_output_names)...)
 
     pb = ExprTools.combinedef(Dict(
         :head => :function,
@@ -56,18 +56,18 @@ macro from_rrule(ctx, sig)
     rule_expr = ExprTools.combinedef(
         Dict(
             :head => :function,
-            :name => :(Tapir.rrule!!),
+            :name => :(Mooncake.rrule!!),
             :args => arg_exprs,
             :body => quote
                 y, pb = $call_rrule
                 $pb
-                return Tapir.zero_fcodual(y), pb!!
+                return Mooncake.zero_fcodual(y), pb!!
             end,
         )
     )
 
     ex = quote
-        Tapir.is_primitive(::Type{$ctx}, ::Type{$sig}) = true
+        Mooncake.is_primitive(::Type{$ctx}, ::Type{$sig}) = true
         $rule_expr
     end
     return esc(ex)

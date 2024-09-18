@@ -13,19 +13,19 @@ using
     PrettyTables,
     Random,
     ReverseDiff,
-    Tapir,
+    Mooncake,
     Test,
     Turing,
     Zygote
 
-using Tapir:
+using Mooncake:
     CoDual,
     generate_hand_written_rrule!!_test_cases,
     generate_derived_rrule!!_test_cases,
     TestUtils,
     _typeof
 
-using Tapir.TestUtils: _deepcopy, to_benchmark
+using Mooncake.TestUtils: _deepcopy, to_benchmark
 
 function zygote_to_benchmark(ctx, x::Vararg{Any, N}) where {N}
     out, pb = Zygote._pullback(ctx, x...)
@@ -82,8 +82,8 @@ _broadcast_sin_cos_exp(x::AbstractArray{<:Real}) = sum(sin.(cos.(exp.(x))))
 # about all of the operations.
 _simple_mlp(W2, W1, Y, X) = sum(abs2, Y - W2 * map(x -> x * (0 <= x), W1 * X))
 
-# Only Zygote and Tapir can actually handle this. Note that Tapir only has rules for BLAS
-# and LAPACK stuff, not explicit rules for things like the squared euclidean distance.
+# Only Zygote and Mooncake can actually handle this. Note that Mooncake only has rules for
+# BLAS and LAPACK stuff, not explicit rules for things like the squared euclidean distance.
 # Consequently, Zygote is at a major advantage.
 _gp_lml(x, y, s) = logpdf(GP(SEKernel())(x, s), y)
 
@@ -182,12 +182,12 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
                 evals=1,
             )
 
-            # Benchmark AD via Tapir.
-            @info "Tapir"
-            rule = Tapir.build_rrule(args...)
+            # Benchmark AD via Mooncake.
+            @info "Mooncake"
+            rule = Mooncake.build_rrule(args...)
             coduals = map(x -> x isa CoDual ? x : zero_codual(x), args)
             to_benchmark(rule, coduals...)
-            suite["tapir"] = Chairmarks.benchmark(
+            suite["mooncake"] = Chairmarks.benchmark(
                 () -> (rule, coduals),
                 identity,
                 a -> to_benchmark(a[1], a[2]...),
@@ -234,16 +234,16 @@ end
 function combine_results(result, tag, _range, default_range)
     d = result[2]
     primal_time = minimum(d["primal"]).time
-    tapir_time = minimum(d["tapir"]).time
+    mooncake_time = minimum(d["mooncake"]).time
     zygote_time = in("zygote", keys(d)) ? minimum(d["zygote"]).time : missing
     rd_time = in("rd", keys(d)) ? minimum(d["rd"]).time : missing
     ez_time = in("enzyme", keys(d)) ? minimum(d["enzyme"]).time : missing
-    fallback_tag = string((result[1][1], map(Tapir._typeof, result[1][2:end])...))
+    fallback_tag = string((result[1][1], map(Mooncake._typeof, result[1][2:end])...))
     return (
         tag=tag === nothing ? fallback_tag : tag,
         primal_time=primal_time,
-        tapir_time=tapir_time,
-        Tapir=tapir_time / primal_time,
+        mooncake_time=mooncake_time,
+        Mooncake=mooncake_time / primal_time,
         zygote_time=zygote_time,
         Zygote=zygote_time / primal_time,
         rd_time=rd_time,
@@ -299,7 +299,7 @@ end
 function flag_concerning_performance(ratios)
     @testset "detect concerning performance" begin
         @testset for ratio in ratios
-            @test ratio.range.lb < ratio.Tapir < ratio.range.ub
+            @test ratio.range.lb < ratio.Mooncake < ratio.range.ub
         end
     end
 end
@@ -307,18 +307,18 @@ end
 """
     plot_ratio_histogram!(df::DataFrame)
 
-Constructs a histogram of the `tapir_ratio` field of `df`, with formatting that is
+Constructs a histogram of the `mooncake_ratio` field of `df`, with formatting that is
 well-suited to the numbers typically found in this field.
 """
 function plot_ratio_histogram!(df::DataFrame)
     bin = 10.0 .^ (-1.0:0.05:4.0)
     xlim = extrema(bin)
-    histogram(df.Tapir; xscale=:log10, xlim, bin, title="log", label="")
+    histogram(df.Mooncake; xscale=:log10, xlim, bin, title="log", label="")
 end
 
 function create_inter_ad_benchmarks()
     results = benchmark_inter_framework_rules()
-    tools = [:Tapir, :Zygote, :ReverseDiff, :Enzyme]
+    tools = [:Mooncake, :Zygote, :ReverseDiff, :Enzyme]
     df = DataFrame(results)[:, [:tag, tools...]]
 
     # Plot graph of results.

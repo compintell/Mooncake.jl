@@ -158,7 +158,7 @@ be given by `tangent_type(P)`.
 
 # Extended help
 
-The tangent types which Tapir.jl uses are quite similar in spirit to ChainRules.jl.
+The tangent types which Mooncake.jl uses are quite similar in spirit to ChainRules.jl.
 For example, tangent "vectors" for
 1. `Float64`s are `Float64`s,
 1. `Vector{Float64}`s are `Vector{Float64}`s, and
@@ -171,9 +171,9 @@ also a permissible type of tangent for any of them, and `Float32` is permissible
 `Float64`. This is a general theme in ChainRules.jl -- it intentionally declines to place
 restrictions on what type can be used to represent the tangent of a given type.
 
-Tapir.jl differs from this.
+Mooncake.jl differs from this.
 **It insists that each primal type is associated to a _single_ tangent type.**
-Furthermore, this type is _always_ given by the function `Tapir.tangent_type(primal_type)`.
+Furthermore, this type is _always_ given by the function `Mooncake.tangent_type(primal_type)`.
 
 Consider some more worked examples.
 
@@ -845,10 +845,10 @@ function tangent_test_cases()
             ((1,), NoTangent(), NoTangent(), NoTangent()),
             ((2, 3), NoTangent(), NoTangent(), NoTangent()),
             (
-                Tapir.tuple_fill(5.0, Val(N_large)),
-                Tapir.tuple_fill(6.0, Val(N_large)),
-                Tapir.tuple_fill(7.0, Val(N_large)),
-                Tapir.tuple_fill(13.0, Val(N_large)),
+                Mooncake.tuple_fill(5.0, Val(N_large)),
+                Mooncake.tuple_fill(6.0, Val(N_large)),
+                Mooncake.tuple_fill(7.0, Val(N_large)),
+                Mooncake.tuple_fill(13.0, Val(N_large)),
             ),
             (
                 (a=6.0, b=[1.0, 2.0]),
@@ -858,10 +858,10 @@ function tangent_test_cases()
             ),
             ((;), NoTangent(), NoTangent(), NoTangent()),
             (
-                NamedTuple{_names}(Tapir.tuple_fill(5.0, Val(N_large))),
-                NamedTuple{_names}(Tapir.tuple_fill(6.0, Val(N_large))),
-                NamedTuple{_names}(Tapir.tuple_fill(7.0, Val(N_large))),
-                NamedTuple{_names}(Tapir.tuple_fill(13.0, Val(N_large))),
+                NamedTuple{_names}(Mooncake.tuple_fill(5.0, Val(N_large))),
+                NamedTuple{_names}(Mooncake.tuple_fill(6.0, Val(N_large))),
+                NamedTuple{_names}(Mooncake.tuple_fill(7.0, Val(N_large))),
+                NamedTuple{_names}(Mooncake.tuple_fill(13.0, Val(N_large))),
             ),
             (
                 TestResources.TypeStableMutableStruct{Float64}(5.0, 3.0),
@@ -942,6 +942,6 @@ function tangent_test_cases()
     return vcat(
         map(x -> (false, x...), abs_test_cases),
         map(x -> (false, x), rel_test_cases),
-        map(Tapir.TestTypes.instantiate, Tapir.TestTypes.PRIMALS),
+        map(Mooncake.TestTypes.instantiate, Mooncake.TestTypes.PRIMALS),
     )
 end

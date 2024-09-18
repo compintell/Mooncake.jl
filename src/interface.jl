@@ -1,7 +1,7 @@
 """
     __value_and_pullback!!(rule, ȳ, f::CoDual, x::CoDual...)
 
-*Note:* this is not part of the public Tapir.jl interface, and may change without warning.
+*Note:* this is not part of the public Mooncake.jl interface, and may change without warning.
 
 In-place version of `value_and_pullback!!` in which the arguments have been wrapped in
 `CoDual`s. Note that any mutable data in `f` and `x` will be incremented in-place. As such,
@@ -40,7 +40,7 @@ end
 """
     __value_and_gradient!!(rule, f::CoDual, x::CoDual...)
 
-*Note:* this is not part of the public Tapir.jl interface, and may change without warning.
+*Note:* this is not part of the public Mooncake.jl interface, and may change without warning.
 
 Equivalent to `__value_and_pullback!!(rule, 1.0, f, x...)` -- assumes `f` returns a `Float64`.
 
@@ -58,8 +58,8 @@ tx = zero_tangent(x)
 ty = zero_tangent(y)
 
 # Do AD.
-Tapir.__value_and_gradient!!(
-    rule, Tapir.CoDual(f, tf), Tapir.CoDual(x, tx), Tapir.CoDual(y, ty)
+Mooncake.__value_and_gradient!!(
+    rule, Mooncake.CoDual(f, tf), Mooncake.CoDual(x, tx), Mooncake.CoDual(y, ty)
 )
 # output
 
@@ -150,10 +150,10 @@ function __create_coduals(args)
         if e isa StackOverflowError
             error(
                 "Found a StackOverFlow error when trying to wrap inputs. This often " *
-                "means that Tapir.jl has encountered a self-referential type. Tapir.jl " *
+                "means that Mooncake.jl has encountered a self-referential type. Mooncake.jl " *
                 "is not presently able to handle self-referential types, so if you are " *
                 "indeed using a self-referential type somewhere, you will need to " *
-                "refactor to avoid it if you wish to use Tapir.jl."
+                "refactor to avoid it if you wish to use Mooncake.jl."
             )
         else
             rethrow(e)

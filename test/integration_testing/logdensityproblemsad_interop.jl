@@ -9,7 +9,7 @@ test_gradient(x) = -2 .* x
 
 @testset "AD via Zygote" begin
     l = TestLogDensity2()
-    ∇l = ADgradient(Val(:Tapir), l)
+    ∇l = ADgradient(Val(:Mooncake), l)
 
     @test dimension(∇l) == 20
     @test capabilities(∇l) == LogDensityProblemsAD.LogDensityOrder(1)
@@ -20,6 +20,6 @@ test_gradient(x) = -2 .* x
         @test isapprox(logdensity_and_gradient(∇l, x)[2], test_gradient(x))
     end
 
-    @test ADgradient(ADTypes.AutoTapir(safe_mode=false), l) isa typeof(∇l)
+    @test ADgradient(ADTypes.AutoMooncake(safe_mode=false), l) isa typeof(∇l)
     @test parent(∇l) === l
 end

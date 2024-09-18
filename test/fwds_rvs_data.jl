@@ -18,19 +18,19 @@ end
         @test fdata_type(tangent_type(P)) == F
         @test rdata_type(tangent_type(P)) == R
     end
-    @testset "$(typeof(p))" for (_, p, _...) in Tapir.tangent_test_cases()
+    @testset "$(typeof(p))" for (_, p, _...) in Mooncake.tangent_test_cases()
         TestUtils.test_fwds_rvs_data(Xoshiro(123456), p)
     end
     @testset "zero_rdata_from_type checks" begin
-        @test Tapir.can_produce_zero_rdata_from_type(Vector) == true
-        @test Tapir.zero_rdata_from_type(Vector) == NoRData()
-        @test Tapir.can_produce_zero_rdata_from_type(FwdsRvsDataTestResources.Foo) == false
-        @test Tapir.can_produce_zero_rdata_from_type(Tuple{Float64, Type{Float64}})
+        @test Mooncake.can_produce_zero_rdata_from_type(Vector) == true
+        @test Mooncake.zero_rdata_from_type(Vector) == NoRData()
+        @test Mooncake.can_produce_zero_rdata_from_type(FwdsRvsDataTestResources.Foo) == false
+        @test Mooncake.can_produce_zero_rdata_from_type(Tuple{Float64, Type{Float64}})
         @test ==(
-            Tapir.zero_rdata_from_type(FwdsRvsDataTestResources.Foo),
-            Tapir.CannotProduceZeroRDataFromType(),
+            Mooncake.zero_rdata_from_type(FwdsRvsDataTestResources.Foo),
+            Mooncake.CannotProduceZeroRDataFromType(),
         )
-        @test !Tapir.can_produce_zero_rdata_from_type(Tuple)
+        @test !Mooncake.can_produce_zero_rdata_from_type(Tuple)
     end
     @testset "lazy construction checks" begin
         # Check that lazy construction is in fact lazy for some cases where performance
@@ -44,34 +44,34 @@ end
             (StructFoo, StructFoo(5.0), false),
             (StructFoo, StructFoo(5.0, randn(4)), false),
             (Type{Bool}, Bool, true),
-            (Type{Tapir.TestResources.StableFoo}, Tapir.TestResources.StableFoo, true),
+            (Type{Mooncake.TestResources.StableFoo}, Mooncake.TestResources.StableFoo, true),
             (Tuple{Float64, Float64}, (5.0, 4.0), true),
             (Tuple{Float64, Vararg{Float64}}, (5.0, 4.0, 3.0), false),
             (Type{Type{Tuple{T}} where {T}}, Type{Tuple{T}} where {T}, true),
         ]
-            L = Tapir.lazy_zero_rdata_type(P)
+            L = Mooncake.lazy_zero_rdata_type(P)
             @test fully_lazy == Base.issingletontype(typeof(lazy_zero_rdata(L, p)))
             if isconcretetype(P)
-                @inferred Tapir.instantiate(lazy_zero_rdata(L, p))
+                @inferred Mooncake.instantiate(lazy_zero_rdata(L, p))
             end
-            @test typeof(lazy_zero_rdata(L, p)) == Tapir.lazy_zero_rdata_type(P)
+            @test typeof(lazy_zero_rdata(L, p)) == Mooncake.lazy_zero_rdata_type(P)
             @test lazy_zero_rdata(p) isa LazyZeroRData{_typeof(p)}
         end
         @test isa(
-            lazy_zero_rdata(Tapir.TestResources.StableFoo),
-            LazyZeroRData{Type{Tapir.TestResources.StableFoo}},
+            lazy_zero_rdata(Mooncake.TestResources.StableFoo),
+            LazyZeroRData{Type{Mooncake.TestResources.StableFoo}},
         )
     end
     @testset "misc fdata / rdata type checking" begin
         @test(==(
-            Tapir.rdata_type(tangent_type(Tuple{Union{Float32, Float64}})),
+            Mooncake.rdata_type(tangent_type(Tuple{Union{Float32, Float64}})),
             Tuple{Union{Float32, Float64}},
         ))
         @test(==(
-            Tapir.rdata_type(tangent_type(Tuple{Union{Int32, Int}})), NoRData
+            Mooncake.rdata_type(tangent_type(Tuple{Union{Int32, Int}})), NoRData
         ))
         @test(==(
-            Tapir.rdata_type(tangent_type(
+            Mooncake.rdata_type(tangent_type(
                 Tuple{Union{Vector{Float32}, Vector{Float64}}}
             )),
             NoRData,

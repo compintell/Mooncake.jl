@@ -82,7 +82,7 @@
         TestUtils.test_tangent_type(primal_type, expected_tangent_type)
     end
 
-    @testset "$(typeof(data))" for (interface_only, data...) in Tapir.tangent_test_cases()
+    @testset "$(typeof(data))" for (interface_only, data...) in Mooncake.tangent_test_cases()
         test_tangent(Xoshiro(123456), data...; interface_only)
     end
 
@@ -167,16 +167,16 @@ end
 @testset "zero_tangent and randn_tangent" begin
     @testset "circular reference" begin
         foo = make_circular_reference_struct()
-        zt = Tapir.zero_tangent(foo)
+        zt = Mooncake.zero_tangent(foo)
         @test zt.fields.b.tangent === zt
-        rt = Tapir.randn_tangent(Xoshiro(123456), foo)
+        rt = Mooncake.randn_tangent(Xoshiro(123456), foo)
         @test rt.fields.b.tangent === rt
     end
 
     @testset "struct with non-concrete fields" begin
-        bar = Tapir.TestResources.TypeUnstableStruct(5.0, 1.0)
+        bar = Mooncake.TestResources.TypeUnstableStruct(5.0, 1.0)
         @test ==(
-            Tapir.zero_tangent(bar),
+            Mooncake.zero_tangent(bar),
             Tangent{@NamedTuple{a::Float64, b::PossiblyUninitTangent{Any}}}((a=0.0, b=PossiblyUninitTangent{Any}(0.0)))
         )
     end
@@ -185,26 +185,26 @@ end
         @testset "subarray" begin
             x = [1.0, 2.0, 3.0]
             immutable_struct = TypeUnstableStruct2(view(x, 1:2), view(x, 1:2))
-            mt = Tapir.zero_tangent(immutable_struct)
-            @test mt isa Tapir.Tangent
+            mt = Mooncake.zero_tangent(immutable_struct)
+            @test mt isa Mooncake.Tangent
             @test mt.fields.a === mt.fields.b
-            rt = Tapir.randn_tangent(Xoshiro(123456), immutable_struct)
+            rt = Mooncake.randn_tangent(Xoshiro(123456), immutable_struct)
             @test rt.fields.a === rt.fields.b
 
             mutable_struct = TypeUnstableMutableStruct2(view(x, 1:2), view(x, 1:2))
-            mt = Tapir.zero_tangent(mutable_struct)
-            @test mt isa Tapir.MutableTangent
+            mt = Mooncake.zero_tangent(mutable_struct)
+            @test mt isa Mooncake.MutableTangent
             @test mt.fields.a.fields.parent === mt.fields.b.fields.parent
-            rt = Tapir.randn_tangent(Xoshiro(123456), mutable_struct)
+            rt = Mooncake.randn_tangent(Xoshiro(123456), mutable_struct)
             @test rt.fields.a.fields.parent === rt.fields.b.fields.parent
         end
     end
 
     @testset "indirect circular reference" begin
         m = make_indirect_circular_reference_array()
-        zt = Tapir.zero_tangent(m)
+        zt = Mooncake.zero_tangent(m)
         @test zt[1][1] === zt
-        rt = Tapir.randn_tangent(Xoshiro(123456), m)
+        rt = Mooncake.randn_tangent(Xoshiro(123456), m)
         @test rt[1][1] === rt
     end
 end

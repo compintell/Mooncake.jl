@@ -1,8 +1,8 @@
-module TapirSpecialFunctionsExt
+module MooncakeSpecialFunctionsExt
 
-    using SpecialFunctions, Tapir
+    using SpecialFunctions, Mooncake
 
-    import Tapir: @from_rrule, DefaultCtx
+    import Mooncake: @from_rrule, DefaultCtx
 
     @from_rrule DefaultCtx Tuple{typeof(airyai), Float64}
     @from_rrule DefaultCtx Tuple{typeof(airyaix), Float64}

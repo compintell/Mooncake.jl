@@ -11,13 +11,13 @@ struct ClosureCacheKey
     key::Any
 end
 
-struct TICache
+struct MooncakeCache
     dict::IdDict{Core.MethodInstance, Core.CodeInstance}
 end
 
-TICache() = TICache(IdDict{Core.MethodInstance, Core.CodeInstance}())
+MooncakeCache() = MooncakeCache(IdDict{Core.MethodInstance, Core.CodeInstance}())
 
-struct TapirInterpreter{C} <: CC.AbstractInterpreter
+struct MooncakeInterpreter{C} <: CC.AbstractInterpreter
     meta # additional information
     world::UInt
     inf_params::CC.InferenceParams
@@ -25,7 +25,7 @@ struct TapirInterpreter{C} <: CC.AbstractInterpreter
     inf_cache::Vector{CC.InferenceResult}
     code_cache::TICache
     oc_cache::Dict{ClosureCacheKey, Any}
-    function TapirInterpreter(
+    function MooncakeInterpreter(
         ::Type{C};
         meta=nothing,
         world::UInt=Base.get_world_counter(),
@@ -41,38 +41,40 @@ end
 
 # Don't print out the IRCode object, because this tends to pollute the REPL. Just make it
 # clear that this is a MistyClosure, which contains an OpaqueClosure.
-Base.show(io::IO, mime::MIME"text/plain", mc::TapirInterpreter) = _show_tapir_interp(io, mime, mc)
-Base.show(io::IO, mc::TapirInterpreter) = _show_tapir_interp(io, MIME"text/plain"(), mc)
+function Base.show(io::IO, mime::MIME"text/plain", mc::MooncakeInterpreter)
+    return _show_interp(io, mime, mc)
+end
+Base.show(io::IO, mc::MooncakeInterpreter) = _show_interp(io, MIME"text/plain"(), mc)
 
-function _show_tapir_interp(io::IO, mime::MIME"text/plain", mc::TapirInterpreter)
-    print(io, "TapirInterpreter()")
+function _show_interp(io::IO, ::MIME"text/plain", ::MooncakeInterpreter)
+    print(io, "MooncakeInterpreter()")
 end
 
-TapirInterpreter() = TapirInterpreter(DefaultCtx)
+MooncakeInterpreter() = MooncakeInterpreter(DefaultCtx)
 
-# Globally cached interpreter. Should only be accessed via `get_tapir_interpreter`.
-const GLOBAL_INTERPRETER = Ref(TapirInterpreter())
+# Globally cached interpreter. Should only be accessed via `get_interpreter`.
+const GLOBAL_INTERPRETER = Ref(MooncakeInterpreter())
 
 """
-    get_tapir_interpreter()
+    get_interpreter()
 
-Returns a `TapirInterpreter` appropriate for the current world age. Will use a cached
+Returns a `MooncakeInterpreter` appropriate for the current world age. Will use a cached
 interpreter if one already exists for the current world age, otherwise creates a new one.
 
-This should be prefered over constructing a `TapirInterpreter` directly.
+This should be prefered over constructing a `MooncakeInterpreter` directly.
 """
-function get_tapir_interpreter()
+function get_interpreter()
     if GLOBAL_INTERPRETER[].world != Base.get_world_counter()
-        GLOBAL_INTERPRETER[] = TapirInterpreter()
+        GLOBAL_INTERPRETER[] = MooncakeInterpreter()
     end
     return GLOBAL_INTERPRETER[]
 end
 
-CC.InferenceParams(interp::TapirInterpreter) = interp.inf_params
-CC.OptimizationParams(interp::TapirInterpreter) = interp.opt_params
-CC.get_world_counter(interp::TapirInterpreter) = interp.world
-CC.get_inference_cache(interp::TapirInterpreter) = interp.inf_cache
-function CC.code_cache(interp::TapirInterpreter)
+CC.InferenceParams(interp::MooncakeInterpreter) = interp.inf_params
+CC.OptimizationParams(interp::MooncakeInterpreter) = interp.opt_params
+CC.get_world_counter(interp::MooncakeInterpreter) = interp.world
+CC.get_inference_cache(interp::MooncakeInterpreter) = interp.inf_cache
+function CC.code_cache(interp::MooncakeInterpreter)
     return CC.WorldView(interp.code_cache, CC.WorldRange(interp.world))
 end
 function CC.get(wvc::CC.WorldView{TICache}, mi::Core.MethodInstance, default)
@@ -94,7 +96,7 @@ _type(x::CC.PartialStruct) = x.typ
 _type(x::CC.Conditional) = Union{_type(x.thentype), _type(x.elsetype)}
 
 function CC.inlining_policy(
-    interp::TapirInterpreter{C},
+    interp::MooncakeInterpreter{C},
     @nospecialize(src),
     @nospecialize(info::CC.CallInfo),
     stmt_flag::UInt8,
@@ -117,4 +119,4 @@ function CC.inlining_policy(
     )
 end
 
-context_type(::TapirInterpreter{C}) where {C} = C
+context_type(::MooncakeInterpreter{C}) where {C} = C

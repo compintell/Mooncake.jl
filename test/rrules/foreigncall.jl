@@ -10,7 +10,7 @@
     ]
         @test_throws(
             ErrorException,
-            Tapir.rrule!!(zero_codual(Tapir._foreigncall_), zero_codual(Val(name))),
+            Mooncake.rrule!!(zero_codual(Mooncake._foreigncall_), zero_codual(Val(name))),
         )
     end
 end

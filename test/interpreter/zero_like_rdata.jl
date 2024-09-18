@@ -8,7 +8,7 @@
             Vector{Float64},
             TypeVar(:a),
         ]
-            @test Tapir.zero_like_rdata_from_type(P) isa Tapir.zero_like_rdata_type(P)
+            @test Mooncake.zero_like_rdata_from_type(P) isa Mooncake.zero_like_rdata_type(P)
         end
     end
 end

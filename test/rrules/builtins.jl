@@ -1,12 +1,12 @@
 @testset "builtins" begin
     @test_throws(
         ErrorException,
-        Tapir.rrule!!(CoDual(IntrinsicsWrappers.add_ptr, NoTangent()), 5.0, 4.0),
+        Mooncake.rrule!!(CoDual(IntrinsicsWrappers.add_ptr, NoTangent()), 5.0, 4.0),
     )
 
     @test_throws(
         ErrorException,
-        Tapir.rrule!!(CoDual(IntrinsicsWrappers.sub_ptr, NoTangent()), 5.0, 4.0),
+        Mooncake.rrule!!(CoDual(IntrinsicsWrappers.sub_ptr, NoTangent()), 5.0, 4.0),
     )
 
     @testset "_apply_iterate_equivalent with $(typeof(args))" for args in Any[
@@ -18,7 +18,7 @@
     ]
         @test ==(
             Core._apply_iterate(Base.iterate, args...),
-            Tapir._apply_iterate_equivalent(Base.iterate, args...),
+            Mooncake._apply_iterate_equivalent(Base.iterate, args...),
         )
     end
 
@@ -26,14 +26,14 @@
 
     # Unhandled built-in throws an intelligible error.
     @test_throws(
-        Tapir.MissingRuleForBuiltinException,
-        invoke(Tapir.rrule!!, Tuple{CoDual{<:Core.Builtin}}, zero_fcodual(getfield)),
+        Mooncake.MissingRuleForBuiltinException,
+        invoke(Mooncake.rrule!!, Tuple{CoDual{<:Core.Builtin}}, zero_fcodual(getfield)),
     )
 
     # Unhandled intrinsic throws an intelligible error.
     @test_throws(
-        Tapir.IntrinsicsWrappers.MissingIntrinsicWrapperException,
-        invoke(Tapir.IntrinsicsWrappers.translate, Tuple{Any}, Val(:foo)),
+        Mooncake.IntrinsicsWrappers.MissingIntrinsicWrapperException,
+        invoke(Mooncake.IntrinsicsWrappers.translate, Tuple{Any}, Val(:foo)),
     )
 
     @testset "Disable bitcast to differentiable type" begin
