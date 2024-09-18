@@ -1,30 +1,36 @@
-# Tapir
+# Mooncake
 
-[![Build Status](https://github.com/compintell/Tapir.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/compintell/Tapir.jl/actions/workflows/CI.yml?query=branch%3Amain)
-[![codecov](https://codecov.io/github/compintell/Tapir.jl/graph/badge.svg?token=NUPWTB4IAP)](https://codecov.io/github/compintell/Tapir.jl)
+[![Build Status](https://github.com/compintell/Mooncake.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/compintell/Mooncake.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![codecov](https://codecov.io/github/compintell/Mooncake.jl/graph/badge.svg?token=NUPWTB4IAP)](https://codecov.io/github/compintell/Mooncake.jl)
 [![Code Style: Blue](https://img.shields.io/badge/code%20style-blue-4495d1.svg)](https://github.com/invenia/BlueStyle)
 [![ColPrac: Contributor's Guide on Collaborative Practices for Community Packages](https://img.shields.io/badge/ColPrac-Contributor's%20Guide-blueviolet)](https://github.com/SciML/ColPrac)
-[![](https://img.shields.io/badge/docs-blue.svg)](https://compintell.github.io/Tapir.jl/dev)
+[![](https://img.shields.io/badge/docs-blue.svg)](https://compintell.github.io/Mooncake.jl/dev)
 
-The goal of the `Tapir.jl` project is to produce a reverse-mode AD package which is written entirely in Julia, which improves over both `ReverseDiff.jl` and `Zygote.jl` in several ways, and is competitive with `Enzyme.jl`.
+The goal of the `Mooncake.jl` project is to produce a reverse-mode AD package which is written entirely in Julia, which improves over both `ReverseDiff.jl` and `Zygote.jl` in several ways, and is competitive with `Enzyme.jl`.
+
+## Note on renaming
+
+On 18/09/2024 this package was renamed from `Tapir.jl` to `Mooncake.jl`.
+The last version until the name `Tapir.jl` was version 0.2.51.
+Upon renaming, the version was bumped to 0.3.0.
 
 ## Note on project status
 
-`Tapir.jl` is under active development.
+`Mooncake.jl` is under active development.
 You should presently expect releases involving breaking changes on a semi-regular basis.
-We are trying to keep this README as up to date as possible, particularly with regards to the best examples of code to look at to understand how to use Tapir.jl.
-If you encounter a new version of Tapir.jl in the wild, please consult this README for the most up-to-date advice.
+We are trying to keep this README as up to date as possible, particularly with regards to the best examples of code to look at to understand how to use Mooncake.jl.
+If you encounter a new version of Mooncake.jl in the wild, please consult this README for the most up-to-date advice.
 
 # Getting Started
 
-There are several ways to interact with Tapir.jl.
+There are several ways to interact with Mooncake.jl.
 The one that we recommend people begin with is [DifferentiationInterface.jl](https://github.com/gdalle/DifferentiationInterface.jl/). For example, use it as follows to compute the gradient of a function mapping a `Vector{Float64}` to `Float64`.
 ```julia
 using DifferentiationInterface
-import Tapir
+import Mooncake
 
 f(x) = sum(abs2, x)
-backend = AutoTapir()
+backend = AutoMooncake()
 x = ones(3)
 extras = prepare_gradient(f, backend, x)
 gradient(f, backend, x, extras)
@@ -32,11 +38,11 @@ gradient(f, backend, x, extras)
 You should expect that the first time you run `gradient` that it will take a little bit of time, but subsequent runs should be fast.
 
 We are committed to ensuring support for DifferentiationInterface, which is why we recommend using that.
-If you are interested in slightly more flexible functionality, you should consider `Tapir.value_and_gradient!!`. See its docstring for more info.
+If you are interested in slightly more flexible functionality, you should consider `Mooncake.value_and_gradient!!`. See its docstring for more info.
 
 # How it works
 
-`Tapir.jl` is based around a function `rrule!!` (which computes vector-Jacobian products (VJPs)) and a related function, `build_rrule` (which builds functions semantically identical to `rrule!!`).
+`Mooncake.jl` is based around a function `rrule!!` (which computes vector-Jacobian products (VJPs)) and a related function, `build_rrule` (which builds functions semantically identical to `rrule!!`).
 These VJPs can, for example, be used to compute gradients.
 `rrule!!` is similar to ChainRules' `rrule` and Zygote's `_pullback`, but supports functions which mutate (modify) their arguments, in addition to those that do not, and immediately increments (co)tangents.
 It has, perhaps unsurprisingly, wound up looking quite similar to the rule system in Enzyme.
@@ -62,7 +68,7 @@ Thus you should equate `rrule!!`'s support for mutation with good support for ex
 Conversely, you should equate `Zygote.jl`'s / `ReverseDiff.jl`'s patchy support for mutation with patchy support for existing code.
 
 `rrule!!`s impose no constraints on the types which can be operated on, as with `ChainRules`'s `rrule` and `Zygote`'s `_pullback`.
-Consequently, there is in principle nothing to prevent `Tapir.jl` from operating on any type, for example, structured arrays, GPU arrays, and complicated `struct`s / `mutable struct`s.
+Consequently, there is in principle nothing to prevent `Mooncake.jl` from operating on any type, for example, structured arrays, GPU arrays, and complicated `struct`s / `mutable struct`s.
 
 
 ### Correctness and Testing
@@ -83,7 +89,7 @@ This contrasts with e.g. `ReverseDiff.jl`'s compiled tape, which can give silent
 
 ### Performance
 
-Hand-written `rrule!!`s have excellent performance, provided that they have been written well (most of the hand-written rules in `Tapir.jl` have excellent performance, but some require optimisation. Doing this just requires investing some time).
+Hand-written `rrule!!`s have excellent performance, provided that they have been written well (most of the hand-written rules in `Mooncake.jl` have excellent performance, but some require optimisation. Doing this just requires investing some time).
 Consequently, whether or not the overall AD system has good performance is largely a question of how much overhead is associated to the mechanism by which hand-written `rrules!!`s are algorithmically composed.
 
 ~~At present (11/2023), we do _not_ do this in a performant way, but this will change.~~
@@ -95,7 +101,7 @@ Additionally, the strategy of immediately incrementing (co)tangents resolves lon
 
 ### Written entirely in Julia
 
-`Tapir.jl` is written entirely in Julia.
+`Mooncake.jl` is written entirely in Julia.
 This sits in contrast to `Enzyme.jl`, which targets LLVM and is primarily written in C++.
 These two approaches entail different tradeoffs.
 
@@ -104,8 +110,10 @@ These two approaches entail different tradeoffs.
 Before an initial release, this package was called `Taped.jl`, but that name ceased to be helpful when we stopped using a classic "Wengert list"-style type to implement AD.
 For about 48 hours is was called `Phi.jl`, but the community guidelines state that the name of packages in the general registry should generally be at least 5 characters in length.
 
-Disambiguation: when choosing the name `Tapir.jl` we were only vaguely aware of other work [of the same name](https://github.com/wsmoses/Tapir-LLVM), and didn't feel that it presented a serious name clash as it isn't AD-specific or a Julia project.
-As it turns out, there has been significant work attempting to integrate the ideas from this work into the [Julia compiler](https://github.com/JuliaLang/julia/pull/39773), so it is possible that this package name _may_ change again at _some_ point in the future.
+We then chose `Tapir.jl`, and didn't initially feel that other work [of the same name](https://github.com/wsmoses/Tapir-LLVM) presented a serious name clash, as it isn't AD-specific or a Julia project.
+As it turns out, there has been significant work attempting to integrate the ideas from this work into the [Julia compiler](https://github.com/JuliaLang/julia/pull/39773), so the clash is something of a problem.
+
+We finally settled on `Mooncake.jl`. Hopefully this name will stick.
 
 # Project Status
 
@@ -119,14 +127,14 @@ We aim to reach the maintenance phase of the project before 01/06/2024.
 
 *Update: (30/04/2024)*
 Phase 2 continues!
-We are now finding that `Tapir.jl` comfortably outperforms compiled `ReverseDiff.jl` on type-stable code in all of the situations we have tested.
+We are now finding that `Mooncake.jl` comfortably outperforms compiled `ReverseDiff.jl` on type-stable code in all of the situations we have tested.
 Optimising to get similar performance to `Enzyme.jl` is an on-going process.
 
 *Update: (22/03/2024)*
 ~~Phase 2 is now further along.~~
-~~`Tapir.jl` now uses something which could reasonably be described as a source-to-source system to perform AD.~~
+~~`Mooncake.jl` now uses something which could reasonably be described as a source-to-source system to perform AD.~~
 ~~At present the performance of this system is not as good as that of Enzyme, but often beats compiled ReverseDiff, and comfortably beats Zygote in any situations involving dynamic control flow.~~
-~~The present focus is on dealing with some remaining performance limitations that should make `Tapir.jl`'s performance much closer to that of Enzyme, and consistently beat ReverseDiff on a range of benchmarks.~~
+~~The present focus is on dealing with some remaining performance limitations that should make `Mooncake.jl`'s performance much closer to that of Enzyme, and consistently beat ReverseDiff on a range of benchmarks.~~
 ~~Fortunately, dealing with these performance limitations necessitates simplifying the internals substantially.~~
 
 *Update: (16/01/2024)*
@@ -155,7 +163,7 @@ Please be aware that by "performant" we mean similar or better performance than 
 
 ### What won't work
 
-While `Tapir.jl` should now work on a very large subset of the language, there remain things that you should expect not to work. A non-exhaustive list of things to bear in mind includes:
+While `Mooncake.jl` should now work on a very large subset of the language, there remain things that you should expect not to work. A non-exhaustive list of things to bear in mind includes:
 1. It is always necessary to produce hand-written rules for `ccall`s (and, more generally, foreigncall nodes). We have rules for many `ccall`s, but not all. If you encounter a foreigncall without a hand-written rule, you should get an informative error message which tells you what is going on and how to deal with it.
-1. Builtins which require rules. The vast majority of them have rules now, but some don't. ~~Notably, `apply_iterate` does not have a rule, so `Tapir.jl` cannot currently AD through type-unstable splatting -- someone should resolve this.~~ `Core._apply_iterate` should now work correctly.
+1. Builtins which require rules. The vast majority of them have rules now, but some don't. ~~Notably, `apply_iterate` does not have a rule, so `Mooncake.jl` cannot currently AD through type-unstable splatting -- someone should resolve this.~~ `Core._apply_iterate` should now work correctly.
 1. Anything involving tasks / threading -- we have no thread safety guarantees and, at the time of writing, I'm not entirely sure what error you will find if you attempt to AD through code which uses Julia's task / thread system. The same applies to distributed computing. These limitations ought to be possible to resolve.

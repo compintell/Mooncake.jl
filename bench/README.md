@@ -1,10 +1,10 @@
 # Benchmarking
 
 There are two flavours of benchmarks implemented in `run_benchmarks.jl`.
-One is a set of pass / fail tests designed to check that large performance regressions are avoided in `Tapir.jl`.
-The other is a set of comparisons between a variety of frameworks -- this set is designed to give a rough sense of where `Tapir.jl` stands in comparison to other AD frameworks, and the results should not be thought of as pass / fail tests.
+One is a set of pass / fail tests designed to check that large performance regressions are avoided in `Mooncake.jl`.
+The other is a set of comparisons between a variety of frameworks -- this set is designed to give a rough sense of where `Mooncake.jl` stands in comparison to other AD frameworks, and the results should not be thought of as pass / fail tests.
 
-## Tapir-Only Benchmarking
+## Mooncake-Only Benchmarking
 
 The benchmarking runs as part of CI, and evaluates a sequence of pass / fail tests.
 
@@ -21,9 +21,9 @@ to run the benchmarks which test the performance of AD. This will produce a `Dat
 containing a run-down of the results. It has the following columns:
 1. `tag`: a `String` with an automatically generated name for the test
 1. `primal_time`: the time taken to run the original code
-1. `tapir_time`: the time is takes `Tapir.jl` to AD the code
-1. `Tapir`: `tapir_time / primal_time`
-1. `range`: a named tuple with fields `lb` and `ub` specifying the acceptable range of values for `Tapir.jl`.
+1. `moon_time`: the time is takes `Mooncake.jl` to AD the code
+1. `Mooncake`: `moon_time / primal_time`
+1. `range`: a named tuple with fields `lb` and `ub` specifying the acceptable range of values for `Mooncake.jl`.
 
 From here you can look at whatever properties of the results you are interested in.
 
@@ -33,7 +33,7 @@ Note that the types of all of the columns are very simple, so it is fine to writ
 CSV.write("file_name.csv", df)
 ```
 
-Additionally, the convenience function `plot_ratio_histogram!` can be used to produce a histogram of `Tapir.jl` with formatting which is suited to this field. Call it as follows:
+Additionally, the convenience function `plot_ratio_histogram!` can be used to produce a histogram of `Mooncake.jl` with formatting which is suited to this field. Call it as follows:
 ```julia
 derived_results = benchmark_derived_rrules!!(Xoshiro)
 df = DataFrame(df)
@@ -42,7 +42,7 @@ plot_ratio_histogram!(df)
 
 ## Inter-framework Benchmarking
 
-This comprises a small suite of functions that we AD using `Tapir.jl`, `Zygote.jl`, `ReverseDiff.jl`, and `Enzyme.jl`.
+This comprises a small suite of functions that we AD using `Mooncake.jl`, `Zygote.jl`, `ReverseDiff.jl`, and `Enzyme.jl`.
 The primary purpose of this suite of benchmarks is to ensure that we're regularly comparing the performance of a range of reverse-mode ADs on a set of problems which are known to stretch them in various ways.
 For any given function in the suite, some frameworks might have rules for it, and some not.
 For example, `Zygote.jl` only achieves good performance on any of test cases because it has many rules.

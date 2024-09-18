@@ -39,7 +39,7 @@
 
         rule = build_rrule(identity, (5.0, 4.0))
         @test_throws(
-            Tapir.ValueAndGradientReturnTypeError,
+            Mooncake.ValueAndGradientReturnTypeError,
             value_and_gradient!!(rule, identity, (5.0, 4.0)),
         )
     end

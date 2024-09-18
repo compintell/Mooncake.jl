@@ -1,12 +1,12 @@
 # Known Limitations
 
-Tapir.jl has a number of known qualitative limitations, which we document here.
+Mooncake.jl has a number of known qualitative limitations, which we document here.
 
 ## Mutation of Global Variables
 
 ```@meta
 DocTestSetup = quote
-    using Tapir
+    using Mooncake
 end
 ```
 
@@ -26,9 +26,9 @@ For some technical reasons that are beyond the scope of this section, this packa
 `foo` is the identity function, so it should have gradient `1.0`.
 However, if you differentiate this example, you'll see:
 ```jldoctest bad_globalref
-julia> rule = Tapir.build_rrule(foo, 2.0);
+julia> rule = Mooncake.build_rrule(foo, 2.0);
 
-julia> Tapir.value_and_gradient!!(rule, foo, 2.0)
+julia> Mooncake.value_and_gradient!!(rule, foo, 2.0)
 (2.0, (NoTangent(), 0.0))
 ```
 Observe that while it has correctly computed the identity function, the gradient is zero.
@@ -37,7 +37,7 @@ The takehome: do not attempt to differentiate functions which modify global stat
 
 ## Circular References
 
-To a large extent, Tapir.jl does not presently support circular references in an automatic fashion.
+To a large extent, Mooncake.jl does not presently support circular references in an automatic fashion.
 It is generally possible to hand-write solutions, so we explain some of the problems here, and the general approach to resolving them.
 
 ### Tangent Types
@@ -119,7 +119,7 @@ However, we cannot get any of this context from the pointer itself -- by just lo
 
 Recall that the tangent to a pointer is another pointer:
 ```jldoctest
-julia> Tapir.tangent_type(Ptr{Float64})
+julia> Mooncake.tangent_type(Ptr{Float64})
 Ptr{Float64}
 ```
 Plainly I cannot implement a method of `zero_tangent` for `Ptr{Float64}` because I don't know how much memory to allocate.
@@ -131,8 +131,8 @@ function foo(x::Vector{Float64})
     return unsafe_load(p)
 end
 
-rule = build_rrule(get_tapir_interpreter(), Tuple{typeof(foo), Vector{Float64}})
-Tapir.value_and_gradient!!(rule, foo, [5.0, 4.0])
+rule = build_rrule(get_interpreter(), Tuple{typeof(foo), Vector{Float64}})
+Mooncake.value_and_gradient!!(rule, foo, [5.0, 4.0])
 
 # output
 (4.0, (NoTangent(), [0.0, 1.0]))
@@ -142,11 +142,11 @@ _**The Solution**_
 
 This is only really a problem for tangent / fdata / rdata generation functionality, such as `zero_tangent`.
 As a work-around, AD testing functionality permits users to pass in `CoDual`s.
-So if you are testing something involving a pointer, you will need to construct its tangent yourself, and pass a `CoDual` to e.g. `Tapir.TestUtils.test_rule`.
+So if you are testing something involving a pointer, you will need to construct its tangent yourself, and pass a `CoDual` to e.g. `Mooncake.TestUtils.test_rule`.
 
 While pointers tend to be a low-level implementation detail in Julia code, you could in principle actually be interested in differentiating a function of a pointer.
-In this case, you will not be able to use `Tapir.value_and_gradient!!` as this requires the use of `zero_tangent`.
-Instead, you will need to use lower-level (internal) functionality, such as `Tapir.__value_and_gradient!!`, or use the rule interface directly.
+In this case, you will not be able to use `Mooncake.value_and_gradient!!` as this requires the use of `zero_tangent`.
+Instead, you will need to use lower-level (internal) functionality, such as `Mooncake.__value_and_gradient!!`, or use the rule interface directly.
 
 Honestly, your best bet is just to avoid differentiating functions whose arguments are pointers if you can.
 

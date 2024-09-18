@@ -94,7 +94,7 @@
         input_addr_map = populate_address_map(x, x̄)
         f_f̄ = CoDual(f, zero_tangent(f))
         x_x̄ = map(CoDual, x, x̄)
-        y_ȳ, _ = Tapir.rrule!!(f_f̄, x_x̄...)
+        y_ȳ, _ = Mooncake.rrule!!(f_f̄, x_x̄...)
         z = (x..., primal(y_ȳ))
         z̄ = (x̄..., tangent(y_ȳ))
         @test_throws AssertionError populate_address_map(z, z̄)

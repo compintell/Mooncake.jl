@@ -1,4 +1,4 @@
-module Tapir
+module Mooncake
 
 const CC = Core.Compiler
 
@@ -45,7 +45,7 @@ The second element contains the pullback, which runs the reverse-pass. It maps f
 the rdata associated to `y` to the rdata associated to `f` and each `x`.
 
 ```jldoctest
-using Tapir: zero_fcodual, CoDual, NoFData, rrule!!
+using Mooncake: zero_fcodual, CoDual, NoFData, rrule!!
 y, pb!! = rrule!!(zero_fcodual(sin), CoDual(5.0, NoFData()))
 pb!!(1.0)
 
@@ -116,6 +116,6 @@ export
     rdata_type,
     fdata,
     rdata,
-    get_tapir_interpreter
+    get_interpreter
 
 end

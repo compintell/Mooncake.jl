@@ -1,6 +1,6 @@
-# Tapir.jl's Rule System
+# Mooncake.jl's Rule System
 
-Tapir.jl's approach to AD is recursive.
+Mooncake.jl's approach to AD is recursive.
 It has a single specification for _what_ it means to differentiate a Julia callable, and basically two approaches to achieving this.
 This section of the documentation explains the former.
 
@@ -253,7 +253,7 @@ _**Functionality**_
 
 This description should leave you with (at least) a couple of questions.
 What is "rdata", and what is "the correct place" to put the results of applying the adjoint of the derivative?
-In order to address these, we need to discuss the types that Tapir.jl uses to represent the results of AD, and to propagate results backwards on the reverse pass.
+In order to address these, we need to discuss the types that Mooncake.jl uses to represent the results of AD, and to propagate results backwards on the reverse pass.
 
 
 
@@ -283,14 +283,14 @@ _**FData and RData**_
 
 While tangents are the things used to represent gradients and are what high-level interfaces will return, they are not what gets propagated forwards and backwards by rules during AD.
 
-Rather, during AD, Tapir.jl makes a fundamental distinction between data which is identified by its address in memory (`Array`s, `mutable struct`s, etc), and data which is identified by its value (is-bits types such as `Float64`, `Int`, and `struct`s thereof).
+Rather, during AD, Mooncake.jl makes a fundamental distinction between data which is identified by its address in memory (`Array`s, `mutable struct`s, etc), and data which is identified by its value (is-bits types such as `Float64`, `Int`, and `struct`s thereof).
 In particular, memory which is identified by its address gets assigned a unique location in memory in which its gradient lives (that this "unique gradient address" system is essential will become apparent when we discuss aliasing later on).
 Conversely, the gradient w.r.t. a value type resides in another value type.
 
 The following docstring provides the best in-depth explanation.
 
 ```@docs
-Tapir.fdata_type(T)
+Mooncake.fdata_type(T)
 ```
 
 
@@ -341,7 +341,7 @@ where ``\mathbf{1}`` is the vector of length ``N`` in which each element is equa
 (Observe that this agrees with the result we derived earlier for functions which don't mutate their arguments).
 
 Now that we know what the adjoint is, we'll write down the `rrule!!`, and then explain what is going on in terms of the adjoint.
-This hand-written implementation is to aid your understanding -- Tapir.jl should be relied upon to generate this code automatically in practice.
+This hand-written implementation is to aid your understanding -- Mooncake.jl should be relied upon to generate this code automatically in practice.
 ```julia
 function rrule!!(::CoDual{typeof(foo)}, x::CoDual{Tuple{Float64, Vector{Float64}}})
     dx_fdata = x.tangent[2]
@@ -380,7 +380,7 @@ _**Reminder**_: the first element of the tuple returned by `dfoo_adjoint` is the
 
 # Testing
 
-Tapir.jl has an almost entirely automated system for testing rules -- `Tapir.TestUtils.test_rule`.
+Mooncake.jl has an almost entirely automated system for testing rules -- `Mooncake.TestUtils.test_rule`.
 You should absolutely make use of these when writing rules.
 
 TODO: improve docstring for testing functionality.
@@ -390,10 +390,10 @@ TODO: improve docstring for testing functionality.
 # Summary
 
 In this section we have covered the rule system.
-Every callable object / function in the Julia language is differentiated using rules with this interface, whether they be hand-written `rrule!!`s, or rules derived by Tapir.jl.
+Every callable object / function in the Julia language is differentiated using rules with this interface, whether they be hand-written `rrule!!`s, or rules derived by Mooncake.jl.
 
-At this point you should be equipped with enough information to understand what a rule in Tapir.jl does, and how you can write your own ones.
-Later sections will explain how Tapir.jl goes about deriving rules itself in a recursive manner, and introduce you to some of the internals.
+At this point you should be equipped with enough information to understand what a rule in Mooncake.jl does, and how you can write your own ones.
+Later sections will explain how Mooncake.jl goes about deriving rules itself in a recursive manner, and introduce you to some of the internals.
 
 
 
@@ -406,7 +406,7 @@ Later sections will explain how Tapir.jl goes about deriving rules itself in a r
 
 ### Why Uniqueness of Type For Tangents / FData / RData?
 
-Why does Tapir.jl insist that each primal type `P` be paired with a single tangent type `T`, as opposed to being more permissive.
+Why does Mooncake.jl insist that each primal type `P` be paired with a single tangent type `T`, as opposed to being more permissive.
 There are a few notable reasons:
 1. To provide a precise interface. Rules pass fdata around on the forwards pass and rdata on the reverse pass -- being able to make strong assumptions about the type of the fdata / rdata given the primal type makes implementing rules much easier in practice.
 1. Conditional type stability. We wish to have a high degree of confidence that if the primal code is type-stable, then the AD code will also be. It is straightforward to construct type stable primal codes which have type-unstable forwards and reverse passes if you permit there to be more than one fdata / rdata type for a given primal. So while uniqueness is certainly not sufficient on its own to guarantee conditional type stability, it is probably necessary in general.

@@ -1,5 +1,5 @@
 <!--
-    Thank you for opening a pull request to Tapir.jl!
+    Thank you for opening a pull request to Mooncake.jl!
     Please note that this project operates the following policy: any time a PR is merged
     which modifies code in the src directory, a release must be made.
 

@@ -12,7 +12,7 @@
         CoDual{Type{Type{Tuple{T}} where {T}}, NoTangent},
     )
     @test ==(
-        Tapir.fcodual_type(Type{Tuple{T}} where {T}),
+        Mooncake.fcodual_type(Type{Tuple{T}} where {T}),
         CoDual{Type{Type{Tuple{T}} where {T}}, NoFData},
     )
     @test(==(

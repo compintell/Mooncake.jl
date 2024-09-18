@@ -13,9 +13,9 @@ end
         f, args... = fargs
         insts = only(code_typed(f, _typeof(args)))[1].code
     
-        # Use Tapir.ircode to build an `IRCode`.
+        # Use Mooncake.ircode to build an `IRCode`.
         argtypes = Any[map(_typeof, fargs)...]
-        ir = Tapir.ircode(insts, argtypes)
+        ir = Mooncake.ircode(insts, argtypes)
 
         # Check the validity of the `IRCode`, and that an OpaqueClosure constructed using it
         # gives the same answer as the original function.
@@ -25,7 +25,7 @@ end
     @testset "infer_ir!" begin
 
         # Generate IR without any types. 
-        ir = Tapir.ircode(
+        ir = Mooncake.ircode(
             Any[
                 Expr(:call, GlobalRef(Base, :sin), Argument(2)),
                 Expr(:call, cos, SSAValue(1)),
@@ -35,7 +35,7 @@ end
         )
 
         # Run inference and check that the types are as expected.
-        ir = Tapir.infer_ir!(ir)
+        ir = Mooncake.infer_ir!(ir)
         @test ir.stmts.type[1] == Float64
         @test ir.stmts.type[2] == Float64
 
@@ -43,13 +43,15 @@ end
         @test Core.OpaqueClosure(ir)(5.0) == cos(sin(5.0))
     end
     @testset "unhandled_feature" begin
-        @test_throws Tapir.UnhandledLanguageFeatureException Tapir.unhandled_feature("foo")
+        @test_throws(
+            Mooncake.UnhandledLanguageFeatureException, Mooncake.unhandled_feature("foo")
+        )
     end
     @testset "inc_args" begin
-        @test Tapir.inc_args(Expr(:call, sin, Argument(4))) == Expr(:call, sin, Argument(5))
-        @test Tapir.inc_args(ReturnNode(Argument(2))) == ReturnNode(Argument(3))
+        @test Mooncake.inc_args(Expr(:call, sin, Argument(4))) == Expr(:call, sin, Argument(5))
+        @test Mooncake.inc_args(ReturnNode(Argument(2))) == ReturnNode(Argument(3))
         id = ID()
-        @test Tapir.inc_args(IDGotoIfNot(Argument(1), id)) == IDGotoIfNot(Argument(2), id)
-        @test Tapir.inc_args(IDGotoNode(id)) == IDGotoNode(id)
+        @test Mooncake.inc_args(IDGotoIfNot(Argument(1), id)) == IDGotoIfNot(Argument(2), id)
+        @test Mooncake.inc_args(IDGotoNode(id)) == IDGotoNode(id)
     end
 end

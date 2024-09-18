@@ -2,8 +2,8 @@
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 DocumenterCitations = "daee34ce-89f3-4625-b898-19384cb65244"
-Tapir = "07d77754-e150-4737-8c94-cd238a1fb45b"
+Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
 
 [compat]
 Documenter = "1"
-Tapir = "0.2.13"
+Mooncake = "0.3.0"

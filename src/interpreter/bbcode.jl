@@ -817,7 +817,7 @@ A block is unreachable if either:
 
 For example, consider the following IR:
 ```jldoctest remove_unreachable_blocks
-julia> ir = Tapir.ircode(
+julia> ir = Mooncake.ircode(
            Any[Core.ReturnNode(nothing), Expr(:call, sin, 5), Core.ReturnNode(Core.SSAValue(2))],
            Any[Any, Any, Any],
        );
@@ -825,7 +825,7 @@ julia> ir = Tapir.ircode(
 There is no possible way to reach the second basic block (lines 2 and 3). Applying this
 function will therefore remove it, yielding the following:
 ```jldoctest remove_unreachable_blocks
-julia> Tapir.IRCode(Tapir.remove_unreachable_blocks(Tapir.BBCode(ir)))
+julia> Mooncake.IRCode(Mooncake.remove_unreachable_blocks(Mooncake.BBCode(ir)))
 1 1 ─     return nothing
 ```
 """

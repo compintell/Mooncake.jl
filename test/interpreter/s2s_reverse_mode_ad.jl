@@ -16,7 +16,7 @@ end
 @testset "s2s_reverse_mode_ad" begin
     @testset "SharedDataPairs" begin
         m = SharedDataPairs()
-        id = Tapir.add_data!(m, 5.0)
+        id = Mooncake.add_data!(m, 5.0)
         @test length(m.pairs) == 1
         @test m.pairs[1][1] == id
         @test m.pairs[1][2] == 5.0
@@ -30,23 +30,23 @@ end
             id_ssa_2 => CC.NewInstruction(nothing, Any),
         )
         is_used_dict = Dict{ID, Bool}(id_ssa_1 => true, id_ssa_2 => true)
-        rdata_ref = Ref{Tuple{map(Tapir.lazy_zero_rdata_type, (Float64, Int))...}}()
-        info = ADInfo(get_tapir_interpreter(), arg_types, ssa_insts, is_used_dict, false, rdata_ref)
+        rdata_ref = Ref{Tuple{map(Mooncake.lazy_zero_rdata_type, (Float64, Int))...}}()
+        info = ADInfo(get_interpreter(), arg_types, ssa_insts, is_used_dict, false, rdata_ref)
 
         # Verify that we can access the interpreter and terminator block ID.
-        @test info.interp isa Tapir.TapirInterpreter
+        @test info.interp isa Mooncake.MooncakeInterpreter
 
         # Verify that we can get the type associated to Arguments, IDs, and others.
         global ___x = 5.0
         global ___y::Float64 = 5.0
-        @test Tapir.get_primal_type(info, Argument(1)) == Float64
-        @test Tapir.get_primal_type(info, Argument(2)) == Int
-        @test Tapir.get_primal_type(info, id_ssa_1) == Float64
-        @test Tapir.get_primal_type(info, GlobalRef(Base, :sin)) == typeof(sin)
-        @test Tapir.get_primal_type(info, GlobalRef(Main, :___x)) == Any
-        @test Tapir.get_primal_type(info, GlobalRef(Main, :___y)) == Float64
-        @test Tapir.get_primal_type(info, 5) == Int
-        @test Tapir.get_primal_type(info, QuoteNode(:hello)) == Symbol
+        @test Mooncake.get_primal_type(info, Argument(1)) == Float64
+        @test Mooncake.get_primal_type(info, Argument(2)) == Int
+        @test Mooncake.get_primal_type(info, id_ssa_1) == Float64
+        @test Mooncake.get_primal_type(info, GlobalRef(Base, :sin)) == typeof(sin)
+        @test Mooncake.get_primal_type(info, GlobalRef(Main, :___x)) == Any
+        @test Mooncake.get_primal_type(info, GlobalRef(Main, :___y)) == Float64
+        @test Mooncake.get_primal_type(info, 5) == Int
+        @test Mooncake.get_primal_type(info, QuoteNode(:hello)) == Symbol
     end
     @testset "ADStmtInfo" begin
         # If the ID passes as the comms channel doesn't appear in the stmts for the forwards
@@ -60,7 +60,7 @@ end
         id_line_1 = ID()
         id_line_2 = ID()
         info = ADInfo(
-            get_tapir_interpreter(),
+            get_interpreter(),
             Dict{Argument, Any}(Argument(1) => typeof(sin), Argument(2) => Float64),
             Dict{ID, CC.NewInstruction}(
                 id_line_1 => new_inst(Expr(:invoke, nothing, cos, Argument(2)), Float64),
@@ -68,7 +68,7 @@ end
             ),
             Dict{ID, Bool}(id_line_1=>true, id_line_2=>true),
             false,
-            Ref{Tuple{map(Tapir.lazy_zero_rdata_type, (typeof(sin), Float64))...}}(),
+            Ref{Tuple{map(Mooncake.lazy_zero_rdata_type, (typeof(sin), Float64))...}}(),
         )
 
         @testset "Nothing" begin
@@ -91,7 +91,7 @@ end
                 stmts = make_ad_stmts!(ReturnNode(Argument(2)), line, info)
                 @test only(stmts.fwds)[2].stmt == ReturnNode(Argument(3))
                 @test Meta.isexpr(only(stmts.rvs)[2].stmt, :call)
-                @test only(stmts.rvs)[2].stmt.args[1] == Tapir.increment_ref!
+                @test only(stmts.rvs)[2].stmt.args[1] == Mooncake.increment_ref!
             end
             @testset "literal" begin
                 stmt_info = make_ad_stmts!(ReturnNode(5.0), line, info)
@@ -133,7 +133,7 @@ end
         @testset "PiNode" begin
             @testset "unhandled case" begin
                 @test_throws(
-                    Tapir.UnhandledLanguageFeatureException,
+                    Mooncake.UnhandledLanguageFeatureException,
                     make_ad_stmts!(PiNode(5.0, Float64), ID(), info),
                 )
             end
@@ -148,40 +148,40 @@ end
             @testset "non-const" begin
                 global_ref = GlobalRef(S2SGlobals, :non_const_global)
                 stmt_info = make_ad_stmts!(global_ref, ID(), info)
-                @test Tapir.TestResources.non_const_global_ref(5.0) == 5.0 # run primal
-                @test stmt_info isa Tapir.ADStmtInfo
+                @test Mooncake.TestResources.non_const_global_ref(5.0) == 5.0 # run primal
+                @test stmt_info isa Mooncake.ADStmtInfo
                 @test Meta.isexpr(last(stmt_info.fwds)[2].stmt, :call)
-                @test last(stmt_info.fwds)[2].stmt.args[1] == Tapir.__verify_const
+                @test last(stmt_info.fwds)[2].stmt.args[1] == Mooncake.__verify_const
             end
             @testset "differentiable const globals" begin
                 stmt_info = make_ad_stmts!(GlobalRef(S2SGlobals, :const_float), ID(), info)
-                @test stmt_info isa Tapir.ADStmtInfo
+                @test stmt_info isa Mooncake.ADStmtInfo
                 @test only(stmt_info.fwds)[2].stmt isa CoDual{Float64}
             end
         end
         @testset "PhiCNode" begin
             @test_throws(
-                Tapir.UnhandledLanguageFeatureException,
+                Mooncake.UnhandledLanguageFeatureException,
                 make_ad_stmts!(Core.PhiCNode(Any[]), ID(), info),
             )
         end
         @testset "UpsilonNode" begin
             @test_throws(
-                Tapir.UnhandledLanguageFeatureException,
+                Mooncake.UnhandledLanguageFeatureException,
                 make_ad_stmts!(Core.UpsilonNode(5), ID(), info),
             )
         end
         @testset "Expr" begin
             @testset "assignment to GlobalRef" begin
                 @test_throws(
-                    Tapir.UnhandledLanguageFeatureException,
+                    Mooncake.UnhandledLanguageFeatureException,
                     make_ad_stmts!(Expr(:(=), GlobalRef(Main, :a), 5.0), ID(), info)
                 )
             end
             @testset "copyast" begin
                 stmt = Expr(:copyast, QuoteNode(:(hi)))
                 ad_stmts = make_ad_stmts!(stmt, ID(), info)
-                @test ad_stmts isa Tapir.ADStmtInfo
+                @test ad_stmts isa Mooncake.ADStmtInfo
                 @test Meta.isexpr(ad_stmts.fwds[1][2].stmt, :call)
                 @test ad_stmts.fwds[1][2].stmt.args[1] == identity
             end
@@ -208,14 +208,14 @@ end
     @testset "rule_type $sig, $safety_on" for
         sig in Any[
             Tuple{typeof(getfield), Tuple{Float64}, 1},
-            Tuple{typeof(Tapir.TestResources.foo), Float64},
-            Tuple{typeof(Tapir.TestResources.type_unstable_tester_0), Ref{Any}},
+            Tuple{typeof(Mooncake.TestResources.foo), Float64},
+            Tuple{typeof(Mooncake.TestResources.type_unstable_tester_0), Ref{Any}},
         ],
         safety_on in [true, false]
 
-        interp = get_tapir_interpreter()
-        rule = Tapir.build_rrule(interp, sig; safety_on)
-        @test rule isa Tapir.rule_type(interp, sig; safety_on)
+        interp = get_interpreter()
+        rule = Mooncake.build_rrule(interp, sig; safety_on)
+        @test rule isa Mooncake.rule_type(interp, sig; safety_on)
     end
 
     @testset "$(_typeof((f, x...)))" for (n, (interface_only, perf_flag, bnds, f, x...)) in
@@ -227,18 +227,18 @@ end
             Xoshiro(123456), f, x...; perf_flag, interface_only, is_primitive=false
         )
 
-        # interp = Tapir.get_tapir_interpreter()
+        # interp = Mooncake.get_interpreter()
         # codual_args = map(zero_codual, (f, x...))
-        # fwds_args = map(Tapir.to_fwds, codual_args)
-        # rule = Tapir.build_rrule(interp, sig)
+        # fwds_args = map(Mooncake.to_fwds, codual_args)
+        # rule = Mooncake.build_rrule(interp, sig)
         # out, pb!! = rule(fwds_args...)
         # # @code_warntype optimize=true rule(codual_args...)
         # # @code_warntype optimize=true pb!!(tangent(out), map(tangent, codual_args)...)
 
         # primal_time = @benchmark $f($(Ref(x))[]...)
-        # s2s_time = @benchmark $rule($fwds_args...)[2]($(Tapir.zero_rdata(primal(out))))
-        # # in_f = in_f = Tapir.InterpretedFunction(DefaultCtx(), sig, interp);
-        # # __rrule!! = Tapir.build_rrule!!(in_f);
+        # s2s_time = @benchmark $rule($fwds_args...)[2]($(Mooncake.zero_rdata(primal(out))))
+        # # in_f = in_f = Mooncake.InterpretedFunction(DefaultCtx(), sig, interp);
+        # # __rrule!! = Mooncake.build_rrule!!(in_f);
         # # df = zero_codual(in_f);
         # # codual_x = map(zero_codual, (f, x...));
         # # interp_time = @benchmark TestUtils.to_benchmark($__rrule!!, $df, $codual_x...)
@@ -251,17 +251,17 @@ end
         # println("s2s ratio ratio: $(s2s_ratio)")
         # # println("interp ratio: $(interp_ratio)")
 
-        # f(rule, fwds_args, out) = rule(fwds_args...)[2]((Tapir.zero_rdata(primal(out))))
+        # f(rule, fwds_args, out) = rule(fwds_args...)[2]((Mooncake.zero_rdata(primal(out))))
         # f(rule, fwds_args, out)
         # @profview(run_many_times(500, f, rule, fwds_args, out))
     end
 
     @testset "integration testing for invalid global ref errors" begin
         @test_throws(
-            Tapir.UnhandledLanguageFeatureException,
-            Tapir.build_rrule(
-                Tapir.get_tapir_interpreter(),
-                Tuple{typeof(Tapir.TestResources.non_const_global_ref), Float64},
+            Mooncake.UnhandledLanguageFeatureException,
+            Mooncake.build_rrule(
+                Mooncake.get_interpreter(),
+                Tuple{typeof(Mooncake.TestResources.non_const_global_ref), Float64},
             )
         )
     end
@@ -278,7 +278,7 @@ end
         # BenchmarkTools not working due to world age problems. Provided that this code
         # runs successfully, everything is okay -- no need to check anything specific.
         f(x) = sin(cos(x))
-        rule = Tapir.build_rrule(f, 0.0)
-        @benchmark Tapir.value_and_gradient!!($rule, $f, $(Ref(0.0))[])
+        rule = Mooncake.build_rrule(f, 0.0)
+        @benchmark Mooncake.value_and_gradient!!($rule, $f, $(Ref(0.0))[])
     end
 end

@@ -11,7 +11,7 @@ module TestTypes
 using Base.Iterators: product
 using Core: svec
 using ExprTools: combinedef
-using ..Tapir: NoTangent, tangent_type, _typeof
+using ..Mooncake: NoTangent, tangent_type, _typeof
 
 const PRIMALS = Tuple{Bool, Any, Tuple}[]
 
@@ -86,8 +86,8 @@ interfaces that this package defines have been implemented correctly.
 """
 module TestUtils
 
-using Random, Tapir, Test, InteractiveUtils
-using Tapir:
+using Random, Mooncake, Test, InteractiveUtils
+using Mooncake:
     CoDual, NoTangent, rrule!!, is_init, zero_codual, DefaultCtx, @is_primitive, val,
     is_always_fully_initialised, get_tangent_field, set_tangent_field!, MutableTangent,
     Tangent, _typeof, rdata, NoFData, to_fwds, uninit_fdata, zero_rdata,
@@ -242,7 +242,7 @@ function populate_address_map!(m::AddressMap, primal::P, tangent::T) where {P, T
 end
 
 __get_data_field(t::Union{Tangent, MutableTangent}, n) = getfield(t.fields, n)
-__get_data_field(t::Union{Tapir.FData, Tapir.RData}, n) = getfield(t.data, n)
+__get_data_field(t::Union{Mooncake.FData, Mooncake.RData}, n) = getfield(t.data, n)
 
 function populate_address_map!(m::AddressMap, p::P, t) where {P<:Union{Tuple, NamedTuple}}
     t isa NoFData && return m
@@ -308,7 +308,7 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...; rul
     # Run `rrule!!` on copies of `f` and `x`. We use randomly generated tangents so that we
     # can later verify that non-zero values do not get propagated by the rule.
     x̄_zero = map(zero_tangent, x)
-    x̄_fwds = map(Tapir.fdata, x̄_zero)
+    x̄_fwds = map(Mooncake.fdata, x̄_zero)
     x_x̄_rule = map((x, x̄_f) -> fcodual_type(_typeof(x))(_deepcopy(x), x̄_f), x, x̄_fwds)
     inputs_address_map = populate_address_map(map(primal, x_x̄_rule), map(tangent, x_x̄_rule))
     y_ȳ_rule, pb!! = rule(to_fwds(f_f̄), x_x̄_rule...)
@@ -332,7 +332,7 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...; rul
     x̄_init = map(set_to_zero!!, x̄_zero)
     ȳ = increment!!(ȳ_init, ȳ_delta)
     map(increment!!, x̄_init, x̄_delta)
-    _, x̄_rvs_inc... = pb!!(Tapir.rdata(ȳ))
+    _, x̄_rvs_inc... = pb!!(Mooncake.rdata(ȳ))
     x̄_rvs = map((x, x_inc) -> increment!!(rdata(x), x_inc), x̄_delta, x̄_rvs_inc)
     x̄ = map(tangent, x̄_fwds, x̄_rvs)
 
@@ -348,7 +348,7 @@ get_address(x) = ismutable(x) ? pointer_from_objref(x) : nothing
 _deepcopy(x) = deepcopy(x)
 _deepcopy(x::Module) = x
 
-rrule_output_type(::Type{Ty}) where {Ty} = Tuple{Tapir.fcodual_type(Ty), Any}
+rrule_output_type(::Type{Ty}) where {Ty} = Tuple{Mooncake.fcodual_type(Ty), Any}
 
 function test_rrule_interface(f_f̄, x_x̄...; rule)
     @nospecialize f_f̄ x_x̄
@@ -395,7 +395,7 @@ function test_rrule_interface(f_f̄, x_x̄...; rule)
     y_ȳ, pb!! = rrule_ret
 
     # Run the reverse-pass. Throw a meaningful exception if it doesn't run at all.
-    ȳ = Tapir.rdata(zero_tangent(primal(y_ȳ), tangent(y_ȳ)))
+    ȳ = Mooncake.rdata(zero_tangent(primal(y_ȳ), tangent(y_ȳ)))
     f̄_new, x̄_new... = try
         pb!!(ȳ)
     catch e
@@ -418,7 +418,7 @@ end
 
 function __forwards_and_backwards(rule, x_x̄::Vararg{Any, N}) where {N}
     out, pb!! = rule(x_x̄...)
-    return pb!!(Tapir.zero_rdata(primal(out)))
+    return pb!!(Mooncake.zero_rdata(primal(out)))
 end
 
 function test_rrule_performance(
@@ -444,7 +444,7 @@ function test_rrule_performance(
 
         # Test reverse-pass stability.
         y_ȳ, pb!! = rule(to_fwds(f_f̄), map(to_fwds, _deepcopy(x_x̄))...)
-        rvs_data = Tapir.rdata(zero_tangent(primal(y_ȳ), tangent(y_ȳ)))
+        rvs_data = Mooncake.rdata(zero_tangent(primal(y_ȳ), tangent(y_ȳ)))
         test_opt(Shim(), pb!!, (_typeof(rvs_data), ))
     end
 
@@ -470,7 +470,7 @@ end
         interface_only=false,
         is_primitive::Bool=true,
         perf_flag::Symbol=:none,
-        interp::Tapir.TapirInterpreter=Tapir.get_tapir_interpreter(),
+        interp::Mooncake.MooncakeInterpreter=Mooncake.get_interpreter(),
         safety_on::Bool=false,
     )
 
@@ -483,7 +483,7 @@ though, in partcular `Ptr`s. In this case, the argument for which `randn_tangent
 readily defined should be a `CoDual` containing the primal, and a _manually_ constructed
 tangent field.
 
-This function uses [`Tapir.build_rrule`](@ref) to construct a rule. This will use an
+This function uses [`Mooncake.build_rrule`](@ref) to construct a rule. This will use an
 `rrule!!` if one exists, and derive a rule otherwise.
 """
 function test_rule(
@@ -491,13 +491,13 @@ function test_rule(
     interface_only::Bool=false,
     is_primitive::Bool=true,
     perf_flag::Symbol=:none,
-    interp::Tapir.TapirInterpreter=Tapir.get_tapir_interpreter(),
+    interp::Mooncake.MooncakeInterpreter=Mooncake.get_interpreter(),
     safety_on::Bool=false,
 )
     @nospecialize rng x
 
     # Construct the rule.
-    rule = Tapir.build_rrule(interp, _typeof(__get_primals(x)); safety_on)
+    rule = Mooncake.build_rrule(interp, _typeof(__get_primals(x)); safety_on)
 
     # If we're requiring `is_primitive`, then check that `rule == rrule!!`.
     if is_primitive
@@ -517,7 +517,7 @@ function test_rule(
     test_rrule_performance(perf_flag, rule, x_x̄...)
 
     # Test the interface again, in order to verify that caching is working correctly.
-    rule_2 = Tapir.build_rrule(interp, _typeof(__get_primals(x)); safety_on)
+    rule_2 = Mooncake.build_rrule(interp, _typeof(__get_primals(x)); safety_on)
     test_rrule_interface(x_x̄..., rule=rule_2)
 end
 
@@ -588,7 +588,7 @@ function test_rule_and_type_interactions(rng::AbstractRNG, x::P) where {P}
                 interface_only=false,
                 is_primitive=true,
                 perf_flag=:none,
-                interp=Tapir.get_tapir_interpreter(),
+                interp=Mooncake.get_interpreter(),
             )
         end
     end
@@ -634,7 +634,7 @@ function test_tangent_consistency(rng::AbstractRNG, p::P; interface_only=false) 
     test_equality_comparison(t)
 
     # Check that zero_tangent isn't obviously non-deterministic.
-    @test has_equal_data(z, Tapir.zero_tangent(p))
+    @test has_equal_data(z, Mooncake.zero_tangent(p))
 
     # Check that ismutabletype(P) => ismutabletype(T)
     if ismutabletype(P) && !(T == NoTangent)
@@ -707,19 +707,19 @@ end
 function test_set_tangent_field!_correctness(t1::T, t2::T) where {T<:MutableTangent}
     Tfields = _typeof(t1.fields)
     for n in 1:fieldcount(Tfields)
-        !Tapir.is_init(t2.fields[n]) && continue
+        !Mooncake.is_init(t2.fields[n]) && continue
         v = get_tangent_field(t2, n)
 
         # Int form.
-        v′ = Tapir.set_tangent_field!(t1, n, v)
+        v′ = Mooncake.set_tangent_field!(t1, n, v)
         @test v′ === v
-        @test Tapir.get_tangent_field(t1, n) === v
+        @test Mooncake.get_tangent_field(t1, n) === v
 
         # Symbol form.
         s = fieldname(Tfields, n)
-        g = Tapir.set_tangent_field!(t1, s, v)
+        g = Mooncake.set_tangent_field!(t1, s, v)
         @test g === v
-        @test Tapir.get_tangent_field(t1, n) === v
+        @test Mooncake.get_tangent_field(t1, n) === v
     end
 end
 
@@ -789,7 +789,7 @@ function test_set_tangent_field!_performance(t1::T, t2::T) where {V, T<:MutableT
             Tuple{typeof(_set_tangent_field!), typeof(t1), Val{n}, typeof(v)},
         )
 
-        if all(n -> !(fieldtype(V, n) <: Tapir.PossiblyUninitTangent), 1:fieldcount(V))
+        if all(n -> !(fieldtype(V, n) <: Mooncake.PossiblyUninitTangent), 1:fieldcount(V))
             i = Val(n)
             _set_tangent_field!(t1, i, v)
             @test count_allocs(_set_tangent_field!, t1, i, v) == 0
@@ -803,7 +803,7 @@ function test_set_tangent_field!_performance(t1::T, t2::T) where {V, T<:MutableT
             Tuple{typeof(_set_tangent_field!), typeof(t1), typeof(s), typeof(v)},
         )
 
-        if all(n -> !(fieldtype(V, n) <: Tapir.PossiblyUninitTangent), 1:fieldcount(V))
+        if all(n -> !(fieldtype(V, n) <: Mooncake.PossiblyUninitTangent), 1:fieldcount(V))
             _set_tangent_field!(t1, s, v)
             @test count_allocs(_set_tangent_field!, t1, s, v) == 0
         end
@@ -811,10 +811,10 @@ function test_set_tangent_field!_performance(t1::T, t2::T) where {V, T<:MutableT
 end
 
 function test_get_tangent_field_performance(t::Union{MutableTangent, Tangent})
-    V = Tapir._typeof(t.fields)
+    V = Mooncake._typeof(t.fields)
     for n in 1:fieldcount(V)
         !is_init(t.fields[n]) && continue
-        Tfield = fieldtype(Tapir.fields_type(Tapir._typeof(t)), n)
+        Tfield = fieldtype(Mooncake.fields_type(Mooncake._typeof(t)), n)
         !__is_completely_stable_type(Tfield) && continue
 
         # Int mode.
@@ -848,7 +848,7 @@ __tangent_generation_should_allocate(::Type{P}) where {P<:Array} = true
 
 function __increment_should_allocate(::Type{P}) where {P}
     return any(eachindex(fieldtypes(P))) do n
-        Tapir.tangent_field_type(P, n) <: PossiblyUninitTangent
+        Mooncake.tangent_field_type(P, n) <: PossiblyUninitTangent
     end
 end
 __increment_should_allocate(::Type{Core.SimpleVector}) = true
@@ -883,7 +883,7 @@ function test_tangent(
     @test tangent_type(P) == T
 
     # Check that zero_tangent infers.
-    @inferred Tapir.zero_tangent(p)
+    @inferred Mooncake.zero_tangent(p)
 
     # Verify that adding together `x` and `y` gives the value the user expected.
     z_pred = increment!!(x, y)
@@ -919,16 +919,16 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
 
     # Check that fdata_type and rdata_type run and produce types.
     T = tangent_type(P)
-    F = Tapir.fdata_type(T)
+    F = Mooncake.fdata_type(T)
     @test F isa Type
-    R = Tapir.rdata_type(T)
+    R = Mooncake.rdata_type(T)
     @test R isa Type
 
     # Check that fdata and rdata produce the correct types.
     t = randn_tangent(rng, p)
-    f = Tapir.fdata(t)
+    f = Mooncake.fdata(t)
     @test f isa F
-    r = Tapir.rdata(t)
+    r = Mooncake.rdata(t)
     @test r isa R
 
     # Check that fdata / rdata validation functionality doesn't error on valid fdata / rdata
@@ -949,21 +949,21 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
     @test tangent_type(F, R) == T
 
     # Check that combining f and r yields a tangent of the correct type and value.
-    t_combined = Tapir.tangent(f, r)
+    t_combined = Mooncake.tangent(f, r)
     @test t_combined isa T
     @test t_combined === t
 
     # Check that pulling out `f` and `r` from `t_combined` yields the correct values.
-    @test Tapir.fdata(t_combined) === f
-    @test Tapir.rdata(t_combined) === r
+    @test Mooncake.fdata(t_combined) === f
+    @test Mooncake.rdata(t_combined) === r
 
     # Test that `zero_rdata` produces valid reverse data.
     @test zero_rdata(p) isa R
 
     # Check that constructing a zero tangent from reverse data yields the original tangent.
     z = zero_tangent(p)
-    f_z = Tapir.fdata(z)
-    @test f_z isa Tapir.fdata_type(T)
+    f_z = Mooncake.fdata(z)
+    @test f_z isa Mooncake.fdata_type(T)
     z_new = zero_tangent(p, f_z)
     @test z_new isa tangent_type(P)
     @test z_new === z
@@ -988,14 +988,14 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
 end
 
 function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)
-    test_cases, memory = Tapir.generate_hand_written_rrule!!_test_cases(rng_ctor, v)
+    test_cases, memory = Mooncake.generate_hand_written_rrule!!_test_cases(rng_ctor, v)
     GC.@preserve memory @testset "$f, $(_typeof(x))" for (interface_only, perf_flag, _, f, x...) in test_cases
         test_rule(rng_ctor(123), f, x...; interface_only, perf_flag)
     end
 end
 
 function run_derived_rrule!!_test_cases(rng_ctor, v::Val)
-    test_cases, memory = Tapir.generate_derived_rrule!!_test_cases(rng_ctor, v)
+    test_cases, memory = Mooncake.generate_derived_rrule!!_test_cases(rng_ctor, v)
     GC.@preserve memory @testset "$f, $(typeof(x))" for
         (interface_only, perf_flag, _, f, x...) in test_cases
         test_rule(rng_ctor(123), f, x...; interface_only, perf_flag, is_primitive=false)
@@ -1008,9 +1008,9 @@ function run_rrule!!_test_cases(rng_ctor, v::Val)
 end
 
 function to_benchmark(__rrule!!::R, dx::Vararg{CoDual, N}) where {R, N}
-    dx_f = Tapir.tuple_map(x -> CoDual(primal(x), Tapir.fdata(tangent(x))), dx)
+    dx_f = Mooncake.tuple_map(x -> CoDual(primal(x), Mooncake.fdata(tangent(x))), dx)
     out, pb!! = __rrule!!(dx_f...)
-    return pb!!(Tapir.zero_rdata(primal(out)))
+    return pb!!(Mooncake.zero_rdata(primal(out)))
 end
 
 __get_primals(xs) = map(x -> x isa CoDual ? primal(x) : x, xs)
@@ -1026,8 +1026,8 @@ AD anything.
 """
 module TestResources
 
-using ..Tapir
-using ..Tapir:
+using ..Mooncake
+using ..Mooncake:
     CoDual, Tangent, MutableTangent, NoTangent, PossiblyUninitTangent, ircode,
     @is_primitive, MinimalCtx, val
 
@@ -1512,9 +1512,9 @@ end
 @noinline edge_case_tester(x::Int) = 10
 @noinline edge_case_tester(x::String) = "hi"
 @is_primitive MinimalCtx Tuple{typeof(edge_case_tester), Float64}
-function Tapir.rrule!!(::CoDual{typeof(edge_case_tester)}, x::CoDual{Float64})
-    edge_case_tester_pb!!(dy) = Tapir.NoRData(), 5 * dy
-    return Tapir.zero_fcodual(5 * primal(x)), edge_case_tester_pb!!
+function Mooncake.rrule!!(::CoDual{typeof(edge_case_tester)}, x::CoDual{Float64})
+    edge_case_tester_pb!!(dy) = Mooncake.NoRData(), 5 * dy
+    return Mooncake.zero_fcodual(5 * primal(x)), edge_case_tester_pb!!
 end
 
 # To test the edge case properly, call this with x = Any[5.0, false]
@@ -1534,7 +1534,7 @@ sr(n) = Xoshiro(n)
     return a < b ? a * b : test_self_reference(b, a) + a
 end
 
-# See https://github.com/withbayes/Tapir.jl/pull/84 for info
+# See https://github.com/withbayes/Mooncake.jl/pull/84 for info
 @noinline function test_recursive_sum(x::Vector{Float64})
     isempty(x) && return 0.0
     return @inbounds x[1] + test_recursive_sum(x[2:end])
@@ -1819,7 +1819,7 @@ function _setfield!(value::MutableTangent, name, x)
     return x
 end
 
-function Tapir.rrule!!(::Tapir.CoDual{typeof(my_setfield!)}, value, name, x)
+function Mooncake.rrule!!(::Mooncake.CoDual{typeof(my_setfield!)}, value, name, x)
     _name = primal(name)
     old_x = isdefined(primal(value), _name) ? getfield(primal(value), _name) : nothing
     function setfield!_pullback(dy, df, dvalue, ::NoTangent, dx)
@@ -1828,7 +1828,7 @@ function Tapir.rrule!!(::Tapir.CoDual{typeof(my_setfield!)}, value, name, x)
         old_x !== nothing && setfield!(primal(value), _name, old_x)
         return df, dvalue, NoTangent(), new_dx
     end
-    y = Tapir.CoDual(
+    y = Mooncake.CoDual(
         setfield!(primal(value), _name, primal(x)),
         _setfield!(tangent(value), _name, tangent(x)),
     )

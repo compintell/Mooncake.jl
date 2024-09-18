@@ -12,39 +12,39 @@
             0x0000000000000001,
         )
         sp_map = Dict{Symbol, CC.VarState}()
-        call = Tapir.foreigncall_to_call(foreigncall, sp_map)
+        call = Mooncake.foreigncall_to_call(foreigncall, sp_map)
         @test Meta.isexpr(call, :call)
-        @test call.args[1] == Tapir._foreigncall_
+        @test call.args[1] == Mooncake._foreigncall_
     end
     @testset "new_to_call" begin
-        new_ex = Expr(:new, GlobalRef(Tapir, :Foo), SSAValue(1), :hi)
-        call_ex = Tapir.new_to_call(new_ex)
+        new_ex = Expr(:new, GlobalRef(Mooncake, :Foo), SSAValue(1), :hi)
+        call_ex = Mooncake.new_to_call(new_ex)
         @test Meta.isexpr(call_ex, :call)
-        @test call_ex.args[1] == Tapir._new_
+        @test call_ex.args[1] == Mooncake._new_
         @test call_ex.args[2:end] == new_ex.args
     end
     @testset "splatnew_to_call" begin
-        splatnew_ex = Expr(:splatnew, GlobalRef(Tapir, :Foo), SSAValue(1))
-        call_ex = Tapir.splatnew_to_call(splatnew_ex)
+        splatnew_ex = Expr(:splatnew, GlobalRef(Mooncake, :Foo), SSAValue(1))
+        call_ex = Mooncake.splatnew_to_call(splatnew_ex)
         @test Meta.isexpr(call_ex, :call)
-        @test call_ex.args[1] == Tapir._splat_new_
+        @test call_ex.args[1] == Mooncake._splat_new_
         @test call_ex.args[2:end] == splatnew_ex.args
     end
     @testset "intrinsic_to_function" begin
         @testset "GlobalRef" begin
             intrinsic_ex = Expr(:call, GlobalRef(Core.Intrinsics, :abs_float), SSAValue(1))
-            wrapper_ex = Tapir.intrinsic_to_function(intrinsic_ex)
-            @test wrapper_ex.args[1] == Tapir.IntrinsicsWrappers.abs_float
+            wrapper_ex = Mooncake.intrinsic_to_function(intrinsic_ex)
+            @test wrapper_ex.args[1] == Mooncake.IntrinsicsWrappers.abs_float
         end
         @testset "IntrinsicFunction" begin
             intrinsic_ex = Expr(:call, Core.Intrinsics.abs_float, SSAValue(1))
-            wrapper_ex = Tapir.intrinsic_to_function(intrinsic_ex)
-            @test wrapper_ex.args[1] == Tapir.IntrinsicsWrappers.abs_float
+            wrapper_ex = Mooncake.intrinsic_to_function(intrinsic_ex)
+            @test wrapper_ex.args[1] == Mooncake.IntrinsicsWrappers.abs_float
         end
         @testset "cglobal" begin
             cglobal_ex = Expr(:call, cglobal, :jl_uv_stdout, Ptr{Cvoid})
-            wrapper_ex = Tapir.intrinsic_to_function(cglobal_ex)
-            @test wrapper_ex.args[1] == Tapir.IntrinsicsWrappers.__cglobal
+            wrapper_ex = Mooncake.intrinsic_to_function(cglobal_ex)
+            @test wrapper_ex.args[1] == Mooncake.IntrinsicsWrappers.__cglobal
         end
     end
     @testset "lift_getfield_and_others $ex" for (ex, target) in Any[
@@ -86,12 +86,12 @@
             Expr(:call, sin, SSAValue(1)),
         ),
     ]
-        @test Tapir.lift_getfield_and_others(ex) == target
+        @test Mooncake.lift_getfield_and_others(ex) == target
     end
     @testset "gc_preserve_begin and gc_preserve_end" begin
 
-        # Check that the placeholder function added to Tapir.jl behaves as expected.
-        @test Tapir.gc_preserve(5.0) === nothing
+        # Check that the placeholder function added to Mooncake.jl behaves as expected.
+        @test Mooncake.gc_preserve(5.0) === nothing
 
         # Thanks to maleadt for this suggestion. For more info, see:
         # https://discourse.julialang.org/t/testing-gc-preserve-when-doing-compiler-passes/102241
@@ -116,7 +116,7 @@
         # Check that if you insert a call to `gc_preserve`, the object is not finalised.
         function test_preserved()
             x = FinalizerObject()
-            _, pb!! = Tapir.rrule!!(zero_fcodual(Tapir.gc_preserve), Tapir.zero_fcodual(x))
+            _, pb!! = Mooncake.rrule!!(zero_fcodual(Mooncake.gc_preserve), Mooncake.zero_fcodual(x))
             ptr = convert(Ptr{Bool}, Base.pointer_from_objref(x))
             GC.gc(true)
             return unsafe_load(ptr), pb!!
@@ -126,9 +126,9 @@
 
         # Check that translation of expressions happens correctly.
         @test ==(
-            Tapir.lift_gc_preservation(Expr(:gc_preserve_begin, Argument(1), SSAValue(2))),
-            Expr(:call, Tapir.gc_preserve, Argument(1), SSAValue(2)),
+            Mooncake.lift_gc_preservation(Expr(:gc_preserve_begin, Argument(1), SSAValue(2))),
+            Expr(:call, Mooncake.gc_preserve, Argument(1), SSAValue(2)),
         )
-        @test Tapir.lift_gc_preservation(Expr(:gc_preserve_end, SSAValue(2))) === nothing
+        @test Mooncake.lift_gc_preservation(Expr(:gc_preserve_end, SSAValue(2))) === nothing
     end
 end
