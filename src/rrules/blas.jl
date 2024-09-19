@@ -68,7 +68,7 @@ for (fname, elty) in ((:cblas_ddot, :Float64), (:cblas_sdot, :Float32))
 end
 
 for (fname, elty) in ((:dscal_, :Float64), (:sscal_, :Float32))
-    @eval @inline function Tapir.rrule!!(
+    @eval @inline function Mooncake.rrule!!(
         ::CoDual{typeof(_foreigncall_)},
         ::CoDual{Val{$(blas_name(fname))}},
         ::CoDual, # return type

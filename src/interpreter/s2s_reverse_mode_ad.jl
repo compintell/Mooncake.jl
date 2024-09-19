@@ -85,7 +85,7 @@ This data structure is used to hold "global" information associated to a particu
 `build_rrule`. It is used as a means of communication between `make_ad_stmts!` and the
 codegen which produces the forwards- and reverse-passes.
 
-- `interp`: a `TapirInterpreter`.
+- `interp`: a `MooncakeInterpreter`.
 - `block_stack_id`: the ID associated to the block stack -- the stack which keeps track of
     which blocks we visited during the forwards-pass, and which is used on the reverse-pass
     to determine which blocks to visit.
@@ -119,7 +119,7 @@ codegen which produces the forwards- and reverse-passes.
     associated to this information.
 =#
 struct ADInfo
-    interp::TapirInterpreter
+    interp::MooncakeInterpreter
     block_stack_id::ID
     block_stack::BlockStack
     entry_id::ID
@@ -136,7 +136,7 @@ end
 # The constructor that you should use for ADInfo if you don't have a BBCode lying around.
 # See the definition of the ADInfo struct for info on the arguments.
 function ADInfo(
-    interp::TapirInterpreter,
+    interp::MooncakeInterpreter,
     arg_types::Dict{Argument, Any},
     ssa_insts::Dict{ID, NewInstruction},
     is_used_dict::Dict{ID, Bool},
@@ -163,7 +163,7 @@ end
 
 # The constructor you should use for ADInfo if you _do_ have a BBCode lying around. See the
 # ADInfo struct for information regarding `interp` and `safety_on`.
-function ADInfo(interp::TapirInterpreter, ir::BBCode, safety_on::Bool)
+function ADInfo(interp::MooncakeInterpreter, ir::BBCode, safety_on::Bool)
     arg_types = Dict{Argument, Any}(
         map(((n, t),) -> (Argument(n) => _type(t)), enumerate(ir.argtypes))
     )
@@ -216,7 +216,7 @@ __ref(P) = new_inst(Expr(:call, __make_ref, P))
 @inline @generated function __make_ref(p::Type{P}) where {P}
     _P = @isdefined(P) ? P : _typeof(p)
     R = zero_like_rdata_type(_P)
-    return :(Ref{$R}(Tapir.zero_like_rdata_from_type($_P)))
+    return :(Ref{$R}(Mooncake.zero_like_rdata_from_type($_P)))
 end
 
 @inline __make_ref(::Type{Union{}}) = nothing
@@ -454,12 +454,12 @@ end
 get_const_primal_value(x::QuoteNode) = x.value
 get_const_primal_value(x) = x
 
-# Tapir does not yet handle `PhiCNode`s. Throw an error if one is encountered.
+# Mooncake does not yet handle `PhiCNode`s. Throw an error if one is encountered.
 function make_ad_stmts!(stmt::Core.PhiCNode, ::ID, ::ADInfo)
     unhandled_feature("Encountered PhiCNode: $stmt")
 end
 
-# Tapir does not yet handle `UpsilonNode`s. Throw an error if one is encountered.
+# Mooncake does not yet handle `UpsilonNode`s. Throw an error if one is encountered.
 function make_ad_stmts!(stmt::Core.UpsilonNode, ::ID, ::ADInfo)
     unhandled_feature("Encountered UpsilonNode: $stmt")
 end
@@ -765,7 +765,7 @@ _is_primitive(C::Type, sig::Type) = is_primitive(C, sig)
 # Compute the concrete type of the rule that will be returned from `build_rrule`. This is
 # important for performance in dynamic dispatch, and to ensure that recursion works
 # properly.
-function rule_type(interp::TapirInterpreter{C}, sig_or_mi; safety_on) where {C}
+function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; safety_on) where {C}
 
     if _is_primitive(C, sig_or_mi)
         return safety_on ? SafeRRule{typeof(rrule!!)} : typeof(rrule!!)
@@ -825,14 +825,14 @@ end
 Helper method. Only uses static information from `args`.
 """
 function build_rrule(args...; safety_on=false)
-    interp = get_tapir_interpreter()
+    interp = get_interpreter()
     return build_rrule(interp, _typeof(TestUtils.__get_primals(args)); safety_on)
 end
 
-const TAPIR_INFERENCE_LOCK = ReentrantLock()
+const MOONCAKE_INFERENCE_LOCK = ReentrantLock()
 
 """
-    build_rrule(interp::TapirInterpreter{C}, sig_or_mi; safety_on=false) where {C}
+    build_rrule(interp::MooncakeInterpreter{C}, sig_or_mi; safety_on=false) where {C}
 
 Returns a `DerivedRule` which is an `rrule!!` for `sig_or_mi` in context `C`. See the
 docstring for `rrule!!` for more info.
@@ -840,7 +840,7 @@ docstring for `rrule!!` for more info.
 If `safety_on` is `true`, then all calls to rules are replaced with calls to `SafeRRule`s.
 """
 function build_rrule(
-    interp::TapirInterpreter{C}, sig_or_mi; safety_on=false, silence_safety_messages=true
+    interp::MooncakeInterpreter{C}, sig_or_mi; safety_on=false, silence_safety_messages=true
 ) where {C}
 
     # To avoid segfaults, ensure that we bail out if the interpreter's world age is greater
@@ -859,7 +859,7 @@ function build_rrule(
 
     # If we have a hand-coded rule, just use that.
     _is_primitive(C, sig_or_mi) && return (safety_on ? SafeRRule(rrule!!) : rrule!!)
-    lock(TAPIR_INFERENCE_LOCK)
+    lock(MOONCAKE_INFERENCE_LOCK)
     try
         # If we've already derived the OpaqueClosures and info, do not re-derive, just create a
         # copy and pass in new shared data.
@@ -941,7 +941,7 @@ function build_rrule(
             return rule
         end
     finally
-        unlock(TAPIR_INFERENCE_LOCK)
+        unlock(MOONCAKE_INFERENCE_LOCK)
     end
 end
 
@@ -1303,7 +1303,7 @@ end
 # Helper, used in conclude_rvs_block.
 @inline function __deref_and_zero(::Type{P}, x::Ref) where {P}
     t = x[]
-    x[] = Tapir.zero_like_rdata_from_type(P)
+    x[] = Mooncake.zero_like_rdata_from_type(P)
     return t
 end
 
@@ -1411,7 +1411,7 @@ end
 __switch_case(id::Int32, predecessor_id::Int32) = !(id === predecessor_id)
 
 #=
-    DynamicDerivedRule(interp::TapirInterpreter, safety_on::Bool)
+    DynamicDerivedRule(interp::MooncakeInterpreter, safety_on::Bool)
 
 For internal use only.
 
@@ -1433,7 +1433,7 @@ function (dynamic_rule::DynamicDerivedRule)(args::Vararg{Any, N}) where {N}
     sig = Tuple{map(_typeof ∘ primal, args)...}
     rule = get(dynamic_rule.cache, sig, nothing)
     if rule === nothing
-        rule = build_rrule(get_tapir_interpreter(), sig; safety_on=dynamic_rule.safety_on)
+        rule = build_rrule(get_interpreter(), sig; safety_on=dynamic_rule.safety_on)
         dynamic_rule.cache[sig] = rule
     end
     return rule(args...)
@@ -1462,7 +1462,7 @@ mutable struct LazyDerivedRule{primal_sig, Trule}
     mi::Core.MethodInstance
     rule::Trule
     function LazyDerivedRule(mi::Core.MethodInstance, safety_on::Bool)
-        interp = get_tapir_interpreter()
+        interp = get_interpreter()
         return new{mi.specTypes, rule_type(interp, mi; safety_on)}(safety_on, mi)
     end
     function LazyDerivedRule{Tprimal_sig, Trule}(
@@ -1476,7 +1476,7 @@ _copy(x::P) where {P<:LazyDerivedRule} = P(x.mi, x.safety_on)
 
 function (rule::LazyDerivedRule{sig, Trule})(args::Vararg{Any, N}) where {N, sig, Trule}
     if !isdefined(rule, :rule)
-        interp = get_tapir_interpreter()
+        interp = get_interpreter()
         derived_rule = build_rrule(interp, rule.mi; safety_on=rule.safety_on)
         if derived_rule isa Trule
             rule.rule = derived_rule
