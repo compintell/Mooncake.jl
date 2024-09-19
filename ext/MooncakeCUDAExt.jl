@@ -64,6 +64,7 @@ function rrule!!(
     init::CoDual{UndefInitializer},
     dims::CoDual{Int}...
 ) where {P<:CuArray{<:Base.IEEEFloat}}
+    @show "a rule?"
     _dims = map(primal, dims)
     y = CoDual(P(undef, _dims), P(undef, _dims))
     return y, NoPullback(p, init, dims...)
