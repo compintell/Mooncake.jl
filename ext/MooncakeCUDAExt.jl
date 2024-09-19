@@ -1,11 +1,11 @@
-module TapirCUDAExt
+module MooncakeCUDAExt
 
-    using LinearAlgebra, Random, Tapir
+    using LinearAlgebra, Random, Mooncake
 
     using Base: IEEEFloat
     using CUDA: CuArray, cu
 
-    import Tapir:
+    import Mooncake:
         MinimalCtx,
         rrule!!,
         @is_primitive,
@@ -22,9 +22,9 @@ module TapirCUDAExt
         CoDual,
         NoPullback
 
-    import Tapir.TestUtils: populate_address_map!, AddressMap, __increment_should_allocate
+    import Mooncake.TestUtils: populate_address_map!, AddressMap, __increment_should_allocate
 
-    # Tell Tapir.jl how to handle CuArrays.
+    # Tell Mooncake.jl how to handle CuArrays.
 
     tangent_type(::Type{P}) where {P<:CuArray{<:IEEEFloat}} = P
     zero_tangent(x::CuArray{<:IEEEFloat}) = zero(x)
@@ -46,7 +46,7 @@ module TapirCUDAExt
         m[k] = v
         return m
     end
-    function Tapir._verify_fdata_value(p::CuArray, f::CuArray)
+    function Mooncake._verify_fdata_value(p::CuArray, f::CuArray)
         if size(p) != size(f)
             throw(InvalidFDataException("p has size $(size(p)) but f has size $(size(f))"))
         end

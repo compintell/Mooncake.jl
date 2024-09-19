@@ -1,7 +1,7 @@
  """
     to_cr_tangent(t)
 
-Convert a Tapir tangent into a type that ChainRules.jl `rrule`s expect to see.
+Convert a Mooncake tangent into a type that ChainRules.jl `rrule`s expect to see.
 """
 to_cr_tangent(t::IEEEFloat) = t
 to_cr_tangent(t::Array{<:IEEEFloat}) = t
@@ -31,14 +31,14 @@ Used to implement `rrule!!`s via `ChainRulesCore.rrule`.
 Given a function `foo`, argument types `arg_types`, and a method `ChainRulesCore.rrule` of
 which applies to these, you can make use of this function as follows:
 ```julia
-Tapir.@is_primitive DefaultCtx Tuple{typeof(foo), arg_types...}
-function Tapir.rrule!!(f::CoDual{typeof(foo)}, args::CoDual...)
+Mooncake.@is_primitive DefaultCtx Tuple{typeof(foo), arg_types...}
+function Mooncake.rrule!!(f::CoDual{typeof(foo)}, args::CoDual...)
     return rrule_wrapper(f, args...)
 end
 ```
-Assumes that methods of `to_cr_tangent` and `to_tapir_tangent` are defined such that you
-can convert between the different representations of tangents that Tapir and ChainRulesCore
-expect.
+Assumes that methods of `to_cr_tangent` and `to_mooncake_tangent` are defined such that you
+can convert between the different representations of tangents that Mooncake and
+ChainRulesCore expect.
 
 Furthermore, it is _essential_ that
 1. `f(args)` does not mutate `f` or `args`, and
@@ -51,7 +51,7 @@ function rrule_wrapper(fargs::Vararg{CoDual, N}) where {N}
 
     # Run forwards-pass.
     primals = tuple_map(primal, fargs)
-    lazy_rdata = tuple_map(Tapir.lazy_zero_rdata, primals)
+    lazy_rdata = tuple_map(Mooncake.lazy_zero_rdata, primals)
     y_primal, cr_pb = ChainRulesCore.rrule(primals...)
     y_fdata = fdata(zero_tangent(y_primal))
 
@@ -107,12 +107,12 @@ For example,
 ```julia
 @from_rrule DefaultCtx Tuple{typeof(sin), Float64}
 ```
-would define a `Tapir.rrule!!` for `sin` of `Float64`s, by calling `ChainRulesCore.rrule`.
+would define a `Mooncake.rrule!!` for `sin` of `Float64`s by calling `ChainRulesCore.rrule`.
 
 ```julia
 @from_rrule DefaultCtx Tuple{typeof(foo), Float64} true
 ```
-would define a method of `Tapir.rrule!!` which can handle keyword arguments.
+would define a method of `Mooncake.rrule!!` which can handle keyword arguments.
 
 Limitations: it is your responsibility to ensure that
 1. calls with signature `sig` do not mutate their arguments,
@@ -159,15 +159,15 @@ macro from_rrule(ctx, sig::Expr, has_kwargs::Bool=false)
     end
 
     arg_names = map(n -> Symbol("x_$n"), eachindex(arg_type_symbols))
-    arg_types = map(t -> :(Tapir.CoDual{<:$t}), arg_type_symbols)
+    arg_types = map(t -> :(Mooncake.CoDual{<:$t}), arg_type_symbols)
     rule_expr = construct_def(arg_names, arg_types, where_params)
 
     if has_kwargs
         kw_sig = Expr(:curly, :Tuple, :(typeof(Core.kwcall)), :NamedTuple, arg_type_symbols...)
         kw_sig = where_params === nothing ? kw_sig : Expr(:where, kw_sig, where_params...)
-        kw_is_primitive = :(Tapir.is_primitive(::Type{$ctx}, ::Type{<:$kw_sig}) = true)
-        kwcall_type = :(Tapir.CoDual{typeof(Core.kwcall)})
-        nt_type = :(Tapir.CoDual{<:NamedTuple})
+        kw_is_primitive = :(Mooncake.is_primitive(::Type{$ctx}, ::Type{<:$kw_sig}) = true)
+        kwcall_type = :(Mooncake.CoDual{typeof(Core.kwcall)})
+        nt_type = :(Mooncake.CoDual{<:NamedTuple})
         kwargs_rule_expr = construct_def(
             vcat(:_kwcall, :kwargs, arg_names),
             vcat(kwcall_type, nt_type, arg_types),
@@ -179,7 +179,7 @@ macro from_rrule(ctx, sig::Expr, has_kwargs::Bool=false)
     end
 
     ex = quote
-        Tapir.is_primitive(::Type{$ctx}, ::Type{<:$sig}) = true
+        Mooncake.is_primitive(::Type{$ctx}, ::Type{<:$sig}) = true
         $rule_expr
         $kw_is_primitive
         $kwargs_rule_expr
@@ -191,7 +191,7 @@ function construct_def(arg_names, arg_types, where_params)
     arg_exprs = map((n, t) -> :($n::$t), arg_names, arg_types)
     def = Dict(
         :head => :function,
-        :name => :(Tapir.rrule!!),
+        :name => :(Mooncake.rrule!!),
         :args => arg_exprs,
         :body => Expr(:call, rrule_wrapper, arg_names...),
     )

@@ -12,7 +12,7 @@ using
     Random,
     SpecialFunctions,
     StableRNGs,
-    Tapir,
+    Mooncake,
     Test
 
 import ChainRulesCore
@@ -25,7 +25,7 @@ using Core.Intrinsics: pointerref, pointerset
 
 using NNlib: dropout
 
-using Tapir:
+using Mooncake:
     CC,
     IntrinsicsWrappers,
     TestUtils,
@@ -79,7 +79,15 @@ using .TestUtils:
 using .TestResources:
     TypeStableMutableStruct,
     StructFoo,
-    MutableFoo
+    MutableFoo,
+    TypeUnstableStruct,
+    TypeUnstableStruct2,
+    TypeUnstableMutableStruct,
+    TypeUnstableMutableStruct2,
+    make_circular_reference_struct,
+    make_indirect_circular_reference_struct,
+    make_circular_reference_array,
+    make_indirect_circular_reference_array
 
 # The integration tests take ages to run, so we split them up. CI sets up two jobs -- the
 # "basic" group runs test that, when passed, _ought_ to imply correctness of the entire
@@ -92,6 +100,6 @@ const test_group = get(ENV, "TEST_GROUP", "basic")
 sr(n::Int) = StableRNG(n)
 
 # This is annoying and hacky and should be improved.
-if isempty(Tapir.TestTypes.PRIMALS)
-    Tapir.TestTypes.generate_primals()
+if isempty(Mooncake.TestTypes.PRIMALS)
+    Mooncake.TestTypes.generate_primals()
 end

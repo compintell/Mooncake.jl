@@ -2,7 +2,7 @@
 
 ```@meta
 DocTestSetup = quote
-    using Tapir, ADTypes
+    using Mooncake, ADTypes
 end
 ```
 
@@ -34,19 +34,19 @@ Check that the types of the fdata / rdata associated to arguments are exactly wh
 
 This is implemented via `SafeRRule`:
 ```@docs
-Tapir.SafeRRule
+Mooncake.SafeRRule
 ```
 
 You can straightforwardly enable it when building a rule via the `safety_on` kwarg in the following:
 ```@docs
-Tapir.build_rrule
+Mooncake.build_rrule
 ```
 
 When using ADTypes.jl, you can choose whether or not to use it via the `safe_mode` kwarg:
-```jldoctest
-julia> AutoTapir(safe_mode=false)
-AutoTapir(safe_mode=false)
-```
+# ```jldoctest
+# julia> AutoMooncake(safe_mode=false)
+# AutoMooncake(safe_mode=false)
+# ```
 
 ### When Should You Use Safe Mode?
 

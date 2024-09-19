@@ -21,7 +21,7 @@ end
         @test bb isa BBlock
         @test length(bb) == 2
 
-        ids, phi_nodes = Tapir.phi_nodes(bb)
+        ids, phi_nodes = Mooncake.phi_nodes(bb)
         @test only(ids) == bb.inst_ids[1]
         @test only(phi_nodes) == bb.insts[1]
 
@@ -32,15 +32,15 @@ end
         bb_copy = copy(bb)
         @test bb_copy.inst_ids !== bb.inst_ids
 
-        @test Tapir.terminator(bb) === nothing
+        @test Mooncake.terminator(bb) === nothing
 
         # Final statment is regular instruction, so newly inserted instruction should go at
         # the end of the block.
-        @test Tapir.insert_before_terminator!(bb, ID(), new_inst(ReturnNode(5))) === nothing
+        @test Mooncake.insert_before_terminator!(bb, ID(), new_inst(ReturnNode(5))) === nothing
         @test bb.insts[end].stmt === ReturnNode(5)
 
         # Final statement is now a Terminator, so insertion should happen before it.
-        @test Tapir.insert_before_terminator!(bb, ID(), new_inst(nothing)) === nothing
+        @test Mooncake.insert_before_terminator!(bb, ID(), new_inst(nothing)) === nothing
         @test bb.insts[end].stmt === ReturnNode(5)
         @test bb.insts[end-1].stmt === nothing
     end
@@ -53,21 +53,21 @@ end
         bb_code = BBCode(ir)
         @test bb_code isa BBCode
         @test length(bb_code.blocks) == length(ir.cfg.blocks)
-        new_ir = Tapir.IRCode(bb_code)
+        new_ir = Mooncake.IRCode(bb_code)
         @test length(new_ir.stmts.inst) == length(ir.stmts.inst)
         @test all(map(==, ir.stmts.inst, new_ir.stmts.inst))
         @test all(map(==, ir.stmts.type, new_ir.stmts.type))
         @test all(map(==, ir.stmts.info, new_ir.stmts.info))
         @test all(map(==, ir.stmts.line, new_ir.stmts.line))
         @test all(map(==, ir.stmts.flag, new_ir.stmts.flag))
-        @test length(Tapir.collect_stmts(bb_code)) == length(ir.stmts.inst)
-        @test Tapir.id_to_line_map(bb_code) isa Dict{ID, Int}
+        @test length(Mooncake.collect_stmts(bb_code)) == length(ir.stmts.inst)
+        @test Mooncake.id_to_line_map(bb_code) isa Dict{ID, Int}
     end
     @testset "control_flow_graph" begin
         ir = Base.code_ircode_by_type(Tuple{typeof(sin), Float64})[1][1]
         bb = BBCode(ir)
         new_ir = Core.Compiler.IRCode(bb)
-        cfg = Tapir.control_flow_graph(bb)
+        cfg = Mooncake.control_flow_graph(bb)
         @test all(map((l, r) -> l.stmts == r.stmts, ir.cfg.blocks, cfg.blocks))
         @test all(map((l, r) -> sort(l.preds) == sort(r.preds), ir.cfg.blocks, cfg.blocks))
         @test all(map((l, r) -> sort(l.succs) == sort(r.succs), ir.cfg.blocks, cfg.blocks))
@@ -151,51 +151,51 @@ end
             @testset "Expr" begin
                 id = ID()
                 d = Dict{ID, Bool}(id => false)
-                Tapir._find_id_uses!(d, Expr(:call, sin, 5))
+                Mooncake._find_id_uses!(d, Expr(:call, sin, 5))
                 @test d[id] == false
-                Tapir._find_id_uses!(d, Expr(:call, sin, id))
+                Mooncake._find_id_uses!(d, Expr(:call, sin, id))
                 @test d[id] == true
             end
             @testset "IDGotoIfNot" begin
                 id = ID()
                 d = Dict{ID, Bool}(id => false)
-                Tapir._find_id_uses!(d, IDGotoIfNot(ID(), ID()))
+                Mooncake._find_id_uses!(d, IDGotoIfNot(ID(), ID()))
                 @test d[id] == false
-                Tapir._find_id_uses!(d, IDGotoIfNot(true, ID()))
+                Mooncake._find_id_uses!(d, IDGotoIfNot(true, ID()))
                 @test d[id] == false
-                Tapir._find_id_uses!(d, IDGotoIfNot(id, ID()))
+                Mooncake._find_id_uses!(d, IDGotoIfNot(id, ID()))
                 @test d[id] == true
             end
             @testset "IDGotoNode" begin
                 id = ID()
                 d = Dict{ID, Bool}(id => false)
-                Tapir._find_id_uses!(d, IDGotoNode(ID()))
+                Mooncake._find_id_uses!(d, IDGotoNode(ID()))
                 @test d[id] == false
             end
             @testset "IDPhiNode" begin
                 id = ID()
                 d = Dict{ID, Bool}(id => false)
-                Tapir._find_id_uses!(d, IDPhiNode([ID()], Vector{Any}(undef, 1)))
+                Mooncake._find_id_uses!(d, IDPhiNode([ID()], Vector{Any}(undef, 1)))
                 @test d[id] == false
-                Tapir._find_id_uses!(d, IDPhiNode([ID()], Any[id]))
+                Mooncake._find_id_uses!(d, IDPhiNode([ID()], Any[id]))
                 @test d[id] == true
             end
             @testset "PiNode" begin
                 id = ID()
                 d = Dict{ID, Bool}(id => false)
-                Tapir._find_id_uses!(d, PiNode(false, Bool))
+                Mooncake._find_id_uses!(d, PiNode(false, Bool))
                 @test d[id] == false
-                Tapir._find_id_uses!(d, PiNode(id, Bool))
+                Mooncake._find_id_uses!(d, PiNode(id, Bool))
                 @test d[id] == true
             end
             @testset "ReturnNode" begin
                 id = ID()
                 d = Dict{ID, Bool}(id => false)
-                Tapir._find_id_uses!(d, ReturnNode())
+                Mooncake._find_id_uses!(d, ReturnNode())
                 @test d[id] == false
-                Tapir._find_id_uses!(d, ReturnNode(5))
+                Mooncake._find_id_uses!(d, ReturnNode(5))
                 @test d[id] == false
-                Tapir._find_id_uses!(d, ReturnNode(id))
+                Mooncake._find_id_uses!(d, ReturnNode(id))
                 @test d[id] == true
             end
         end
@@ -215,7 +215,7 @@ end
         end
     end
     @testset "_is_reachable" begin
-        ir = Tapir.ircode(
+        ir = Mooncake.ircode(
             Any[
                 ReturnNode(nothing),
                 Expr(:call, sin, 5),
@@ -224,6 +224,6 @@ end
             ],
             Any[Any for _ in 1:4],
         )
-        @test Tapir._is_reachable(BBCode(ir).blocks) == [true, false, false]
+        @test Mooncake._is_reachable(BBCode(ir).blocks) == [true, false, false]
     end
 end

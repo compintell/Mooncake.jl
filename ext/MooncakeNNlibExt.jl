@@ -1,10 +1,10 @@
-module TapirNNlibExt
+module MooncakeNNlibExt
 
-    using NNlib, Random, Tapir
+    using NNlib, Random, Mooncake
     using Base: IEEEFloat
     using NNlib: dropout
 
-    import Tapir: @from_rrule, DefaultCtx
+    import Mooncake: @from_rrule, DefaultCtx
 
     @from_rrule(
         DefaultCtx,

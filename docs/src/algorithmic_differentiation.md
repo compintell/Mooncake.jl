@@ -1,7 +1,7 @@
 # Algorithmic Differentiation
 
 This section introduces the mathematics behind AD.
-Even if you have worked with AD before, we recommend reading in order to acclimatise yourself to the perspective that Tapir.jl takes on the subject.
+Even if you have worked with AD before, we recommend reading in order to acclimatise yourself to the perspective that Mooncake.jl takes on the subject.
 
 # Derivatives
 
@@ -193,7 +193,7 @@ D f [X]^\ast (\bar{Y}) = \bar{Y} X^\top + X \bar{Y}.
 #### AD of a Julia function: a trivial example
 
 We now turn to differentiating Julia `function`s (we use `function` to refer to the programming language construct, and function to refer to a more general mathematical concept).
-The way that Tapir.jl handles immutable data is very similar to how Zygote / ChainRules do.
+The way that Mooncake.jl handles immutable data is very similar to how Zygote / ChainRules do.
 For example, consider the Julia function
 ```julia
 f(x::Float64) = sin(x)

@@ -1,16 +1,16 @@
-using Documenter, DocumenterCitations, Tapir
+using Documenter, DocumenterCitations, Mooncake
 
 DocMeta.setdocmeta!(
-    Tapir,
+    Mooncake,
     :DocTestSetup,
     quote
-        using Random, Tapir
+        using Random, Mooncake
     end;
     recursive=true,
 )
 
 makedocs(
-    sitename="Tapir.jl",
+    sitename="Mooncake.jl",
     format=Documenter.HTML(;
         mathengine = Documenter.KaTeX(
             Dict(
@@ -20,17 +20,17 @@ makedocs(
             )
         ),
     ),
-    modules=[Tapir],
+    modules=[Mooncake],
     checkdocs=:none,
     plugins=[
         CitationBibliography(joinpath(@__DIR__, "src", "refs.bib"); style=:numeric),
     ],
     pages = [
-        "Tapir.jl" => "index.md",
-        "Understanding Tapir.jl" => [
+        "Mooncake.jl" => "index.md",
+        "Understanding Mooncake.jl" => [
             "Introduction" => "understanding_intro.md",
             "Algorithmic Differentiation" => "algorithmic_differentiation.md",
-            "Tapir.jl's Rule System" => "mathematical_interpretation.md",
+            "Mooncake.jl's Rule System" => "mathematical_interpretation.md",
         ],
         "Utilities" => [
             "Using ChainRules" => "using_chain_rules.md",
@@ -41,4 +41,4 @@ makedocs(
     ]
 )
 
-deploydocs(repo="github.com/compintell/Tapir.jl.git", push_preview=true)
+deploydocs(repo="github.com/compintell/Mooncake.jl.git", push_preview=true)

@@ -1,7 +1,7 @@
-name = "Tapir"
-uuid = "07d77754-e150-4737-8c94-cd238a1fb45b"
+name = "Mooncake"
+uuid = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
 authors = ["Will Tebbutt, Hong Ge, and contributors"]
-version = "0.2.51"
+version = "0.3.1"
 
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
@@ -27,13 +27,13 @@ NNlib = "872c559c-99b0-510c-b3b7-b6c96a88d5cd"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 
 [extensions]
-TapirCUDAExt = "CUDA"
-TapirDynamicPPLExt = "DynamicPPL"
-TapirJETExt = "JET"
-TapirLogDensityProblemsADExt = "LogDensityProblemsAD"
-TapirLuxLibExt = "LuxLib"
-TapirNNlibExt = "NNlib"
-TapirSpecialFunctionsExt = "SpecialFunctions"
+MooncakeCUDAExt = "CUDA"
+MooncakeDynamicPPLExt = "DynamicPPL"
+MooncakeJETExt = "JET"
+MooncakeLogDensityProblemsADExt = "LogDensityProblemsAD"
+MooncakeLuxLibExt = "LuxLib"
+MooncakeNNlibExt = "NNlib"
+MooncakeSpecialFunctionsExt = "SpecialFunctions"
 
 [compat]
 ADTypes = "1.2"

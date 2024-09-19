@@ -158,7 +158,7 @@ be given by `tangent_type(P)`.
 
 # Extended help
 
-The tangent types which Tapir.jl uses are quite similar in spirit to ChainRules.jl.
+The tangent types which Mooncake.jl uses are quite similar in spirit to ChainRules.jl.
 For example, tangent "vectors" for
 1. `Float64`s are `Float64`s,
 1. `Vector{Float64}`s are `Vector{Float64}`s, and
@@ -171,9 +171,9 @@ also a permissible type of tangent for any of them, and `Float32` is permissible
 `Float64`. This is a general theme in ChainRules.jl -- it intentionally declines to place
 restrictions on what type can be used to represent the tangent of a given type.
 
-Tapir.jl differs from this.
+Mooncake.jl differs from this.
 **It insists that each primal type is associated to a _single_ tangent type.**
-Furthermore, this type is _always_ given by the function `Tapir.tangent_type(primal_type)`.
+Furthermore, this type is _always_ given by the function `Mooncake.tangent_type(primal_type)`.
 
 Consider some more worked examples.
 
@@ -428,42 +428,16 @@ handles both circular references and aliasing correctly.
 """
 zero_tangent(x)
 function zero_tangent(x::P) where {P}
-    return isbitstype(P) ? zero_tangent_internal(x) : zero_tangent_internal(x, IdDict())
-end
-
-@inline zero_tangent_internal(::Union{Int8, Int16, Int32, Int64, Int128}) = NoTangent()
-@inline zero_tangent_internal(x::IEEEFloat) = zero(x)
-@inline function zero_tangent_internal(x::P) where {P<:Union{Tuple, NamedTuple}}
-    return tangent_type(P) == NoTangent ? NoTangent() : tuple_map(zero_tangent_internal, x)
-end
-@generated function zero_tangent_internal(x::P) where P
-
-    tangent_type(P) == NoTangent && return NoTangent()
-
-    # This method can only handle struct types. Tell user to implement tangent type
-    # directly for primitive types.
-    isprimitivetype(P) && throw(error(
-        "$P is a primitive type. Implement a method of `zero_tangent` for it."
-    ))
-
-    # Derive zero tangent. Tangent types of fields, and types of zeros need only agree
-    # if field types are concrete.
-    tangent_field_zeros_exprs = ntuple(fieldcount(P)) do n
-        if tangent_field_type(P, n) <: PossiblyUninitTangent
-            V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
-            return :(isdefined(x, $n) ? $V(zero_tangent_internal(getfield(x, $n))) : $V())
-        else
-            return :(zero_tangent_internal(getfield(x, $n)))
-        end
-    end
-    backing_data_expr = Expr(:call, :tuple, tangent_field_zeros_exprs...)
-    backing_expr = :($(backing_type(P))($backing_data_expr))
-    return :($(tangent_type(P))($backing_expr))
+    return zero_tangent_internal(x, isbitstype(P) ? nothing : IdDict())
 end
 
 # the `stackdict` naming following convention of Julia's `deepcopy` and `deepcopy_internal`
 # https://github.com/JuliaLang/julia/blob/48d4fd48430af58502699fdf3504b90589df3852/base/deepcopy.jl#L35
-@inline zero_tangent_internal(x::Union{Int8,Int16,Int32,Int64,Int128,IEEEFloat}, stackdict::IdDict) = zero_tangent_internal(x)
+@inline zero_tangent_internal(::Union{Int8, Int16, Int32, Int64, Int128}, ::Any) = NoTangent()
+@inline zero_tangent_internal(x::IEEEFloat, ::Any) = zero(x)
+@inline function zero_tangent_internal(x::P, stackdict::Any) where {P<:Union{Tuple, NamedTuple}}
+    return tangent_type(P) == NoTangent ? NoTangent() : tuple_map(Base.Fix2(zero_tangent_internal, stackdict), x)
+end
 @inline function zero_tangent_internal(x::SimpleVector, stackdict::IdDict)
     return map!(n -> zero_tangent_internal(x[n], stackdict), Vector{Any}(undef, length(x)), eachindex(x))
 end
@@ -474,14 +448,17 @@ end
     stackdict[x] = zt
     return _map_if_assigned!(Base.Fix2(zero_tangent_internal, stackdict), zt, x)::Array{tangent_type(P), N}
 end
-@inline function zero_tangent_internal(x::P, stackdict::IdDict) where {P<:Union{Tuple, NamedTuple}}
-    return tangent_type(P) == NoTangent ? NoTangent() : tuple_map(Base.Fix2(zero_tangent_internal, stackdict), x)
-end
-function zero_tangent_internal(x::P, stackdict::IdDict) where {P}
-
+function zero_tangent_internal(x::P, stackdict) where {P}
     tangent_type(P) == NoTangent && return NoTangent()
 
     if tangent_type(P) <: MutableTangent
+        if !(stackdict isa IdDict)
+            throw(
+                ArgumentError(
+                    "Internal error: stackdict must be an IdDict for mutable structs, not $(typeof(stackdict)). Please report this issue."
+                )
+            )
+        end
         if haskey(stackdict, x)
             return stackdict[x]::tangent_type(P)
         end
@@ -489,30 +466,24 @@ function zero_tangent_internal(x::P, stackdict::IdDict) where {P}
         # if circular reference exists, then the recursive call will first look up the stackdict
         # and return the uninitialised MutableTangent
         # after the recursive call returns, the stackdict will be initialised
-        stackdict[x].fields = backing_type(P)(zero_tangent_struct_field(x, stackdict))
+        stackdict[x].fields = zero_tangent_struct_field(x, stackdict)
         return stackdict[x]::tangent_type(P)
     else
-        if isbitstype(P)
-            return zero_tangent_internal(x)
-        else
-            return tangent_type(P)(backing_type(P)(zero_tangent_struct_field(x, stackdict)))
-        end
+        return tangent_type(P)(zero_tangent_struct_field(x, stackdict))
     end
 end
 
-@inline function zero_tangent_struct_field(x::P, stackdict::IdDict) where {P}
-    return ntuple(fieldcount(P)) do n
+@generated function zero_tangent_struct_field(x::P, stackdict) where {P}
+    tangent_field_zeros_exprs = ntuple(fieldcount(P)) do n
         if tangent_field_type(P, n) <: PossiblyUninitTangent
             V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
-            if isdefined(x, n)
-                return V(zero_tangent_internal(getfield(x, n), stackdict))
-            else
-                return V()
-            end
+            return :(isdefined(x, $n) ? $V(zero_tangent_internal(getfield(x, $n), stackdict)) : $V())
         else
-            return zero_tangent_internal(getfield(x, n), stackdict)
+            return :(zero_tangent_internal(getfield(x, $n), stackdict))
         end
     end
+    tangent_fields_expr = Expr(:call, :tuple, tangent_field_zeros_exprs...)
+    return :($(backing_type(P))($tangent_fields_expr))
 end
 
 """
@@ -529,47 +500,62 @@ details -- this docstring is intentionally non-specific in order to avoid becomi
 
 Required for testing.
 Generate a randomly-chosen tangent to `x`.
+The design is closely modelled after `zero_tangent`.
 """
-randn_tangent(::AbstractRNG, ::NoTangent) = NoTangent()
-randn_tangent(rng::AbstractRNG, ::T) where {T<:IEEEFloat} = randn(rng, T)
-function randn_tangent(rng::AbstractRNG, x::Array{T, N}) where {T, N}
-    dx = Array{tangent_type(T), N}(undef, size(x)...)
-    return _map_if_assigned!(Base.Fix1(randn_tangent, rng), dx, x)
+function randn_tangent(rng::AbstractRNG, x::T) where {T}
+    return randn_tangent_internal(rng, x, isbitstype(T) ? nothing : IdDict())
 end
-function randn_tangent(rng::AbstractRNG, x::SimpleVector)
+
+randn_tangent_internal(::AbstractRNG, ::NoTangent, ::Any) = NoTangent()
+randn_tangent_internal(rng::AbstractRNG, ::T, ::Any) where {T<:IEEEFloat} = randn(rng, T)
+function randn_tangent_internal(rng::AbstractRNG, x::P, stackdict::Any) where {P<:Union{Tuple, NamedTuple}}
+    return tangent_type(P) == NoTangent ? NoTangent() : tuple_map(x -> randn_tangent_internal(rng, x, stackdict), x)
+end
+function randn_tangent_internal(rng::AbstractRNG, x::SimpleVector, stackdict::IdDict)
     return map!(Vector{Any}(undef, length(x)), eachindex(x)) do n
-        return randn_tangent(rng, x[n])
+        return randn_tangent_internal(rng, x[n], stackdict)
     end
 end
-function randn_tangent(rng::AbstractRNG, x::P) where {P <: Union{Tuple, NamedTuple}}
+function randn_tangent_internal(rng::AbstractRNG, x::Array{T, N}, stackdict::IdDict) where {T, N}
+    haskey(stackdict, x) && return stackdict[x]::tangent_type(typeof(x))
+    
+    dx = Array{tangent_type(T), N}(undef, size(x)...)
+    stackdict[x] = dx
+    return _map_if_assigned!(x -> randn_tangent_internal(rng, x, stackdict), dx, x)
+end
+function randn_tangent_internal(rng::AbstractRNG, x::P, stackdict) where {P}
     tangent_type(P) == NoTangent && return NoTangent()
-    return tuple_map(x -> randn_tangent(rng, x), x)
+
+    if tangent_type(P) <: MutableTangent
+        if !(stackdict isa IdDict)
+            throw(
+                ArgumentError(
+                    "Internal error: stackdict must be an IdDict for mutable structs, not $(typeof(stackdict)). Please report this issue."
+                )
+            )
+        end
+        if haskey(stackdict, x)
+            return stackdict[x]::tangent_type(P)
+        end
+        stackdict[x] = tangent_type(P)()
+        stackdict[x].fields = randn_tangent_struct_field(rng, x, stackdict)
+        return stackdict[x]::tangent_type(P)
+    else
+        return tangent_type(P)(randn_tangent_struct_field(rng, x, stackdict))
+    end
 end
-function randn_tangent(rng::AbstractRNG, x::T) where {T<:Union{Tangent, MutableTangent}}
-    return T(randn_tangent(rng, x.fields))
-end
-@generated function randn_tangent(rng::AbstractRNG, x::P) where {P}
 
-    # If `P` doesn't have a tangent space, always return `NoTangent()`.
-    tangent_type(P) === NoTangent && return NoTangent()
-
-    # This method can only handle struct types. Tell user to implement tangent type
-    # directly for primitive types.
-    isprimitivetype(P) && throw(error(
-        "$P is a primitive type. Implement a method of `randn_tangent` for it."
-    ))
-
-    # Assume `P` is a generic struct type, and derive the tangent recursively.
+@generated function randn_tangent_struct_field(rng::AbstractRNG, x::P, stackdict) where {P}
     tangent_field_exprs = map(1:fieldcount(P)) do n
         if tangent_field_type(P, n) <: PossiblyUninitTangent
             V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
-            return :(isdefined(x, $n) ? $V(randn_tangent(rng, getfield(x, $n))) : $V())
+            return :(isdefined(x, $n) ? $V(randn_tangent_internal(rng, getfield(x, $n), stackdict)) : $V())
         else
-            return :(randn_tangent(rng, getfield(x, $n)))
+            return :(randn_tangent_internal(rng, getfield(x, $n), stackdict))
         end
     end
     tangent_fields_expr = Expr(:call, :tuple, tangent_field_exprs...)
-    return :($(tangent_type(P))($(backing_type(P))($tangent_fields_expr)))
+    return :($(backing_type(P))($tangent_fields_expr))
 end
 
 """
@@ -793,7 +779,7 @@ for T in [Symbol, Int, Val]
     @eval increment_field!!(::NoTangent, ::NoTangent, f::Union{$T}) = NoTangent()
 end
 
-#=
+"""
     tangent_test_cases()
 
 Constructs a `Vector` of `Tuple`s containing test cases for the tangent infrastructure.
@@ -809,13 +795,9 @@ If the returned tuple has 5 elements, then the elements are interpreted as follo
 2 - primal value
 3, 4, 5 - tangents, where <5> == increment!!(<3>, <4>).
 
-Generally speaking, it's very straightforward to produce test cases in the first format,
-while the second requires more work. Consequently, at the time of writing there are many
-more instances of the first format than the second.
-
 Test cases in the first format make use of `zero_tangent` / `randn_tangent` etc to generate
 tangents, but they're unable to check that `increment!!` is correct in an absolute sense.
-=#
+"""
 function tangent_test_cases()
 
     N_large = 33
@@ -863,10 +845,10 @@ function tangent_test_cases()
             ((1,), NoTangent(), NoTangent(), NoTangent()),
             ((2, 3), NoTangent(), NoTangent(), NoTangent()),
             (
-                Tapir.tuple_fill(5.0, Val(N_large)),
-                Tapir.tuple_fill(6.0, Val(N_large)),
-                Tapir.tuple_fill(7.0, Val(N_large)),
-                Tapir.tuple_fill(13.0, Val(N_large)),
+                Mooncake.tuple_fill(5.0, Val(N_large)),
+                Mooncake.tuple_fill(6.0, Val(N_large)),
+                Mooncake.tuple_fill(7.0, Val(N_large)),
+                Mooncake.tuple_fill(13.0, Val(N_large)),
             ),
             (
                 (a=6.0, b=[1.0, 2.0]),
@@ -876,10 +858,10 @@ function tangent_test_cases()
             ),
             ((;), NoTangent(), NoTangent(), NoTangent()),
             (
-                NamedTuple{_names}(Tapir.tuple_fill(5.0, Val(N_large))),
-                NamedTuple{_names}(Tapir.tuple_fill(6.0, Val(N_large))),
-                NamedTuple{_names}(Tapir.tuple_fill(7.0, Val(N_large))),
-                NamedTuple{_names}(Tapir.tuple_fill(13.0, Val(N_large))),
+                NamedTuple{_names}(Mooncake.tuple_fill(5.0, Val(N_large))),
+                NamedTuple{_names}(Mooncake.tuple_fill(6.0, Val(N_large))),
+                NamedTuple{_names}(Mooncake.tuple_fill(7.0, Val(N_large))),
+                NamedTuple{_names}(Mooncake.tuple_fill(13.0, Val(N_large))),
             ),
             (
                 TestResources.TypeStableMutableStruct{Float64}(5.0, 3.0),
@@ -960,6 +942,6 @@ function tangent_test_cases()
     return vcat(
         map(x -> (false, x...), abs_test_cases),
         map(x -> (false, x), rel_test_cases),
-        map(Tapir.TestTypes.instantiate, Tapir.TestTypes.PRIMALS),
+        map(Mooncake.TestTypes.instantiate, Mooncake.TestTypes.PRIMALS),
     )
 end

@@ -1,9 +1,9 @@
 module ChainRulesInteropTestResources
 
-using ChainRulesCore, LinearAlgebra, Tapir
+using ChainRulesCore, LinearAlgebra, Mooncake
 
 using Base: IEEEFloat
-using Tapir: DefaultCtx, @from_rrule
+using Mooncake: DefaultCtx, @from_rrule
 
 # Test case with isbits data.
 
@@ -53,7 +53,7 @@ end
 @from_rrule DefaultCtx Tuple{typeof(test_nothing)} false
 
 # Test case in which ChainRulesCore returns a tangent which is of the "wrong" type from the
-# perspective of Tapir.jl. In this instance, some kind of error should be thrown, rather
+# perspective of Mooncake.jl. In this instance, some kind of error should be thrown, rather
 # than it being possible for the error to propagate.
 
 test_bad_rdata(x::Real) = 5x
@@ -91,7 +91,7 @@ end
         (ones(5), ones(5)),
         (NoTangent(), ChainRulesCore.NoTangent()),
     ]
-        @test Tapir.to_cr_tangent(t) == t_cr
+        @test Mooncake.to_cr_tangent(t) == t_cr
     end
     @testset "rules: $(typeof(fargs))" for fargs in Any[
         (ChainRulesInteropTestResources.bleh, 5.0, 4),
@@ -106,7 +106,7 @@ end
     end
     @testset "bad rdata" begin
         f = ChainRulesInteropTestResources.test_bad_rdata
-        out, pb!! = Tapir.rrule!!(zero_fcodual(f), zero_fcodual(3.0))
+        out, pb!! = Mooncake.rrule!!(zero_fcodual(f), zero_fcodual(3.0))
         @test_throws MethodError pb!!(5.0)
     end
 end
