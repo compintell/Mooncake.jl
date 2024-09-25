@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
 jobs:
   test:
-    name: ${{ matrix.test_group }}
+    name: ${{ matrix.test_group }} - ${{ matrix.version }}
     runs-on: ubuntu-latest
     if: github.event_name != 'schedule'
     strategy:
