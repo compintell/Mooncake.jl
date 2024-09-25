@@ -36,6 +36,6 @@ In any case, the point here is that `Mooncake.TestUtils.test_rule` provides a co
 ## Segfaults
 
 These are everyone's least favourite kind of problem, and they should be _extremely_ rare in Mooncake.jl.
-However, if you are unfortunate enough to encounter one, please re-run your problem with the `safety_on` kwarg set to `true`.
+However, if you are unfortunate enough to encounter one, please re-run your problem with the `debug_mode` kwarg set to `true`.
 See [Safe Mode](@ref) for more info.
 In general, this will catch problems before they become segfaults, at which point the above strategy for debugging and error reporting should work well.

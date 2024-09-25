@@ -7,7 +7,7 @@ post-conditions to `pb`. Let `dx = pb.pb(dy)`, for some rdata `dy`, then this fu
 - checks that `dy` has the correct rdata type for `y`, and
 - checks that each element of `dx` has the correct rdata type for `x`.
 
-Reverse pass counterpart to [`SafeRRule`](@ref)
+Reverse pass counterpart to [`DebugRRule`](@ref)
 """
 struct SafePullback{Tpb, Ty, Tx}
     pb::Tpb
@@ -47,7 +47,7 @@ end
 end
 
 """
-    SafeRRule(rule)
+    DebugRRule(rule)
 
 Construct a callable which is equivalent to `rule`, but inserts additional type checking.
 In particular:
@@ -63,8 +63,8 @@ static type alone.
 Some additional dynamic checks are also performed (e.g. that an fdata array of the same size
 as its primal).
 
-Let `rule` return `y, pb!!`, then `SafeRRule(rule)` returns `y, SafePullback(pb!!)`.
-`SafePullback` inserts the same kind of checks as `SafeRRule`, but on the reverse-pass. See
+Let `rule` return `y, pb!!`, then `DebugRRule(rule)` returns `y, SafePullback(pb!!)`.
+`SafePullback` inserts the same kind of checks as `DebugRRule`, but on the reverse-pass. See
 the docstring for details.
 
 *Note:* at any given point in time, the checks performed by this function constitute a
@@ -77,19 +77,19 @@ article: https://en.wikipedia.org/wiki/Safe_mode . Its purpose is to help with d
 and should not be used when trying to differentiate code in general, as it decreases
 performance quite substantially in many cases.
 """
-struct SafeRRule{Trule}
+struct DebugRRule{Trule}
     rule::Trule
 end
 
-_copy(x::P) where {P<:SafeRRule} = P(_copy(x.rule))
+_copy(x::P) where {P<:DebugRRule} = P(_copy(x.rule))
 
 """
-    (rule::SafeRRule)(x::CoDual...)
+    (rule::DebugRRule)(x::CoDual...)
 
 Apply type checking to enforce pre- and post-conditions on `rule.rule`. See the docstring
-for `SafeRRule` for details.
+for `DebugRRule` for details.
 """
-@inline function (rule::SafeRRule)(x::Vararg{CoDual, N}) where {N}
+@inline function (rule::DebugRRule)(x::Vararg{CoDual, N}) where {N}
     verify_fwds_inputs(x)
     y, pb = rule.rule(x...)
     verify_fwds_output(x, y)
