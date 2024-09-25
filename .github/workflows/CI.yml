@@ -20,6 +20,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        version:
+          - '1'
+          - 'pre'
         test_group:
           - 'basic'
           - 'rrules'
@@ -35,7 +38,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
-          version: '1'
+          version: ${{ matrix.version }}
           arch: x64
           include-all-prereleases: false
       - uses: julia-actions/cache@v2
