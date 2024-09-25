@@ -60,13 +60,13 @@ end
 
 # # Interop with ADTypes.
 # function ADgradient(x::ADTypes.AutoMooncake, ℓ)
-#     if x.safe_mode
-#         msg = "Running Mooncake in safe mode. This mode is computationally expensive, " *
+#     if x.debug_mode
+#         msg = "Running Mooncake in debug mode. This mode is computationally expensive, " *
 #             "should only be used when debugging a problem with AD, and turned off in " *
-#             "general use. Do this by using AutoMooncake(safe_mode=false)."
+#             "general use. Do this by using AutoMooncake(debug_mode=false)."
 #         @info msg
 #     end
-#     return ADgradient(Val(:Mooncake), ℓ; debug_mode=x.safe_mode)
+#     return ADgradient(Val(:Mooncake), ℓ; debug_mode=x.debug_mode)
 # end
 
 Base.parent(x::MooncakeGradientLogDensity) = Mooncake.primal(x.ℓ)

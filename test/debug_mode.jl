@@ -1,4 +1,4 @@
-@testset "safety" begin
+@testset "debug_mode" begin
 
     # Forwards-pass tests.
     x = (CoDual(sin, NoTangent()), CoDual(5.0, NoFData()))

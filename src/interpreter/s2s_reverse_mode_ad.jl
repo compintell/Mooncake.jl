@@ -105,8 +105,8 @@ codegen which produces the forwards- and reverse-passes.
     the final programme.
 - `ssa_rdata_ref_ids`: the same as `arg_rdata_ref_ids`, but for each `ID` associated to an
     ssa rather than each argument.
-- `debug_mode`: if `true`, run in "safe mode" -- wraps all rule calls in `DebugRRule`. This
-    is applied recursively, so that safe mode is also switched on in derived rules.
+- `debug_mode`: if `true`, run in "debug mode" -- wraps all rule calls in `DebugRRule`. This
+    is applied recursively, so that debug mode is also switched on in derived rules.
 - `is_used_dict`: for each `ID` associated to a line of code, is `false` if line is not used
     anywhere in any other line of code.
 - `lazy_zero_rdata_ref_id`: for any arguments whose type doesn't permit the construction of
@@ -505,10 +505,10 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         # output of `can_produce_zero_rdata_from_type(P)`, where `P` is the type of the
         # value returned by this line.
         tmp = can_produce_zero_rdata_from_type(get_primal_type(info, line))
-        zero_safe_rule = tmp ? raw_rule : RRuleZeroWrapper(raw_rule)
+        zero_wrapped_rule = tmp ? raw_rule : RRuleZeroWrapper(raw_rule)
 
-        # If safe mode has been requested, use a safe rule.
-        rule = info.debug_mode ? DebugRRule(zero_safe_rule) : zero_safe_rule
+        # If debug mode has been requested, use a debug rule.
+        rule = info.debug_mode ? DebugRRule(zero_wrapped_rule) : zero_wrapped_rule
 
         # If the rule is `rrule!!` (i.e. `sig` is primitive), then don't bother putting
         # the rule into shared data, because it's safe to put it directly into the code.
@@ -852,9 +852,9 @@ function build_rrule(
         ))
     end
 
-    # If we're compiling in safe mode, let the user know by default.
+    # If we're compiling in debug mode, let the user know by default.
     if !silence_debug_messages && debug_mode
-        @info "Compiling rule for $sig_or_mi in safe mode. Disable for best performance."
+        @info "Compiling rule for $sig_or_mi in debug mode. Disable for best performance."
     end
 
     # If we have a hand-coded rule, just use that.

@@ -1,4 +1,4 @@
-# Safe Mode
+# Debug Mode
 
 ```@meta
 DocTestSetup = quote
@@ -48,7 +48,7 @@ When using ADTypes.jl, you can choose whether or not to use it via the `debug_mo
 # AutoMooncake(Mooncake.Config())
 # ```
 
-### When Should You Use Safe Mode?
+### When Should You Use Debug Mode?
 
 Only use `debug_mode` when debugging a problem.
 This is because is has substantial performance implications.

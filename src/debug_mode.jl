@@ -1,6 +1,6 @@
 
 """
-    SafePullback(pb, y, x)
+    DebugPullback(pb, y, x)
 
 Construct a callable which is equivalent to `pb`, but which enforces type-based pre- and
 post-conditions to `pb`. Let `dx = pb.pb(dy)`, for some rdata `dy`, then this function
@@ -9,19 +9,19 @@ post-conditions to `pb`. Let `dx = pb.pb(dy)`, for some rdata `dy`, then this fu
 
 Reverse pass counterpart to [`DebugRRule`](@ref)
 """
-struct SafePullback{Tpb, Ty, Tx}
+struct DebugPullback{Tpb, Ty, Tx}
     pb::Tpb
     y::Ty
     x::Tx
 end
 
 """
-    (pb::SafePullback)(dy)
+    (pb::DebugPullback)(dy)
 
 Apply type checking to enforce pre- and post-conditions on `pb.pb`. See the docstring for
-`SafePullback` for details.
+`DebugPullback` for details.
 """
-@inline function (pb::SafePullback)(dy)
+@inline function (pb::DebugPullback)(dy)
     verify_rvs_input(pb.y, dy)
     dx = pb.pb(dy)
     verify_rvs_output(pb.x, dx)
@@ -63,19 +63,14 @@ static type alone.
 Some additional dynamic checks are also performed (e.g. that an fdata array of the same size
 as its primal).
 
-Let `rule` return `y, pb!!`, then `DebugRRule(rule)` returns `y, SafePullback(pb!!)`.
-`SafePullback` inserts the same kind of checks as `DebugRRule`, but on the reverse-pass. See
+Let `rule` return `y, pb!!`, then `DebugRRule(rule)` returns `y, DebugPullback(pb!!)`.
+`DebugPullback` inserts the same kind of checks as `DebugRRule`, but on the reverse-pass. See
 the docstring for details.
 
 *Note:* at any given point in time, the checks performed by this function constitute a
 necessary but insufficient set of conditions to ensure correctness. If you find that an
 error isn't being caught by these tests, but you believe it ought to be, please open an
 issue or (better still) a PR.
-
-*Note:* this is a "safe mode" in the sense of operating systems. See e.g. this Wikipedia
-article: https://en.wikipedia.org/wiki/Safe_mode . Its purpose is to help with debugging,
-and should not be used when trying to differentiate code in general, as it decreases
-performance quite substantially in many cases.
 """
 struct DebugRRule{Trule}
     rule::Trule
@@ -93,7 +88,7 @@ for `DebugRRule` for details.
     verify_fwds_inputs(x)
     y, pb = rule.rule(x...)
     verify_fwds_output(x, y)
-    return y::CoDual, SafePullback(pb, primal(y), map(primal, x))
+    return y::CoDual, DebugPullback(pb, primal(y), map(primal, x))
 end
 
 @noinline function verify_fwds_inputs(@nospecialize(x::Tuple))
