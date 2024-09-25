@@ -43,10 +43,10 @@ Mooncake.build_rrule
 ```
 
 When using ADTypes.jl, you can choose whether or not to use it via the `safe_mode` kwarg:
-# ```jldoctest
-# julia> AutoMooncake(safe_mode=false)
-# AutoMooncake(safe_mode=false)
-# ```
+```jldoctest
+julia> AutoMooncake(safe_mode=false)
+AutoMooncake(safe_mode=false)
+```
 
 ### When Should You Use Safe Mode?
 
