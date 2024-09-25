@@ -125,7 +125,7 @@ end
         @info name
         rng = sr(123)
         f, x = build_turing_problem(rng, model, ex)
-        test_rule(sr(123456), f, x; interface_only=true, is_primitive=false, safety_on=true)
+        test_rule(sr(123456), f, x; interface_only=true, is_primitive=false, debug_mode=true)
 
         # rule = build_rrule(interp, _typeof((f, x)))
         # codualed_args = map(zero_codual, (f, x))

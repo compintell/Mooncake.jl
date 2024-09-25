@@ -60,7 +60,7 @@ include("utils.jl")
 include("tangents.jl")
 include("fwds_rvs_data.jl")
 include("codual.jl")
-include("safe_mode.jl")
+include("debug_mode.jl")
 include("stack.jl")
 
 include(joinpath("interpreter", "contexts.jl"))
@@ -87,6 +87,7 @@ include(joinpath("rrules", "tasks.jl"))
 
 include("chain_rules_macro.jl")
 include("interface.jl")
+include("config.jl")
 
 export
     primal,

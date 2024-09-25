@@ -33,7 +33,7 @@ makedocs(
             "Mooncake.jl's Rule System" => "mathematical_interpretation.md",
         ],
         "Known Limitations" => "known_limitations.md",
-        "Safe Mode" => "safe_mode.md",
+        "Debug Mode" => "debug_mode.md",
         "Debugging and MWEs" => "debugging_and_mwes.md",
     ]
 )

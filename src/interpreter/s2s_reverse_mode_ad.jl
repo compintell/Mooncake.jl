@@ -105,8 +105,8 @@ codegen which produces the forwards- and reverse-passes.
     the final programme.
 - `ssa_rdata_ref_ids`: the same as `arg_rdata_ref_ids`, but for each `ID` associated to an
     ssa rather than each argument.
-- `safety_on`: if `true`, run in "safe mode" -- wraps all rule calls in `SafeRRule`. This is
-    applied recursively, so that safe mode is also switched on in derived rules.
+- `debug_mode`: if `true`, run in "debug mode" -- wraps all rule calls in `DebugRRule`. This
+    is applied recursively, so that debug mode is also switched on in derived rules.
 - `is_used_dict`: for each `ID` associated to a line of code, is `false` if line is not used
     anywhere in any other line of code.
 - `lazy_zero_rdata_ref_id`: for any arguments whose type doesn't permit the construction of
@@ -128,7 +128,7 @@ struct ADInfo
     ssa_insts::Dict{ID, NewInstruction}
     arg_rdata_ref_ids::Dict{Argument, ID}
     ssa_rdata_ref_ids::Dict{ID, ID}
-    safety_on::Bool
+    debug_mode::Bool
     is_used_dict::Dict{ID, Bool}
     lazy_zero_rdata_ref_id::ID
 end
@@ -140,7 +140,7 @@ function ADInfo(
     arg_types::Dict{Argument, Any},
     ssa_insts::Dict{ID, NewInstruction},
     is_used_dict::Dict{ID, Bool},
-    safety_on::Bool,
+    debug_mode::Bool,
     zero_lazy_rdata_ref::Ref{<:Tuple},
 )
     shared_data_pairs = SharedDataPairs()
@@ -155,15 +155,15 @@ function ADInfo(
         ssa_insts,
         Dict((k, ID()) for k in keys(arg_types)),
         Dict((k, ID()) for k in keys(ssa_insts)),
-        safety_on,
+        debug_mode,
         is_used_dict,
         add_data!(shared_data_pairs, zero_lazy_rdata_ref),
     )
 end
 
 # The constructor you should use for ADInfo if you _do_ have a BBCode lying around. See the
-# ADInfo struct for information regarding `interp` and `safety_on`.
-function ADInfo(interp::MooncakeInterpreter, ir::BBCode, safety_on::Bool)
+# ADInfo struct for information regarding `interp` and `debug_mode`.
+function ADInfo(interp::MooncakeInterpreter, ir::BBCode, debug_mode::Bool)
     arg_types = Dict{Argument, Any}(
         map(((n, t),) -> (Argument(n) => _type(t)), enumerate(ir.argtypes))
     )
@@ -171,7 +171,7 @@ function ADInfo(interp::MooncakeInterpreter, ir::BBCode, safety_on::Bool)
     ssa_insts = Dict{ID, NewInstruction}(stmts)
     is_used_dict = characterise_used_ids(stmts)
     zero_lazy_rdata_ref = Ref{Tuple{map(lazy_zero_rdata_type ∘ _type, ir.argtypes)...}}()
-    return ADInfo(interp, arg_types, ssa_insts, is_used_dict, safety_on, zero_lazy_rdata_ref)
+    return ADInfo(interp, arg_types, ssa_insts, is_used_dict, debug_mode, zero_lazy_rdata_ref)
 end
 
 # Shortcut for `add_data!(info.shared_data_pairs, data)`.
@@ -495,9 +495,9 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
             rrule!! # intrinsic / builtin / thing we provably have rule for
         elseif is_invoke
             mi = stmt.args[1]::Core.MethodInstance
-            LazyDerivedRule(mi, info.safety_on) # Static dispatch
+            LazyDerivedRule(mi, info.debug_mode) # Static dispatch
         else
-            DynamicDerivedRule(info.safety_on)  # Dynamic dispatch
+            DynamicDerivedRule(info.debug_mode)  # Dynamic dispatch
         end
 
         # Wrap the raw rule in a struct which ensures that any `ZeroRData`s are stripped
@@ -505,10 +505,10 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         # output of `can_produce_zero_rdata_from_type(P)`, where `P` is the type of the
         # value returned by this line.
         tmp = can_produce_zero_rdata_from_type(get_primal_type(info, line))
-        zero_safe_rule = tmp ? raw_rule : RRuleZeroWrapper(raw_rule)
+        zero_wrapped_rule = tmp ? raw_rule : RRuleZeroWrapper(raw_rule)
 
-        # If safe mode has been requested, use a safe rule.
-        rule = info.safety_on ? SafeRRule(zero_safe_rule) : zero_safe_rule
+        # If debug mode has been requested, use a debug rule.
+        rule = info.debug_mode ? DebugRRule(zero_wrapped_rule) : zero_wrapped_rule
 
         # If the rule is `rrule!!` (i.e. `sig` is primitive), then don't bother putting
         # the rule into shared data, because it's safe to put it directly into the code.
@@ -765,10 +765,10 @@ _is_primitive(C::Type, sig::Type) = is_primitive(C, sig)
 # Compute the concrete type of the rule that will be returned from `build_rrule`. This is
 # important for performance in dynamic dispatch, and to ensure that recursion works
 # properly.
-function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; safety_on) where {C}
+function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where {C}
 
     if _is_primitive(C, sig_or_mi)
-        return safety_on ? SafeRRule{typeof(rrule!!)} : typeof(rrule!!)
+        return debug_mode ? DebugRRule{typeof(rrule!!)} : typeof(rrule!!)
     end
 
     ir, _ = lookup_ir(interp, sig_or_mi)
@@ -781,8 +781,8 @@ function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; safety_on) where {
     arg_rvs_types = Tuple{map(rdata_type ∘ tangent_type, arg_types)...}
     rvs_return_type = rdata_type(tangent_type(Treturn))
     return if isconcretetype(Treturn)
-        if safety_on
-            SafeRRule{DerivedRule{
+        if debug_mode
+            DebugRRule{DerivedRule{
                 primal_sig,
                 MistyClosure{OpaqueClosure{arg_fwds_types, fcodual_type(Treturn)}},
                 MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
@@ -799,8 +799,8 @@ function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; safety_on) where {
             }
         end
     else
-        if safety_on
-            SafeRRule{DerivedRule{
+        if debug_mode
+            DebugRRule{DerivedRule{
                 primal_sig,
                 MistyClosure{OpaqueClosure{arg_fwds_types, Tfcodual_ret}},
                 MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
@@ -820,27 +820,27 @@ function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; safety_on) where {
 end
 
 """
-    build_rrule(args...; safety_on=false)
+    build_rrule(args...; debug_mode=false)
 
 Helper method. Only uses static information from `args`.
 """
-function build_rrule(args...; safety_on=false)
+function build_rrule(args...; debug_mode=false)
     interp = get_interpreter()
-    return build_rrule(interp, _typeof(TestUtils.__get_primals(args)); safety_on)
+    return build_rrule(interp, _typeof(TestUtils.__get_primals(args)); debug_mode)
 end
 
 const MOONCAKE_INFERENCE_LOCK = ReentrantLock()
 
 """
-    build_rrule(interp::MooncakeInterpreter{C}, sig_or_mi; safety_on=false) where {C}
+    build_rrule(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode=false) where {C}
 
 Returns a `DerivedRule` which is an `rrule!!` for `sig_or_mi` in context `C`. See the
 docstring for `rrule!!` for more info.
 
-If `safety_on` is `true`, then all calls to rules are replaced with calls to `SafeRRule`s.
+If `debug_mode` is `true`, then all calls to rules are replaced with calls to `DebugRRule`s.
 """
 function build_rrule(
-    interp::MooncakeInterpreter{C}, sig_or_mi; safety_on=false, silence_safety_messages=true
+    interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode=false, silence_debug_messages=true
 ) where {C}
 
     # To avoid segfaults, ensure that we bail out if the interpreter's world age is greater
@@ -852,18 +852,18 @@ function build_rrule(
         ))
     end
 
-    # If we're compiling in safe mode, let the user know by default.
-    if !silence_safety_messages && safety_on
-        @info "Compiling rule for $sig_or_mi in safe mode. Disable for best performance."
+    # If we're compiling in debug mode, let the user know by default.
+    if !silence_debug_messages && debug_mode
+        @info "Compiling rule for $sig_or_mi in debug mode. Disable for best performance."
     end
 
     # If we have a hand-coded rule, just use that.
-    _is_primitive(C, sig_or_mi) && return (safety_on ? SafeRRule(rrule!!) : rrule!!)
+    _is_primitive(C, sig_or_mi) && return (debug_mode ? DebugRRule(rrule!!) : rrule!!)
     lock(MOONCAKE_INFERENCE_LOCK)
     try
         # If we've already derived the OpaqueClosures and info, do not re-derive, just create a
         # copy and pass in new shared data.
-        oc_cache_key = ClosureCacheKey(interp.world, (sig_or_mi, safety_on))
+        oc_cache_key = ClosureCacheKey(interp.world, (sig_or_mi, debug_mode))
         if haskey(interp.oc_cache, oc_cache_key)
             return _copy(interp.oc_cache[oc_cache_key])
         else
@@ -882,7 +882,7 @@ function build_rrule(
             primal_ir = BBCode(ir)
 
             # Compute global info.
-            info = ADInfo(interp, primal_ir, safety_on)
+            info = ADInfo(interp, primal_ir, debug_mode)
 
             # For each block in the fwds and pullback BBCode, translate all statements. Running this
             # will, in general, push items to `info.shared_data_pairs`.
@@ -910,7 +910,7 @@ function build_rrule(
             # optimised_pb_ir = optimise_ir!(IRCode(pb_ir); do_inline=true)
             # @show sig_or_mi
             # @show Treturn
-            # @show safety_on
+            # @show debug_mode
             # display(ir)
             # display(IRCode(fwds_ir))
             # display(IRCode(pb_ir))
@@ -936,7 +936,7 @@ function build_rrule(
             end
 
             raw_rule = DerivedRule(sig, fwds_oc, pb_oc, Val(isva), Val(num_args(info)))
-            rule = safety_on ? SafeRRule(raw_rule) : raw_rule
+            rule = debug_mode ? DebugRRule(raw_rule) : raw_rule
             interp.oc_cache[oc_cache_key] = rule
             return rule
         end
@@ -1411,7 +1411,7 @@ end
 __switch_case(id::Int32, predecessor_id::Int32) = !(id === predecessor_id)
 
 #=
-    DynamicDerivedRule(interp::MooncakeInterpreter, safety_on::Bool)
+    DynamicDerivedRule(interp::MooncakeInterpreter, debug_mode::Bool)
 
 For internal use only.
 
@@ -1422,25 +1422,25 @@ This is used to implement dynamic dispatch.
 =#
 struct DynamicDerivedRule{V}
     cache::V
-    safety_on::Bool
+    debug_mode::Bool
 end
 
-DynamicDerivedRule(safety_on::Bool) = DynamicDerivedRule(Dict{Any, Any}(), safety_on)
+DynamicDerivedRule(debug_mode::Bool) = DynamicDerivedRule(Dict{Any, Any}(), debug_mode)
 
-_copy(x::P) where {P<:DynamicDerivedRule} = P(Dict{Any, Any}(), x.safety_on)
+_copy(x::P) where {P<:DynamicDerivedRule} = P(Dict{Any, Any}(), x.debug_mode)
 
 function (dynamic_rule::DynamicDerivedRule)(args::Vararg{Any, N}) where {N}
     sig = Tuple{map(_typeof ∘ primal, args)...}
     rule = get(dynamic_rule.cache, sig, nothing)
     if rule === nothing
-        rule = build_rrule(get_interpreter(), sig; safety_on=dynamic_rule.safety_on)
+        rule = build_rrule(get_interpreter(), sig; debug_mode=dynamic_rule.debug_mode)
         dynamic_rule.cache[sig] = rule
     end
     return rule(args...)
 end
 
 #=
-    LazyDerivedRule(interp, mi::Core.MethodInstance, safety_on::Bool)
+    LazyDerivedRule(interp, mi::Core.MethodInstance, debug_mode::Bool)
 
 For internal use only.
 
@@ -1448,7 +1448,7 @@ A type-stable wrapper around a `DerivedRule`, which only instantiates the `Deriv
 when it is first called. This is useful, as it means that if a rule does not get run, it
 does not have to be derived.
 
-If `safety_on` is `true`, then the rule constructed will be a `SafeRRule`. This is useful
+If `debug_mode` is `true`, then the rule constructed will be a `DebugRRule`. This is useful
 when debugging, but should usually be switched off for production code as it (in general)
 incurs some runtime overhead.
 
@@ -1458,26 +1458,26 @@ in the stack trace when something goes wrong, as it allows you to trivially dete
 bit of your code is the culprit.
 =#
 mutable struct LazyDerivedRule{primal_sig, Trule}
-    safety_on::Bool
+    debug_mode::Bool
     mi::Core.MethodInstance
     rule::Trule
-    function LazyDerivedRule(mi::Core.MethodInstance, safety_on::Bool)
+    function LazyDerivedRule(mi::Core.MethodInstance, debug_mode::Bool)
         interp = get_interpreter()
-        return new{mi.specTypes, rule_type(interp, mi; safety_on)}(safety_on, mi)
+        return new{mi.specTypes, rule_type(interp, mi; debug_mode)}(debug_mode, mi)
     end
     function LazyDerivedRule{Tprimal_sig, Trule}(
-        mi::Core.MethodInstance, safety_on::Bool
+        mi::Core.MethodInstance, debug_mode::Bool
     ) where {Tprimal_sig, Trule}
-        return new{Tprimal_sig, Trule}(safety_on, mi)
+        return new{Tprimal_sig, Trule}(debug_mode, mi)
     end
 end
 
-_copy(x::P) where {P<:LazyDerivedRule} = P(x.mi, x.safety_on)
+_copy(x::P) where {P<:LazyDerivedRule} = P(x.mi, x.debug_mode)
 
 function (rule::LazyDerivedRule{sig, Trule})(args::Vararg{Any, N}) where {N, sig, Trule}
     if !isdefined(rule, :rule)
         interp = get_interpreter()
-        derived_rule = build_rrule(interp, rule.mi; safety_on=rule.safety_on)
+        derived_rule = build_rrule(interp, rule.mi; debug_mode=rule.debug_mode)
         if derived_rule isa Trule
             rule.rule = derived_rule
         else
