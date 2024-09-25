@@ -1,21 +1,30 @@
 module MooncakeLuxLibExt
 
-    using LuxLib, Random, Mooncake
-    using Base: IEEEFloat
+using LuxLib, Random, Mooncake
+using Base: IEEEFloat
 
-    import LuxLib.Impl: matmul, matmuladd, fused_dense
-    import Mooncake: @from_rrule, DefaultCtx
+import LuxLib.Impl: matmul, matmuladd, fused_dense
+import Mooncake: @from_rrule, DefaultCtx, MooncakeInterpreter
 
-    @from_rrule(DefaultCtx, Tuple{typeof(matmul), Array{P}, Array{P}} where {P<:IEEEFloat})
-    @from_rrule(
-        DefaultCtx,
-        Tuple{typeof(matmuladd), Array{P}, Array{P}, Vector{P}} where {P<:IEEEFloat},
-    )
+@from_rrule(DefaultCtx, Tuple{typeof(matmul), Array{P}, Array{P}} where {P<:IEEEFloat})
+@from_rrule(
+    DefaultCtx,
+    Tuple{typeof(matmuladd), Array{P}, Array{P}, Vector{P}} where {P<:IEEEFloat},
+)
 
-    # The implementations of rrules for fused operations are not straightforward to
-    # incorporate into Mooncake.jl, because they call back into AD.
-    # We take a simple appoach to their implementation: differentiate an un-fused version
-    # of their implementation. This will likely hit performance, but it makes implementing
-    # rules much more straightforward, in that we only have to be able to implement their
-    # constituent parts, rather than the entire thing.
+# Unfused version of `fused_dense`, which `build_rrule` makes use of.
+function unfused_dense(
+    opmode,
+    act::F,
+    weight::AbstractMatrix,
+    x::AbstractMatrix,
+    b::LuxLib.Optional{<:AbstractVector},
+) where {F}
+    return bias_activation(act, matmul(opmode, weight, x), b)
+end
+
+function Mooncake.build_rrule(interp::MooncakeInterpreter, sig_or_mi; kwargs...)
+    return Mooncake.build
+end
+
 end
