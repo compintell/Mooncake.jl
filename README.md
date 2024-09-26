@@ -33,11 +33,11 @@ The one that we recommend people begin with is [DifferentiationInterface.jl](htt
 using DifferentiationInterface
 import Mooncake
 
-f(x) = sum(abs2, x)
-backend = AutoMooncake()
-x = ones(3)
-extras = prepare_gradient(f, backend, x)
-gradient(f, backend, x, extras)
+f(x) = sum(cos, x)
+backend = AutoMooncake(; config=nothing)
+x = ones(1_000)
+prep = prepare_gradient(f, backend, x)
+gradient(f, prep, backend, x)
 ```
 You should expect that the first time you run `gradient` that it will take a little bit of time, but subsequent runs should be fast.
 
