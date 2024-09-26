@@ -26,5 +26,5 @@ test_gradient(x) = -2 .* x
 
     # Run in debug mode.
     debug_config = Mooncake.Config(; debug_mode=true)
-    @test parent(ADgradient(ADTypes.AutoMooncake(; config), l)) === l
+    @test parent(ADgradient(ADTypes.AutoMooncake(; config=debug_config), l)) === l
 end
