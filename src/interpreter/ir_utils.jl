@@ -156,6 +156,7 @@ function optimise_ir!(ir::IRCode; show_ir=false, do_inline=true)
         ir = CC.ssa_inlining_pass!(ir, inline_state, #=propagate_inbounds=#true)
         ir = CC.compact!(ir)
     end
+    ir = IRCode(remove_unreachable_blocks(BBCode(ir)))
     ir = __strip_coverage!(ir)
     ir = CC.sroa_pass!(ir, inline_state)
     ir = CC.adce_pass!(ir, inline_state)
