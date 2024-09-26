@@ -205,6 +205,8 @@ The precise definition and role of `NoFData` will be explained shortly, but the 
 
 The rule returns another `CoDual` (it propagates book-keeping information forwards), along with a `function` which runs the reverse pass.
 
+
+
 In a little more depth:
 
 
@@ -292,6 +294,12 @@ The following docstring provides the best in-depth explanation.
 ```@docs
 Mooncake.fdata_type(T)
 ```
+
+
+_**CoDuals**_
+
+CoDuals are simply used to bundle together values and fdata, depending upon context.
+Occassionally, they are used to pair together values and tangents.
 
 
 
