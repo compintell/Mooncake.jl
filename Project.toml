@@ -1,7 +1,7 @@
 name = "Mooncake"
 uuid = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
 authors = ["Will Tebbutt, Hong Ge, and contributors"]
-version = "0.3.0"
+version = "0.4.1"
 
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
@@ -32,7 +32,7 @@ MooncakeLogDensityProblemsADExt = "LogDensityProblemsAD"
 MooncakeSpecialFunctionsExt = "SpecialFunctions"
 
 [compat]
-ADTypes = "1.2"
+ADTypes = "1.9"
 BenchmarkTools = "1"
 CUDA = "5"
 ChainRulesCore = "1"

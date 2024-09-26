@@ -31,10 +31,10 @@ end
 
 Gradient using algorithmic/automatic differentiation via Mooncake.
 """
-function ADgradient(::Val{:Mooncake}, ℓ; safety_on::Bool=false, rule=nothing)
+function ADgradient(::Val{:Mooncake}, ℓ; debug_mode::Bool=false, rule=nothing)
     if isnothing(rule)
         primal_sig = Tuple{typeof(logdensity), typeof(ℓ), Vector{Float64}}
-        rule = Mooncake.build_rrule(Mooncake.get_interpreter(), primal_sig; safety_on)
+        rule = Mooncake.build_rrule(Mooncake.get_interpreter(), primal_sig; debug_mode)
     end
     return MooncakeGradientLogDensity(rule, Mooncake.uninit_fcodual(ℓ))
 end
@@ -58,16 +58,18 @@ function logdensity_and_gradient(∇l::MooncakeGradientLogDensity, x::Vector{Flo
     return Mooncake.primal(y), dx
 end
 
-# # Interop with ADTypes.
-# function ADgradient(x::ADTypes.AutoMooncake, ℓ)
-#     if x.safe_mode
-#         msg = "Running Mooncake in safe mode. This mode is computationally expensive, " *
-#             "should only be used when debugging a problem with AD, and turned off in " *
-#             "general use. Do this by using AutoMooncake(safe_mode=false)."
-#         @info msg
-#     end
-#     return ADgradient(Val(:Mooncake), ℓ; safety_on=x.safe_mode)
-# end
+# Interop with ADTypes.
+function ADgradient(x::ADTypes.AutoMooncake, ℓ)
+    debug_mode = x.config.debug_mode
+    if debug_mode
+        msg = "Running Mooncake in debug mode. This mode is computationally expensive, " *
+            "should only be used when debugging a problem with AD, and turned off in " *
+            "general use. Do this by using " *
+            "AutoMooncake(; config=Mooncake.Config(debug_mode=false))."
+        @info msg
+    end
+    return ADgradient(Val(:Mooncake), ℓ; debug_mode)
+end
 
 Base.parent(x::MooncakeGradientLogDensity) = Mooncake.primal(x.ℓ)
 
