@@ -20,7 +20,12 @@ test_gradient(x) = -2 .* x
         @test isapprox(logdensity_and_gradient(∇l, x)[2], test_gradient(x))
     end
 
-    config = config=Mooncake.Config(; debug_mode=false)
+    config = Mooncake.Config(; debug_mode=false)
     @test ADgradient(ADTypes.AutoMooncake(; config), l) isa typeof(∇l)
+    @test parent(∇l) === l
+
+    # Run in debug mode.
+    debug_config = Mooncake.Config(; debug_mode=true)
+    @test ADgradient(ADTypes.AutoMooncake(; debug_config), l) isa typeof(∇l)
     @test parent(∇l) === l
 end
