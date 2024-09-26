@@ -1,7 +1,7 @@
 name = "Mooncake"
 uuid = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
 authors = ["Will Tebbutt, Hong Ge, and contributors"]
-version = "0.4.1"
+version = "0.4.2"
 
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
@@ -40,7 +40,7 @@ DiffRules = "1"
 DiffTests = "0.1"
 Distributions = "0.25"
 Documenter = "1"
-DynamicPPL = "0.28"
+DynamicPPL = "0.29"
 ExprTools = "0.1"
 FillArrays = "1"
 Graphs = "1"
@@ -52,7 +52,6 @@ Setfield = "1"
 SpecialFunctions = "2"
 StableRNGs = "1"
 TemporalGPs = "0.6"
-Turing = "0.34"
 julia = "1.10"
 
 [extras]
@@ -68,12 +67,10 @@ JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
 KernelFunctions = "ec8451be-7e33-11e9-00cf-bbf324bd1392"
 LogDensityProblemsAD = "996a588d-648d-4e1f-a8f0-a84b347e47b1"
 PDMats = "90014a1f-27ba-587c-ab20-58faa44d9150"
-ReverseDiff = "37e2e3b7-166d-5795-8a7a-e32c996b4267"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 StableRNGs = "860ef19b-820b-49d6-a774-d7a799459cd3"
 TemporalGPs = "e155a3c4-0841-43e1-8b83-a0e4f03cc18f"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
 
 [targets]
-test = ["AbstractGPs", "BenchmarkTools", "CUDA", "DiffTests", "Distributions", "Documenter", "DynamicPPL", "FillArrays", "KernelFunctions", "JET", "LogDensityProblemsAD", "PDMats", "ReverseDiff", "SpecialFunctions", "StableRNGs", "Test", "Turing", "TemporalGPs"]
+test = ["AbstractGPs", "BenchmarkTools", "CUDA", "DiffTests", "Distributions", "Documenter", "DynamicPPL", "FillArrays", "KernelFunctions", "JET", "LogDensityProblemsAD", "PDMats", "SpecialFunctions", "StableRNGs", "Test", "TemporalGPs"]

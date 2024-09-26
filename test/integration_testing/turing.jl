@@ -1,13 +1,4 @@
-using Turing
-
-using ReverseDiff
-# using CSV, DataFrames, ReverseDiff
-# turing_bench_results = DataFrame(
-#     :name => String[],
-#     :primal => [],
-#     :gradient => [],
-#     :reversediff => [],
-# )
+using Distributions, DynamicPPL
 
 @model function simple_model()
     y ~ Normal()
@@ -27,7 +18,6 @@ end
 @model broadcast_demo(x) = begin
     μ ~ truncated(Normal(1, 2), 0.1, 10)
     σ ~ truncated(Normal(1, 2), 0.1, 10)
-    
     x .~ LogNormal(μ, σ)   
 end
 
@@ -68,7 +58,7 @@ end
     θ ~ filldist(Dirichlet(α), D)
 
     log_product = log.(β * θ)
-    Turing.@addlogprob! sum(log_product[CartesianIndex.(w, doc)])
+    DynamicPPL.@addlogprob! sum(log_product[CartesianIndex.(w, doc)])
     # Above is equivalent to below
     #product = β * θ
     #dist = [Categorical(product[:,i]) for i in 1:D]
@@ -88,12 +78,12 @@ end
 make_large_model()
 
 function build_turing_problem(rng, model, example=nothing)
-    ctx = Turing.DefaultContext()
-    vi = example === nothing ? Turing.SimpleVarInfo(model) : Turing.SimpleVarInfo(example)
-    vi_linked = Turing.link(vi, model)
-    ldp = Turing.LogDensityFunction(vi_linked, model, ctx)
-    test_function = Base.Fix1(Turing.LogDensityProblems.logdensity, ldp)
-    d = Turing.LogDensityProblems.dimension(ldp)
+    ctx = DynamicPPL.DefaultContext()
+    vi = DynamicPPL.SimpleVarInfo(example === nothing ? model : example)
+    vi_linked = DynamicPPL.link(vi, model)
+    ldp = DynamicPPL.LogDensityFunction(vi_linked, model, ctx)
+    test_function = Base.Fix1(DynamicPPL.LogDensityProblems.logdensity, ldp)
+    d = DynamicPPL.LogDensityProblems.dimension(ldp)
     return test_function, randn(rng, d)
 end
 
@@ -118,64 +108,12 @@ end
             # ), doesn't currently work with SimpleVarInfo
         ],
         Any[
-            (false, "demo_$n", m, Turing.DynamicPPL.TestUtils.rand_prior_true(m)) for
-                (n, m) in enumerate(Turing.DynamicPPL.TestUtils.DEMO_MODELS)
+            (false, "demo_$n", m, DynamicPPL.TestUtils.rand_prior_true(m)) for
+                (n, m) in enumerate(DynamicPPL.TestUtils.DEMO_MODELS)
         ],
     )
         @info name
-        rng = sr(123)
-        f, x = build_turing_problem(rng, model, ex)
-        test_rule(sr(123456), f, x; interface_only=true, is_primitive=false, debug_mode=true)
-
-        # rule = build_rrule(interp, _typeof((f, x)))
-        # codualed_args = map(zero_codual, (f, x))
-        # TestUtils.to_benchmark(rule, codualed_args...)
-
-        # primal = @benchmark $f($x)
-        # gradient = @benchmark(TestUtils.to_benchmark($rule, $codualed_args...))
-
-        # println("primal")
-        # display(primal)
-        # println()
-
-        # println("gradient")
-        # display(gradient)
-        # println()
-
-        # try
-        #     tape = ReverseDiff.GradientTape(f, x);
-        #     ReverseDiff.gradient!(tape, x);
-        #     result = zeros(size(x));
-        #     ReverseDiff.gradient!(result, tape, x)
-
-        #     revdiff = @benchmark ReverseDiff.gradient!($result, $tape, $x)
-        #     println("ReverseDiff")
-        #     display(revdiff)
-        #     println()
-        #     @show time(revdiff) / time(primal)
-        # catch
-        #     display("revdiff failed")
-        # end
-
-        # @show time(gradient) / time(primal)
-
-        # @profview run_many_times(10_000, TestUtils.to_benchmark, rule, codualed_args...)
-
-        # Profile.clear()
-        # @profile run_many_times(10_000, TestUtils.to_benchmark, rule, codualed_args...)
-        # pprof()
-
-        # push!(turing_bench_results, (name, primal, gradient, revdiff))
+        f, x = build_turing_problem(sr(123), model, ex)
+        test_rule(sr(123456), f, x; interface_only=true, is_primitive=false)
     end
 end
-
-# function process_turing_bench_results(df::DataFrame)
-#     out_df = DataFrame(
-#         :name => df.name,
-#         :primal => map(time, df.primal),
-#         :gradient => map(time, df.gradient),
-#         :reversediff => map(time, df.reversediff),
-#     )
-#     CSV.write("turing_benchmarks.csv", out_df)
-# end
-# process_turing_bench_results(turing_bench_results)
