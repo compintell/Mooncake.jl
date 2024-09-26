@@ -32,7 +32,7 @@ MooncakeLogDensityProblemsADExt = "LogDensityProblemsAD"
 MooncakeSpecialFunctionsExt = "SpecialFunctions"
 
 [compat]
-ADTypes = "1.2"
+ADTypes = "1.9"
 BenchmarkTools = "1"
 CUDA = "5"
 ChainRulesCore = "1"
