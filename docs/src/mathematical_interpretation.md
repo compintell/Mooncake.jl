@@ -298,8 +298,8 @@ Mooncake.fdata_type(T)
 
 _**CoDuals**_
 
-CoDuals are simply used to bundle together values and fdata, depending upon context.
-Occassionally, they are used to pair together values and tangents.
+CoDuals are simply used to bundle together a primal and an associated fdata, depending upon context.
+Occassionally, they are used to pair together a primal and a tangent.
 
 
 
