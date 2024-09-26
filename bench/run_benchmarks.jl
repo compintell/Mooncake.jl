@@ -6,6 +6,8 @@ using
     Chairmarks,
     CSV,
     DataFrames,
+    Distributions,
+    DynamicPPL,
     Enzyme,
     KernelFunctions,
     LinearAlgebra,
@@ -15,7 +17,6 @@ using
     ReverseDiff,
     Mooncake,
     Test,
-    Turing,
     Zygote
 
 using Mooncake:
@@ -106,22 +107,22 @@ end
 function build_turing_problem()
     rng = Xoshiro(123)
     model = broadcast_demo(rand(LogNormal(1.5, 0.5), 100_000))
-    ctx = Turing.DefaultContext()
-    vi = Turing.SimpleVarInfo(model)
-    vi_linked = Turing.link(vi, model)
-    ldp = Turing.LogDensityFunction(vi_linked, model, ctx)
-    test_function = Base.Fix1(Turing.LogDensityProblems.logdensity, ldp)
-    d = Turing.LogDensityProblems.dimension(ldp)
+    ctx = DynamicPPL.DefaultContext()
+    vi = DynamicPPL.SimpleVarInfo(model)
+    vi_linked = DynamicPPL.link(vi, model)
+    ldp = DynamicPPL.LogDensityFunction(vi_linked, model, ctx)
+    test_function = Base.Fix1(DynamicPPL.LogDensityProblems.logdensity, ldp)
+    d = DynamicPPL.LogDensityProblems.dimension(ldp)
     return test_function, randn(rng, d)
 end
 
 run_turing_problem(f::F, x::X) where {F, X} = f(x)
 
 should_run_benchmark(
-    ::Val{:zygote}, ::Base.Fix1{<:typeof(Turing.LogDensityProblems.logdensity)}, x...
+    ::Val{:zygote}, ::Base.Fix1{<:typeof(DynamicPPL.LogDensityProblems.logdensity)}, x...
 ) = false
 should_run_benchmark(
-    ::Val{:enzyme}, ::Base.Fix1{<:typeof(Turing.LogDensityProblems.logdensity)}, x...
+    ::Val{:enzyme}, ::Base.Fix1{<:typeof(DynamicPPL.LogDensityProblems.logdensity)}, x...
 ) = false
 
 @inline g(x, a, ::Val{N}) where {N} = N > 0 ? g(x * a, a, Val(N-1)) : x
