@@ -1,4 +1,4 @@
-# Mooncake
+# Mooncake.jl (formerly Tapir.jl)
 
 [![Build Status](https://github.com/compintell/Mooncake.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/compintell/Mooncake.jl/actions/workflows/CI.yml?query=branch%3Amain)
 [![codecov](https://codecov.io/github/compintell/Mooncake.jl/graph/badge.svg?token=NUPWTB4IAP)](https://codecov.io/github/compintell/Mooncake.jl)
@@ -8,27 +8,18 @@
 
 The goal of the `Mooncake.jl` project is to produce a reverse-mode AD package which is written entirely in Julia, which improves over both `ReverseDiff.jl` and `Zygote.jl` in several ways, and is competitive with `Enzyme.jl`.
 
-## Note on renaming
-
-On 18/09/2024 this package was renamed from Tapir.jl to Mooncake.jl.
-The last version while the package was called Tapir.jl was 0.2.51.
-Upon renaming, the version was bumped to 0.3.0.
-
-We are currently going through the process of updating the name of the package in the general registry and updating dependents to use the new package naming.
-This should be largely complete in a few days.
-During this time, there will be no new releases of Mooncake.jl, and there will be issues with its interaction with ADTypes.jl, LogDensityProblemsAD.jl, and possibly other things that we haven't thought of.
-
 ## Note on project status
 
 `Mooncake.jl` is under active development.
 You should presently expect releases involving breaking changes on a semi-regular basis.
-We are trying to keep this README as up to date as possible, particularly with regards to the best examples of code to look at to understand how to use Mooncake.jl.
-If you encounter a new version of Mooncake.jl in the wild, please consult this README for the most up-to-date advice.
+We are trying to keep this README as up to date as possible, particularly with regards to the best examples of code to look at to understand how to use `Mooncake.jl`.
+If you encounter a new version of `Mooncake.jl` in the wild, please consult this README for the most up-to-date advice.
 
 # Getting Started
 
-There are several ways to interact with Mooncake.jl.
-The one that we recommend people begin with is [DifferentiationInterface.jl](https://github.com/gdalle/DifferentiationInterface.jl/). For example, use it as follows to compute the gradient of a function mapping a `Vector{Float64}` to `Float64`.
+There are several ways to interact with `Mooncake.jl`.
+The one that we recommend people begin with is [`DifferentiationInterface.jl`](https://github.com/gdalle/DifferentiationInterface.jl/).
+For example, use it as follows to compute the gradient of a function mapping a `Vector{Float64}` to `Float64`.
 ```julia
 using DifferentiationInterface
 import Mooncake
@@ -39,10 +30,10 @@ x = ones(1_000)
 prep = prepare_gradient(f, backend, x)
 gradient(f, prep, backend, x)
 ```
-You should expect that the first time you run `gradient` that it will take a little bit of time, but subsequent runs should be fast.
+You should expect that `prep` takes a little bit of time to run, but that `gradient` is fast.
 
 We are committed to ensuring support for DifferentiationInterface, which is why we recommend using that.
-If you are interested in slightly more flexible functionality, you should consider `Mooncake.value_and_gradient!!`. See its docstring for more info.
+If you are interested in interacting in a more direct fashion with `Mooncake.jl`, you should consider `Mooncake.value_and_gradient!!`. See its docstring for more info.
 
 # How it works
 
@@ -117,6 +108,9 @@ For about 48 hours is was called `Phi.jl`, but the community guidelines state th
 We then chose `Tapir.jl`, and didn't initially feel that other work [of the same name](https://github.com/wsmoses/Tapir-LLVM) presented a serious name clash, as it isn't AD-specific or a Julia project.
 As it turns out, there has been significant work attempting to integrate the ideas from this work into the [Julia compiler](https://github.com/JuliaLang/julia/pull/39773), so the clash is something of a problem.
 
+On 18/09/2024 this package was renamed from `Tapir.jl` to `Mooncake.jl`.
+The last version while the package was called `Tapir.jl` was 0.2.51.
+Upon renaming, the version was bumped to 0.3.0.
 We finally settled on `Mooncake.jl`. Hopefully this name will stick.
 
 # Project Status
