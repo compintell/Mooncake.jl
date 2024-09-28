@@ -5,7 +5,7 @@ for (M, f, arity) in DiffRules.diffrules(; filter_modules=nothing)
         continue  # Skip rules for methods not defined in the current scope
     end
     (f == :rem2pi || f == :ldexp) && continue # not designed for Float64s
-    (f in [:+, :*, :sin, :cos, :exp]) && continue # use other functionality to implement these
+    (f in [:+, :*, :sin, :cos, :exp, :-, :abs2, :inv, :abs, :/, :\]) && continue # use other functionality to implement these
     if arity == 1
         dx = DiffRules.diffrule(M, f, :x)
         pb_name = Symbol("$(M).$(f)_pb!!")
@@ -84,11 +84,19 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:low_level_mat
         end
         arity > 2 && return
         (f == :rem2pi || f == :ldexp || f == :(^)) && return
-        (f == :+ || f == :*) && return # use intrinsics instead
+        (f in [:+, :*, :sin, :cos, :exp, :-, :abs2, :inv, :abs, :/, :\]) && return # use other functionality to implement these
         f = @eval $M.$f
         push!(test_cases, (false, :stability, nothing, f, rand_inputs(rng, Float64, f, arity)...))
         push!(test_cases, (true, :stability, nothing, f, rand_inputs(rng, Float32, f, arity)...))
     end
+
+    # test cases for additional rules written in this file.
+    push!(test_cases, (false, :stability_and_allocs, nothing, sin, 1.1))
+    push!(test_cases, (true, :stability_and_allocs, nothing, sin, Float32(1.1)))
+    push!(test_cases, (false, :stability_and_allocs, nothing, cos, 1.1))
+    push!(test_cases, (true, :stability_and_allocs, nothing, cos, Float32(1.1)))
+    push!(test_cases, (false, :stability_and_allocs, nothing, exp, 1.1))
+    push!(test_cases, (true, :stability_and_allocs, nothing, exp, Float32(1.1)))
     memory = Any[]
     return test_cases, memory
 end

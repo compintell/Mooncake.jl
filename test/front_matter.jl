@@ -61,7 +61,9 @@ using Mooncake:
     InvalidFDataException,
     InvalidRDataException,
     verify_fdata_value,
-    verify_rdata_value
+    verify_rdata_value,
+    is_primitive,
+    MinimalCtx
 
 using .TestUtils:
     test_rule,
