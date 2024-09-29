@@ -34,7 +34,7 @@ makedocs(
         ],
         "Utilities" => [
             "Using ChainRules" => "using_chain_rules.md",
-            "Safe Mode" => "safe_mode.md",
+            "Debug Mode" => "debug_mode.md",
             "Debugging and MWEs" => "debugging_and_mwes.md",
         ],
         "Known Limitations" => "known_limitations.md",

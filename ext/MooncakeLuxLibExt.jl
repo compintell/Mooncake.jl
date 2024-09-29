@@ -23,8 +23,8 @@ function unfused_dense(
     return bias_activation(act, matmul(opmode, weight, x), b)
 end
 
-function Mooncake.build_rrule(interp::MooncakeInterpreter, sig_or_mi; kwargs...)
-    return Mooncake.build
-end
+# function Mooncake.build_rrule(interp::MooncakeInterpreter, sig_or_mi; kwargs...)
+#     return Mooncake.build
+# end
 
 end

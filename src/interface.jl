@@ -27,7 +27,7 @@ function __verify_sig(
     end
 end
 
-__verify_sig(rule::SafeRRule, fx) = __verify_sig(rule.rule, fx)
+__verify_sig(rule::DebugRRule, fx) = __verify_sig(rule.rule, fx)
 
 # rrule!! doesn't specify specific argument types which must be used, so there's nothing to
 # check here.

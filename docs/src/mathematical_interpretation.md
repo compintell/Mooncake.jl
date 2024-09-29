@@ -293,7 +293,10 @@ The following docstring provides the best in-depth explanation.
 Mooncake.fdata_type(T)
 ```
 
+_**CoDuals**_
 
+CoDuals are simply used to bundle together a primal and an associated fdata, depending upon context.
+Occassionally, they are used to pair together a primal and a tangent.
 
 _**A quick aside: Non-Differentiable Data**_
 
@@ -315,9 +318,18 @@ This works, even if it seems a little contrived.
 
 Now that you've seen what data structures are used to represent gradients, we can describe in more depth the detail of how fdata and rdata are used to propagate gradients backwards on the reverse pass.
 
+```@meta
+DocTestSetup = quote
+    using Mooncake
+    using Mooncake: CoDual
+    import Mooncake: rrule!!
+end
+```
+
 Consider the `function`
-```julia
-foo(x::Tuple{Float64, Vector{Float64}}) = x[1] + sum(x[2])
+```jldoctest foo-doctest
+julia> foo(x::Tuple{Float64, Vector{Float64}}) = x[1] + sum(x[2])
+foo (generic function with 1 method)
 ```
 The fdata for `x` is a `Tuple{NoFData, Vector{Float64}}`, and its rdata is a `Tuple{Float64, NoRData}`.
 The function returns a `Float64`, which has no fdata, and whose rdata is `Float64`.
@@ -342,20 +354,36 @@ where ``\mathbf{1}`` is the vector of length ``N`` in which each element is equa
 
 Now that we know what the adjoint is, we'll write down the `rrule!!`, and then explain what is going on in terms of the adjoint.
 This hand-written implementation is to aid your understanding -- Mooncake.jl should be relied upon to generate this code automatically in practice.
-```julia
-function rrule!!(::CoDual{typeof(foo)}, x::CoDual{Tuple{Float64, Vector{Float64}}})
-    dx_fdata = x.tangent[2]
-    function dfoo_adjoint(dy::Float64)
-        dx_fdata[2] .+= dy
-        dx_1_rdata = dy
-        dx_rdata = (dx_1_rdata, NoRData())
-        return NoRData(), dx_rdata
-    end
-    x_p = x.primal
-    return CoDual(x_p[1] + sum(x_p[2]), NoFData()), dfoo_adjoint
-end
+
+```jldoctest foo-doctest
+julia> function rrule!!(::CoDual{typeof(foo)}, x::CoDual{Tuple{Float64, Vector{Float64}}})
+           dx_fdata = x.dx
+           function dfoo_adjoint(dy::Float64)
+               dx_fdata[2] .+= dy
+               dx_1_rdata = dy
+               dx_rdata = (dx_1_rdata, NoRData())
+               return NoRData(), dx_rdata
+           end
+           x_p = x.x
+           return CoDual(x_p[1] + sum(x_p[2]), NoFData()), dfoo_adjoint
+       end;
+
 ```
 where `dy` is the rdata for the output to `foo`.
+The `rrule!!` can be called with the appropriate `CoDual`s:
+```jldoctest foo-doctest
+julia> out, pb!! = rrule!!(CoDual(foo, NoFData()), CoDual((5.0, [1.0, 2.0]), (NoFData(), [0.0, 0.0])))
+(CoDual{Float64, NoFData}(8.0, NoFData()), var"#dfoo_adjoint#1"{Tuple{NoFData, Vector{Float64}}}((NoFData(), [0.0, 0.0])))
+```
+and the pullback with appropriate rdata:
+```jldoctest foo-doctest
+julia> pb!!(1.0)
+(NoRData(), (1.0, NoRData()))
+```
+
+```@meta
+DocTestSetup = nothing
+```
 
 Observe that the forwards pass:
 1. computes the result of the initial function, and

@@ -6,7 +6,7 @@ include("front_matter.jl")
         include("tangents.jl")
         include("fwds_rvs_data.jl")
         include("codual.jl")
-        include("safe_mode.jl")
+        include("debug_mode.jl")
         include("stack.jl")
         @testset "interpreter" begin
             include(joinpath("interpreter", "contexts.jl"))
@@ -18,6 +18,7 @@ include("front_matter.jl")
             include(joinpath("interpreter", "s2s_reverse_mode_ad.jl"))
         end
         include("interface.jl")
+        include("config.jl")
     elseif test_group == "rrules"
         include("test_utils.jl")
         @testset "rrules" begin

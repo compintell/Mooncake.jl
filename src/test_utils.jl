@@ -471,7 +471,7 @@ end
         is_primitive::Bool=true,
         perf_flag::Symbol=:none,
         interp::Mooncake.MooncakeInterpreter=Mooncake.get_interpreter(),
-        safety_on::Bool=false,
+        debug_mode::Bool=false,
     )
 
 Run standardised tests on the `rule` for `x`.
@@ -492,12 +492,12 @@ function test_rule(
     is_primitive::Bool=true,
     perf_flag::Symbol=:none,
     interp::Mooncake.MooncakeInterpreter=Mooncake.get_interpreter(),
-    safety_on::Bool=false,
+    debug_mode::Bool=false,
 )
     @nospecialize rng x
 
     # Construct the rule.
-    rule = Mooncake.build_rrule(interp, _typeof(__get_primals(x)); safety_on)
+    rule = Mooncake.build_rrule(interp, _typeof(__get_primals(x)); debug_mode)
 
     # If we're requiring `is_primitive`, then check that `rule == rrule!!`.
     if is_primitive
@@ -517,7 +517,7 @@ function test_rule(
     test_rrule_performance(perf_flag, rule, x_x̄...)
 
     # Test the interface again, in order to verify that caching is working correctly.
-    rule_2 = Mooncake.build_rrule(interp, _typeof(__get_primals(x)); safety_on)
+    rule_2 = Mooncake.build_rrule(interp, _typeof(__get_primals(x)); debug_mode)
     test_rrule_interface(x_x̄..., rule=rule_2)
 end
 
