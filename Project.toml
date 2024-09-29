@@ -51,7 +51,7 @@ PDMats = "0.11"
 Setfield = "1"
 SpecialFunctions = "2"
 StableRNGs = "1"
-TemporalGPs = "0.6"
+TemporalGPs = "0.7"
 julia = "1.10"
 
 [extras]
