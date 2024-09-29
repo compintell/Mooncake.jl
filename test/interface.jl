@@ -27,6 +27,7 @@
             (x -> sin(cos(x)), randn(Float32)),
             ((x, y) -> x + sin(y), randn(Float64), randn(Float64)),
             ((x, y) -> x + sin(y), randn(Float32), randn(Float32)),
+            ((x...) -> x[1] + x[2], randn(Float64), randn(Float64)),
         ]
             rule = build_rrule(fargs...)
             f, args... = fargs
