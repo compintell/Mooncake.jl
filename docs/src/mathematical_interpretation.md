@@ -108,14 +108,20 @@ function f(x::Vector{Float64}, y::Vector{Float64}, z::Vector{Float64}, s::Ref{Ve
     return sum(z)
 end
 ```
-We draw your attention to three features of this `function`:
+We draw your attention to a variety of features of this `function`:
 1. `z` is mutated,
-2. `s` is mutated to contain freshly allocated memory, and
-3. we allocate a new value and return it (albeit, it is probably allocated on the stack).
+2. `s` is mutated to reference freshly allocated memory,
+3. the value previously pointed to by `s` is unmodified, and
+4. we allocate a new value and return it (albeit, it is probably allocated on the stack).
 
-The model we adopt for `function` `f` is a function ``f : \mathcal{X} \to \mathcal{X} \times \mathcal{A}`` where ``\mathcal{X}`` is the real finite Hilbert space associated to the arguments to `f` prior to execution, and ``\mathcal{A}`` is the real finite Hilbert space associated to any newly allocated data during execution which is externally visible after execution -- any newly allocated data which is not made visible is of no concern.
+The model we adopt for any Julia `function` `f` is a function ``f : \mathcal{X} \to \mathcal{X} \times \mathcal{A}`` where ``\mathcal{X}`` is the real finite Hilbert space associated to the arguments to `f` prior to execution, and ``\mathcal{A}`` is the real finite Hilbert space associated to any newly allocated data during execution which is externally visible after execution -- any newly allocated data which is not made visible is of no concern.
+
 In this example, ``\mathcal{X} = \RR^D \times \RR^D \times \RR^D \times \RR^S`` where ``D`` is the length of `x` / `y` / `z`, and ``S`` the length of `s[]` prior to running `f`.
-``\mathcal{A} = \RR^D \times \RR``, where the ``\RR^D`` component corresponds to the value put in `s`, and ``\RR`` to the return value.
+``\mathcal{A} = \RR^D \times \RR``, where the ``\RR^D`` component corresponds to the freshly allocated memory that `s` references, and ``\RR`` to the return value.
+Observe that we model `Float64`s as elements of ``\RR``, `Vector{Float64}`s as elements of ``\RR^D`` (for some value of ``D``), and `Ref`s with whatever the model for their contents is.
+The keen-eyed reader will note that these choices abstract away several details which could conceivably be included in the model.
+In particular, `Vector{Float64}` is implemented via a memory buffer, a pointer to the start of this buffer, and an integer which indicates the length of this buffer -- none of these details are exposed in the model.
+
 In this example, some of the memory allocated during execution is made externally visible by modifying one of the arguments, not just via the return value.
 
 The argument to ``f`` is the arguments to `f` _before_ execution, and the output is the 2-tuple comprising the same arguments _after_ execution and the values associated to any newly allocated / created data.
@@ -123,7 +129,7 @@ Crucially, observe that we distinguish between the state of the arguments before
 
 For our example, the exact form of ``f`` is
 ```math
-f((x, y, z, s)) = ((x, y, x \odot y, 2 x \odot y), (2 x \odot y, \sum_{d=1}^D x \odot y))
+f((x, y, z, s)) = ((x, y, x \odot y, s), (2 x \odot y, \sum_{d=1}^D x \odot y))
 ```
 Observe that ``f`` behaves a little like a transition operator, in the that the first element of the tuple returned is the updated state of the arguments.
 
@@ -131,7 +137,7 @@ This model is good enough for the vast majority of functions.
 Unfortunately it isn't sufficient to describe a `function` when arguments alias each other (e.g. consider the way in which this particular model is wrong if `y` aliases `z`).
 Fortunately this is only a problem in a small fraction of all cases of aliasing, so we defer discussion of this until later on.
 
-It is helpful to first look at what this model implies about the derivatives and the associated adjoints of a few Julia functions.
+Consider now how this approach can be used to model several additional Julia functions, and to obtain their derivatives and adjoints.
 
 _**`sin(x::Float64)`**_
 
