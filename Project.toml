@@ -1,7 +1,7 @@
 name = "Mooncake"
 uuid = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
 authors = ["Will Tebbutt, Hong Ge, and contributors"]
-version = "0.4.4"
+version = "0.4.5"
 
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
@@ -51,7 +51,7 @@ PDMats = "0.11"
 Setfield = "1"
 SpecialFunctions = "2"
 StableRNGs = "1"
-TemporalGPs = "0.6"
+TemporalGPs = "0.7"
 julia = "1.10"
 
 [extras]
