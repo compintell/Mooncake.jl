@@ -53,6 +53,7 @@ include("front_matter.jl")
         include(joinpath("ext", "luxlib.jl"))
         include(joinpath("ext", "nnlib.jl"))
         include(joinpath("ext", "special_functions.jl"))
+        include(joinpath("integration_testing", "lux.jl"))
     elseif test_group == "integration_testing/misc_abstract_array"
         include(joinpath("integration_testing", "misc_abstract_array.jl"))
     elseif test_group == "integration_testing/diff_tests"

@@ -5,7 +5,6 @@
 # The most important bit of this code is `inlining_policy` -- the rest is copy + pasted
 # boiler plate, largely taken from https://github.com/JuliaLang/julia/blob/2fe4190b3d26b4eee52b2b1b1054ddd6e38a941e/test/compiler/newinterp.jl#L11
 
-
 struct ClosureCacheKey
     world_age::UInt
     key::Any
@@ -17,6 +16,8 @@ end
 
 MooncakeCache() = MooncakeCache(IdDict{Core.MethodInstance, Core.CodeInstance}())
 
+Base.Experimental.@MethodTable mooncake_method_table
+
 struct MooncakeInterpreter{C} <: CC.AbstractInterpreter
     meta # additional information
     world::UInt
@@ -25,6 +26,7 @@ struct MooncakeInterpreter{C} <: CC.AbstractInterpreter
     inf_cache::Vector{CC.InferenceResult}
     code_cache::MooncakeCache
     oc_cache::Dict{ClosureCacheKey, Any}
+    method_table_to_overlay::CC.MethodTable
     function MooncakeInterpreter(
         ::Type{C};
         meta=nothing,
@@ -34,8 +36,18 @@ struct MooncakeInterpreter{C} <: CC.AbstractInterpreter
         inf_cache::Vector{CC.InferenceResult}=CC.InferenceResult[], 
         code_cache::MooncakeCache=MooncakeCache(),
         oc_cache::Dict{ClosureCacheKey, Any}=Dict{ClosureCacheKey, Any}(),
+        method_table_to_overlay::CC.MethodTable=mooncake_method_table,
     ) where {C}
-        return new{C}(meta, world, inf_params, opt_params, inf_cache, code_cache, oc_cache)
+        return new{C}(
+            meta,
+            world,
+            inf_params,
+            opt_params,
+            inf_cache,
+            code_cache,
+            oc_cache,
+            method_table_to_overlay,
+        )
     end
 end
 
@@ -91,6 +103,9 @@ function CC.setindex!(
 )
     return setindex!(wvc.cache.dict, ci, mi)
 end
+function CC.method_table(interp::MooncakeInterpreter)
+    return CC.OverlayMethodTable(interp.world, interp.method_table_to_overlay)
+end
 
 _type(x) = x
 _type(x::CC.Const) = _typeof(x.val)
@@ -108,7 +123,9 @@ function CC.inlining_policy(
 
     # Do not inline away primitives.
     argtype_tuple = Tuple{map(_type, argtypes)...}
-    is_primitive(C, argtype_tuple) && return nothing
+    if is_primitive(C, argtype_tuple)
+        return nothing
+    end
 
     # If not a primitive, AD doesn't care about it. Use the usual inlining strategy.
     return @invoke CC.inlining_policy(

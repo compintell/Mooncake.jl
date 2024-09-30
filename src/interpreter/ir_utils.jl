@@ -170,6 +170,9 @@ function optimise_ir!(ir::IRCode; show_ir=false, do_inline=true)
     return ir
 end
 
+Base.iterate(x::CC.MethodLookupResult) = CC.iterate(x)
+Base.iterate(x::CC.MethodLookupResult, n::Int) = CC.iterate(x, n)
+
 """
     lookup_ir(
         interp::AbstractInterpreter,
@@ -181,18 +184,35 @@ there is no code found, or if more than one `IRCode` instance returned.
 
 Returns a tuple containing the `IRCode` and its return type.
 """
-function lookup_ir(interp::CC.AbstractInterpreter, sig::Type{<:Tuple})
-    output = Base.code_ircode_by_type(sig; interp)
-    if isempty(output)
-        throw(ArgumentError("No methods found for signature $sig"))
-    elseif length(output) > 1
-        throw(ArgumentError("$(length(output)) methods found for signature $sig"))
+function lookup_ir(interp::CC.AbstractInterpreter, tt::Type{<:Tuple}; optimize_until=nothing)
+    matches = CC.findall(tt, CC.method_table(interp))
+    asts = []
+    for match in matches.matches
+        match = match::Core.MethodMatch
+        meth = Base.func_for_method_checked(match.method, tt, match.sparams)
+        (code, ty) = CC.typeinf_ircode(
+            interp,
+            meth,
+            match.spec_types,
+            match.sparams,
+            optimize_until,
+        )
+        if code === nothing
+            push!(asts, match.method => Any)
+        else
+            push!(asts, code => ty)
+        end
     end
-    return only(output)
+    if isempty(asts)
+        throw(ArgumentError("No methods found for signature $asts"))
+    elseif length(asts) > 1
+        throw(ArgumentError("$(length(asts)) methods found for signature $sig"))
+    end
+    return only(asts)
 end
 
-function lookup_ir(interp::CC.AbstractInterpreter, mi::Core.MethodInstance)
-    return CC.typeinf_ircode(interp, mi.def, mi.specTypes, mi.sparam_vals, nothing)
+function lookup_ir(interp::CC.AbstractInterpreter, mi::Core.MethodInstance; optimize_until=nothing)
+    return CC.typeinf_ircode(interp, mi.def, mi.specTypes, mi.sparam_vals, optimize_until)
 end
 
 """
