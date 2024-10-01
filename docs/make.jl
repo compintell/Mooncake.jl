@@ -33,7 +33,7 @@ makedocs(
             "Mooncake.jl's Rule System" => "mathematical_interpretation.md",
         ],
         "Utilities" => [
-            "Using ChainRules" => "using_chain_rules.md",
+            "Tools for Rules" => "tools_for_rules.md",
             "Debug Mode" => "debug_mode.md",
             "Debugging and MWEs" => "debugging_and_mwes.md",
         ],
