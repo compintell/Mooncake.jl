@@ -24,6 +24,7 @@ using Core:
 using Core.Intrinsics: pointerref, pointerset
 
 using NNlib: dropout
+using LuxLib.Impl: SLEEFActivations
 
 using Mooncake:
     CC,

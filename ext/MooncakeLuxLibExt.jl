@@ -4,13 +4,18 @@ using LuxLib, Random, Mooncake
 using Base: IEEEFloat
 using Base.Experimental: @overlay
 
-import LuxLib.Impl: matmul, matmuladd
-import Mooncake: @from_rrule, DefaultCtx, MooncakeInterpreter, mooncake_method_table
+import LuxLib: Impl
+import LuxLib.Utils: static_training_mode_check
+import Mooncake: @from_rrule, DefaultCtx, MooncakeInterpreter, mooncake_method_table, CoDual
 
-@from_rrule(DefaultCtx, Tuple{typeof(matmul), Array{P}, Array{P}} where {P<:IEEEFloat})
+@from_rrule(DefaultCtx, Tuple{typeof(Impl.matmul), Array{P}, Array{P}} where {P<:IEEEFloat})
 @from_rrule(
     DefaultCtx,
-    Tuple{typeof(matmuladd), Array{P}, Array{P}, Vector{P}} where {P<:IEEEFloat},
+    Tuple{typeof(Impl.matmuladd), Array{P}, Array{P}, Vector{P}} where {P<:IEEEFloat},
+)
+@from_rrule(
+    DefaultCtx,
+    Tuple{typeof(Impl.batched_matmul), Array{P, 3}, Array{P, 3}} where {P<:IEEEFloat},
 )
 
 # Re-implement a bunch of methods to ensure that Mooncake can differentiate them.
@@ -21,7 +26,7 @@ import Mooncake: @from_rrule, DefaultCtx, MooncakeInterpreter, mooncake_method_t
     x::AbstractMatrix,
     b::LuxLib.Optional{<:AbstractVector},
 ) where {F}
-    return bias_activation(act, matmul(weight, x), b)
+    return bias_activation(act, Impl.matmul(weight, x), b)
 end
 
 @overlay mooncake_method_table function LuxLib.Impl.bias_activation_loop!(
@@ -47,6 +52,125 @@ end
     return LuxLib.Impl.bias_activation(act, LuxLib.Impl.conv(x, weight, cdims), bias)
 end
 
-# IMPORT SLEEFPirates RULES! Use a loop.
+for f in [
+    Impl.SLEEFActivations.sigmoid_fast,
+    Impl.SLEEFActivations.softplus,
+    Impl.SLEEFActivations.logsigmoid,
+    Impl.SLEEFActivations.swish,
+    Impl.SLEEFActivations.lisht,
+    Impl.SLEEFActivations.tanh,
+    Impl.SLEEFActivations.tanh_fast,
+]
+    @from_rrule DefaultCtx Tuple{typeof(f), IEEEFloat}
+    @from_rrule(
+        DefaultCtx,
+        Tuple{typeof(Broadcast.broadcasted), typeof(f), Union{IEEEFloat, Array{<:IEEEFloat}}},
+    )
+end
+
+Mooncake.@is_primitive(DefaultCtx, Tuple{typeof(static_training_mode_check), Vararg})
+function Mooncake.rrule!!(f::CoDual{typeof(static_training_mode_check)}, x::CoDual...)
+    return Mooncake.simple_zero_adjoint(f, x...)
+end
+
+
+
+
+# This is a really horrible hack that we need to do until Mooncake is able to support the
+# call-back-into-ad interface that ChainRules exposes.
+
+import LuxLib.Impl:
+    safe_eltype,
+    batchnorm_affine_normalize_internal,
+    batchnorm_affine_normalize_internal!,
+    ∇batchnorm_affine_normalize,
+    AbstractInternalArrayOpMode
+
+import ChainRulesCore as CRC
+
+function CRC.rrule(
+    ::typeof(batchnorm_affine_normalize_internal),
+    opmode::AbstractInternalArrayOpMode,
+    ::typeof(identity),
+    x::AbstractArray{T, N},
+    μ::AbstractVector,
+    σ²::AbstractVector,
+    γ::LuxLib.Optional{<:AbstractVector},
+    β::LuxLib.Optional{<:AbstractVector},
+    ϵ::Real,
+) where {T, N}
+    y = similar(
+        x,
+        promote_type(
+            safe_eltype(x), safe_eltype(μ), safe_eltype(σ²), safe_eltype(γ), safe_eltype(β)
+        )
+    )
+    γ′ = similar(
+        x, promote_type(safe_eltype(γ), safe_eltype(σ²), safe_eltype(ϵ)), size(x, N - 1)
+    )
+
+    batchnorm_affine_normalize_internal!(y, opmode, identity, x, μ, σ², γ, β, ϵ, γ′)
+
+    𝒫x, 𝒫μ, 𝒫σ² = CRC.ProjectTo(x), CRC.ProjectTo(μ), CRC.ProjectTo(σ²)
+    𝒫γ = γ === nothing ? identity : CRC.ProjectTo(γ)
+    𝒫β = β === nothing ? identity : CRC.ProjectTo(β)
+
+    ∇batchnorm_affine_normalize_internal = LuxLib.Impl.@closure Δ -> begin
+        ∂x, ∂μ, ∂σ², ∂γ, ∂β = ∇batchnorm_affine_normalize(opmode, Δ, x, μ, σ², γ, β, ϵ, γ′)
+        ∂∅ = CRC.NoTangent()
+        return ∂∅, ∂∅, ∂∅, 𝒫x(∂x), 𝒫μ(∂μ), 𝒫σ²(∂σ²), 𝒫γ(∂γ), 𝒫β(∂β), ∂∅
+    end
+
+    return y, ∇batchnorm_affine_normalize_internal
+end
+
+@from_rrule(
+    DefaultCtx,
+    Tuple{
+        typeof(batchnorm_affine_normalize_internal),
+        AbstractInternalArrayOpMode,
+        typeof(identity),
+        AbstractArray,
+        AbstractVector,
+        AbstractVector,
+        LuxLib.Optional{<:AbstractVector},
+        LuxLib.Optional{<:AbstractVector},
+        Real,
+    },
+)
+
+@overlay mooncake_method_table function batchnorm_affine_normalize_internal(
+    opmode::LuxLib.AbstractInternalArrayOpMode,
+    act::F,
+    x::AbstractArray{xT, 3},
+    μ::AbstractVector,
+    σ²::AbstractVector,
+    γ::Union{Nothing, AbstractVector},
+    β::Union{Nothing, AbstractVector},
+    ϵ::Real,
+) where {F, xT}
+    y = batchnorm_affine_normalize_internal(opmode, identity, x, μ, σ², γ, β, ϵ)
+    LuxLib.Impl.activation!(y, opmode, act, y)
+    return y
+end
+
+@overlay mooncake_method_table function batchnorm_affine_normalize_internal(
+    opmode::LuxLib.AbstractInternalArrayOpMode,
+    ::typeof(identity),
+    x::AbstractArray{xT, 3},
+    μ::AbstractVector,
+    σ²::AbstractVector,
+    γ::Union{Nothing, AbstractVector},
+    β::Union{Nothing, AbstractVector},
+    ϵ::Real,
+) where {xT}
+    y = similar(x,
+        promote_type(
+            safe_eltype(x), safe_eltype(μ), safe_eltype(σ²), safe_eltype(γ), safe_eltype(β)
+        )
+    )
+    batchnorm_affine_normalize_internal!(y, opmode, identity, x, μ, σ², γ, β, ϵ)
+    return y
+end
 
 end
