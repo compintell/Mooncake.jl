@@ -3,6 +3,9 @@
     w = randn(2, 2, 3, 3)
     dense_cdims = DenseConvDims(x, w)
     sep_cdims = DepthwiseConvDims(x, w)
+    y = conv(x, w, dense_cdims)
+    y_sep = depthwiseconv(x, w, sep_cdims)
+
     pool_dims = PoolDims(size(x), 2)
 
     grid = Array{Float64}(undef, 2, 2, 2, 1)
@@ -74,6 +77,16 @@
         (false, :none, true, conv, x, w, dense_cdims),
         (false, :none, true, Core.kwcall, (;), depthwiseconv, x, w, sep_cdims),
         (false, :none, true, depthwiseconv, x, w, sep_cdims),
+
+        # ∇conv_data
+        (false, :none, true, Core.kwcall, (;), ∇conv_data, y, w, dense_cdims),
+        (false, :none, true, ∇conv_data, y, w, dense_cdims),
+        (false, :none, true, Core.kwcall, (;), ∇depthwiseconv_data, y_sep, w, sep_cdims),
+        (false, :none, true, ∇depthwiseconv_data, y_sep, w, sep_cdims),
+
+        # ∇conv_filter
+        (false, :none, true, Core.kwcall, (;), ∇conv_filter, x, y, dense_cdims),
+        (false, :none, true, ∇conv_filter, x, y, dense_cdims),
 
         # pooling
         (false, :none, true, maxpool, x, pool_dims),
