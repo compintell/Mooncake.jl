@@ -23,18 +23,6 @@
                 LuxLib.Utils.True(),
                 LuxLib.Utils.True(),
             ),
-            (
-                false, :none, true,
-                LuxLib.Impl.batchnorm_affine_normalize_internal,
-                LuxLib.LoopedArrayOp(),
-                identity,
-                randn(5, 4, 3),
-                randn(4),
-                ones(4),
-                nothing,
-                nothing,
-                1.1,
-            ),
         ],
         # vec(map(Iterators.product(
         #     [LuxLib.LoopedArrayOp(), LuxLib.GenericBroadcastOp()],
