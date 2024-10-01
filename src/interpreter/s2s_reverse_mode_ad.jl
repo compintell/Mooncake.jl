@@ -617,6 +617,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         :leave,
         :pop_exception,
         :throw_undef_if_not,
+        :meta,
     ]
         # Expressions which do not require any special treatment.
         return ad_stmt_info(line, nothing, stmt, nothing)
