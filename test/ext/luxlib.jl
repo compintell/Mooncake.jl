@@ -24,16 +24,16 @@
                 LuxLib.Utils.True(),
             ),
         ],
-        # vec(map(Iterators.product(
-        #     [LuxLib.LoopedArrayOp(), LuxLib.GenericBroadcastOp()],
-        #     [randn(5), nothing],
-        #     [Lux.relu, tanh, NNlib.gelu],
-        # )) do (opmode, bias, activation)
-        #     (
-        #         false, :none, false,
-        #         LuxLib.Impl.fused_dense, opmode, activation, randn(5, 4), randn(4, 2), bias,
-        #     )
-        # end),
+        vec(map(Iterators.product(
+            [LuxLib.LoopedArrayOp(), LuxLib.GenericBroadcastOp()],
+            [randn(5), nothing],
+            [Lux.relu, tanh, NNlib.gelu],
+        )) do (opmode, bias, activation)
+            (
+                false, :none, false,
+                LuxLib.Impl.fused_dense, opmode, activation, randn(5, 4), randn(4, 2), bias,
+            )
+        end),
     )
         test_rule(sr(1), fargs...; perf_flag, is_primitive, interface_only)
     end
