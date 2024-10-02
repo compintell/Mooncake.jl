@@ -1,3 +1,12 @@
+overlay_tester(x) = 2x
+Mooncake.@mooncake_overlay overlay_tester(x) = 3x
+
+zero_tester(x) = 0
+Mooncake.@zero_adjoint MinimalCtx Tuple{typeof(zero_tester), Float64}
+
+vararg_zero_tester(x...) = 0
+Mooncake.@zero_adjoint MinimalCtx Tuple{typeof(vararg_zero_tester), Vararg}
+
 module ChainRulesInteropTestResources
 
 using ChainRulesCore, LinearAlgebra, Mooncake
@@ -85,28 +94,41 @@ end
 
 end
 
-@testset "chain_rules_macro" begin
-    @testset "to_cr_tangent" for (t, t_cr) in Any[
-        (5.0, 5.0),
-        (ones(5), ones(5)),
-        (NoTangent(), ChainRulesCore.NoTangent()),
-    ]
-        @test Mooncake.to_cr_tangent(t) == t_cr
+@testset "tools_for_rules" begin
+    @testset "mooncake_overlay" begin
+        rule = Mooncake.build_rrule(Tuple{typeof(overlay_tester), Float64})
+        @test value_and_gradient!!(rule, overlay_tester, 5.0) == (15.0, (NoTangent(), 3.0))
     end
-    @testset "rules: $(typeof(fargs))" for fargs in Any[
-        (ChainRulesInteropTestResources.bleh, 5.0, 4),
-        (ChainRulesInteropTestResources.test_sum, ones(5)),
-        (ChainRulesInteropTestResources.test_scale, 5.0, randn(3)),
-        (ChainRulesInteropTestResources.test_nothing,),
-        (Core.kwcall, (y=true, ), ChainRulesInteropTestResources.test_kwargs, 5.0),
-        (Core.kwcall, (y=false, ), ChainRulesInteropTestResources.test_kwargs, 5.0),
-        (ChainRulesInteropTestResources.test_kwargs, 5.0),
-    ]
-        test_rule(sr(1), fargs...; perf_flag=:stability, is_primitive=true)
-    end
-    @testset "bad rdata" begin
-        f = ChainRulesInteropTestResources.test_bad_rdata
-        out, pb!! = Mooncake.rrule!!(zero_fcodual(f), zero_fcodual(3.0))
-        @test_throws MethodError pb!!(5.0)
+    @testset "zero_adjoint" begin
+        test_rule(sr(123), zero_tester, 5.0; is_primitive=true, perf_flag=:stability_and_allocs)
+        test_rule(
+            sr(123), vararg_zero_tester, 5.0, 4.0;
+            is_primitive=true, perf_flag=:stability_and_allocs,
+        )
+    end    
+    @testset "chain_rules_macro" begin
+        @testset "to_cr_tangent" for (t, t_cr) in Any[
+            (5.0, 5.0),
+            (ones(5), ones(5)),
+            (NoTangent(), ChainRulesCore.NoTangent()),
+        ]
+            @test Mooncake.to_cr_tangent(t) == t_cr
+        end
+        @testset "rules: $(typeof(fargs))" for fargs in Any[
+            (ChainRulesInteropTestResources.bleh, 5.0, 4),
+            (ChainRulesInteropTestResources.test_sum, ones(5)),
+            (ChainRulesInteropTestResources.test_scale, 5.0, randn(3)),
+            (ChainRulesInteropTestResources.test_nothing,),
+            (Core.kwcall, (y=true, ), ChainRulesInteropTestResources.test_kwargs, 5.0),
+            (Core.kwcall, (y=false, ), ChainRulesInteropTestResources.test_kwargs, 5.0),
+            (ChainRulesInteropTestResources.test_kwargs, 5.0),
+        ]
+            test_rule(sr(1), fargs...; perf_flag=:stability, is_primitive=true)
+        end
+        @testset "bad rdata" begin
+            f = ChainRulesInteropTestResources.test_bad_rdata
+            out, pb!! = Mooncake.rrule!!(zero_fcodual(f), zero_fcodual(3.0))
+            @test_throws MethodError pb!!(5.0)
+        end
     end
 end

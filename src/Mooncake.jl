@@ -71,8 +71,8 @@ include(joinpath("interpreter", "ir_utils.jl"))
 include(joinpath("interpreter", "ir_normalisation.jl"))
 include(joinpath("interpreter", "zero_like_rdata.jl"))
 include(joinpath("interpreter", "s2s_reverse_mode_ad.jl"))
-include(joinpath("interpreter", "method_overlays.jl"))
 
+include("tools_for_rules.jl")
 include("test_utils.jl")
 
 include(joinpath("rrules", "avoiding_non_differentiable_code.jl"))
@@ -87,7 +87,6 @@ include(joinpath("rrules", "misc.jl"))
 include(joinpath("rrules", "new.jl"))
 include(joinpath("rrules", "tasks.jl"))
 
-include("chain_rules_interop.jl")
 include("interface.jl")
 include("config.jl")
 

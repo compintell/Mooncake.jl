@@ -65,30 +65,10 @@ end
 # Rules to handle / avoid foreigncall nodes
 #
 
-@is_primitive MinimalCtx Tuple{typeof(Base.allocatedinline), Type}
-function rrule!!(f::CoDual{typeof(Base.allocatedinline)}, T::CoDual{<:Type})
-    return simple_zero_adjoint(f, T)
-end
-
-@is_primitive MinimalCtx Tuple{Type{<:Array{T, N}}, typeof(undef), Vararg} where {T, N}
-function rrule!!(
-    f::CoDual{Type{Array{T, N}}}, u::CoDual{typeof(undef)}, m::Vararg{CoDual}
-) where {T, N}
-    return simple_zero_adjoint(f, u, m...)
-end
-
-function rrule!!(
-    f::CoDual{Type{Array{T, 0}}}, u::CoDual{typeof(undef)}, m::CoDual{Tuple{}}
-) where {T}
-    return simple_zero_adjoint(f, u, m)
-end
-
-@is_primitive MinimalCtx Tuple{Type{<:Array{T, N}}, typeof(undef), NTuple{N}} where {T, N}
-function rrule!!(
-    ::CoDual{<:Type{<:Array{T, N}}}, ::CoDual{typeof(undef)}, m::CoDual{NTuple{N}},
-) where {T, N}
-    return rrule!!(zero_fcodual(Array{T, N}), zero_fcodual(undef), m)
-end
+@zero_adjoint MinimalCtx Tuple{typeof(Base.allocatedinline), Type}
+@zero_adjoint MinimalCtx Tuple{Type{<:Array{T, N}}, typeof(undef), Vararg} where {T, N}
+@zero_adjoint MinimalCtx Tuple{Type{<:Array{T, N}}, typeof(undef), Tuple{}} where {T, N}
+@zero_adjoint MinimalCtx Tuple{Type{<:Array{T, N}}, typeof(undef), NTuple{N}} where {T, N}
 
 @is_primitive MinimalCtx Tuple{typeof(copy), Array}
 function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Array})
@@ -260,8 +240,7 @@ function rrule!!(f::CoDual{typeof(sizehint!)}, x::CoDual{<:Vector}, sz::CoDual{<
     return x, NoPullback(f, x, sz)
 end
 
-@is_primitive MinimalCtx Tuple{typeof(objectid), Any}
-rrule!!(f::CoDual{typeof(objectid)}, @nospecialize(x)) = simple_zero_adjoint(f, x)
+@zero_adjoint MinimalCtx Tuple{typeof(objectid), Any}
 
 @is_primitive MinimalCtx Tuple{typeof(pointer_from_objref), Any}
 function rrule!!(f::CoDual{typeof(pointer_from_objref)}, x)
@@ -272,10 +251,7 @@ function rrule!!(f::CoDual{typeof(pointer_from_objref)}, x)
     return y, NoPullback(f, x)
 end
 
-@is_primitive MinimalCtx Tuple{typeof(CC.return_type), Vararg}
-function rrule!!(f::CoDual{typeof(Core.Compiler.return_type)}, args...)
-    return simple_zero_adjoint(f, args...)
-end
+@zero_adjoint MinimalCtx Tuple{typeof(CC.return_type), Vararg}
 
 @is_primitive MinimalCtx Tuple{typeof(Base.unsafe_pointer_to_objref), Ptr}
 function rrule!!(f::CoDual{typeof(Base.unsafe_pointer_to_objref)}, x::CoDual{<:Ptr})
@@ -283,11 +259,8 @@ function rrule!!(f::CoDual{typeof(Base.unsafe_pointer_to_objref)}, x::CoDual{<:P
     return y, NoPullback(f, x)
 end
 
-@is_primitive MinimalCtx Tuple{typeof(Threads.threadid)}
-rrule!!(f::CoDual{typeof(Threads.threadid)}) = simple_zero_adjoint(f)
-
-@is_primitive MinimalCtx Tuple{typeof(typeintersect), Any, Any}
-rrule!!(f::CoDual{typeof(typeintersect)}, a, b) = simple_zero_adjoint(f, a, b)
+@zero_adjoint MinimalCtx Tuple{typeof(Threads.threadid)}
+@zero_adjoint MinimalCtx Tuple{typeof(typeintersect), Any, Any}
 
 function _increment_pointer!(x::Ptr{T}, y::Ptr{T}, N::Integer) where {T}
     increment!!(unsafe_wrap(Vector{T}, x, N), unsafe_wrap(Vector{T}, y, N))
@@ -476,14 +449,9 @@ function rrule!!(::CoDual{typeof(deepcopy)}, x::CoDual)
     return y, deepcopy_pb!!
 end
 
-@is_primitive MinimalCtx Tuple{Type{UnionAll}, TypeVar, Any}
-@is_primitive MinimalCtx Tuple{Type{UnionAll}, TypeVar, Type}
-function rrule!!(f::CoDual{<:Type{UnionAll}}, x::CoDual{<:TypeVar}, y::CoDual{<:Type})
-    return simple_zero_adjoint(f, x, y)
-end
-
-@is_primitive MinimalCtx Tuple{typeof(hash), Vararg}
-rrule!!(f::CoDual{typeof(hash)}, x::CoDual...) = simple_zero_adjoint(f, x...)
+@zero_adjoint MinimalCtx Tuple{Type{UnionAll}, TypeVar, Any}
+@zero_adjoint MinimalCtx Tuple{Type{UnionAll}, TypeVar, Type}
+@zero_adjoint MinimalCtx Tuple{typeof(hash), Vararg}
 
 function rrule!!(
     f::CoDual{typeof(_foreigncall_)}, ::CoDual{Val{:jl_string_ptr}}, args::Vararg{CoDual, N}

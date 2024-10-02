@@ -6,16 +6,9 @@ function rrule!!(f::CoDual{typeof(Base.:(+))}, x::CoDual{<:Ptr}, y::CoDual{<:Int
     return CoDual(primal(x) + primal(y), tangent(x) + primal(y)), NoPullback(f, x, y)
 end
 
-@is_primitive MinimalCtx Tuple{typeof(randn), AbstractRNG, Vararg}
-function rrule!!(f::CoDual{typeof(randn)}, rng::CoDual{<:AbstractRNG}, args::CoDual...)
-    return simple_zero_adjoint(f, rng, args...)
-end
-
-@is_primitive MinimalCtx Tuple{typeof(string), Vararg}
-rrule!!(f::CoDual{typeof(string)}, x::CoDual...) = simple_zero_adjoint(f, x...)
-
-@is_primitive MinimalCtx Tuple{Type{Symbol}, Vararg}
-rrule!!(f::CoDual{Type{Symbol}}, x::CoDual...) = simple_zero_adjoint(f, x...)
+@zero_adjoint MinimalCtx Tuple{typeof(randn), AbstractRNG, Vararg}
+@zero_adjoint MinimalCtx Tuple{typeof(string), Vararg}
+@zero_adjoint MinimalCtx Tuple{Type{Symbol}, Vararg}
 
 function generate_hand_written_rrule!!_test_cases(
     rng_ctor, ::Val{:avoiding_non_differentiable_code}

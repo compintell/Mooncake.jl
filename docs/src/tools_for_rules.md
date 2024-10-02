@@ -1,11 +1,5 @@
 # Tools for Rules
 
-```@meta
-DocTestSetup = quote
-    using Mooncake
-end
-```
-
 Most of the time, Mooncake.jl can just differentiate your code, but you will need to intervene if you make use of a language feature which is unsupported.
 However, this does not always necessitate writing your own `rrule!!` from scratch.
 In this section, we detail some useful strategies which can help you avoid having to write `rrule!!`s in many situations.
@@ -16,20 +10,14 @@ In this section, we detail some useful strategies which can help you avoid havin
 Mooncake.@mooncake_overlay
 ```
 
-## Functions with Zero Derivative
+## Functions with Zero Adjoint
 
-If the above strategy does not work, but you find yourself in the surprisingly common situation that the derivative of your function is always zero, you can very straightforwardly write a rule by making use of the following:
+If the above strategy does not work, but you find yourself in the surprisingly common
+situation that the adjoint of the derivative of your function is always zero, you can very
+straightforwardly write a rule by making use of the following:
 ```@docs
-Mooncake.simple_zero_adjoint
+Mooncake.@zero_adjoint
 ```
-Suppose you have a function `foo(x, y, z)` whose derivative is zero, you would write an `rrule!!` as follows:
-```julia
-function Mooncake.rrule!!(f::CoDual{typeof(foo)}, x::CoDual, y::CoDual, z::CoDual)
-    return Mooncake.simple_zero_adjoint(f, x, y, z)
-end
-```
-Users of ChainRules.jl should be familiar with this functionality -- it is morally the same as `ChainRulesCore.@non_differentiable`.
-This approach is utilised often in Mooncake.jl's codebase.
 
 ## Using ChainRules.jl
 
@@ -42,9 +30,4 @@ The docstrings below explain this functionality, and how it should / should not 
 
 ```@docs
 Mooncake.@from_rrule
-Mooncake.rrule_wrapper
-```
-
-```@meta
-DocTestSetup = nothing
 ```

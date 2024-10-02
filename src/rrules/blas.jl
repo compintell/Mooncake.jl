@@ -25,17 +25,10 @@ const MatrixOrView{T} = Union{Matrix{T}, SubArray{T, 2, Matrix{T}}}
 # Utility
 #
 
-@is_primitive MinimalCtx Tuple{typeof(BLAS.get_num_threads)}
-rrule!!(f::CoDual{typeof(BLAS.get_num_threads)}) = simple_zero_adjoint(f)
-
-@is_primitive MinimalCtx Tuple{typeof(BLAS.lbt_get_num_threads)}
-rrule!!(f::CoDual{typeof(BLAS.lbt_get_num_threads)}) = simple_zero_adjoint(f)
-
-@is_primitive MinimalCtx Tuple{typeof(BLAS.set_num_threads), Union{Integer, Nothing}}
-rrule!!(f::CoDual{typeof(BLAS.set_num_threads)}, x::CoDual) = simple_zero_adjoint(f, x)
-
-@is_primitive MinimalCtx Tuple{typeof(BLAS.lbt_set_num_threads), Any}
-rrule!!(f::CoDual{typeof(BLAS.lbt_set_num_threads)}, x::CoDual) = simple_zero_adjoint(f, x)
+@zero_adjoint MinimalCtx Tuple{typeof(BLAS.get_num_threads)}
+@zero_adjoint MinimalCtx Tuple{typeof(BLAS.lbt_get_num_threads)}
+@zero_adjoint MinimalCtx Tuple{typeof(BLAS.set_num_threads), Union{Integer, Nothing}}
+@zero_adjoint MinimalCtx Tuple{typeof(BLAS.lbt_set_num_threads), Any}
 
 #
 # LEVEL 1

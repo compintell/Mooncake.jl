@@ -71,13 +71,7 @@ for f in [
     )
 end
 
-Mooncake.@is_primitive(DefaultCtx, Tuple{typeof(static_training_mode_check), Vararg})
-function Mooncake.rrule!!(f::CoDual{typeof(static_training_mode_check)}, x::CoDual...)
-    return Mooncake.simple_zero_adjoint(f, x...)
-end
-
-
-
+Mooncake.@zero_adjoint DefaultCtx Tuple{typeof(static_training_mode_check), Vararg}
 
 # This is a really horrible hack that we need to do until Mooncake is able to support the
 # call-back-into-ad interface that ChainRules exposes.
