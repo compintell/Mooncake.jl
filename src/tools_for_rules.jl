@@ -185,7 +185,7 @@ WARNING: this is only correct if the output of the function does not alias any f
 function, or any of its arguments. For example, applying this macro to the function `x -> x`
 will yield incorrect results.
 
-As always, you should use `Mooncake.TestUtils.test_rule` to ensure that you've not
+As always, you should use [`TestUtils.test_rule`](@ref) to ensure that you've not
 made a mistake.
 
 # Signatures Unsupported By This Macro
@@ -376,9 +376,14 @@ only write a rule for these types:
 @from_rrule DefaultCtx Tuple{typeof(foo), IEEEFloat, Vector{<:IEEEFloat}}
 ```
 
-# Extended Help
+# Conversions Between Different Tangent Type Systems
 
-Under the hood, this functionality relies on two functions: 
+Under the hood, this functionality relies on two functions: `Mooncake.to_cr_tangent`, and
+`Mooncake.increment_and_get_rdata!`. These two functions handle conversion to / from
+`Mooncake` tangent types and `ChainRulesCore` tangent types. This functionality is known to
+work well for simple types, but has not been tested to a great extent on complicated
+composite types. If `@from_rrule` does not work in your case because the required method of
+either of these functions does not exist, please open an issue.
 """
 macro from_rrule(ctx, sig::Expr, has_kwargs::Bool=false)
 
