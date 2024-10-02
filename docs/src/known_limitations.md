@@ -131,7 +131,7 @@ function foo(x::Vector{Float64})
     return unsafe_load(p)
 end
 
-rule = build_rrule(get_interpreter(), Tuple{typeof(foo), Vector{Float64}})
+rule = build_rrule(Tuple{typeof(foo), Vector{Float64}})
 Mooncake.value_and_gradient!!(rule, foo, [5.0, 4.0])
 
 # output
