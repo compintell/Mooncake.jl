@@ -71,6 +71,7 @@ include(joinpath("interpreter", "ir_utils.jl"))
 include(joinpath("interpreter", "ir_normalisation.jl"))
 include(joinpath("interpreter", "zero_like_rdata.jl"))
 include(joinpath("interpreter", "s2s_reverse_mode_ad.jl"))
+include(joinpath("interpreter", "method_overlays.jl"))
 
 include("test_utils.jl")
 

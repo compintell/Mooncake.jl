@@ -2,11 +2,14 @@ module MooncakeLuxLibExt
 
 using LuxLib, Random, Mooncake
 using Base: IEEEFloat
-using Base.Experimental: @overlay
 
 import LuxLib: Impl
 import LuxLib.Utils: static_training_mode_check
-import Mooncake: @from_rrule, DefaultCtx, MooncakeInterpreter, mooncake_method_table, CoDual
+import Mooncake:
+    @from_rrule,
+    DefaultCtx,
+    @mooncake_overlay,
+    CoDual
 
 @from_rrule(DefaultCtx, Tuple{typeof(Impl.matmul), Array{P}, Array{P}} where {P<:IEEEFloat})
 @from_rrule(
@@ -19,7 +22,7 @@ import Mooncake: @from_rrule, DefaultCtx, MooncakeInterpreter, mooncake_method_t
 )
 
 # Re-implement a bunch of methods to ensure that Mooncake can differentiate them.
-@overlay mooncake_method_table function LuxLib.Impl.fused_dense(
+@mooncake_overlay function LuxLib.Impl.fused_dense(
     opmode,
     act::F,
     weight::AbstractMatrix,
@@ -29,19 +32,19 @@ import Mooncake: @from_rrule, DefaultCtx, MooncakeInterpreter, mooncake_method_t
     return bias_activation(act, Impl.matmul(weight, x), b)
 end
 
-@overlay mooncake_method_table function LuxLib.Impl.bias_activation_loop!(
+@mooncake_overlay function LuxLib.Impl.bias_activation_loop!(
     y::AbstractArray{yT, 3}, σ::F, x::AbstractArray{xT, 3}, bias::AbstractVector
 ) where {F, xT, yT}
     return LuxLib.Impl.bias_activation_simd_loop!(y, σ, x, bias)
 end
 
-@overlay mooncake_method_table function LuxLib.Impl.activation_loop!(
+@mooncake_overlay function LuxLib.Impl.activation_loop!(
     y::AbstractArray, σ::F, x::AbstractArray
 ) where {F}
     return LuxLib.Impl.activation_simd_loop!(y, σ, x)
 end
 
-@overlay mooncake_method_table function LuxLib.Impl.fused_conv(
+@mooncake_overlay function LuxLib.Impl.fused_conv(
     ::LuxLib.Impl.AbstractInternalArrayOpMode,
     act::F,
     weight::AbstractArray{wT, N},
@@ -139,7 +142,7 @@ end
     },
 )
 
-@overlay mooncake_method_table function batchnorm_affine_normalize_internal(
+@mooncake_overlay function batchnorm_affine_normalize_internal(
     opmode::LuxLib.AbstractInternalArrayOpMode,
     act::F,
     x::AbstractArray{xT, 3},
@@ -154,7 +157,7 @@ end
     return y
 end
 
-@overlay mooncake_method_table function batchnorm_affine_normalize_internal(
+@mooncake_overlay function batchnorm_affine_normalize_internal(
     opmode::LuxLib.AbstractInternalArrayOpMode,
     ::typeof(identity),
     x::AbstractArray{xT, 3},

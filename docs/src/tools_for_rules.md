@@ -1,24 +1,20 @@
 # Tools for Rules
 
+```@meta
+DocTestSetup = quote
+    using Mooncake
+end
+```
+
 Most of the time, Mooncake.jl can just differentiate your code, but you will need to intervene if you make use of a language feature which is unsupported.
 However, this does not always necessitate writing your own `rrule!!` from scratch.
 In this section, we detail some useful strategies which can help you avoid having to write `rrule!!`s in many situations.
 
 ## Simplfiying Code via Overlays
 
-Suppose you have a function
-```julia
-foo(x::Float64) = bar(x)
+```@docs
+Mooncake.@mooncake_overlay
 ```
-where Mooncake.jl fails to differentiate `bar` for some reason.
-If you have access to another function `baz`, which does the same thing as `bar`, but does so in a way which Mooncake.jl can differentiate, you can simply write:
-```julia
-Base.Experimental.@overlay Mooncake.mooncake_method_table foo(x::Float64) = baz(x)
-```
-When looking up the code for `foo(::Float64)`, Mooncake.jl will see this method, rather than the original, and should successfully differentiate it.
-If you search for `@overlay` in the Mooncake.jl source code, you will see a variety of instances where this is used in practice.
-
-This approach is often very straightforward, and we recommend you try this first before going down the path of writing rules.
 
 ## Functions with Zero Derivative
 
@@ -47,4 +43,8 @@ The docstrings below explain this functionality, and how it should / should not 
 ```@docs
 Mooncake.@from_rrule
 Mooncake.rrule_wrapper
+```
+
+```@meta
+DocTestSetup = nothing
 ```
