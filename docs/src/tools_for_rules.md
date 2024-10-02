@@ -17,6 +17,7 @@ situation that the adjoint of the derivative of your function is always zero, yo
 straightforwardly write a rule by making use of the following:
 ```@docs
 Mooncake.@zero_adjoint
+Mooncake.zero_adjoint
 ```
 
 ## Using ChainRules.jl

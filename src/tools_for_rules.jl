@@ -1,3 +1,35 @@
+#
+# General utilities
+#
+
+function parse_signature_expr(sig::Expr)
+    # Different parsing is required for `Tuple{...}` vs `Tuple{...} where ...`.
+    if sig.head == :curly
+        @assert sig.args[1] == :Tuple
+        arg_type_symbols = sig.args[2:end]
+        where_params = nothing
+    elseif sig.head == :where
+        @assert sig.args[1].args[1] == :Tuple
+        arg_type_symbols = sig.args[1].args[2:end]
+        where_params = sig.args[2:end]
+    else
+        throw(ArgumentError("Expected either a `Tuple{...}` or `Tuple{...} where {...}"))
+    end
+    return arg_type_symbols, where_params
+end
+
+function construct_def(arg_names, arg_types, where_params, body)
+    name = :(Mooncake.rrule!!)
+    arg_exprs = map((n, t) -> :($n::$t), arg_names, arg_types)
+    def = Dict(:head => :function, :name => name, :args => arg_exprs, :body => body)
+    where_params !== nothing && setindex!(def, where_params, :whereparams)
+    return ExprTools.combinedef(def)
+end
+
+#
+# Functionality supporting @mooncake_overlay
+#
+
 """
     @mooncake_overlay method_expr
 
@@ -68,28 +100,42 @@ macro mooncake_overlay(method_expr)
     return esc(combinedef(def))
 end
 
-function parse_signature_expr(sig::Expr)
-    # Different parsing is required for `Tuple{...}` vs `Tuple{...} where ...`.
-    if sig.head == :curly
-        @assert sig.args[1] == :Tuple
-        arg_type_symbols = sig.args[2:end]
-        where_params = nothing
-    elseif sig.head == :where
-        @assert sig.args[1].args[1] == :Tuple
-        arg_type_symbols = sig.args[1].args[2:end]
-        where_params = sig.args[2:end]
-    else
-        throw(ArgumentError("Expected either a `Tuple{...}` or `Tuple{...} where {...}"))
-    end
-    return arg_type_symbols, where_params
-end
+#
+# Functionality supporting @zero_adjoint
+#
 
-function construct_def(arg_names, arg_types, where_params, body)
-    name = :(Mooncake.rrule!!)
-    arg_exprs = map((n, t) -> :($n::$t), arg_names, arg_types)
-    def = Dict(:head => :function, :name => name, :args => arg_exprs, :body => body)
-    where_params !== nothing && setindex!(def, where_params, :whereparams)
-    return ExprTools.combinedef(def)
+"""
+    zero_adjoint(f::CoDual, x::Vararg{CoDual, N}) where {N}
+
+Utility functionality for constructing `rrule!!`s for functions which produce adjoints which
+always return zero.
+
+NOTE: you should only make use of this function if you cannot make use of the
+[`@zero_adjoint`](@ref) macro.
+
+You make use of this functionality by writing a method of `Mooncake.rrule!!`, and
+passing all of its arguments (including the function itself) to this function. For example:
+```jldoctest
+julia> import Mooncake: zero_adjoint, DefaultCtx, zero_fcodual, rrule!!, is_primitive, CoDual
+
+julia> foo(x::Vararg{Int}) = 5
+foo (generic function with 1 method)
+
+julia> is_primitive(::Type{DefaultCtx}, ::Type{<:Tuple{typeof(foo), Vararg{Int}}}) = true;
+
+julia> rrule!!(f::CoDual{typeof(foo)}, x::Vararg{CoDual{Int}}) = zero_adjoint(f, x...);
+
+julia> rrule!!(zero_fcodual(foo), zero_fcodual(3), zero_fcodual(2))[2](NoRData())
+(NoRData(), NoRData(), NoRData())
+```
+
+WARNING: this is only correct if the output of `primal(f)(map(primal, x)...)` does not alias
+anything in `f` or `x`. This is always the case if the result is a bits type, but more care
+may be required if it is not.
+```
+"""
+@inline function zero_adjoint(f::CoDual, x::Vararg{CoDual, N}) where {N}
+    return zero_fcodual(primal(f)(map(primal, x)...)), NoPullback(f, x...)
 end
 
 """
@@ -116,12 +162,37 @@ julia> rrule!!(zero_fcodual(foo), zero_fcodual(3.0))[2](NoRData())
 (NoRData(), 0.0)
 ```
 
+Limited support for `Vararg`s is also available. For example
+```jldoctest
+julia> using Mooncake: @zero_adjoint, DefaultCtx, zero_fcodual, rrule!!, is_primitive
+
+julia> foo_varargs(x...) = 5
+foo_varargs (generic function with 1 method)
+
+julia> @zero_adjoint DefaultCtx Tuple{typeof(foo_varargs), Vararg}
+
+julia> is_primitive(DefaultCtx, Tuple{typeof(foo_varargs), Any, Float64, Int})
+true
+
+julia> rrule!!(zero_fcodual(foo_varargs), zero_fcodual(3.0), zero_fcodual(5))[2](NoRData())
+(NoRData(), 0.0, NoRData())
+```
+Be aware that it is not currently possible to specify any of the type parameters of the
+`Vararg`. For example, the signature `Tuple{typeof(foo), Vararg{Float64, 5}}` will not work
+with this macro.
+
 WARNING: this is only correct if the output of the function does not alias any fields of the
 function, or any of its arguments. For example, applying this macro to the function `x -> x`
 will yield incorrect results.
 
-As always, you should use [`Mooncake.TestUtils.test_rule`](@ref) to ensure that you've not
+As always, you should use `Mooncake.TestUtils.test_rule` to ensure that you've not
 made a mistake.
+
+# Signatures Unsupported By This Macro
+
+If the signature you wish to apply `@zero_adjoint` to is not supported, for example because
+it uses a `Vararg` with a type parameter, you can still make use of
+[`zero_adjoint`](@ref).
 """
 macro zero_adjoint(ctx, sig)
 
@@ -137,11 +208,11 @@ macro zero_adjoint(ctx, sig)
         )
         splat_symbol = Expr(Symbol("..."), arg_names[end])
         body = Expr(
-            :call, Mooncake.simple_zero_adjoint, arg_names[1:end-1]..., splat_symbol,
+            :call, Mooncake.zero_adjoint, arg_names[1:end-1]..., splat_symbol,
         )
     else
         arg_types = map(t -> :(Mooncake.CoDual{<:$t}), arg_type_symbols)
-        body = Expr(:call, Mooncake.simple_zero_adjoint, arg_names...)
+        body = Expr(:call, Mooncake.zero_adjoint, arg_names...)
     end
 
     # Return code to create a method of is_primitive and a rule.
@@ -152,25 +223,9 @@ macro zero_adjoint(ctx, sig)
     return esc(ex)
 end
 
-"""
-    simple_zero_adjoint(f::CoDual, x::Vararg{CoDual, N}) where {N}
-
-Utility functionality for constructing `rrule!!`s for functions which produce adjoints which
-always return zero. Equivalent to:
-```julia
-zero_fcodual(primal(f)(map(primal, x)...)), NoPullback(f, x...)
-```
-
-WARNING: this is only correct if the output of `primal(f)(map(primal, x)...)` does not alias
-anything in `f` or `x`. This is always the case if the result is a bits type, but more care
-may be required if it is not.
-
-Note: you should generally not call this function. Rather, you should make use of
-`@zero_adjoint`.
-"""
-@inline function simple_zero_adjoint(f::CoDual, x::Vararg{CoDual, N}) where {N}
-    return zero_fcodual(primal(f)(map(primal, x)...)), NoPullback(f, x...)
-end
+#
+# Functionality supporting @from_rrule
+#
 
 """
     to_cr_tangent(t)
@@ -320,6 +375,10 @@ only write a rule for these types:
 ```julia
 @from_rrule DefaultCtx Tuple{typeof(foo), IEEEFloat, Vector{<:IEEEFloat}}
 ```
+
+# Extended Help
+
+Under the hood, this functionality relies on two functions: 
 """
 macro from_rrule(ctx, sig::Expr, has_kwargs::Bool=false)
 
