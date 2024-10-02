@@ -831,11 +831,11 @@ function build_rrule(args...; debug_mode=false)
 end
 
 """
-    build_rrule(sig_or_mi)
+    build_rrule(sig::Type{<:Tuple})
 
-Equivalent to `build_rrule(Mooncake.get_interpreter(), sig_or_mi)`.
+Equivalent to `build_rrule(Mooncake.get_interpreter(), sig)`.
 """
-build_rrule(sig_or_mi) = build_rrule(get_interpreter(), sig_or_mi)
+build_rrule(sig::Type{<:Tuple}) = build_rrule(get_interpreter(), sig)
 
 const MOONCAKE_INFERENCE_LOCK = ReentrantLock()
 
