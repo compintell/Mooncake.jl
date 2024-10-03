@@ -6,5 +6,6 @@ DocumenterCitations = "daee34ce-89f3-4625-b898-19384cb65244"
 Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
 
 [compat]
+ChainRulesCore = "1"
 Documenter = "1"
 Mooncake = "0.4.0"
