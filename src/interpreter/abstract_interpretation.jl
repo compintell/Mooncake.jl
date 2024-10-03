@@ -16,6 +16,7 @@ end
 
 MooncakeCache() = MooncakeCache(IdDict{Core.MethodInstance, Core.CodeInstance}())
 
+# The method table used by `Mooncake.@mooncake_overlay`.
 Base.Experimental.@MethodTable mooncake_method_table
 
 struct MooncakeInterpreter{C} <: CC.AbstractInterpreter
@@ -26,7 +27,6 @@ struct MooncakeInterpreter{C} <: CC.AbstractInterpreter
     inf_cache::Vector{CC.InferenceResult}
     code_cache::MooncakeCache
     oc_cache::Dict{ClosureCacheKey, Any}
-    method_table_to_overlay::CC.MethodTable
     function MooncakeInterpreter(
         ::Type{C};
         meta=nothing,
@@ -36,18 +36,8 @@ struct MooncakeInterpreter{C} <: CC.AbstractInterpreter
         inf_cache::Vector{CC.InferenceResult}=CC.InferenceResult[], 
         code_cache::MooncakeCache=MooncakeCache(),
         oc_cache::Dict{ClosureCacheKey, Any}=Dict{ClosureCacheKey, Any}(),
-        method_table_to_overlay::CC.MethodTable=mooncake_method_table,
     ) where {C}
-        return new{C}(
-            meta,
-            world,
-            inf_params,
-            opt_params,
-            inf_cache,
-            code_cache,
-            oc_cache,
-            method_table_to_overlay,
-        )
+        return new{C}(meta, world, inf_params, opt_params, inf_cache, code_cache, oc_cache)
     end
 end
 
@@ -104,7 +94,7 @@ function CC.setindex!(
     return setindex!(wvc.cache.dict, ci, mi)
 end
 function CC.method_table(interp::MooncakeInterpreter)
-    return CC.OverlayMethodTable(interp.world, interp.method_table_to_overlay)
+    return CC.OverlayMethodTable(interp.world, mooncake_method_table)
 end
 
 _type(x) = x
@@ -123,9 +113,7 @@ function CC.inlining_policy(
 
     # Do not inline away primitives.
     argtype_tuple = Tuple{map(_type, argtypes)...}
-    if is_primitive(C, argtype_tuple)
-        return nothing
-    end
+    is_primitive(C, argtype_tuple) && return nothing
 
     # If not a primitive, AD doesn't care about it. Use the usual inlining strategy.
     return @invoke CC.inlining_policy(
