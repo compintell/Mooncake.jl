@@ -7,3 +7,5 @@ Configuration struct for use with ADTypes.AutoMooncake.
     debug_mode::Bool=false
     silence_debug_messages::Bool=false
 end
+
+const DEFAULT_CONFIG = Config()
