@@ -51,7 +51,7 @@ for conv in [:conv, :depthwiseconv]
         true,
     )
 end
-@eval @from_rrule(
+@from_rrule(
     MinimalCtx,
     Tuple{typeof(∇conv_filter), Array{P}, Array{P}, ConvDims} where {P<:IEEEFloat},
     true,
