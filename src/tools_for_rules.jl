@@ -336,25 +336,86 @@ end
 
 Convenience functionality to assist in using `ChainRulesCore.rrule`s to write `rrule!!`s.
 
-For example,
-```julia
-@from_rrule DefaultCtx Tuple{typeof(sin), Float64}
-```
-would define a `Mooncake.rrule!!` for `sin` of `Float64`s by calling `ChainRulesCore.rrule`.
+# Arguments
 
-```julia
-@from_rrule DefaultCtx Tuple{typeof(foo), Float64} true
-```
-would define a method of `Mooncake.rrule!!` which can handle keyword arguments.
+- `ctx`: A Mooncake context type
+- `sig`: the signature which you wish to assert should be a primitive in `Mooncake.jl`, and
+    use an existing `ChainRulesCore.rrule` to implement this functionality.
+- `has_kwargs`: a `Bool` state whether or not the function has keyword arguments. This
+    feature has the same limitations as `ChainRulesCore.rrule` -- the derivative w.r.t. all
+    kwargs must be zero.
 
-Limitations: it is your responsibility to ensure that
+# Example Usage
+
+## A Basic Example
+
+```jldoctest
+julia> using Mooncake: @from_rrule, DefaultCtx, rrule!!, zero_fcodual, TestUtils
+
+julia> using ChainRulesCore
+
+julia> foo(x::Real) = 5x;
+
+julia> function ChainRulesCore.rrule(::typeof(foo), x::Real)
+           foo_pb(Ω::Real) = ChainRulesCore.NoTangent(), 5Ω
+           return foo(x), foo_pb
+       end;
+
+julia> @from_rrule DefaultCtx Tuple{typeof(foo), Base.IEEEFloat}
+
+julia> rrule!!(zero_fcodual(foo), zero_fcodual(5.0))[2](1.0)
+(NoRData(), 5.0)
+
+julia> # Check that the rule works as intended.
+       TestUtils.test_rule(Xoshiro(123), foo, 5.0; is_primitive=true)
+Test Passed
+```
+
+## An Example with Keyword Arguments
+
+```jldoctest
+julia> using Mooncake: @from_rrule, DefaultCtx, rrule!!, zero_fcodual, TestUtils
+
+julia> using ChainRulesCore
+
+julia> foo(x::Real; cond::Bool) = cond ? 5x : 4x;
+
+julia> function ChainRulesCore.rrule(::typeof(foo), x::Real; cond::Bool)
+           foo_pb(Ω::Real) = ChainRulesCore.NoTangent(), cond ? 5Ω : 4Ω
+           return foo(x; cond), foo_pb
+       end;
+
+julia> @from_rrule DefaultCtx Tuple{typeof(foo), Base.IEEEFloat} true
+
+julia> _, pb = rrule!!(
+           zero_fcodual(Core.kwcall),
+           zero_fcodual((cond=false, )),
+           zero_fcodual(foo),
+           zero_fcodual(5.0),
+       );
+
+julia> pb(3.0)
+(NoRData(), NoRData(), NoRData(), 12.0)
+
+julia> # Check that the rule works as intended.
+       TestUtils.test_rule(
+           Xoshiro(123), Core.kwcall, (cond=false, ), foo, 5.0; is_primitive=true
+       )
+Test Passed
+```
+Notice that, in order to access the kwarg method we must call the method of `Core.kwcall`,
+as Mooncake's `rrule!!` does not itself permit the use of kwargs.
+
+# Limitations
+
+It is your responsibility to ensure that
 1. calls with signature `sig` do not mutate their arguments,
 2. the output of calls with signature `sig` does not alias any of the inputs.
 
 As with all hand-written rules, you should definitely make use of
 [`TestUtils.test_rule`](@ref) to verify correctness on some test cases.
 
-# A Note On Type Constraints
+# Argument Type Constraints
 
 Many methods of `ChainRuleCore.rrule` are implemented with very loose type constraints.
 For example, it would not be surprising to see a method of rrule with the signature
@@ -364,17 +425,15 @@ Tuple{typeof(rrule), typeof(foo), Real, AbstractVector{<:Real}}
 There are a variety of reasons for this way of doing things, and whether it is a good idea
 to write rules for such generic objects has been debated at length.
 
-Suffice it to say, you should not write rules for this package which are so generically
+Suffice it to say, you should not write rules for _this_ package which are so generically
 typed.
 Rather, you should create rules for the subset of types for which you believe that the
 `ChainRulesCore.rrule` will work correctly, and leave this package to derive rules for the
 rest.
-For example, in the above case you might be confident that the rule will behave correctly
-for input types `Tuple{typeof(foo), IEEEFloat, Vector{<:IEEEFloat}}`. You should therefore
-only write a rule for these types:
-```julia
-@from_rrule DefaultCtx Tuple{typeof(foo), IEEEFloat, Vector{<:IEEEFloat}}
-```
+For example, it is quite common to be confident that a given rule will work correctly for
+any `Base.IEEEFloat` argument, i.e. `Union{Float16, Float32, Float64}`, but it is usually
+not possible to know that the rule is correct for all possible subtypes of `Real` that
+someone might define.
 
 # Conversions Between Different Tangent Type Systems
 
