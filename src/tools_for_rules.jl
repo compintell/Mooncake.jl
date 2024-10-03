@@ -387,13 +387,13 @@ either of these functions does not exist, please open an issue.
 """
 macro from_rrule(ctx, sig::Expr, has_kwargs::Bool=false)
 
-    arg_type_symbols, where_params = parse_signature_expr(sig)
-    arg_names = map(n -> Symbol("x_$n"), eachindex(arg_type_symbols))
-    arg_types = map(t -> :(Mooncake.CoDual{<:$t}), arg_type_symbols)
+    arg_type_syms, where_params = parse_signature_expr(sig)
+    arg_names = map(n -> Symbol("x_$n"), eachindex(arg_type_syms))
+    arg_types = map(t -> :(Mooncake.CoDual{<:$t}), arg_type_syms)
     rule_expr = construct_rrule_wrapper_def(arg_names, arg_types, where_params)
 
     if has_kwargs
-        kw_sig = Expr(:curly, :Tuple, :(typeof(Core.kwcall)), :NamedTuple, arg_type_symbols...)
+        kw_sig = Expr(:curly, :Tuple, :(typeof(Core.kwcall)), :NamedTuple, arg_type_syms...)
         kw_sig = where_params === nothing ? kw_sig : Expr(:where, kw_sig, where_params...)
         kw_is_primitive = :(Mooncake.is_primitive(::Type{$ctx}, ::Type{<:$kw_sig}) = true)
         kwcall_type = :(Mooncake.CoDual{typeof(Core.kwcall)})
