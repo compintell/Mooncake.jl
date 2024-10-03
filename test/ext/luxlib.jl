@@ -7,6 +7,14 @@
             (false, :none, false, LuxLib.Impl.activation, Lux.relu, randn(5, 4)),
             (
                 false, :none, false,
+                LuxLib.Impl.bias_activation_loop!,
+                randn(5, 4, 3),
+                Lux.relu,
+                randn(5, 4, 3),
+                randn(4),
+            ),
+            (
+                false, :none, false,
                 LuxLib.Impl.activation_loop!, randn(5, 3), NNlib.gelu, randn(5, 3),
             ),
             (false, :stability_and_allocs, true, SLEEFActivations.sigmoid_fast, randn()),
