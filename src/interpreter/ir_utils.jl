@@ -191,11 +191,7 @@ function lookup_ir(interp::CC.AbstractInterpreter, tt::Type{<:Tuple}; optimize_u
         match = match::Core.MethodMatch
         meth = Base.func_for_method_checked(match.method, tt, match.sparams)
         (code, ty) = CC.typeinf_ircode(
-            interp,
-            meth,
-            match.spec_types,
-            match.sparams,
-            optimize_until,
+            interp, meth, match.spec_types, match.sparams, optimize_until
         )
         if code === nothing
             push!(asts, match.method => Any)
