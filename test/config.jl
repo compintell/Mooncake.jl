@@ -1,4 +1,4 @@
 @testset "config" begin
-    @test !Mooncake.DEFAULT_CONFIG.debug_mode
-    @test !Mooncake.DEFAULT_CONFIG.silence_debug_messages
+    @test !Mooncake.Config().debug_mode
+    @test !Mooncake.Config().silence_debug_messages
 end

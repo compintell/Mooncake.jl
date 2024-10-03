@@ -61,7 +61,7 @@ end
 # Interop with ADTypes.
 function getconfig(x::ADTypes.AutoMooncake)
     c = x.config
-    return isnothing(c) ? Mooncake.DEFAULT_CONFIG : c
+    return isnothing(c) ? Mooncake.Config() : c
 end
 function ADgradient(x::ADTypes.AutoMooncake, ℓ)
     debug_mode = getconfig(x).debug_mode
