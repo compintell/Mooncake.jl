@@ -31,6 +31,21 @@
                 LuxLib.Utils.True(),
                 LuxLib.Utils.True(),
             ),
+            (
+                false, :none, false,
+                function(opmode, act, x, m, sigma2, gamma, beta)
+                    LuxLib.Impl.batchnorm_affine_normalize_internal(
+                        opmode, act, x, m, sigma2, gamma, beta, 1e-3
+                    )
+                end,
+                LuxLib.LoopedArrayOp(),
+                Lux.relu,
+                randn(5, 4, 3),
+                randn(4),
+                rand(4) .+ 1.0,
+                nothing,
+                nothing,
+            ),
         ],
         vec(map(Iterators.product(
             [LuxLib.LoopedArrayOp(), LuxLib.GenericBroadcastOp()],
