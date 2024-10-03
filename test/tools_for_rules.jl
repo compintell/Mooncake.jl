@@ -100,7 +100,9 @@ end
         @test value_and_gradient!!(rule, overlay_tester, 5.0) == (15.0, (NoTangent(), 3.0))
     end
     @testset "zero_adjoint" begin
-        test_rule(sr(123), zero_tester, 5.0; is_primitive=true, perf_flag=:stability_and_allocs)
+        test_rule(
+            sr(123), zero_tester, 5.0; is_primitive=true, perf_flag=:stability_and_allocs
+        )
         test_rule(
             sr(123), vararg_zero_tester, 5.0, 4.0;
             is_primitive=true, perf_flag=:stability_and_allocs,
