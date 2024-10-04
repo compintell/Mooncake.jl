@@ -3,17 +3,10 @@
 
 module MooncakeLogDensityProblemsADExt
 
-if isdefined(Base, :get_extension)
-    using ADTypes
-    using LogDensityProblemsAD: ADGradientWrapper
-    import LogDensityProblemsAD: ADgradient, logdensity_and_gradient, dimension, logdensity
-    import Mooncake
-else
-    using ADTypes
-    using ..LogDensityProblemsAD: ADGradientWrapper
-    import ..LogDensityProblemsAD: ADgradient, logdensity_and_gradient, dimension, logdensity
-    import ..Mooncake
-end
+using ADTypes
+using LogDensityProblemsAD: ADGradientWrapper
+import LogDensityProblemsAD: ADgradient, logdensity_and_gradient, dimension, logdensity
+import Mooncake
 
 struct MooncakeGradientLogDensity{Trule, L} <: ADGradientWrapper
     rule::Trule
@@ -59,8 +52,12 @@ function logdensity_and_gradient(∇l::MooncakeGradientLogDensity, x::Vector{Flo
 end
 
 # Interop with ADTypes.
+function getconfig(x::ADTypes.AutoMooncake)
+    c = x.config
+    return isnothing(c) ? Mooncake.Config() : c
+end
 function ADgradient(x::ADTypes.AutoMooncake, ℓ)
-    debug_mode = x.config.debug_mode
+    debug_mode = getconfig(x).debug_mode
     if debug_mode
         msg = "Running Mooncake in debug mode. This mode is computationally expensive, " *
             "should only be used when debugging a problem with AD, and turned off in " *
