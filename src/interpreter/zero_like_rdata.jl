@@ -24,8 +24,6 @@ function zero_like_rdata_type(::Type{P}) where {P}
     return can_produce_zero_rdata_from_type(P) ? R : Union{R, ZeroRData}
 end
 
-zero_like_rdata_type(::TypeVar) = NoRData
-
 """
     zero_like_rdata_from_type(::Type{P}) where {P}
 
@@ -37,5 +35,3 @@ It is always valid to return a `ZeroRData`,
 function zero_like_rdata_from_type(::Type{P}) where {P}
     return can_produce_zero_rdata_from_type(P) ? zero_rdata_from_type(P) : ZeroRData()
 end
-
-zero_like_rdata_from_type(::TypeVar) = NoRData()
