@@ -52,8 +52,12 @@ function logdensity_and_gradient(∇l::MooncakeGradientLogDensity, x::Vector{Flo
 end
 
 # Interop with ADTypes.
+function getconfig(x::ADTypes.AutoMooncake)
+    c = x.config
+    return isnothing(c) ? Mooncake.Config() : c
+end
 function ADgradient(x::ADTypes.AutoMooncake, ℓ)
-    debug_mode = x.config.debug_mode
+    debug_mode = getconfig(x).debug_mode
     if debug_mode
         msg = "Running Mooncake in debug mode. This mode is computationally expensive, " *
             "should only be used when debugging a problem with AD, and turned off in " *
