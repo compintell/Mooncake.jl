@@ -205,17 +205,17 @@ end
             end
         end
     end
-    @testset "rule_type $sig, $safety_on" for
+    @testset "rule_type $sig, $debug_mode" for
         sig in Any[
             Tuple{typeof(getfield), Tuple{Float64}, 1},
             Tuple{typeof(Mooncake.TestResources.foo), Float64},
             Tuple{typeof(Mooncake.TestResources.type_unstable_tester_0), Ref{Any}},
         ],
-        safety_on in [true, false]
+        debug_mode in [true, false]
 
         interp = get_interpreter()
-        rule = Mooncake.build_rrule(interp, sig; safety_on)
-        @test rule isa Mooncake.rule_type(interp, sig; safety_on)
+        rule = Mooncake.build_rrule(interp, sig; debug_mode)
+        @test rule isa Mooncake.rule_type(interp, sig; debug_mode)
     end
 
     @testset "$(_typeof((f, x...)))" for (n, (interface_only, perf_flag, bnds, f, x...)) in

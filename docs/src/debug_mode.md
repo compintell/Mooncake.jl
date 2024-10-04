@@ -1,4 +1,4 @@
-# Safe Mode
+# Debug Mode
 
 ```@meta
 DocTestSetup = quote
@@ -32,25 +32,25 @@ _**The Solution**_
 
 Check that the types of the fdata / rdata associated to arguments are exactly what `tangent_type` / `fdata_type` / `rdata_type` require upon entry to / exit from rules and pullbacks.
 
-This is implemented via `SafeRRule`:
+This is implemented via `DebugRRule`:
 ```@docs
-Mooncake.SafeRRule
+Mooncake.DebugRRule
 ```
 
-You can straightforwardly enable it when building a rule via the `safety_on` kwarg in the following:
+You can straightforwardly enable it when building a rule via the `debug_mode` kwarg in the following:
 ```@docs
 Mooncake.build_rrule
 ```
 
-When using ADTypes.jl, you can choose whether or not to use it via the `safe_mode` kwarg:
-# ```jldoctest
-# julia> AutoMooncake(safe_mode=false)
-# AutoMooncake(safe_mode=false)
-# ```
+When using ADTypes.jl, you can choose whether or not to use it via the `debug_mode` kwarg:
+```jldoctest
+julia> AutoMooncake(; config=Mooncake.Config(; debug_mode=true))
+AutoMooncake{Mooncake.Config}(Mooncake.Config(true, false))
+```
 
-### When Should You Use Safe Mode?
+### When Should You Use Debug Mode?
 
-Only use `safe_mode` when debugging a problem.
+Only use `debug_mode` when debugging a problem.
 This is because is has substantial performance implications.
 
 

@@ -19,15 +19,16 @@ function __value_and_pullback!!(rule::R, ȳ::T, fx::Vararg{CoDual, N}) where {R
 end
 
 function __verify_sig(
-    ::DerivedRule{<:Any, <:MistyClosure{<:OpaqueClosure{sig}}}, ::Tfx
+    rule::DerivedRule{<:Any, <:MistyClosure{<:OpaqueClosure{sig}}}, fx::Tfx
 ) where {sig, Tfx}
-    if sig != Tfx
-        msg = "signature of arguments, $Tfx, not equal to signature required by rule, $sig."
+    Pfx = typeof(__unflatten_codual_varargs(rule.isva, fx, rule.nargs))
+    if sig != Pfx
+        msg = "signature of arguments, $Pfx, not equal to signature required by rule, $sig."
         throw(ArgumentError(msg))
     end
 end
 
-__verify_sig(rule::SafeRRule, fx) = __verify_sig(rule.rule, fx)
+__verify_sig(rule::DebugRRule, fx) = __verify_sig(rule.rule, fx)
 
 # rrule!! doesn't specify specific argument types which must be used, so there's nothing to
 # check here.

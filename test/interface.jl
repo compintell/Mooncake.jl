@@ -4,8 +4,8 @@
         ([1.0, 1.0], x -> [sin(x), sin(2x)], 3.0),
         (1.0, x -> sum(5x), [5.0, 2.0]),
     ]
-        @testset "safe_mode=$safe_mode" for safe_mode in Bool[false, true]
-            rule = build_rrule(f, x...; safety_on=safe_mode)
+        @testset "debug_mode=$debug_mode" for debug_mode in Bool[false, true]
+            rule = build_rrule(f, x...; debug_mode)
             v, (df, dx...) = value_and_pullback!!(rule, ȳ, f, x...)
             @test v ≈ f(x...)
             @test df isa tangent_type(typeof(f))
@@ -27,6 +27,7 @@
             (x -> sin(cos(x)), randn(Float32)),
             ((x, y) -> x + sin(y), randn(Float64), randn(Float64)),
             ((x, y) -> x + sin(y), randn(Float32), randn(Float32)),
+            ((x...) -> x[1] + x[2], randn(Float64), randn(Float64)),
         ]
             rule = build_rrule(fargs...)
             f, args... = fargs

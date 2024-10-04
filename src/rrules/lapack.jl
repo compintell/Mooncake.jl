@@ -47,20 +47,22 @@ for (fname, elty) in ((:dgetrf_, :Float64), (:sgetrf_, :Float32))
         dA = tangent(_A)
         function getrf_pb!!(::NoRData)
 
-            # Run reverse-pass.
-            L, U = UnitLowerTriangular(A_mat), UpperTriangular(A_mat)
-            dA_mat = wrap_ptr_as_view(dA, LDA_val, M_val, N_val)
-            dL, dU = tril(dA_mat, -1), UpperTriangular(dA_mat)
+            GC.@preserve args begin
+                # Run reverse-pass.
+                L, U = UnitLowerTriangular(A_mat), UpperTriangular(A_mat)
+                dA_mat = wrap_ptr_as_view(dA, LDA_val, M_val, N_val)
+                dL, dU = tril(dA_mat, -1), UpperTriangular(dA_mat)
 
-            # Figure out the pivot matrix used.
-            p = LinearAlgebra.ipiv2perm(ipiv_vec, N_val)
+                # Figure out the pivot matrix used.
+                p = LinearAlgebra.ipiv2perm(ipiv_vec, N_val)
 
-            # Compute pullback using Seth's method.
-            __dF = tril(L'dL, -1) + UpperTriangular(dU * U')
-            dA_mat .= (inv(L') * __dF * inv(U'))[invperm(p), :]
+                # Compute pullback using Seth's method.
+                __dF = tril(L'dL, -1) + UpperTriangular(dU * U')
+                dA_mat .= (inv(L') * __dF * inv(U'))[invperm(p), :]
 
-            # Restore initial state.
-            A_mat .= A_store
+                # Restore initial state.
+                A_mat .= A_store
+            end
 
             return tuple_fill(NoRData(), Val(12 + Nargs))
         end
@@ -91,48 +93,52 @@ for (fname, elty) in ((:dtrtrs_, :Float64), (:strtrs_, :Float32))
         args::Vararg{Any, Nargs},
     ) where {Nargs}
 
-        # Load in data.
-        ul_p, tA_p, diag_p = map(primal, (_ul, _tA, _diag))
-        N_p, Nrhs_p, lda_p, ldb_p, info_p = map(primal, (_N, _Nrhs, _lda, _ldb, _info))
-        ul, tA, diag, N, Nrhs, lda, ldb, info = map(
-            unsafe_load, (ul_p, tA_p, diag_p, N_p, Nrhs_p, lda_p, ldb_p, info_p),
-        )
+        GC.@preserve args begin
+            # Load in data.
+            ul_p, tA_p, diag_p = map(primal, (_ul, _tA, _diag))
+            N_p, Nrhs_p, lda_p, ldb_p, info_p = map(primal, (_N, _Nrhs, _lda, _ldb, _info))
+            ul, tA, diag, N, Nrhs, lda, ldb, info = map(
+                unsafe_load, (ul_p, tA_p, diag_p, N_p, Nrhs_p, lda_p, ldb_p, info_p),
+            )
 
-        A = wrap_ptr_as_view(primal(_A), lda, N, N)
-        B = wrap_ptr_as_view(primal(_B), ldb, N, Nrhs)
-        B_copy = copy(B)
+            A = wrap_ptr_as_view(primal(_A), lda, N, N)
+            B = wrap_ptr_as_view(primal(_B), ldb, N, Nrhs)
+            B_copy = copy(B)
 
-        # Run the primal.
-        ccall(
-            $(blas_name(fname)),
-            Cvoid,
-            (
-                Ptr{UInt8}, Ptr{UInt8}, Ptr{UInt8}, Ptr{BlasInt}, Ptr{BlasInt},
-                Ptr{$elty}, Ptr{BlasInt}, Ptr{$elty}, Ptr{BlasInt}, Ptr{BlasInt},
-                Clong, Clong, Clong,
-            ),
-            ul_p, tA_p, diag_p, N_p, Nrhs_p, primal(_A), lda_p, primal(_B),ldb_p, info_p,
-            1, 1, 1,
-        )
+            # Run the primal.
+            ccall(
+                $(blas_name(fname)),
+                Cvoid,
+                (
+                    Ptr{UInt8}, Ptr{UInt8}, Ptr{UInt8}, Ptr{BlasInt}, Ptr{BlasInt},
+                    Ptr{$elty}, Ptr{BlasInt}, Ptr{$elty}, Ptr{BlasInt}, Ptr{BlasInt},
+                    Clong, Clong, Clong,
+                ),
+                ul_p, tA_p, diag_p, N_p, Nrhs_p, primal(_A), lda_p, primal(_B),ldb_p, info_p,
+                1, 1, 1,
+            )
+        end
 
         _dA = tangent(_A)
         _dB = tangent(_B)
         function trtrs_pb!!(::NoRData)
 
-            # Compute cotangent of B.
-            dB = wrap_ptr_as_view(_dB, ldb, N, Nrhs)
-            LAPACK.trtrs!(Char(ul), Char(tA) == 'N' ? 'T' : 'N', Char(diag), A, dB)
+            GC.@preserve args begin
+                # Compute cotangent of B.
+                dB = wrap_ptr_as_view(_dB, ldb, N, Nrhs)
+                LAPACK.trtrs!(Char(ul), Char(tA) == 'N' ? 'T' : 'N', Char(diag), A, dB)
 
-            # Compute cotangent of A.
-            dA = wrap_ptr_as_view(_dA, lda, N, N)
-            if Char(tA) == 'N'
-                dA .-= tri!(dB * B', Char(ul), Char(diag))
-            else
-                dA .-= tri!(B * dB', Char(ul), Char(diag))
+                # Compute cotangent of A.
+                dA = wrap_ptr_as_view(_dA, lda, N, N)
+                if Char(tA) == 'N'
+                    dA .-= tri!(dB * B', Char(ul), Char(diag))
+                else
+                    dA .-= tri!(B * dB', Char(ul), Char(diag))
+                end
+
+                # Restore initial state.
+                B .= B_copy
             end
-
-            # Restore initial state.
-            B .= B_copy
 
             return tuple_fill(NoRData(), Val(16 + Nargs))
         end
@@ -160,80 +166,84 @@ for (fname, elty) in ((:dgetrs_, :Float64), (:sgetrs_, :Float32))
         args::Vararg{Any, Nargs},
     ) where {Nargs}
 
-        # Load in values.
-        tA = Char(unsafe_load(primal(_tA)))
-        N, Nrhs, lda, ldb, info = map(unsafe_load ∘ primal, (_N, _Nrhs, _lda, _ldb, _info))
-        ipiv = unsafe_wrap(Vector{BlasInt}, primal(_ipiv), N)
-        A = wrap_ptr_as_view(primal(_A), lda, N, N)
-        B = wrap_ptr_as_view(primal(_B), ldb, N, Nrhs)
-        B0 = copy(B)
+        GC.@preserve args begin
+            # Load in values.
+            tA = Char(unsafe_load(primal(_tA)))
+            N, Nrhs, lda, ldb, info = map(unsafe_load ∘ primal, (_N, _Nrhs, _lda, _ldb, _info))
+            ipiv = unsafe_wrap(Vector{BlasInt}, primal(_ipiv), N)
+            A = wrap_ptr_as_view(primal(_A), lda, N, N)
+            B = wrap_ptr_as_view(primal(_B), ldb, N, Nrhs)
+            B0 = copy(B)
 
-        # Pivot B.
-        p = LinearAlgebra.ipiv2perm(ipiv, N)
+            # Pivot B.
+            p = LinearAlgebra.ipiv2perm(ipiv, N)
 
-        if tA == 'N'
-            # Apply permutation matrix.
-            B .= B[p, :]
+            if tA == 'N'
+                # Apply permutation matrix.
+                B .= B[p, :]
 
-            # Run inv(L) * B and write result to B.
-            LAPACK.trtrs!('L', 'N', 'U', A, B)
-            B1 = copy(B) # record intermediate state for use in pullback.
+                # Run inv(L) * B and write result to B.
+                LAPACK.trtrs!('L', 'N', 'U', A, B)
+                B1 = copy(B) # record intermediate state for use in pullback.
 
-            # Run inv(U) * B and write result to B.
-            LAPACK.trtrs!('U', 'N', 'N', A, B)
-            B2 = B
-        else
-            # Run inv(U)^T * B and write result to B.
-            LAPACK.trtrs!('U', 'T', 'N', A, B)
-            B1 = copy(B) # record intermediate state for use in pullback.
+                # Run inv(U) * B and write result to B.
+                LAPACK.trtrs!('U', 'N', 'N', A, B)
+                B2 = B
+            else
+                # Run inv(U)^T * B and write result to B.
+                LAPACK.trtrs!('U', 'T', 'N', A, B)
+                B1 = copy(B) # record intermediate state for use in pullback.
 
-            # Run inv(L)^T * B and write result to B.
-            LAPACK.trtrs!('L', 'T', 'U', A, B)
-            B2 = B
+                # Run inv(L)^T * B and write result to B.
+                LAPACK.trtrs!('L', 'T', 'U', A, B)
+                B2 = B
 
-            # Apply permutation matrix.
-            B2 .= B2[invperm(p), :]
+                # Apply permutation matrix.
+                B2 .= B2[invperm(p), :]
+            end
+
+            # We need to write to `info`.
+            unsafe_store!(primal(_info), 0)
         end
-
-        # We need to write to `info`.
-        unsafe_store!(primal(_info), 0)
 
         _dA = tangent(_A)
         _dB = tangent(_B)
         function getrs_pb!!(::NoRData)
 
-            dA = wrap_ptr_as_view(_dA, lda, N, N)
-            dB = wrap_ptr_as_view(_dB, ldb, N, Nrhs)
+            GC.@preserve args begin
+                dA = wrap_ptr_as_view(_dA, lda, N, N)
+                dB = wrap_ptr_as_view(_dB, ldb, N, Nrhs)
 
-            if tA == 'N'
+                if tA == 'N'
 
-                # Run pullback for inv(U) * B.
-                LAPACK.trtrs!('U', 'T', 'N', A, dB)
-                dA .-= tri!(dB * B2', 'U', 'N')
+                    # Run pullback for inv(U) * B.
+                    LAPACK.trtrs!('U', 'T', 'N', A, dB)
+                    dA .-= tri!(dB * B2', 'U', 'N')
 
-                # Run pullback for inv(L) * B.
-                LAPACK.trtrs!('L', 'T', 'U', A, dB)
-                dA .-= tri!(dB * B1', 'L', 'U')
+                    # Run pullback for inv(L) * B.
+                    LAPACK.trtrs!('L', 'T', 'U', A, dB)
+                    dA .-= tri!(dB * B1', 'L', 'U')
 
-                # Undo permutation.
-                dB .= dB[invperm(p), :]
-            else
+                    # Undo permutation.
+                    dB .= dB[invperm(p), :]
+                else
 
-                # Undo permutation.
-                dB .= dB[p, :]
-                B2 .= B2[p, :]
+                    # Undo permutation.
+                    dB .= dB[p, :]
+                    B2 .= B2[p, :]
 
-                # Run pullback for inv(L^T) * B.
-                LAPACK.trtrs!('L', 'N', 'U', A, dB)
-                dA .-= tri!(B2 * dB', 'L', 'U')
+                    # Run pullback for inv(L^T) * B.
+                    LAPACK.trtrs!('L', 'N', 'U', A, dB)
+                    dA .-= tri!(B2 * dB', 'L', 'U')
 
-                # Run pullback for inv(U^T) * B.
-                LAPACK.trtrs!('U', 'N', 'N', A, dB)
-                dA .-= tri!(B1 * dB', 'U', 'N')
+                    # Run pullback for inv(U^T) * B.
+                    LAPACK.trtrs!('U', 'N', 'N', A, dB)
+                    dA .-= tri!(B1 * dB', 'U', 'N')
+                end
+
+                # Restore initial state.
+                B .= B0
             end
-
-            # Restore initial state.
-            B .= B0
 
             return tuple_fill(NoRData(), Val(15 + Nargs))
         end
@@ -259,39 +269,43 @@ for (fname, elty) in ((:dgetri_, :Float64), (:sgetri_, :Float32))
         args::Vararg{Any, Nargs},
     ) where {Nargs}
 
-        # Pull out data.
-        N_p, lda_p, lwork_p, info_p = map(primal, (_N, _lda, _lwork, _info))
-        N, lda, lwork, info = map(unsafe_load, (N_p, lda_p, lwork_p, info_p))
-        A_p = primal(_A)
-        A = wrap_ptr_as_view(A_p, lda, N, N)
-        A_copy = copy(A)
+        GC.@preserve args begin
+            # Pull out data.
+            N_p, lda_p, lwork_p, info_p = map(primal, (_N, _lda, _lwork, _info))
+            N, lda, lwork, info = map(unsafe_load, (N_p, lda_p, lwork_p, info_p))
+            A_p = primal(_A)
+            A = wrap_ptr_as_view(A_p, lda, N, N)
+            A_copy = copy(A)
 
-        # Run forwards-pass.
-        ccall(
-            $(blas_name(fname)), Cvoid,
-            (
-                Ptr{BlasInt}, Ptr{$elty}, Ptr{BlasInt}, Ptr{BlasInt}, Ptr{$elty},
-                Ptr{BlasInt}, Ptr{BlasInt},
-            ),
-            N_p, A_p, lda_p, primal(_ipiv), primal(_work), lwork_p, info_p,
-        )
+            # Run forwards-pass.
+            ccall(
+                $(blas_name(fname)), Cvoid,
+                (
+                    Ptr{BlasInt}, Ptr{$elty}, Ptr{BlasInt}, Ptr{BlasInt}, Ptr{$elty},
+                    Ptr{BlasInt}, Ptr{BlasInt},
+                ),
+                N_p, A_p, lda_p, primal(_ipiv), primal(_work), lwork_p, info_p,
+            )
 
-        p = LinearAlgebra.ipiv2perm(unsafe_wrap(Array, primal(_ipiv), N), N)
+            p = LinearAlgebra.ipiv2perm(unsafe_wrap(Array, primal(_ipiv), N), N)
+        end
 
         _dA = tangent(_A)
         function getri_pb!!(::NoRData)
-            if lwork != -1
-                dA = wrap_ptr_as_view(_dA, lda, N, N)
-                A .= A[:, p]
-                dA .= dA[:, p]
+            GC.@preserve args begin
+                if lwork != -1
+                    dA = wrap_ptr_as_view(_dA, lda, N, N)
+                    A .= A[:, p]
+                    dA .= dA[:, p]
 
-                # Cotangent w.r.t. L.
-                dL = -(A' * dA) / UnitLowerTriangular(A_copy)'
-                dU = -(UpperTriangular(A_copy)' \ (dA * A'))
-                dA .= tri!(dL, 'L', 'U') .+ tri!(dU, 'U', 'N')
+                    # Cotangent w.r.t. L.
+                    dL = -(A' * dA) / UnitLowerTriangular(A_copy)'
+                    dU = -(UpperTriangular(A_copy)' \ (dA * A'))
+                    dA .= tri!(dL, 'L', 'U') .+ tri!(dU, 'U', 'N')
 
-                # Restore initial state.
-                A .= A_copy
+                    # Restore initial state.
+                    A .= A_copy
+                end
             end
 
             return tuple_fill(NoRData(), Val(13 + Nargs))
@@ -318,42 +332,46 @@ for (fname, elty) in ((:dpotrf_, :Float64), (:spotrf_, :Float32))
         args::Vararg{Any, Nargs},
     ) where {Nargs}
 
-        # Pull out the data.
-        uplo_p, N_p, A_p, lda_p, info_p = map(primal, (_uplo, _N, _A, _lda, _info))
-        uplo, lda, N = map(unsafe_load, (uplo_p, lda_p, N_p))
+        GC.@preserve args begin
+            # Pull out the data.
+            uplo_p, N_p, A_p, lda_p, info_p = map(primal, (_uplo, _N, _A, _lda, _info))
+            uplo, lda, N = map(unsafe_load, (uplo_p, lda_p, N_p))
 
-        # Make a copy of the initial state for later restoration.
-        A = wrap_ptr_as_view(A_p, lda, N, N)
-        A_copy = copy(A)
+            # Make a copy of the initial state for later restoration.
+            A = wrap_ptr_as_view(A_p, lda, N, N)
+            A_copy = copy(A)
 
-        # Run forwards-pass.
-        ccall(
-            $(blas_name(fname)), Cvoid,
-            (Ptr{UInt8}, Ptr{BlasInt}, Ptr{$elty}, Ptr{BlasInt}, Ptr{BlasInt}),
-            uplo_p, N_p, A_p, lda_p, info_p,
-        )
+            # Run forwards-pass.
+            ccall(
+                $(blas_name(fname)), Cvoid,
+                (Ptr{UInt8}, Ptr{BlasInt}, Ptr{$elty}, Ptr{BlasInt}, Ptr{BlasInt}),
+                uplo_p, N_p, A_p, lda_p, info_p,
+            )
+        end
 
         _dA = tangent(_A)
         function potrf_pb!!(::NoRData)
 
-            dA = wrap_ptr_as_view(_dA, lda, N, N)
-            dA2 = dA
+            GC.@preserve args begin
+                dA = wrap_ptr_as_view(_dA, lda, N, N)
+                dA2 = dA
 
-            # Compute cotangents.
-            if Char(uplo) == 'L'
-                E = LowerTriangular(2 * ones(N, N)) - Diagonal(ones(N))
-                L = LowerTriangular(A)
-                B = L' \ (E' .* (dA2'L)) / L
-                dA .= 0.5 * __sym(B) .* E .+ triu!(dA2, 1)
-            else
-                E = UpperTriangular(2 * ones(N, N) - Diagonal(ones(N)))
-                U = UpperTriangular(A)
-                B = U \ ((U * dA2') .* E') / U'
-                dA .= 0.5 * __sym(B) .* E .+ tril!(dA2, -1)
+                # Compute cotangents.
+                if Char(uplo) == 'L'
+                    E = LowerTriangular(2 * ones(N, N)) - Diagonal(ones(N))
+                    L = LowerTriangular(A)
+                    B = L' \ (E' .* (dA2'L)) / L
+                    dA .= 0.5 * __sym(B) .* E .+ triu!(dA2, 1)
+                else
+                    E = UpperTriangular(2 * ones(N, N) - Diagonal(ones(N)))
+                    U = UpperTriangular(A)
+                    B = U \ ((U * dA2') .* E') / U'
+                    dA .= 0.5 * __sym(B) .* E .+ tril!(dA2, -1)
+                end
+
+                # Restore initial state.
+                A .= A_copy
             end
-
-            # Restore initial state.
-            A .= A_copy
 
             return tuple_fill(NoRData(), Val(11 + Nargs))
         end
@@ -379,47 +397,52 @@ for (fname, elty) in ((:dpotrs_, :Float64), (:spotrs_, :Float32))
         _info::CoDual{Ptr{BlasInt}},
         args::Vararg{Any, Nargs},
     ) where {Nargs}
-        # Pull out the data.
-        uplo_p, N_p, Nrhs_p, A_p, lda_p, B_p, ldb_p, info_p = map(
-            primal, (_uplo, _N, _Nrhs, _A, _lda, _B, _ldb, _info)
-        )
-        uplo, lda, N, ldb, Nrhs = map(unsafe_load, (uplo_p, lda_p, N_p, ldb_p, Nrhs_p))
 
-        # Make a copy of the initial state for later restoration.
-        A = wrap_ptr_as_view(A_p, lda, N, N)
-        B = wrap_ptr_as_view(B_p, ldb, N, Nrhs)
-        B_copy = copy(B)
+        GC.@preserve args begin
+            # Pull out the data.
+            uplo_p, N_p, Nrhs_p, A_p, lda_p, B_p, ldb_p, info_p = map(
+                primal, (_uplo, _N, _Nrhs, _A, _lda, _B, _ldb, _info)
+            )
+            uplo, lda, N, ldb, Nrhs = map(unsafe_load, (uplo_p, lda_p, N_p, ldb_p, Nrhs_p))
 
-        # Run forwards-pass.
-        ccall(
-            $(blas_name(fname)), Cvoid,
-            (
-                Ptr{UInt8}, Ptr{BlasInt}, Ptr{BlasInt}, Ptr{$elty},
-                Ptr{BlasInt}, Ptr{$elty}, Ptr{BlasInt}, Ptr{BlasInt},
-            ),
-            uplo_p, N_p, Nrhs_p, A_p, lda_p, B_p, ldb_p, info_p,
-        )
+            # Make a copy of the initial state for later restoration.
+            A = wrap_ptr_as_view(A_p, lda, N, N)
+            B = wrap_ptr_as_view(B_p, ldb, N, Nrhs)
+            B_copy = copy(B)
+
+            # Run forwards-pass.
+            ccall(
+                $(blas_name(fname)), Cvoid,
+                (
+                    Ptr{UInt8}, Ptr{BlasInt}, Ptr{BlasInt}, Ptr{$elty},
+                    Ptr{BlasInt}, Ptr{$elty}, Ptr{BlasInt}, Ptr{BlasInt},
+                ),
+                uplo_p, N_p, Nrhs_p, A_p, lda_p, B_p, ldb_p, info_p,
+            )
+        end
 
         _dA = tangent(_A)
         _dB = tangent(_B)
         function potrs_pb!!(::NoRData)
 
-            dA = wrap_ptr_as_view(_dA, lda, N, N)
-            dB = wrap_ptr_as_view(_dB, ldb, N, Nrhs)
+            GC.@preserve args begin
+                dA = wrap_ptr_as_view(_dA, lda, N, N)
+                dB = wrap_ptr_as_view(_dB, ldb, N, Nrhs)
 
-            # Compute cotangents.
-            if Char(uplo) == 'L'
-                tmp = __sym(B_copy * dB') / LowerTriangular(A)'
-                dA .-= 2 .* tril!(LinearAlgebra.LAPACK.potrs!('L', A, tmp))
-                LinearAlgebra.LAPACK.potrs!('L', A, dB)
-            else
-                tmp = UpperTriangular(A)' \ __sym(B_copy * dB')
-                dA .-= 2 .* triu!((tmp / UpperTriangular(A)) / UpperTriangular(A)')
-                LinearAlgebra.LAPACK.potrs!('U', A, dB)
+                # Compute cotangents.
+                if Char(uplo) == 'L'
+                    tmp = __sym(B_copy * dB') / LowerTriangular(A)'
+                    dA .-= 2 .* tril!(LinearAlgebra.LAPACK.potrs!('L', A, tmp))
+                    LinearAlgebra.LAPACK.potrs!('L', A, dB)
+                else
+                    tmp = UpperTriangular(A)' \ __sym(B_copy * dB')
+                    dA .-= 2 .* triu!((tmp / UpperTriangular(A)) / UpperTriangular(A)')
+                    LinearAlgebra.LAPACK.potrs!('U', A, dB)
+                end
+
+                # Restore initial state.
+                B .= B_copy
             end
-
-            # Restore initial state.
-            B .= B_copy
 
             return tuple_fill(NoRData(), Val(14 + Nargs))
         end
