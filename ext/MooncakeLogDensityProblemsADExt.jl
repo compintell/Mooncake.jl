@@ -3,17 +3,10 @@
 
 module MooncakeLogDensityProblemsADExt
 
-if isdefined(Base, :get_extension)
-    using ADTypes
-    using LogDensityProblemsAD: ADGradientWrapper
-    import LogDensityProblemsAD: ADgradient, logdensity_and_gradient, dimension, logdensity
-    import Mooncake
-else
-    using ADTypes
-    using ..LogDensityProblemsAD: ADGradientWrapper
-    import ..LogDensityProblemsAD: ADgradient, logdensity_and_gradient, dimension, logdensity
-    import ..Mooncake
-end
+using ADTypes
+using LogDensityProblemsAD: ADGradientWrapper
+import LogDensityProblemsAD: ADgradient, logdensity_and_gradient, dimension, logdensity
+import Mooncake
 
 struct MooncakeGradientLogDensity{Trule, L} <: ADGradientWrapper
     rule::Trule
