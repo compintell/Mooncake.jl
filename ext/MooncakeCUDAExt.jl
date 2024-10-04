@@ -56,17 +56,13 @@ end
 # Basic rules for operating on CuArrays.
 
 @is_primitive(
-    MinimalCtx,
-    Tuple{Type{<:CuArray}, UndefInitializer, Vararg{Int, N}} where {N},
+    MinimalCtx, Tuple{Type{<:CuArray}, UndefInitializer, Vararg{Int, N}} where {N},
 )
 function rrule!!(
-    p::CoDual{Type{P}},
-    init::CoDual{UndefInitializer},
-    dims::CoDual{Int}...
+    p::CoDual{Type{P}}, init::CoDual{UndefInitializer}, dims::CoDual{Int}...
 ) where {P<:CuArray{<:Base.IEEEFloat}}
     _dims = map(primal, dims)
-    y = CoDual(P(undef, _dims), P(undef, _dims))
-    return y, NoPullback(p, init, dims...)
+    return CoDual(P(undef, _dims), P(undef, _dims)), NoPullback(p, init, dims...)
 end
 
 end
