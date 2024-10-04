@@ -499,9 +499,9 @@ function test_rule(
     # Construct the rule.
     rule = Mooncake.build_rrule(interp, _typeof(__get_primals(x)); debug_mode)
 
-    # If we're requiring `is_primitive`, then check that `rule == rrule!!`.
+    # If something is primitive, then the rule should be `rrule!!`.
     if is_primitive
-        @test rule === rrule!!
+        @test rule == (debug_mode ? Mooncake.DebugRRule(rrule!!) : rrule!!)
     end
 
     # Generate random tangents for anything that is not already a CoDual.
