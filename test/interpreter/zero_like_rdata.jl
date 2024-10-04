@@ -6,7 +6,6 @@
             Float64,
             Int,
             Vector{Float64},
-            # TypeVar(:a),
         ]
             @test Mooncake.zero_like_rdata_from_type(P) isa Mooncake.zero_like_rdata_type(P)
         end
