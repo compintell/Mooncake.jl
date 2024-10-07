@@ -24,13 +24,19 @@ end
     @testset "zero_rdata_from_type checks" begin
         @test Mooncake.can_produce_zero_rdata_from_type(Vector) == true
         @test Mooncake.zero_rdata_from_type(Vector) == NoRData()
-        @test Mooncake.can_produce_zero_rdata_from_type(FwdsRvsDataTestResources.Foo) == false
+        @test !Mooncake.can_produce_zero_rdata_from_type(FwdsRvsDataTestResources.Foo)
         @test Mooncake.can_produce_zero_rdata_from_type(Tuple{Float64, Type{Float64}})
         @test ==(
             Mooncake.zero_rdata_from_type(FwdsRvsDataTestResources.Foo),
             Mooncake.CannotProduceZeroRDataFromType(),
         )
         @test !Mooncake.can_produce_zero_rdata_from_type(Tuple)
+        @test !Mooncake.can_produce_zero_rdata_from_type(
+            Union{Tuple{Float64, Int}, Tuple{Int, Float64}}
+        )
+        @test !Mooncake.can_produce_zero_rdata_from_type(
+            Tuple{T, T} where {T<:Integer}
+        )
     end
     @testset "lazy construction checks" begin
         # Check that lazy construction is in fact lazy for some cases where performance

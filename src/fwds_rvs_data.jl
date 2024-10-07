@@ -563,7 +563,10 @@ obtained from `P` alone.
     R == NoRData && return true
     isabstracttype(P) && return false
     (isconcretetype(P) || P <: Tuple) || return false
-    (P <: Tuple && Base.datatype_fieldcount(P) === nothing) && return false
+    if P <: Tuple
+        P isa DataType || return false
+        Base.datatype_fieldcount(P) === nothing && return false
+    end
 
     # For general structs, just look at their fields.
     return isstructtype(P) ? all(can_produce_zero_rdata_from_type, fieldtypes(P)) : false
