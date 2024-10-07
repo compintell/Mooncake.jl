@@ -564,7 +564,7 @@ obtained from `P` alone.
     isabstracttype(P) && return false
     (isconcretetype(P) || P <: Tuple) || return false
     (P <: Tuple && !(P isa DataType)) && return false
-    (P <: Tuple && isnothing(Base.datatype_fieldcount(P))) && return false
+    (P <: Tuple && Base.datatype_fieldcount(P) === nothing) && return false
 
     # For general structs, just look at their fields.
     return isstructtype(P) ? all(can_produce_zero_rdata_from_type, fieldtypes(P)) : false
