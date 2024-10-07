@@ -31,12 +31,8 @@ end
             Mooncake.CannotProduceZeroRDataFromType(),
         )
         @test !Mooncake.can_produce_zero_rdata_from_type(Tuple)
-        @test !Mooncake.can_produce_zero_rdata_from_type(
-            Union{Tuple{Float64, Int}, Tuple{Int, Float64}}
-        )
-        @test !Mooncake.can_produce_zero_rdata_from_type(
-            Tuple{T, T} where {T<:Integer}
-        )
+        @test !Mooncake.can_produce_zero_rdata_from_type(Union{Tuple{Float64}, Tuple{Int}})
+        @test !Mooncake.can_produce_zero_rdata_from_type(Tuple{T, T} where {T<:Integer})
     end
     @testset "lazy construction checks" begin
         # Check that lazy construction is in fact lazy for some cases where performance
