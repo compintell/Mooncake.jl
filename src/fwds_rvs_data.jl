@@ -564,7 +564,7 @@ obtained from `P` alone.
     isabstracttype(P) && return false
     (isconcretetype(P) || P <: Tuple) || return false
     if P <: Tuple
-        P isa DataType || return false
+        P isa DataType || return false # eg. Unions and UnionAll of Tuples.
         Base.datatype_fieldcount(P) === nothing && return false
     end
 
