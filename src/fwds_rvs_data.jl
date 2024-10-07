@@ -563,6 +563,7 @@ obtained from `P` alone.
     R == NoRData && return true
     isabstracttype(P) && return false
     (isconcretetype(P) || P <: Tuple) || return false
+    (P <: Tuple && !(P isa DataType)) && return false # catch Unions and UnionAlls
     (P <: Tuple && Base.datatype_fieldcount(P) === nothing) && return false
 
     # For general structs, just look at their fields.
