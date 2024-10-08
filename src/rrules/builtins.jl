@@ -110,7 +110,7 @@ function rrule!!(::CoDual{typeof(add_ptr)}, a, b)
 end
 
 @inactive_intrinsic and_int
-@inactive_intrinsic arraylen
+
 @inactive_intrinsic ashr_int
 
 # atomic_fence
@@ -357,8 +357,6 @@ function rrule!!(::CoDual{typeof(pointerset)}, p, x, idx, z)
     return p, pointerset_pullback!!
 end
 
-# rem_float -- appears to be unused
-# rem_float_fast -- appears to be unused
 @inactive_intrinsic rint_llvm
 @inactive_intrinsic sdiv_int
 @inactive_intrinsic sext_int
@@ -415,6 +413,11 @@ end
 @inactive_intrinsic urem_int
 @inactive_intrinsic xor_int
 @inactive_intrinsic zext_int
+
+# This intrinsic was removed in 1.11 as part of the Array implementation refactor.
+@static if VERSION < v"1.11.0-rc4"
+    @inactive_intrinsic arraylen
+end
 
 end # IntrinsicsWrappers
 
@@ -485,7 +488,6 @@ function rrule!!(
 end
 
 # Core._typebody!
-# Core._typevar
 
 function rrule!!(f::CoDual{typeof(Core._typevar)}, args...)
     return zero_fcodual(Core._typevar(map(primal, args)...)), NoPullback(f, args...)
@@ -495,6 +497,10 @@ function rrule!!(f::CoDual{typeof(Core.apply_type)}, args...)
     T = Core.apply_type(tuple_map(primal, args)...)
     return CoDual{_typeof(T), NoFData}(T, NoFData()), NoPullback(f, args...)
 end
+
+# These functions were converted from builtins to regular Julia functions as part of the
+# refactoring of the Array implementation in 1.11.
+@static if VERSION < v"1.11.0-rc4"
 
 Base.@propagate_inbounds function rrule!!(
     ::CoDual{typeof(Core.arrayref)},
@@ -583,8 +589,9 @@ function rrule!!(f::CoDual{typeof(Core.arraysize)}, X, dim)
     return zero_fcodual(Core.arraysize(primal(X), primal(dim))), NoPullback(f, X, dim)
 end
 
+end
+
 # Core.compilerbarrier
-# Core.const_arrayref
 # Core.donotdelete
 # Core.finalizer
 # Core.get_binding_type
@@ -613,6 +620,15 @@ function rrule!!(f::CoDual{typeof(Core.ifelse)}, cond, a::A, b::B) where {A, B}
     return CoDual(ifelse(_cond, p_a, p_b), ifelse(_cond, tangent(a), tangent(b))), pb!!
 end
 
+# Core.memoryref_isassigned
+# Core.memoryrefget
+# Core.memoryrefmodify!
+# Core.memoryrefnew
+# Core.memoryrefoffset
+# Core.memoryrefreplace!
+# Core.memoryrefset!
+# Core.memoryrefsetonce!
+# Core.memoryrefswap!
 # Core.set_binding_type!
 
 rrule!!(f::CoDual{typeof(Core.sizeof)}, x) = simple_zero_adjoint(f, x)
@@ -762,8 +778,6 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability, nothing, IntrinsicsWrappers.add_float_fast, 4.0, 5.0),
         (false, :stability, nothing, IntrinsicsWrappers.add_int, 1, 2),
         (false, :stability, nothing, IntrinsicsWrappers.and_int, 2, 3),
-        (false, :stability, nothing, IntrinsicsWrappers.arraylen, randn(10)),
-        (false, :stability, nothing, IntrinsicsWrappers.arraylen, randn(10, 7)),
         (false, :stability, nothing, IntrinsicsWrappers.ashr_int, 123456, 0x0000000000000020),
         # atomic_fence -- NEEDS IMPLEMENTING AND TESTING
         # atomic_pointermodify -- NEEDS IMPLEMENTING AND TESTING
@@ -892,43 +906,6 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (true, :stability, nothing, Core._typevar, :T, Union{}, Any),
         (false, :none, (lb=1e-3, ub=100.0), Core.apply_type, Vector, Float64),
         (false, :none, (lb=1e-3, ub=100.0), Core.apply_type, Array, Float64, 2),
-        (false, :stability, nothing, Base.arrayref, true, randn(5), 1),
-        (false, :stability, nothing, Base.arrayref, false, randn(4), 1),
-        (false, :stability, nothing, Base.arrayref, true, randn(5, 4), 1, 1),
-        (false, :stability, nothing, Base.arrayref, false, randn(5, 4), 5, 4),
-        (false, :stability, nothing, Base.arrayref, true, randn(5, 4), 1),
-        (false, :stability, nothing, Base.arrayref, false, randn(5, 4), 5),
-        (false, :stability, nothing, Base.arrayref, false, [1, 2, 3], 1),
-        (false, :stability, nothing, Base.arrayset, false, [1, 2, 3], 4, 2),
-        (false, :stability, nothing, Base.arrayset, false, randn(5), 4.0, 3),
-        (false, :stability, nothing, Base.arrayset, false, randn(5, 4), 3.0, 1, 3),
-        (false, :stability, nothing, Base.arrayset, true, randn(5), 4.0, 3),
-        (false, :stability, nothing, Base.arrayset, true, randn(5, 4), 3.0, 1, 3),
-        (false, :stability, nothing, Base.arrayset, false, [randn(3) for _ in 1:5], randn(4), 1),
-        (false, :stability, nothing, Base.arrayset, false, _a, randn(4), 1),
-        (false, :stability, nothing, Base.arrayset, true, [(5.0, rand(1))], (4.0, rand(1)), 1),
-        (
-            false,
-            :stability,
-            nothing,
-            Base.arrayset,
-            false,
-            setindex!(Vector{Vector{Float64}}(undef, 3), randn(3), 1),
-            randn(4),
-            1,
-        ),
-        (
-            false,
-            :stability,
-            nothing,
-            Base.arrayset,
-            false,
-            setindex!(Vector{Vector{Float64}}(undef, 3), randn(3), 2),
-            randn(4),
-            1,
-        ),
-        (false, :stability, nothing, Core.arraysize, randn(5, 4, 3), 2),
-        (false, :stability, nothing, Core.arraysize, randn(5, 4, 3, 2, 1), 100),
         # Core.compilerbarrier -- NEEDS IMPLEMENTING AND TESTING
         # Core.const_arrayref -- NEEDS IMPLEMENTING AND TESTING
         # Core.donotdelete -- NEEDS IMPLEMENTING AND TESTING
@@ -1012,6 +989,54 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability, nothing, typeof, 5.0),
         (false, :stability, nothing, typeof, randn(5)),
     ]
+
+    # These functions are only primitives before 1.11. After 1.11, they are regular Julia
+    # functions, so we ought to be able to differentiate through them.
+    @static if VERSION < v"1.11.0-rc4"
+        test_cases = vcat(
+            test_cases,
+            (false, :stability, nothing, IntrinsicsWrappers.arraylen, randn(10)),
+            (false, :stability, nothing, IntrinsicsWrappers.arraylen, randn(10, 7)),
+            (false, :stability, nothing, Base.arrayref, true, randn(5), 1),
+            (false, :stability, nothing, Base.arrayref, false, randn(4), 1),
+            (false, :stability, nothing, Base.arrayref, true, randn(5, 4), 1, 1),
+            (false, :stability, nothing, Base.arrayref, false, randn(5, 4), 5, 4),
+            (false, :stability, nothing, Base.arrayref, true, randn(5, 4), 1),
+            (false, :stability, nothing, Base.arrayref, false, randn(5, 4), 5),
+            (false, :stability, nothing, Base.arrayref, false, [1, 2, 3], 1),
+            (false, :stability, nothing, Base.arrayset, false, [1, 2, 3], 4, 2),
+            (false, :stability, nothing, Base.arrayset, false, randn(5), 4.0, 3),
+            (false, :stability, nothing, Base.arrayset, false, randn(5, 4), 3.0, 1, 3),
+            (false, :stability, nothing, Base.arrayset, true, randn(5), 4.0, 3),
+            (false, :stability, nothing, Base.arrayset, true, randn(5, 4), 3.0, 1, 3),
+            (false, :stability, nothing, Base.arrayset, false, [randn(3) for _ in 1:5], randn(4), 1),
+            (false, :stability, nothing, Base.arrayset, false, _a, randn(4), 1),
+            (false, :stability, nothing, Base.arrayset, true, [(5.0, rand(1))], (4.0, rand(1)), 1),
+            (
+                false,
+                :stability,
+                nothing,
+                Base.arrayset,
+                false,
+                setindex!(Vector{Vector{Float64}}(undef, 3), randn(3), 1),
+                randn(4),
+                1,
+            ),
+            (
+                false,
+                :stability,
+                nothing,
+                Base.arrayset,
+                false,
+                setindex!(Vector{Vector{Float64}}(undef, 3), randn(3), 2),
+                randn(4),
+                1,
+            ),
+            (false, :stability, nothing, Core.arraysize, randn(5, 4, 3), 2),
+            (false, :stability, nothing, Core.arraysize, randn(5, 4, 3, 2, 1), 100),
+        )
+    end
+
     memory = Any[_x, _dx, _a, p, dp]
     return test_cases, memory
 end
@@ -1057,11 +1082,25 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :none, nothing, getindex, randn(5), [1, 2, 2]),
         (false, :none, nothing, setindex!, randn(5), [4.0, 5.0], [1, 1]),
         (false, :none, nothing, setindex!, randn(5), [4.0, 5.0, 6.0], [1, 2, 2]),
-        (
-            false, :none, nothing,
-            Base._unsafe_copyto!, fill!(Matrix{Real}(undef, 5, 4), 1.0), 3, randn(10), 2, 4,
-        ),
     ]
+
+    # This (internal) function was removed in 1.11 as part of the refactor of the Array
+    # interface. Possibly we shouldn't have been testing it in the first place, but should
+    # rather target a slightly higher-level function (maybe Base.unsafe_copyto!).
+    @static if VERSION < v"1.11.0-rc4"
+        push!(
+            test_cases,
+            (
+                false, :none, nothing,
+                Base._unsafe_copyto!,
+                fill!(Matrix{Real}(undef, 5, 4), 1.0),
+                3,
+                randn(10),
+                2,
+                4,
+            ),
+        )
+    end
     memory = Any[]
     return test_cases, memory
 end

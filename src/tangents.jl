@@ -317,9 +317,11 @@ tangent_type(::Type{<:Core.LLVMPtr}) = NoTangent
 
 tangent_type(::Type{String}) = NoTangent
 
-tangent_type(::Type{<:Array{P, N}}) where {P, N} = Array{tangent_type(P), N}
+tangent_type(::Type{<:Memory{P}}) where {P} = Memory{tangent_type(P)}
 
-tangent_type(::Type{<:Array{P, N} where {P}}) where {N} = Array
+# tangent_type(::Type{<:Array{P, N}}) where {P, N} = Array{tangent_type(P), N}
+
+# tangent_type(::Type{<:Array{P, N} where {P}}) where {N} = Array
 
 tangent_type(::Type{<:MersenneTwister}) = NoTangent
 
