@@ -83,18 +83,28 @@ function populate_address_map!(m::TestUtils.AddressMap, p::Memory, t::Memory)
     return m
 end
 
+# FData / RData Interface Implementation
+
 tangent_type(::Type{F}, ::Type{NoRData}) where {F<:Memory} = F
 
 tangent(f::Memory, ::NoRData) = f
 
+function _verify_fdata_value(p::Memory{P}, f::Memory{T}) where {P, T}
+    @assert length(p) == length(f)
+    return nothing
+end
 
-# FData / RData Interface Implementation
+# Rules for builtins which must be specially implemented for Memory because it uses a
+# custom tangent type.
 
-
-
-
-
-
+function rrule!!(
+    f::CoDual{typeof(getfield)}, x::CoDual{<:Memory}, name::CoDual{<:Union{Int, Symbol}}
+)
+    y = getfield(primal(x), primal(name))
+    wants_length = primal(name) === 1 || primal(name) === :length
+    dy = wants_length ? NoFData() : bitcast(Ptr{NoTangent}, x.dx.ptr)
+    return CoDual(y, dy), NoPullback(f, x, name)
+end
 
 
 

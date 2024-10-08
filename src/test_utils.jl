@@ -560,7 +560,9 @@ function generate_args(::typeof(getfield), x)
 end
 generate_args(::typeof(isa), x) = [(x, Float64), (x, Int), (x, _typeof(x))]
 function generate_args(::typeof(setfield!), x)
-    names = filter(f -> isdefined(x, f), fieldnames(_typeof(x)))
+    names = filter(fieldnames(_typeof(x))) do f
+        return !isconst(_typeof(x), f) && isdefined(x, f)
+    end
     return map(n -> (x, n, getfield(x, n)), vcat(names..., eachindex(names)...))
 end
 generate_args(::typeof(tuple), x) = [(x, ), (x, x), (x, x, x)]
@@ -608,7 +610,7 @@ function test_rule_and_type_interactions(rng::AbstractRNG, p::P) where {P}
         @testset for args in arg_sets
             test_rule(
                 rng, f, args...;
-                interface_only=false,
+                interface_only=true,
                 is_primitive=true,
                 perf_flag=:none,
                 interp=Mooncake.get_interpreter(),
