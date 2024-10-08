@@ -1007,12 +1007,6 @@ function run_rrule!!_test_cases(rng_ctor, v::Val)
     run_derived_rrule!!_test_cases(rng_ctor, v)
 end
 
-function to_benchmark(__rrule!!::R, dx::Vararg{CoDual, N}) where {R, N}
-    dx_f = Mooncake.tuple_map(x -> CoDual(primal(x), Mooncake.fdata(tangent(x))), dx)
-    out, pb!! = __rrule!!(dx_f...)
-    return pb!!(Mooncake.zero_rdata(primal(out)))
-end
-
 __get_primals(xs) = map(x -> x isa CoDual ? primal(x) : x, xs)
 
 end
