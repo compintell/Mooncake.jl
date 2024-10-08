@@ -257,7 +257,7 @@ end
 
 Used to implement `rrule!!`s via `ChainRulesCore.rrule`.
 
-Given a function `foo`, argument types `arg_types`, and a method `ChainRulesCore.rrule` of
+Given a function `foo`, argument types `arg_types`, and a method of `ChainRulesCore.rrule`
 which applies to these, you can make use of this function as follows:
 ```julia
 Mooncake.@is_primitive DefaultCtx Tuple{typeof(foo), arg_types...}

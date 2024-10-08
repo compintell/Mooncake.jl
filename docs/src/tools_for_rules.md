@@ -24,7 +24,7 @@ Mooncake.zero_adjoint
 
 [ChainRules.jl](https://github.com/JuliaDiff/ChainRules.jl) provides a large number of rules for differentiating functions in reverse-mode.
 These rules are methods of the `ChainRulesCore.rrule` function.
-There are some instances where there is it most convenient to implement a `Mooncake.rrule!!` by wrapping an existing `ChainRulesCore.rrule`.
+There are some instances where it is most convenient to implement a `Mooncake.rrule!!` by wrapping an existing `ChainRulesCore.rrule`.
 
 There is enough similarity between these two systems that most of the boilerplate code can be avoided.
 
