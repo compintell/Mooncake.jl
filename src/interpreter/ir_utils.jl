@@ -179,7 +179,7 @@ Base.iterate(x::CC.MethodLookupResult, n::Int) = CC.iterate(x, n)
         sig_or_mi::Union{Type{<:Tuple}, Core.MethodInstance},
     )::Tuple{IRCode, T}
 
-Get the IR unique IR associated to `sig_or_mi` under `interp`. Throws `ArgumentError`s if
+Get the unique IR associated to `sig_or_mi` under `interp`. Throws `ArgumentError`s if
 there is no code found, or if more than one `IRCode` instance returned.
 
 Returns a tuple containing the `IRCode` and its return type.
