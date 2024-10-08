@@ -641,7 +641,7 @@ function rrule!!(f::CoDual{typeof(Core.fieldtype)}, args::Vararg{Any, N}) where 
     return simple_zero_adjoint(f, args...)
 end
 
-const StandardFDataType = Union{Tuple, NamedTuple, FData, MutableTangent}
+const StandardFDataType = Union{Tuple, NamedTuple, FData, MutableTangent, NoFData}
 
 function rrule!!(
     f::CoDual{typeof(getfield)}, x::CoDual{P, <:StandardFDataType}, name::CoDual
