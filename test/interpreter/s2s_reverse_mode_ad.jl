@@ -237,19 +237,11 @@ end
 
         # primal_time = @benchmark $f($(Ref(x))[]...)
         # s2s_time = @benchmark $rule($fwds_args...)[2]($(Mooncake.zero_rdata(primal(out))))
-        # # in_f = in_f = Mooncake.InterpretedFunction(DefaultCtx(), sig, interp);
-        # # __rrule!! = Mooncake.build_rrule!!(in_f);
-        # # df = zero_codual(in_f);
-        # # codual_x = map(zero_codual, (f, x...));
-        # # interp_time = @benchmark TestUtils.to_benchmark($__rrule!!, $df, $codual_x...)
 
         # display(primal_time)
         # display(s2s_time)
-        # # display(interp_time)
         # s2s_ratio = time(s2s_time) / time(primal_time)
-        # # interp_ratio = time(interp_time) / time(primal_time)
         # println("s2s ratio ratio: $(s2s_ratio)")
-        # # println("interp ratio: $(interp_ratio)")
 
         # f(rule, fwds_args, out) = rule(fwds_args...)[2]((Mooncake.zero_rdata(primal(out))))
         # f(rule, fwds_args, out)

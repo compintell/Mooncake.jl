@@ -72,6 +72,7 @@ include(joinpath("interpreter", "zero_like_rdata.jl"))
 include(joinpath("interpreter", "s2s_reverse_mode_ad.jl"))
 
 include("test_utils.jl")
+include("test_resources.jl")
 
 include(joinpath("rrules", "avoiding_non_differentiable_code.jl"))
 include(joinpath("rrules", "blas.jl"))
