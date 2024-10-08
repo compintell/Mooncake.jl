@@ -6,42 +6,31 @@
 # deduce that these bits of code are inactive though.
 #
 
-for name in [
-    :size,
-    :(LinearAlgebra.lapack_size),
-    :(Base.require_one_based_indexing),
-    :in,
-    :iszero,
-    :isempty,
-    :isbitstype,
-    :sizeof,
-    :promote_type,
-    :(Base.elsize),
-    :(Core.Compiler.sizeof_nothrow),
-    :(Base.datatype_haspadding),
-    :(Base.datatype_nfields),
-    :(Base.datatype_pointerfree),
-    :(Base.datatype_alignment),
-    :(Base.datatype_fielddesc_type),
-    :(LinearAlgebra.chkstride1),
-    :(Threads.nthreads),
-    :(Base.depwarn),
-    :(Base.reduced_indices),
-    :(Base.check_reducedims),
-    :(Base.throw_boundserror),
-    :(Base.Broadcast.eltypes),
-    :(Base.eltype),
-]
-    @eval @is_primitive DefaultCtx Tuple{typeof($name), Vararg}
-    @eval function rrule!!(f::CoDual{_typeof($name)}, args::Vararg{CoDual, N}) where {N}
-        return simple_zero_adjoint(f, args...)
-    end
-end
-
-@is_primitive MinimalCtx Tuple{Type, TypeVar, Type}
-function rrule!!(x::CoDual{<:Type}, y::CoDual{<:TypeVar}, z::CoDual{<:Type})
-    return simple_zero_adjoint(x, y, z)
-end
+@zero_adjoint DefaultCtx Tuple{typeof(size), Vararg}
+@zero_adjoint DefaultCtx Tuple{typeof(LinearAlgebra.lapack_size), Vararg}
+@zero_adjoint DefaultCtx Tuple{typeof(Base.require_one_based_indexing), Vararg}
+@zero_adjoint DefaultCtx Tuple{typeof(in), Vararg}
+@zero_adjoint DefaultCtx Tuple{typeof(iszero), Vararg}
+@zero_adjoint DefaultCtx Tuple{typeof(isempty), Vararg}
+@zero_adjoint DefaultCtx Tuple{typeof(isbitstype), Vararg}
+@zero_adjoint DefaultCtx Tuple{typeof(sizeof), Vararg}
+@zero_adjoint DefaultCtx Tuple{typeof(promote_type), Vararg}
+@zero_adjoint DefaultCtx Tuple{typeof(Base.elsize), Vararg}
+@zero_adjoint DefaultCtx Tuple{typeof(Core.Compiler.sizeof_nothrow), Vararg}
+@zero_adjoint DefaultCtx Tuple{typeof(Base.datatype_haspadding), Vararg}
+@zero_adjoint DefaultCtx Tuple{typeof(Base.datatype_nfields), Vararg}
+@zero_adjoint DefaultCtx Tuple{typeof(Base.datatype_pointerfree), Vararg}
+@zero_adjoint DefaultCtx Tuple{typeof(Base.datatype_alignment), Vararg}
+@zero_adjoint DefaultCtx Tuple{typeof(Base.datatype_fielddesc_type), Vararg}
+@zero_adjoint DefaultCtx Tuple{typeof(LinearAlgebra.chkstride1), Vararg}
+@zero_adjoint DefaultCtx Tuple{typeof(Threads.nthreads), Vararg}
+@zero_adjoint DefaultCtx Tuple{typeof(Base.depwarn), Vararg}
+@zero_adjoint DefaultCtx Tuple{typeof(Base.reduced_indices), Vararg}
+@zero_adjoint DefaultCtx Tuple{typeof(Base.check_reducedims), Vararg}
+@zero_adjoint DefaultCtx Tuple{typeof(Base.throw_boundserror), Vararg}
+@zero_adjoint DefaultCtx Tuple{typeof(Base.Broadcast.eltypes), Vararg}
+@zero_adjoint DefaultCtx Tuple{typeof(Base.eltype), Vararg}
+@zero_adjoint MinimalCtx Tuple{Type, TypeVar, Type}
 
 """
     lgetfield(x, f::Val)

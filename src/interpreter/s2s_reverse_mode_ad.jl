@@ -617,6 +617,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         :leave,
         :pop_exception,
         :throw_undef_if_not,
+        :meta,
     ]
         # Expressions which do not require any special treatment.
         return ad_stmt_info(line, nothing, stmt, nothing)
@@ -828,6 +829,13 @@ function build_rrule(args...; debug_mode=false)
     interp = get_interpreter()
     return build_rrule(interp, _typeof(TestUtils.__get_primals(args)); debug_mode)
 end
+
+"""
+    build_rrule(sig::Type{<:Tuple})
+
+Equivalent to `build_rrule(Mooncake.get_interpreter(), sig)`.
+"""
+build_rrule(sig::Type{<:Tuple}) = build_rrule(get_interpreter(), sig)
 
 const MOONCAKE_INFERENCE_LOCK = ReentrantLock()
 

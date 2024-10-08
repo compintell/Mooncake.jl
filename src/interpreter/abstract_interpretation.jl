@@ -5,7 +5,6 @@
 # The most important bit of this code is `inlining_policy` -- the rest is copy + pasted
 # boiler plate, largely taken from https://github.com/JuliaLang/julia/blob/2fe4190b3d26b4eee52b2b1b1054ddd6e38a941e/test/compiler/newinterp.jl#L11
 
-
 struct ClosureCacheKey
     world_age::UInt
     key::Any
@@ -16,6 +15,9 @@ struct MooncakeCache
 end
 
 MooncakeCache() = MooncakeCache(IdDict{Core.MethodInstance, Core.CodeInstance}())
+
+# The method table used by `Mooncake.@mooncake_overlay`.
+Base.Experimental.@MethodTable mooncake_method_table
 
 struct MooncakeInterpreter{C} <: CC.AbstractInterpreter
     meta # additional information
@@ -90,6 +92,9 @@ function CC.setindex!(
     wvc::CC.WorldView{MooncakeCache}, ci::Core.CodeInstance, mi::Core.MethodInstance
 )
     return setindex!(wvc.cache.dict, ci, mi)
+end
+function CC.method_table(interp::MooncakeInterpreter)
+    return CC.OverlayMethodTable(interp.world, mooncake_method_table)
 end
 
 _type(x) = x

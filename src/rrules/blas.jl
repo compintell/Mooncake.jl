@@ -22,6 +22,15 @@ end
 const MatrixOrView{T} = Union{Matrix{T}, SubArray{T, 2, Matrix{T}}}
 
 #
+# Utility
+#
+
+@zero_adjoint MinimalCtx Tuple{typeof(BLAS.get_num_threads)}
+@zero_adjoint MinimalCtx Tuple{typeof(BLAS.lbt_get_num_threads)}
+@zero_adjoint MinimalCtx Tuple{typeof(BLAS.set_num_threads), Union{Integer, Nothing}}
+@zero_adjoint MinimalCtx Tuple{typeof(BLAS.lbt_set_num_threads), Any}
+
+#
 # LEVEL 1
 #
 
@@ -892,6 +901,12 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
     aliased_gemm! = (tA, tB, a, b, A, C) -> BLAS.gemm!(tA, tB, a, A, A, b, C)
 
     test_cases = vcat(
+
+        # Utility
+        (false, :stability, nothing, BLAS.get_num_threads),
+        (false, :stability, nothing, BLAS.lbt_get_num_threads),
+        (false, :stability, nothing, BLAS.set_num_threads, 1),
+        (false, :stability, nothing, BLAS.lbt_set_num_threads, 1),
 
         #
         # BLAS LEVEL 1

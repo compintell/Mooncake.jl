@@ -75,7 +75,7 @@ macro inactive_intrinsic(name)
         (is_primitive)(::Type{MinimalCtx}, ::Type{<:Tuple{typeof($name), Vararg}}) = true
         translate(::Val{Intrinsics.$name}) = $name
         function rrule!!(f::CoDual{typeof($name)}, args::Vararg{Any, N}) where {N}
-            return Mooncake.simple_zero_adjoint(f, args...)
+            return Mooncake.zero_adjoint(f, args...)
         end
     end
     return esc(expr)
@@ -418,9 +418,8 @@ end
 
 end # IntrinsicsWrappers
 
-rrule!!(f::CoDual{typeof(<:)}, T1, T2) = simple_zero_adjoint(f, T1, T2)
-
-rrule!!(f::CoDual{typeof(===)}, x, y) = simple_zero_adjoint(f, x, y)
+@zero_adjoint MinimalCtx Tuple{typeof(<:), Any, Any}
+@zero_adjoint MinimalCtx Tuple{typeof(===), Any, Any}
 
 # Core._abstracttype
 
@@ -463,9 +462,7 @@ end
 # Core._call_latest
 
 # Doesn't do anything differentiable.
-function rrule!!(f::CoDual{typeof(Core._compute_sparams)}, args::CoDual...)
-    return simple_zero_adjoint(f, args...)
-end
+@zero_adjoint MinimalCtx Tuple{typeof(Core._compute_sparams), Vararg}
 
 # Core._equiv_typedef
 # Core._expr
@@ -615,15 +612,12 @@ end
 
 # Core.set_binding_type!
 
-rrule!!(f::CoDual{typeof(Core.sizeof)}, x) = simple_zero_adjoint(f, x)
+@zero_adjoint MinimalCtx Tuple{typeof(Core.sizeof), Any}
 
 # Core.svec
 
-rrule!!(_f::CoDual{typeof(applicable)}, f, args...) = simple_zero_adjoint(_f, f, args...)
-
-function rrule!!(f::CoDual{typeof(Core.fieldtype)}, args::Vararg{Any, N}) where {N}
-    return simple_zero_adjoint(f, args...)
-end
+@zero_adjoint MinimalCtx Tuple{typeof(applicable), Vararg}
+@zero_adjoint MinimalCtx Tuple{typeof(fieldtype), Vararg}
 
 function rrule!!(f::CoDual{typeof(getfield)}, x::CoDual{P}, name::CoDual) where {P}
     if tangent_type(P) == NoTangent
@@ -680,17 +674,16 @@ is_homogeneous_and_immutable(::Any) = false
 #     return y, pb!!
 # end
 
-rrule!!(f::CoDual{typeof(getglobal)}, a, b) = simple_zero_adjoint(f, a, b)
+@zero_adjoint MinimalCtx Tuple{typeof(getglobal), Any, Any}
 
 # invoke
 
-rrule!!(f::CoDual{typeof(isa)}, x, T) = simple_zero_adjoint(f, x, T)
-
-rrule!!(f::CoDual{typeof(isdefined)}, args...) = simple_zero_adjoint(f, args...)
+@zero_adjoint MinimalCtx Tuple{typeof(isa), Any, Any}
+@zero_adjoint MinimalCtx Tuple{typeof(isdefined), Vararg}
 
 # modifyfield!
 
-rrule!!(f::CoDual{typeof(nfields)}, x) = simple_zero_adjoint(f, x)
+@zero_adjoint MinimalCtx Tuple{typeof(nfields), Any}
 
 # replacefield!
 
@@ -732,7 +725,7 @@ function rrule!!(::CoDual{typeof(typeassert)}, x::CoDual, type::CoDual)
     return CoDual(typeassert(primal(x), primal(type)), tangent(x)), typeassert_pullback
 end
 
-rrule!!(f::CoDual{typeof(typeof)}, x::CoDual) = simple_zero_adjoint(f, x)
+@zero_adjoint MinimalCtx Tuple{typeof(typeof), Any}
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
 

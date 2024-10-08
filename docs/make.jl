@@ -32,9 +32,12 @@ makedocs(
             "Algorithmic Differentiation" => "algorithmic_differentiation.md",
             "Mooncake.jl's Rule System" => "mathematical_interpretation.md",
         ],
+        "Utilities" => [
+            "Tools for Rules" => "tools_for_rules.md",
+            "Debug Mode" => "debug_mode.md",
+            "Debugging and MWEs" => "debugging_and_mwes.md",
+        ],
         "Known Limitations" => "known_limitations.md",
-        "Debug Mode" => "debug_mode.md",
-        "Debugging and MWEs" => "debugging_and_mwes.md",
     ]
 )
 
