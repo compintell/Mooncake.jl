@@ -63,8 +63,8 @@ lgetfield(x, ::Val{f}) where {f} = getfield(x, f)
 
 @is_primitive MinimalCtx Tuple{typeof(lgetfield), Any, Val}
 @inline function rrule!!(
-    ::CoDual{typeof(lgetfield)}, x::CoDual{P}, ::CoDual{Val{f}}
-) where {P, f}
+    ::CoDual{typeof(lgetfield)}, x::CoDual{P, F}, ::CoDual{Val{f}}
+) where {P, F<:StandardFDataType, f}
     pb!! = if ismutabletype(P)
         dx = tangent(x)
         function mutable_lgetfield_pb!!(dy)
@@ -105,8 +105,8 @@ lgetfield(x, ::Val{f}, ::Val{order}) where {f, order} = getfield(x, f, order)
 
 @is_primitive MinimalCtx Tuple{typeof(lgetfield), Any, Val, Val}
 @inline function rrule!!(
-    ::CoDual{typeof(lgetfield)}, x::CoDual{P}, ::CoDual{Val{f}}, ::CoDual{Val{order}}
-) where {P, f, order}
+    ::CoDual{typeof(lgetfield)}, x::CoDual{P, F}, ::CoDual{Val{f}}, ::CoDual{Val{order}}
+) where {P, F<:StandardFDataType, f, order}
     pb!! = if ismutabletype(P)
         dx = tangent(x)
         function mutable_lgetfield_pb!!(dy)
@@ -137,9 +137,9 @@ lsetfield!(value, ::Val{name}, x) where {name} = setfield!(value, name, x)
 
 @is_primitive MinimalCtx Tuple{typeof(lsetfield!), Any, Any, Any}
 @inline function rrule!!(
-    ::CoDual{typeof(lsetfield!)}, value::CoDual{P}, ::CoDual{Val{name}}, x::CoDual
-) where {P, name}
-    F = fdata_type(tangent_type(P))
+    ::CoDual{typeof(lsetfield!)}, value::CoDual{P, F}, ::CoDual{Val{name}}, x::CoDual
+) where {P, F<:StandardFDataType, name}
+    # F = fdata_type(tangent_type(P))
     save = isdefined(primal(value), name)
     old_x = save ? getfield(primal(value), name) : nothing
     old_dx = if F == NoFData

@@ -64,7 +64,7 @@ end
 
 
 #=
-    _map_if_assigned!(f, y::Array, x::Array{P}) where {P}
+    _map_if_assigned!(f, y::DenseArray, x::DenseArray{P}) where {P}
 
 For all `n`, if `x[n]` is assigned, then writes the value returned by `f(x[n])` to `y[n]`,
 otherwise leaves `y[n]` unchanged.
@@ -73,7 +73,7 @@ Equivalent to `map!(f, y, x)` if `P` is a bits type as element will always be as
 
 Requires that `y` and `x` have the same size.
 =#
-function _map_if_assigned!(f::F, y::Array, x::Array{P}) where {F, P}
+function _map_if_assigned!(f::F, y::DenseArray, x::DenseArray{P}) where {F, P}
     @assert size(y) == size(x)
     @inbounds for n in eachindex(y)
         if isbitstype(P) || isassigned(x, n)
@@ -84,14 +84,14 @@ function _map_if_assigned!(f::F, y::Array, x::Array{P}) where {F, P}
 end
 
 #=
-    _map_if_assigned!(f::F, y::Array, x1::Array{P}, x2::Array)
+    _map_if_assigned!(f::F, y::DenseArray, x1::DenseArray{P}, x2::DenseArray)
 
 Similar to the other method of `_map_if_assigned!` -- for all `n`, if `x1[n]` is assigned,
 writes `f(x1[n], x2[n])` to `y[n]`, otherwise leaves `y[n]` unchanged.
 
 Requires that `y`, `x1`, and `x2` have the same size.
 =#
-function _map_if_assigned!(f::F, y::Array, x1::Array{P}, x2::Array) where {F, P}
+function _map_if_assigned!(f::F, y::DenseArray, x1::DenseArray{P}, x2::DenseArray) where {F, P}
     @assert size(y) == size(x1)
     @assert size(y) == size(x2)
     @inbounds for n in eachindex(y)

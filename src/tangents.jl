@@ -317,11 +317,9 @@ tangent_type(::Type{<:Core.LLVMPtr}) = NoTangent
 
 tangent_type(::Type{String}) = NoTangent
 
-tangent_type(::Type{<:Memory{P}}) where {P} = Memory{tangent_type(P)}
+tangent_type(::Type{<:Array{P, N}}) where {P, N} = Array{tangent_type(P), N}
 
-# tangent_type(::Type{<:Array{P, N}}) where {P, N} = Array{tangent_type(P), N}
-
-# tangent_type(::Type{<:Array{P, N} where {P}}) where {N} = Array
+tangent_type(::Type{<:Array{P, N} where {P}}) where {N} = Array
 
 tangent_type(::Type{<:MersenneTwister}) = NoTangent
 
@@ -440,6 +438,9 @@ end
 @inline function zero_tangent_internal(x::P, stackdict::Any) where {P<:Union{Tuple, NamedTuple}}
     return tangent_type(P) == NoTangent ? NoTangent() : tuple_map(Base.Fix2(zero_tangent_internal, stackdict), x)
 end
+function zero_tangent_internal(x::Ptr, ::Any)
+    return throw(ArgumentError("zero_tangent not available for pointers."))
+end
 @inline function zero_tangent_internal(x::SimpleVector, stackdict::IdDict)
     return map!(n -> zero_tangent_internal(x[n], stackdict), Vector{Any}(undef, length(x)), eachindex(x))
 end
@@ -527,7 +528,9 @@ function randn_tangent_internal(rng::AbstractRNG, x::Array{T, N}, stackdict::IdD
 end
 function randn_tangent_internal(rng::AbstractRNG, x::P, stackdict) where {P}
     tangent_type(P) == NoTangent && return NoTangent()
-
+    if isprimitivetype(P)
+        return throw(ArgumentError("$P is a primitive type. Defined randn_tangent for it."))
+    end
     if tangent_type(P) <: MutableTangent
         if !(stackdict isa IdDict)
             throw(
@@ -548,6 +551,7 @@ function randn_tangent_internal(rng::AbstractRNG, x::P, stackdict) where {P}
 end
 
 @generated function randn_tangent_struct_field(rng::AbstractRNG, x::P, stackdict) where {P}
+
     tangent_field_exprs = map(1:fieldcount(P)) do n
         if tangent_field_type(P, n) <: PossiblyUninitTangent
             V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}

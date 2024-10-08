@@ -85,6 +85,9 @@ include(joinpath("rrules", "low_level_maths.jl"))
 include(joinpath("rrules", "misc.jl"))
 include(joinpath("rrules", "new.jl"))
 include(joinpath("rrules", "tasks.jl"))
+@static if VERSION >= v"1.11-rc4"
+    include(joinpath("rrules", "memory.jl"))
+end
 
 include("chain_rules_macro.jl")
 include("interface.jl")

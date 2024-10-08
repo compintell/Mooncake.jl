@@ -641,7 +641,11 @@ function rrule!!(f::CoDual{typeof(Core.fieldtype)}, args::Vararg{Any, N}) where 
     return simple_zero_adjoint(f, args...)
 end
 
-function rrule!!(f::CoDual{typeof(getfield)}, x::CoDual{P}, name::CoDual) where {P}
+const StandardFDataType = Union{Tuple, NamedTuple, FData, MutableTangent}
+
+function rrule!!(
+    f::CoDual{typeof(getfield)}, x::CoDual{P, <:StandardFDataType}, name::CoDual
+) where {P}
     if tangent_type(P) == NoTangent
         y = uninit_fcodual(getfield(primal(x), primal(name)))
         return y, NoPullback(f, x, name)
@@ -659,7 +663,9 @@ function rrule!!(f::CoDual{typeof(getfield)}, x::CoDual{P}, name::CoDual) where 
     end
 end
 
-function rrule!!(f::CoDual{typeof(getfield)}, x::CoDual{P}, name::CoDual, order::CoDual) where {P}
+function rrule!!(
+    f::CoDual{typeof(getfield)}, x::CoDual{P, F}, name::CoDual, order::CoDual
+) where {P, F<:StandardFDataType}
     if tangent_type(P) == NoTangent
         y = uninit_fcodual(getfield(primal(x), primal(name)))
         return y, NoPullback(f, x, name, order)
@@ -710,7 +716,9 @@ rrule!!(f::CoDual{typeof(nfields)}, x) = simple_zero_adjoint(f, x)
 
 # replacefield!
 
-function rrule!!(::CoDual{typeof(setfield!)}, value, name, x)
+function rrule!!(
+    ::CoDual{typeof(setfield!)}, value::CoDual{P, F}, name, x
+) where {P, F<:StandardFDataType}
     literal_name = uninit_fcodual(Val(primal(name)))
     return rrule!!(uninit_fcodual(lsetfield!), value, literal_name, x)
 end

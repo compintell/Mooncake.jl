@@ -464,6 +464,8 @@ function test_rrule_performance(
     end
 end
 
+__get_primals(xs) = map(x -> x isa CoDual ? primal(x) : x, xs)
+
 @doc"""
     test_rule(
         rng, x...;
@@ -521,6 +523,27 @@ function test_rule(
     test_rrule_interface(x_x̄..., rule=rule_2)
 end
 
+
+function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)
+    test_cases, memory = Mooncake.generate_hand_written_rrule!!_test_cases(rng_ctor, v)
+    GC.@preserve memory @testset "$f, $(_typeof(x))" for (interface_only, perf_flag, _, f, x...) in test_cases
+        test_rule(rng_ctor(123), f, x...; interface_only, perf_flag)
+    end
+end
+
+function run_derived_rrule!!_test_cases(rng_ctor, v::Val)
+    test_cases, memory = Mooncake.generate_derived_rrule!!_test_cases(rng_ctor, v)
+    GC.@preserve memory @testset "$f, $(typeof(x))" for
+        (interface_only, perf_flag, _, f, x...) in test_cases
+        test_rule(rng_ctor(123), f, x...; interface_only, perf_flag, is_primitive=false)
+    end
+end
+
+function run_rrule!!_test_cases(rng_ctor, v::Val)
+    run_hand_written_rrule!!_test_cases(rng_ctor, v)
+    run_derived_rrule!!_test_cases(rng_ctor, v)
+end
+
 #
 # Test that some basic operations work on a given type.
 #
@@ -567,8 +590,8 @@ struct-type, and we should have a rule for `setfield!` for any mutable struct ty
 The purpose of this test is to ensure that, for any given `x`, the full range of primitive
 functions that _ought_ to work on it, do indeed work on it.
 """
-function test_rule_and_type_interactions(rng::AbstractRNG, x::P) where {P}
-    @nospecialize rng x
+function test_rule_and_type_interactions(rng::AbstractRNG, p::P) where {P}
+    @nospecialize rng p
 
     # Generate standard test cases.
     fs = if ismutabletype(P)
@@ -581,7 +604,7 @@ function test_rule_and_type_interactions(rng::AbstractRNG, x::P) where {P}
 
     # Run standardised tests for all functions.
     @testset "$f" for f in fs
-        arg_sets = generate_args(f, x)
+        arg_sets = generate_args(f, p)
         @testset for args in arg_sets
             test_rule(
                 rng, f, args...;
@@ -632,6 +655,9 @@ function test_tangent_consistency(rng::AbstractRNG, p::P; interface_only=false) 
     @test t isa T
     test_equality_comparison(p)
     test_equality_comparison(t)
+
+    # Check that `tangent_type` is performant.
+    test_tangent_type(P, T)
 
     # Check that zero_tangent isn't obviously non-deterministic.
     @test has_equal_data(z, Mooncake.zero_tangent(p))
@@ -987,26 +1013,20 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
     @test increment_rdata!!(t, r) isa T
 end
 
-function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)
-    test_cases, memory = Mooncake.generate_hand_written_rrule!!_test_cases(rng_ctor, v)
-    GC.@preserve memory @testset "$f, $(_typeof(x))" for (interface_only, perf_flag, _, f, x...) in test_cases
-        test_rule(rng_ctor(123), f, x...; interface_only, perf_flag)
-    end
-end
+"""
+    test_data(rng::AbstractRNG, x::P)
 
-function run_derived_rrule!!_test_cases(rng_ctor, v::Val)
-    test_cases, memory = Mooncake.generate_derived_rrule!!_test_cases(rng_ctor, v)
-    GC.@preserve memory @testset "$f, $(typeof(x))" for
-        (interface_only, perf_flag, _, f, x...) in test_cases
-        test_rule(rng_ctor(123), f, x...; interface_only, perf_flag, is_primitive=false)
-    end
+Verify that all tangent / fdata / rdata functionality work properly for `x`. Furthermore,
+verify that all primitives listed in `TestUtils.test_rule_and_type_interactions` work
+correctly on `x`. This functionality is particularly useful if you are writing your own
+custom tangent / fdata / rdata types and want to be confident that you have implemented the
+functionality that you need in order to make these custom types work with all the rules
+written in Mooncake itself.
+"""
+function test_data(rng::AbstractRNG, p::P; interface_only=false) where {P}
+    test_tangent_consistency(rng, p; interface_only)
+    test_fwds_rvs_data(rng, p)
+    test_rule_and_type_interactions(rng, p)
 end
-
-function run_rrule!!_test_cases(rng_ctor, v::Val)
-    run_hand_written_rrule!!_test_cases(rng_ctor, v)
-    run_derived_rrule!!_test_cases(rng_ctor, v)
-end
-
-__get_primals(xs) = map(x -> x isa CoDual ? primal(x) : x, xs)
 
 end
