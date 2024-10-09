@@ -69,7 +69,8 @@ using Mooncake:
     verify_fdata_value,
     verify_rdata_value,
     is_primitive,
-    MinimalCtx
+    MinimalCtx,
+    generate_data_test_cases
 
 using .TestUtils:
     test_rule,
