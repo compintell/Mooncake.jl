@@ -74,7 +74,11 @@ end
 
 CC.InferenceParams(interp::MooncakeInterpreter) = interp.inf_params
 CC.OptimizationParams(interp::MooncakeInterpreter) = interp.opt_params
-CC.get_world_counter(interp::MooncakeInterpreter) = interp.world
+if VERSION < v"1.11.0"
+    CC.get_world_counter(interp::MooncakeInterpreter) = interp.world
+else
+    CC.get_inference_world(interp::MooncakeInterpreter) = interp.world
+end
 CC.get_inference_cache(interp::MooncakeInterpreter) = interp.inf_cache
 function CC.code_cache(interp::MooncakeInterpreter)
     return CC.WorldView(interp.code_cache, CC.WorldRange(interp.world))
