@@ -620,17 +620,6 @@ function rrule!!(f::CoDual{typeof(Core.ifelse)}, cond, a::A, b::B) where {A, B}
     return CoDual(ifelse(_cond, p_a, p_b), ifelse(_cond, tangent(a), tangent(b))), pb!!
 end
 
-# Core.memoryref_isassigned
-# Core.memoryrefget
-# Core.memoryrefmodify!
-# Core.memoryrefnew
-# Core.memoryrefoffset
-# Core.memoryrefreplace!
-# Core.memoryrefset!
-# Core.memoryrefsetonce!
-# Core.memoryrefswap!
-# Core.set_binding_type!
-
 rrule!!(f::CoDual{typeof(Core.sizeof)}, x) = simple_zero_adjoint(f, x)
 
 # Core.svec

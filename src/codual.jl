@@ -25,6 +25,13 @@ Equivalent to `CoDual(x, zero_tangent(x))`.
 zero_codual(x) = CoDual(x, zero_tangent(x))
 
 """
+    uninit_codual(x)
+
+Equivalent to `CoDual(x, uninit_tangent(x))`.
+"""
+uninit_codual(x) = CoDual(x, uninit_tangent(x))
+
+"""
     codual_type(P::Type)
 
 The type of the `CoDual` which contains instances of `P` and associated tangents.

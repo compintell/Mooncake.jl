@@ -94,7 +94,7 @@ using Mooncake:
     zero_rdata_from_type, CannotProduceZeroRDataFromType, lazy_zero_rdata, instantiate,
     can_produce_zero_rdata_from_type, increment_rdata!!, fcodual_type,
     verify_fdata_type, verify_rdata_type, verify_fdata_value, verify_rdata_value,
-    InvalidFDataException, InvalidRDataException
+    InvalidFDataException, InvalidRDataException, uninit_codual
 
 struct Shim end
 
@@ -394,6 +394,10 @@ function test_rrule_interface(f_f̄, x_x̄...; rule)
     @test rrule_ret isa rrule_output_type(_typeof(y))
     y_ȳ, pb!! = rrule_ret
 
+    # Check that returned fdata type is correct.
+    @test typeof(y_ȳ.dx) == fdata_type(tangent_type(typeof(y_ȳ.x)))
+    @test Mooncake._verify_fdata_value(y_ȳ.x, y_ȳ.dx) === nothing
+
     # Run the reverse-pass. Throw a meaningful exception if it doesn't run at all.
     ȳ = Mooncake.rdata(zero_tangent(primal(y_ȳ), tangent(y_ȳ)))
     f̄_new, x̄_new... = try
@@ -507,7 +511,7 @@ function test_rule(
     end
 
     # Generate random tangents for anything that is not already a CoDual.
-    x_x̄ = map(x -> x isa CoDual ? x : zero_codual(x), x)
+    x_x̄ = map(x -> x isa CoDual ? x : interface_only ? uninit_codual(x) : zero_codual(x), x)
 
     # Test that the interface is basically satisfied (checks types / memory addresses).
     test_rrule_interface(x_x̄...; rule)
