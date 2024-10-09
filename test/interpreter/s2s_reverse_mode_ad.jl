@@ -252,7 +252,6 @@ end
         @test_throws(
             Mooncake.UnhandledLanguageFeatureException,
             Mooncake.build_rrule(
-                Mooncake.get_interpreter(),
                 Tuple{typeof(Mooncake.TestResources.non_const_global_ref), Float64},
             )
         )

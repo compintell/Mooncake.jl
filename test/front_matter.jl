@@ -5,6 +5,9 @@ using
     FillArrays,
     JET,
     LinearAlgebra,
+    Lux,
+    LuxLib,
+    NNlib,
     PDMats,
     Random,
     SpecialFunctions,
@@ -14,11 +17,14 @@ using
 
 import ChainRulesCore
 
-using Base: unsafe_load, pointer_from_objref
+using Base: unsafe_load, pointer_from_objref, IEEEFloat
 using Base.Iterators: product
 using Core:
     bitcast, svec, ReturnNode, PhiNode, PiNode, GotoIfNot, GotoNode, SSAValue, Argument
 using Core.Intrinsics: pointerref, pointerset
+
+using NNlib: dropout
+using LuxLib.Impl: SLEEFActivations
 
 using Mooncake:
     CC,
