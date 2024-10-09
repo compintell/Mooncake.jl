@@ -410,6 +410,9 @@ function test_rrule_interface(f_f̄, x_x̄...; rule)
         ))
     end
 
+    # Check that the pullback returns the correct number of things.
+    @test length(x̄_new) == length(x_fwds)
+
     # Check that memory addresses have remained constant under pb!!.
     new_x_addresses = map(get_address, x)
     @test all(map(==, x_addresses, new_x_addresses))
