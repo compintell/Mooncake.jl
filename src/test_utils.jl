@@ -562,8 +562,14 @@ end
 generate_args(::typeof(Core.sizeof), x) = [(x, )]
 generate_args(::typeof(Core.svec), x) = [(x, ), (x, x)]
 function generate_args(::typeof(getfield), x)
-    names = filter(f -> isdefined(x, f), fieldnames(_typeof(x)))
-    return map(n -> (x, n), vcat(names..., eachindex(names)...))
+    syms = filter(f -> isdefined(x, f), fieldnames(_typeof(x)))
+    fs = vcat(syms..., eachindex(syms)...)
+    return vcat(map(n -> (x, n), fs), map(n -> (x, n, :not_atomic), fs))
+end
+function generate_args(::typeof(Mooncake.lgetfield), x)
+    syms = filter(f -> isdefined(x, f), fieldnames(_typeof(x)))
+    fs = vcat(syms..., eachindex(syms)...)
+    return vcat(map(n -> (x, Val(n)), fs), map(n -> (x, Val(n), Val(:not_atomic)), fs))
 end
 generate_args(::typeof(isa), x) = [(x, Float64), (x, Int), (x, _typeof(x))]
 function generate_args(::typeof(setfield!), x)
@@ -580,7 +586,7 @@ function functions_for_all_types()
     return [===, Core.ifelse, Core.sizeof, isa, tuple, typeassert, typeof]
 end
 
-functions_for_structs() = vcat(functions_for_all_types(), [getfield])
+functions_for_structs() = vcat(functions_for_all_types(), [getfield, Mooncake.lgetfield])
 
 function functions_for_mutable_structs()
     return vcat(
