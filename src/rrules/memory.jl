@@ -94,19 +94,6 @@ function _verify_fdata_value(p::Memory{P}, f::Memory{T}) where {P, T}
     return nothing
 end
 
-# Rules
-
-function rrule!!(
-    f::CoDual{typeof(getfield)}, x::CoDual{<:Memory}, name::CoDual{<:Union{Int, Symbol}}
-)
-    y = getfield(primal(x), primal(name))
-    wants_length = primal(name) === 1 || primal(name) === :length
-    dy = wants_length ? NoFData() : bitcast(Ptr{NoTangent}, x.dx.ptr)
-    return CoDual(y, dy), NoPullback(f, x, name)
-end
-
-
-
 #
 # MemoryRef
 #
@@ -175,17 +162,6 @@ tangent(f::MemoryRef, ::NoRData) = f
 function _verify_fdata_value(p::MemoryRef{P}, f::MemoryRef{T}) where {P, T}
     @assert Core.memoryrefoffset(p) == Core.memoryrefoffset(f)
     _verify_fdata_value(p.mem, f.mem)
-end
-
-# Rules
-
-function rrule!!(
-    f::CoDual{typeof(getfield)}, x::CoDual{<:MemoryRef}, name::CoDual{<:Union{Int, Symbol}}
-)
-    y = getfield(primal(x), primal(name))
-    wants_offset = primal(name) === 1 || primal(name) === :ptr_or_offset
-    dy = wants_offset ? bitcast(Ptr{NoTangent}, x.dx.ptr_or_offset) : x.dx.mem
-    return CoDual(y, dy), NoPullback(f, x, name)
 end
 
 #
@@ -303,18 +279,73 @@ end
 # Core.set_binding_type!
 
 
-# Functionality for `Array`s. Since they behave like `mutable struct`s as of v1.11, they
-# gain a range of additional functions (getfield, setfield!), etc. Since we use `Array`s
-# as the tangent / fdata type for `Array`s, a range of functionality must be added to ensure
-# that they interact correctly with these functions.
+# getfield / lgetfield rules for Memory, MemoryRef, and Array.
 
 function rrule!!(
-    f::CoDual{typeof(getfield)}, x::CoDual{<:Array}, name::CoDual{<:Union{Int, Symbol}}
-)
-    y = getfield(primal(x), primal(name))
-    wants_size = primal(name) === 2 || primal(name) === :size
+    ::CoDual{typeof(lgetfield)},
+    x::CoDual{<:Memory},
+    ::CoDual{Val{name}},
+    ::CoDual{Val{order}},
+) where {name, order}
+    y = getfield(primal(x), name, order)
+    wants_length = name === 1 || name === :length
+    dy = wants_length ? NoFData() : bitcast(Ptr{NoTangent}, x.dx.ptr)
+    return CoDual(y, dy), NoPullback(ntuple(_ -> NoRData(), 4))
+end
+
+function rrule!!(
+    ::CoDual{typeof(lgetfield)},
+    x::CoDual{<:MemoryRef},
+    ::CoDual{Val{name}},
+    ::CoDual{Val{order}},
+) where {name, order}
+    y = getfield(primal(x), name, order)
+    wants_offset = name === 1 || name === :ptr_or_offset
+    dy = wants_offset ? bitcast(Ptr{NoTangent}, x.dx.ptr_or_offset) : x.dx.mem
+    return CoDual(y, dy), NoPullback(ntuple(_ -> NoRData(), 4))
+end
+
+function rrule!!(
+    ::CoDual{typeof(lgetfield)},
+    x::CoDual{<:Array},
+    ::CoDual{Val{name}},
+    ::CoDual{Val{order}},
+) where {name, order}
+    y = getfield(primal(x), name, order)
+    wants_size = name === 2 || name === :size
     dy = wants_size ? NoFData() : x.dx.ref
-    return CoDual(y, dy), NoPullback(f, x, name)
+    return CoDual(y, dy), NoPullback(ntuple(_ -> NoRData(), 4))
+end
+
+const _MemTypes = Union{Memory, MemoryRef, Array}
+
+function rrule!!(f::CoDual{typeof(lgetfield)}, x::CoDual{<:_MemTypes}, name::CoDual{<:Val})
+    y, pb = rrule!!(f, x, name, zero_fcodual(Val(:not_atomic)))
+    ternary_lgetfield_adjoint(dy) = pb(dy)[1:3]
+    return y, ternary_lgetfield_adjoint
+end
+
+function rrule!!(
+    ::CoDual{typeof(getfield)}, x::CoDual{<:_MemTypes},
+    name::CoDual{<:Union{Int, Symbol}},
+    order::CoDual{Symbol},
+)
+    y, pb = rrule!!(
+        zero_fcodual(lgetfield),
+        x,
+        zero_fcodual(Val(primal(name))),
+        zero_fcodual(Val(primal(order))),
+    )
+    getfield_adjoint(dy) = pb(dy)
+    return y, getfield_adjoint
+end
+
+function rrule!!(
+    f::CoDual{typeof(getfield)}, x::CoDual{<:_MemTypes}, name::CoDual{<:Union{Int, Symbol}}
+)
+    y, pb = rrule!!(f, x, name, zero_fcodual(:not_atomic))
+    ternary_getfield_adjoint(dy) = pb(dy)[1:3]
+    return y, ternary_getfield_adjoint
 end
 
 @inline function rrule!!(
