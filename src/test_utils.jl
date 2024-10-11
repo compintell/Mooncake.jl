@@ -571,6 +571,30 @@ function generate_args(::typeof(Mooncake.lgetfield), x)
     fs = vcat(syms..., eachindex(syms)...)
     return vcat(map(n -> (x, Val(n)), fs), map(n -> (x, Val(n), Val(:not_atomic)), fs))
 end
+
+_new_excluded(::Type) = false
+_new_excluded(::Type{<:Union{String}}) = true
+
+if VERSION < v"1.11-"
+    # Prior to 1.11, Arrays are special objects, with special constructors that don't
+    # involve calling the `:new` instruction. From 1.11 onwards, they behave more like
+    # regular mutable composite types, so calling `_new_` becomes meaningful.
+    _new_excluded(::Type{<:Array}) = true
+else
+    # Memory and MemoryRef appeared in 1.11. Neither are constructed in the usual manner
+    # via the `:new` instruction, but rather by a variety of built-ins and `ccall`s.
+    # Consequently, it does not make sense to call `_new_` on them -- while this _can_ be
+    # made to work, it typically yields segfaults in very short order, and I _believe_ it
+    # should never occur in practice.
+    _new_excluded(::Type{<:Union{Memory, MemoryRef}}) = true
+end
+
+function generate_args(::typeof(Mooncake._new_), x)
+    _new_excluded(_typeof(x)) && return []
+    syms = filter(f -> isdefined(x, f), fieldnames(_typeof(x)))
+    field_values = map(sym -> getfield(x, sym), syms)
+    return [(_typeof(x), field_values...)]
+end
 generate_args(::typeof(isa), x) = [(x, Float64), (x, Int), (x, _typeof(x))]
 function generate_args(::typeof(setfield!), x)
     names = filter(fieldnames(_typeof(x))) do f
@@ -586,7 +610,9 @@ function functions_for_all_types()
     return [===, Core.ifelse, Core.sizeof, isa, tuple, typeassert, typeof]
 end
 
-functions_for_structs() = vcat(functions_for_all_types(), [getfield, Mooncake.lgetfield])
+function functions_for_structs()
+    return vcat(functions_for_all_types(), [getfield, Mooncake.lgetfield, Mooncake._new_])
+end
 
 function functions_for_mutable_structs()
     return vcat(

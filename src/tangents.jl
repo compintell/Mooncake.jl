@@ -649,7 +649,8 @@ function _dot(t::T, s::T) where {T<:Array}
     return sum(
         _map(eachindex(t)) do n
             (isassigned(t, n) && isassigned(s, n)) ? _dot(t[n], s[n]) : 0.0
-        end
+        end;
+        init=0.0,
     )
 end
 _dot(t::T, s::T) where {T<:Union{Tuple, NamedTuple}} = sum(map(_dot, t, s); init=0.0)

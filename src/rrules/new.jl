@@ -1,7 +1,3 @@
-@inline @generated function _new_(::Type{T}, x::Vararg{Any, N}) where {T, N}
-    return Expr(:new, :T, map(n -> :(x[$n]), 1:N)...)
-end
-
 @is_primitive MinimalCtx Tuple{typeof(_new_), Vararg}
 
 function rrule!!(

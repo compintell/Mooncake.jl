@@ -54,13 +54,13 @@ end
         @test bb_code isa BBCode
         @test length(bb_code.blocks) == length(ir.cfg.blocks)
         new_ir = Mooncake.IRCode(bb_code)
-        @test length(new_ir.stmts.inst) == length(ir.stmts.inst)
-        @test all(map(==, ir.stmts.inst, new_ir.stmts.inst))
+        @test length(stmt(new_ir.stmts)) == length(stmt(ir.stmts))
+        @test all(map(==, stmt(ir.stmts), stmt(new_ir.stmts)))
         @test all(map(==, ir.stmts.type, new_ir.stmts.type))
         @test all(map(==, ir.stmts.info, new_ir.stmts.info))
         @test all(map(==, ir.stmts.line, new_ir.stmts.line))
         @test all(map(==, ir.stmts.flag, new_ir.stmts.flag))
-        @test length(Mooncake.collect_stmts(bb_code)) == length(ir.stmts.inst)
+        @test length(Mooncake.collect_stmts(bb_code)) == length(stmt(ir.stmts))
         @test Mooncake.id_to_line_map(bb_code) isa Dict{ID, Int}
     end
     @testset "control_flow_graph" begin

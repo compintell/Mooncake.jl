@@ -887,7 +887,7 @@ function build_rrule(
             # Normalise the IR, and generated BBCode version of it.
             isva, spnames = is_vararg_and_sparam_names(sig_or_mi)
             ir = normalise!(ir, spnames)
-            primal_ir = BBCode(ir)
+            primal_ir = remove_unreachable_blocks(BBCode(ir))
 
             # Compute global info.
             info = ADInfo(interp, primal_ir, debug_mode)
@@ -924,9 +924,9 @@ function build_rrule(
             # display(IRCode(pb_ir))
             # display(optimised_fwds_ir)
             # display(optimised_pb_ir)
-            # @show length(ir.stmts.inst)
-            # @show length(optimised_fwds_ir.stmts.inst)
-            # @show length(optimised_pb_ir.stmts.inst)
+            # @show length(stmt(ir.stmts))
+            # @show length(stmt(optimised_fwds_ir.stmts))
+            # @show length(stmt(optimised_pb_ir.stmts))
             fwds_oc = MistyClosure(
                 OpaqueClosure(optimised_fwds_ir, shared_data...; do_compile=true),
                 optimised_fwds_ir,
@@ -1098,7 +1098,8 @@ function forwards_pass_ir(
 
     # Create and return the `BBCode` for the forwards-pass.
     arg_types = vcat(Tshared_data, map(fcodual_type ∘ _type, ir.argtypes))
-    return BBCode(vcat(entry_block, blocks), arg_types, ir.sptypes, ir.linetable, ir.meta)
+    ir = BBCode(vcat(entry_block, blocks), arg_types, ir.sptypes, ir.linetable, ir.meta)
+    return remove_unreachable_blocks(ir)
 end
 
 # Going via this function, rather than just calling push!, makes it very straightforward to

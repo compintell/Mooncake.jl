@@ -449,6 +449,7 @@ function rrule!!(::CoDual{typeof(deepcopy)}, x::CoDual)
     return y, deepcopy_pb!!
 end
 
+@zero_adjoint MinimalCtx Tuple{typeof(fieldoffset), DataType, Integer}
 @zero_adjoint MinimalCtx Tuple{Type{UnionAll}, TypeVar, Any}
 @zero_adjoint MinimalCtx Tuple{Type{UnionAll}, TypeVar, Type}
 @zero_adjoint MinimalCtx Tuple{typeof(hash), Vararg}
@@ -479,7 +480,7 @@ for name in [
     :(:jl_type_intersection), :(:memset), :(:jl_get_tls_world_age), :(:memmove),
     :(:jl_array_sizehint), :(:jl_array_del_at), :(:jl_array_grow_at), :(:jl_array_del_beg),
     :(:jl_array_grow_beg), :(:jl_value_ptr), :(:jl_type_unionall), :(:jl_threadid),
-    :(:memhash_seed), :(:memhash32_seed),
+    :(:memhash_seed), :(:memhash32_seed), :(:jl_get_field_offset),
 ]
     @eval function _foreigncall_(
         ::Val{$name}, ::Val{RT}, AT::Tuple, ::Val{nreq}, ::Val{calling_convention}, x...,
@@ -568,6 +569,8 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:foreigncall})
         (false, :none, nothing, deepcopy, TestResources.StructFoo(5.0, randn(5))),
         (false, :stability, nothing, deepcopy, (5.0, randn(5))),
         (false, :stability, nothing, deepcopy, (a=5.0, b=randn(5))),
+        (false, :none, nothing, fieldoffset, @NamedTuple{a::Float64, b::Int}, 1),
+        (false, :none, nothing, fieldoffset, @NamedTuple{a::Float64, b::Int}, 2),
         (false, :none, nothing, UnionAll, TypeVar(:a), Real),
         (false, :none, nothing, hash, "5", UInt(3)),
         (false, :none, nothing, hash, Float64, UInt(5)),

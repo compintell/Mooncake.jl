@@ -175,3 +175,19 @@ constructors which permit partial initialisation.
 function is_always_fully_initialised(::Type{P}) where {P}
     return Core.Compiler.datatype_min_ninitialized(P) == fieldcount(P)
 end
+
+"""
+    lgetfield(x, ::Val{f}, ::Val{order}) where {f, order}
+
+Like `getfield`, but with the field and access order encoded as types.
+"""
+lgetfield(x, ::Val{f}, ::Val{order}) where {f, order} = getfield(x, f, order)
+
+"""
+    _new_(::Type{T}, x::Vararg{Any, N}) where {T, N}
+
+One-liner which calls the `:new` instruction with type `T` with arguments `x`.
+"""
+@inline @generated function _new_(::Type{T}, x::Vararg{Any, N}) where {T, N}
+    return Expr(:new, :T, map(n -> :(x[$n]), 1:N)...)
+end

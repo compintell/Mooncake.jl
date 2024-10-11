@@ -70,7 +70,7 @@ using Mooncake:
     verify_rdata_value,
     is_primitive,
     MinimalCtx,
-    generate_data_test_cases
+    stmt
 
 using .TestUtils:
     test_rule,

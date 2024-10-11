@@ -1,3 +1,11 @@
+# This file was introduced as part of the transition from 1.10 to 1.11. Its purpose is to
+# ensure that Mooncake can handle the new implementation of `Array`s. This implementation
+# relies on the new `Memory` and `MemoryRef` types (aliases for specific parametrisations of
+# `GenericMemory` and `GenericMemoryRef`). Consequently, the code here will make little
+# sense unless you are familiar with these types, and how they relate to `Array`s.
+# Fortunately, Oscar Smith and Jameson Nash gave an excellent talk at JuliaCon 2024 on
+# exactly this topic, which you can find here: https://www.youtube.com/watch?v=L6BFQ1d8xNs .
+
 #
 # Memory
 #
@@ -94,6 +102,46 @@ function _verify_fdata_value(p::Memory{P}, f::Memory{T}) where {P, T}
     return nothing
 end
 
+# Rules
+
+@is_primitive(
+    MinimalCtx, Tuple{typeof(unsafe_copyto!), MemoryRef{P}, MemoryRef{P}, Int} where {P}
+)
+function rrule!!(
+    ::CoDual{typeof(unsafe_copyto!)},
+    dest::CoDual{MemoryRef{P}},
+    src::CoDual{MemoryRef{P}},
+    _n::CoDual{Int},
+) where {P}
+    n = primal(_n)
+
+    # Copy state of primal and fdata of dest.
+    dest_primal_copy = memoryref(Memory{P}(undef, n))
+    dest_fdata_copy = memoryref(Memory{tangent_type(P)}(undef, n))
+    unsafe_copyto!(dest_primal_copy, dest.x, n)
+    unsafe_copyto!(dest_fdata_copy, dest.dx, n)
+
+    # Apply primal computation to both primal and fdata.
+    unsafe_copyto!(dest.x, src.x, n)
+    unsafe_copyto!(dest.dx, src.dx, n)
+
+    function unsafe_copyto!_adjoint(::NoRData)
+
+        # Increment tangents in src by values in dest.
+        @inbounds for i in 1:n
+            src_ref = memoryref(src.dx, i)
+            src_ref[] = increment!!(src_ref[], memoryref(dest.dx, i)[])
+        end
+
+        # Restore state of `dest`.
+        unsafe_copyto!(dest.x, dest_primal_copy, n)
+        unsafe_copyto!(dest.dx, dest_fdata_copy, n)
+
+        return ntuple(_ -> NoRData(), 4)
+    end
+    return dest, unsafe_copyto!_adjoint
+end
+
 #
 # MemoryRef
 #
@@ -160,7 +208,6 @@ tangent_type(::Type{<:MemoryRef{T}}, ::Type{NoRData}) where {T} = MemoryRef{T}
 tangent(f::MemoryRef, ::NoRData) = f
 
 function _verify_fdata_value(p::MemoryRef{P}, f::MemoryRef{T}) where {P, T}
-    @assert Core.memoryrefoffset(p) == Core.memoryrefoffset(f)
     _verify_fdata_value(p.mem, f.mem)
 end
 
@@ -176,23 +223,46 @@ using Core: memoryref_isassigned, memoryrefget, memoryrefset!, memoryrefnew, mem
     MinimalCtx, Tuple{typeof(memoryref_isassigned), GenericMemoryRef, Symbol, Bool}
 )
 
-@inline Base.@propagate_inbounds function rrule!!(
-    ::CoDual{typeof(memoryrefget)},
+@inline function lmemoryrefget(
+    x::MemoryRef, ::Val{ordering}, ::Val{boundscheck}
+) where {ordering, boundscheck}
+    return memoryrefget(x, ordering, boundscheck)
+end
+
+@is_primitive MinimalCtx Tuple{typeof(lmemoryrefget), MemoryRef, Val, Val}
+@inline function rrule!!(
+    ::CoDual{typeof(lmemoryrefget)},
     x::CoDual{<:MemoryRef},
-    _ordering::CoDual{Symbol},
-    _boundscheck::CoDual{Bool},
+    _ordering::CoDual{<:Val},
+    _boundscheck::CoDual{<:Val},
 )
-    ordering = Val(primal(_ordering))
-    bc = Val(primal(_boundscheck))
+    ordering = primal(_ordering)
+    bc = primal(_boundscheck)
     dx = x.dx
-    function memoryrefget_adjoint!!(dy)
+    function lmemoryrefget_adjoint(dy)
         new_tangent = increment_rdata!!(memoryrefget(dx, _val(ordering), _val(bc)), dy)
         memoryrefset!(dx, new_tangent, _val(ordering), _val(bc))
         return NoRData(), NoRData(), NoRData(), NoRData()
     end
     y = memoryrefget(x.x, _val(ordering), _val(bc))
     dy = fdata(memoryrefget(x.dx, _val(ordering), _val(bc)))
-    return CoDual(y, dy), memoryrefget_adjoint!!
+    return CoDual(y, dy), lmemoryrefget_adjoint
+end
+
+@inline Base.@propagate_inbounds function rrule!!(
+    ::CoDual{typeof(memoryrefget)},
+    x::CoDual{<:MemoryRef},
+    _ordering::CoDual{Symbol},
+    _boundscheck::CoDual{Bool},
+)
+    out, adj = rrule!!(
+        zero_fcodual(lmemoryrefget),
+        x,
+        zero_fcodual(Val(primal(_ordering))),
+        zero_fcodual(Val(primal(_boundscheck))),
+    )
+    memoryrefget_adjoint(dy) = adj(dy)
+    return out, memoryrefget_adjoint
 end
 
 # Core.memoryrefmodify!
@@ -222,17 +292,25 @@ end
 
 # Core.memoryrefreplace!
 
+@inline function lmemoryrefset!(
+    x::MemoryRef, value, ::Val{ordering}, ::Val{boundscheck}
+) where {ordering, boundscheck}
+    return memoryrefset!(x, value, ordering, boundscheck)
+end
+
+@is_primitive MinimalCtx Tuple{typeof(lmemoryrefset!), MemoryRef, Any, Val, Val}
+
 @inline function rrule!!(
-    ::CoDual{typeof(memoryrefset!)},
+    ::CoDual{typeof(lmemoryrefset!)},
     x::CoDual{<:MemoryRef{P}, <:MemoryRef{V}},
     value::CoDual,
-    _ordering::CoDual{Symbol},
-    _boundscheck::CoDual{Bool},
+    _ordering::CoDual{<:Val},
+    _boundscheck::CoDual{<:Val},
 ) where {P, V}
-    ordering = Val(_ordering.x)
-    bc = Val(_boundscheck.x)
+    ordering = primal(_ordering)
+    bc = primal(_boundscheck)
 
-    isbitstype(P) && return isbits_memoryrefset!_rule(x, value, ordering, bc)
+    isbitstype(P) && return isbits_lmemoryrefset!_rule(x, value, ordering, bc)
 
     to_save = isassigned(x.x)
     old_x = Ref{Tuple{P, V}}()
@@ -246,7 +324,7 @@ end
     memoryrefset!(x.x, value.x, _val(ordering), _val(bc))
     dx = x.dx
     memoryrefset!(dx, tangent(value.dx, zero_rdata(value.dx)), _val(ordering), _val(bc))
-    function memoryrefset_adjoint!!(dy)
+    function lmemoryrefset_adjoint(dy)
         dvalue = increment!!(dy, rdata(memoryrefget(dx, _val(ordering), _val(bc))))
         if to_save
             memoryrefset!(x.x, old_x[][1], _val(ordering), _val(bc))
@@ -254,10 +332,10 @@ end
         end
         return NoRData(), NoRData(), dvalue, NoRData(), NoRData()
     end
-    return value, memoryrefset_adjoint!!
+    return value, lmemoryrefset_adjoint
 end
 
-function isbits_memoryrefset!_rule(x::CoDual, value::CoDual, ordering::Val, bc::Val)
+function isbits_lmemoryrefset!_rule(x::CoDual, value::CoDual, ordering::Val, bc::Val)
     old_x = (
         memoryrefget(x.x, _val(ordering), _val(bc)),
         memoryrefget(x.dx, _val(ordering), _val(bc)),
@@ -265,19 +343,68 @@ function isbits_memoryrefset!_rule(x::CoDual, value::CoDual, ordering::Val, bc::
     memoryrefset!(x.x, value.x, _val(ordering), _val(bc))
     memoryrefset!(x.dx, zero_tangent(value.x), _val(ordering), _val(bc))
 
-    function isbits_memoryrefset!_adjoint!!(dy)
+    function isbits_lmemoryrefset!_adjoint(dy)
         dvalue = increment!!(dy, rdata(memoryrefget(x.dx, _val(ordering), _val(bc))))
         memoryrefset!(x.x, old_x[1], _val(ordering), _val(bc))
         memoryrefset!(x.dx, old_x[2], _val(ordering), _val(bc))
         return NoRData(), NoRData(), dvalue, NoRData(), NoRData()
     end
-    return value, isbits_memoryrefset!_adjoint!!
+    return value, isbits_lmemoryrefset!_adjoint
+end
+
+@inline function rrule!!(
+    ::CoDual{typeof(memoryrefset!)},
+    x::CoDual{<:MemoryRef{P}, <:MemoryRef{V}},
+    value::CoDual,
+    ordering::CoDual{Symbol},
+    boundscheck::CoDual{Bool},
+) where {P, V}
+    y, adj = rrule!!(
+        zero_fcodual(lmemoryrefset!),
+        x,
+        value,
+        zero_fcodual(Val(primal(ordering))),
+        zero_fcodual(Val(primal(boundscheck))),
+    )
+    memoryrefset_adjoint(dy) = adj(dy)
+    return y, memoryrefset_adjoint
 end
 
 # Core.memoryrefsetonce!
 # Core.memoryrefswap!
 # Core.set_binding_type!
 
+# _new_ and _new_-adjacent rules for Memory, MemoryRef, and Array.
+
+@is_primitive MinimalCtx Tuple{Type{<:Memory}, UndefInitializer, Int}
+function rrule!!(
+    ::CoDual{Type{Memory{P}}}, ::CoDual{UndefInitializer}, m::CoDual{Int}
+) where {P}
+    y = CoDual(Memory{P}(undef, primal(m)), Memory{tangent_type(P)}(undef, primal(m)))
+    return y, NoPullback(ntuple(_ -> NoRData(), 3))
+end
+
+function rrule!!(
+    ::CoDual{typeof(_new_)},
+    ::CoDual{Type{MemoryRef{P}}},
+    ptr_or_offset::CoDual{Ptr{Nothing}},
+    mem::CoDual{Memory{P}},
+) where {P}
+    y = _new_(MemoryRef{P}, ptr_or_offset.x, mem.x)
+    dy = _new_(MemoryRef{tangent_type(P)}, bitcast(Ptr{Nothing}, ptr_or_offset.dx), mem.dx)
+    return CoDual(y, dy), NoPullback(ntuple(_ -> NoRData(), 4))
+end
+
+function rrule!!(
+    ::CoDual{typeof(_new_)},
+    ::CoDual{Type{Array{P, N}}},
+    ref::CoDual{MemoryRef{P}},
+    size::CoDual{<:NTuple{N, Int}},
+) where {P, N}
+    y = _new_(Array{P, N}, ref.x, size.x)
+    dy = _new_(Array{tangent_type(P), N}, ref.dx, size.x)
+    return CoDual(y, dy), NoPullback(ntuple(_ -> NoRData(), 4))
+end
 
 # getfield / lgetfield rules for Memory, MemoryRef, and Array.
 
@@ -320,8 +447,8 @@ end
 const _MemTypes = Union{Memory, MemoryRef, Array}
 
 function rrule!!(f::CoDual{typeof(lgetfield)}, x::CoDual{<:_MemTypes}, name::CoDual{<:Val})
-    y, pb = rrule!!(f, x, name, zero_fcodual(Val(:not_atomic)))
-    ternary_lgetfield_adjoint(dy) = pb(dy)[1:3]
+    y, adj = rrule!!(f, x, name, zero_fcodual(Val(:not_atomic)))
+    ternary_lgetfield_adjoint(dy) = adj(dy)[1:3]
     return y, ternary_lgetfield_adjoint
 end
 
@@ -330,21 +457,21 @@ function rrule!!(
     name::CoDual{<:Union{Int, Symbol}},
     order::CoDual{Symbol},
 )
-    y, pb = rrule!!(
+    y, adj = rrule!!(
         zero_fcodual(lgetfield),
         x,
         zero_fcodual(Val(primal(name))),
         zero_fcodual(Val(primal(order))),
     )
-    getfield_adjoint(dy) = pb(dy)
+    getfield_adjoint(dy) = adj(dy)
     return y, getfield_adjoint
 end
 
 function rrule!!(
     f::CoDual{typeof(getfield)}, x::CoDual{<:_MemTypes}, name::CoDual{<:Union{Int, Symbol}}
 )
-    y, pb = rrule!!(f, x, name, zero_fcodual(:not_atomic))
-    ternary_getfield_adjoint(dy) = pb(dy)[1:3]
+    y, adj = rrule!!(f, x, name, zero_fcodual(:not_atomic))
+    ternary_getfield_adjoint(dy) = adj(dy)[1:3]
     return y, ternary_getfield_adjoint
 end
 
@@ -385,9 +512,10 @@ function _mems()
 end
 
 function _mem_refs()
-    mems, sample_values = _mems()
-    mem_refs = vcat([memoryref(m) for m in mems], [memoryref(m, 2) for m in mems])
-    return mem_refs, vcat(sample_values, sample_values)
+    mems_1, sample_values_1 = _mems()
+    mems_2, sample_values_2 = _mems()
+    mem_refs = vcat([memoryref(m) for m in mems_1], [memoryref(m, 2) for m in mems_2])
+    return mem_refs, vcat(sample_values_1, sample_values_2)
 end
 
 function generate_data_test_cases(rng_ctor, ::Val{:memory})
@@ -401,10 +529,20 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:memory})
     mems, _ = _mems()
     mem_refs, sample_mem_ref_values = _mem_refs()
     test_cases = vcat(
+
+        # Rules for `Memory`
+        (true, :stability, nothing, Memory{Float64}, undef, 5),
+        (true, :stability, nothing, Memory{Memory{Float64}}, undef, 5),
+        [(false, :stability_and_allocs, nothing, lgetfield, m, Val(:length)) for m in mems],
+        [(false, :stability_and_allocs, nothing, lgetfield, m, Val(1)) for m in mems],
+        [(false, :none, nothing, getfield, m, :length) for m in mems],
+        [(false, :none, nothing, getfield, m, 1) for m in mems],
+
+        # Rules for `MemoryRef`
         [(false, :stability, nothing, memoryref_isassigned, mem_ref, :not_atomic, bc) for
             mem_ref in mem_refs for bc in [false, true]
         ],
-        [(false, :stability, nothing, memoryrefget, mem_ref, :not_atomic, bc) for
+        [(false, :none, nothing, memoryrefget, mem_ref, :not_atomic, bc) for
             mem_ref in filter(isassigned, mem_refs) for bc in [false, true]
         ],
         [(false, :stability, nothing, memoryrefnew, mem) for mem in mems],
@@ -414,9 +552,42 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:memory})
         ],
         [(false, :stability, nothing, memoryrefoffset, mem_ref) for mem_ref in mem_refs],
         [
-            (false, :stability, nothing, memoryrefset!, mem_ref, sample_value, :not_atomic, bc) for
+            (false, :stability, nothing, lmemoryrefset!, mem_ref, sample_value, Val(:not_atomic), bc) for
+            (mem_ref, sample_value) in zip(mem_refs, sample_mem_ref_values) for
+            bc in [Val(false), Val(true)]
+        ],
+        [
+            (false, :none, nothing, memoryrefset!, mem_ref, sample_value, :not_atomic, bc) for
             (mem_ref, sample_value) in zip(mem_refs, sample_mem_ref_values) for
             bc in [false, true]
+        ],
+        (false, :stability, nothing, unsafe_copyto!, randn(10).ref, randn(8).ref, 5),
+        (
+            false, :stability, nothing,
+            unsafe_copyto!,
+            memoryref(randn(10).ref, 2),
+            memoryref(randn(8).ref, 3),
+            4,
+        ),
+        (
+            false, :stability, nothing,
+            unsafe_copyto!,
+            [randn(10), randn(5)].ref,
+            [randn(10), randn(3)].ref,
+            2,
+        ),
+
+        # Rules for `Array`
+        (false, :stability, nothing, _new_, Vector{Float64}, randn(10).ref, (10, )),
+        (false, :stability, nothing, _new_, Matrix{Float64}, randn(12).ref, (4, 3)),
+        (false, :stability, nothing, _new_, Array{Float64, 3}, randn(12).ref, (4, 1, 3)),
+        [
+            (false, :stability, nothing, lgetfield, randn(10), f) for
+                f in [Val(:ref), Val(:size), Val(1), Val(2)]
+        ],
+        [
+            (false, :none, nothing, getfield, randn(10), f) for
+                f in [:ref, :size, 1, 2]
         ],
         (false, :stability, nothing, setfield!, randn(10), :ref, randn(10).ref),
         (false, :stability, nothing, setfield!, randn(10), 1, randn(10).ref),

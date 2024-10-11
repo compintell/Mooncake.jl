@@ -283,14 +283,10 @@ function avoid_throwing_path_tester(x)
     return sin(x)
 end
 
-simple_foreigncall_tester(x) = ccall(:jl_array_isassigned, Cint, (Any, UInt), x, 1)
+simple_foreigncall_tester(s::String) = ccall(:jl_string_ptr, Ptr{UInt8}, (Any,), s)
 
-function simple_foreigncall_tester_2(a::Array{T, M}, dims::NTuple{N, Int}) where {T,N,M}
-    ccall(:jl_reshape_array, Array{T,N}, (Any, Any, Any), Array{T,N}, a, dims)
-end
-
-function foreigncall_tester(x)
-    return ccall(:jl_array_isassigned, Cint, (Any, UInt), x, 1) == 1 ? cos(x[1]) : sin(x[1])
+function simple_foreigncall_tester_2(a::TypeVar, b::Type)
+    ccall(:jl_type_unionall, Any, (Any, Any), a, b)
 end
 
 function no_primitive_inlining_tester(x)
@@ -620,9 +616,11 @@ function generate_test_functions()
             Base.Slice(Base.OneTo(1)),
         ), # fun PhiNode example
         (false, :allocs, nothing, avoid_throwing_path_tester, 5.0),
-        (false, :allocs, nothing, simple_foreigncall_tester, randn(5)),
-        (false, :none, nothing, simple_foreigncall_tester_2, randn(6), (2, 3)),
-        (false, :allocs, nothing, foreigncall_tester, randn(5)),
+        (true, :allocs, nothing, simple_foreigncall_tester, "hello"),
+        (
+            false, :none, nothing,
+            simple_foreigncall_tester_2, TypeVar(:T, Union{}, Any), Vector{T} where {T}
+        ),
         (false, :none, nothing, no_primitive_inlining_tester, 5.0),
         (false, :allocs, nothing, varargs_tester, 5.0),
         (false, :allocs, nothing, varargs_tester, 5.0, 4),
@@ -672,7 +670,6 @@ function generate_test_functions()
             setfield_tester_right!, FullyInitMutableStruct(5.0, randn(3)), randn(5),
         ),
         (false, :none, nothing, mul!, randn(3, 5)', randn(5, 5), randn(5, 3), 4.0, 3.0),
-        (false, :none, nothing, Random.make_seed, 5),
         (false, :none, nothing, Random.SHA.digest!, Random.SHA.SHA2_256_CTX()),
         (false, :none, nothing, Xoshiro, 123456),
         (false, :none, nothing, *, randn(250, 500), randn(500, 250)),

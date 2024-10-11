@@ -6,9 +6,6 @@
 # deduce that these bits of code are inactive though.
 #
 
-@zero_adjoint DefaultCtx Tuple{typeof(size), Vararg}
-@zero_adjoint DefaultCtx Tuple{typeof(LinearAlgebra.lapack_size), Vararg}
-@zero_adjoint DefaultCtx Tuple{typeof(Base.require_one_based_indexing), Vararg}
 @zero_adjoint DefaultCtx Tuple{typeof(in), Vararg}
 @zero_adjoint DefaultCtx Tuple{typeof(iszero), Vararg}
 @zero_adjoint DefaultCtx Tuple{typeof(isempty), Vararg}
@@ -30,7 +27,14 @@
 @zero_adjoint DefaultCtx Tuple{typeof(Base.throw_boundserror), Vararg}
 @zero_adjoint DefaultCtx Tuple{typeof(Base.Broadcast.eltypes), Vararg}
 @zero_adjoint DefaultCtx Tuple{typeof(Base.eltype), Vararg}
+@zero_adjoint MinimalCtx Tuple{typeof(Base.padding), DataType}
+@zero_adjoint MinimalCtx Tuple{typeof(Base.padding), DataType, Int}
 @zero_adjoint MinimalCtx Tuple{Type, TypeVar, Type}
+
+if VERSION >= v"1.11-"
+    @zero_adjoint MinimalCtx Tuple{typeof(Random.hash_seed), Vararg}
+    @zero_adjoint MinimalCtx Tuple{typeof(Base.dataids), Memory}
+end
 
 """
     lgetfield(x, f::Val)
@@ -89,8 +93,6 @@ end
 
 # This is largely copy + pasted from the above. Attempts were made to refactor to avoid
 # code duplication, but it wound up not being any cleaner than this copy + pasted version.
-
-lgetfield(x, ::Val{f}, ::Val{order}) where {f, order} = getfield(x, f, order)
 
 @is_primitive MinimalCtx Tuple{typeof(lgetfield), Any, Val, Val}
 @inline function rrule!!(
@@ -203,6 +205,8 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
         ),
         (false, :allocs, nothing, Threads.nthreads),
         (false, :none, nothing, Base.eltype, randn(1)),
+        (false, :none, nothing, Base.padding, @NamedTuple{a::Float64}),
+        (false, :none, nothing, Base.padding, @NamedTuple{a::Float64}, 1),
 
         # Literal replacement for setfield!.
         (

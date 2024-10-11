@@ -1,3 +1,6 @@
+# the field containing the instructions in `IRCode` changed name in 1.11 from inst to stmt.
+stmt(ir::CC.InstructionStream) = @static VERSION < v"1.11.0-rc4" ? ir.inst : ir.stmt
+
 """
     ircode(
         inst::Vector{Any},
@@ -106,7 +109,7 @@ end
 # https://gist.github.com/oxinabox/cdcffc1392f91a2f6d80b2524726d802#file-example-jl-L54
 function __infer_ir!(ir, interp::CC.AbstractInterpreter, mi::CC.MethodInstance)
     method_info = CC.MethodInfo(#=propagate_inbounds=#true, nothing)
-    min_world = world = CC.get_world_counter(interp)
+    min_world = world = get_inference_world(interp)
     max_world = Base.get_world_counter()
     irsv = CC.IRInterpretationState(
         interp, method_info, ir, mi, ir.argtypes, world, min_world, max_world
@@ -119,9 +122,9 @@ end
 # Moreover, it seems to cause some serious inference probems. Consequently, it makes sense
 # to remove such effects before optimising IRCode.
 function __strip_coverage!(ir::IRCode)
-    for n in eachindex(ir.stmts.inst)
-        if Meta.isexpr(ir.stmts.inst[n], :code_coverage_effect)
-            ir.stmts.inst[n] = nothing
+    for n in eachindex(stmt(ir.stmts))
+        if Meta.isexpr(stmt(ir.stmts)[n], :code_coverage_effect)
+            stmt(ir.stmts)[n] = nothing
         end
     end
     return ir
@@ -158,7 +161,13 @@ function optimise_ir!(ir::IRCode; show_ir=false, do_inline=true)
     end
     ir = __strip_coverage!(ir)
     ir = CC.sroa_pass!(ir, inline_state)
-    ir = CC.adce_pass!(ir, inline_state)
+
+    if VERSION < v"1.11-"
+        ir = CC.adce_pass!(ir, inline_state)
+    else
+        ir, _ = CC.adce_pass!(ir, inline_state)
+    end
+
     ir = CC.compact!(ir)
     # CC.verify_ir(ir, true, false, CC.optimizer_lattice(local_interp))
     CC.verify_linetable(ir.linetable, true)
@@ -189,10 +198,14 @@ function lookup_ir(interp::CC.AbstractInterpreter, tt::Type{<:Tuple}; optimize_u
     asts = []
     for match in matches.matches
         match = match::Core.MethodMatch
-        meth = Base.func_for_method_checked(match.method, tt, match.sparams)
-        (code, ty) = CC.typeinf_ircode(
-            interp, meth, match.spec_types, match.sparams, optimize_until
-        )
+        if VERSION < v"1.11-"
+            meth = Base.func_for_method_checked(match.method, tt, match.sparams)
+            (code, ty) = CC.typeinf_ircode(
+                interp, meth, match.spec_types, match.sparams, optimize_until
+            )
+        else
+            (code, ty) = Core.Compiler.typeinf_ircode(interp, match, optimize_until)
+        end
         if code === nothing
             push!(asts, match.method => Any)
         else
@@ -282,4 +295,37 @@ Create a `NewInstruction` with fields:
 """
 function new_inst(@nospecialize(stmt), @nospecialize(type)=Any, flag=CC.IR_FLAG_REFINED)
     return NewInstruction(stmt, type, CC.NoCallInfo(), Int32(1), flag)
+end
+
+"""
+    replace_uses_with!(stmt, def::Union{Argument, SSAValue}, val)
+
+Replace all uses of `def` with `val` in the single statement `stmt`.
+"""
+function replace_uses_with!(stmt, def::Union{Argument, SSAValue}, val)
+    if stmt isa Expr
+        stmt.args = Any[arg == def ? val : arg for arg in stmt.args]
+        return stmt
+    elseif stmt isa GotoIfNot
+        if stmt.cond == def
+            @assert val isa Bool
+            return val === true ? nothing : GotoNode(stmt.dest)
+        else
+            return stmt
+        end
+    else
+        return stmt
+    end
+end
+
+"""
+    replace_uses_with(ir::IRCode, def::Union{Argument, SSAValue}, val)
+
+Replace all uses of `def` in `ir` with `val`.
+"""
+function replace_uses_with!(ir::IRCode, def::Union{Argument, SSAValue}, val)
+    for (n, stmt) in enumerate(stmt(ir.stmts))
+        statements[n] = replace_uses_with!(stmt, def, val)
+    end
+    return ir
 end

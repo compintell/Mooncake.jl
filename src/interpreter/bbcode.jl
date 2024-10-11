@@ -420,7 +420,7 @@ end
 
 # Convert an InstructionStream into a list of `NewInstruction`s.
 function new_inst_vec(x::CC.InstructionStream)
-    return map((v..., ) -> NewInstruction(v...), x.inst, x.type, x.info, x.line, x.flag)
+    return map((v..., ) -> NewInstruction(v...), stmt(x), x.type, x.info, x.line, x.flag)
 end
 
 # Maps from positional names (SSAValues for nodes, Integers for basic blocks) to IDs.
