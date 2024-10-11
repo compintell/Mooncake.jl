@@ -76,4 +76,29 @@
         @assert length(map(*, x, randn(11))) == 10
         @test_throws AssertionError Mooncake._map(*, x, randn(11)) 
     end
+    @testset "_get_type_body" begin
+        @test Mooncake._get_type_body(Float64) == Float64
+        @test Mooncake._get_type_body(@NamedTuple{a::Float64}) == @NamedTuple{a::Float64}
+        @test Mooncake._get_type_body(Tuple{<:Real})::DataType <: Tuple
+        @test Mooncake._get_type_body(Tuple{T, T} where {V<:Real, T<:V})::DataType <: Tuple
+        @test Mooncake._get_type_body(Tuple{T, V} where {V<:Real, G<:V, T<:G}) <: Tuple
+    end
+    @testset "is_always_initialised" begin
+        # DataType
+        @test Mooncake.is_always_initialised(TestResources.StructFoo, 1)
+        @test !Mooncake.is_always_initialised(TestResources.StructFoo, 2)
+
+        # UnionAll
+        @test Mooncake.is_always_initialised(TestResources.TypeStableStruct{<:Real}, 1)
+        @test !Mooncake.is_always_initialised(TestResources.TypeStableStruct{<:Real}, 2)
+    end
+    @testset "is_always_fully_initialised" begin
+        # DataType
+        @test Mooncake.is_always_fully_initialised(TestResources.Foo)
+        @test !Mooncake.is_always_fully_initialised(TestResources.StructFoo)
+
+        # UnionAll
+        @test Mooncake.is_always_fully_initialised(Tuple{T, T} where {T<:Real})
+        @test !Mooncake.is_always_fully_initialised(TestResources.TypeStableStruct{<:Real})
+    end
 end

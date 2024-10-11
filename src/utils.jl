@@ -156,24 +156,34 @@ function sparam_names(m::Core.Method)::Vector{Symbol}
 end
 
 """
-    is_always_initialised(::Type{P}, n::Int)
+    _get_type_body(P::Union{DataType, UnionAll})::DataType
+
+Returns `P` if `P isa DataType`, otherwise returns the body of `P` via recursion.
+"""
+_get_type_body(P::DataType)::DataType = P
+_get_type_body(P::UnionAll)::DataType = _get_type_body(P.body)
+
+"""
+    is_always_initialised(::Type{P}, n::Int)::Bool
 
 True if the `n`th field of `P` is always initialised. If the `n`th fieldtype of `P`
 `isbitstype`, then this is distinct from asking whether the `n`th field is always defined.
 An isbits field is always defined, but is not always explicitly initialised.
 """
-function is_always_initialised(::Type{P}, n::Int) where {P}
-    return n <= Core.Compiler.datatype_min_ninitialized(P)
+function is_always_initialised(::Type{P}, n::Int)::Bool where {P}
+    @assert P isa Union{DataType, UnionAll}
+    return n <= CC.datatype_min_ninitialized(_get_type_body(P))
 end
 
 """
-    is_always_fully_initialised(::Type{P}) where {P}
+    is_always_fully_initialised(::Type{P})::Bool where {P}
 
 True if all fields in `P` are always initialised. Put differently, there are no inner
 constructors which permit partial initialisation.
 """
-function is_always_fully_initialised(::Type{P}) where {P}
-    return Core.Compiler.datatype_min_ninitialized(P) == fieldcount(P)
+function is_always_fully_initialised(::Type{P})::Bool where {P}
+    @assert P isa Union{DataType, UnionAll}
+    return CC.datatype_min_ninitialized(_get_type_body(P)) == fieldcount(P)
 end
 
 """
