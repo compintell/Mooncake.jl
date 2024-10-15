@@ -381,6 +381,12 @@ end
 
 function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
 
+    # PiNodes of the form `π (nothing, Union{})` have started appearing in 1.11. These nodes
+    # appear in unreachable sections of code, and appear to serve no purpose. Consequently,
+    # we mark them for removal (replace them with `nothing`). We do not currently have a
+    # unit test for this, but integration testing seems to catch it in multiple places.
+    stmt == PiNode(nothing, Union{}) && return ad_stmt_info(line, nothing, stmt, nothing)
+
     # Assume that the PiNode contains active data -- it's hard to see why a PiNode would be
     # created for e.g. a constant. Error if code is encountered where this doesn't hold.
     is_active(stmt.val) || unhandled_feature("PiNode: $stmt")
@@ -911,7 +917,6 @@ function build_rrule(
             pb_ir = pullback_ir(
                 primal_ir, Treturn, ad_stmts_blocks, pb_comms_insts, info, Tshared_data
             )
-
             optimised_fwds_ir = optimise_ir!(IRCode(fwds_ir); do_inline=true)
             optimised_pb_ir = optimise_ir!(IRCode(pb_ir); do_inline=true)
             # optimised_fwds_ir = optimise_ir!(IRCode(fwds_ir); do_inline=false)
