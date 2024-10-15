@@ -131,6 +131,12 @@ end
             @test ad_stmts isa ADStmtInfo
         end
         @testset "PiNode" begin
+            @testset "π (nothing, Union{})" begin
+                # This is a weird edge case that appeared in 1.11. See comment in src.
+                line = id_line_1
+                stmt_info = make_ad_stmts!(PiNode(nothing, Union{}), line, info)
+                @test stmt_info isa ADStmtInfo
+            end
             @testset "unhandled case" begin
                 @test_throws(
                     Mooncake.UnhandledLanguageFeatureException,
