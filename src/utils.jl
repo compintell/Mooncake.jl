@@ -36,6 +36,17 @@ end
     end
 end
 
+for N in 1:128
+    @eval @inline function tuple_map(f::F, x::Tuple{Vararg{Any, $N}}) where {F}
+        return $(Expr(:call, :tuple, map(n -> :(f(getfield(x, $n))), 1:N)...))
+    end
+    @eval @inline function tuple_map(
+        f, x::Tuple{Vararg{Any, $N}}, y::Tuple{Vararg{Any, $N}}
+    )
+        return $(Expr(:call, :tuple, map(n -> :(f(getfield(x, $n), getfield(y, $n))), 1:N)...))
+    end
+end
+
 function tuple_map(f::F, x::NamedTuple{names}) where {F, names}
     return NamedTuple{names}(tuple_map(f, Tuple(x)))
 end
@@ -156,34 +167,24 @@ function sparam_names(m::Core.Method)::Vector{Symbol}
 end
 
 """
-    _get_type_body(P::Union{DataType, UnionAll})::DataType
-
-Returns `P` if `P isa DataType`, otherwise returns the body of `P` via recursion.
-"""
-_get_type_body(P::DataType)::DataType = P
-_get_type_body(P::UnionAll)::DataType = _get_type_body(P.body)
-
-"""
-    is_always_initialised(::Type{P}, n::Int)::Bool
+    is_always_initialised(P::DataType, n::Int)::Bool
 
 True if the `n`th field of `P` is always initialised. If the `n`th fieldtype of `P`
 `isbitstype`, then this is distinct from asking whether the `n`th field is always defined.
 An isbits field is always defined, but is not always explicitly initialised.
 """
-function is_always_initialised(::Type{P}, n::Int)::Bool where {P}
-    @assert P isa Union{DataType, UnionAll}
-    return n <= CC.datatype_min_ninitialized(_get_type_body(P))
+function is_always_initialised(P::DataType, n::Int)::Bool
+    return n <= CC.datatype_min_ninitialized(P)
 end
 
 """
-    is_always_fully_initialised(::Type{P})::Bool where {P}
+    is_always_fully_initialised(P::DataType)::Bool
 
 True if all fields in `P` are always initialised. Put differently, there are no inner
 constructors which permit partial initialisation.
 """
-function is_always_fully_initialised(::Type{P})::Bool where {P}
-    @assert P isa Union{DataType, UnionAll}
-    return CC.datatype_min_ninitialized(_get_type_body(P)) == fieldcount(P)
+function is_always_fully_initialised(P::DataType)::Bool
+    return CC.datatype_min_ninitialized(P) == fieldcount(P)
 end
 
 """
