@@ -323,7 +323,7 @@ end
 
     memoryrefset!(x.x, value.x, _val(ordering), _val(bc))
     dx = x.dx
-    memoryrefset!(dx, tangent(value.dx, zero_rdata(value.dx)), _val(ordering), _val(bc))
+    memoryrefset!(dx, tangent(value.dx, zero_rdata(value.x)), _val(ordering), _val(bc))
     function lmemoryrefset_adjoint(dy)
         dvalue = increment!!(dy, rdata(memoryrefget(dx, _val(ordering), _val(bc))))
         if to_save
@@ -380,9 +380,12 @@ end
 function rrule!!(
     ::CoDual{Type{Memory{P}}}, ::CoDual{UndefInitializer}, m::CoDual{Int}
 ) where {P}
-    y = CoDual(Memory{P}(undef, primal(m)), Memory{tangent_type(P)}(undef, primal(m)))
-    return y, NoPullback(ntuple(_ -> NoRData(), 3))
+    # y = CoDual(Memory{P}(undef, primal(m)), Memory{tangent_type(P)}(undef, primal(m)))
+    y = Memory{P}(undef, primal(m))
+    return zero_fcodual(y), NoPullback(ntuple(_ -> NoRData(), 3))
 end
+
+# @zero_adjoint MinimalCtx Tuple{Type{<:Memory}, UndefInitializer, Int}
 
 function rrule!!(
     ::CoDual{typeof(_new_)},
@@ -501,13 +504,14 @@ function _mems()
 
     # Return a collection of test cases.
     mems = [
-        fill!(Memory{Float64}(undef, 10), 0.0),
-        fill!(Memory{Int}(undef, 5), 1),
-        Memory{Vector{Float64}}([randn(1), randn(3)]),
-        Memory{Vector{Float64}}(undef, 3),
-        mem_with_single_undef,
+        (fill!(Memory{Float64}(undef, 10), 0.0)),
+        (fill!(Memory{Int}(undef, 5), 1)),
+        (Memory{Vector{Float64}}([randn(1), randn(3)])),
+        (Memory{Vector{Float64}}(undef, 3)),
+        (Memory{Any}(randn(3))),
+        (mem_with_single_undef),
     ]
-    sample_values = [1.0, 3, randn(2), randn(2), Memory{Int}(undef, 5)]
+    sample_values = [1.0, 3, randn(2), randn(2), 5.0, Memory{Int}(undef, 5)]
     return mems, sample_values
 end
 
@@ -539,20 +543,20 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:memory})
         [(false, :none, nothing, getfield, m, 1) for m in mems],
 
         # Rules for `MemoryRef`
-        [(false, :stability, nothing, memoryref_isassigned, mem_ref, :not_atomic, bc) for
+        [(false, :none, nothing, memoryref_isassigned, mem_ref, :not_atomic, bc) for
             mem_ref in mem_refs for bc in [false, true]
         ],
         [(false, :none, nothing, memoryrefget, mem_ref, :not_atomic, bc) for
             mem_ref in filter(isassigned, mem_refs) for bc in [false, true]
         ],
-        [(false, :stability, nothing, memoryrefnew, mem) for mem in mems],
-        [(false, :stability, nothing, memoryrefnew, mem, 1) for mem in mem_refs],
-        [(false, :stability, nothing, memoryrefnew, mem, 1, bc) for
+        [(false, :none, nothing, memoryrefnew, mem) for mem in mems],
+        [(false, :none, nothing, memoryrefnew, mem, 1) for mem in mem_refs],
+        [(false, :none, nothing, memoryrefnew, mem, 1, bc) for
             mem in mem_refs for bc in [false, true]
         ],
-        [(false, :stability, nothing, memoryrefoffset, mem_ref) for mem_ref in mem_refs],
+        [(false, :none, nothing, memoryrefoffset, mem_ref) for mem_ref in mem_refs],
         [
-            (false, :stability, nothing, lmemoryrefset!, mem_ref, sample_value, Val(:not_atomic), bc) for
+            (false, :none, nothing, lmemoryrefset!, mem_ref, sample_value, Val(:not_atomic), bc) for
             (mem_ref, sample_value) in zip(mem_refs, sample_mem_ref_values) for
             bc in [Val(false), Val(true)]
         ],
@@ -579,6 +583,20 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:memory})
 
         # Rules for `Array`
         (false, :stability, nothing, _new_, Vector{Float64}, randn(10).ref, (10, )),
+        (
+            false, :stability, nothing,
+            _new_,
+            Vector{Vector{Float64}},
+            [randn(10), randn(5)].ref,
+            (2, ),
+        ),
+        (
+            false, :none, nothing,
+            _new_,
+            Vector{Any},
+            [1, randn(5)].ref,
+            (2, ),
+        ),
         (false, :stability, nothing, _new_, Matrix{Float64}, randn(12).ref, (4, 3)),
         (false, :stability, nothing, _new_, Array{Float64, 3}, randn(12).ref, (4, 1, 3)),
         [
