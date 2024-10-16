@@ -19,11 +19,19 @@ function rrule!!(::CoDual{typeof(Base.FastMath.exp10_fast)}, x::CoDual{P}) where
     return CoDual(yp, NoFData()), exp2_fast_pb!!
 end
 
+@is_primitive MinimalCtx Tuple{typeof(Base.FastMath.sincos), IEEEFloat}
+function rrule!!(::CoDual{typeof(Base.FastMath.sincos)}, x::CoDual{P}) where {P<:IEEEFloat}
+    y = Base.FastMath.sincos(primal(x))
+    sincos_fast_adj!!(dy::Tuple{P, P}) = NoRData(), dy[1] * y[2] - dy[2] * y[1]
+    return CoDual(y, NoFData()), sincos_fast_adj!!
+end
+
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:fastmath})
     test_cases = Any[
         (false, :stability_and_allocs, nothing, Base.FastMath.exp10_fast, 0.5),
         (false, :stability_and_allocs, nothing, Base.FastMath.exp2_fast, 0.5),
         (false, :stability_and_allocs, nothing, Base.FastMath.exp_fast, 5.0),
+        (false, :stability_and_allocs, nothing, Base.FastMath.sincos, 3.0),
     ]
     memory = Any[]
     return test_cases, memory
