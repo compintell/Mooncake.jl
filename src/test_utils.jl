@@ -94,7 +94,7 @@ using Mooncake:
     zero_rdata_from_type, CannotProduceZeroRDataFromType, lazy_zero_rdata, instantiate,
     can_produce_zero_rdata_from_type, increment_rdata!!, fcodual_type,
     verify_fdata_type, verify_rdata_type, verify_fdata_value, verify_rdata_value,
-    InvalidFDataException, InvalidRDataException, uninit_codual
+    InvalidFDataException, InvalidRDataException, uninit_codual, lgetfield, lsetfield!
 
 struct Shim end
 
@@ -566,7 +566,7 @@ function generate_args(::typeof(getfield), x)
     fs = vcat(syms..., eachindex(syms)...)
     return vcat(map(n -> (x, n), fs), map(n -> (x, n, :not_atomic), fs))
 end
-function generate_args(::typeof(Mooncake.lgetfield), x)
+function generate_args(::typeof(lgetfield), x)
     syms = filter(f -> isdefined(x, f), fieldnames(_typeof(x)))
     fs = vcat(syms..., eachindex(syms)...)
     return vcat(map(n -> (x, Val(n)), fs), map(n -> (x, Val(n), Val(:not_atomic)), fs))
@@ -602,6 +602,12 @@ function generate_args(::typeof(setfield!), x)
     end
     return map(n -> (x, n, getfield(x, n)), vcat(names..., eachindex(names)...))
 end
+function generate_args(::typeof(lsetfield!), x)
+    names = filter(fieldnames(_typeof(x))) do f
+        return !isconst(_typeof(x), f) && isdefined(x, f)
+    end
+    return map(n -> (x, Val(n), getfield(x, n)), vcat(names..., eachindex(names)...))
+end
 generate_args(::typeof(tuple), x) = [(x, ), (x, x), (x, x, x)]
 generate_args(::typeof(typeassert), x) = [(x, _typeof(x))]
 generate_args(::typeof(typeof), x) = [(x, )]
@@ -611,12 +617,13 @@ function functions_for_all_types()
 end
 
 function functions_for_structs()
-    return vcat(functions_for_all_types(), [getfield, Mooncake.lgetfield, Mooncake._new_])
+    return vcat(functions_for_all_types(), [getfield, lgetfield, Mooncake._new_])
 end
 
 function functions_for_mutable_structs()
     return vcat(
-        functions_for_structs(), [setfield!],# modifyfield!, replacefield!, swapfield!]
+        functions_for_structs(),
+        [setfield!, lsetfield!],# modifyfield!, replacefield!, swapfield!],
     )
 end
 
