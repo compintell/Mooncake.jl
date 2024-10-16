@@ -893,7 +893,7 @@ function build_rrule(
             # Normalise the IR, and generated BBCode version of it.
             isva, spnames = is_vararg_and_sparam_names(sig_or_mi)
             ir = normalise!(ir, spnames)
-            primal_ir = remove_unreachable_blocks(BBCode(ir))
+            primal_ir = remove_unreachable_blocks!(BBCode(ir))
 
             # Compute global info.
             info = ADInfo(interp, primal_ir, debug_mode)
@@ -1102,7 +1102,7 @@ function forwards_pass_ir(
     # Create and return the `BBCode` for the forwards-pass.
     arg_types = vcat(Tshared_data, map(fcodual_type ∘ _type, ir.argtypes))
     ir = BBCode(vcat(entry_block, blocks), arg_types, ir.sptypes, ir.linetable, ir.meta)
-    return remove_unreachable_blocks(ir)
+    return remove_unreachable_blocks!(ir)
 end
 
 # Going via this function, rather than just calling push!, makes it very straightforward to
@@ -1264,7 +1264,7 @@ function pullback_ir(
     # avoid annoying the Julia compiler.
     blks = vcat(entry_block, main_blocks, exit_block)
     pb_ir = BBCode(blks, arg_types, ir.sptypes, ir.linetable, ir.meta)
-    return remove_unreachable_blocks(_sort_blocks!(pb_ir))
+    return remove_unreachable_blocks!(_sort_blocks!(pb_ir))
 end
 
 #=
