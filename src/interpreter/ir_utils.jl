@@ -146,7 +146,7 @@ function optimise_ir!(ir::IRCode; show_ir=false, do_inline=true)
     ir = __strip_coverage!(ir)
     ir = CC.compact!(ir)
     local_interp = CC.NativeInterpreter()
-    mi = __get_toplevel_mi_from_ir(ir, @__MODULE__);
+    mi = __get_toplevel_mi_from_ir(ir, @__MODULE__)
     ir = __infer_ir!(ir, local_interp, mi)
     if show_ir
         println("Post-inference")
