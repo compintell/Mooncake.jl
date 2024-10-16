@@ -48,6 +48,9 @@ include("front_matter.jl")
             @static if VERSION >= v"1.11.0-rc4"
                 @info "memory"
                 include(joinpath("rrules", "memory.jl"))
+            else
+                @info "array legacy"
+                include(joinpath("rrules", "array_legacy.jl"))
             end
         end
     elseif test_group == "integration_testing/misc"

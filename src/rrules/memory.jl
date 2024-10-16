@@ -128,14 +128,18 @@ function rrule!!(
     function unsafe_copyto!_adjoint(::NoRData)
 
         # Increment tangents in src by values in dest.
-        @inbounds for i in 1:n
-            src_ref = memoryref(src.dx, i)
-            src_ref[] = increment!!(src_ref[], memoryref(dest.dx, i)[])
-        end
+        tmp = Memory{eltype(dest.dx)}(undef, n)
+        unsafe_copyto!(memoryref(tmp), dest.dx, n)
 
         # Restore state of `dest`.
         unsafe_copyto!(dest.x, dest_primal_copy, n)
         unsafe_copyto!(dest.dx, dest_fdata_copy, n)
+
+        # Increment gradients.
+        @inbounds for i in 1:n
+            src_ref = memoryref(src.dx, i)
+            src_ref[] = increment!!(src_ref[], memoryref(tmp, i)[])
+        end
 
         return ntuple(_ -> NoRData(), 4)
     end
@@ -376,16 +380,7 @@ end
 
 # _new_ and _new_-adjacent rules for Memory, MemoryRef, and Array.
 
-@is_primitive MinimalCtx Tuple{Type{<:Memory}, UndefInitializer, Int}
-function rrule!!(
-    ::CoDual{Type{Memory{P}}}, ::CoDual{UndefInitializer}, m::CoDual{Int}
-) where {P}
-    # y = CoDual(Memory{P}(undef, primal(m)), Memory{tangent_type(P)}(undef, primal(m)))
-    y = Memory{P}(undef, primal(m))
-    return zero_fcodual(y), NoPullback(ntuple(_ -> NoRData(), 3))
-end
-
-# @zero_adjoint MinimalCtx Tuple{Type{<:Memory}, UndefInitializer, Int}
+@zero_adjoint MinimalCtx Tuple{Type{<:Memory}, UndefInitializer, Int}
 
 function rrule!!(
     ::CoDual{typeof(_new_)},
@@ -479,19 +474,53 @@ function rrule!!(
 end
 
 @inline function rrule!!(
-    ::CoDual{typeof(setfield!)}, value::CoDual{<:Array}, _name::CoDual, x::CoDual,
-)
-    name = _name.x
+    ::CoDual{typeof(lsetfield!)}, value::CoDual{<:Array}, ::CoDual{Val{name}}, x::CoDual
+) where {name}
     old_x = getfield(value.x, name)
     old_dx = getfield(value.dx, name)
     setfield!(value.x, name, x.x)
     setfield!(value.dx, name, (name === :size || name === 2) ? x.x : x.dx)
-    function array_setfield!_adjoint(::NoRData)
+    function array_lsetfield!_adjoint(::NoRData)
         setfield!(value.x, name, old_x)
         setfield!(value.dx, name, old_dx)
         return NoRData(), NoRData(), NoRData(), NoRData()
     end
-    return x, array_setfield!_adjoint
+    return x, array_lsetfield!_adjoint
+end
+
+@inline function rrule!!(
+    ::CoDual{typeof(setfield!)}, value::CoDual{<:Array}, name::CoDual, x::CoDual,
+)
+    return rrule!!(zero_fcodual(lsetfield!), value, zero_fcodual(Val(primal(name))), x)
+end
+
+# Misc. other rules which are required for correctness.
+
+@is_primitive MinimalCtx Tuple{typeof(copy), Array}
+function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Array})
+    dx = tangent(a)
+    dy = copy(dx)
+    y = CoDual(copy(primal(a)), dy)
+    function copy_pullback!!(::NoRData)
+        increment!!(dx, dy)
+        return NoRData(), NoRData()
+    end
+    return y, copy_pullback!!
+end
+
+@is_primitive MinimalCtx Tuple{typeof(fill!), Array{<:Union{UInt8, Int8}}, Integer}
+@is_primitive MinimalCtx Tuple{typeof(fill!), Memory{<:Union{UInt8, Int8}}, Integer}
+function rrule!!(
+    ::CoDual{typeof(fill!)}, a::CoDual{T}, x::CoDual{<:Integer}
+) where {V<:Union{UInt8, Int8}, T<:Union{Array{V}, Memory{V}}}
+    pa = primal(a)
+    old_value = copy(pa)
+    fill!(pa, primal(x))
+    function fill!_pullback!!(::NoRData)
+        pa .= old_value
+        return NoRData(), NoRData(), NoRData()
+    end
+    return a, fill!_pullback!!
 end
 
 # Test cases
@@ -607,19 +636,63 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:memory})
             (false, :none, nothing, getfield, randn(10), f) for
                 f in [:ref, :size, 1, 2]
         ],
-        (false, :stability, nothing, setfield!, randn(10), :ref, randn(10).ref),
-        (false, :stability, nothing, setfield!, randn(10), 1, randn(10).ref),
-        (false, :stability, nothing, setfield!, randn(10), :size, (10, )),
-        (false, :stability, nothing, setfield!, randn(10), 2, (10, )),
+        (false, :stability_and_allocs, nothing, lsetfield!, randn(10), Val(:ref), randn(10).ref),
+        (false, :stability_and_allocs, nothing, lsetfield!, randn(10), Val(1), randn(10).ref),
+        (false, :stability_and_allocs, nothing, lsetfield!, randn(10), Val(:size), (10, )),
+        (false, :stability_and_allocs, nothing, lsetfield!, randn(10), Val(2), (10, )),
+        (false, :none, nothing, setfield!, randn(10), :ref, randn(10).ref),
+        (false, :none, nothing, setfield!, randn(10), 1, randn(10).ref),
+        (false, :none, nothing, setfield!, randn(10), :size, (10, )),
+        (false, :none, nothing, setfield!, randn(10), 2, (10, )),
     )
     memory = Any[]
     return test_cases, memory
 end
 
 function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:memory})
-    mems, _ = _mems()
-    mem_refs, sample_mem_ref_values = _mem_refs()
-    test_cases = Any[]
+    x = Memory{Float64}(randn(10))
+    test_cases = Any[
+        (true, :none, nothing, Array{Float64, 0}, undef),
+        (true, :none, nothing, Array{Float64, 1}, undef, 5),
+        (true, :none, nothing, Array{Float64, 2}, undef, 5, 4),
+        (true, :none, nothing, Array{Float64, 3}, undef, 5, 4, 3),
+        (true, :none, nothing, Array{Float64, 4}, undef, 5, 4, 3, 2),
+        (true, :none, nothing, Array{Float64, 5}, undef, 5, 4, 3, 2, 1),
+        (true, :none, nothing, Array{Float64, 0}, undef, ()),
+        (true, :none, nothing, Array{Float64, 4}, undef, (2, 3, 4, 5)),
+        (true, :none, nothing, Array{Float64, 5}, undef, (2, 3, 4, 5, 6)),
+        (false, :none, nothing, copy, randn(5, 4)),
+        (false, :none, nothing, Base._deletebeg!, randn(5), 0),
+        (false, :none, nothing, Base._deletebeg!, randn(5), 2),
+        (false, :none, nothing, Base._deletebeg!, randn(5), 5),
+        (false, :none, nothing, Base._deleteend!, randn(5), 2),
+        (false, :none, nothing, Base._deleteend!, randn(5), 5),
+        (false, :none, nothing, Base._deleteend!, randn(5), 0),
+        (false, :none, nothing, Base._deleteat!, randn(5), 2, 2),
+        (false, :none, nothing, Base._deleteat!, randn(5), 1, 5),
+        (false, :none, nothing, Base._deleteat!, randn(5), 5, 1),
+        (false, :none, nothing, fill!, rand(Int8, 5), Int8(2)),
+        (false, :none, nothing, fill!, rand(UInt8, 5), UInt8(2)),
+        (false, :none, nothing, fill!, Memory{Int8}(rand(Int8, 5)), Int8(3)),
+        (false, :none, nothing, fill!, Memory{UInt8}(rand(UInt8, 5)), UInt8(5)),
+        (true, :none, nothing, Base._growbeg!, randn(5), 3),
+        (true, :none, nothing, Base._growend!, randn(5), 3),
+        (true, :none, nothing, Base._growat!, randn(5), 2, 2),
+        (false, :none, nothing, sizehint!, randn(5), 10),
+        (false, :none, nothing, unsafe_copyto!, randn(4), 2, randn(3), 1, 2),
+        (
+            false, :none, nothing,
+            unsafe_copyto!, [rand(3) for _ in 1:5], 2, [rand(4) for _ in 1:4], 1, 3,
+        ),
+        (
+            false, :none, nothing,
+            unsafe_copyto!, Vector{Any}(undef, 5), 2, Any[rand() for _ in 1:4], 1, 3,
+        ),
+        (false, :none, nothing, x -> unsafe_copyto!(memoryref(x, 1), memoryref(x), 3), x),
+        (false, :none, nothing, x -> unsafe_copyto!(memoryref(x), memoryref(x), 3), x),
+        (false, :none, nothing, x -> unsafe_copyto!(memoryref(x), memoryref(x, 2), 3), x),
+        (false, :none, nothing, x -> unsafe_copyto!(memoryref(x), memoryref(x, 4), 3), x),
+    ]
     memory = Any[]
     return test_cases, memory
 end

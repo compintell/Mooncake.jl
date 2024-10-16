@@ -115,22 +115,10 @@ end
     return y, pb!!
 end
 
-"""
-    lsetfield!(value, name::Val, x, [order::Val])
-
-This function is to `setfield!` what `lgetfield` is to `getfield`. It will always hold that
-```julia
-setfield!(copy(x), :f, v) == lsetfield!(copy(x), Val(:f), v)
-setfield!(copy(x), 2, v) == lsetfield(copy(x), Val(2), v)
-```
-"""
-lsetfield!(value, ::Val{name}, x) where {name} = setfield!(value, name, x)
-
 @is_primitive MinimalCtx Tuple{typeof(lsetfield!), Any, Any, Any}
 @inline function rrule!!(
     ::CoDual{typeof(lsetfield!)}, value::CoDual{P, F}, ::CoDual{Val{name}}, x::CoDual
 ) where {P, F<:StandardFDataType, name}
-    # F = fdata_type(tangent_type(P))
     save = isdefined(primal(value), name)
     old_x = save ? getfield(primal(value), name) : nothing
     old_dx = if F == NoFData
@@ -183,15 +171,6 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
         (false, :stability_and_allocs, nothing, Base.datatype_haspadding, Float64),
 
         # Performance-rules that would ideally be completely removed.
-        (false, :stability_and_allocs, nothing, size, randn(5, 4)),
-        (
-            false, :stability_and_allocs, nothing,
-            LinearAlgebra.lapack_size, 'N', randn(5, 4),
-        ),
-        (
-            false, :stability_and_allocs, nothing,
-            Base.require_one_based_indexing, randn(2, 3), randn(2, 1),
-        ),
         (false, :stability_and_allocs, nothing, in, 5.0, randn(4)),
         (false, :stability_and_allocs, nothing, iszero, 5.0),
         (false, :stability_and_allocs, nothing, isempty, randn(5)),

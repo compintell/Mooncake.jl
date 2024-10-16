@@ -89,6 +89,8 @@ include(joinpath("rrules", "new.jl"))
 include(joinpath("rrules", "tasks.jl"))
 @static if VERSION >= v"1.11-rc4"
     include(joinpath("rrules", "memory.jl"))
+else
+    include(joinpath("rrules", "array_legacy.jl"))
 end
 
 include("interface.jl")
