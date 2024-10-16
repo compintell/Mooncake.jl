@@ -658,14 +658,6 @@ function _distance_to_entry(blks::Vector{BBlock})::Vector{Int}
     return dijkstra_shortest_paths(g, id_to_int[blks[1].id]).dists
 end
 
-"""
-    _is_reachable(blks::Vector{BBlock})::Vector{Bool}
-
-Computes a `Vector` whose length is `length(blks)`. The `n`th element is `true` iff it is
-possible for control flow to reach the `n`th block.
-"""
-_is_reachable(blks::Vector{BBlock})::Vector{Bool} = _distance_to_entry(blks) .< typemax(Int)
-
 #=
     _sort_blocks!(ir::BBCode)::BBCode
 
@@ -807,7 +799,15 @@ _find_id_uses!(d::Dict{ID, Bool}, x::QuoteNode) = nothing
 _find_id_uses!(d::Dict{ID, Bool}, x) = nothing
 
 """
-    remove_unreachable_blocks(ir::BBCode)::BBCode
+    _is_reachable(blks::Vector{BBlock})::Vector{Bool}
+
+Computes a `Vector` whose length is `length(blks)`. The `n`th element is `true` iff it is
+possible for control flow to reach the `n`th block.
+"""
+_is_reachable(blks::Vector{BBlock})::Vector{Bool} = _distance_to_entry(blks) .< typemax(Int)
+
+"""
+    remove_unreachable_blocks!(ir::BBCode)::BBCode
 
 If a basic block in `ir` cannot possibly be reached during execution, then it can be safely
 removed from `ir` without changing its functionality.
@@ -825,10 +825,38 @@ julia> ir = Mooncake.ircode(
 There is no possible way to reach the second basic block (lines 2 and 3). Applying this
 function will therefore remove it, yielding the following:
 ```jldoctest remove_unreachable_blocks
-julia> Mooncake.IRCode(Mooncake.remove_unreachable_blocks(Mooncake.BBCode(ir)))
+julia> Mooncake.IRCode(Mooncake.remove_unreachable_blocks!(Mooncake.BBCode(ir)))
 1 1 ─     return nothing
 ```
-"""
-remove_unreachable_blocks(ir::BBCode) = BBCode(ir, _remove_unreachable_blocks(ir.blocks))
 
-_remove_unreachable_blocks(blks::Vector{BBlock}) = blks[_is_reachable(blks)]
+In the blocks which have not been removed, there may be references to blocks which have been
+removed. For example, the `edge`s in a `PhiNode` may contain a reference to a removed block.
+These references are removed in-place from these remaining blocks, so this function will (in
+general) modify `ir`.
+"""
+remove_unreachable_blocks!(ir::BBCode) = BBCode(ir, _remove_unreachable_blocks!(ir.blocks))
+
+function _remove_unreachable_blocks!(blks::Vector{BBlock})
+
+    # Figure out which blocks are reachable.
+    is_reachable = _is_reachable(blks)
+
+    # Collect all blocks which are reachable.
+    remaining_blks = blks[is_reachable]
+
+    # For each reachable block, remove any references to removed blocks. These can appear in
+    # `PhiNode`s with edges that come from remove blocks.
+    removed_block_ids = map(idx -> blks[idx].id, findall(!, is_reachable))
+    for blk in remaining_blks, inst in blk.insts
+        stmt = inst.stmt
+        stmt isa IDPhiNode || continue
+        for n in reverse(1:length(stmt.edges))
+            if stmt.edges[n] in removed_block_ids
+                deleteat!(stmt.edges, n)
+                deleteat!(stmt.values, n)
+            end
+        end
+    end
+
+    return remaining_blks
+end

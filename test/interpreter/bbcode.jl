@@ -226,4 +226,45 @@ end
         )
         @test Mooncake._is_reachable(BBCode(ir).blocks) == [true, false, false]
     end
+    @testset "remove_unreachable_blocks!" begin
+
+        # This test case has two important features:
+        # 1. the second basic block (the second statement) cannot be reached, and
+        # 2. the PhiNode in the third basic block refers to the second basic block. Since
+        #   the second block will be removed, the edge / value in the PhiNode corresponding
+        #   to the second block must be removed as part of the call to
+        #   remove_unreachable_blocks.
+        ir = Mooncake.ircode(
+            Any[
+                GotoNode(3),
+                nothing,
+                PhiNode(Int32[2, 1], Any[false, true]),
+                ReturnNode(SSAValue(3)),
+            ],
+            Any[Any for _ in 1:4],
+        )
+        bb_ir = BBCode(ir)
+        new_bb_ir = Mooncake.remove_unreachable_blocks!(bb_ir)
+
+        # Check that only the first and third block remain in the new IR.
+        @test length(new_bb_ir.blocks) == 2
+        @test bb_ir.blocks[1].id == new_bb_ir.blocks[1].id
+        @test bb_ir.blocks[3].id == new_bb_ir.blocks[2].id
+
+        # Check that the reference to the second block in the PhiNode has been removed.
+        # Do this by checking that the only
+        updated_id_phi_node = new_bb_ir.blocks[2].insts[1].stmt
+        @test length(updated_id_phi_node.edges) == 1
+        @test length(updated_id_phi_node.values) == 1
+        @test only(updated_id_phi_node.values) == true
+
+        # Get the IRCode, and ensure that the statements in it agree with what is expected.
+        new_ir = CC.IRCode(new_bb_ir)
+        expected_stmts = Any[
+            GotoNode(2),
+            PhiNode(Int32[1], Any[true]),
+            ReturnNode(SSAValue(2)),
+        ]
+        @test Mooncake.stmt(new_ir.stmts) == expected_stmts
+    end
 end
