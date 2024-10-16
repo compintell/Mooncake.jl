@@ -919,8 +919,6 @@ function build_rrule(
             )
             optimised_fwds_ir = optimise_ir!(IRCode(fwds_ir); do_inline=true)
             optimised_pb_ir = optimise_ir!(IRCode(pb_ir); do_inline=true)
-            # optimised_fwds_ir = optimise_ir!(IRCode(fwds_ir); do_inline=false)
-            # optimised_pb_ir = optimise_ir!(IRCode(pb_ir); do_inline=true)
             # @show sig_or_mi
             # @show Treturn
             # @show debug_mode
