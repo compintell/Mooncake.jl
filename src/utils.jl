@@ -195,6 +195,17 @@ Like `getfield`, but with the field and access order encoded as types.
 lgetfield(x, ::Val{f}, ::Val{order}) where {f, order} = getfield(x, f, order)
 
 """
+    lsetfield!(value, name::Val, x, [order::Val])
+
+This function is to `setfield!` what `lgetfield` is to `getfield`. It will always hold that
+```julia
+setfield!(copy(x), :f, v) == lsetfield!(copy(x), Val(:f), v)
+setfield!(copy(x), 2, v) == lsetfield(copy(x), Val(2), v)
+```
+"""
+lsetfield!(value, ::Val{name}, x) where {name} = setfield!(value, name, x)
+
+"""
     _new_(::Type{T}, x::Vararg{Any, N}) where {T, N}
 
 One-liner which calls the `:new` instruction with type `T` with arguments `x`.
