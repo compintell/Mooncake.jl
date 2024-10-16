@@ -58,7 +58,6 @@ function _interpolate_boundschecks!(statements::Vector{Any})
             for (m, stmt) in enumerate(statements)
                 statements[m] = replace_uses_with!(stmt, def, val)
             end
-            # @show stmt
             statements[n] = nothing
         end
     end
