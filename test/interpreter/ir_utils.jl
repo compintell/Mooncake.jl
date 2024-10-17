@@ -19,7 +19,7 @@ end
 
         # Check the validity of the `IRCode`, and that an OpaqueClosure constructed using it
         # gives the same answer as the original function.
-        @test length(ir.stmts.inst) == length(insts)
+        @test length(stmt(ir.stmts)) == length(insts)
         @test Core.OpaqueClosure(ir; do_compile=true)(args...) == f(args...)
     end
     @testset "infer_ir!" begin
@@ -42,6 +42,13 @@ end
         # Check that the ir is runable.
         @test Core.OpaqueClosure(ir)(5.0) == cos(sin(5.0))
     end
+    @testset "lookup_ir" begin
+        tt = Tuple{typeof(sin), Float64}
+        @test isa(
+            Mooncake.lookup_ir(CC.NativeInterpreter(), tt; optimize_until=nothing)[1],
+            CC.IRCode,
+        )
+    end
     @testset "unhandled_feature" begin
         @test_throws(
             Mooncake.UnhandledLanguageFeatureException, Mooncake.unhandled_feature("foo")
@@ -53,5 +60,10 @@ end
         id = ID()
         @test Mooncake.inc_args(IDGotoIfNot(Argument(1), id)) == IDGotoIfNot(Argument(2), id)
         @test Mooncake.inc_args(IDGotoNode(id)) == IDGotoNode(id)
+    end
+    @testset "replace_uses_with!" begin
+        stmt = Expr(:call, sin, SSAValue(1))
+        Mooncake.replace_uses_with!(stmt, SSAValue(1), 5.0)
+        @test stmt.args[end] == 5.0
     end
 end

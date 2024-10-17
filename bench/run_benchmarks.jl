@@ -26,7 +26,13 @@ using Mooncake:
     TestUtils,
     _typeof
 
-using Mooncake.TestUtils: _deepcopy, to_benchmark
+using Mooncake.TestUtils: _deepcopy
+
+function to_benchmark(__rrule!!::R, dx::Vararg{CoDual, N}) where {R, N}
+    dx_f = Mooncake.tuple_map(x -> CoDual(primal(x), Mooncake.fdata(tangent(x))), dx)
+    out, pb!! = __rrule!!(dx_f...)
+    return pb!!(Mooncake.zero_rdata(primal(out)))
+end
 
 function zygote_to_benchmark(ctx, x::Vararg{Any, N}) where {N}
     out, pb = Zygote._pullback(ctx, x...)
@@ -277,9 +283,7 @@ function benchmark_hand_written_rrules!!(rng_ctor)
 end
 
 function benchmark_derived_rrules!!(rng_ctor)
-    test_case_data = map([
-        :test_utils
-    ]) do s
+    test_case_data = map([:test_resources]) do s
         test_cases, memory = generate_derived_rrule!!_test_cases(rng_ctor, Val(s))
         ranges = map(x -> x[3], test_cases)
         tags = fill(nothing, length(test_cases))

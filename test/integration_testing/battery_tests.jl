@@ -1,5 +1,5 @@
 @testset "battery_tests" begin
-    @testset "$(typeof(x))" for x in vcat(
+    @testset "$(typeof(p))" for p in vcat(
         [
             true, false,
             UInt8(0), UInt8(3),
@@ -16,9 +16,12 @@
         ],
         randn(Float64, 5),
         [1, 2, 3],
-        # randn(Float32, 5),
-        # randn(Float16, 5),
+        randn(Float32, 5),
+        randn(Float16, 5),
         [
+            randn(1),
+            randn(1, 2),
+            randn(1, 2, 1),
             Adjoint(randn(2, 2)),
             Diagonal(randn(2)),
             UnitRange(1, 3),
@@ -38,6 +41,6 @@
             UnitUpperTriangular(randn(2, 2)),
         ]
     )
-        TestUtils.test_rule_and_type_interactions(Xoshiro(123456), x)
+        TestUtils.test_data(sr(123), p)
     end
 end
