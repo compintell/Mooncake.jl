@@ -836,16 +836,18 @@ function test_tangent_performance(rng::AbstractRNG, p::P) where {P}
 
     # Unfortunately, `increment!!` does occassionally allocate at the minute due to the
     # way we're handling partial initialisation. Hopefully this will change in the future.
-    if !__increment_should_allocate(P)
-        @test (@allocations increment!!(t, t)) == 0
-        @test (@allocations increment!!(z, t)) == 0
-        @test (@allocations increment!!(t, z)) == 0
-        @test (@allocations increment!!(z, z)) == 0
-    end
+    __increment_should_allocate(P) || test_allocations(t, z)
 
     # set_tangent_field! should never allocate.
     t isa MutableTangent && test_set_tangent_field!_performance(t, z)
     t isa Union{MutableTangent, Tangent} && test_get_tangent_field_performance(t)
+end
+
+function test_allocations(t::T, z::T) where {T}
+    @test (@allocations increment!!(t, t)) == 0
+    @test (@allocations increment!!(z, t)) == 0
+    @test (@allocations increment!!(t, z)) == 0
+    @test (@allocations increment!!(z, z)) == 0
 end
 
 _set_tangent_field!(x, ::Val{i}, v) where {i} = set_tangent_field!(x, i, v)
