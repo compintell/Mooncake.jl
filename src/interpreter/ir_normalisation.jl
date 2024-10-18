@@ -21,16 +21,47 @@ provides a convenient way to do this.
 """
 function normalise!(ir::IRCode, spnames::Vector{Symbol})
     sp_map = Dict{Symbol, CC.VarState}(zip(spnames, ir.sptypes))
-    for (n, inst) in enumerate(ir.stmts.inst)
+    ir = interpolate_boundschecks!(ir)
+    ir = CC.compact!(ir)
+    for (n, inst) in enumerate(stmt(ir.stmts))
         inst = foreigncall_to_call(inst, sp_map)
         inst = new_to_call(inst)
         inst = splatnew_to_call(inst)
         inst = intrinsic_to_function(inst)
         inst = lift_getfield_and_others(inst)
+        inst = lift_memoryrefget_and_memoryrefset_builtins(inst)
         inst = lift_gc_preservation(inst)
-        ir.stmts.inst[n] = inst
+        stmt(ir.stmts)[n] = inst
     end
     return ir
+end
+
+"""
+    interpolate_boundschecks!(ir::IRCode)
+
+For every `x = Expr(:boundscheck, value)` in `ir`, interpolate `value` into all uses of `x`.
+This is only required in order to ensure that literal versions of memoryrefget,
+memoryrefset!, getfield, and setfield! work effectively. If they are removed through
+improvements to the way that we handle constant propagation inside Mooncake, then this
+functionality can be removed.
+"""
+function interpolate_boundschecks!(ir::IRCode)
+    _interpolate_boundschecks!(stmt(ir.stmts))
+    return ir
+end
+
+function _interpolate_boundschecks!(statements::Vector{Any})
+    for (n, stmt) in enumerate(statements)
+        if stmt isa Expr && stmt.head == :boundscheck && length(stmt.args) == 1
+            def = SSAValue(n)
+            val = only(stmt.args)
+            for (m, stmt) in enumerate(statements)
+                statements[m] = replace_uses_with!(stmt, def, val)
+            end
+            statements[n] = nothing
+        end
+    end
+    return nothing
 end
 
 """
@@ -180,6 +211,48 @@ end
 __get_arg(x::GlobalRef) = getglobal(x.mod, x.name)
 __get_arg(x::QuoteNode) = x.value
 __get_arg(x) = x
+
+# memoryrefget and memoryrefset! were introduced in 1.11.
+if VERSION >= v"1.11-"
+
+"""
+    lift_memoryrefget_and_memoryrefset_builtins(inst)
+
+Replaces memoryrefget -> lmemoryrefget and memoryrefset! -> lmemoryrefset!.
+"""
+function lift_memoryrefget_and_memoryrefset_builtins(inst)
+    Meta.isexpr(inst, :call) || return inst
+    f = __get_arg(inst.args[1])
+    if f == Core.memoryrefget && length(inst.args) == 4
+        ordering = inst.args[3]
+        boundscheck = inst.args[4]
+        if ordering isa QuoteNode && boundscheck isa Bool
+            new_ordering = Val(ordering.value)
+            return Expr(:call, lmemoryrefget, inst.args[2], new_ordering, Val(boundscheck))
+        else
+            return inst
+        end
+    elseif f == Core.memoryrefset! && length(inst.args) == 5
+        ordering = inst.args[4]
+        boundscheck = inst.args[5]
+        if ordering isa QuoteNode && boundscheck isa Bool
+            new_ordering = Val(ordering.value)
+            bc = Val(boundscheck)
+            return Expr(:call, lmemoryrefset!, inst.args[2], inst.args[3], new_ordering, bc)
+        else
+            return inst
+        end
+    else
+        return inst
+    end
+end
+
+else
+
+# memoryrefget and memoryrefset! do not exist before v1.11.
+lift_memoryrefget_and_memoryrefset_builtins(inst) = inst
+
+end
 
 """
     gc_preserve(xs...)

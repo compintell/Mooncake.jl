@@ -157,7 +157,7 @@ _getter() = 5.0
             (false, IndexStyle, randn(sr(7), 2, 1), randn(sr(8), 1, 2)),
             (false, LinearIndices, randn(sr(9), 3)),
             (false, LinearIndices, randn(sr(0), 3, 2)),
-            # (false, PermutedDimsArray, randn(sr(1), 2, 3), [2, 1]), # missing rule for _apply_iterate
+            (false, PermutedDimsArray, randn(sr(1), 2, 3), [2, 1]),
             (false, SubArray, randn(sr(2), 2, 3), (1:2, 2:3)),
             (false, \, 0.67, randn(sr(3), 2, 2)),
             # (false, \, Hermitian(randn(sr(0), 2, 2) + 3I), randn(sr(1), 2)), # missing foreigncall rule
@@ -311,7 +311,7 @@ _getter() = 5.0
             (false, fill!, randn(sr(0), 3, 2), randn(sr(9))),
             (false, x -> filter(>(0), x), [0.5, -0.1, -0.4]),
             (false, x -> filter(<(0), x), randn(sr(1), 2, 2)),
-            # (false, x -> findall(<(0), x), [0.5, 0.0, -0.3]), # uses invoke, which is not currently supported
+            (false, x -> findall(<(0), x), [0.5, 0.0, -0.3]),
             (false, x -> findfirst(<(0), x), [0.5, -0.1, -0.4]),
             (false, x -> findlast(<(0), x), [0.5, -0.1, -0.4]),
             (false, findmax, randn(sr(1), 2, 2)),
@@ -377,18 +377,18 @@ _getter() = 5.0
             (false, map!, sin, randn(sr(9), 2), randn(sr(0), 2)),
             (false, map!, *, randn(sr(3), 2), randn(sr(2), 2), randn(sr(1), 2)),
             (false, mapreduce, sin, *, randn(sr(4), 2)),
-            # (false, (f, x) -> mapslices(f, x; dims=1), sum, randn(sr(5), 2, 3)), # no _apply_iterate rule
+            (false, (f, x) -> mapslices(f, x; dims=1), sum, randn(sr(5), 2, 3)),
             (false, maximum, randn(sr(6), 2)),
             (false, maximum, randn(sr(7), 2, 3)),
             (false, maximum, sin, randn(sr(8), 2)),
             (false, maximum, cos, randn(sr(9), 2, 3)),
-            # (false, x -> maximum(cos, x; dims=2), randn(sr(0), 3, 2)), # no _apply_iterate rule
+            (false, x -> maximum(cos, x; dims=2), randn(sr(0), 3, 2)),
             (false, maximum!, sin, randn(sr(2), 2), randn(sr(1), 2, 3)),
             (false, minimum, randn(sr(3), 2)),
             (false, minimum, randn(sr(4), 2, 3)),
             (false, minimum, sin, randn(sr(5), 2)),
             (false, minimum, cos, randn(sr(6), 2, 3)),
-            # (false, x -> minimum(cos, x; dims=2), randn(sr(7), 3, 2)), # missing _apply_iterate rule
+            (false, x -> minimum(cos, x; dims=2), randn(sr(7), 3, 2)),
             (false, minimum!, sin, randn(sr(9), 2), randn(sr(8), 2, 3)),
         ],
         vec(reduce(
@@ -416,7 +416,7 @@ _getter() = 5.0
             (false, permutedims!, randn(sr(9), 2, 3, 1), randn(sr(0), 3, 2, 1), [2, 1, 3]),
             (false, pop!, randn(sr(1), 5)),
             (false, popat!, randn(sr(2), 5), 1),
-            (false, popat!, randn(sr(3), 5), 3),
+            (false, popat!, randn(sr(4), 10), 5),
             (false, popat!, randn(sr(4), 5), 5),
             (false, popat!, randn(sr(5), 5), 7, 3.0),
             (false, popfirst!, randn(sr(6), 5)),
@@ -425,8 +425,8 @@ _getter() = 5.0
             (false, prevind, randn(sr(0), 2, 3), CartesianIndex(2, 2)),
             (false, prod, randn(sr(1), 2)),
             (false, prod, randn(sr(2), 2, 3)),
-            # (false, x -> prod(x; dims=1), randn(sr(3), 2, 3)), # missing _apply_iterate rule
-            # (false, x -> prod(sin, x; dims=2), randn(sr(4), 2, 2)), # missing _apply_iterate rule
+            (false, x -> prod(x; dims=1), randn(sr(3), 2, 3)),
+            (false, x -> prod(sin, x; dims=2), randn(sr(4), 2, 2)),
             (false, prod!, sin, randn(sr(6), 2), randn(sr(5), 2, 3)),
             (false, prod!, randn(sr(7), 2), randn(sr(8), 2, 3)),
             (false, promote_shape, randn(sr(0), 2), randn(sr(9), 2)),
@@ -438,6 +438,7 @@ _getter() = 5.0
             (false, reduce, *, randn(sr(7), 3, 2)),
             (false, repeat, randn(sr(8), 2), 2, 3),
             (false, (x, i, o) -> repeat(x; inner=i, outer=o), randn(sr(9), 2), 2, 3),
+            (false, reshape, randn(sr(0), 5), 1, 5),
             (false, reshape, randn(sr(0), 3, 2), 2, 3),
             (false, reshape, randn(sr(1), 3, 2), :, 3),
             (false, reshape, randn(sr(2), 3, 2), (6,)),
@@ -465,7 +466,7 @@ _getter() = 5.0
             (false, sort!, randn(sr(4), 3)),
             (false, sortperm, randn(sr(0), 3)),
             (false, sortperm!, [1, 2, 3], randn(sr(1), 3)),
-            # (false, x -> sortslices(x; dims=1), randn(sr(2), 2, 3)), # missing _apply_iterate rule
+            (false, x -> sortslices(x; dims=1), randn(sr(2), 2, 3)),
             (false, splice!, randn(sr(5), 5), 1:2),
             (false, splice!, randn(sr(6), 5), 1:0),
             (false, splice!, randn(sr(7), 5), 1:5),
@@ -475,15 +476,15 @@ _getter() = 5.0
             (false, splice!, randn(sr(1), 5), 1, randn(sr(3))),
             (false, splice!, randn(sr(2), 5), 1, randn(sr(4), 3)),
             (false, stride, randn(sr(7), 3, 2), 1),
-            # (false, sum, randn(sr(8), 2, 3)), # missing rules for _apply_iterate
-            # (false, x -> sum(x; dims=1), randn(sr(9), 3, 2)), # missing rules for _apply_iterate
-            # (false, (f, x) -> sum(f, x; dims=2), sin, randn(sr(0), 3, 2)), # missing _apply_iterate rule
+            (false, sum, randn(sr(8), 2, 3)),
+            (false, x -> sum(x; dims=1), randn(sr(9), 3, 2)),
+            (false, (f, x) -> sum(f, x; dims=2), sin, randn(sr(0), 3, 2)),
             (false, sum!, randn(sr(2), 1, 3), randn(sr(1), 2, 3)),
             (false, sum!, sin, randn(sr(3), 1, 3), randn(sr(4), 2, 3)),
             (false, transpose, randn(sr(5), 3)),
             (false, transpose, randn(sr(6), 3, 2)),
             (false, transpose, randn(sr(7), 1, 3)),
-            # (false, unique, randn(sr(8), 3)), # hits invoke, which is not currently supported
+            (false, unique, randn(sr(8), 3)),
             (false, valtype, randn(sr(9), 3)),
             (false, vcat, randn(sr(0), 2)),
             (false, vcat, randn(sr(1), 2, 2)),

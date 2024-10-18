@@ -1,4 +1,12 @@
 @testset "ir_normalisation" begin
+    @testset "interpolate_boundschecks" begin
+        statements = Any[
+            Expr(:boundscheck, true),
+            Expr(:call, sin, SSAValue(1)),
+        ]
+        Mooncake._interpolate_boundschecks!(statements)
+        @test statements[2].args[2] == true
+    end
     @testset "foreigncall_to_call" begin
         foreigncall = Expr(
             :foreigncall,

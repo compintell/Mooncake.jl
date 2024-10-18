@@ -6,7 +6,7 @@
         :jl_array_copy, :jl_type_intersection, :memset, :jl_get_tls_world_age, :memmove,
         :jl_object_id, :jl_array_sizehint, :jl_array_grow_beg, :jl_array_grow_end,
         :jl_array_grow_at, :jl_array_del_beg, :jl_array_del_end, :jl_array_del_at,
-        :jl_value_ptr, :jl_threadid, :memhash_seed, :memhash32_seed,
+        :jl_value_ptr, :jl_threadid, :memhash_seed, :memhash32_seed, :jl_get_field_offset,
     ]
         @test_throws(
             ErrorException,

@@ -84,7 +84,7 @@ _copy(x::P) where {P<:DebugRRule} = P(_copy(x.rule))
 Apply type checking to enforce pre- and post-conditions on `rule.rule`. See the docstring
 for `DebugRRule` for details.
 """
-@inline function (rule::DebugRRule)(x::Vararg{CoDual, N}) where {N}
+@noinline function (rule::DebugRRule)(x::Vararg{CoDual, N}) where {N}
     verify_fwds_inputs(x)
     y, pb = rule.rule(x...)
     verify_fwds_output(x, y)
