@@ -488,12 +488,6 @@ end
     return x, array_lsetfield!_adjoint
 end
 
-@inline function rrule!!(
-    ::CoDual{typeof(setfield!)}, value::CoDual{<:Array}, name::CoDual, x::CoDual,
-)
-    return rrule!!(zero_fcodual(lsetfield!), value, zero_fcodual(Val(primal(name))), x)
-end
-
 # Misc. other rules which are required for correctness.
 
 @is_primitive MinimalCtx Tuple{typeof(copy), Array}

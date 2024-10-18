@@ -605,9 +605,7 @@ is_homogeneous_and_immutable(::Any) = false
 
 # replacefield!
 
-function rrule!!(
-    ::CoDual{typeof(setfield!)}, value::CoDual{P, F}, name, x
-) where {P, F<:StandardFDataType}
+function rrule!!(::CoDual{typeof(setfield!)}, value::CoDual, name::CoDual, x::CoDual)
     literal_name = uninit_fcodual(Val(primal(name)))
     return rrule!!(uninit_fcodual(lsetfield!), value, literal_name, x)
 end
