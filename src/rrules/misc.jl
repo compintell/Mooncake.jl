@@ -117,8 +117,14 @@ end
 
 @is_primitive MinimalCtx Tuple{typeof(lsetfield!), Any, Any, Any}
 @inline function rrule!!(
-    ::CoDual{typeof(lsetfield!)}, value::CoDual{P, F}, ::CoDual{Val{name}}, x::CoDual
-) where {P, F<:StandardFDataType, name}
+    ::CoDual{typeof(lsetfield!)}, value::CoDual{P, F}, name::CoDual, x::CoDual
+) where {P, F<:StandardFDataType}
+    return lsetfield_rrule(value, name, x)
+end
+
+function lsetfield_rrule(
+    value::CoDual{P, F}, ::CoDual{Val{name}}, x::CoDual
+) where {P, F, name}
     save = isdefined(primal(value), name)
     old_x = save ? getfield(primal(value), name) : nothing
     old_dx = if F == NoFData
