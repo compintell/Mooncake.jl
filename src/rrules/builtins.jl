@@ -707,7 +707,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability, nothing, IntrinsicsWrappers.checked_usub_int, 5, 4),
         (false, :stability, nothing, IntrinsicsWrappers.copysign_float, 5.0, 4.0),
         (false, :stability, nothing, IntrinsicsWrappers.copysign_float, 5.0, -3.0),
-        [false, :stability, nothing, IntrinsicsWrappers.ctlz_int, 5],
+        (false, :stability, nothing, IntrinsicsWrappers.ctlz_int, 5),
         (false, :stability, nothing, IntrinsicsWrappers.ctpop_int, 5),
         (false, :stability, nothing, IntrinsicsWrappers.cttz_int, 5),
         (false, :stability, nothing, IntrinsicsWrappers.div_float, 5.0, 3.0),
@@ -885,7 +885,6 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability, nothing, typeof, 5.0),
         (false, :stability, nothing, typeof, randn(5)),
     ]
-    memory = Any[_x, _dx, _a, p, dp]
     return test_cases, memory
 end
 
@@ -931,5 +930,5 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :none, nothing, setindex!, randn(5), [4.0, 5.0], [1, 1]),
         (false, :none, nothing, setindex!, randn(5), [4.0, 5.0, 6.0], [1, 2, 2]),
     ]
-    return test_cases, memory
+    return test_cases, Any[]
 end
