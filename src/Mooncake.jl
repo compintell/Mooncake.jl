@@ -74,6 +74,7 @@ include(joinpath("interpreter", "s2s_reverse_mode_ad.jl"))
 
 include("tools_for_rules.jl")
 include("test_utils.jl")
+include("test_resources.jl")
 
 include(joinpath("rrules", "avoiding_non_differentiable_code.jl"))
 include(joinpath("rrules", "blas.jl"))
@@ -86,6 +87,11 @@ include(joinpath("rrules", "low_level_maths.jl"))
 include(joinpath("rrules", "misc.jl"))
 include(joinpath("rrules", "new.jl"))
 include(joinpath("rrules", "tasks.jl"))
+@static if VERSION >= v"1.11-rc4"
+    include(joinpath("rrules", "memory.jl"))
+else
+    include(joinpath("rrules", "array_legacy.jl"))
+end
 
 include("interface.jl")
 include("config.jl")

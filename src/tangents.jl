@@ -274,6 +274,9 @@ tangent_type(T)
 
 tangent_type(x) = throw(error("$x is not a type. Perhaps you meant typeof(x)?"))
 
+# The "Bottom" type.
+tangent_type(::Type{Union{}}) = NoTangent
+
 # This is essential for DataType, as the recursive definition always recurses infinitely,
 # because one of the fieldtypes is itself always a DataType. In particular, we'll always
 # eventually hit `Any`, whose `super` field is `Any`.
@@ -290,8 +293,6 @@ tangent_type(::Type{<:Ptr}) = NoTangent
 tangent_type(::Type{Bool}) = NoTangent
 
 tangent_type(::Type{Char}) = NoTangent
-
-tangent_type(::Type{Union{}}) = NoTangent
 
 tangent_type(::Type{Symbol}) = NoTangent
 
@@ -331,7 +332,7 @@ tangent_type(::Type{DimensionMismatch}) = NoTangent
 
 tangent_type(::Type{Method}) = NoTangent
 
-@inline function tangent_type(::Type{P}) where {P<:Tuple}
+function tangent_type(::Type{P}) where {N, P<:Tuple{Vararg{Any, N}}}
 
     # As with other types, tangent type of Union is Union of tangent types.
     P isa Union && return Union{tangent_type(P.a), tangent_type(P.b)}
@@ -364,17 +365,12 @@ tangent_type(::Type{Method}) = NoTangent
     return T_all_notangent <: T ? Union{T, NoTangent} : T
 end
 
-function tangent_type(::Type{P}) where {N, T<:Tuple, P<:NamedTuple{N, T}}
-    !isconcretetype(P) && return Union{NamedTuple{N}, NoTangent}
-    TT = tangent_type(T)
+function tangent_type(::Type{P}) where {N, P<:NamedTuple{N}}
+    P isa Union && return Union{tangent_type(P.a), tangent_type(P.b)}
+    !isconcretetype(P) && return Union{NoTangent, NamedTuple{N}}
+    TT = tangent_type(Tuple{fieldtypes(P)...})
     TT == NoTangent && return NoTangent
     return isconcretetype(TT) ? NamedTuple{N, TT} : Any
-end
-
-function backing_type(::Type{P}) where {P}
-    tangent_field_types = map(n -> tangent_field_type(P, n), 1:fieldcount(P))
-    all(==(NoTangent), tangent_field_types) && return NoTangent
-    return NamedTuple{fieldnames(P), Tuple{tangent_field_types...}}
 end
 
 @generated function tangent_type(::Type{P}) where {P}
@@ -392,13 +388,22 @@ end
     # The same goes for if the type has any undetermined type parameters.
     (isabstracttype(P) || !isconcretetype(P)) && return Any
 
-    # If the type has no fields, then it's a `NoTangent`.
-    Base.issingletontype(P) && return NoTangent
+    # If all fields are definitely NoTangents, then the overall tangent type is NoTangent.
+    T_all_notangent = Tuple{Vararg{NoTangent, fieldcount(P)}}
+    Tuple{tangent_field_types(P)...} <: T_all_notangent && return NoTangent
 
     # Derive tangent type.
     bt = backing_type(P)
     return bt == NoTangent ? bt : (ismutabletype(P) ? MutableTangent : Tangent){bt}
 end
+
+@inline function tangent_field_types(P)
+    return tuple_map(Base.Fix1(tangent_field_type, P), (1:fieldcount(P)..., ))
+end
+
+backing_type(P::Type{<:Tuple}) = Tuple{tangent_field_types(P)...}
+
+backing_type(P::Type) = NamedTuple{fieldnames(P), Tuple{tangent_field_types(P)...}}
 
 """
     tangent_field_type(::Type{P}, n::Int) where {P}
@@ -437,6 +442,9 @@ end
 @inline zero_tangent_internal(x::IEEEFloat, ::Any) = zero(x)
 @inline function zero_tangent_internal(x::P, stackdict::Any) where {P<:Union{Tuple, NamedTuple}}
     return tangent_type(P) == NoTangent ? NoTangent() : tuple_map(Base.Fix2(zero_tangent_internal, stackdict), x)
+end
+function zero_tangent_internal(x::Ptr, ::Any)
+    return throw(ArgumentError("zero_tangent not available for pointers."))
 end
 @inline function zero_tangent_internal(x::SimpleVector, stackdict::IdDict)
     return map!(n -> zero_tangent_internal(x[n], stackdict), Vector{Any}(undef, length(x)), eachindex(x))
@@ -525,7 +533,9 @@ function randn_tangent_internal(rng::AbstractRNG, x::Array{T, N}, stackdict::IdD
 end
 function randn_tangent_internal(rng::AbstractRNG, x::P, stackdict) where {P}
     tangent_type(P) == NoTangent && return NoTangent()
-
+    if isprimitivetype(P)
+        return throw(ArgumentError("$P is a primitive type. Defined randn_tangent for it."))
+    end
     if tangent_type(P) <: MutableTangent
         if !(stackdict isa IdDict)
             throw(
@@ -546,6 +556,7 @@ function randn_tangent_internal(rng::AbstractRNG, x::P, stackdict) where {P}
 end
 
 @generated function randn_tangent_struct_field(rng::AbstractRNG, x::P, stackdict) where {P}
+
     tangent_field_exprs = map(1:fieldcount(P)) do n
         if tangent_field_type(P, n) <: PossiblyUninitTangent
             V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
@@ -572,7 +583,7 @@ function increment!!(x::T, y::T) where {P, N, T<:Array{P, N}}
     return x === y ? x : _map_if_assigned!(increment!!, x, x, y)
 end
 increment!!(x::T, y::T) where {T<:Tuple} = tuple_map(increment!!, x, y)::T
-increment!!(x::T, y::T) where {T<:NamedTuple} = T(increment!!(Tuple(x), Tuple(y)))
+increment!!(x::T, y::T) where {T<:NamedTuple} = T(tuple_map(increment!!, x, y))
 function increment!!(x::T, y::T) where {T<:PossiblyUninitTangent}
     is_init(x) && is_init(y) && return T(increment!!(val(x), val(y)))
     is_init(x) && !is_init(y) && error("x is initialised, but y is not")
@@ -643,7 +654,8 @@ function _dot(t::T, s::T) where {T<:Array}
     return sum(
         _map(eachindex(t)) do n
             (isassigned(t, n) && isassigned(s, n)) ? _dot(t[n], s[n]) : 0.0
-        end
+        end;
+        init=0.0,
     )
 end
 _dot(t::T, s::T) where {T<:Union{Tuple, NamedTuple}} = sum(map(_dot, t, s); init=0.0)

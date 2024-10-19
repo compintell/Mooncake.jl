@@ -4,6 +4,11 @@
 
 # The most important bit of this code is `inlining_policy` -- the rest is copy + pasted
 # boiler plate, largely taken from https://github.com/JuliaLang/julia/blob/2fe4190b3d26b4eee52b2b1b1054ddd6e38a941e/test/compiler/newinterp.jl#L11
+#
+# Credit: much of the code in here is copied over from the main Julia repo, and from
+# Enzyme.jl, which has a very similar set of concerns to Mooncake in terms of avoiding
+# inlining primitive functions.
+#
 
 struct ClosureCacheKey
     world_age::UInt
@@ -54,6 +59,8 @@ end
 
 MooncakeInterpreter() = MooncakeInterpreter(DefaultCtx)
 
+context_type(::MooncakeInterpreter{C}) where {C} = C
+
 # Globally cached interpreter. Should only be accessed via `get_interpreter`.
 const GLOBAL_INTERPRETER = Ref(MooncakeInterpreter())
 
@@ -74,7 +81,6 @@ end
 
 CC.InferenceParams(interp::MooncakeInterpreter) = interp.inf_params
 CC.OptimizationParams(interp::MooncakeInterpreter) = interp.opt_params
-CC.get_world_counter(interp::MooncakeInterpreter) = interp.world
 CC.get_inference_cache(interp::MooncakeInterpreter) = interp.inf_cache
 function CC.code_cache(interp::MooncakeInterpreter)
     return CC.WorldView(interp.code_cache, CC.WorldRange(interp.world))
@@ -97,10 +103,59 @@ function CC.method_table(interp::MooncakeInterpreter)
     return CC.OverlayMethodTable(interp.world, mooncake_method_table)
 end
 
+if VERSION < v"1.11.0"
+    CC.get_world_counter(interp::MooncakeInterpreter) = interp.world
+    get_inference_world(interp::CC.AbstractInterpreter) = CC.get_world_counter(interp)
+else
+    CC.get_inference_world(interp::MooncakeInterpreter) = interp.world
+    CC.cache_owner(::MooncakeInterpreter) = nothing
+    get_inference_world(interp::CC.AbstractInterpreter) = CC.get_inference_world(interp)
+end
+
 _type(x) = x
 _type(x::CC.Const) = _typeof(x.val)
 _type(x::CC.PartialStruct) = x.typ
 _type(x::CC.Conditional) = Union{_type(x.thentype), _type(x.elsetype)}
+
+struct NoInlineCallInfo <: CC.CallInfo
+    info::CC.CallInfo # wrapped call
+    tt::Any # signature
+end
+
+CC.nsplit_impl(info::NoInlineCallInfo) = CC.nsplit(info.info)
+CC.getsplit_impl(info::NoInlineCallInfo, idx::Int) = CC.getsplit(info.info, idx)
+CC.getresult_impl(info::NoInlineCallInfo, idx::Int) = CC.getresult(info.info, idx)
+
+function Core.Compiler.abstract_call_gf_by_type(
+    interp::MooncakeInterpreter{C},
+    @nospecialize(f),
+    arginfo::CC.ArgInfo,
+    si::CC.StmtInfo,
+    @nospecialize(atype),
+    sv::CC.AbsIntState,
+    max_methods::Int,
+) where {C}
+    ret = @invoke CC.abstract_call_gf_by_type(
+        interp::CC.AbstractInterpreter,
+        f::Any,
+        arginfo::CC.ArgInfo,
+        si::CC.StmtInfo,
+        atype::Any,
+        sv::CC.AbsIntState,
+        max_methods::Int,
+    )
+    callinfo = ret.info
+    if Mooncake.is_primitive(C, atype)
+        callinfo = NoInlineCallInfo(callinfo, atype)
+    end
+    @static if VERSION ≥ v"1.11-"
+        return CC.CallMeta(ret.rt, ret.exct, ret.effects, callinfo)
+    else
+        return CC.CallMeta(ret.rt, ret.effects, callinfo)
+    end
+end
+
+if VERSION < v"1.11-"
 
 function CC.inlining_policy(
     interp::MooncakeInterpreter{C},
@@ -112,8 +167,7 @@ function CC.inlining_policy(
 ) where {C}
 
     # Do not inline away primitives.
-    argtype_tuple = Tuple{map(_type, argtypes)...}
-    is_primitive(C, argtype_tuple) && return nothing
+    info isa NoInlineCallInfo && return nothing
 
     # If not a primitive, AD doesn't care about it. Use the usual inlining strategy.
     return @invoke CC.inlining_policy(
@@ -126,4 +180,24 @@ function CC.inlining_policy(
     )
 end
 
-context_type(::MooncakeInterpreter{C}) where {C} = C
+else # 1.11 and up.
+
+function CC.inlining_policy(
+    interp::MooncakeInterpreter,
+    @nospecialize(src),
+    @nospecialize(info::CC.CallInfo),
+    stmt_flag::UInt32,
+)
+    # Do not inline away primitives.
+    info isa NoInlineCallInfo && return nothing
+
+    # If not a primitive, AD doesn't care about it. Use the usual inlining strategy.
+    return @invoke CC.inlining_policy(
+        interp::CC.AbstractInterpreter,
+        src::Any,
+        info::CC.CallInfo,
+        stmt_flag::UInt32,
+    )
+end
+
+end

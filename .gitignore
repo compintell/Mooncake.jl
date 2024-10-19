@@ -1,4 +1,5 @@
 /Manifest.toml
+/Manifest-v1.11.toml
 dev
 bench/Manifest.toml
 analysis_results

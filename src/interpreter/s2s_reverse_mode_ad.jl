@@ -381,6 +381,12 @@ end
 
 function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
 
+    # PiNodes of the form `π (nothing, Union{})` have started appearing in 1.11. These nodes
+    # appear in unreachable sections of code, and appear to serve no purpose. Consequently,
+    # we mark them for removal (replace them with `nothing`). We do not currently have a
+    # unit test for this, but integration testing seems to catch it in multiple places.
+    stmt == PiNode(nothing, Union{}) && return ad_stmt_info(line, nothing, stmt, nothing)
+
     # Assume that the PiNode contains active data -- it's hard to see why a PiNode would be
     # created for e.g. a constant. Error if code is encountered where this doesn't hold.
     is_active(stmt.val) || unhandled_feature("PiNode: $stmt")
@@ -887,7 +893,7 @@ function build_rrule(
             # Normalise the IR, and generated BBCode version of it.
             isva, spnames = is_vararg_and_sparam_names(sig_or_mi)
             ir = normalise!(ir, spnames)
-            primal_ir = BBCode(ir)
+            primal_ir = remove_unreachable_blocks!(BBCode(ir))
 
             # Compute global info.
             info = ADInfo(interp, primal_ir, debug_mode)
@@ -911,11 +917,8 @@ function build_rrule(
             pb_ir = pullback_ir(
                 primal_ir, Treturn, ad_stmts_blocks, pb_comms_insts, info, Tshared_data
             )
-
             optimised_fwds_ir = optimise_ir!(IRCode(fwds_ir); do_inline=true)
             optimised_pb_ir = optimise_ir!(IRCode(pb_ir); do_inline=true)
-            # optimised_fwds_ir = optimise_ir!(IRCode(fwds_ir); do_inline=false)
-            # optimised_pb_ir = optimise_ir!(IRCode(pb_ir); do_inline=true)
             # @show sig_or_mi
             # @show Treturn
             # @show debug_mode
@@ -924,9 +927,9 @@ function build_rrule(
             # display(IRCode(pb_ir))
             # display(optimised_fwds_ir)
             # display(optimised_pb_ir)
-            # @show length(ir.stmts.inst)
-            # @show length(optimised_fwds_ir.stmts.inst)
-            # @show length(optimised_pb_ir.stmts.inst)
+            # @show length(stmt(ir.stmts))
+            # @show length(stmt(optimised_fwds_ir.stmts))
+            # @show length(stmt(optimised_pb_ir.stmts))
             fwds_oc = MistyClosure(
                 OpaqueClosure(optimised_fwds_ir, shared_data...; do_compile=true),
                 optimised_fwds_ir,
@@ -1098,7 +1101,8 @@ function forwards_pass_ir(
 
     # Create and return the `BBCode` for the forwards-pass.
     arg_types = vcat(Tshared_data, map(fcodual_type ∘ _type, ir.argtypes))
-    return BBCode(vcat(entry_block, blocks), arg_types, ir.sptypes, ir.linetable, ir.meta)
+    ir = BBCode(vcat(entry_block, blocks), arg_types, ir.sptypes, ir.linetable, ir.meta)
+    return remove_unreachable_blocks!(ir)
 end
 
 # Going via this function, rather than just calling push!, makes it very straightforward to
@@ -1260,7 +1264,7 @@ function pullback_ir(
     # avoid annoying the Julia compiler.
     blks = vcat(entry_block, main_blocks, exit_block)
     pb_ir = BBCode(blks, arg_types, ir.sptypes, ir.linetable, ir.meta)
-    return remove_unreachable_blocks(_sort_blocks!(pb_ir))
+    return remove_unreachable_blocks!(_sort_blocks!(pb_ir))
 end
 
 #=

@@ -110,7 +110,6 @@ function rrule!!(::CoDual{typeof(add_ptr)}, a, b)
 end
 
 @inactive_intrinsic and_int
-@inactive_intrinsic arraylen
 @inactive_intrinsic ashr_int
 
 # atomic_fence
@@ -357,8 +356,6 @@ function rrule!!(::CoDual{typeof(pointerset)}, p, x, idx, z)
     return p, pointerset_pullback!!
 end
 
-# rem_float -- appears to be unused
-# rem_float_fast -- appears to be unused
 @inactive_intrinsic rint_llvm
 @inactive_intrinsic sdiv_int
 @inactive_intrinsic sext_int
@@ -415,6 +412,11 @@ end
 @inactive_intrinsic urem_int
 @inactive_intrinsic xor_int
 @inactive_intrinsic zext_int
+
+# This intrinsic was removed in 1.11 as part of the Array implementation refactor.
+@static if VERSION < v"1.11.0-rc4"
+    @inactive_intrinsic arraylen
+end
 
 end # IntrinsicsWrappers
 
@@ -482,7 +484,6 @@ function rrule!!(
 end
 
 # Core._typebody!
-# Core._typevar
 
 function rrule!!(f::CoDual{typeof(Core._typevar)}, args...)
     return zero_fcodual(Core._typevar(map(primal, args)...)), NoPullback(f, args...)
@@ -493,95 +494,7 @@ function rrule!!(f::CoDual{typeof(Core.apply_type)}, args...)
     return CoDual{_typeof(T), NoFData}(T, NoFData()), NoPullback(f, args...)
 end
 
-Base.@propagate_inbounds function rrule!!(
-    ::CoDual{typeof(Core.arrayref)},
-    checkbounds::CoDual{Bool},
-    x::CoDual{<:Array},
-    inds::Vararg{CoDual{Int}, N},
-) where {N}
-
-    # Convert to linear indices to reduce amount of data required on the reverse-pass, to
-    # avoid converting from cartesian to linear indices multiple times, and to perform a
-    # bounds check if required by the calling context.
-    lin_inds = LinearIndices(size(primal(x)))[tuple_map(primal, inds)...]
-
-    dx = tangent(x)
-    function arrayref_pullback!!(dy)
-        new_tangent = increment_rdata!!(arrayref(false, dx, lin_inds), dy)
-        arrayset(false, dx, new_tangent, lin_inds)
-        return NoRData(), NoRData(), NoRData(), ntuple(_ -> NoRData(), N)...
-    end
-    _y = arrayref(false, primal(x), lin_inds)
-    dy = fdata(arrayref(false, tangent(x), lin_inds))
-    return CoDual(_y, dy), arrayref_pullback!!
-end
-
-function rrule!!(
-    ::CoDual{typeof(Core.arrayset)},
-    inbounds::CoDual{Bool},
-    A::CoDual{<:Array{P}, TdA},
-    v::CoDual,
-    inds::CoDual{Int}...,
-) where {P, V, TdA <: Array{V}}
-    _inbounds = primal(inbounds)
-    _inds = map(primal, inds)
-
-    if isbitstype(P)
-        return isbits_arrayset_rrule(_inbounds, _inds, A, v)
-    end
-
-    to_save = isassigned(primal(A), _inds...)
-    old_A = Ref{Tuple{P, V}}()
-    if to_save
-        old_A[] = (
-            arrayref(_inbounds, primal(A), _inds...),
-            arrayref(_inbounds, tangent(A), _inds...),
-        )
-    end
-
-    arrayset(_inbounds, primal(A), primal(v), _inds...)
-    dA = tangent(A)
-    arrayset(_inbounds, dA, tangent(tangent(v), zero_rdata(primal(v))), _inds...)
-    function arrayset_pullback!!(::NoRData)
-        dv = rdata(arrayref(_inbounds, dA, _inds...))
-        if to_save
-            arrayset(_inbounds, primal(A), old_A[][1], _inds...)
-            arrayset(_inbounds, dA, old_A[][2], _inds...)
-        end
-        return NoRData(), NoRData(), NoRData(), dv, tuple_map(_ -> NoRData(), _inds)...
-    end
-    return A, arrayset_pullback!!
-end
-
-function isbits_arrayset_rrule(
-    boundscheck, _inds, A::CoDual{<:Array{P}, TdA}, v::CoDual{P}
-) where {P, V, TdA <: Array{V}}
-
-    # Convert to linear indices
-    lin_inds = LinearIndices(size(primal(A)))[_inds...]
-
-    old_A = (arrayref(false, primal(A), lin_inds), arrayref(false, tangent(A), lin_inds))
-    arrayset(false, primal(A), primal(v), lin_inds)
-
-    _A = primal(A)
-    dA = tangent(A)
-    arrayset(false, dA, zero_tangent(primal(v)), lin_inds)
-    ninds = Val(length(_inds))
-    function isbits_arrayset_pullback!!(::NoRData)
-        dv = rdata(arrayref(false, dA, lin_inds))
-        arrayset(false, _A, old_A[1], lin_inds)
-        arrayset(false, dA, old_A[2], lin_inds)
-        return NoRData(), NoRData(), NoRData(), dv, tuple_fill(NoRData(), ninds)...
-    end
-    return A, isbits_arrayset_pullback!!
-end
-
-function rrule!!(f::CoDual{typeof(Core.arraysize)}, X, dim)
-    return zero_fcodual(Core.arraysize(primal(X), primal(dim))), NoPullback(f, X, dim)
-end
-
 # Core.compilerbarrier
-# Core.const_arrayref
 # Core.donotdelete
 # Core.finalizer
 # Core.get_binding_type
@@ -610,8 +523,6 @@ function rrule!!(f::CoDual{typeof(Core.ifelse)}, cond, a::A, b::B) where {A, B}
     return CoDual(ifelse(_cond, p_a, p_b), ifelse(_cond, tangent(a), tangent(b))), pb!!
 end
 
-# Core.set_binding_type!
-
 @zero_adjoint MinimalCtx Tuple{typeof(Core.sizeof), Any}
 
 # Core.svec
@@ -619,7 +530,11 @@ end
 @zero_adjoint MinimalCtx Tuple{typeof(applicable), Vararg}
 @zero_adjoint MinimalCtx Tuple{typeof(fieldtype), Vararg}
 
-function rrule!!(f::CoDual{typeof(getfield)}, x::CoDual{P}, name::CoDual) where {P}
+const StandardFDataType = Union{Tuple, NamedTuple, FData, MutableTangent, NoFData}
+
+function rrule!!(
+    f::CoDual{typeof(getfield)}, x::CoDual{P, <:StandardFDataType}, name::CoDual
+) where {P}
     if tangent_type(P) == NoTangent
         y = uninit_fcodual(getfield(primal(x), primal(name)))
         return y, NoPullback(f, x, name)
@@ -637,7 +552,9 @@ function rrule!!(f::CoDual{typeof(getfield)}, x::CoDual{P}, name::CoDual) where 
     end
 end
 
-function rrule!!(f::CoDual{typeof(getfield)}, x::CoDual{P}, name::CoDual, order::CoDual) where {P}
+function rrule!!(
+    f::CoDual{typeof(getfield)}, x::CoDual{P, F}, name::CoDual, order::CoDual
+) where {P, F<:StandardFDataType}
     if tangent_type(P) == NoTangent
         y = uninit_fcodual(getfield(primal(x), primal(name)))
         return y, NoPullback(f, x, name, order)
@@ -687,7 +604,7 @@ is_homogeneous_and_immutable(::Any) = false
 
 # replacefield!
 
-function rrule!!(::CoDual{typeof(setfield!)}, value, name, x)
+function rrule!!(::CoDual{typeof(setfield!)}, value::CoDual, name::CoDual, x::CoDual)
     literal_name = uninit_fcodual(Val(primal(name)))
     return rrule!!(uninit_fcodual(lsetfield!), value, literal_name, x)
 end
@@ -746,6 +663,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
 
     # Slightly wider range for builtins whose performance is known not to be great.
     _range = (lb=1e-3, ub=200.0)
+    memory = Any[_x, _dx, _a, x, p, dx, dp, y, q, dy, dq]
 
     test_cases = Any[
 
@@ -755,8 +673,6 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability, nothing, IntrinsicsWrappers.add_float_fast, 4.0, 5.0),
         (false, :stability, nothing, IntrinsicsWrappers.add_int, 1, 2),
         (false, :stability, nothing, IntrinsicsWrappers.and_int, 2, 3),
-        (false, :stability, nothing, IntrinsicsWrappers.arraylen, randn(10)),
-        (false, :stability, nothing, IntrinsicsWrappers.arraylen, randn(10, 7)),
         (false, :stability, nothing, IntrinsicsWrappers.ashr_int, 123456, 0x0000000000000020),
         # atomic_fence -- NEEDS IMPLEMENTING AND TESTING
         # atomic_pointermodify -- NEEDS IMPLEMENTING AND TESTING
@@ -790,7 +706,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability, nothing, IntrinsicsWrappers.checked_usub_int, 5, 4),
         (false, :stability, nothing, IntrinsicsWrappers.copysign_float, 5.0, 4.0),
         (false, :stability, nothing, IntrinsicsWrappers.copysign_float, 5.0, -3.0),
-        [false, :stability, nothing, IntrinsicsWrappers.ctlz_int, 5],
+        (false, :stability, nothing, IntrinsicsWrappers.ctlz_int, 5),
         (false, :stability, nothing, IntrinsicsWrappers.ctpop_int, 5),
         (false, :stability, nothing, IntrinsicsWrappers.cttz_int, 5),
         (false, :stability, nothing, IntrinsicsWrappers.div_float, 5.0, 3.0),
@@ -885,43 +801,6 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (true, :stability, nothing, Core._typevar, :T, Union{}, Any),
         (false, :none, (lb=1e-3, ub=100.0), Core.apply_type, Vector, Float64),
         (false, :none, (lb=1e-3, ub=100.0), Core.apply_type, Array, Float64, 2),
-        (false, :stability, nothing, Base.arrayref, true, randn(5), 1),
-        (false, :stability, nothing, Base.arrayref, false, randn(4), 1),
-        (false, :stability, nothing, Base.arrayref, true, randn(5, 4), 1, 1),
-        (false, :stability, nothing, Base.arrayref, false, randn(5, 4), 5, 4),
-        (false, :stability, nothing, Base.arrayref, true, randn(5, 4), 1),
-        (false, :stability, nothing, Base.arrayref, false, randn(5, 4), 5),
-        (false, :stability, nothing, Base.arrayref, false, [1, 2, 3], 1),
-        (false, :stability, nothing, Base.arrayset, false, [1, 2, 3], 4, 2),
-        (false, :stability, nothing, Base.arrayset, false, randn(5), 4.0, 3),
-        (false, :stability, nothing, Base.arrayset, false, randn(5, 4), 3.0, 1, 3),
-        (false, :stability, nothing, Base.arrayset, true, randn(5), 4.0, 3),
-        (false, :stability, nothing, Base.arrayset, true, randn(5, 4), 3.0, 1, 3),
-        (false, :stability, nothing, Base.arrayset, false, [randn(3) for _ in 1:5], randn(4), 1),
-        (false, :stability, nothing, Base.arrayset, false, _a, randn(4), 1),
-        (false, :stability, nothing, Base.arrayset, true, [(5.0, rand(1))], (4.0, rand(1)), 1),
-        (
-            false,
-            :stability,
-            nothing,
-            Base.arrayset,
-            false,
-            setindex!(Vector{Vector{Float64}}(undef, 3), randn(3), 1),
-            randn(4),
-            1,
-        ),
-        (
-            false,
-            :stability,
-            nothing,
-            Base.arrayset,
-            false,
-            setindex!(Vector{Vector{Float64}}(undef, 3), randn(3), 2),
-            randn(4),
-            1,
-        ),
-        (false, :stability, nothing, Core.arraysize, randn(5, 4, 3), 2),
-        (false, :stability, nothing, Core.arraysize, randn(5, 4, 3, 2, 1), 100),
         # Core.compilerbarrier -- NEEDS IMPLEMENTING AND TESTING
         # Core.const_arrayref -- NEEDS IMPLEMENTING AND TESTING
         # Core.donotdelete -- NEEDS IMPLEMENTING AND TESTING
@@ -1005,7 +884,6 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability, nothing, typeof, 5.0),
         (false, :stability, nothing, typeof, randn(5)),
     ]
-    memory = Any[_x, _dx, _a, p, dp]
     return test_cases, memory
 end
 
@@ -1050,11 +928,6 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :none, nothing, getindex, randn(5), [1, 2, 2]),
         (false, :none, nothing, setindex!, randn(5), [4.0, 5.0], [1, 1]),
         (false, :none, nothing, setindex!, randn(5), [4.0, 5.0, 6.0], [1, 2, 2]),
-        (
-            false, :none, nothing,
-            Base._unsafe_copyto!, fill!(Matrix{Real}(undef, 5, 4), 1.0), 3, randn(10), 2, 4,
-        ),
     ]
-    memory = Any[]
-    return test_cases, memory
+    return test_cases, Any[]
 end

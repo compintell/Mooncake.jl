@@ -21,14 +21,14 @@ contains_primitive_behind_call(x) = @inline contains_primitive(x)
 
             # Pre-condition: must inline away under usual compilation.
             usual_ir = Base.code_ircode_by_type(sig)[1][1]
-            invoke_line = findfirst(x -> Meta.isexpr(x, :invoke), usual_ir.stmts.inst)
-            @assert usual_ir.stmts.inst[invoke_line].args[2] == GlobalRef(Main, :sin)
+            invoke_line = findfirst(x -> Meta.isexpr(x, :invoke), stmt(usual_ir.stmts))
+            @assert stmt(usual_ir.stmts)[invoke_line].args[2] == GlobalRef(Main, :sin)
 
             # Should continue to inline away under AD compilation.
             interp = Mooncake.MooncakeInterpreter(DefaultCtx)
             ad_ir = Base.code_ircode_by_type(sig; interp)[1][1]
-            invoke_line = findfirst(x -> Meta.isexpr(x, :invoke), ad_ir.stmts.inst)
-            @test ad_ir.stmts.inst[invoke_line].args[2] == GlobalRef(Main, :sin)
+            invoke_line = findfirst(x -> Meta.isexpr(x, :invoke), stmt(ad_ir.stmts))
+            @test stmt(ad_ir.stmts)[invoke_line].args[2] == GlobalRef(Main, :sin)
         end
         @testset "primitive is no longer inlined away" begin
 
@@ -38,14 +38,14 @@ contains_primitive_behind_call(x) = @inline contains_primitive(x)
 
             # Pre-condition: must inline away under usual compilation.
             usual_ir = Base.code_ircode_by_type(sig)[1][1]
-            invoke_line = findfirst(x -> Meta.isexpr(x, :invoke), usual_ir.stmts.inst)
-            @assert usual_ir.stmts.inst[invoke_line].args[2] == GlobalRef(Main, :sin)
+            invoke_line = findfirst(x -> Meta.isexpr(x, :invoke), stmt(usual_ir.stmts))
+            @assert stmt(usual_ir.stmts)[invoke_line].args[2] == GlobalRef(Main, :sin)
 
             # Should not inline away under AD compilation.
             interp = Mooncake.MooncakeInterpreter(DefaultCtx)
             ad_ir = Base.code_ircode_by_type(sig; interp)[1][1]
-            invoke_line = findfirst(x -> Meta.isexpr(x, :invoke), ad_ir.stmts.inst)
-            @test ad_ir.stmts.inst[invoke_line].args[2] == GlobalRef(Main, :a_primitive)
+            invoke_line = findfirst(x -> Meta.isexpr(x, :invoke), stmt(ad_ir.stmts))
+            @test stmt(ad_ir.stmts)[invoke_line].args[2] == GlobalRef(Main, :a_primitive)
         end
         @testset "deep primitive is not inlined away" begin
 
@@ -57,14 +57,14 @@ contains_primitive_behind_call(x) = @inline contains_primitive(x)
 
             # Pre-condition: both functions should be inlined away under usual conditions.
             usual_ir = Base.code_ircode_by_type(sig)[1][1]
-            invoke_line = findfirst(x -> Meta.isexpr(x, :invoke), usual_ir.stmts.inst)
-            @assert usual_ir.stmts.inst[invoke_line].args[2] == GlobalRef(Main, :sin)
+            invoke_line = findfirst(x -> Meta.isexpr(x, :invoke), stmt(usual_ir.stmts))
+            @assert stmt(usual_ir.stmts)[invoke_line].args[2] == GlobalRef(Main, :sin)
 
             # Should not inline away under AD compilation.
             interp = Mooncake.MooncakeInterpreter(DefaultCtx)
             ad_ir = Base.code_ircode_by_type(sig; interp)[1][1]
-            invoke_line = findfirst(x -> Meta.isexpr(x, :invoke), ad_ir.stmts.inst)
-            @test ad_ir.stmts.inst[invoke_line].args[2] == GlobalRef(Main, :a_primitive)
+            invoke_line = findfirst(x -> Meta.isexpr(x, :invoke), stmt(ad_ir.stmts))
+            @test stmt(ad_ir.stmts)[invoke_line].args[2] == GlobalRef(Main, :a_primitive)
         end
     end
 end

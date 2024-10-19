@@ -45,6 +45,10 @@ include("front_matter.jl")
             include(joinpath("rrules", "new.jl"))
             @info "tasks"
             include(joinpath("rrules", "tasks.jl"))
+            @static if VERSION >= v"1.11.0-rc4"
+                @info "memory"
+                include(joinpath("rrules", "memory.jl"))
+            end
         end
     elseif test_group == "integration_testing/misc"
         include(joinpath("integration_testing", "battery_tests.jl"))

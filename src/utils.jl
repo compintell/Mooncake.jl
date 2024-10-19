@@ -36,12 +36,25 @@ end
     end
 end
 
-function tuple_map(f::F, x::NamedTuple{names}) where {F, names}
-    return NamedTuple{names}(tuple_map(f, Tuple(x)))
-end
-
-function tuple_map(f::F, x::NamedTuple{names}, y::NamedTuple{names}) where {F, names}
-    return NamedTuple{names}(tuple_map(f, Tuple(x), Tuple(y)))
+for N in 1:128
+    @eval @inline function tuple_map(f::F, x::Tuple{Vararg{Any, $N}}) where {F}
+        return $(Expr(:call, :tuple, map(n -> :(f(getfield(x, $n))), 1:N)...))
+    end
+    @eval @inline function tuple_map(f::F, x::NamedTuple{names, <:Tuple{Vararg{Any, $N}}}) where {F, names}
+        return NamedTuple{names}($(Expr(:call, :tuple, map(n -> :(f(getfield(x, $n))), 1:N)...)))
+    end
+    @eval @inline function tuple_map(
+        f, x::Tuple{Vararg{Any, $N}}, y::Tuple{Vararg{Any, $N}}
+    )
+        return $(Expr(:call, :tuple, map(n -> :(f(getfield(x, $n), getfield(y, $n))), 1:N)...))
+    end
+    @eval @inline function tuple_map(
+        f::F,
+        x::NamedTuple{names, <:Tuple{Vararg{Any, $N}}},
+        y::NamedTuple{names, <:Tuple{Vararg{Any, $N}}},
+    ) where {F, names}
+        return NamedTuple{names}($(Expr(:call, :tuple, map(n -> :(f(getfield(x, $n), getfield(y, $n))), 1:N)...)))
+    end
 end
 
 for N in 1:256
@@ -64,7 +77,7 @@ end
 
 
 #=
-    _map_if_assigned!(f, y::Array, x::Array{P}) where {P}
+    _map_if_assigned!(f, y::DenseArray, x::DenseArray{P}) where {P}
 
 For all `n`, if `x[n]` is assigned, then writes the value returned by `f(x[n])` to `y[n]`,
 otherwise leaves `y[n]` unchanged.
@@ -73,7 +86,7 @@ Equivalent to `map!(f, y, x)` if `P` is a bits type as element will always be as
 
 Requires that `y` and `x` have the same size.
 =#
-function _map_if_assigned!(f::F, y::Array, x::Array{P}) where {F, P}
+function _map_if_assigned!(f::F, y::DenseArray, x::DenseArray{P}) where {F, P}
     @assert size(y) == size(x)
     @inbounds for n in eachindex(y)
         if isbitstype(P) || isassigned(x, n)
@@ -84,14 +97,14 @@ function _map_if_assigned!(f::F, y::Array, x::Array{P}) where {F, P}
 end
 
 #=
-    _map_if_assigned!(f::F, y::Array, x1::Array{P}, x2::Array)
+    _map_if_assigned!(f::F, y::DenseArray, x1::DenseArray{P}, x2::DenseArray)
 
 Similar to the other method of `_map_if_assigned!` -- for all `n`, if `x1[n]` is assigned,
 writes `f(x1[n], x2[n])` to `y[n]`, otherwise leaves `y[n]` unchanged.
 
 Requires that `y`, `x1`, and `x2` have the same size.
 =#
-function _map_if_assigned!(f::F, y::Array, x1::Array{P}, x2::Array) where {F, P}
+function _map_if_assigned!(f::F, y::DenseArray, x1::DenseArray{P}, x2::DenseArray) where {F, P}
     @assert size(y) == size(x1)
     @assert size(y) == size(x2)
     @inbounds for n in eachindex(y)
@@ -156,22 +169,49 @@ function sparam_names(m::Core.Method)::Vector{Symbol}
 end
 
 """
-    is_always_initialised(::Type{P}, n::Int)
+    is_always_initialised(P::DataType, n::Int)::Bool
 
 True if the `n`th field of `P` is always initialised. If the `n`th fieldtype of `P`
 `isbitstype`, then this is distinct from asking whether the `n`th field is always defined.
 An isbits field is always defined, but is not always explicitly initialised.
 """
-function is_always_initialised(::Type{P}, n::Int) where {P}
-    return n <= Core.Compiler.datatype_min_ninitialized(P)
+function is_always_initialised(P::DataType, n::Int)::Bool
+    return n <= CC.datatype_min_ninitialized(P)
 end
 
 """
-    is_always_fully_initialised(::Type{P}) where {P}
+    is_always_fully_initialised(P::DataType)::Bool
 
 True if all fields in `P` are always initialised. Put differently, there are no inner
 constructors which permit partial initialisation.
 """
-function is_always_fully_initialised(::Type{P}) where {P}
-    return Core.Compiler.datatype_min_ninitialized(P) == fieldcount(P)
+function is_always_fully_initialised(P::DataType)::Bool
+    return CC.datatype_min_ninitialized(P) == fieldcount(P)
+end
+
+"""
+    lgetfield(x, ::Val{f}, ::Val{order}) where {f, order}
+
+Like `getfield`, but with the field and access order encoded as types.
+"""
+lgetfield(x, ::Val{f}, ::Val{order}) where {f, order} = getfield(x, f, order)
+
+"""
+    lsetfield!(value, name::Val, x, [order::Val])
+
+This function is to `setfield!` what `lgetfield` is to `getfield`. It will always hold that
+```julia
+setfield!(copy(x), :f, v) == lsetfield!(copy(x), Val(:f), v)
+setfield!(copy(x), 2, v) == lsetfield(copy(x), Val(2), v)
+```
+"""
+lsetfield!(value, ::Val{name}, x) where {name} = setfield!(value, name, x)
+
+"""
+    _new_(::Type{T}, x::Vararg{Any, N}) where {T, N}
+
+One-liner which calls the `:new` instruction with type `T` with arguments `x`.
+"""
+@inline @generated function _new_(::Type{T}, x::Vararg{Any, N}) where {T, N}
+    return Expr(:new, :T, map(n -> :(x[$n]), 1:N)...)
 end

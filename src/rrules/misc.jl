@@ -6,9 +6,6 @@
 # deduce that these bits of code are inactive though.
 #
 
-@zero_adjoint DefaultCtx Tuple{typeof(size), Vararg}
-@zero_adjoint DefaultCtx Tuple{typeof(LinearAlgebra.lapack_size), Vararg}
-@zero_adjoint DefaultCtx Tuple{typeof(Base.require_one_based_indexing), Vararg}
 @zero_adjoint DefaultCtx Tuple{typeof(in), Vararg}
 @zero_adjoint DefaultCtx Tuple{typeof(iszero), Vararg}
 @zero_adjoint DefaultCtx Tuple{typeof(isempty), Vararg}
@@ -30,7 +27,14 @@
 @zero_adjoint DefaultCtx Tuple{typeof(Base.throw_boundserror), Vararg}
 @zero_adjoint DefaultCtx Tuple{typeof(Base.Broadcast.eltypes), Vararg}
 @zero_adjoint DefaultCtx Tuple{typeof(Base.eltype), Vararg}
+@zero_adjoint MinimalCtx Tuple{typeof(Base.padding), DataType}
+@zero_adjoint MinimalCtx Tuple{typeof(Base.padding), DataType, Int}
 @zero_adjoint MinimalCtx Tuple{Type, TypeVar, Type}
+
+if VERSION >= v"1.11-"
+    @zero_adjoint MinimalCtx Tuple{typeof(Random.hash_seed), Vararg}
+    @zero_adjoint MinimalCtx Tuple{typeof(Base.dataids), Memory}
+end
 
 """
     lgetfield(x, f::Val)
@@ -52,8 +56,8 @@ lgetfield(x, ::Val{f}) where {f} = getfield(x, f)
 
 @is_primitive MinimalCtx Tuple{typeof(lgetfield), Any, Val}
 @inline function rrule!!(
-    ::CoDual{typeof(lgetfield)}, x::CoDual{P}, ::CoDual{Val{f}}
-) where {P, f}
+    ::CoDual{typeof(lgetfield)}, x::CoDual{P, F}, ::CoDual{Val{f}}
+) where {P, F<:StandardFDataType, f}
     pb!! = if ismutabletype(P)
         dx = tangent(x)
         function mutable_lgetfield_pb!!(dy)
@@ -90,12 +94,10 @@ end
 # This is largely copy + pasted from the above. Attempts were made to refactor to avoid
 # code duplication, but it wound up not being any cleaner than this copy + pasted version.
 
-lgetfield(x, ::Val{f}, ::Val{order}) where {f, order} = getfield(x, f, order)
-
 @is_primitive MinimalCtx Tuple{typeof(lgetfield), Any, Val, Val}
 @inline function rrule!!(
-    ::CoDual{typeof(lgetfield)}, x::CoDual{P}, ::CoDual{Val{f}}, ::CoDual{Val{order}}
-) where {P, f, order}
+    ::CoDual{typeof(lgetfield)}, x::CoDual{P, F}, ::CoDual{Val{f}}, ::CoDual{Val{order}}
+) where {P, F<:StandardFDataType, f, order}
     pb!! = if ismutabletype(P)
         dx = tangent(x)
         function mutable_lgetfield_pb!!(dy)
@@ -113,22 +115,16 @@ lgetfield(x, ::Val{f}, ::Val{order}) where {f, order} = getfield(x, f, order)
     return y, pb!!
 end
 
-"""
-    lsetfield!(value, name::Val, x, [order::Val])
-
-This function is to `setfield!` what `lgetfield` is to `getfield`. It will always hold that
-```julia
-setfield!(copy(x), :f, v) == lsetfield!(copy(x), Val(:f), v)
-setfield!(copy(x), 2, v) == lsetfield(copy(x), Val(2), v)
-```
-"""
-lsetfield!(value, ::Val{name}, x) where {name} = setfield!(value, name, x)
-
 @is_primitive MinimalCtx Tuple{typeof(lsetfield!), Any, Any, Any}
 @inline function rrule!!(
-    ::CoDual{typeof(lsetfield!)}, value::CoDual{P}, ::CoDual{Val{name}}, x::CoDual
-) where {P, name}
-    F = fdata_type(tangent_type(P))
+    ::CoDual{typeof(lsetfield!)}, value::CoDual{P, F}, name::CoDual, x::CoDual
+) where {P, F<:StandardFDataType}
+    return lsetfield_rrule(value, name, x)
+end
+
+function lsetfield_rrule(
+    value::CoDual{P, F}, ::CoDual{Val{name}}, x::CoDual
+) where {P, F, name}
     save = isdefined(primal(value), name)
     old_x = save ? getfield(primal(value), name) : nothing
     old_dx = if F == NoFData
@@ -181,15 +177,6 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
         (false, :stability_and_allocs, nothing, Base.datatype_haspadding, Float64),
 
         # Performance-rules that would ideally be completely removed.
-        (false, :stability_and_allocs, nothing, size, randn(5, 4)),
-        (
-            false, :stability_and_allocs, nothing,
-            LinearAlgebra.lapack_size, 'N', randn(5, 4),
-        ),
-        (
-            false, :stability_and_allocs, nothing,
-            Base.require_one_based_indexing, randn(2, 3), randn(2, 1),
-        ),
         (false, :stability_and_allocs, nothing, in, 5.0, randn(4)),
         (false, :stability_and_allocs, nothing, iszero, 5.0),
         (false, :stability_and_allocs, nothing, isempty, randn(5)),
@@ -203,6 +190,8 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
         ),
         (false, :allocs, nothing, Threads.nthreads),
         (false, :none, nothing, Base.eltype, randn(1)),
+        (false, :none, nothing, Base.padding, @NamedTuple{a::Float64}),
+        (false, :none, nothing, Base.padding, @NamedTuple{a::Float64}, 1),
 
         # Literal replacement for setfield!.
         (

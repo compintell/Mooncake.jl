@@ -18,6 +18,7 @@
         (Tuple{T} where {T}, Union{NoTangent, Tuple{Any}}),
         (Tuple{T, T} where {T<:Real}, Union{NoTangent, Tuple{Any, Any}}),
         (Tuple{Float64, T} where {T<:Int}, Tuple{Float64, NoTangent}),
+        (Union{Tuple{T}, Tuple{T, T}} where {T<:Real}, Any),
 
         # Edge case: (provably) empty Tuple.
         (Tuple{}, NoTangent),
@@ -63,11 +64,13 @@
         (@NamedTuple{a::T} where {T}, Union{NoTangent, NamedTuple{(:a,)}}),
         (@NamedTuple{a::T, b::T} where {T<:Real}, Union{NoTangent, NamedTuple{(:a, :b)}}),
         (@NamedTuple{a::Float64, b::T} where {T<:Int}, Union{NoTangent, NamedTuple{(:a, :b)}}),
+        (Union{@NamedTuple{a::T}, @NamedTuple{b::T, c::T}} where {T<:Any}, Any),
+        (Union{@NamedTuple{T, Float64}, @NamedTuple{T, Float64, Int}} where {T}, Any),
 
         # Edge case
         (@NamedTuple{}, NoTangent),
 
-        # Simple Tuples.
+        # Simple NamedTuples.
         (@NamedTuple{a::Int}, NoTangent),
         (@NamedTuple{a::Int, b::Int}, NoTangent),
         (@NamedTuple{a::DataType, b::Int}, NoTangent),

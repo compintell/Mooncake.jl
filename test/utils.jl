@@ -76,4 +76,12 @@
         @assert length(map(*, x, randn(11))) == 10
         @test_throws AssertionError Mooncake._map(*, x, randn(11)) 
     end
+    @testset "is_always_initialised" begin
+        @test Mooncake.is_always_initialised(TestResources.StructFoo, 1)
+        @test !Mooncake.is_always_initialised(TestResources.StructFoo, 2)
+    end
+    @testset "is_always_fully_initialised" begin
+        @test Mooncake.is_always_fully_initialised(TestResources.Foo)
+        @test !Mooncake.is_always_fully_initialised(TestResources.StructFoo)
+    end
 end
