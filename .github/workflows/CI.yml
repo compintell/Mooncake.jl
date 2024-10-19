@@ -33,7 +33,12 @@ jobs:
           - 'integration_testing/temporalgps'
         version:
           - '1'
-          - '1.10'
+        include:
+          - test_group: 'basic'
+            version: '1.10'
+          - test_group: 'integration_testing/turing'
+            version: '1.10'
+
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
