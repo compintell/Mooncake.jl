@@ -664,6 +664,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
 
     # Slightly wider range for builtins whose performance is known not to be great.
     _range = (lb=1e-3, ub=200.0)
+    memory = Any[_x, _dx, _a, x, p, dx, dp, y, q, dy, dq]
 
     test_cases = Any[
 
@@ -930,6 +931,5 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :none, nothing, setindex!, randn(5), [4.0, 5.0], [1, 1]),
         (false, :none, nothing, setindex!, randn(5), [4.0, 5.0, 6.0], [1, 2, 2]),
     ]
-    memory = Any[]
     return test_cases, memory
 end
