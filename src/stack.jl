@@ -27,7 +27,7 @@ end
 
 @inline function Base.pop!(x::Stack)
     position = x.position
-    val = x.memory[position]
+    @inbounds val = x.memory[position]
     x.position = position - 1
     return val
 end
@@ -36,3 +36,34 @@ struct SingletonStack{T} end
 
 Base.push!(::SingletonStack, ::Any) = nothing
 @generated Base.pop!(::SingletonStack{T}) where {T} = T.instance
+
+
+struct ImmutableStack{T}
+    memory::Vector{T}
+    length::Int
+    position::Int
+end
+
+ImmutableStack{T}() where {T} = ImmutableStack{T}(Vector{T}(undef, 0), 0, 0)
+
+_copy(::ImmutableStack{T}) where {T} = ImmutableStack{T}()
+
+@inline function Base.push!(x::ImmutableStack{T}, val::T) where {T}
+    position = x.position + 1
+    memory = x.memory
+    l = x.length
+    if position <= l
+        @inbounds memory[position] = val
+    else
+        @noinline push!(memory, val)
+        l += 1
+    end
+    return ImmutableStack(memory, l, position)
+end
+
+@inline function Base.pop!(x::ImmutableStack)
+    position = x.position
+    memory = x.memory
+    @inbounds val = memory[position]
+    return val, ImmutableStack(memory, x.length, position - 1)
+end

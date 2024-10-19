@@ -76,7 +76,7 @@ one block stack per derived rule.
 By using Int32, we assume that there aren't more than `typemax(Int32)` unique basic blocks
 in a given function, which ought to be reasonable.
 =#
-const BlockStack = Stack{Int32}
+const BlockStack = ImmutableStack{Int32}
 
 #=
     ADInfo
@@ -91,8 +91,11 @@ codegen which produces the forwards- and reverse-passes.
     to determine which blocks to visit.
 - `block_stack`: the block stack. Can always be found at `block_stack_id` in the forwards-
     and reverse-passes.
-- `entry_id`: ID associated to the block inserted at the start of execution in the the
+- `entry_id`: ID associated to the block inserted at the start of execution in the
     forwards-pass, and the end of execution in the pullback.
+- `exit_id`: ID associated to the block inserted at the end of execution in the
+    reverse-pass. All reachable `ReturnNode`s will be replaced with `GotoNode`s pointing at
+    this block.
 - `shared_data_pairs`: the `SharedDataPairs` used to define the captured variables passed
     to both the forwards- and reverse-passes.
 - `arg_types`: a map from `Argument` to its static type.
@@ -120,9 +123,11 @@ codegen which produces the forwards- and reverse-passes.
 =#
 struct ADInfo
     interp::MooncakeInterpreter
+    block_stack_ref_id::ID
     block_stack_id::ID
     block_stack::BlockStack
     entry_id::ID
+    exit_id::ID
     shared_data_pairs::SharedDataPairs
     arg_types::Dict{Argument, Any}
     ssa_insts::Dict{ID, NewInstruction}
@@ -147,9 +152,11 @@ function ADInfo(
     block_stack = BlockStack()
     return ADInfo(
         interp,
-        add_data!(shared_data_pairs, block_stack),
+        ID(), # block_stack_ref_id
+        add_data!(shared_data_pairs, Ref(block_stack)),
         block_stack,
-        ID(),
+        ID(), # entry_id
+        ID(), # exit_id
         shared_data_pairs,
         arg_types,
         ssa_insts,
@@ -330,14 +337,14 @@ function make_ad_stmts!(stmt::ReturnNode, line::ID, info::ADInfo)
     if !is_reachable_return_node(stmt)
         return ad_stmt_info(line, nothing, inc_args(stmt), nothing)
     end
+
     if is_active(stmt.val)
         rdata_id = get_rev_data_id(info, stmt.val)
         rvs = new_inst(Expr(:call, increment_ref!, rdata_id, Argument(2)))
-        return ad_stmt_info(line, nothing, inc_args(stmt), rvs)
     else
-        fwds = ReturnNode(const_codual(stmt.val, info))
-        return ad_stmt_info(line, nothing, fwds, nothing)
+        rvs = nothing
     end
+    return ad_stmt_info(line, nothing, IDGotoNode(info.exit_id), rvs)
 end
 
 # Identity forwards-pass, no-op reverse. No shared data.
@@ -898,8 +905,8 @@ function build_rrule(
             # Compute global info.
             info = ADInfo(interp, primal_ir, debug_mode)
 
-            # For each block in the fwds and pullback BBCode, translate all statements. Running this
-            # will, in general, push items to `info.shared_data_pairs`.
+            # For each block in the fwds and pullback BBCode, translate all statements.
+            # Running this will, in general, push items to `info.shared_data_pairs`.
             ad_stmts_blocks = map(primal_ir.blocks) do primal_blk
                 ids = primal_blk.inst_ids
                 primal_stmts = map(x -> x.stmt, primal_blk.insts)
@@ -1035,6 +1042,11 @@ function create_comms_insts!(ad_stmts_blocks::ADStmts, info::ADInfo)
     return map(first, insts), map(last, insts)
 end
 
+__get_block_stack_ref(x::Ref{BlockStack}) = Ref(x[])
+function __set_block_stack_ref!(x::Ref{BlockStack}, new_val)
+    x[] = new_val[]
+end
+
 #=
     forwards_pass_ir(ir::BBCode, ad_stmts_blocks::ADStmts, info::ADInfo, Tshared_data)
 
@@ -1043,7 +1055,6 @@ Produce the IR associated to the `OpaqueClosure` which runs most of the forwards
 function forwards_pass_ir(
     ir::BBCode, ad_stmts_blocks::ADStmts, fwds_comms_insts, info::ADInfo, Tshared_data
 )
-
     is_unique_pred, pred_is_unique_pred = characterise_unique_predecessor_blocks(ir.blocks)
 
     # Insert a block at the start which extracts all items from the captures field of the
@@ -1052,6 +1063,10 @@ function forwards_pass_ir(
     # Push the entry id onto the block stack if needed. Create `LazyZeroRData` for each
     # argument, and put it in the `Ref` for use on the reverse-pass.
     sds = shared_data_stmts(info.shared_data_pairs)
+    block_stack_ref_stmt = [(
+        info.block_stack_ref_id,
+        new_inst(Expr(:call, __get_block_stack_ref, info.block_stack_id)),
+    )]
     if pred_is_unique_pred[ir.blocks[1].id]
         push_block_stack_insts = IDInstPair[]
     else
@@ -1067,7 +1082,9 @@ function forwards_pass_ir(
         map(n -> Argument(n + 1), 1:num_args(info))...,
     )
     lazy_zero_rdata_insts = [(ID(), new_inst(lazy_zero_rdata_stmt))]
-    entry_stmts = vcat(sds, lazy_zero_rdata_insts, push_block_stack_insts)
+    entry_stmts = vcat(
+        sds, block_stack_ref_stmt, lazy_zero_rdata_insts, push_block_stack_insts
+    )
     entry_block = BBlock(info.entry_id, entry_stmts)
 
     # Construct augmented version of each basic block from the primal. For each block:
@@ -1092,22 +1109,56 @@ function forwards_pass_ir(
         # of each of its successors (in which case there is no need to log that control
         # passed through this block as opposed to any other).
         if !is_unique_pred[block_id]
-            ins_stmt = Expr(:call, __push_blk_stack!, info.block_stack_id, block_id.id)
+            ins_stmt = Expr(:call, __push_blk_stack!, info.block_stack_ref_id, block_id.id)
+            # ins_stmt = Expr(:call, __push_blk_stack!, info.block_stack_id, block_id.id)
             insert_before_terminator!(blk, ID(), new_inst(ins_stmt))
         end
 
         return blk
     end
 
+    # Construct the exit block for the forwards-pass.
+    # This block
+    # 1. collects the return value using a phi node which takes the value associated to
+    #   the `ReturnNode` which would have returned from the primal.
+    # 2. pushes the current block stack value to its Ref in shared data.
+    # 3. Returns the return value.
+
+    # IDPhiNode to collect return value.
+    block_ids, return_nodes = reachable_return_nodes(ir)
+    return_phi_id = ID()
+    return_phi_node = IDPhiNode(
+        block_ids, map(n -> is_active(n.val) ? inc_args(n).val : const_codual(n.val, info), return_nodes)
+    )
+    return_phi_stmt = (return_phi_id, new_inst(return_phi_node))
+
+    # Statement to record state of the block stack.
+    block_stack_ref_expr = Expr(
+        :call, __set_block_stack_ref!, info.block_stack_id, info.block_stack_ref_id,
+    )
+    block_stack_ref_stmt = (ID(), new_inst(block_stack_ref_expr))
+
+    # ReturnNode
+    return_stmt = (ID(), new_inst(ReturnNode(return_phi_id)))
+
+    # Construct exit block.
+    exit_block = BBlock(info.exit_id, [return_phi_stmt, block_stack_ref_stmt, return_stmt])
+
     # Create and return the `BBCode` for the forwards-pass.
     arg_types = vcat(Tshared_data, map(fcodual_type ∘ _type, ir.argtypes))
-    ir = BBCode(vcat(entry_block, blocks), arg_types, ir.sptypes, ir.linetable, ir.meta)
+    blocks = vcat(entry_block, blocks, exit_block)
+    ir = BBCode(blocks, arg_types, ir.sptypes, ir.linetable, ir.meta)
     return remove_unreachable_blocks!(ir)
 end
 
 # Going via this function, rather than just calling push!, makes it very straightforward to
 # figure out much time is spent pushing to the block stack when profiling AD.
 @inline __push_blk_stack!(block_stack::BlockStack, id::Int32) = push!(block_stack, id)
+
+# New trial method.
+@inline function __push_blk_stack!(block_stack_ref::Ref{BlockStack}, id::Int32)
+    block_stack_ref[] = push!(block_stack_ref[], id)
+end
 
 @inline function __assemble_lazy_zero_rdata(r::Ref{T}, args::Vararg{CoDual, N}) where {T<:Tuple, N}
     r[] = __make_tuples(T, args)
@@ -1159,10 +1210,16 @@ function pullback_ir(
     #   only a single block in the primal containing a reachable ReturnNode, then there is
     #   no need to pop the block stack.
     data_stmts = shared_data_stmts(info.shared_data_pairs)
+    block_stack_ref_stmt = [(
+        info.block_stack_ref_id,
+        new_inst(Expr(:call, __get_block_stack_ref, info.block_stack_id)),
+    )]
     rev_data_ref_stmts = reverse_data_ref_stmts(info)
     exit_blocks_ids = map(n -> ir.blocks[n].id, primal_exit_blocks_inds)
     switch_stmts = make_switch_stmts(exit_blocks_ids, length(exit_blocks_ids) == 1, info)
-    entry_block = BBlock(ID(), vcat(data_stmts, rev_data_ref_stmts, switch_stmts))
+    entry_block = BBlock(
+        ID(), vcat(data_stmts, block_stack_ref_stmt, rev_data_ref_stmts, switch_stmts)
+    )
 
     # For each basic block in the primal:
     # 1. if the block is reachable on the reverse-pass, the bulk of its statements are the
@@ -1248,13 +1305,18 @@ function pullback_ir(
     deref_id = ID()
     deref = new_inst(Expr(:call, tuple, final_ids...))
 
+    # Write the block stack to its ref.
+    block_stack_ref_set = (
+        ID(), new_inst(Expr(:call, __set_block_stack_ref!, info.block_stack_id, info.block_stack_ref_id))
+    )
+
     ret = new_inst(ReturnNode(deref_id))
     exit_block = BBlock(
         info.entry_id,
         vcat(
             (lazy_zero_rdata_tuple_id, lazy_zero_rdata_tuple),
             rdata_extraction_stmts...,
-            [(deref_id, deref), (ID(), ret)],
+            [(deref_id, deref), block_stack_ref_set, (ID(), ret)],
         ),
     )
 
@@ -1396,7 +1458,7 @@ function make_switch_stmts(
     if pred_is_unique_pred
         prev_blk = new_inst(QuoteNode(only(pred_ids)))
     else
-        prev_blk = new_inst(Expr(:call, __pop_blk_stack!, info.block_stack_id))
+        prev_blk = new_inst(Expr(:call, __pop_blk_stack!, info.block_stack_ref_id))
     end
 
     # Compare predecessor from primal with all possible predecessors.
@@ -1417,7 +1479,12 @@ end
 
 # Going via this function, rather than just calling pop! directly, makes it easy to figure
 # out how much time is spent popping the block stack when profiling performance.
-@inline __pop_blk_stack!(block_stack::BlockStack) = pop!(block_stack)
+# @inline __pop_blk_stack!(block_stack::BlockStack) = pop!(block_stack)
+@inline function __pop_blk_stack!(block_stack_ref::Ref{BlockStack})
+    v, block_stack = pop!(block_stack_ref[])
+    block_stack_ref[] = block_stack
+    return v
+end
 
 # Helper function emitted by `make_switch_stmts`.
 __switch_case(id::Int32, predecessor_id::Int32) = !(id === predecessor_id)

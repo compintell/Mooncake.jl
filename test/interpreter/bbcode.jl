@@ -267,4 +267,25 @@ end
         ]
         @test Mooncake.stmt(new_ir.stmts) == expected_stmts
     end
+    @testset "reachable_return_nodes" begin
+        ir = Mooncake.ircode(
+            Any[
+                GotoNode(4),
+                nothing,
+                ReturnNode(),
+                PhiNode(Int32[2, 1], Any[false, true]),
+                ReturnNode(SSAValue(3)),
+            ],
+            Any[Any for _ in 1:5],
+        )
+        bb_ir = BBCode(ir)
+        ids, return_nodes = Mooncake.reachable_return_nodes(bb_ir)
+
+        # Check that the block ID is for the final block.
+        @test only(ids) == bb_ir.blocks[3].id
+
+        # Check that the value of the ReturnNode is the ID of the third statement.
+        bb_stmts = Mooncake.collect_stmts(bb_ir)
+        @test only(return_nodes).val == bb_stmts[3][1]
+    end
 end

@@ -860,3 +860,26 @@ function _remove_unreachable_blocks!(blks::Vector{BBlock})
 
     return remaining_blks
 end
+
+"""
+    reachable_return_nodes(ir::BBCode)::Tuple{Vector{ID}, Vector{ReturnNode}}
+
+Return a `Vector{ID}` containing the `ID` associated to the `BBlock` of each reachable
+`ReturnNode` in `ir`. Also return a `Vector{ReturnNode}` containing the reachable
+`ReturnNode`s themselves. Element `n` of the `Vector{ID}` is the `ID` of element `n` of the
+`Vector{ReturnNode}`.
+"""
+reachable_return_nodes(ir::BBCode) = reachable_return_nodes(ir.blocks)
+
+function reachable_return_nodes(blks::Vector{BBlock})::Tuple{Vector{ID}, Vector{ReturnNode}}
+    block_ids = ID[]
+    return_nodes = ReturnNode[]
+    for blk in blks
+        t = terminator(blk)
+        if is_reachable_return_node(t)
+            push!(block_ids, blk.id)
+            push!(return_nodes, t)
+        end
+    end
+    return block_ids, return_nodes
+end
