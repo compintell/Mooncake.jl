@@ -293,6 +293,31 @@ function rrule!!(f::CoDual{typeof(Core.arraysize)}, X, dim)
     return zero_fcodual(Core.arraysize(primal(X), primal(dim))), NoPullback(f, X, dim)
 end
     
+@is_primitive MinimalCtx Tuple{typeof(copy), Array}
+function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Array})
+    dx = tangent(a)
+    dy = copy(dx)
+    y = CoDual(copy(primal(a)), dy)
+    function copy_pullback!!(::NoRData)
+        increment!!(dx, dy)
+        return NoRData(), NoRData()
+    end
+    return y, copy_pullback!!
+end
+
+@is_primitive MinimalCtx Tuple{typeof(fill!), Array{<:Union{UInt8, Int8}}, Integer}
+function rrule!!(
+    ::CoDual{typeof(fill!)}, a::CoDual{T}, x::CoDual{<:Integer}
+) where {V<:Union{UInt8, Int8}, T<:Array{V}}
+    pa = primal(a)
+    old_value = copy(pa)
+    fill!(pa, primal(x))
+    function fill!_pullback!!(::NoRData)
+        pa .= old_value
+        return NoRData(), NoRData(), NoRData()
+    end
+    return a, fill!_pullback!!
+end
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:array_legacy})
     _x = Ref(5.0)
