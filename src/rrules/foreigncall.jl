@@ -303,7 +303,7 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:foreigncall})
     _b, _db = randn(4), randn(4)
     ptr_a, ptr_da = pointer(_a), pointer(_da)
     ptr_b, ptr_db = pointer(_b), pointer(_db)
-    memory = Any[_x, _dx, _a, _da, _b, _d]
+    memory = Any[_x, _a, _da, _b, _d]
 
     test_cases = [
         (false, :none, nothing, reshape, randn(5, 4), (4, 5)),
