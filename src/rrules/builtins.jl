@@ -110,7 +110,6 @@ function rrule!!(::CoDual{typeof(add_ptr)}, a, b)
 end
 
 @inactive_intrinsic and_int
-
 @inactive_intrinsic ashr_int
 
 # atomic_fence

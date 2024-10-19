@@ -42,18 +42,6 @@ function codual_type(::Type{P}) where {P}
     P <: UnionAll && return CoDual # P is abstract, so we don't know its tangent type.
     return isconcretetype(P) ? CoDual{P, tangent_type(P)} : CoDual
 end
-# function codual_type(::Type{P}) where {P}
-#     P == DataType && return CoDual
-#     P isa Union && return Union{codual_type(P.a), codual_type(P.b)}
-#     if P isa UnionAll
-#         P <: Type && return CoDual{S, NoTangent} where {S<:P}
-#         return CoDual
-#     end
-#     if P <: Type
-#         return isconcretetype(P) ? CoDual{P, NoTangent} : CoDual{Pt, NoTangent} where {Pt<:P}
-#     end
-#     return isconcretetype(P) ? CoDual{P, tangent_type(P)} : CoDual
-# end
 
 function codual_type(p::Type{Type{P}}) where {P}
     return @isdefined(P) ? CoDual{Type{P}, NoTangent} : CoDual{_typeof(p), NoTangent}
@@ -109,19 +97,6 @@ function fcodual_type(::Type{P}) where {P}
     P <: UnionAll && return CoDual
     return isconcretetype(P) ? CoDual{P, fdata_type(tangent_type(P))} : CoDual
 end
-
-# function fcodual_type(::Type{P}) where {P}
-#     P == DataType && return CoDual
-#     P isa Union && return Union{fcodual_type(P.a), fcodual_type(P.b)}
-#     if P isa UnionAll
-#         P <: Type && return CoDual{S, NoFData} where {S<:P}
-#         return CoDual
-#     end
-#     if P <: Type
-#         return isconcretetype(P) ? CoDual{P, NoFData} : CoDual{Pt, NoFData} where {Pt<:P}
-#     end
-#     return isconcretetype(P) ? CoDual{P, fdata_type(tangent_type(P))} : CoDual
-# end
 
 function fcodual_type(p::Type{Type{P}}) where {P}
     return @isdefined(P) ? CoDual{Type{P}, NoFData} : CoDual{_typeof(p), NoFData}
