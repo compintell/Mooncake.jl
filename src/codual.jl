@@ -39,7 +39,7 @@ The type of the `CoDual` which contains instances of `P` and associated tangents
 function codual_type(::Type{P}) where {P}
     P == DataType && return CoDual
     P isa Union && return Union{codual_type(P.a), codual_type(P.b)}
-    P <: UnionAll && return CoDual
+    P <: UnionAll && return CoDual # P is abstract, so we don't know its tangent type.
     return isconcretetype(P) ? CoDual{P, tangent_type(P)} : CoDual
 end
 # function codual_type(::Type{P}) where {P}

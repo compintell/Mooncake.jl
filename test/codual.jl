@@ -7,19 +7,13 @@
     @test codual_type(Real) == CoDual
     @test codual_type(Any) == CoDual
     @test codual_type(Type{UnitRange{Int}}) == CoDual{Type{UnitRange{Int}}, NoTangent}
-    @test ==(
-        codual_type(Type{Tuple{T}} where {T}),
-        CoDual{P, NoTangent} where {P<:(Type{Tuple{T}} where {T})},
-    )
-    @test ==(
-        Mooncake.fcodual_type(Type{Tuple{T}} where {T}),
-        CoDual{P, NoFData} where {P<:(Type{Tuple{T}} where {T})},
-    )
+    @test codual_type(Type{Tuple{T}} where {T}) == CoDual
+    @test Mooncake.fcodual_type(Type{Tuple{T}} where {T}) == CoDual
     @test(==(
         codual_type(Union{Float64, Int}),
         Union{CoDual{Float64, Float64}, CoDual{Int, NoTangent}},
     ))
-    @test codual_type(UnionAll) == CoDual{UnionAll, NoTangent}
+    @test codual_type(UnionAll) == CoDual
     @testset "NoPullback" begin
         @test Base.issingletontype(typeof(NoPullback(zero_fcodual(5.0))))
         @test NoPullback(zero_codual(5.0))(4.0) == (0.0, )
