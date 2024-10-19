@@ -53,6 +53,26 @@ function get_tangent_field(t::TaskTangent, f)
     throw(error("Unhandled field $f"))
 end
 
+function rrule!!(::CoDual{typeof(lgetfield)}, x::CoDual{Task}, ::CoDual{Val{f}}) where {f}
+    dx = x.dx
+    function mutable_lgetfield_pb!!(dy)
+        increment_field_rdata!(dx, dy, Val{f}())
+        return NoRData(), NoRData(), NoRData()
+    end
+    y = CoDual(getfield(x.x, f), _get_fdata_field(x.x, x.dx, f))
+    return y, mutable_lgetfield_pb!!
+end
+
+function rrule!!(::CoDual{typeof(getfield)}, x::CoDual{Task}, f::CoDual)
+    return rrule!!(zero_fcodual(lgetfield), x, zero_fcodual(Val(primal(f))))
+end
+
+function rrule!!(
+    ::CoDual{typeof(lsetfield!)}, task::CoDual{Task}, name::CoDual, value::CoDual
+)
+    return lsetfield_rrule(task, name, value)
+end
+
 set_tangent_field!(t::TaskTangent, f, ::NoTangent) = NoTangent()
 
 @zero_adjoint MinimalCtx Tuple{typeof(current_task)}
