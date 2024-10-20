@@ -937,14 +937,8 @@ function build_rrule(
             # @show length(stmt(ir.stmts))
             # @show length(stmt(optimised_fwds_ir.stmts))
             # @show length(stmt(optimised_pb_ir.stmts))
-            fwds_oc = MistyClosure(
-                OpaqueClosure(optimised_fwds_ir, shared_data...; do_compile=true),
-                optimised_fwds_ir,
-            )
-            pb_oc = MistyClosure(
-                OpaqueClosure(optimised_pb_ir, shared_data...; do_compile=true),
-                optimised_pb_ir,
-            )
+            fwds_oc = MistyClosure(optimised_fwds_ir, shared_data...; do_compile=true)
+            pb_oc = MistyClosure(optimised_pb_ir, shared_data...; do_compile=true)
 
             # Compute the signature. Needs careful handling with varargs.
             sig = sig_or_mi isa Core.MethodInstance ? sig_or_mi.specTypes : sig_or_mi
