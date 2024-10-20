@@ -267,8 +267,8 @@ _getter() = 5.0
             ),
             (false, x -> count(<(0), x), randn(sr(7), 2, 3)),
             (false, (r, A) -> count!(<(0), r, A), randn(sr(8), 2), randn(sr(9), 2, 3)),
-            # (false, cumprod, randn(sr(0), 3)),
-            # (
+            # (false, cumprod, randn(sr(0), 3)), # problem with the SROA pass
+            # ( # problem with the SROA pass
             #     false,
             #     (B, A) -> cumprod!(B, A; dims=2),
             #     randn(sr(1), 2, 2),
@@ -276,7 +276,7 @@ _getter() = 5.0
             # ),
             (false, cumsum, randn(sr(3), 3)),
             (false, (out, v) -> cumsum!(out, v; dims=1), randn(sr(4), 3), randn(sr(5), 3)),
-            # (
+            # ( # problem with the SROA pass
             #     false,
             #     (out, v) -> cumsum!(out, v; dims=2),
             #     randn(sr(7), 2, 3),
