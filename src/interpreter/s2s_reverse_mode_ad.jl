@@ -456,7 +456,7 @@ end
 # and the ID associated to it in the forwards- and reverse-passes returned.
 function const_codual(stmt, info::ADInfo)
     x = uninit_fcodual(get_const_primal_value(stmt))
-    return isbitstype(_typeof(x)) ? x : add_data!(info, x)
+    return isbitstype(_typeof(x)) || stmt isa Type ? x : add_data!(info, x)
 end
 
 # Get the value associated to `x`. For `GlobalRef`s, verify that `x` is indeed a constant.
@@ -1057,6 +1057,7 @@ function forwards_pass_ir(
 )
     is_unique_pred, pred_is_unique_pred = characterise_unique_predecessor_blocks(ir.blocks)
 
+    # Entry Block:
     # Insert a block at the start which extracts all items from the captures field of the
     # `OpaqueClosure`, which contains all of the data shared between the forwards- and
     # reverse-passes. These are assigned to the `ID`s given by the `SharedDataPairs`.
@@ -1116,18 +1117,17 @@ function forwards_pass_ir(
         return blk
     end
 
-    # Construct the exit block for the forwards-pass.
-    # This block
+    # Exit Block: this block
     # 1. collects the return value using a phi node which takes the value associated to
     #   the `ReturnNode` which would have returned from the primal.
     # 2. pushes the current block stack value to its Ref in shared data.
     # 3. Returns the return value.
 
     # IDPhiNode to collect return value.
-    block_ids, return_nodes = reachable_return_nodes(ir)
+    block_ids, return_vals = reachable_return_nodes(ir)
     return_phi_id = ID()
     return_phi_node = IDPhiNode(
-        block_ids, map(n -> is_active(n.val) ? inc_args(n).val : const_codual(n.val, info), return_nodes)
+        block_ids, map(v -> is_active(v) ? __inc(v) : const_codual(v, info), return_vals)
     )
     return_phi_stmt = (return_phi_id, new_inst(return_phi_node))
 
