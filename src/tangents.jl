@@ -332,8 +332,9 @@ tangent_type(::Type{DimensionMismatch}) = NoTangent
 
 tangent_type(::Type{Method}) = NoTangent
 
-function tangent_type(::Type{P}) where {N, P<:Tuple{Vararg{Any, N}}}
+tangent_type(::Type{<:Enum}) = NoTangent
 
+function tangent_type(::Type{P}) where {N, P<:Tuple{Vararg{Any, N}}}
     # As with other types, tangent type of Union is Union of tangent types.
     P isa Union && return Union{tangent_type(P.a), tangent_type(P.b)}
 
@@ -374,7 +375,6 @@ function tangent_type(::Type{P}) where {N, P<:NamedTuple{N}}
 end
 
 @generated function tangent_type(::Type{P}) where {P}
-
     # This method can only handle struct types. Tell user to implement tangent type
     # directly for primitive types.
     isprimitivetype(P) && throw(error(
@@ -950,6 +950,7 @@ function tangent_test_cases()
         (a=randn(10), b=3),
         (a=3, b=randn(10)),
         (a=randn(10), b=randn(10)),
+        (Base.TOML.ErrorType(1), NoTangent()), # Enum
     ]
     return vcat(
         map(x -> (false, x...), abs_test_cases),
