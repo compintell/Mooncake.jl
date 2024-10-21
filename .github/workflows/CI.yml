@@ -34,7 +34,7 @@ jobs:
         version:
           - '1'
         arch:
-          -x64
+          - x64
         include:
           - test_group: 'basic'
             version: '1.10'
