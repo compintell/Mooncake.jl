@@ -1,6 +1,6 @@
 # Running Tests Locally
 
-Mooncake.jl's test suite is fairly extensive. While you can, of course, run the tests in the same way that you would any Julia package, this is not usually optimal. When editing some code, you typically only want to run the tests associated with it, not the entire test suite.
+Mooncake.jl's test suite is fairly extensive. While you can use `Pkg.test` to run the test suite in the standard manner, this is not usually optimal in Mooncake.jl. When editing some code, you typically only want to run the tests associated with it, not the entire test suite.
 
 Mooncake's tests are organised as follows:
 1. Things that are required for most / all test suites are loaded up in `test/front_matter.jl`.
