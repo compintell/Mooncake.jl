@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
 jobs:
   test:
-    name: ${{ matrix.test_group }}-${{ matrix.version }}
+    name: ${{ matrix.test_group }}-${{ matrix.version }}-${{ matrix.arch }}
     runs-on: ubuntu-latest
     if: github.event_name != 'schedule'
     strategy:
@@ -33,18 +33,25 @@ jobs:
           - 'integration_testing/temporalgps'
         version:
           - '1'
+        arch:
+          - x64
         include:
           - test_group: 'basic'
             version: '1.10'
+            arch: x64
           - test_group: 'integration_testing/turing'
             version: '1.10'
+            arch: x64
+          - test_group: 'basic'
+            version: '1.10'
+            arch: x86
 
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
-          arch: x64
+          arch: ${{ matrix.arch }}
           include-all-prereleases: false
       - uses: julia-actions/cache@v2
       - uses: julia-actions/julia-buildpkg@v1
