@@ -80,8 +80,8 @@ end
 struct TypeStableStruct{T}
     a::Int
     b::T
-    TypeStableStruct{T}(a::Float64) where {T} = new{T}(a)
-    TypeStableStruct{T}(a::Float64, b::T) where {T} = new{T}(a, b)
+    TypeStableStruct{T}(a::Int) where {T} = new{T}(a)
+    TypeStableStruct{T}(a::Int, b::T) where {T} = new{T}(a, b)
 end
 
 struct TypeUnstableStruct2
