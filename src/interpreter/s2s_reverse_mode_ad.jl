@@ -1546,29 +1546,30 @@ end
 
 _copy(x::P) where {P<:LazyDerivedRule} = P(x.mi, x.debug_mode)
 
-function (rule::LazyDerivedRule{sig, Trule})(args::Vararg{Any, N}) where {N, sig, Trule}
-    if !isdefined(rule, :rule)
-        interp = get_interpreter()
-        derived_rule = build_rrule(interp, rule.mi; debug_mode=rule.debug_mode)
-        if derived_rule isa Trule
-            rule.rule = derived_rule
-        else
-            @warn "Unable to put rule in rule field. Rule should error."
-            println("MethodInstance is")
-            display(rule.mi)
-            println()
-            println("with signature")
-            display(sig)
-            println()
-            println("derived_rule is of type")
-            display(typeof(derived_rule))
-            println()
-            println("Expected type is")
-            display(Trule)
-            println()
-            derived_rule(args...)
-            error("Rule with bad type ran without error.")
-        end
+@noinline function _build_rule!(rule::LazyDerivedRule{sig, Trule}) where {sig, Trule}
+    derived_rule = build_rrule(get_interpreter(), rule.mi; debug_mode=rule.debug_mode)
+    if derived_rule isa Trule
+        rule.rule = derived_rule
+    else
+        @warn "Unable to put rule in rule field. Rule should error."
+        println("MethodInstance is")
+        display(rule.mi)
+        println()
+        println("with signature")
+        display(sig)
+        println()
+        println("derived_rule is of type")
+        display(typeof(derived_rule))
+        println()
+        println("Expected type is")
+        display(Trule)
+        println()
+        derived_rule(args...)
+        error("Rule with bad type ran without error.")
     end
+end
+
+@inline function (rule::LazyDerivedRule)(args::Vararg{Any, N}) where {N}
+    isdefined(rule, :rule) || _build_rule!(rule)
     return rule.rule(args...)
 end
