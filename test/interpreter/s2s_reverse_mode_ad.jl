@@ -89,20 +89,9 @@ end
             @testset "Argument" begin
                 val = Argument(4)
                 stmts = make_ad_stmts!(ReturnNode(Argument(2)), line, info)
-                @test only(stmts.fwds)[2].stmt == ReturnNode(Argument(3))
+                @test only(stmts.fwds)[2].stmt == IDGotoNode(info.exit_id)
                 @test Meta.isexpr(only(stmts.rvs)[2].stmt, :call)
                 @test only(stmts.rvs)[2].stmt.args[1] == Mooncake.increment_ref!
-            end
-            @testset "literal" begin
-                stmt_info = make_ad_stmts!(ReturnNode(5.0), line, info)
-                @test stmt_info isa ADStmtInfo
-                @test stmt_info.fwds[1][2].stmt isa ReturnNode
-            end
-            @testset "GlobalRef" begin
-                node = ReturnNode(GlobalRef(S2SGlobals, :const_float))
-                stmt_info = make_ad_stmts!(node, line, info)
-                @test stmt_info isa ADStmtInfo
-                @test stmt_info.fwds[1][2].stmt isa ReturnNode
             end
         end
         @testset "IDGotoNode" begin

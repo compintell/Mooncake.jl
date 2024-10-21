@@ -245,6 +245,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:foreigncall})
     _b, _db = randn(4), randn(4)
     ptr_a, ptr_da = pointer(_a), pointer(_da)
     ptr_b, ptr_db = pointer(_b), pointer(_db)
+    memory = Any[_x, _dx, _a, _da, _b, _db]
 
     test_cases = Any[
         (false, :stability, nothing, Base.allocatedinline, Float64),
@@ -286,7 +287,6 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:foreigncall})
         (false, :none, nothing, hash, Float64, UInt(5)),
         (false, :none, nothing, hash, Float64),
     ]
-    memory = Any[_x, _dx, _a, _da, _b, _db]
     return test_cases, memory
 end
 
