@@ -8,7 +8,7 @@ Mooncake's tests are organised as follows:
 
 Thus, a workflow that I (Will) find works very well is the following:
 1. Ensure that you have Revise.jl and TestEnv.jl installed in your default environment.
-1. `dev` Mooncake.jl, start the REPL, and navigate to the top level of the Mooncake.jl directory.
+1. start the REPL, `dev` Mooncake.jl, and navigate to the top level of the Mooncake.jl directory.
 1. `using TestEnv, Revise`. Better still, load both of these in your `.julia/config/startup.jl` file so that you don't ever forget to load them.
 1. Run the following: `using Pkg; Pkg.activate("."); TestEnv.activate(); include("test/front_matter.jl");` to set up your environment.
 1. `include` whichever test file you want to run the tests from.
