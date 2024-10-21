@@ -1,6 +1,5 @@
 function blas_name(name::Symbol)
-    return Symbol(name, "64_"), Symbol(BLAS.libblastrampoline)
-    # return (BLAS.USE_BLAS64 ? Symbol(name, "64_") : name, Symbol(BLAS.libblastrampoline))
+    return (BLAS.USE_BLAS64 ? Symbol(name, "64_") : name, Symbol(BLAS.libblastrampoline))
 end
 
 function wrap_ptr_as_view(ptr::Ptr{T}, N::Int, inc::Int) where {T}
