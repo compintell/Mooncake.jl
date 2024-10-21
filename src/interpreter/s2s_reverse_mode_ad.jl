@@ -1481,8 +1481,7 @@ end
 _copy(x::P) where {P<:LazyDerivedRule} = P(x.mi, x.debug_mode)
 
 @noinline function _build_rule!(rule::LazyDerivedRule{sig, Trule}) where {sig, Trule}
-    interp = get_interpreter()
-    derived_rule = build_rrule(interp, rule.mi; debug_mode=rule.debug_mode)
+    derived_rule = build_rrule(get_interpreter(), rule.mi; debug_mode=rule.debug_mode)
     if derived_rule isa Trule
         rule.rule = derived_rule
     else
