@@ -33,6 +33,16 @@ end
         @test !Mooncake.can_produce_zero_rdata_from_type(Tuple)
         @test !Mooncake.can_produce_zero_rdata_from_type(Union{Tuple{Float64}, Tuple{Int}})
         @test !Mooncake.can_produce_zero_rdata_from_type(Tuple{T, T} where {T<:Integer})
+        @test Mooncake.can_produce_zero_rdata_from_type(Type{Float64})
+
+        # Edge case: Types with unbound type parameters.
+        P = (Type{T} where {T}).body
+        @test Mooncake.can_produce_zero_rdata_from_type(P)
+        @test Mooncake.zero_rdata_from_type(P) === NoRData()
+
+        # Check for ambiguity.
+        @test Mooncake.can_produce_zero_rdata_from_type(Union{})
+        @test Mooncake.zero_rdata_from_type(Union{}) === NoRData()
     end
     @testset "lazy construction checks" begin
         # Check that lazy construction is in fact lazy for some cases where performance
