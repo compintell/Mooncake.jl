@@ -1195,7 +1195,7 @@ function pullback_ir(
         rvs_block = BBlock(blk_id, vcat(comms_insts, rvs_ad_stmts, additional_stmts))
         return vcat(rvs_block, new_blocks)
     end
-    main_blocks = vcat(main_blocks...)
+    main_blocks = reduce(vcat, main_blocks)
 
     # Create an exit block. Dereferences reverse-data for arguments, increments a zero rdata
     # against it to ensure that it is of the correct type, and returns it.
