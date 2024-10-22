@@ -75,7 +75,7 @@ include("front_matter.jl")
     elseif test_group == "gpu"
         include(joinpath("ext", "cuda", "cuda.jl"))
     elseif test_group == "ext/differentiation_interface"
-        include(joinpath("ext", "differentiation_interface", "runtests.jl"))
+        include(joinpath("ext", "differentiation_interface", "di.jl"))
     else
         throw(error("test_group=$(test_group) is not recognised"))
     end
