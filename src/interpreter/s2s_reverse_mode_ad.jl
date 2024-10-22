@@ -387,23 +387,22 @@ function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
     # unit test for this, but integration testing seems to catch it in multiple places.
     stmt == PiNode(nothing, Union{}) && return ad_stmt_info(line, nothing, stmt, nothing)
 
-    # Assume that the PiNode contains active data -- it's hard to see why a PiNode would be
-    # created for e.g. a constant. Error if code is encountered where this doesn't hold.
-    is_active(stmt.val) || unhandled_feature("PiNode: $stmt")
+    if is_active(stmt.val)
+        # Get the primal type of this line, and the rdata refs for the `val` of this
+        # `PiNode` and this line itself.
+        P = get_primal_type(info, line)
+        val_rdata_ref_id = get_rev_data_id(info, stmt.val)
+        output_rdata_ref_id = get_rev_data_id(info, line)
+        fwds = PiNode(__inc(stmt.val), fcodual_type(_type(stmt.typ)))
+        rvs = Expr(:call, __pi_rvs!, P, val_rdata_ref_id, output_rdata_ref_id)
+    else
+        # If the value of the PiNode is a constant / QuoteNode etc, then there is nothing to
+        # do on the reverse-pass.
+        fwds = PiNode(const_codual(stmt.val, info), fcodual_type(_type(stmt.typ)))
+        rvs = nothing
+    end
 
-    # Get the primal type of this line, and the rdata refs for the `val` of this `PiNode`
-    # and this line itself.
-    P = get_primal_type(info, line)
-    val_rdata_ref_id = get_rev_data_id(info, stmt.val)
-    output_rdata_ref_id = get_rev_data_id(info, line)
-
-    # Assemble the above lines and construct reverse-pass.
-    return ad_stmt_info(
-        line,
-        nothing,
-        PiNode(__inc(stmt.val), fcodual_type(_type(stmt.typ))),
-        Expr(:call, __pi_rvs!, P, val_rdata_ref_id, output_rdata_ref_id),
-    )
+    return ad_stmt_info(line, nothing, fwds, rvs)
 end
 
 @inline function __pi_rvs!(::Type{P}, val_rdata_ref::Ref, output_rdata_ref::Ref) where {P}
@@ -922,10 +921,10 @@ function build_rrule(
             # @show sig_or_mi
             # @show Treturn
             # @show debug_mode
-            # display(ir)
+            display(ir)
             # display(IRCode(fwds_ir))
             # display(IRCode(pb_ir))
-            # display(optimised_fwds_ir)
+            display(optimised_fwds_ir)
             # display(optimised_pb_ir)
             # @show length(stmt(ir.stmts))
             # @show length(stmt(optimised_fwds_ir.stmts))

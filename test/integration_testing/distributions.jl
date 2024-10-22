@@ -227,15 +227,21 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
         ),
         (
             :none,
-            "allocs Normal",
+            "truncated Normal",
             (a, b, x) -> logpdf(truncated(Normal(), a, b), x),
             (-0.3, 0.3, 0.1),
         ),
         (
             :none,
-            "allocs Uniform",
+            "truncated Uniform",
             (a, b, α, β, x) -> logpdf(truncated(Uniform(α, β), a, b), x),
             (0.1, 0.9, -0.1, 1.1, 0.4),
+        ),
+        (
+            :none,
+            "left-truncated Beta",
+            (a, α, β, x) -> logpdf(truncated(Beta(α, β), lower=a), x),
+            (0.1, 1.1, 1.3, 0.4),
         ),
         (:none, "Dirichlet", (a, x) -> logpdf(Dirichlet(a), [x, 1-x]), ([1.5, 1.1], 0.6)),
         (
