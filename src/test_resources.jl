@@ -562,6 +562,8 @@ function non_const_global_ref(y::Float64)
     return __x_for_non_const_global_ref
 end
 
+partial_type_var() = TypeVar(:a, Union{}, Any)
+
 function generate_test_functions()
     return Any[
         (false, :allocs, nothing, const_tester),
@@ -738,6 +740,7 @@ function generate_test_functions()
         (false, :allocs, nothing, inlinable_invoke_call, 5.0),
         (false, :none, nothing, inlinable_vararg_invoke_call, (2, 2), 5.0, 4.0, 3.0, 2.0),
         (false, :none, nothing, hvcat, (2, 2), 3.0, 2.0, 0.0, 1.0),
+        (false, :none, nothing, partial_type_var),
     ]
 end
 
