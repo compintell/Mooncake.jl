@@ -68,6 +68,10 @@ function _kron_view_sum(x::AbstractMatrix{<:Real}, y::AbstractMatrix{<:Real})
     return _kron_sum(view(x, 1:20, 1:20), UpperTriangular(y))
 end
 
+# Zygote is *really slow* for these benchmark cases based on `_sum`
+should_run_benchmark(::Val{:zygote}, ::typeof(_kron_sum), x, y) = false
+should_run_benchmark(::Val{:zygote}, ::typeof(_kron_view_sum), x, y) = false
+
 # No one has a rule for this.
 function _naive_map_sin_cos_exp(x::AbstractArray{<:Real})
     y = similar(x)
