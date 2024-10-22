@@ -137,11 +137,34 @@ end
                 stmt_info = make_ad_stmts!(PiNode(nothing, Union{}), line, info)
                 @test stmt_info isa ADStmtInfo
             end
-            @testset "unhandled case" begin
-                @test_throws(
-                    Mooncake.UnhandledLanguageFeatureException,
-                    make_ad_stmts!(PiNode(5.0, Float64), ID(), info),
-                )
+            @testset "π (nothing, Nothing)" begin
+                stmt_info = make_ad_stmts!(PiNode(nothing, Nothing), id_line_1, info)
+                @test stmt_info isa ADStmtInfo
+                fwds_stmt = only(stmt_info.fwds)[2].stmt
+                @test fwds_stmt isa PiNode
+                @test fwds_stmt.val == CoDual(nothing, NoFData())
+                @test fwds_stmt.typ == CoDual{Nothing, NoFData}
+                @test only(stmt_info.rvs)[2].stmt === nothing
+            end
+            @testset "π (nothing, CC.Const(nothing))" begin
+                node = PiNode(nothing, CC.Const(nothing))
+                stmt_info = make_ad_stmts!(node, id_line_1, info)
+                @test stmt_info isa ADStmtInfo
+                fwds_stmt = only(stmt_info.fwds)[2].stmt
+                @test fwds_stmt isa PiNode
+                @test fwds_stmt.val == CoDual(nothing, NoFData())
+                @test fwds_stmt.typ == CoDual{Nothing, NoFData}
+                @test only(stmt_info.rvs)[2].stmt === nothing
+            end
+            @testset "π (GlobalRef, Type)" begin
+                node = PiNode(GlobalRef(S2SGlobals, :const_float), Any)
+                stmt_info = make_ad_stmts!(node, id_line_1, info)
+                @test stmt_info isa ADStmtInfo
+                fwds_stmt = only(stmt_info.fwds)[2].stmt
+                @test fwds_stmt isa PiNode
+                @test fwds_stmt.val == CoDual(5.0, NoFData())
+                @test fwds_stmt.typ == CoDual
+                @test only(stmt_info.rvs)[2].stmt === nothing
             end
             @testset "sharpen type of ID" begin
                 line = id_line_1
