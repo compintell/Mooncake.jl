@@ -37,6 +37,9 @@ makedocs(
             "Debug Mode" => "debug_mode.md",
             "Debugging and MWEs" => "debugging_and_mwes.md",
         ],
+        "Developer Documentation" => [
+            "Running Tests Locally" => "running_tests_locally.md",
+        ],
         "Known Limitations" => "known_limitations.md",
     ]
 )
