@@ -23,6 +23,7 @@ jobs:
         test_group:
           - 'basic'
           - 'rrules'
+          - 'ext/differentiation_interface'
           - 'integration_testing/misc'
           - 'integration_testing/misc_abstract_array'
           - 'integration_testing/diff_tests'
