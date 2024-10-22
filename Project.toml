@@ -69,7 +69,6 @@ julia = "1"
 AbstractGPs = "99985d1d-32ba-4be9-9821-2ec096f28918"
 AllocCheck = "9b6a8646-10ed-4001-bbdc-1d2f46dfbb1a"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
-CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 DiffTests = "de460e47-3fe3-5279-bb4a-814414816d5d"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
@@ -89,4 +88,4 @@ TemporalGPs = "e155a3c4-0841-43e1-8b83-a0e4f03cc18f"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["AbstractGPs", "AllocCheck", "BenchmarkTools", "CUDA", "DiffTests", "Distributions", "Documenter", "DynamicPPL", "FillArrays", "KernelFunctions", "JET", "LogDensityProblemsAD", "Lux", "LuxLib", "NNlib", "PDMats", "Pkg", "SpecialFunctions", "StableRNGs", "Test", "TemporalGPs"]
+test = ["AbstractGPs", "AllocCheck", "BenchmarkTools", "DiffTests", "Distributions", "Documenter", "DynamicPPL", "FillArrays", "KernelFunctions", "JET", "LogDensityProblemsAD", "Lux", "LuxLib", "NNlib", "PDMats", "Pkg", "SpecialFunctions", "StableRNGs", "Test", "TemporalGPs"]
