@@ -60,7 +60,7 @@ end
 
 # Zygote has rules for both sum and kron, so it's interesting to compare this against the
 # other frameworks because they don't have rules for kron, and maybe for not for sum.
-_kron_sum(x::AbstractMatrix{<:Real}, y::AbstractMatrix{<:Real}) = _sum(kron(x, y))
+_kron_sum(x::AbstractMatrix{<:Real}, y::AbstractMatrix{<:Real}) = _sum(identity, kron(x, y))
 
 # Zygote (should) use the ChainRules projection functionality to handle the more interesting
 # types surrounding the arrays.
