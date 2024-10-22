@@ -799,8 +799,8 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability, nothing, ===, randn(5), randn(3)),
         (false, :stability, nothing, ===, 5.0, 5.0),
         (true, :stability, nothing, Core._typevar, :T, Union{}, Any),
-        (false, :none, (lb=1e-3, ub=100.0), Core.apply_type, Vector, Float64),
-        (false, :none, (lb=1e-3, ub=100.0), Core.apply_type, Array, Float64, 2),
+        (false, :none, _range, Core.apply_type, Vector, Float64),
+        (false, :none, _range, Core.apply_type, Array, Float64, 2),
         # Core.compilerbarrier -- NEEDS IMPLEMENTING AND TESTING
         # Core.const_arrayref -- NEEDS IMPLEMENTING AND TESTING
         # Core.donotdelete -- NEEDS IMPLEMENTING AND TESTING
