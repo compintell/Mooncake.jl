@@ -789,7 +789,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         # Core._primitivetype -- NEEDS IMPLEMENTING AND TESTING
         # Core._setsuper! -- NEEDS IMPLEMENTING AND TESTING
         # Core._structtype -- NEEDS IMPLEMENTING AND TESTING
-        (false, :none, nothing, Core._svec_ref, svec(5, 4), 2),
+        (false, :none, _range, Core._svec_ref, svec(5, 4), 2),
         # Core._typebody! -- NEEDS IMPLEMENTING AND TESTING
         (false, :stability, nothing, <:, Float64, Int),
         (false, :stability, nothing, <:, Any, Float64),
