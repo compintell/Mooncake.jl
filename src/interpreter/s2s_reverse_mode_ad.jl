@@ -921,10 +921,10 @@ function build_rrule(
             # @show sig_or_mi
             # @show Treturn
             # @show debug_mode
-            display(ir)
+            # display(ir)
             # display(IRCode(fwds_ir))
             # display(IRCode(pb_ir))
-            display(optimised_fwds_ir)
+            # display(optimised_fwds_ir)
             # display(optimised_pb_ir)
             # @show length(stmt(ir.stmts))
             # @show length(stmt(optimised_fwds_ir.stmts))
