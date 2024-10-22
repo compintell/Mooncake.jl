@@ -562,6 +562,8 @@ function non_const_global_ref(y::Float64)
     return __x_for_non_const_global_ref
 end
 
+# The inferred type of `TypeVar(...)` is `CC.PartialTypeVar`. Thanks to Jameson Nash for
+# pointing out this pleasantly simple test case.
 partial_type_var() = TypeVar(:a, Union{}, Any)
 
 function generate_test_functions()
