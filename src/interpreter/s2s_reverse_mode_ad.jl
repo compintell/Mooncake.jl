@@ -1500,8 +1500,15 @@ function Base.showerror(io::IO, err::BadRuleTypeException)
     println(io, "However, expected rule to be of type:")
     println(io, err.expected_rule_type)
     println(io)
-    println(io, "This error occured for MethodInstance $(err.mi) with signature:")
+    println(io, "This error occured for $(err.mi) with signature:")
     println(io, err.sig)
+    println(io)
+    msg = "Usually this error is indicative of something having gone wrong in the " *
+        "compilation of the rule in question. Look at the error message for to the error " *
+        "which caused this error (below) for more details. If the error below does not " *
+        "immediately give you enough information to debug what is going on, you consider " *
+        "building the rule for the signature above, and inspecting the IR."
+    println(io, msg)
 end
 
 @noinline function _build_rule!(rule::LazyDerivedRule{sig, Trule}, args) where {sig, Trule}
