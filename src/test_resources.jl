@@ -564,7 +564,13 @@ end
 
 # The inferred type of `TypeVar(...)` is `CC.PartialTypeVar`. Thanks to Jameson Nash for
 # pointing out this pleasantly simple test case.
-partial_type_var() = TypeVar(:a, Union{}, Any)
+partial_typevar_tester() = TypeVar(:a, Union{}, Any)
+
+function typevar_tester()
+    tv = Core._typevar(:a, Union{}, Any)
+    t = Core.apply_type(AbstractArray, tv, 1)
+    return UnionAll(tv, t)
+end
 
 function generate_test_functions()
     return Any[
@@ -742,7 +748,8 @@ function generate_test_functions()
         (false, :allocs, nothing, inlinable_invoke_call, 5.0),
         (false, :none, nothing, inlinable_vararg_invoke_call, (2, 2), 5.0, 4.0, 3.0, 2.0),
         (false, :none, nothing, hvcat, (2, 2), 3.0, 2.0, 0.0, 1.0),
-        (false, :none, nothing, partial_type_var),
+        (false, :none, nothing, partial_typevar_tester),
+        (false, :none, nothing, typevar_tester),
     ]
 end
 
