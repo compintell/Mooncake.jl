@@ -219,6 +219,12 @@ __ref(P) = new_inst(Expr(:call, __make_ref, P))
     return :(Ref{$R}(Mooncake.zero_like_rdata_from_type($_P)))
 end
 
+# This specialised method is necessary to ensure that `__make_ref` works properly for
+# `DataType`s with unbound type parameters. See `TestResources.typevar_tester` for an
+# example. The above method requires that `P` be a type in which all parameters are fully-
+# bound. Strange errors occur if this property does not hold.
+@inline __make_ref(::Type{<:Type}) = Ref{NoRData}(NoRData())
+
 @inline __make_ref(::Type{Union{}}) = nothing
 
 # Returns the number of arguments that the primal function has.
