@@ -1,5 +1,5 @@
 module S2SGlobals
-    using LinearAlgebra
+    using LinearAlgebra, Mooncake
 
     non_const_global = 5.0
     const const_float = 5.0
@@ -11,6 +11,13 @@ module S2SGlobals
         data
     end
     f(a, x) = dot(a.data, x)
+
+    # Test cases designed to cause `LazyDerivedRule` to throw an error when attempting to
+    # construct a rule for `bar`.
+    foo(x) = x
+    @noinline bar(x) = foo(x)
+    baz(x) = bar(x)
+    Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{typeof(foo), Any}
 end
 
 @testset "s2s_reverse_mode_ad" begin
@@ -246,7 +253,11 @@ end
         rule = Mooncake.build_rrule(interp, sig; debug_mode)
         @test rule isa Mooncake.rule_type(interp, sig; debug_mode)
     end
-
+    @testset "LazyDerivedRule" begin
+        fargs = (S2SGlobals.baz, 5.0)
+        rule = build_rrule(fargs...)
+        @test_throws Mooncake.BadRuleTypeException rule(map(zero_fcodual, fargs)...)
+    end
     @testset "$(_typeof((f, x...)))" for (n, (interface_only, perf_flag, bnds, f, x...)) in
         collect(enumerate(TestResources.generate_test_functions()))
 
