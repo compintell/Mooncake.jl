@@ -1504,7 +1504,7 @@ function Base.showerror(io::IO, err::BadRuleTypeException)
     println(io, err.sig)
     println(io)
     msg = "Usually this error is indicative of something having gone wrong in the " *
-        "compilation of the rule in question. Look at the error message for to the error " *
+        "compilation of the rule in question. Look at the error message for the error " *
         "which caused this error (below) for more details. If the error below does not " *
         "immediately give you enough information to debug what is going on, you consider " *
         "building the rule for the signature above, and inspecting the IR."
