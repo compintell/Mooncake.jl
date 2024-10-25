@@ -572,6 +572,10 @@ end
 
 can_produce_zero_rdata_from_type(::Type{<:IEEEFloat}) = true
 
+can_produce_zero_rdata_from_type(::Type{<:Type}) = true
+
+can_produce_zero_rdata_from_type(::Type{Union{}}) = true
+
 """
     CannotProduceZeroRDataFromType()
 
@@ -647,6 +651,9 @@ end
 
 zero_rdata_from_type(::Type{P}) where {P<:IEEEFloat} = zero(P)
 
+zero_rdata_from_type(::Type{<:Type}) = NoRData()
+
+zero_rdata_from_type(::Type{Union{}}) = NoRData()
 
 """
     InvalidRDataException(msg::String)

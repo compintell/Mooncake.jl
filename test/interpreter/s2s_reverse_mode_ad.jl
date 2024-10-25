@@ -1,5 +1,5 @@
 module S2SGlobals
-    using LinearAlgebra
+    using LinearAlgebra, Mooncake
 
     non_const_global = 5.0
     const const_float = 5.0
@@ -11,6 +11,13 @@ module S2SGlobals
         data
     end
     f(a, x) = dot(a.data, x)
+
+    # Test cases designed to cause `LazyDerivedRule` to throw an error when attempting to
+    # construct a rule for `bar`.
+    foo(x) = x
+    @noinline bar(x) = foo(x)
+    baz(x) = bar(x)
+    Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{typeof(foo), Any}
 end
 
 @testset "s2s_reverse_mode_ad" begin
@@ -126,11 +133,34 @@ end
                 stmt_info = make_ad_stmts!(PiNode(nothing, Union{}), line, info)
                 @test stmt_info isa ADStmtInfo
             end
-            @testset "unhandled case" begin
-                @test_throws(
-                    Mooncake.UnhandledLanguageFeatureException,
-                    make_ad_stmts!(PiNode(5.0, Float64), ID(), info),
-                )
+            @testset "π (nothing, Nothing)" begin
+                stmt_info = make_ad_stmts!(PiNode(nothing, Nothing), id_line_1, info)
+                @test stmt_info isa ADStmtInfo
+                fwds_stmt = only(stmt_info.fwds)[2].stmt
+                @test fwds_stmt isa PiNode
+                @test fwds_stmt.val == CoDual(nothing, NoFData())
+                @test fwds_stmt.typ == CoDual{Nothing, NoFData}
+                @test only(stmt_info.rvs)[2].stmt === nothing
+            end
+            @testset "π (nothing, CC.Const(nothing))" begin
+                node = PiNode(nothing, CC.Const(nothing))
+                stmt_info = make_ad_stmts!(node, id_line_1, info)
+                @test stmt_info isa ADStmtInfo
+                fwds_stmt = only(stmt_info.fwds)[2].stmt
+                @test fwds_stmt isa PiNode
+                @test fwds_stmt.val == CoDual(nothing, NoFData())
+                @test fwds_stmt.typ == CoDual{Nothing, NoFData}
+                @test only(stmt_info.rvs)[2].stmt === nothing
+            end
+            @testset "π (GlobalRef, Type)" begin
+                node = PiNode(GlobalRef(S2SGlobals, :const_float), Any)
+                stmt_info = make_ad_stmts!(node, id_line_1, info)
+                @test stmt_info isa ADStmtInfo
+                fwds_stmt = only(stmt_info.fwds)[2].stmt
+                @test fwds_stmt isa PiNode
+                @test fwds_stmt.val == CoDual(5.0, NoFData())
+                @test fwds_stmt.typ == CoDual
+                @test only(stmt_info.rvs)[2].stmt === nothing
             end
             @testset "sharpen type of ID" begin
                 line = id_line_1
@@ -212,7 +242,11 @@ end
         rule = Mooncake.build_rrule(interp, sig; debug_mode)
         @test rule isa Mooncake.rule_type(interp, sig; debug_mode)
     end
-
+    @testset "LazyDerivedRule" begin
+        fargs = (S2SGlobals.baz, 5.0)
+        rule = build_rrule(fargs...)
+        @test_throws Mooncake.BadRuleTypeException rule(map(zero_fcodual, fargs)...)
+    end
     @testset "$(_typeof((f, x...)))" for (n, (interface_only, perf_flag, bnds, f, x...)) in
         collect(enumerate(TestResources.generate_test_functions()))
 

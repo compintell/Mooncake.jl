@@ -80,8 +80,8 @@ end
 struct TypeStableStruct{T}
     a::Int
     b::T
-    TypeStableStruct{T}(a::Float64) where {T} = new{T}(a)
-    TypeStableStruct{T}(a::Float64, b::T) where {T} = new{T}(a, b)
+    TypeStableStruct{T}(a::Int) where {T} = new{T}(a)
+    TypeStableStruct{T}(a::Int, b::T) where {T} = new{T}(a, b)
 end
 
 struct TypeUnstableStruct2
@@ -562,6 +562,16 @@ function non_const_global_ref(y::Float64)
     return __x_for_non_const_global_ref
 end
 
+# The inferred type of `TypeVar(...)` is `CC.PartialTypeVar`. Thanks to Jameson Nash for
+# pointing out this pleasantly simple test case.
+partial_typevar_tester() = TypeVar(:a, Union{}, Any)
+
+function typevar_tester()
+    tv = Core._typevar(:a, Union{}, Any)
+    t = Core.apply_type(AbstractArray, tv, 1)
+    return UnionAll(tv, t)
+end
+
 function generate_test_functions()
     return Any[
         (false, :allocs, nothing, const_tester),
@@ -738,6 +748,8 @@ function generate_test_functions()
         (false, :allocs, nothing, inlinable_invoke_call, 5.0),
         (false, :none, nothing, inlinable_vararg_invoke_call, (2, 2), 5.0, 4.0, 3.0, 2.0),
         (false, :none, nothing, hvcat, (2, 2), 3.0, 2.0, 0.0, 1.0),
+        (false, :none, nothing, partial_typevar_tester),
+        (false, :none, nothing, typevar_tester),
     ]
 end
 

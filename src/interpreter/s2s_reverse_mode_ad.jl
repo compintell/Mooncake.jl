@@ -226,6 +226,12 @@ __ref(P) = new_inst(Expr(:call, __make_ref, P))
     return :(Ref{$R}(Mooncake.zero_like_rdata_from_type($_P)))
 end
 
+# This specialised method is necessary to ensure that `__make_ref` works properly for
+# `DataType`s with unbound type parameters. See `TestResources.typevar_tester` for an
+# example. The above method requires that `P` be a type in which all parameters are fully-
+# bound. Strange errors occur if this property does not hold.
+@inline __make_ref(::Type{<:Type}) = Ref{NoRData}(NoRData())
+
 @inline __make_ref(::Type{Union{}}) = nothing
 
 # Returns the number of arguments that the primal function has.
@@ -394,23 +400,22 @@ function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
     # unit test for this, but integration testing seems to catch it in multiple places.
     stmt == PiNode(nothing, Union{}) && return ad_stmt_info(line, nothing, stmt, nothing)
 
-    # Assume that the PiNode contains active data -- it's hard to see why a PiNode would be
-    # created for e.g. a constant. Error if code is encountered where this doesn't hold.
-    is_active(stmt.val) || unhandled_feature("PiNode: $stmt")
+    if is_active(stmt.val)
+        # Get the primal type of this line, and the rdata refs for the `val` of this
+        # `PiNode` and this line itself.
+        P = get_primal_type(info, line)
+        val_rdata_ref_id = get_rev_data_id(info, stmt.val)
+        output_rdata_ref_id = get_rev_data_id(info, line)
+        fwds = PiNode(__inc(stmt.val), fcodual_type(_type(stmt.typ)))
+        rvs = Expr(:call, __pi_rvs!, P, val_rdata_ref_id, output_rdata_ref_id)
+    else
+        # If the value of the PiNode is a constant / QuoteNode etc, then there is nothing to
+        # do on the reverse-pass.
+        fwds = PiNode(const_codual(stmt.val, info), fcodual_type(_type(stmt.typ)))
+        rvs = nothing
+    end
 
-    # Get the primal type of this line, and the rdata refs for the `val` of this `PiNode`
-    # and this line itself.
-    P = get_primal_type(info, line)
-    val_rdata_ref_id = get_rev_data_id(info, stmt.val)
-    output_rdata_ref_id = get_rev_data_id(info, line)
-
-    # Assemble the above lines and construct reverse-pass.
-    return ad_stmt_info(
-        line,
-        nothing,
-        PiNode(__inc(stmt.val), fcodual_type(_type(stmt.typ))),
-        Expr(:call, __pi_rvs!, P, val_rdata_ref_id, output_rdata_ref_id),
-    )
+    return ad_stmt_info(line, nothing, fwds, rvs)
 end
 
 @inline function __pi_rvs!(::Type{P}, val_rdata_ref::Ref, output_rdata_ref::Ref) where {P}
@@ -1252,7 +1257,7 @@ function pullback_ir(
         rvs_block = BBlock(blk_id, vcat(comms_insts, rvs_ad_stmts, additional_stmts))
         return vcat(rvs_block, new_blocks)
     end
-    main_blocks = vcat(main_blocks...)
+    main_blocks = reduce(vcat, main_blocks)
 
     # Create an exit block. Dereferences reverse-data for arguments, increments a zero rdata
     # against it to ensure that it is of the correct type, and returns it.
@@ -1546,30 +1551,51 @@ end
 
 _copy(x::P) where {P<:LazyDerivedRule} = P(x.mi, x.debug_mode)
 
-@noinline function _build_rule!(rule::LazyDerivedRule{sig, Trule}) where {sig, Trule}
+@inline function (rule::LazyDerivedRule)(args::Vararg{Any, N}) where {N}
+    isdefined(rule, :rule) || _build_rule!(rule, args)
+    return rule.rule(args...)
+end
+
+struct BadRuleTypeException <: Exception
+    mi::Core.MethodInstance
+    sig::Type
+    actual_rule_type::Type
+    expected_rule_type::Type
+end
+
+function Base.showerror(io::IO, err::BadRuleTypeException)
+    println(io, "BadRuleTypeException:")
+    println(io)
+    println(io, "Rule is of type:")
+    println(io, err.actual_rule_type)
+    println(io)
+    println(io, "However, expected rule to be of type:")
+    println(io, err.expected_rule_type)
+    println(io)
+    println(io, "This error occured for $(err.mi) with signature:")
+    println(io, err.sig)
+    println(io)
+    msg = "Usually this error is indicative of something having gone wrong in the " *
+        "compilation of the rule in question. Look at the error message for the error " *
+        "which caused this error (below) for more details. If the error below does not " *
+        "immediately give you enough information to debug what is going on, consider " *
+        "building the rule for the signature above, and inspecting the IR."
+    println(io, msg)
+end
+
+@noinline function _build_rule!(rule::LazyDerivedRule{sig, Trule}, args) where {sig, Trule}
     derived_rule = build_rrule(get_interpreter(), rule.mi; debug_mode=rule.debug_mode)
     if derived_rule isa Trule
         rule.rule = derived_rule
     else
-        @warn "Unable to put rule in rule field. Rule should error."
-        println("MethodInstance is")
-        display(rule.mi)
-        println()
-        println("with signature")
-        display(sig)
-        println()
-        println("derived_rule is of type")
-        display(typeof(derived_rule))
-        println()
-        println("Expected type is")
-        display(Trule)
-        println()
-        derived_rule(args...)
-        error("Rule with bad type ran without error.")
+        @warn "Unable to put rule in rule field. A `BadRuleTypeException` should be thrown."
+        err = BadRuleTypeException(rule.mi, sig, typeof(derived_rule), Trule)
+        try
+            derived_rule(args...)
+        catch
+            throw(err)
+        end
+        @warn "`BadRuleTypException was _not_ thrown. Throwing now."
+        throw(err)
     end
-end
-
-@inline function (rule::LazyDerivedRule)(args::Vararg{Any, N}) where {N}
-    isdefined(rule, :rule) || _build_rule!(rule)
-    return rule.rule(args...)
 end
