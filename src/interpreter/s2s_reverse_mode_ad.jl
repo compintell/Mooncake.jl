@@ -710,7 +710,7 @@ function Pullback(
     return Pullback{Tprimal, Tpb_oc, Tisva, Tnvargs}(pb_oc, isva, nvargs)
 end
 
-@inline (pb::Pullback)(dy) = __flatten_varargs(pb.isva, pb.pb_oc(dy), pb.nvargs)
+@inline (pb::Pullback)(dy) = __flatten_varargs(pb.isva, pb.pb_oc[](dy), pb.nvargs)
 
 struct DerivedRule{Tprimal, Tfwds_oc, Tpb_oc, Tisva<:Val, Tnargs<:Val}
     fwds_oc::Tfwds_oc
@@ -730,7 +730,7 @@ _copy(::Nothing) = nothing
 function _copy(x::P) where {P<:DerivedRule}
     new_captures = _copy(x.fwds_oc.oc.captures)
     new_fwds_oc = replace_captures(x.fwds_oc, new_captures)
-    new_pb_oc = replace_captures(x.pb_oc, new_captures)
+    new_pb_oc = Ref(replace_captures(x.pb_oc[], new_captures))
     return P(new_fwds_oc, new_pb_oc, x.isva, x.nargs)
 end
 
@@ -804,7 +804,7 @@ function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where 
             DebugRRule{DerivedRule{
                 primal_sig,
                 MistyClosure{OpaqueClosure{arg_fwds_types, fcodual_type(Treturn)}},
-                MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
+                Base.RefValue{MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}}},
                 Val{isva},
                 Val{length(ir.argtypes)},
             }}
@@ -812,7 +812,7 @@ function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where 
             DerivedRule{
                 primal_sig,
                 MistyClosure{OpaqueClosure{arg_fwds_types, fcodual_type(Treturn)}},
-                MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
+                Base.RefValue{MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}}},
                 Val{isva},
                 Val{length(ir.argtypes)},
             }
@@ -822,7 +822,7 @@ function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where 
             DebugRRule{DerivedRule{
                 primal_sig,
                 MistyClosure{OpaqueClosure{arg_fwds_types, Tfcodual_ret}},
-                MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
+                Base.RefValue{MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}}},
                 Val{isva},
                 Val{length(ir.argtypes)},
             }} where {Tfcodual_ret <: fcodual_type(Treturn)}
@@ -830,7 +830,7 @@ function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where 
             DerivedRule{
                 primal_sig,
                 MistyClosure{OpaqueClosure{arg_fwds_types, Tfcodual_ret}},
-                MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
+                Base.RefValue{MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}}},
                 Val{isva},
                 Val{length(ir.argtypes)},
             } where {Tfcodual_ret <: fcodual_type(Treturn)}
@@ -952,7 +952,7 @@ function build_rrule(
                 sig = Tuple{sig.parameters[1:nargs-1]..., Tuple{sig.parameters[nargs:end]...}}
             end
 
-            raw_rule = DerivedRule(sig, fwds_oc, pb_oc, Val(isva), Val(num_args(info)))
+            raw_rule = DerivedRule(sig, fwds_oc, Ref(pb_oc), Val(isva), Val(num_args(info)))
             rule = debug_mode ? DebugRRule(raw_rule) : raw_rule
             interp.oc_cache[oc_cache_key] = rule
             return rule
@@ -982,12 +982,18 @@ const ADStmts = Vector{Tuple{ID, Vector{ADStmtInfo}}}
 
 @inline get_stack_ref(storage_ref::Ref{<:ImmutableStack}) = Ref(storage_ref[])
 @inline get_stack_ref(storage_ref::SingletonStack) = storage_ref
+
+# @inline get_stack_ref(data::Tuple, n::Int) = Ref(data[n])
+
 @inline function set_stack_ref!(storage_ref::S, x::S) where {S<:Ref{<:ImmutableStack}}
     storage_ref[] = x[]
 end
 @inline set_stack_ref!(storage_ref::S, x::S) where {S<:SingletonStack} = x
 
 @inline function push_comms_stack!(comms_stack_ref::Ref, item)
+    # if comms_stack_ref[] isa ImmutableStack
+    #     # display((comms_stack_ref[].length, typeof(item)))
+    # end
     comms_stack_ref[] = push!(comms_stack_ref[], item)
 end
 
@@ -1058,6 +1064,19 @@ function create_comms_insts!(ad_stmts_blocks::ADStmts, info::ADInfo)
         comms_stack_id = add_data_if_not_singleton!(info, stack)
 
         # Create instruction for headers.
+        # CENTRAL IDEAS: pass around the length and position as stack-allocated values in the
+        # code itself, rather than leaving them in the heap and only requesting them when
+        # needed.
+        # Only write the value of the length to the stack when an update occurs (which
+        # should never happen in performance-critical sections of code), and always write
+        # the value of the position to the stack before the forwards- and reverse-passes
+        # return -- this should minimise the amount of work done when the stacks aren't
+        # actually used because e.g. a particular branch isn't hit, while giving really
+        # very good performance in loop-heavy code.
+        # The only question is: is there something different that I ought to be doing in
+        # order to avoid having to make this tradeoff? Why is this happening at all? Why do
+        # I see different performance characteristics between loops which contain function
+        # calls vs loops which only contain calls to builtins?
         local_ref_id =  ID()
         header_inst = (local_ref_id, new_inst(Expr(:call, get_stack_ref, comms_stack_id)))
 
@@ -1091,6 +1110,78 @@ function create_comms_insts!(ad_stmts_blocks::ADStmts, info::ADInfo)
         adjoint_insts=map(x -> x[4], insts)::Vector{Vector{IDInstPair}},
     )
 end
+
+# Version which seems to be really quite fast for loop-heavy functions in which everything is
+# inlined away, but quite poor in situations where a function call appears inside of a loop.
+# function create_comms_insts!(ad_stmts_blocks::ADStmts, info::ADInfo)
+#     insts = map(ad_stmts_blocks) do (_, ad_stmts)
+
+#         # Get the communication channel for each stmt which has one.
+#         comms_channels = filter(!=(nothing), map(comms_channel, ad_stmts))
+#         comms_ids = map(first, comms_channels)
+
+#         # Determine the type of the tuple which will contain these, and create a stack which
+#         # can hold such tuples. Put this stack in shared data, and get its `ID`.
+#         # Optimise for the case that `TT` is a singleton type -- the result of this
+#         # optimisation is to directly insert the stack into the code if `TT` is a singleton
+#         # type, and avoid adding anything to shared data. One notable case in which this
+#         # will hold is when comms_ids is empty.
+#         TT = Tuple{map(x -> x[2].type, comms_channels)...}
+#         stack = Base.issingletontype(TT) ? SingletonStack{TT}() : ImmutableStack{TT}()
+
+#         # Create instruction for headers.
+#         local_ref_id =  ID()
+
+#         # Create instructions for forwards-pass to create tuple + push onto comms stack.
+#         tuple_id = ID()
+#         fwds_insts = IDInstPair[
+#             (tuple_id, new_inst(Expr(:call, tuple, comms_ids...))),
+#             (ID(), new_inst(Expr(:call, push_comms_stack!, local_ref_id, tuple_id))),
+#         ]
+
+#         # Create instructions for reverse-pass to pop comms stack and extract elements of
+#         # tuple into comms ids.
+#         rvs_insts = IDInstPair[
+#             (tuple_id, new_inst(Expr(:call, pop_comms_stack!, local_ref_id))),
+#             map(enumerate(comms_ids)) do (n, id)
+#                 (id, new_inst(Expr(:call, getfield, tuple_id, n)))
+#             end...,
+#         ]
+
+#         return (local_ref_id, stack), fwds_insts, rvs_insts
+#     end
+
+#     # Create the tuple of stacks, and shove it in shared data. I'm not bothering to remove
+#     # the singleton stacks, as the compiler should be able to optimise them away fully, and
+#     # they take up no space.
+#     local_ref_id_stack_pairs = map(x -> x[1], insts)
+#     stack_tuple = Ref((map(x -> x[2], local_ref_id_stack_pairs)..., ))
+#     stack_tuple_ref_id = add_data_if_not_singleton!(info, stack_tuple)
+
+#     # Construct header block code.
+#     stack_tuple_id = ID()
+#     stack_tuple_inst = (stack_tuple_id, new_inst(Expr(:call, getindex, stack_tuple_ref_id)))
+#     getter_insts = map(enumerate(local_ref_id_stack_pairs)) do (n, (local_ref_id, _))
+#         (local_ref_id, new_inst(Expr(:call, get_stack_ref, stack_tuple_id, n)))
+#     end
+#     header_insts = vcat(stack_tuple_inst, getter_insts)
+
+#     # Construct footer block code.
+#     deref_insts = map(local_ref_id_stack_pairs) do (local_ref_id, _)
+#         (ID(), new_inst(Expr(:call, getindex, local_ref_id)))
+#     end
+#     tuple_id = ID()
+#     tuple_inst = (tuple_id, new_inst(Expr(:call, tuple, map(first, deref_insts)...)))
+#     ref_set_inst = (ID(), new_inst(Expr(:call, setindex!, stack_tuple_ref_id, tuple_id)))
+#     footer_insts = vcat(deref_insts, [tuple_inst, ref_set_inst])
+
+#     return (
+#         header_insts=header_insts::Vector{IDInstPair},
+#         footer_insts=footer_insts::Vector{IDInstPair},
+#         forwards_insts=map(x -> x[2], insts)::Vector{Vector{IDInstPair}},
+#         adjoint_insts=map(x -> x[3], insts)::Vector{Vector{IDInstPair}},
+#     )
+# end
 
 __get_block_stack_ref(x::Ref{BlockStack}) = Ref(x[])
 function __set_block_stack_ref!(x::Ref{BlockStack}, new_val)

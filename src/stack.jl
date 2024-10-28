@@ -34,8 +34,10 @@ end
 
 struct SingletonStack{T} end
 
-Base.push!(::SingletonStack, ::Any) = nothing
-@generated Base.pop!(::SingletonStack{T}) where {T} = T.instance
+_copy(x::SingletonStack) = x
+
+Base.push!(x::SingletonStack, ::Any) = x
+@generated Base.pop!(x::SingletonStack{T}) where {T} = T.instance
 
 
 struct ImmutableStack{T}
@@ -52,13 +54,19 @@ _copy(::ImmutableStack{T}) where {T} = ImmutableStack{T}()
     position = x.position + 1
     memory = x.memory
     l = x.length
-    if position <= l
-        @inbounds memory[position] = val
+    @inbounds if position <= l
+        memory[position] = val
+        return ImmutableStack(memory, l, position)
     else
-        @noinline push!(memory, val)
-        l += 1
+        return __slow_path(x, val)
+        # @noinline push!(memory, val)
+        # l += 1
     end
-    return ImmutableStack(memory, l, position)
+end
+
+@noinline function __slow_path(x::ImmutableStack{T}, val) where {T}
+    push!(x.memory, val)
+    return ImmutableStack{T}(x.memory, x.length + 1, x.position + 1)
 end
 
 @inline function Base.pop!(x::ImmutableStack)

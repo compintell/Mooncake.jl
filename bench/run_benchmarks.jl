@@ -8,7 +8,6 @@ using
     DataFrames,
     Distributions,
     DynamicPPL,
-    Enzyme,
     KernelFunctions,
     LinearAlgebra,
     Plots,
