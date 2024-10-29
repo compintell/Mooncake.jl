@@ -2,7 +2,7 @@ using Pkg
 Pkg.activate(@__DIR__)
 Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 
-using Distributions, Mooncake, Test
+using Distributions, Fill, Mooncake, Test
 
 _sym(A) = A'A
 _pdmat(A) = PDMat(_sym(A) + 5I)
