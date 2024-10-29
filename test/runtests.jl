@@ -73,15 +73,15 @@ include("front_matter.jl")
     elseif test_group == "integration_testing/diff_tests"
         include(joinpath("integration_testing", "diff_tests.jl"))
     elseif test_group == "integration_testing/distributions"
-        include(joinpath("integration_testing", "distributions.jl"))
+        include(joinpath("integration_testing", "distributions", "distributions.jl"))
     elseif test_group == "integration_testing/gp"
-        include(joinpath("integration_testing", "gp.jl"))
+        include(joinpath("integration_testing", "gp", "gp.jl"))
     elseif test_group == "integration_testing/array"
         include(joinpath("integration_testing", "array.jl"))
     elseif test_group == "integration_testing/turing"
-        include(joinpath("integration_testing", "turing.jl"))
+        include(joinpath("integration_testing", "turing", "turing.jl"))
     elseif test_group == "integration_testing/temporalgps"
-        include(joinpath("integration_testing", "temporalgps.jl"))
+        include(joinpath("integration_testing", "temporalgps", "temporalgps.jl"))
     else
         throw(error("test_group=$(test_group) is not recognised"))
     end
