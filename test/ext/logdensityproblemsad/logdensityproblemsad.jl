@@ -1,4 +1,8 @@
-using ADTypes, LogDensityProblemsAD
+using Pkg
+Pkg.activate(@__DIR__)
+Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
+
+using ADTypes, LogDensityProblemsAD, Mooncake, Test
 using LogDensityProblemsAD: logdensity_and_gradient, capabilities, dimension, logdensity
 
 # Copied over from LogDensityProblemsAD test suite.

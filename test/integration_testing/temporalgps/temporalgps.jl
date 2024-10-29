@@ -1,4 +1,8 @@
-using AbstractGPs, KernelFunctions, TemporalGPs
+using Pkg
+Pkg.activate(@__DIR__)
+Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
+
+using AbstractGPs, KernelFunctions, Mooncake, TemporalGPs, Test
 
 build_gp(k) = to_sde(GP(k), SArrayStorage(Float64))
 

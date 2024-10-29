@@ -1,0 +1,5 @@
+[deps]
+AbstractGPs = "99985d1d-32ba-4be9-9821-2ec096f28918"
+KernelFunctions = "ec8451be-7e33-11e9-00cf-bbf324bd1392"
+Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
