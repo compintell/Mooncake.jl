@@ -98,7 +98,9 @@ tangent_type(::Type{F}, ::Type{NoRData}) where {F<:Memory} = F
 tangent(f::Memory, ::NoRData) = f
 
 function _verify_fdata_value(p::Memory{P}, f::Memory{T}) where {P, T}
-    @assert length(p) == length(f)
+    if length(p) != length(f)
+        throw(error("length(p) == $(length(p)) but length(f) == $(length(f))"))
+    end
     return nothing
 end
 

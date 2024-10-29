@@ -9,6 +9,7 @@ end
 @zero_adjoint MinimalCtx Tuple{typeof(randn), AbstractRNG, Vararg}
 @zero_adjoint MinimalCtx Tuple{typeof(string), Vararg}
 @zero_adjoint MinimalCtx Tuple{Type{Symbol}, Vararg}
+@zero_adjoint MinimalCtx Tuple{typeof(==), Any, Any}
 
 function generate_hand_written_rrule!!_test_cases(
     rng_ctor, ::Val{:avoiding_non_differentiable_code}

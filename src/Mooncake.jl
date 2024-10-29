@@ -6,6 +6,7 @@ using
     ADTypes,
     DiffRules,
     ExprTools,
+    FunctionWrappers,
     Graphs,
     InteractiveUtils,
     LinearAlgebra,
@@ -14,7 +15,7 @@ using
     Setfield
 
 # There are many clashing names, so we will always qualify uses of names from CRC.
-import ChainRulesCore
+import ChainRulesCore as CRC
 
 using Base:
     IEEEFloat, unsafe_convert, unsafe_pointer_to_objref, pointer_from_objref, arrayref,
