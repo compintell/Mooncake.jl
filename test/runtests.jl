@@ -64,24 +64,24 @@ include("front_matter.jl")
         include(joinpath("ext", "nnlib", "nnlib.jl"))
     elseif test_group == "ext/special_functions"
         include(joinpath("ext", "special_functions", "special_functions.jl"))
-    elseif test_group == "integration_testing/misc"
-        include(joinpath("integration_testing", "battery_tests.jl"))
-    elseif test_group == "integration_testing/lux"
-        include(joinpath("integration_testing", "lux", "lux.jl"))
-    elseif test_group == "integration_testing/misc_abstract_array"
-        include(joinpath("integration_testing", "misc_abstract_array.jl"))
+    elseif test_group == "integration_testing/array"
+        include(joinpath("integration_testing", "array.jl"))
     elseif test_group == "integration_testing/diff_tests"
         include(joinpath("integration_testing", "diff_tests.jl"))
     elseif test_group == "integration_testing/distributions"
         include(joinpath("integration_testing", "distributions", "distributions.jl"))
     elseif test_group == "integration_testing/gp"
         include(joinpath("integration_testing", "gp", "gp.jl"))
-    elseif test_group == "integration_testing/array"
-        include(joinpath("integration_testing", "array.jl"))
-    elseif test_group == "integration_testing/turing"
-        include(joinpath("integration_testing", "turing", "turing.jl"))
+    elseif test_group == "integration_testing/lux"
+        include(joinpath("integration_testing", "lux", "lux.jl"))
+    elseif test_group == "integration_testing/misc"
+        include(joinpath("integration_testing", "battery_tests.jl"))
+    elseif test_group == "integration_testing/misc_abstract_array"
+        include(joinpath("integration_testing", "misc_abstract_array.jl"))
     elseif test_group == "integration_testing/temporalgps"
         include(joinpath("integration_testing", "temporalgps", "temporalgps.jl"))
+    elseif test_group == "integration_testing/turing"
+        include(joinpath("integration_testing", "turing", "turing.jl"))
     else
         throw(error("test_group=$(test_group) is not recognised"))
     end
