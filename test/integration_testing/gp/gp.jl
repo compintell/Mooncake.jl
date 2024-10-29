@@ -1,4 +1,8 @@
-using AbstractGPs, KernelFunctions
+using Pkg
+Pkg.activate(@__DIR__)
+Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
+
+using AbstractGPs, KernelFunctions, Mooncake, Test
 
 @testset "gp" begin
     base_kernels = Any[
