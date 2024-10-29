@@ -2,7 +2,7 @@ using Pkg
 Pkg.activate(@__DIR__)
 Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 
-using Lux, LuxLib, Mooncake, Test
+using Lux, LuxLib, Mooncake, NNlib, Test
 using LuxLib.Impl: SLEEFActivations
 
 @testset "luxlib" begin
