@@ -4,20 +4,26 @@
 module MooncakeLogDensityProblemsADExt
 
 using ADTypes
+using Base: IEEEFloat
 using LogDensityProblemsAD: ADGradientWrapper
 import LogDensityProblemsAD: ADgradient, logdensity_and_gradient, dimension, logdensity
 import Mooncake
 
-struct MooncakeGradientLogDensity{Trule, L} <: ADGradientWrapper
-    rule::Trule
-    ℓ::L
+mutable struct MooncakeGradientLogDensity{L} <: ADGradientWrapper
+    const ℓ::L
+    const debug_mode::Bool
+    rule
+    MooncakeGradientLogDensity(ℓ::L, debug_mode::Bool) where {L} = new{L}(ℓ, debug_mode)
+    function MooncakeGradientLogDensity(ℓ::L, debug_mode::Bool, rule) where {L}
+        return new{L}(ℓ, debug_mode, rule)
+    end
 end
 
-dimension(∇l::MooncakeGradientLogDensity) = dimension(Mooncake.primal(∇l.ℓ))
+const MGLD{L} = MooncakeGradientLogDensity{L}
 
-function logdensity(∇l::MooncakeGradientLogDensity, x::Vector{Float64})
-    return logdensity(Mooncake.primal(∇l.ℓ), x)
-end
+dimension(∇l::MGLD) = dimension(Mooncake.primal(∇l.ℓ))
+
+logdensity(∇l::MGLD, x::Vector{<:IEEEFloat}) = logdensity(Mooncake.primal(∇l.ℓ), x)
 
 """
     ADgradient(Val(:Mooncake), ℓ)
@@ -25,29 +31,30 @@ end
 Gradient using algorithmic/automatic differentiation via Mooncake.
 """
 function ADgradient(::Val{:Mooncake}, ℓ; debug_mode::Bool=false, rule=nothing)
-    if isnothing(rule)
-        primal_sig = Tuple{typeof(logdensity), typeof(ℓ), Vector{Float64}}
-        rule = Mooncake.build_rrule(Mooncake.get_interpreter(), primal_sig; debug_mode)
-    end
-    return MooncakeGradientLogDensity(rule, Mooncake.uninit_fcodual(ℓ))
+    l = Mooncake.uninit_fcodual(ℓ)
+    return rule === nothing ? MGLD(l, debug_mode) : MGLD(l, debug_mode, rule) 
 end
 
-function Base.show(io::IO, ∇ℓ::MooncakeGradientLogDensity)
+function Base.show(io::IO, ∇ℓ::MGLD)
     return print(io, "Mooncake AD wrapper for ", Mooncake.primal(∇ℓ.ℓ))
 end
 
-# We only test Mooncake with `Float64`s at the minute, so make strong assumptions about the
-# types supported in order to prevent silent errors.
-function logdensity_and_gradient(::MooncakeGradientLogDensity, ::AbstractVector)
-    msg = "Only Vector{Float64} presently supported for logdensity_and_gradients."
+# We only permit simple types. Rule out anything that's not a `Vector{<:IEEEFloat}`.
+function logdensity_and_gradient(::MGLD, ::AbstractVector)
+    msg = "Only Vector{<:IEEEFloat} presently supported for logdensity_and_gradients."
     throw(ArgumentError(msg))
 end
 
-function logdensity_and_gradient(∇l::MooncakeGradientLogDensity, x::Vector{Float64})
-    dx = zeros(length(x))
+function logdensity_and_gradient(∇l::MGLD, x::Vector{P}) where {P<:IEEEFloat}
+    if !isdefined(∇l, :rule)
+        primal_sig = Tuple{typeof(logdensity), typeof(Mooncake.primal(∇l.ℓ)), Vector{P}}
+        debug_mode = ∇l.debug_mode
+        ∇l.rule = Mooncake.build_rrule(Mooncake.get_interpreter(), primal_sig; debug_mode)
+    end
+    dx = zero(x)
     y, pb!! = ∇l.rule(Mooncake.zero_fcodual(logdensity), ∇l.ℓ, Mooncake.CoDual(x, dx))
-    @assert Mooncake.primal(y) isa Float64
-    pb!!(1.0)
+    @assert Mooncake.primal(y) isa P
+    pb!!(one(P))
     return Mooncake.primal(y), dx
 end
 
@@ -68,6 +75,6 @@ function ADgradient(x::ADTypes.AutoMooncake, ℓ)
     return ADgradient(Val(:Mooncake), ℓ; debug_mode)
 end
 
-Base.parent(x::MooncakeGradientLogDensity) = Mooncake.primal(x.ℓ)
+Base.parent(x::MGLD) = Mooncake.primal(x.ℓ)
 
 end

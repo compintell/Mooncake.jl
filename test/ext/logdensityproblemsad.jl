@@ -9,17 +9,20 @@ test_gradient(x) = -2 .* x
 
 @testset "AD via Mooncake" begin
     l = TestLogDensity2()
-    ∇l = ADgradient(Val(:Mooncake), l)
-
-    @test dimension(∇l) == 20
-    @test capabilities(∇l) == LogDensityProblemsAD.LogDensityOrder(1)
-    for _ in 1:100
-        x = randn(20)
-        @test isapprox(@inferred(logdensity(∇l, x)), logdensity(l, x))
-        @test isapprox(logdensity_and_gradient(∇l, x)[1], logdensity(TestLogDensity2(), x))
-        @test isapprox(logdensity_and_gradient(∇l, x)[2], test_gradient(x))
+    config = Mooncake.Config(; debug_mode=false)
+    for P in [Float16, Float32, Float64]
+        ∇l = ADgradient(ADTypes.AutoMooncake(; config), l)
+        @test dimension(∇l) == 20
+        @test capabilities(∇l) == LogDensityProblemsAD.LogDensityOrder(1)
+        for _ in 1:100
+            x = randn(P, 20)
+            @test @inferred(logdensity(∇l, x)) ≈ logdensity(l, x)
+            @test logdensity_and_gradient(∇l, x)[1] ≈ logdensity(TestLogDensity2(), x)
+            @test logdensity_and_gradient(∇l, x)[2] ≈ test_gradient(x)
+        end
     end
 
+    ∇l = ADgradient(ADTypes.AutoMooncake(; config), l)
     config = Mooncake.Config(; debug_mode=false)
     @test ADgradient(ADTypes.AutoMooncake(; config), l) isa typeof(∇l)
     @test parent(∇l) === l

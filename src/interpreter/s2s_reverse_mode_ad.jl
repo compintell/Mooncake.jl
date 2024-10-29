@@ -718,6 +718,13 @@ function DerivedRule(
     return DerivedRule{Tprimal, Tfwds_oc, Tpb_oc, Tisva, Tnargs}(fwds_oc, pb_oc, isva, nargs)
 end
 
+# Extends functionality defined for debug_mode.
+function verify_args(::DerivedRule{sig}, ::Tx) where {sig, Tx}
+    sig === Tx && return nothing
+    msg = "Arguments with sig $Tx do not match signature expected by rule, $sig"
+    throw(ArgumentError(msg))
+end
+
 _copy(::Nothing) = nothing
 
 function _copy(x::P) where {P<:DerivedRule}
