@@ -85,14 +85,21 @@ Apply type checking to enforce pre- and post-conditions on `rule.rule`. See the 
 for `DebugRRule` for details.
 """
 @noinline function (rule::DebugRRule)(x::Vararg{CoDual, N}) where {N}
-    verify_fwds_inputs(x)
+    verify_fwds_inputs(rule.rule, x)
     y, pb = rule.rule(x...)
     verify_fwds_output(x, y)
     return y::CoDual, DebugPullback(pb, primal(y), map(primal, x))
 end
 
-@noinline function verify_fwds_inputs(@nospecialize(x::Tuple))
+# DerivedRRule adds a method to this function.
+verify_args(_, x) = nothing
+
+@noinline function verify_fwds_inputs(rule, @nospecialize(x::Tuple))
     try
+        # Check that the input types are correct. If this check is not present, the passing
+        # in arguments of the wrong type can result in a segfault.
+        verify_args(rule, map(primal, x))
+
         # Use for-loop to keep the stack trace as simple as possible.
         for _x in x
             verify_fwds(_x)
