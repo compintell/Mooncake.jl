@@ -1,3 +1,10 @@
+using Pkg
+Pkg.activate(@__DIR__)
+Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
+
+using Lux, LuxLib, Mooncake, Test
+using LuxLib.Impl: SLEEFActivations
+
 @testset "luxlib" begin
     @testset "$(typeof(fargs))" for (interface_only, perf_flag, is_primitive, fargs...) in vcat(
         Any[

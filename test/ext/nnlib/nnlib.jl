@@ -1,3 +1,10 @@
+using Pkg
+Pkg.activate(@__DIR__)
+Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
+
+using Mooncake, NNlib, Test
+using NNlib: dropout
+
 @testset "nnlib" begin
     x = randn(5, 4, 3, 2)
     w = randn(2, 2, 3, 3)

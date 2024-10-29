@@ -1,3 +1,9 @@
+using Pkg
+Pkg.activate(@__DIR__)
+Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
+
+using Mooncake, SpecialFunctions, Test
+
 @testset "special_functions" begin
     @testset for (perf_flag, f, x...) in [
         (:stability, airyai, 0.1),
