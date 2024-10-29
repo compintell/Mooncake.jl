@@ -1,4 +1,5 @@
 using
+    AllocCheck,
     BenchmarkTools,
     DiffRules,
     JET,
