@@ -1,7 +1,9 @@
 include("front_matter.jl")
 
 @testset "Mooncake.jl" begin
-    if test_group == "basic"
+    if test_group == "aqua"
+        Aqua.test_all(Mooncake)
+    elseif test_group == "basic"
         include("utils.jl")
         include("tangents.jl")
         include("fwds_rvs_data.jl")
