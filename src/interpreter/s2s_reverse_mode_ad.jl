@@ -297,7 +297,7 @@ function comms_channel(info::ADStmtInfo)
 end
 
 #=
-    make_ad_stmts(inst::NewInstruction, line::ID, info::ADInfo)::ADStmtInfo
+    make_ad_stmts!(inst::NewInstruction, line::ID, info::ADInfo)::ADStmtInfo
 
 Every line in the primal code is associated to one or more lines in the forwards-pass of AD,
 and one or more lines in the pullback. This function has method specific to every
