@@ -42,11 +42,24 @@ using Mooncake, SpecialFunctions, Test
         (:stability_and_allocs, cosint, 0.3),
         (:stability_and_allocs, ellipk, 0.3),
         (:stability_and_allocs, ellipe, 0.3),
+        (:stability_and_allocs, logfactorial, 3),
     ]
         test_rule(Xoshiro(123456), f, x...; perf_flag)
     end
     @testset for (perf_flag, f, x...) in [
-        (:allocs, logerf, 0.3, 0.5),
+        (:allocs, logerf, 0.3, 0.5), # first branch
+        (:allocs, logerf, 1.1, 1.2), # second branch
+        (:allocs, logerf, -1.2, -1.1), # third branch
+        (:allocs, logerf, 0.3, 1.1), # fourth branch
+        (:allocs, SpecialFunctions.loggammadiv, 1.0, 9.0),
+        (:allocs, SpecialFunctions.gammax, 1.0),
+        (:allocs, SpecialFunctions.rgammax, 3.0, 6.0),
+        (:allocs, SpecialFunctions.rgamma1pm1, 0.1),
+        # (:allocs, SpecialFunctions.auxgam, 0.1), # allocations
+        # (:allocs, logabsbeta, 0.3, 0.1), # logabsgamma needs to work for this to work
+        # (:allocs, SpecialFunctions.loggamma1p, 0.3), # allocations
+        # (:allocs, SpecialFunctions.loggamma1p, -0.3), # allocations
+        # (:allocs, SpecialFunctions.lambdaeta, 5.0), # a genuine bug!
     ]
         test_rule(Xoshiro(123456), f, x...; perf_flag, is_primitive=false)
     end

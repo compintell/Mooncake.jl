@@ -3,7 +3,7 @@ module MooncakeSpecialFunctionsExt
 using SpecialFunctions, Mooncake
 using Base: IEEEFloat
 
-import Mooncake: @from_rrule, DefaultCtx
+import Mooncake: @from_rrule, DefaultCtx, @zero_adjoint
 
 @from_rrule DefaultCtx Tuple{typeof(airyai), IEEEFloat}
 @from_rrule DefaultCtx Tuple{typeof(airyaix), IEEEFloat}
@@ -40,5 +40,7 @@ import Mooncake: @from_rrule, DefaultCtx
 @from_rrule DefaultCtx Tuple{typeof(cosint), IEEEFloat}
 @from_rrule DefaultCtx Tuple{typeof(ellipk), IEEEFloat}
 @from_rrule DefaultCtx Tuple{typeof(ellipe), IEEEFloat}
+
+@zero_adjoint DefaultCtx Tuple{typeof(logfactorial), Integer}
 
 end
