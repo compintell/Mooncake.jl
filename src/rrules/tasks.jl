@@ -33,12 +33,12 @@ rdata_type(::Type{TaskTangent}) = NoRData
 
 tangent(t::TaskTangent, ::NoRData) = t
 
-@inline function _get_fdata_field(_, t::TaskTangent, f...)
-    f === (:rngState0, ) && return NoFData()
-    f === (:rngState1, ) && return NoFData()
-    f === (:rngState2, ) && return NoFData()
-    f === (:rngState3, ) && return NoFData()
-    f === (:rngState4, ) && return NoFData()
+@inline function _get_fdata_field(_, t::TaskTangent, f)
+    f === :rngState0 && return NoFData()
+    f === :rngState1 && return NoFData()
+    f === :rngState2 && return NoFData()
+    f === :rngState3 && return NoFData()
+    f === :rngState4 && return NoFData()
     throw(error("Unhandled field $f"))
 end
 
@@ -53,7 +53,9 @@ function get_tangent_field(t::TaskTangent, f)
     throw(error("Unhandled field $f"))
 end
 
-function rrule!!(::CoDual{typeof(lgetfield)}, x::CoDual{Task}, ::CoDual{Val{f}}) where {f}
+const TaskCoDual = CoDual{Task, TaskTangent}
+
+function rrule!!(::CoDual{typeof(lgetfield)}, x::TaskCoDual, ::CoDual{Val{f}}) where {f}
     dx = x.dx
     function mutable_lgetfield_pb!!(dy)
         increment_field_rdata!(dx, dy, Val{f}())
@@ -63,14 +65,12 @@ function rrule!!(::CoDual{typeof(lgetfield)}, x::CoDual{Task}, ::CoDual{Val{f}})
     return y, mutable_lgetfield_pb!!
 end
 
-function rrule!!(::CoDual{typeof(getfield)}, x::CoDual{Task}, f::CoDual)
+function rrule!!(::CoDual{typeof(getfield)}, x::TaskCoDual, f::CoDual)
     return rrule!!(zero_fcodual(lgetfield), x, zero_fcodual(Val(primal(f))))
 end
 
-function rrule!!(
-    ::CoDual{typeof(lsetfield!)}, task::CoDual{Task}, name::CoDual, value::CoDual
-)
-    return lsetfield_rrule(task, name, value)
+function rrule!!(::CoDual{typeof(lsetfield!)}, task::TaskCoDual, name::CoDual, val::CoDual)
+    return lsetfield_rrule(task, name, val)
 end
 
 set_tangent_field!(t::TaskTangent, f, ::NoTangent) = NoTangent()
