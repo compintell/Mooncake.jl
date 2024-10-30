@@ -179,8 +179,9 @@ function optimise_ir!(ir::IRCode; show_ir=false, do_inline=true)
     return ir
 end
 
-Base.iterate(x::CC.MethodLookupResult) = CC.iterate(x)
-Base.iterate(x::CC.MethodLookupResult, n::Int) = CC.iterate(x, n)
+# Handles difference between 1.10 and 1.11.
+get_matches(x::CC.MethodLookupResult) = x.matches
+get_matches(x::Vector{Any}) = x
 
 """
     lookup_ir(
@@ -196,7 +197,7 @@ Returns a tuple containing the `IRCode` and its return type.
 function lookup_ir(interp::CC.AbstractInterpreter, tt::Type{<:Tuple}; optimize_until=nothing)
     matches = CC.findall(tt, CC.method_table(interp))
     asts = []
-    for match in matches.matches
+    for match in get_matches(matches.matches)
         match = match::Core.MethodMatch
         if VERSION < v"1.11-"
             meth = Base.func_for_method_checked(match.method, tt, match.sparams)
