@@ -55,6 +55,7 @@ LuxLib = "1.2 - 1.3.3"
 MistyClosures = "2"
 Pkg = "1"
 Setfield = "1"
+SpecialFunctions = "2"
 StableRNGs = "1"
 julia = "1"
 
