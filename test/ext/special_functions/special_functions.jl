@@ -4,21 +4,50 @@ Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 
 using Mooncake, SpecialFunctions, Test
 
+# Rules in this file are only lightly tester, because they are all just @from_rrule rules.
 @testset "special_functions" begin
     @testset for (perf_flag, f, x...) in [
         (:stability, airyai, 0.1),
-        (:stability, airyai, 0.0),
-        (:stability, airyai, -0.5),
         (:stability, airyaix, 0.1),
-        (:stability, airyaix, 0.05),
-        (:stability, airyaix, 0.9),
+        (:stability, airyaiprime, 0.1),
+        (:stability, airybi, 0.1),
+        (:stability, airybiprime, 0.1),
+        (:stability_and_allocs, besselj0, 0.1),
+        (:stability_and_allocs, besselj1, 0.1),
+        (:stability_and_allocs, bessely0, 0.1),
+        (:stability_and_allocs, bessely1, 0.1),
+        (:stability_and_allocs, dawson, 0.1),
+        (:stability_and_allocs, digamma, 0.1),
+        (:stability_and_allocs, erf, 0.1),
+        (:stability_and_allocs, erf, 0.1, 0.5),
         (:stability_and_allocs, erfc, 0.1),
-        (:stability_and_allocs, erfc, 0.0),
-        (:stability_and_allocs, erfc, -0.5),
+        (:stability_and_allocs, logerfc, 0.1),
+        (:stability_and_allocs, erfcinv, 0.1),
         (:stability_and_allocs, erfcx, 0.1),
-        (:stability_and_allocs, erfcx, 0.0),
-        (:stability_and_allocs, erfcx, -0.5),
+        (:stability_and_allocs, logerfcx, 0.1),
+        (:stability_and_allocs, erfi, 0.1),
+        (:stability_and_allocs, erfinv, 0.1),
+        (:stability_and_allocs, gamma, 0.1),
+        (:stability_and_allocs, invdigamma, 0.1),
+        (:stability_and_allocs, trigamma, 0.1),
+        (:stability_and_allocs, polygamma, 3, 0.1),
+        (:stability_and_allocs, beta, 0.3, 0.1),
+        (:stability_and_allocs, logbeta, 0.3, 0.1),
+        # (:stability_and_allocs, logabsgamma, 0.3),
+        (:stability_and_allocs, loggamma, 0.3),
+        (:stability_and_allocs, expint, 0.3),
+        (:stability_and_allocs, expintx, 0.3),
+        (:stability_and_allocs, expinti, 0.3),
+        (:stability_and_allocs, sinint, 0.3),
+        (:stability_and_allocs, cosint, 0.3),
+        (:stability_and_allocs, ellipk, 0.3),
+        (:stability_and_allocs, ellipe, 0.3),
     ]
         test_rule(Xoshiro(123456), f, x...; perf_flag)
+    end
+    @testset for (perf_flag, f, x...) in [
+        (:allocs, logerf, 0.3, 0.5),
+    ]
+        test_rule(Xoshiro(123456), f, x...; perf_flag, is_primitive=false)
     end
 end
