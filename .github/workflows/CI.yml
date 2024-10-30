@@ -21,6 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         test_group:
+          - 'aqua'
           - 'basic'
           - 'rrules'
           - 'ext/differentiation_interface'

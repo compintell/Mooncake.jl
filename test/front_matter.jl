@@ -1,5 +1,6 @@
 using
     AllocCheck,
+    Aqua,
     BenchmarkTools,
     DiffRules,
     JET,
