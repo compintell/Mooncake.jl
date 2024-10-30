@@ -56,6 +56,7 @@ MistyClosures = "2"
 NNlib = "0.9"
 Pkg = "1"
 Setfield = "1"
+SpecialFunctions = "2"
 StableRNGs = "1"
 julia = "1"
 
