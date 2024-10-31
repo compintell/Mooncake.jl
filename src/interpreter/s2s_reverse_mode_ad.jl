@@ -860,6 +860,11 @@ function Base.showerror(io::IO, err::MooncakeRuleCompilationError)
         "To replicate this error run the following:\n"
     println(io, msg)
     println(io, "Mooncake.build_rrule(Mooncake.$(err.interp), $(err.sig); debug_mode=$(err.debug_mode))")
+    println(
+        io,
+        "\nNote that you may need to `using` some additional packages if not all of the " *
+        "names printed in the above signature are available currently in your environment."
+    )
 end
 
 """
