@@ -535,11 +535,11 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         #
 
         # Make arguments to rrule call. Things which are not already CoDual must be made so.
-        codual_arg_ids = map(_ -> ID(), args)
-        __codual_args = map(arg -> Expr(:call, __make_codual, __inc(arg)), args)
-        codual_args = IDInstPair[
-            (id, new_inst(arg)) for (id, arg) in zip(codual_arg_ids, __codual_args)
-        ]
+        codual_arg_ids = map(_ -> ID(), collect(args))
+        codual_args = map(args, codual_arg_ids) do arg, id
+            ex = Expr(:call, identity, is_active(arg) ? __inc(arg) : const_codual(arg, info))
+            return (id, new_inst(ex))
+        end
 
         # Make call to rule.
         rule_call_id = ID()
@@ -661,9 +661,6 @@ end
 
 __get_primal(x::CoDual) = primal(x)
 __get_primal(x) = x
-
-# Helper used in make_ad_stmts! for call / invoke.
-__make_codual(x::P) where {P} = (P <: CoDual ? x : uninit_fcodual(x))::CoDual
 
 # Used in `make_ad_stmts!` method for `Expr(:call, ...)` and `Expr(:invoke, ...)`.
 @inline function __run_rvs_pass!(::Type{P}, ::Type{sig}, pb!!, ret_rev_data_ref::Ref, arg_rev_data_refs...) where {P, sig}
