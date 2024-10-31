@@ -223,7 +223,7 @@ function lookup_ir(interp::CC.AbstractInterpreter, tt::Type{<:Tuple}; optimize_u
             "f(x::Float64) = sin(x)\n" *
             "build_rrule(Tuple{typeof(f), Int})\n" *
             "\n" *
-            "would cause this error, because there are no methods of `f` which accept\n" *
+            "would cause this error, because there are no methods of `f` which accept " *
             "an `Int` argument."
         throw(ArgumentError(msg))
     elseif length(asts) > 1

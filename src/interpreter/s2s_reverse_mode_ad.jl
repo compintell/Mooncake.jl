@@ -474,7 +474,15 @@ end
 
 # Mooncake does not yet handle `UpsilonNode`s. Throw an error if one is encountered.
 function make_ad_stmts!(stmt::Core.UpsilonNode, ::ID, ::ADInfo)
-    unhandled_feature("Encountered UpsilonNode: $stmt")
+    unhandled_feature(
+        "Encountered UpsilonNode: $stmt. These are generated as part of some try / catch " *
+        "/ finally blocks. At the present time, Mooncake.jl cannot differentiate through " *
+        "these, so they must be avoided. Strategies for resolving this error include " *
+        "re-writing code such that it avoids generating any UpsilonNodes, or writing a " *
+        "rule to differentiate the code by hand. If you are in any doubt as to what to " *
+        "do, please request assistance by opening an issue at " *
+        "github.com/compintell/Mooncake.jl."
+    )
 end
 
 # There are quite a number of possible `Expr`s that can be encountered. Each case has its
@@ -973,9 +981,13 @@ function build_rrule(
             interp.oc_cache[oc_cache_key] = rule
             return rule
         end
-    catch
-        sig = sig_or_mi isa Core.MethodInstance ? sig_or_mi.specTypes : sig_or_mi
-        throw(MooncakeRuleCompilationError(interp, sig, debug_mode))
+    catch e
+        if e isa MooncakeRuleCompilationError
+            rethrow(e)
+        else
+            sig = sig_or_mi isa Core.MethodInstance ? sig_or_mi.specTypes : sig_or_mi
+            throw(MooncakeRuleCompilationError(interp, sig, debug_mode))
+        end
     finally
         unlock(MOONCAKE_INFERENCE_LOCK)
     end
