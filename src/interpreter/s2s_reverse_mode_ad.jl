@@ -837,6 +837,23 @@ function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where 
     end
 end
 
+struct MooncakeRuleCompilationError <: Exception
+    interp::MooncakeInterpreter
+    sig
+    debug_mode::Bool
+end
+
+function Base.showerror(io::IO, err::MooncakeRuleCompilationError)
+    msg = "MooncakeRuleCompilationError: an error occured while Mooncake was compiling a " *
+        "rule to differentiate something. If the `caused by` error " *
+        "message below does not make it clear to you how the problem can be fixed, " *
+        "please open an issue at github.com/compintell/Mooncake.jl describing your " *
+        "problem.\n" *
+        "To replicate this error run the following:\n"
+    println(io, msg)
+    println(io, "Mooncake.build_rrule(Mooncake.$(err.interp), $(err.sig); debug_mode=$(err.debug_mode))")
+end
+
 """
     build_rrule(args...; debug_mode=false)
 
@@ -956,6 +973,9 @@ function build_rrule(
             interp.oc_cache[oc_cache_key] = rule
             return rule
         end
+    catch
+        sig = sig_or_mi isa Core.MethodInstance ? sig_or_mi.specTypes : sig_or_mi
+        throw(MooncakeRuleCompilationError(interp, sig, debug_mode))
     finally
         unlock(MOONCAKE_INFERENCE_LOCK)
     end
