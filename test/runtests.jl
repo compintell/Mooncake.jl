@@ -74,6 +74,8 @@ include("front_matter.jl")
         include(joinpath("integration_testing", "distributions", "distributions.jl"))
     elseif test_group == "integration_testing/gp"
         include(joinpath("integration_testing", "gp", "gp.jl"))
+    elseif test_group == "integration_testing/logexpfunctions"
+        include(joinpath("integration_testing", "logexpfunctions", "logexpfunctions.jl"))
     elseif test_group == "integration_testing/lux"
         include(joinpath("integration_testing", "lux", "lux.jl"))
     elseif test_group == "integration_testing/misc"
