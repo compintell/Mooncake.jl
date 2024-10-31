@@ -34,6 +34,7 @@ jobs:
           - 'integration_testing/diff_tests'
           - 'integration_testing/distributions'
           - 'integration_testing/gp'
+          - 'integration_testing/logexpfunctions'
           - 'integration_testing/lux'
           - 'integration_testing/misc'
           - 'integration_testing/misc_abstract_array'
