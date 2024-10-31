@@ -235,6 +235,7 @@ Convert a Mooncake tangent into a type that ChainRules.jl `rrule`s expect to see
 to_cr_tangent(t::IEEEFloat) = t
 to_cr_tangent(t::Array{<:IEEEFloat}) = t
 to_cr_tangent(::NoTangent) = ChainRulesCore.NoTangent()
+to_cr_tangent(t::Tuple) = ChainRulesCore.Tangent{Any}(t...)
 
 """
     increment_and_get_rdata!(fdata, zero_rdata, cr_tangent)

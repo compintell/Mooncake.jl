@@ -373,7 +373,7 @@ function make_ad_stmts!(stmt::IDPhiNode, line::ID, info::ADInfo)
     new_vals = Vector{Any}(undef, length(vals))
     for n in eachindex(vals)
         isassigned(vals, n) || continue
-        new_vals[n] = is_active(vals[n]) ? __inc(vals[n]) : const_codual(vals[n], info)
+        new_vals[n] = inc_or_const(vals[n], info)
     end
 
     # It turns out to be really very important to do type inference correctly for PhiNodes.
@@ -457,6 +457,8 @@ function const_codual(stmt, info::ADInfo)
     return isbitstype(_typeof(x)) ? x : add_data!(info, x)
 end
 
+inc_or_const(stmt, info::ADInfo) = is_active(stmt) ? __inc(stmt) : const_codual(stmt, info)
+
 # Get the value associated to `x`. For `GlobalRef`s, verify that `x` is indeed a constant.
 function get_const_primal_value(x::GlobalRef)
     isconst(x) || unhandled_feature("Non-constant GlobalRef not supported: $x")
@@ -535,11 +537,10 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         #
 
         # Make arguments to rrule call. Things which are not already CoDual must be made so.
-        codual_arg_ids = map(_ -> ID(), args)
-        __codual_args = map(arg -> Expr(:call, __make_codual, __inc(arg)), args)
-        codual_args = IDInstPair[
-            (id, new_inst(arg)) for (id, arg) in zip(codual_arg_ids, __codual_args)
-        ]
+        codual_arg_ids = map(_ -> ID(), collect(args))
+        codual_args = map(args, codual_arg_ids) do arg, id
+            return (id, new_inst(Expr(:call, identity, inc_or_const(arg, info))))
+        end
 
         # Make call to rule.
         rule_call_id = ID()
@@ -662,9 +663,6 @@ end
 __get_primal(x::CoDual) = primal(x)
 __get_primal(x) = x
 
-# Helper used in make_ad_stmts! for call / invoke.
-__make_codual(x::P) where {P} = (P <: CoDual ? x : uninit_fcodual(x))::CoDual
-
 # Used in `make_ad_stmts!` method for `Expr(:call, ...)` and `Expr(:invoke, ...)`.
 @inline function __run_rvs_pass!(::Type{P}, ::Type{sig}, pb!!, ret_rev_data_ref::Ref, arg_rev_data_refs...) where {P, sig}
     tuple_map(increment_if_ref!, arg_rev_data_refs, pb!!(ret_rev_data_ref[]))
@@ -673,6 +671,7 @@ __make_codual(x::P) where {P} = (P <: CoDual ? x : uninit_fcodual(x))::CoDual
 end
 
 @inline increment_if_ref!(ref::Ref, rvs_data) = increment_ref!(ref, rvs_data)
+@inline increment_if_ref!(::Ref, ::ZeroRData) = nothing
 @inline increment_if_ref!(::Nothing, ::Any) = nothing
 
 @inline increment_ref!(x::Ref, t) = setindex!(x, increment!!(x[], t))

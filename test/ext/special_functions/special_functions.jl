@@ -33,7 +33,7 @@ using Mooncake, SpecialFunctions, Test
         (:stability_and_allocs, polygamma, 3, 0.1),
         (:stability_and_allocs, beta, 0.3, 0.1),
         (:stability_and_allocs, logbeta, 0.3, 0.1),
-        # (:stability_and_allocs, logabsgamma, 0.3),
+        (:stability_and_allocs, logabsgamma, 0.3),
         (:stability_and_allocs, loggamma, 0.3),
         (:stability_and_allocs, expint, 0.3),
         (:stability_and_allocs, expintx, 0.3),
@@ -55,11 +55,11 @@ using Mooncake, SpecialFunctions, Test
         (:allocs, SpecialFunctions.gammax, 1.0),
         (:allocs, SpecialFunctions.rgammax, 3.0, 6.0),
         (:allocs, SpecialFunctions.rgamma1pm1, 0.1),
-        # (:allocs, SpecialFunctions.auxgam, 0.1), # allocations
-        # (:allocs, logabsbeta, 0.3, 0.1), # logabsgamma needs to work for this to work
-        # (:allocs, SpecialFunctions.loggamma1p, 0.3), # allocations
-        # (:allocs, SpecialFunctions.loggamma1p, -0.3), # allocations
-        # (:allocs, SpecialFunctions.lambdaeta, 5.0), # a genuine bug!
+        (:allocs, SpecialFunctions.auxgam, 0.1),
+        (:allocs, logabsbeta, 0.3, 0.1),
+        (:allocs, SpecialFunctions.loggamma1p, 0.3),
+        (:allocs, SpecialFunctions.loggamma1p, -0.3),
+        (:none, SpecialFunctions.lambdaeta, 5.0),
     ]
         test_rule(Xoshiro(123456), f, x...; perf_flag, is_primitive=false)
     end
