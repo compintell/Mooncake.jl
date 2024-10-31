@@ -55,10 +55,10 @@ using Mooncake, SpecialFunctions, Test
         (:allocs, SpecialFunctions.gammax, 1.0),
         (:allocs, SpecialFunctions.rgammax, 3.0, 6.0),
         (:allocs, SpecialFunctions.rgamma1pm1, 0.1),
-        # (:allocs, SpecialFunctions.auxgam, 0.1), # allocations
+        (:allocs, SpecialFunctions.auxgam, 0.1),
         (:allocs, logabsbeta, 0.3, 0.1),
-        # (:allocs, SpecialFunctions.loggamma1p, 0.3), # allocations
-        # (:allocs, SpecialFunctions.loggamma1p, -0.3), # allocations
+        (:allocs, SpecialFunctions.loggamma1p, 0.3),
+        (:allocs, SpecialFunctions.loggamma1p, -0.3),
         (:none, SpecialFunctions.lambdaeta, 5.0),
     ]
         test_rule(Xoshiro(123456), f, x...; perf_flag, is_primitive=false)
