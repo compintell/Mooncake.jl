@@ -380,7 +380,16 @@ end
 
 # _new_ and _new_-adjacent rules for Memory, MemoryRef, and Array.
 
-@zero_adjoint MinimalCtx Tuple{Type{<:Memory}, UndefInitializer, Int}
+@is_primitive MinimalCtx Tuple{Type{<:Memory}, UndefInitializer, Int}
+function rrule!!(
+    ::CoDual{Type{Memory{P}}},
+    ::CoDual{UndefInitializer},
+    n::CoDual{Int},
+) where {P}
+    x = Memory{P}(undef, primal(n))
+    dx = Memory{tangent_type(P)}(undef, primal(n))
+    return CoDual(x, dx), NoPullback((NoRData(), NoRData(), NoRData()))
+end
 
 function rrule!!(
     ::CoDual{typeof(_new_)},
