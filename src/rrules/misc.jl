@@ -31,6 +31,9 @@
 @zero_adjoint MinimalCtx Tuple{typeof(Base.padding), DataType, Int}
 @zero_adjoint MinimalCtx Tuple{Type, TypeVar, Type}
 
+# Required to avoid an ambiguity.
+@zero_adjoint MinimalCtx Tuple{Type{Symbol}, TypeVar, Type}
+
 if VERSION >= v"1.11-"
     @zero_adjoint MinimalCtx Tuple{typeof(Random.hash_seed), Vararg}
     @zero_adjoint MinimalCtx Tuple{typeof(Base.dataids), Memory}
@@ -75,10 +78,10 @@ lgetfield(x, ::Val{f}) where {f} = getfield(x, f)
     return y, pb!!
 end
 
-@inline _get_fdata_field(_, t::Union{Tuple, NamedTuple}, f...) = getfield(t, f...)
-@inline _get_fdata_field(_, data::FData, f...) = val(getfield(data.data, f...))
-@inline _get_fdata_field(primal, ::NoFData, f...) = uninit_fdata(getfield(primal, f...))
-@inline _get_fdata_field(_, t::MutableTangent, f...) = fdata(val(getfield(t.fields, f...)))
+@inline _get_fdata_field(_, t::Union{Tuple, NamedTuple}, f) = getfield(t, f)
+@inline _get_fdata_field(_, data::FData, f) = val(getfield(data.data, f))
+@inline _get_fdata_field(primal, ::NoFData, f) = uninit_fdata(getfield(primal, f))
+@inline _get_fdata_field(_, t::MutableTangent, f) = fdata(val(getfield(t.fields, f)))
 
 increment_field_rdata!(dx::MutableTangent, ::NoRData, ::Val) = dx
 increment_field_rdata!(dx::NoFData, ::NoRData, ::Val) = dx

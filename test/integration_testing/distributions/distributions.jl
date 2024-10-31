@@ -1,4 +1,8 @@
-using Distributions
+using Pkg
+Pkg.activate(@__DIR__)
+Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
+
+using Distributions, FillArrays, Mooncake, LinearAlgebra, PDMats, Test
 
 _sym(A) = A'A
 _pdmat(A) = PDMat(_sym(A) + 5I)
@@ -149,10 +153,8 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
         # Multivariate
         #
 
-        (:allocs, MvNormal(1, 1.5), [-0.3]),
-        (:allocs, MvNormal(2, 0.5), [0.2, -0.3]),
-        (:allocs, MvNormal([1.0]), [-0.1]),
-        (:allocs, MvNormal([1.0, 0.9]), [-0.1, -0.7]),
+        (:allocs, MvNormal(Diagonal(Fill(1.5, 1))), [-0.3]),
+        (:allocs, MvNormal(Diagonal(Fill(0.5, 2))), [0.2, -0.3]),
         (:none, MvNormal([0.0], 0.9), [0.1]),
         (:none, MvNormal([0.0, 0.1], 0.9), [0.1, -0.05]),
         (:allocs, MvNormal(Diagonal([0.1])), [0.1]),

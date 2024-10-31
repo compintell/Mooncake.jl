@@ -304,7 +304,7 @@ function comms_channel(info::ADStmtInfo)
 end
 
 #=
-    make_ad_stmts(inst::NewInstruction, line::ID, info::ADInfo)::ADStmtInfo
+    make_ad_stmts!(inst::NewInstruction, line::ID, info::ADInfo)::ADStmtInfo
 
 Every line in the primal code is associated to one or more lines in the forwards-pass of AD,
 and one or more lines in the pullback. This function has method specific to every
@@ -723,6 +723,13 @@ function DerivedRule(
     Tprimal, fwds_oc::Tfwds_oc, pb_oc::Tpb_oc, isva::Tisva, nargs::Tnargs
 ) where {Tfwds_oc, Tpb_oc, Tisva, Tnargs}
     return DerivedRule{Tprimal, Tfwds_oc, Tpb_oc, Tisva, Tnargs}(fwds_oc, pb_oc, isva, nargs)
+end
+
+# Extends functionality defined for debug_mode.
+function verify_args(::DerivedRule{sig}, ::Tx) where {sig, Tx}
+    sig === Tx && return nothing
+    msg = "Arguments with sig $Tx do not match signature expected by rule, $sig"
+    throw(ArgumentError(msg))
 end
 
 _copy(::Nothing) = nothing

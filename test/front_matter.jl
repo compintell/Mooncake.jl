@@ -1,17 +1,11 @@
 using
     AllocCheck,
+    Aqua,
     BenchmarkTools,
     DiffRules,
-    DynamicPPL,
-    FillArrays,
     JET,
     LinearAlgebra,
-    Lux,
-    LuxLib,
-    NNlib,
-    PDMats,
     Random,
-    SpecialFunctions,
     StableRNGs,
     Mooncake,
     Test
@@ -23,9 +17,6 @@ using Base.Iterators: product
 using Core:
     bitcast, svec, ReturnNode, PhiNode, PiNode, GotoIfNot, GotoNode, SSAValue, Argument
 using Core.Intrinsics: pointerref, pointerset
-
-using NNlib: dropout
-using LuxLib.Impl: SLEEFActivations
 
 using Mooncake:
     CC,

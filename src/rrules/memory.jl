@@ -419,7 +419,7 @@ end
 
 function rrule!!(
     ::CoDual{typeof(lgetfield)},
-    x::CoDual{<:Memory},
+    x::CoDual{<:Memory, <:Memory},
     ::CoDual{Val{name}},
     ::CoDual{Val{order}},
 ) where {name, order}
@@ -431,7 +431,7 @@ end
 
 function rrule!!(
     ::CoDual{typeof(lgetfield)},
-    x::CoDual{<:MemoryRef},
+    x::CoDual{<:MemoryRef, <:MemoryRef},
     ::CoDual{Val{name}},
     ::CoDual{Val{order}},
 ) where {name, order}
@@ -443,7 +443,7 @@ end
 
 function rrule!!(
     ::CoDual{typeof(lgetfield)},
-    x::CoDual{<:Array},
+    x::CoDual{<:Array, <:Array},
     ::CoDual{Val{name}},
     ::CoDual{Val{order}},
 ) where {name, order}
@@ -455,14 +455,16 @@ end
 
 const _MemTypes = Union{Memory, MemoryRef, Array}
 
-function rrule!!(f::CoDual{typeof(lgetfield)}, x::CoDual{<:_MemTypes}, name::CoDual{<:Val})
+function rrule!!(
+    f::CoDual{typeof(lgetfield)}, x::CoDual{<:_MemTypes, <:_MemTypes}, name::CoDual{<:Val}
+)
     y, adj = rrule!!(f, x, name, zero_fcodual(Val(:not_atomic)))
     ternary_lgetfield_adjoint(dy) = adj(dy)[1:3]
     return y, ternary_lgetfield_adjoint
 end
 
 function rrule!!(
-    ::CoDual{typeof(getfield)}, x::CoDual{<:_MemTypes},
+    ::CoDual{typeof(getfield)}, x::CoDual{<:_MemTypes, <:_MemTypes},
     name::CoDual{<:Union{Int, Symbol}},
     order::CoDual{Symbol},
 )
@@ -477,7 +479,9 @@ function rrule!!(
 end
 
 function rrule!!(
-    f::CoDual{typeof(getfield)}, x::CoDual{<:_MemTypes}, name::CoDual{<:Union{Int, Symbol}}
+    f::CoDual{typeof(getfield)},
+    x::CoDual{<:_MemTypes, <:_MemTypes},
+    name::CoDual{<:Union{Int, Symbol}},
 )
     y, adj = rrule!!(f, x, name, zero_fcodual(:not_atomic))
     ternary_getfield_adjoint(dy) = adj(dy)[1:3]
@@ -485,7 +489,10 @@ function rrule!!(
 end
 
 @inline function rrule!!(
-    ::CoDual{typeof(lsetfield!)}, value::CoDual{<:Array}, ::CoDual{Val{name}}, x::CoDual
+    ::CoDual{typeof(lsetfield!)},
+    value::CoDual{<:Array, <:Array},
+    ::CoDual{Val{name}},
+    x::CoDual,
 ) where {name}
     old_x = getfield(value.x, name)
     old_dx = getfield(value.dx, name)

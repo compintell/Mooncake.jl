@@ -1,3 +1,9 @@
+using Pkg
+Pkg.activate(@__DIR__)
+Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
+
+using Mooncake, Lux, Test
+
 @testset "lux" begin
     @testset "$(typeof(f))" for (f, x_f32) in Any[
         (Dense(2, 4), randn(Float32, 2, 3)),
