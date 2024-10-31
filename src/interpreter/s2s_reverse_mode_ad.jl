@@ -373,7 +373,7 @@ function make_ad_stmts!(stmt::IDPhiNode, line::ID, info::ADInfo)
     new_vals = Vector{Any}(undef, length(vals))
     for n in eachindex(vals)
         isassigned(vals, n) || continue
-        new_vals[n] = is_active(vals[n]) ? __inc(vals[n]) : const_codual(vals[n], info)
+        new_vals[n] = inc_or_const(vals[n], info)
     end
 
     # It turns out to be really very important to do type inference correctly for PhiNodes.
@@ -457,6 +457,8 @@ function const_codual(stmt, info::ADInfo)
     return isbitstype(_typeof(x)) ? x : add_data!(info, x)
 end
 
+inc_or_const(stmt, info::ADInfo) = is_active(stmt) ? __inc(stmt) : const_codual(stmt, info)
+
 # Get the value associated to `x`. For `GlobalRef`s, verify that `x` is indeed a constant.
 function get_const_primal_value(x::GlobalRef)
     isconst(x) || unhandled_feature("Non-constant GlobalRef not supported: $x")
@@ -537,8 +539,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         # Make arguments to rrule call. Things which are not already CoDual must be made so.
         codual_arg_ids = map(_ -> ID(), collect(args))
         codual_args = map(args, codual_arg_ids) do arg, id
-            ex = Expr(:call, identity, is_active(arg) ? __inc(arg) : const_codual(arg, info))
-            return (id, new_inst(ex))
+            return (id, new_inst(Expr(:call, identity, inc_or_const(arg, info))))
         end
 
         # Make call to rule.
