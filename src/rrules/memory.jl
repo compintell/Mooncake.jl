@@ -384,13 +384,13 @@ end
 
 @is_primitive MinimalCtx Tuple{Type{<:Memory}, UndefInitializer, Int}
 function rrule!!(
-    a::CoDual{Type{Memory{P}}},
-    b::CoDual{UndefInitializer},
+    ::CoDual{Type{Memory{P}}},
+    ::CoDual{UndefInitializer},
     n::CoDual{Int},
 ) where {P}
     x = Memory{P}(undef, primal(n))
     dx = Memory{tangent_type(P)}(undef, primal(n))
-    return CoDual(x, dx), NoPullback(a, b, n)
+    return CoDual(x, dx), NoPullback((NoRData(), NoRData(), NoRData()))
 end
 
 function rrule!!(
