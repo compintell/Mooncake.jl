@@ -17,9 +17,21 @@ const Maybe{T} = Union{Nothing, T}
 tangent_type(::Type{<:Memory{P}}) where {P} = Memory{tangent_type(P)}
 
 function zero_tangent_internal(x::Memory{P}, stackdict::Maybe{IdDict}) where {P}
+
     T = tangent_type(typeof(x))
+
+    # If no stackdict is provided, then the caller promises that there is no need for it.
+    if stackdict === nothing
+        t = T(undef, length(x))
+        return _map_if_assigned!(Base.Fix2(zero_tangent_internal, stackdict), t, x)::T
+    end
+
+    # If we've seen this primal before, then we have a circular reference, and must return
+    # the tangent which has already been allocated for it.
     haskey(stackdict, x) && return stackdict[x]::T
 
+    # We have not seen this primal before, so allocate + store the tangent for it, and zero
+    # out the elements.
     t = T(undef, length(x))
     stackdict[x] = t
     return _map_if_assigned!(Base.Fix2(zero_tangent_internal, stackdict), t, x)::T
@@ -387,7 +399,7 @@ function rrule!!(
     n::CoDual{Int},
 ) where {P}
     x = Memory{P}(undef, primal(n))
-    dx = Memory{tangent_type(P)}(undef, primal(n))
+    dx = zero_tangent_internal(x, nothing)
     return CoDual(x, dx), NoPullback((NoRData(), NoRData(), NoRData()))
 end
 
