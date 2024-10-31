@@ -673,6 +673,7 @@ __make_codual(x::P) where {P} = (P <: CoDual ? x : uninit_fcodual(x))::CoDual
 end
 
 @inline increment_if_ref!(ref::Ref, rvs_data) = increment_ref!(ref, rvs_data)
+@inline increment_if_ref!(::Ref, ::ZeroRData) = nothing
 @inline increment_if_ref!(::Nothing, ::Any) = nothing
 
 @inline increment_ref!(x::Ref, t) = setindex!(x, increment!!(x[], t))

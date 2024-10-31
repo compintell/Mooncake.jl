@@ -59,7 +59,7 @@ using Mooncake, SpecialFunctions, Test
         (:allocs, logabsbeta, 0.3, 0.1),
         # (:allocs, SpecialFunctions.loggamma1p, 0.3), # allocations
         # (:allocs, SpecialFunctions.loggamma1p, -0.3), # allocations
-        # (:allocs, SpecialFunctions.lambdaeta, 5.0), # a genuine bug!
+        (:none, SpecialFunctions.lambdaeta, 5.0),
     ]
         test_rule(Xoshiro(123456), f, x...; perf_flag, is_primitive=false)
     end
