@@ -17,9 +17,21 @@ const Maybe{T} = Union{Nothing, T}
 tangent_type(::Type{<:Memory{P}}) where {P} = Memory{tangent_type(P)}
 
 function zero_tangent_internal(x::Memory{P}, stackdict::Maybe{IdDict}) where {P}
+
     T = tangent_type(typeof(x))
+
+    # If no stackdict is provided, then the caller promises that there is no need for it.
+    if stackdict === nothing
+        t = T(undef, length(x))
+        return _map_if_assigned!(Base.Fix2(zero_tangent_internal, stackdict), t, x)::T
+    end
+
+    # If we've seen this primal before, then we have a circular reference, and must return
+    # the tangent which has already been allocated for it.
     haskey(stackdict, x) && return stackdict[x]::T
 
+    # We have not seen this primal before, so allocate + store the tangent for it, and zero
+    # out the elements.
     t = T(undef, length(x))
     stackdict[x] = t
     return _map_if_assigned!(Base.Fix2(zero_tangent_internal, stackdict), t, x)::T
@@ -382,7 +394,16 @@ end
 
 # _new_ and _new_-adjacent rules for Memory, MemoryRef, and Array.
 
-@zero_adjoint MinimalCtx Tuple{Type{<:Memory}, UndefInitializer, Int}
+@is_primitive MinimalCtx Tuple{Type{<:Memory}, UndefInitializer, Int}
+function rrule!!(
+    ::CoDual{Type{Memory{P}}},
+    ::CoDual{UndefInitializer},
+    n::CoDual{Int},
+) where {P}
+    x = Memory{P}(undef, primal(n))
+    dx = zero_tangent_internal(x, nothing)
+    return CoDual(x, dx), NoPullback((NoRData(), NoRData(), NoRData()))
+end
 
 function rrule!!(
     ::CoDual{typeof(_new_)},
@@ -410,7 +431,7 @@ end
 
 function rrule!!(
     ::CoDual{typeof(lgetfield)},
-    x::CoDual{<:Memory},
+    x::CoDual{<:Memory, <:Memory},
     ::CoDual{Val{name}},
     ::CoDual{Val{order}},
 ) where {name, order}
@@ -422,7 +443,7 @@ end
 
 function rrule!!(
     ::CoDual{typeof(lgetfield)},
-    x::CoDual{<:MemoryRef},
+    x::CoDual{<:MemoryRef, <:MemoryRef},
     ::CoDual{Val{name}},
     ::CoDual{Val{order}},
 ) where {name, order}
@@ -434,7 +455,7 @@ end
 
 function rrule!!(
     ::CoDual{typeof(lgetfield)},
-    x::CoDual{<:Array},
+    x::CoDual{<:Array, <:Array},
     ::CoDual{Val{name}},
     ::CoDual{Val{order}},
 ) where {name, order}
@@ -446,14 +467,16 @@ end
 
 const _MemTypes = Union{Memory, MemoryRef, Array}
 
-function rrule!!(f::CoDual{typeof(lgetfield)}, x::CoDual{<:_MemTypes}, name::CoDual{<:Val})
+function rrule!!(
+    f::CoDual{typeof(lgetfield)}, x::CoDual{<:_MemTypes, <:_MemTypes}, name::CoDual{<:Val}
+)
     y, adj = rrule!!(f, x, name, zero_fcodual(Val(:not_atomic)))
     ternary_lgetfield_adjoint(dy) = adj(dy)[1:3]
     return y, ternary_lgetfield_adjoint
 end
 
 function rrule!!(
-    ::CoDual{typeof(getfield)}, x::CoDual{<:_MemTypes},
+    ::CoDual{typeof(getfield)}, x::CoDual{<:_MemTypes, <:_MemTypes},
     name::CoDual{<:Union{Int, Symbol}},
     order::CoDual{Symbol},
 )
@@ -468,7 +491,9 @@ function rrule!!(
 end
 
 function rrule!!(
-    f::CoDual{typeof(getfield)}, x::CoDual{<:_MemTypes}, name::CoDual{<:Union{Int, Symbol}}
+    f::CoDual{typeof(getfield)},
+    x::CoDual{<:_MemTypes, <:_MemTypes},
+    name::CoDual{<:Union{Int, Symbol}},
 )
     y, adj = rrule!!(f, x, name, zero_fcodual(:not_atomic))
     ternary_getfield_adjoint(dy) = adj(dy)[1:3]
@@ -476,7 +501,10 @@ function rrule!!(
 end
 
 @inline function rrule!!(
-    ::CoDual{typeof(lsetfield!)}, value::CoDual{<:Array}, ::CoDual{Val{name}}, x::CoDual
+    ::CoDual{typeof(lsetfield!)},
+    value::CoDual{<:Array, <:Array},
+    ::CoDual{Val{name}},
+    x::CoDual,
 ) where {name}
     old_x = getfield(value.x, name)
     old_dx = getfield(value.dx, name)

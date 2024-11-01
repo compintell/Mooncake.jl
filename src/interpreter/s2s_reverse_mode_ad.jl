@@ -297,7 +297,7 @@ function comms_channel(info::ADStmtInfo)
 end
 
 #=
-    make_ad_stmts(inst::NewInstruction, line::ID, info::ADInfo)::ADStmtInfo
+    make_ad_stmts!(inst::NewInstruction, line::ID, info::ADInfo)::ADStmtInfo
 
 Every line in the primal code is associated to one or more lines in the forwards-pass of AD,
 and one or more lines in the pullback. This function has method specific to every
@@ -373,7 +373,7 @@ function make_ad_stmts!(stmt::IDPhiNode, line::ID, info::ADInfo)
     new_vals = Vector{Any}(undef, length(vals))
     for n in eachindex(vals)
         isassigned(vals, n) || continue
-        new_vals[n] = is_active(vals[n]) ? __inc(vals[n]) : const_codual(vals[n], info)
+        new_vals[n] = inc_or_const(vals[n], info)
     end
 
     # It turns out to be really very important to do type inference correctly for PhiNodes.
@@ -457,6 +457,8 @@ function const_codual(stmt, info::ADInfo)
     return isbitstype(_typeof(x)) ? x : add_data!(info, x)
 end
 
+inc_or_const(stmt, info::ADInfo) = is_active(stmt) ? __inc(stmt) : const_codual(stmt, info)
+
 # Get the value associated to `x`. For `GlobalRef`s, verify that `x` is indeed a constant.
 function get_const_primal_value(x::GlobalRef)
     isconst(x) || unhandled_feature("Non-constant GlobalRef not supported: $x")
@@ -472,7 +474,15 @@ end
 
 # Mooncake does not yet handle `UpsilonNode`s. Throw an error if one is encountered.
 function make_ad_stmts!(stmt::Core.UpsilonNode, ::ID, ::ADInfo)
-    unhandled_feature("Encountered UpsilonNode: $stmt")
+    unhandled_feature(
+        "Encountered UpsilonNode: $stmt. These are generated as part of some try / catch " *
+        "/ finally blocks. At the present time, Mooncake.jl cannot differentiate through " *
+        "these, so they must be avoided. Strategies for resolving this error include " *
+        "re-writing code such that it avoids generating any UpsilonNodes, or writing a " *
+        "rule to differentiate the code by hand. If you are in any doubt as to what to " *
+        "do, please request assistance by opening an issue at " *
+        "github.com/compintell/Mooncake.jl."
+    )
 end
 
 # There are quite a number of possible `Expr`s that can be encountered. Each case has its
@@ -535,11 +545,10 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         #
 
         # Make arguments to rrule call. Things which are not already CoDual must be made so.
-        codual_arg_ids = map(_ -> ID(), args)
-        __codual_args = map(arg -> Expr(:call, __make_codual, __inc(arg)), args)
-        codual_args = IDInstPair[
-            (id, new_inst(arg)) for (id, arg) in zip(codual_arg_ids, __codual_args)
-        ]
+        codual_arg_ids = map(_ -> ID(), collect(args))
+        codual_args = map(args, codual_arg_ids) do arg, id
+            return (id, new_inst(Expr(:call, identity, inc_or_const(arg, info))))
+        end
 
         # Make call to rule.
         rule_call_id = ID()
@@ -662,9 +671,6 @@ end
 __get_primal(x::CoDual) = primal(x)
 __get_primal(x) = x
 
-# Helper used in make_ad_stmts! for call / invoke.
-__make_codual(x::P) where {P} = (P <: CoDual ? x : uninit_fcodual(x))::CoDual
-
 # Used in `make_ad_stmts!` method for `Expr(:call, ...)` and `Expr(:invoke, ...)`.
 @inline function __run_rvs_pass!(::Type{P}, ::Type{sig}, pb!!, ret_rev_data_ref::Ref, arg_rev_data_refs...) where {P, sig}
     tuple_map(increment_if_ref!, arg_rev_data_refs, pb!!(ret_rev_data_ref[]))
@@ -673,6 +679,7 @@ __make_codual(x::P) where {P} = (P <: CoDual ? x : uninit_fcodual(x))::CoDual
 end
 
 @inline increment_if_ref!(ref::Ref, rvs_data) = increment_ref!(ref, rvs_data)
+@inline increment_if_ref!(::Ref, ::ZeroRData) = nothing
 @inline increment_if_ref!(::Nothing, ::Any) = nothing
 
 @inline increment_ref!(x::Ref, t) = setindex!(x, increment!!(x[], t))
@@ -716,6 +723,13 @@ function DerivedRule(
     Tprimal, fwds_oc::Tfwds_oc, pb_oc::Tpb_oc, isva::Tisva, nargs::Tnargs
 ) where {Tfwds_oc, Tpb_oc, Tisva, Tnargs}
     return DerivedRule{Tprimal, Tfwds_oc, Tpb_oc, Tisva, Tnargs}(fwds_oc, pb_oc, isva, nargs)
+end
+
+# Extends functionality defined for debug_mode.
+function verify_args(::DerivedRule{sig}, ::Tx) where {sig, Tx}
+    sig === Tx && return nothing
+    msg = "Arguments with sig $Tx do not match signature expected by rule, $sig"
+    throw(ArgumentError(msg))
 end
 
 _copy(::Nothing) = nothing
@@ -829,6 +843,28 @@ function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where 
             } where {Tfcodual_ret <: fcodual_type(Treturn)}
         end
     end
+end
+
+struct MooncakeRuleCompilationError <: Exception
+    interp::MooncakeInterpreter
+    sig
+    debug_mode::Bool
+end
+
+function Base.showerror(io::IO, err::MooncakeRuleCompilationError)
+    msg = "MooncakeRuleCompilationError: an error occured while Mooncake was compiling a " *
+        "rule to differentiate something. If the `caused by` error " *
+        "message below does not make it clear to you how the problem can be fixed, " *
+        "please open an issue at github.com/compintell/Mooncake.jl describing your " *
+        "problem.\n" *
+        "To replicate this error run the following:\n"
+    println(io, msg)
+    println(io, "Mooncake.build_rrule(Mooncake.$(err.interp), $(err.sig); debug_mode=$(err.debug_mode))")
+    println(
+        io,
+        "\nNote that you may need to `using` some additional packages if not all of the " *
+        "names printed in the above signature are available currently in your environment."
+    )
 end
 
 """
@@ -949,6 +985,13 @@ function build_rrule(
             rule = debug_mode ? DebugRRule(raw_rule) : raw_rule
             interp.oc_cache[oc_cache_key] = rule
             return rule
+        end
+    catch e
+        if e isa MooncakeRuleCompilationError
+            rethrow(e)
+        else
+            sig = sig_or_mi isa Core.MethodInstance ? sig_or_mi.specTypes : sig_or_mi
+            throw(MooncakeRuleCompilationError(interp, sig, debug_mode))
         end
     finally
         unlock(MOONCAKE_INFERENCE_LOCK)

@@ -1,5 +1,13 @@
 @testset "debug_mode" begin
 
+    # Unless we explicitly check that the arguments are of the type as expected by the rule,
+    # this will segfault.
+    @testset "argument checking" begin
+        f = x -> 5x
+        rule = build_rrule(f, 5.0; debug_mode=true)
+        @test_throws ErrorException rule(zero_fcodual(f), CoDual(0f0, 1f0))
+    end
+
     # Forwards-pass tests.
     x = (CoDual(sin, NoTangent()), CoDual(5.0, NoFData()))
     @test_throws(ErrorException, Mooncake.DebugRRule(rrule!!)(x...))

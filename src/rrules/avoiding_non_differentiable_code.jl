@@ -10,6 +10,9 @@ end
 @zero_adjoint MinimalCtx Tuple{typeof(string), Vararg}
 @zero_adjoint MinimalCtx Tuple{Type{Symbol}, Vararg}
 @zero_adjoint MinimalCtx Tuple{typeof(==), Any, Any}
+@zero_adjoint MinimalCtx Tuple{Type{Float64}, Any, RoundingMode}
+@zero_adjoint MinimalCtx Tuple{Type{Float32}, Any, RoundingMode}
+@zero_adjoint MinimalCtx Tuple{Type{Float16}, Any, RoundingMode}
 
 function generate_hand_written_rrule!!_test_cases(
     rng_ctor, ::Val{:avoiding_non_differentiable_code}
@@ -48,6 +51,12 @@ function generate_hand_written_rrule!!_test_cases(
         # Rules to make Symbol-related functionality work properly.
         (false, :stability_and_allocs, nothing, Symbol, "hello"),
         (false, :stability_and_allocs, nothing, Symbol, UInt8[1, 2]),
+        (false, :stability_and_allocs, nothing, Float64, π, RoundDown),
+        (false, :stability_and_allocs, nothing, Float64, π, RoundUp),
+        (true, :stability_and_allocs, nothing, Float32, π, RoundDown),
+        (true, :stability_and_allocs, nothing, Float32, π, RoundUp),
+        (true, :stability_and_allocs, nothing, Float16, π, RoundDown),
+        (true, :stability_and_allocs, nothing, Float16, π, RoundUp),
     )
     memory = Any[_x, _dx]
     return test_cases, memory
