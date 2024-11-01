@@ -214,9 +214,20 @@ function lookup_ir(interp::CC.AbstractInterpreter, tt::Type{<:Tuple}; optimize_u
         end
     end
     if isempty(asts)
-        throw(ArgumentError("No methods found for signature $asts"))
+        msg = "No methods found for signature: $tt.\n" *
+            "\n" *
+            "This is often caused by accidentally trying to get Mooncake.jl to " *
+            "differentiate a call (directly or indirectly) which does not exist. For " *
+            "example, defining\n" *
+            "\n" *
+            "f(x::Float64) = sin(x)\n" *
+            "build_rrule(Tuple{typeof(f), Int})\n" *
+            "\n" *
+            "would cause this error, because there are no methods of `f` which accept " *
+            "an `Int` argument."
+        throw(ArgumentError(msg))
     elseif length(asts) > 1
-        throw(ArgumentError("$(length(asts)) methods found for signature $sig"))
+        throw(ArgumentError("More than one method found for signature $sig."))
     end
     return only(asts)
 end

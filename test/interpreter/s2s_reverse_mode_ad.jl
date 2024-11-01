@@ -258,6 +258,9 @@ end
         rule = build_rrule(fargs...)
         @test_throws Mooncake.BadRuleTypeException rule(map(zero_fcodual, fargs)...)
     end
+    @testset "MooncakeRuleCompilationError" begin
+        @test_throws(Mooncake.MooncakeRuleCompilationError, Mooncake.build_rrule(sin))
+    end
     @testset "$(_typeof((f, x...)))" for (n, (interface_only, perf_flag, bnds, f, x...)) in
         collect(enumerate(TestResources.generate_test_functions()))
 
@@ -290,7 +293,7 @@ end
 
     @testset "integration testing for invalid global ref errors" begin
         @test_throws(
-            Mooncake.UnhandledLanguageFeatureException,
+            Mooncake.Mooncake.MooncakeRuleCompilationError,
             Mooncake.build_rrule(
                 Tuple{typeof(Mooncake.TestResources.non_const_global_ref), Float64},
             )

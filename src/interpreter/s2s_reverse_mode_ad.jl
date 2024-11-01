@@ -474,7 +474,15 @@ end
 
 # Mooncake does not yet handle `UpsilonNode`s. Throw an error if one is encountered.
 function make_ad_stmts!(stmt::Core.UpsilonNode, ::ID, ::ADInfo)
-    unhandled_feature("Encountered UpsilonNode: $stmt")
+    unhandled_feature(
+        "Encountered UpsilonNode: $stmt. These are generated as part of some try / catch " *
+        "/ finally blocks. At the present time, Mooncake.jl cannot differentiate through " *
+        "these, so they must be avoided. Strategies for resolving this error include " *
+        "re-writing code such that it avoids generating any UpsilonNodes, or writing a " *
+        "rule to differentiate the code by hand. If you are in any doubt as to what to " *
+        "do, please request assistance by opening an issue at " *
+        "github.com/compintell/Mooncake.jl."
+    )
 end
 
 # There are quite a number of possible `Expr`s that can be encountered. Each case has its
@@ -837,6 +845,28 @@ function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where 
     end
 end
 
+struct MooncakeRuleCompilationError <: Exception
+    interp::MooncakeInterpreter
+    sig
+    debug_mode::Bool
+end
+
+function Base.showerror(io::IO, err::MooncakeRuleCompilationError)
+    msg = "MooncakeRuleCompilationError: an error occured while Mooncake was compiling a " *
+        "rule to differentiate something. If the `caused by` error " *
+        "message below does not make it clear to you how the problem can be fixed, " *
+        "please open an issue at github.com/compintell/Mooncake.jl describing your " *
+        "problem.\n" *
+        "To replicate this error run the following:\n"
+    println(io, msg)
+    println(io, "Mooncake.build_rrule(Mooncake.$(err.interp), $(err.sig); debug_mode=$(err.debug_mode))")
+    println(
+        io,
+        "\nNote that you may need to `using` some additional packages if not all of the " *
+        "names printed in the above signature are available currently in your environment."
+    )
+end
+
 """
     build_rrule(args...; debug_mode=false)
 
@@ -955,6 +985,13 @@ function build_rrule(
             rule = debug_mode ? DebugRRule(raw_rule) : raw_rule
             interp.oc_cache[oc_cache_key] = rule
             return rule
+        end
+    catch e
+        if e isa MooncakeRuleCompilationError
+            rethrow(e)
+        else
+            sig = sig_or_mi isa Core.MethodInstance ? sig_or_mi.specTypes : sig_or_mi
+            throw(MooncakeRuleCompilationError(interp, sig, debug_mode))
         end
     finally
         unlock(MOONCAKE_INFERENCE_LOCK)
