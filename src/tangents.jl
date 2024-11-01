@@ -451,13 +451,6 @@ end
 @inline function zero_tangent_internal(x::SimpleVector, stackdict::IdDict)
     return map!(n -> zero_tangent_internal(x[n], stackdict), Vector{Any}(undef, length(x)), eachindex(x))
 end
-@inline function zero_tangent_internal(x::Array{P, N}, stackdict::IdDict) where {P, N}
-    haskey(stackdict, x) && return stackdict[x]::tangent_type(typeof(x))
-    
-    zt = Array{tangent_type(P), N}(undef, size(x)...)
-    stackdict[x] = zt
-    return _map_if_assigned!(Base.Fix2(zero_tangent_internal, stackdict), zt, x)::Array{tangent_type(P), N}
-end
 function zero_tangent_internal(x::P, stackdict) where {P}
     tangent_type(P) == NoTangent && return NoTangent()
 
@@ -526,13 +519,6 @@ function randn_tangent_internal(rng::AbstractRNG, x::SimpleVector, stackdict::Id
         return randn_tangent_internal(rng, x[n], stackdict)
     end
 end
-function randn_tangent_internal(rng::AbstractRNG, x::Array{T, N}, stackdict::IdDict) where {T, N}
-    haskey(stackdict, x) && return stackdict[x]::tangent_type(typeof(x))
-    
-    dx = Array{tangent_type(T), N}(undef, size(x)...)
-    stackdict[x] = dx
-    return _map_if_assigned!(x -> randn_tangent_internal(rng, x, stackdict), dx, x)
-end
 function randn_tangent_internal(rng::AbstractRNG, x::P, stackdict) where {P}
     tangent_type(P) == NoTangent && return NoTangent()
     if isprimitivetype(P)
@@ -581,9 +567,6 @@ This must apply recursively if `T` is a composite type whose fields are mutable.
 increment!!(::NoTangent, ::NoTangent) = NoTangent()
 increment!!(x::T, y::T) where {T<:IEEEFloat} = x + y
 increment!!(x::Ptr{T}, y::Ptr{T}) where {T} = x === y ? x : throw(error("eurgh"))
-function increment!!(x::T, y::T) where {P, N, T<:Array{P, N}}
-    return x === y ? x : _map_if_assigned!(increment!!, x, x, y)
-end
 increment!!(x::T, y::T) where {T<:Tuple} = tuple_map(increment!!, x, y)::T
 increment!!(x::T, y::T) where {T<:NamedTuple} = T(tuple_map(increment!!, x, y))
 function increment!!(x::T, y::T) where {T<:PossiblyUninitTangent}
@@ -607,7 +590,7 @@ Set `x` to its zero element (`x` should be a tangent, so the zero must exist).
 set_to_zero!!(::NoTangent) = NoTangent()
 set_to_zero!!(x::Base.IEEEFloat) = zero(x)
 set_to_zero!!(x::Union{Tuple, NamedTuple}) = map(set_to_zero!!, x)
-set_to_zero!!(x::Array) = _map_if_assigned!(set_to_zero!!, x, x)
+
 function set_to_zero!!(x::T) where {T<:PossiblyUninitTangent}
     return is_init(x) ? T(set_to_zero!!(val(x))) : x
 end
@@ -628,10 +611,6 @@ correspond to a vector field. Not using `*` in order to avoid piracy.
 """
 _scale(::Float64, ::NoTangent) = NoTangent()
 _scale(a::Float64, t::T) where {T<:IEEEFloat} = T(a * t)
-function _scale(a::Float64, t::Array{T, N}) where {T, N}
-    t′ = Array{T, N}(undef, size(t)...)
-    return _map_if_assigned!(Base.Fix1(_scale, a), t′, t)
-end
 _scale(a::Float64, t::Union{Tuple, NamedTuple}) = map(Base.Fix1(_scale, a), t)
 function _scale(a::Float64, t::T) where {T<:PossiblyUninitTangent}
     return is_init(t) ? T(_scale(a, val(t))) : T()
@@ -651,15 +630,6 @@ Always available because all tangent types correspond to finite-dimensional vect
 """
 _dot(::NoTangent, ::NoTangent) = 0.0
 _dot(t::T, s::T) where {T<:IEEEFloat} = Float64(t * s)
-function _dot(t::T, s::T) where {T<:Array}
-    isbitstype(T) && return sum(_map(_dot, t, s))
-    return sum(
-        _map(eachindex(t)) do n
-            (isassigned(t, n) && isassigned(s, n)) ? _dot(t[n], s[n]) : 0.0
-        end;
-        init=0.0,
-    )
-end
 _dot(t::T, s::T) where {T<:Union{Tuple, NamedTuple}} = sum(map(_dot, t, s); init=0.0)
 function _dot(t::T, s::T) where {T<:PossiblyUninitTangent}
     is_init(t) && is_init(s) && return _dot(val(t), val(s))
@@ -681,10 +651,6 @@ Adds `t` to `p`, returning a `P`. It must be the case that `tangent_type(P) == T
 """
 _add_to_primal(x, ::NoTangent) = x
 _add_to_primal(x::T, t::T) where {T<:IEEEFloat} = x + t
-function _add_to_primal(x::Array{P, N}, t::Array{<:Any, N}) where {P, N}
-    x′ = Array{P, N}(undef, size(x)...)
-    return _map_if_assigned!(_add_to_primal, x′, x, t)
-end
 function _add_to_primal(x::SimpleVector, t::Vector{Any})
     return svec(map(n -> _add_to_primal(x[n], t[n]), eachindex(x))...)
 end
@@ -722,10 +688,6 @@ function _diff(p::P, q::P) where {P}
     return _containerlike_diff(p, q)
 end
 _diff(p::P, q::P) where {P<:IEEEFloat} = p - q
-function _diff(p::P, q::P) where {V, N, P<:Array{V, N}}
-    t = Array{tangent_type(V), N}(undef, size(p))
-    return _map_if_assigned!(_diff, t, p, q)
-end
 function _diff(p::P, q::P) where {P<:SimpleVector}
     return Any[_diff(a, b) for (a, b) in zip(p, q)]
 end
