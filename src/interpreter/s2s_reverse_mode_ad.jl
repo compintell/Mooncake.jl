@@ -762,8 +762,6 @@ _copy(x) = copy(x)
     return fwds.fwds_oc.oc(uf_args...)::CoDual, fwds.pb
 end
 
-@inline nvargs(n_flat, ::Val{nargs}) where {nargs} = Val(n_flat - nargs + 1)
-
 # If isva, inputs (5.0, (4.0, 3.0)) are transformed into (5.0, 4.0, 3.0).
 function __flatten_varargs(::Val{isva}, args, ::Val{nvargs}) where {isva, nvargs}
     isva || return args
@@ -809,19 +807,19 @@ function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where 
     arg_fwds_types = Tuple{map(fcodual_type, arg_types)...}
     arg_rvs_types = Tuple{map(rdata_type ∘ tangent_type, arg_types)...}
     rvs_return_type = rdata_type(tangent_type(Treturn))
-
     pb_type = MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}}
-    n_vargs = length(primal_sig.parameters[end].parameters)
 
     Tderived_rule = DerivedRule{
         primal_sig,
         MistyClosure{OpaqueClosure{arg_fwds_types, fcodual_type(Treturn)}},
-        Pullback{primal_sig, Base.RefValue{pb_type}, Val{isva}, Val{n_vargs}},
+        Pullback{primal_sig, Base.RefValue{pb_type}, Val{isva}, nvargs(isva, primal_sig)},
         Val{isva},
         Val{length(ir.argtypes)},
     }
     return debug_mode ? DebugRRule{Tderived_rule} : Tderived_rule
 end
+
+nvargs(isva, sig) = Val{isva ? length(sig.parameters[end].parameters) : 0}
 
 struct MooncakeRuleCompilationError <: Exception
     interp::MooncakeInterpreter
@@ -959,9 +957,7 @@ function build_rrule(
                 sig = Tuple{sig.parameters[1:nargs-1]..., Tuple{sig.parameters[nargs:end]...}}
             end
 
-            n_vargs = length(sig.parameters[end].parameters)
-            pb = Pullback(sig, Ref(pb_oc), Val(isva), Val(n_vargs))
-
+            pb = Pullback(sig, Ref(pb_oc), Val(isva), nvargs(isva, sig)())
             raw_rule = DerivedRule(sig, fwds_oc, pb, Val(isva), Val(num_args(info)))
             rule = debug_mode ? DebugRRule(raw_rule) : raw_rule
             interp.oc_cache[oc_cache_key] = rule
