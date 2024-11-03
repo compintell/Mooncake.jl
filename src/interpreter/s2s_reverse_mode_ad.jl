@@ -667,7 +667,6 @@ end
 _pullback_type(::Core.TypeofBottom) = Any
 _pullback_type(T::DataType) = T.parameters[2]
 _pullback_type(T::Union) = Union{_pullback_type(T.a), _pullback_type(T.b)}
-_pullback_type(T::UnionAll) = Any
 
 # Used by the getfield special-case in call / invoke statments.
 @inline function __fwds_pass_no_ad!(f::F, raw_args::Vararg{Any, N}) where {F, N}
