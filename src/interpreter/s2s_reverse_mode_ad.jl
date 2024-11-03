@@ -715,19 +715,19 @@ function Pullback(
     return Pullback{Tprimal, Tpb_oc, Tisva, Tnvargs}(pb_oc, isva, nvargs)
 end
 
-@inline (pb::Pullback)(dy) = __flatten_varargs(pb.isva, pb.pb_oc.oc(dy), pb.nvargs)
+@inline (pb::Pullback)(dy) = __flatten_varargs(pb.isva, pb.pb_oc[].oc(dy), pb.nvargs)
 
-struct DerivedRule{Tprimal, Tfwds_oc, Tpb_oc, Tisva<:Val, Tnargs<:Val}
+struct DerivedRule{Tprimal, Tfwds_oc, Tpb, Tisva<:Val, Tnargs<:Val}
     fwds_oc::Tfwds_oc
-    pb_oc::Tpb_oc
+    pb::Tpb
     isva::Tisva
     nargs::Tnargs
 end
 
 function DerivedRule(
-    Tprimal, fwds_oc::Tfwds_oc, pb_oc::Tpb_oc, isva::Tisva, nargs::Tnargs
-) where {Tfwds_oc, Tpb_oc, Tisva, Tnargs}
-    return DerivedRule{Tprimal, Tfwds_oc, Tpb_oc, Tisva, Tnargs}(fwds_oc, pb_oc, isva, nargs)
+    Tprimal, fwds_oc::Tfwds_oc, pb::Tpb, isva::Tisva, nargs::Tnargs
+) where {Tfwds_oc, Tpb, Tisva, Tnargs}
+    return DerivedRule{Tprimal, Tfwds_oc, Tpb, Tisva, Tnargs}(fwds_oc, pb, isva, nargs)
 end
 
 # Extends functionality defined for debug_mode.
@@ -742,8 +742,9 @@ _copy(::Nothing) = nothing
 function _copy(x::P) where {P<:DerivedRule}
     new_captures = _copy(x.fwds_oc.oc.captures)
     new_fwds_oc = replace_captures(x.fwds_oc, new_captures)
-    new_pb_oc = replace_captures(x.pb_oc, new_captures)
-    return P(new_fwds_oc, new_pb_oc, x.isva, x.nargs)
+    new_pb_oc_ref = Ref(replace_captures(x.pb.pb_oc[], new_captures))
+    new_pb = typeof(x.pb)(new_pb_oc_ref, x.isva, x.pb.nvargs)
+    return P(new_fwds_oc, new_pb, x.isva, x.nargs)
 end
 
 _copy(x::Symbol) = x
@@ -760,8 +761,7 @@ _copy(x) = copy(x)
 
 @inline function (fwds::DerivedRule{P, Q, S})(args::Vararg{CoDual, N}) where {P, Q, S, N}
     uf_args = __unflatten_codual_varargs(fwds.isva, args, fwds.nargs)
-    pb!! = Pullback(P, fwds.pb_oc, fwds.isva, nvargs(length(args), fwds.nargs))
-    return fwds.fwds_oc.oc(uf_args...)::CoDual, pb!!
+    return fwds.fwds_oc.oc(uf_args...)::CoDual, fwds.pb
 end
 
 @inline nvargs(n_flat, ::Val{nargs}) where {nargs} = Val(n_flat - nargs + 1)
@@ -811,10 +811,14 @@ function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where 
     arg_fwds_types = Tuple{map(fcodual_type, arg_types)...}
     arg_rvs_types = Tuple{map(rdata_type ∘ tangent_type, arg_types)...}
     rvs_return_type = rdata_type(tangent_type(Treturn))
+
+    pb_type = MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}}
+    n_vargs = length(primal_sig.parameters[end].parameters)
+
     Tderived_rule = DerivedRule{
         primal_sig,
         MistyClosure{OpaqueClosure{arg_fwds_types, fcodual_type(Treturn)}},
-        MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
+        Pullback{primal_sig, Base.RefValue{pb_type}, Val{isva}, Val{n_vargs}},
         Val{isva},
         Val{length(ir.argtypes)},
     }
@@ -957,7 +961,10 @@ function build_rrule(
                 sig = Tuple{sig.parameters[1:nargs-1]..., Tuple{sig.parameters[nargs:end]...}}
             end
 
-            raw_rule = DerivedRule(sig, fwds_oc, pb_oc, Val(isva), Val(num_args(info)))
+            n_vargs = length(sig.parameters[end].parameters)
+            pb = Pullback(sig, Ref(pb_oc), Val(isva), Val(n_vargs))
+
+            raw_rule = DerivedRule(sig, fwds_oc, pb, Val(isva), Val(num_args(info)))
             rule = debug_mode ? DebugRRule(raw_rule) : raw_rule
             interp.oc_cache[oc_cache_key] = rule
             return rule
