@@ -76,7 +76,7 @@ one block stack per derived rule.
 By using Int32, we assume that there aren't more than `typemax(Int32)` unique basic blocks
 in a given function, which ought to be reasonable.
 =#
-const BlockStack = Stack{Int32}
+const BlockStack = Stack{Int32, 16}
 
 #=
     ADInfo

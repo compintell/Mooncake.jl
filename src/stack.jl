@@ -5,29 +5,37 @@ A stack specialised for reverse-mode AD.
 
 Semantically equivalent to a usual stack, but never de-allocates memory once allocated.
 """
-mutable struct Stack{T}
+mutable struct Stack{T, Inc}
     const memory::Vector{T}
     position::Int
-    Stack{T}() where {T} = new{T}(Vector{T}(undef, 0), 0)
+    Stack{T, Inc}() where {T, Inc} = new{T, Inc}(Vector{T}(undef, 0), 0)
 end
 
-_copy(::Stack{T}) where {T} = Stack{T}()
+Stack{T}() where {T} = Stack{T, 1}()
 
-@inline function Base.push!(x::Stack{T}, val::T) where {T}
-    position = x.position + 1
+_copy(::Stack{T, Inc}) where {T, Inc} = Stack{T, Inc}()
+
+@inline function Base.push!(x::Stack{T, Inc}, val::T) where {T, Inc}
     memory = x.memory
-    x.position = position
-    if position <= length(memory)
-        @inbounds memory[position] = val
-    else
-        @noinline push!(memory, val)
+    position = x.position
+    if rem(position, Inc) === 0
+
+        # Since Inc is known at compile time, we can entirely avoid loading the length of
+        # memory most the time, which is often quite helpful.
+        l = length(memory)
+        if position == l
+            @noinline resize!(x.memory, l + Inc)
+        end
     end
+    new_position = position + 1
+    x.position = new_position
+    @inbounds memory[new_position] = val
     return nothing
 end
 
 @inline function Base.pop!(x::Stack)
     position = x.position
-    val = x.memory[position]
+    @inbounds val = x.memory[position]
     x.position = position - 1
     return val
 end
