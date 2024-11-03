@@ -724,10 +724,8 @@ struct DerivedRule{Tprimal, Tfwds_oc, Tpb, Tisva<:Val, Tnargs<:Val}
     nargs::Tnargs
 end
 
-function DerivedRule(
-    Tprimal, fwds_oc::Tfwds_oc, pb::Tpb, isva::Tisva, nargs::Tnargs
-) where {Tfwds_oc, Tpb, Tisva, Tnargs}
-    return DerivedRule{Tprimal, Tfwds_oc, Tpb, Tisva, Tnargs}(fwds_oc, pb, isva, nargs)
+function DerivedRule(Tprimal, fwds_oc::T, pb::U, isva::V, nargs::W) where {T, U, V, W}
+    return DerivedRule{Tprimal, T, U, V, W}(fwds_oc, pb, isva, nargs)
 end
 
 # Extends functionality defined for debug_mode.
