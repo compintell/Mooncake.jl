@@ -525,8 +525,9 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         # away before the raw_rule is called. Only do this if we cannot prove that the
         # output of `can_produce_zero_rdata_from_type(P)`, where `P` is the type of the
         # value returned by this line.
+        is_no_pullback = pullback_type(_typeof(raw_rule), arg_types) <: NoPullback
         tmp = can_produce_zero_rdata_from_type(get_primal_type(info, line))
-        zero_wrapped_rule = tmp ? raw_rule : RRuleZeroWrapper(raw_rule)
+        zero_wrapped_rule = (tmp || is_no_pullback) ? raw_rule : RRuleZeroWrapper(raw_rule)
 
         # If debug mode has been requested, use a debug rule.
         rule = info.debug_mode ? DebugRRule(zero_wrapped_rule) : zero_wrapped_rule
@@ -660,8 +661,12 @@ is_active(::Any) = false
 # Get a bound on the pullback type, given a rule and associated primal types.
 function pullback_type(Trule, arg_types)
     T = Core.Compiler.return_type(Tuple{Trule, map(fcodual_type, arg_types)...})
-    return (T <: Tuple && T !== Union{} && !(T isa Union)) ? T.parameters[2] : Any
+    return T <: Tuple ? _pullback_type(T) : Any
 end
+
+_pullback_type(::Core.TypeofBottom) = Any
+_pullback_type(T::DataType) = T.parameters[2]
+_pullback_type(T::Union) = Union{_pullback_type(T.a), _pullback_type(T.b)}
 
 # Used by the getfield special-case in call / invoke statments.
 @inline function __fwds_pass_no_ad!(f::F, raw_args::Vararg{Any, N}) where {F, N}
@@ -710,7 +715,7 @@ function Pullback(
     return Pullback{Tprimal, Tpb_oc, Tisva, Tnvargs}(pb_oc, isva, nvargs)
 end
 
-@inline (pb::Pullback)(dy) = __flatten_varargs(pb.isva, pb.pb_oc(dy), pb.nvargs)
+@inline (pb::Pullback)(dy) = __flatten_varargs(pb.isva, pb.pb_oc.oc(dy), pb.nvargs)
 
 struct DerivedRule{Tprimal, Tfwds_oc, Tpb_oc, Tisva<:Val, Tnargs<:Val}
     fwds_oc::Tfwds_oc
@@ -756,7 +761,7 @@ _copy(x) = copy(x)
 @inline function (fwds::DerivedRule{P, Q, S})(args::Vararg{CoDual, N}) where {P, Q, S, N}
     uf_args = __unflatten_codual_varargs(fwds.isva, args, fwds.nargs)
     pb!! = Pullback(P, fwds.pb_oc, fwds.isva, nvargs(length(args), fwds.nargs))
-    return fwds.fwds_oc(uf_args...)::CoDual, pb!!
+    return fwds.fwds_oc.oc(uf_args...)::CoDual, pb!!
 end
 
 @inline nvargs(n_flat, ::Val{nargs}) where {nargs} = Val(n_flat - nargs + 1)
@@ -806,43 +811,14 @@ function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where 
     arg_fwds_types = Tuple{map(fcodual_type, arg_types)...}
     arg_rvs_types = Tuple{map(rdata_type ∘ tangent_type, arg_types)...}
     rvs_return_type = rdata_type(tangent_type(Treturn))
-    return if isconcretetype(Treturn)
-        if debug_mode
-            DebugRRule{DerivedRule{
-                primal_sig,
-                MistyClosure{OpaqueClosure{arg_fwds_types, fcodual_type(Treturn)}},
-                MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
-                Val{isva},
-                Val{length(ir.argtypes)},
-            }}
-        else
-            DerivedRule{
-                primal_sig,
-                MistyClosure{OpaqueClosure{arg_fwds_types, fcodual_type(Treturn)}},
-                MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
-                Val{isva},
-                Val{length(ir.argtypes)},
-            }
-        end
-    else
-        if debug_mode
-            DebugRRule{DerivedRule{
-                primal_sig,
-                MistyClosure{OpaqueClosure{arg_fwds_types, Tfcodual_ret}},
-                MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
-                Val{isva},
-                Val{length(ir.argtypes)},
-            }} where {Tfcodual_ret <: fcodual_type(Treturn)}
-        else
-            DerivedRule{
-                primal_sig,
-                MistyClosure{OpaqueClosure{arg_fwds_types, Tfcodual_ret}},
-                MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
-                Val{isva},
-                Val{length(ir.argtypes)},
-            } where {Tfcodual_ret <: fcodual_type(Treturn)}
-        end
-    end
+    Tderived_rule = DerivedRule{
+        primal_sig,
+        MistyClosure{OpaqueClosure{arg_fwds_types, fcodual_type(Treturn)}},
+        MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}},
+        Val{isva},
+        Val{length(ir.argtypes)},
+    }
+    return debug_mode ? DebugRRule{Tderived_rule} : Tderived_rule
 end
 
 struct MooncakeRuleCompilationError <: Exception
@@ -1575,4 +1551,5 @@ end
         @warn "`BadRuleTypException was _not_ thrown. Throwing now."
         throw(err)
     end
+    return nothing
 end
