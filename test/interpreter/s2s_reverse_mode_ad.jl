@@ -244,8 +244,9 @@ end
     @testset "rule_type $sig, $debug_mode" for
         sig in Any[
             Tuple{typeof(getfield), Tuple{Float64}, 1},
-            Tuple{typeof(Mooncake.TestResources.foo), Float64},
-            Tuple{typeof(Mooncake.TestResources.type_unstable_tester_0), Ref{Any}},
+            Tuple{typeof(TestResources.foo), Float64},
+            Tuple{typeof(TestResources.type_unstable_tester_0), Ref{Any}},
+            Tuple{typeof(TestResources.tuple_with_union), Bool},
         ],
         debug_mode in [true, false]
 
