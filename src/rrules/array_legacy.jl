@@ -1,3 +1,50 @@
+@inline function zero_tangent_internal(x::Array{P, N}, stackdict::IdDict) where {P, N}
+    haskey(stackdict, x) && return stackdict[x]::tangent_type(typeof(x))
+
+    zt = Array{tangent_type(P), N}(undef, size(x)...)
+    stackdict[x] = zt
+    return _map_if_assigned!(Base.Fix2(zero_tangent_internal, stackdict), zt, x)::Array{tangent_type(P), N}
+end
+
+function randn_tangent_internal(rng::AbstractRNG, x::Array{T, N}, stackdict::IdDict) where {T, N}
+    haskey(stackdict, x) && return stackdict[x]::tangent_type(typeof(x))
+
+    dx = Array{tangent_type(T), N}(undef, size(x)...)
+    stackdict[x] = dx
+    return _map_if_assigned!(x -> randn_tangent_internal(rng, x, stackdict), dx, x)
+end
+
+function increment!!(x::T, y::T) where {P, N, T<:Array{P, N}}
+    return x === y ? x : _map_if_assigned!(increment!!, x, x, y)
+end
+
+set_to_zero!!(x::Array) = _map_if_assigned!(set_to_zero!!, x, x)
+
+function _scale(a::Float64, t::Array{T, N}) where {T, N}
+    t′ = Array{T, N}(undef, size(t)...)
+    return _map_if_assigned!(Base.Fix1(_scale, a), t′, t)
+end
+
+function _dot(t::T, s::T) where {T<:Array}
+    isbitstype(T) && return sum(_map(_dot, t, s))
+    return sum(
+        _map(eachindex(t)) do n
+            (isassigned(t, n) && isassigned(s, n)) ? _dot(t[n], s[n]) : 0.0
+        end;
+        init=0.0,
+    )
+end
+
+function _add_to_primal(x::Array{P, N}, t::Array{<:Any, N}) where {P, N}
+    x′ = Array{P, N}(undef, size(x)...)
+    return _map_if_assigned!(_add_to_primal, x′, x, t)
+end
+
+function _diff(p::P, q::P) where {V, N, P<:Array{V, N}}
+    t = Array{tangent_type(V), N}(undef, size(p))
+    return _map_if_assigned!(_diff, t, p, q)
+end
+
 @zero_adjoint MinimalCtx Tuple{Type{<:Array{T, N}}, typeof(undef), Vararg} where {T, N}
 @zero_adjoint MinimalCtx Tuple{Type{<:Array{T, N}}, typeof(undef), Tuple{}} where {T, N}
 @zero_adjoint MinimalCtx Tuple{Type{<:Array{T, N}}, typeof(undef), NTuple{N}} where {T, N}

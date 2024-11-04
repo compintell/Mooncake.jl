@@ -109,9 +109,75 @@ tangent_type(::Type{F}, ::Type{NoRData}) where {F<:Memory} = F
 
 tangent(f::Memory, ::NoRData) = f
 
-function _verify_fdata_value(p::Memory{P}, f::Memory{T}) where {P, T}
-    @assert length(p) == length(f)
+function _verify_fdata_value(p::Memory{P}, f::Memory{F}) where {P, F}
+    if length(p) != length(f)
+        msg = "length(p) == $(length(p)) but length(f) == $(length(f)). " *
+            "p isa Memory{$P} and f isa Memory{$F}"
+        throw(error(msg))
+    end
     return nothing
+end
+
+#
+# Array -- tangent interface implementation
+#
+
+@inline function zero_tangent_internal(x::Array, stackdict::Maybe{IdDict})
+    T = tangent_type(typeof(x))
+
+    # If we already have a tangent for this, just return that.
+    haskey(stackdict, x) && return stackdict[x]::T
+
+    # Construct a new tangent, log it in the `stackdict`, and return it.
+    dx = _new_(T)
+    Base.setfield!(dx, :size, x.size)
+    stackdict[x] = dx
+    Base.setfield!(dx, :ref, zero_tangent_internal(x.ref, stackdict))
+    return dx::T
+end
+
+function randn_tangent_internal(rng::AbstractRNG, x::Array, stackdict::Maybe{IdDict})
+    T = tangent_type(typeof(x))
+
+    # If we already have a tangent for this, just return that.
+    haskey(stackdict, x) && return stackdict[x]::T
+
+    # Construct a new tangent, log it in the `stackdict`, and return it.
+    dx = _new_(T)
+    Base.setfield!(dx, :size, x.size)
+    stackdict[x] = dx
+    Base.setfield!(dx, :ref, randn_tangent_internal(rng, x.ref, stackdict))
+    return dx::T
+end
+
+function increment!!(x::T, y::T) where {T<:Array}
+    return x === y ? x : _map_if_assigned!(increment!!, x, x, y)
+end
+
+set_to_zero!!(x::Array) = _map_if_assigned!(set_to_zero!!, x, x)
+
+function _scale(a::Float64, t::T) where {T<:Array}
+    t′ = T(undef, size(t)...)
+    return _map_if_assigned!(Base.Fix1(_scale, a), t′, t)
+end
+
+function _dot(t::T, s::T) where {T<:Array}
+    isbitstype(T) && return sum(_map(_dot, t, s))
+    return sum(
+        _map(eachindex(t)) do n
+            (isassigned(t, n) && isassigned(s, n)) ? _dot(t[n], s[n]) : 0.0
+        end;
+        init=0.0,
+    )
+end
+
+function _add_to_primal(x::Array{P, N}, t::Array{<:Any, N}) where {P, N}
+    x′ = Array{P, N}(undef, size(x)...)
+    return _map_if_assigned!(_add_to_primal, x′, x, t)
+end
+
+function _diff(p::P, q::P) where {P<:Array}
+    return _map_if_assigned!(_diff, tangent_type(P)(undef, size(p)), p, q)
 end
 
 # Rules
