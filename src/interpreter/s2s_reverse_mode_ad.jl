@@ -65,9 +65,11 @@ IDInstPair[
 =#
 function shared_data_stmts(p::SharedDataPairs)::Vector{IDInstPair}
     return map(enumerate(p.pairs)) do (n, p)
-        return (p[1], new_inst(Expr(:call, getfield, Argument(1), n)))
+        return (p[1], new_inst(Expr(:call, get_shared_data_field, Argument(1), n)))
     end
 end
+
+@inline get_shared_data_field(shared_data, n) = getfield(shared_data, n)
 
 #=
 The block stack is the stack used to keep track of which basic blocks are visited on the
@@ -453,9 +455,12 @@ end
 # a bits type, then it is returned. If it is not, then the CoDual is put into shared data,
 # and the ID associated to it in the forwards- and reverse-passes returned.
 function const_codual(stmt, info::ADInfo)
-    x = uninit_fcodual(get_const_primal_value(stmt))
-    return isbitstype(_typeof(x)) ? x : add_data!(info, x)
+    v = get_const_primal_value(stmt)
+    x = uninit_fcodual(v)
+    return safe_for_literal(v) ? x : add_data!(info, x)
 end
+
+safe_for_literal(v) = v isa String || v isa Type || isbitstype(_typeof(v))
 
 inc_or_const(stmt, info::ADInfo) = is_active(stmt) ? __inc(stmt) : const_codual(stmt, info)
 

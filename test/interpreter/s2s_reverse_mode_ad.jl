@@ -315,4 +315,12 @@ end
         rule = Mooncake.build_rrule(f, 0.0)
         @benchmark Mooncake.value_and_gradient!!($rule, $f, $(Ref(0.0))[])
     end
+    @testset "literal Strings do not appear in shared data" begin
+        f() = "hello"
+        @test length(build_rrule(Tuple{typeof(f)}).fwds_oc.oc.captures) == 2
+    end
+    @testset "Literal Types do not appear in shared data" begin
+        f() = Float64
+        @test length(build_rrule(Tuple{typeof(f)}).fwds_oc.oc.captures) == 2
+    end
 end
