@@ -317,7 +317,10 @@ end
     end
     @testset "literal Strings do not appear in shared data" begin
         f() = "hello"
-        rule = build_rrule(Tuple{typeof(f)})
-        @test length(rule.fwds_oc.oc.captures) == 2
+        @test length(build_rrule(Tuple{typeof(f)}).fwds_oc.oc.captures) == 2
+    end
+    @testset "Literal Types do not appear in shared data" begin
+        f() = Float64
+        @test length(build_rrule(Tuple{typeof(f)}).fwds_oc.oc.captures) == 2
     end
 end
