@@ -794,6 +794,8 @@ end
 _is_primitive(C::Type, mi::Core.MethodInstance) = is_primitive(C, mi.specTypes)
 _is_primitive(C::Type, sig::Type) = is_primitive(C, sig)
 
+const RuleMC{A, R} = MistyClosure{OpaqueClosure{A, R}}
+
 # Compute the concrete type of the rule that will be returned from `build_rrule`. This is
 # important for performance in dynamic dispatch, and to ensure that recursion works
 # properly.
@@ -808,20 +810,30 @@ function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where 
     isva, _ = is_vararg_and_sparam_names(sig_or_mi)
 
     arg_types = map(_type, ir.argtypes)
-    primal_sig = Tuple{arg_types...}
+    sig = Tuple{arg_types...}
     arg_fwds_types = Tuple{map(fcodual_type, arg_types)...}
     arg_rvs_types = Tuple{map(rdata_type ∘ tangent_type, arg_types)...}
     rvs_return_type = rdata_type(tangent_type(Treturn))
-    pb_type = MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}}
+    pb_oc_type = MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}}
+    pb_type = Pullback{sig, Base.RefValue{pb_oc_type}, Val{isva}, nvargs(isva, sig)}
+    nargs = Val{length(ir.argtypes)}
 
-    Tderived_rule = DerivedRule{
-        primal_sig,
-        MistyClosure{OpaqueClosure{arg_fwds_types, fcodual_type(Treturn)}},
-        Pullback{primal_sig, Base.RefValue{pb_type}, Val{isva}, nvargs(isva, primal_sig)},
-        Val{isva},
-        Val{length(ir.argtypes)},
-    }
-    return debug_mode ? DebugRRule{Tderived_rule} : Tderived_rule
+    if isconcretetype(Treturn)
+        Tderived_rule = DerivedRule{
+            sig, RuleMC{arg_fwds_types, fcodual_type(Treturn)}, pb_type, Val{isva}, nargs,
+        }
+        return debug_mode ? DebugRRule{Tderived_rule} : Tderived_rule
+    else
+        if debug_mode
+            return DebugRRule{DerivedRule{
+                sig, RuleMC{arg_fwds_types, P}, pb_type, Val{isva}, nargs,
+            }} where {P<:fcodual_type(Treturn)}
+        else
+            return DerivedRule{
+                sig, RuleMC{arg_fwds_types, P}, pb_type, Val{isva}, nargs,
+            } where {P<:fcodual_type(Treturn)}
+        end
+    end
 end
 
 nvargs(isva, sig) = Val{isva ? length(sig.parameters[end].parameters) : 0}
