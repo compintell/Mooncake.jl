@@ -315,7 +315,6 @@ end
         rule = Mooncake.build_rrule(f, 0.0)
         @benchmark Mooncake.value_and_gradient!!($rule, $f, $(Ref(0.0))[])
     end
-
     @testset "literal Strings do not appear in shared data" begin
         f() = "hello"
         rule = build_rrule(Tuple{typeof(f)})
