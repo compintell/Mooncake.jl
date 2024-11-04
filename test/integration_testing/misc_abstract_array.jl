@@ -1,4 +1,4 @@
-@testset "integration_testing" begin
+@testset "misc_abstract_array" begin
     @testset for (interface_only, f, x...) in vcat(
         [
             (false, getindex, randn(5), 4),
