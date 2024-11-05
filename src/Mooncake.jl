@@ -95,7 +95,7 @@ end
 
 include("interface.jl")
 include("config.jl")
-include("dev_tools.jl")
+include("developer_tools.jl")
 
 export
     primal,
