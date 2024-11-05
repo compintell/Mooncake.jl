@@ -664,7 +664,6 @@ end
 function generate_data_test_cases(rng_ctor, ::Val{:memory})
     arrays = [randn(2), Any[]]
     arr = randn(2)
-    arr_and_mem = [arr, arr.ref.mem]
     return vcat(
         _mems()[1],
         _mem_refs()[1],

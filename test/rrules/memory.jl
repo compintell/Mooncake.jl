@@ -13,4 +13,11 @@ end
     # Check that the rule for `Memory{P}` only produces two allocations.
     generate_mem()
     @test 2 >= @allocations generate_mem()
+
+    # Check that zero_tangent and randn_tangent yield consistent results.
+    @testset "$f" for f in [zero_tangent, Base.Fix1(randn_tangent, Xoshiro(123))]
+        arr = randn(2)
+        p = [arr, arr.ref.mem]
+        @test TestUtils.populate_address_map(p, f(p)) isa AddressMap
+    end
 end
