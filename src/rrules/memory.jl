@@ -662,14 +662,7 @@ function _mem_refs()
 end
 
 function generate_data_test_cases(rng_ctor, ::Val{:memory})
-    arrays = [randn(2), Any[]]
-    arr = randn(2)
-    return vcat(
-        _mems()[1],
-        _mem_refs()[1],
-        arrays,
-        Any[arr_and_mem],
-    )
+    return vcat(_mems()[1], _mem_refs()[1], [randn(2), Any[]])
 end
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:memory})
