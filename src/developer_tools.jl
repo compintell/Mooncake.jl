@@ -1,6 +1,9 @@
 """
     primal_ir(sig::Type{<:Tuple}; interp=get_interpreter())::IRCode
 
+!!! warning: this is not part of the public interface of Mooncake. As such, it may change as
+part of a non-breaking release of the package.
+
 Get the `Core.Compiler.IRCode` associated to `sig` from which the a rule can be derived.
 Roughly equivalent to `Base.code_ircode_by_type(sig; interp)`.
 
@@ -22,6 +25,9 @@ end
         sig::Type{<:Tuple};
         interp=get_interpreter(), debug_mode::Bool=false, do_inline::Bool=true
     )::IRCode
+
+!!! warning: this is not part of the public interface of Mooncake. As such, it may change as
+part of a non-breaking release of the package.
 
 Generate the `Core.Compiler.IRCode` used to construct the forwards-pass of AD. Take a look
 at how `build_rrule` makes use of `generate_ir` to see exactly how this is used in practice.
@@ -58,6 +64,9 @@ end
         sig::Type{<:Tuple};
         interp=get_interpreter(), debug_mode::Bool=false, do_inline::Bool=true
     )::IRCode
+
+!!! warning: this is not part of the public interface of Mooncake. As such, it may change as
+part of a non-breaking release of the package.
 
 Generate the `Core.Compiler.IRCode` used to construct the reverse-pass of AD. Take a look
 at how `build_rrule` makes use of `generate_ir` to see exactly how this is used in practice.
