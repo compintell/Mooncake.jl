@@ -784,6 +784,7 @@ function tangent_test_cases()
             (5.1, 4.0, 3.0, 7.0),
             (svec(5.0), Any[4.0], Any[3.0], Any[7.0]),
             ([3.0, 2.0], [1.0, 2.0], [2.0, 3.0], [3.0, 5.0]),
+            (Float64[], Float64[], Float64[], Float64[]),
             (
                 [1, 2],
                 [NoTangent(), NoTangent()],
