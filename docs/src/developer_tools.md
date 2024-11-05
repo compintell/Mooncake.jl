@@ -1,4 +1,4 @@
-# Insepcting Generated IR
+# Developer Tools
 
 Mooncake.jl offers developers to a few convenience functions which give access to the IR
 that it generates in order to perform AD. These are lightweight wrappers around internals
