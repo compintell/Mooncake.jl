@@ -879,6 +879,15 @@ build_rrule(sig::Type{<:Tuple}) = build_rrule(get_interpreter(), sig)
 
 const MOONCAKE_INFERENCE_LOCK = ReentrantLock()
 
+struct DerivedRuleInfo
+    primal_ir::IRCode
+    fwd_ir::IRCode
+    rvs_ir::IRCode
+    shared_data::Tuple
+    info::ADInfo
+    isva::Bool
+end
+
 """
     build_rrule(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode=false) where {C}
 
@@ -907,75 +916,30 @@ function build_rrule(
 
     # If we have a hand-coded rule, just use that.
     _is_primitive(C, sig_or_mi) && return (debug_mode ? DebugRRule(rrule!!) : rrule!!)
+
+    # We don't have a hand-coded rule, so derived one.
     lock(MOONCAKE_INFERENCE_LOCK)
     try
-        # If we've already derived the OpaqueClosures and info, do not re-derive, just create a
-        # copy and pass in new shared data.
+        # If we've already derived the OpaqueClosures and info, do not re-derive, just
+        # create a copy and pass in new shared data.
         oc_cache_key = ClosureCacheKey(interp.world, (sig_or_mi, debug_mode))
         if haskey(interp.oc_cache, oc_cache_key)
             return _copy(interp.oc_cache[oc_cache_key])
         else
-
-            # Reset id count. This ensures that the IDs generated are the same each time this
-            # function runs.
-            seed_id!()
-
-            # Grab code associated to the primal.
-            ir, _ = lookup_ir(interp, sig_or_mi)
-            Treturn = Base.Experimental.compute_ir_rettype(ir)
-
-            # Normalise the IR, and generated BBCode version of it.
-            isva, spnames = is_vararg_and_sparam_names(sig_or_mi)
-            ir = normalise!(ir, spnames)
-            primal_ir = remove_unreachable_blocks!(BBCode(ir))
-
-            # Compute global info.
-            info = ADInfo(interp, primal_ir, debug_mode)
-
-            # For each block in the fwds and pullback BBCode, translate all statements. Running this
-            # will, in general, push items to `info.shared_data_pairs`.
-            ad_stmts_blocks = map(primal_ir.blocks) do primal_blk
-                ids = primal_blk.inst_ids
-                primal_stmts = map(x -> x.stmt, primal_blk.insts)
-                return (primal_blk.id, make_ad_stmts!.(primal_stmts, ids, Ref(info)))
-            end
-
-            # Make shared data, and construct BBCode for forwards-pass and pullback.
-            fwds_comms_insts, pb_comms_insts = create_comms_insts!(ad_stmts_blocks, info)
-            shared_data = shared_data_tuple(info.shared_data_pairs)
-            Tshared_data = _typeof(shared_data)
-
-            fwds_ir = forwards_pass_ir(
-                primal_ir, ad_stmts_blocks, fwds_comms_insts, info, Tshared_data
-            )
-            pb_ir = pullback_ir(
-                primal_ir, Treturn, ad_stmts_blocks, pb_comms_insts, info, Tshared_data
-            )
-            optimised_fwds_ir = optimise_ir!(IRCode(fwds_ir); do_inline=true)
-            optimised_pb_ir = optimise_ir!(IRCode(pb_ir); do_inline=true)
-            # @show sig_or_mi
-            # @show Treturn
-            # @show debug_mode
-            # display(ir)
-            # display(IRCode(fwds_ir))
-            # display(IRCode(pb_ir))
-            # display(optimised_fwds_ir)
-            # display(optimised_pb_ir)
-            # @show length(stmt(ir.stmts))
-            # @show length(stmt(optimised_fwds_ir.stmts))
-            # @show length(stmt(optimised_pb_ir.stmts))
-            fwds_oc = MistyClosure(optimised_fwds_ir, shared_data...; do_compile=true)
-            pb_oc = MistyClosure(optimised_pb_ir, shared_data...; do_compile=true)
+            # Derive forwards- and reverse-pass IR, and shove in `MistyClosure`s.
+            dri = generate_ir(interp, sig_or_mi; debug_mode)
+            fwd_oc = MistyClosure(dri.fwd_ir, dri.shared_data...; do_compile=true)
+            rvs_oc = MistyClosure(dri.rvs_ir, dri.shared_data...; do_compile=true)
 
             # Compute the signature. Needs careful handling with varargs.
             sig = sig_or_mi isa Core.MethodInstance ? sig_or_mi.specTypes : sig_or_mi
-            nargs = num_args(info)
-            if isva
+            nargs = num_args(dri.info)
+            if dri.isva
                 sig = Tuple{sig.parameters[1:nargs-1]..., Tuple{sig.parameters[nargs:end]...}}
             end
 
-            pb = Pullback(sig, Ref(pb_oc), Val(isva), nvargs(isva, sig)())
-            raw_rule = DerivedRule(sig, fwds_oc, pb, Val(isva), Val(num_args(info)))
+            pb = Pullback(sig, Ref(rvs_oc), Val(dri.isva), nvargs(dri.isva, sig)())
+            raw_rule = DerivedRule(sig, fwd_oc, pb, Val(dri.isva), Val(num_args(dri.info)))
             rule = debug_mode ? DebugRRule(raw_rule) : raw_rule
             interp.oc_cache[oc_cache_key] = rule
             return rule
@@ -990,6 +954,49 @@ function build_rrule(
     finally
         unlock(MOONCAKE_INFERENCE_LOCK)
     end
+end
+
+# Used by `build_rrule`, and the various debugging tools: primal_ir, fwds_ir, adjoint_ir.
+function generate_ir(
+    interp::MooncakeInterpreter, sig_or_mi; debug_mode=false, do_inline=true
+)
+    # Reset id count. This ensures that the IDs generated are the same each time this
+    # function runs.
+    seed_id!()
+
+    # Grab code associated to the primal.
+    ir, _ = lookup_ir(interp, sig_or_mi)
+    Treturn = Base.Experimental.compute_ir_rettype(ir)
+
+    # Normalise the IR, and generated BBCode version of it.
+    isva, spnames = is_vararg_and_sparam_names(sig_or_mi)
+    ir = normalise!(ir, spnames)
+    primal_ir = remove_unreachable_blocks!(BBCode(ir))
+
+    # Compute global info.
+    info = ADInfo(interp, primal_ir, debug_mode)
+
+    # For each block in the fwds and pullback BBCode, translate all statements. Running this
+    # will, in general, push items to `info.shared_data_pairs`.
+    ad_stmts_blocks = map(primal_ir.blocks) do primal_blk
+        ids = primal_blk.inst_ids
+        primal_stmts = map(x -> x.stmt, primal_blk.insts)
+        return (primal_blk.id, make_ad_stmts!.(primal_stmts, ids, Ref(info)))
+    end
+
+    # Make shared data, and construct BBCode for forwards-pass and pullback.
+    fwds_comms_insts, pb_comms_insts = create_comms_insts!(ad_stmts_blocks, info)
+    shared_data = shared_data_tuple(info.shared_data_pairs)
+
+    fwd_ir = forwards_pass_ir(
+        primal_ir, ad_stmts_blocks, fwds_comms_insts, info, _typeof(shared_data)
+    )
+    rvs_ir = pullback_ir(
+        primal_ir, Treturn, ad_stmts_blocks, pb_comms_insts, info, _typeof(shared_data)
+    )
+    opt_fwd_ir = optimise_ir!(IRCode(fwd_ir); do_inline)
+    opt_rvs_ir = optimise_ir!(IRCode(rvs_ir); do_inline)
+    return DerivedRuleInfo(ir, opt_fwd_ir, opt_rvs_ir, shared_data, info, isva)
 end
 
 # Given an `OpaqueClosure` `oc`, create a new `OpaqueClosure` of the same type, but with new
