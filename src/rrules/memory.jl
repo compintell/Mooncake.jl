@@ -42,7 +42,7 @@ function randn_tangent_internal(rng::AbstractRNG, x::Memory, stackdict::Maybe{Id
     haskey(stackdict, x) && return stackdict[x]::T
 
     t = T(undef, length(x))
-    stackdict[t] = t
+    stackdict[x] = t
     return _map_if_assigned!(x -> randn_tangent_internal(rng, x, stackdict), t, x)::T
 end
 

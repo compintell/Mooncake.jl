@@ -18,6 +18,8 @@ end
     @testset "$f" for f in [zero_tangent, Base.Fix1(randn_tangent, Xoshiro(123))]
         arr = randn(2)
         p = [arr, arr.ref.mem]
-        @test TestUtils.populate_address_map(p, f(p)) isa AddressMap
+        @test pointer(p[1].ref.mem) === pointer(p[2])
+        t = f(p)
+        @test pointer(t[1].ref.mem) === pointer(t[2])
     end
 end
