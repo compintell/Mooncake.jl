@@ -22,6 +22,7 @@ include("front_matter.jl")
         include("tools_for_rules.jl")
         include("interface.jl")
         include("config.jl")
+        include("dev_tools.jl")
     elseif test_group == "rrules"
         include("test_utils.jl")
         @testset "rrules" begin
