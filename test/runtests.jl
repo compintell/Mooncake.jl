@@ -69,6 +69,8 @@ include("front_matter.jl")
         include(joinpath("ext", "special_functions", "special_functions.jl"))
     elseif test_group == "integration_testing/array"
         include(joinpath("integration_testing", "array.jl"))
+    elseif test_group == "integration_testing/bijectors"
+        include(joinpath("integration_testing", "bijectors", "bijectors.jl"))
     elseif test_group == "integration_testing/diff_tests"
         include(joinpath("integration_testing", "diff_tests.jl"))
     elseif test_group == "integration_testing/distributions"
