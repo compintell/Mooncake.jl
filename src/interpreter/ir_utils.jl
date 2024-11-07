@@ -227,7 +227,7 @@ function lookup_ir(interp::CC.AbstractInterpreter, tt::Type{<:Tuple}; optimize_u
             "an `Int` argument."
         throw(ArgumentError(msg))
     elseif length(asts) > 1
-        throw(ArgumentError("More than one method found for signature $sig."))
+        throw(ArgumentError("More than one method found for signature $tt."))
     end
     return only(asts)
 end

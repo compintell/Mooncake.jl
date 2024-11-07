@@ -244,8 +244,9 @@ end
     @testset "rule_type $sig, $debug_mode" for
         sig in Any[
             Tuple{typeof(getfield), Tuple{Float64}, 1},
-            Tuple{typeof(Mooncake.TestResources.foo), Float64},
-            Tuple{typeof(Mooncake.TestResources.type_unstable_tester_0), Ref{Any}},
+            Tuple{typeof(TestResources.foo), Float64},
+            Tuple{typeof(TestResources.type_unstable_tester_0), Ref{Any}},
+            Tuple{typeof(TestResources.tuple_with_union), Bool},
         ],
         debug_mode in [true, false]
 
@@ -314,5 +315,13 @@ end
         f(x) = sin(cos(x))
         rule = Mooncake.build_rrule(f, 0.0)
         @benchmark Mooncake.value_and_gradient!!($rule, $f, $(Ref(0.0))[])
+    end
+    @testset "literal Strings do not appear in shared data" begin
+        f() = "hello"
+        @test length(build_rrule(Tuple{typeof(f)}).fwds_oc.oc.captures) == 2
+    end
+    @testset "Literal Types do not appear in shared data" begin
+        f() = Float64
+        @test length(build_rrule(Tuple{typeof(f)}).fwds_oc.oc.captures) == 2
     end
 end

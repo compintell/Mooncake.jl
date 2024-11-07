@@ -590,7 +590,6 @@ Set `x` to its zero element (`x` should be a tangent, so the zero must exist).
 set_to_zero!!(::NoTangent) = NoTangent()
 set_to_zero!!(x::Base.IEEEFloat) = zero(x)
 set_to_zero!!(x::Union{Tuple, NamedTuple}) = map(set_to_zero!!, x)
-
 function set_to_zero!!(x::T) where {T<:PossiblyUninitTangent}
     return is_init(x) ? T(set_to_zero!!(val(x))) : x
 end
@@ -657,7 +656,6 @@ end
 _add_to_primal(x::Tuple, t::Tuple) = _map(_add_to_primal, x, t)
 _add_to_primal(x::NamedTuple, t::NamedTuple) = _map(_add_to_primal, x, t)
 _add_to_primal(x, ::Tangent{NamedTuple{(), Tuple{}}}) = x
-
 function _add_to_primal(p::P, t::T) where {P, T<:Union{Tangent, MutableTangent}}
     Tt = tangent_type(P)
     if Tt != typeof(t)
@@ -787,6 +785,7 @@ function tangent_test_cases()
             (5.1, 4.0, 3.0, 7.0),
             (svec(5.0), Any[4.0], Any[3.0], Any[7.0]),
             ([3.0, 2.0], [1.0, 2.0], [2.0, 3.0], [3.0, 5.0]),
+            (Float64[], Float64[], Float64[], Float64[]),
             (
                 [1, 2],
                 [NoTangent(), NoTangent()],

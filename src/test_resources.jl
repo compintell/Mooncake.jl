@@ -577,6 +577,8 @@ function typevar_tester()
     return UnionAll(tv, t)
 end
 
+tuple_with_union(x::Bool) = (x ? 5.0 : 5, nothing)
+
 function generate_test_functions()
     return Any[
         (false, :allocs, nothing, const_tester),

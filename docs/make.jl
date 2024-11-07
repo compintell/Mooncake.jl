@@ -39,6 +39,7 @@ makedocs(
         ],
         "Developer Documentation" => [
             "Running Tests Locally" => "running_tests_locally.md",
+            "Developer Tools" => "developer_tools.md",
         ],
         "Known Limitations" => "known_limitations.md",
     ]
