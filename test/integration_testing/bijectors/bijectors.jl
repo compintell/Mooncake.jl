@@ -13,9 +13,10 @@ struct TestCase
     func::Function
     arg::Any
     name::Union{String,Nothing}
+    broken::Bool
 end
 
-TestCase(f, arg; name = nothing) = TestCase(f, arg, name)
+TestCase(f, arg; name = nothing, broken=false) = TestCase(f, arg, name, broken)
 
 """
 A helper function that returns a TestCase that evaluates bijector(inverse(bijector)(x))
@@ -98,6 +99,9 @@ end
             end,
             randn(Xoshiro(23), 7);
             name = "PlanarLayer7",
+            # TODO(mhauru) Broken on v1.11 due to
+            # https://github.com/compintell/Mooncake.jl/issues/319
+            broken=(VERSION >= v"1.11"),
         ),
         TestCase(
             function (x)
@@ -118,6 +122,13 @@ end
     ]
 
     @testset "$(case.name)" for case in test_cases
-        test_rule(Xoshiro(123456), case.func, case.arg; is_primitive = false)
+        if case.broken
+            @test_broken begin
+                test_rule(Xoshiro(123456), case.func, case.arg; is_primitive=false)
+                true
+            end
+        else
+            test_rule(Xoshiro(123456), case.func, case.arg; is_primitive=false)
+        end
     end
 end
