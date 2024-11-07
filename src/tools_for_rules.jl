@@ -321,7 +321,7 @@ function rrule_wrapper(::CoDual{typeof(Core.kwcall)}, fargs::Vararg{CoDual, N}) 
         cr_dfargs = cr_pb(cr_tangent)
 
         # Increment fdata and compute rdata.
-        kwargs_rdata = rdata(zero_tangent(fargs[1]))
+        kwargs_rdata = rdata(zero_tangent(primals[1]))
         args_rdata = map(fargs[2:end], lazy_rdata[2:end], cr_dfargs) do x, l_rdata, cr_dx
             return increment_and_get_rdata!(tangent(x), instantiate(l_rdata), cr_dx)
         end

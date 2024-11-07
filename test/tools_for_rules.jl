@@ -81,7 +81,7 @@ function ChainRulesCore.rrule(::typeof(test_add), x, y)
 end
 @from_rrule DefaultCtx Tuple{typeof(test_add), T, T} where {T<:IEEEFloat} false
 
-# Test case for rule with kwargs.
+# Test case for rule with non-differentiable kwargs.
 test_kwargs(x; y::Bool=false) = y ? x : 2x
 
 function ChainRulesCore.rrule(::typeof(test_kwargs), x::Float64; y::Bool=false)
@@ -90,6 +90,16 @@ function ChainRulesCore.rrule(::typeof(test_kwargs), x::Float64; y::Bool=false)
 end
 
 @from_rrule(DefaultCtx, Tuple{typeof(test_kwargs), Float64}, true)
+
+# Test case for rule with differentiable types used in a non-differentiable way.
+test_kwargs_conditional(x; y::Float64=1.0) = y > 0 ? x : 2x
+
+function ChainRulesCore.rrule(::typeof(test_kwargs_conditional), x::Float64; y::Float64=1.0)
+    test_kwargs_cond_pb(dz::Float64) = ChainRulesCore.NoTangent(), y > 0 ? dz : 2dz
+    return y > 0 ? x : 2x, test_kwargs_cond_pb
+end
+
+@from_rrule(DefaultCtx, Tuple{typeof(test_kwargs_conditional), Float64}, true)
 
 end
 
@@ -127,6 +137,9 @@ end
             (Core.kwcall, (y=true, ), ToolsForRulesResources.test_kwargs, 5.0),
             (Core.kwcall, (y=false, ), ToolsForRulesResources.test_kwargs, 5.0),
             (ToolsForRulesResources.test_kwargs, 5.0),
+            (Core.kwcall, (y=-1.0, ), ToolsForRulesResources.test_kwargs_conditional, 5.0),
+            (Core.kwcall, (y=1.0, ), ToolsForRulesResources.test_kwargs_conditional, 5.0),
+            (ToolsForRulesResources.test_kwargs_conditional, 5.0),
         ]
             test_rule(sr(1), fargs...; perf_flag=:stability, is_primitive=true)
         end
