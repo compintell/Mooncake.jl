@@ -494,9 +494,42 @@ tangent field.
 
 This function uses [`Mooncake.build_rrule`](@ref) to construct a rule. This will use an
 `rrule!!` if one exists, and derive a rule otherwise.
+
+# Arguments
+- `rng::AbstractRNG`: a random number generator
+- `x...`: the function (first element) and its arguments (the remainder)
+
+# Keyword Arguments
+- `interface_only::Bool=false`: test only that the interface is satisfied, without testing
+    correctness. This should generally be set to `true` (the default value), and only
+    disabled if the testing infrastructure is unable to test correctness for some reason
+    e.g. the returned value of the function is a `Ptr`, and appropriate tangents cannot,
+    therefore, be generated for it automatically.
+- `is_primitive::Bool=true`: check whether the thing that you are testing has a hand-written
+    `rrule!!`. This option is helpful if you are testing a new `rrule!!`, as it enables you
+    to verify that your method of `is_primitive` has returned the correct value, and that
+    you are actually testing a method of the `rrule!!` function -- a common mistake when
+    authoring a new `rrule!!` is to implement `is_primitive` incorrectly and to accidentally
+    wind up testing a rule which Mooncake has derived, as opposed to the one that you have
+    written. If you are testing something for which you have not
+    hand-written an `rrule!!`, or which you do not care whether it has a hand-written
+    `rrule!!` or not, you should set it to `false`.
+- `perf_flag::Symbol=:none`: the value of this symbol determines what kind of performance
+    tests should be performed. By default, none are performed. If you believe that a rule
+    should be allocation-free (iff the primal is allocation free), set this to `:allocs`. If
+    you hand-write an `rrule!!` and believe that your test case should be type stable, set
+    this to `:stability` (at present we cannot verify whether a derived rule is type stable
+    for technical reasons). If you believe that a hand-written rule should be _both_
+    allocation-free and type-stable, set this to `:stability_and_allocs`.
+- `interp::Mooncake.MooncakeInterpreter=Mooncake.get_interpreter()`: the abstract
+    interpreter to be used when testing this rule. The default should generally be used.
+- `debug_mode::Bool=false`: whether or not the rule should be tested in debug mode.
+    Typically this should be left at its default `false` value, but if you are finding that
+    the tests are failing for a given rule, you may wish to temporarily set it to `true` in
+    order to get access to additional information and automated testing.
 """
 function test_rule(
-    rng, x...;
+    rng::AbstractRNG, x...;
     interface_only::Bool=false,
     is_primitive::Bool=true,
     perf_flag::Symbol=:none,
