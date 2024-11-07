@@ -501,8 +501,8 @@ This function uses [`Mooncake.build_rrule`](@ref) to construct a rule. This will
 
 # Keyword Arguments
 - `interface_only::Bool=false`: test only that the interface is satisfied, without testing
-    correctness. This should generally be set to `true` (the default value), and only
-    disabled if the testing infrastructure is unable to test correctness for some reason
+    correctness. This should generally be set to `false` (the default value), and only
+    enabled if the testing infrastructure is unable to test correctness for some reason
     e.g. the returned value of the function is a `Ptr`, and appropriate tangents cannot,
     therefore, be generated for it automatically.
 - `is_primitive::Bool=true`: check whether the thing that you are testing has a hand-written
