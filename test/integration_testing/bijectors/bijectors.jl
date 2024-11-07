@@ -18,50 +18,50 @@ end
 TestCase(f, arg; name = nothing) = TestCase(f, arg, name)
 
 """
-A helper function that returns a TestCase that evaluates sum(bijector(inverse(bijector)(x)))
+A helper function that returns a TestCase that evaluates bijector(inverse(bijector)(x))
 """
-function sum_b_binv_test_case(bijector, dim; name = nothing, rng = Xoshiro(23))
+function b_binv_test_case(bijector, dim; name = nothing, rng = Xoshiro(23))
     if name === nothing
         name = string(bijector)
     end
     b_inv = Bijectors.inverse(bijector)
-    return TestCase(x -> sum(bijector(b_inv(x))), randn(rng, dim); name = name)
+    return TestCase(x -> bijector(b_inv(x)), randn(rng, dim); name = name)
 end
 
 @testset "Bijectors integration tests" begin
     test_cases = TestCase[
-        sum_b_binv_test_case(Bijectors.VecCorrBijector(), 3),
-        sum_b_binv_test_case(Bijectors.VecCorrBijector(), 0),
-        sum_b_binv_test_case(Bijectors.CorrBijector(), (3, 3)),
-        sum_b_binv_test_case(Bijectors.CorrBijector(), (0, 0)),
-        sum_b_binv_test_case(Bijectors.VecCholeskyBijector(:L), 3),
-        sum_b_binv_test_case(Bijectors.VecCholeskyBijector(:L), 0),
-        sum_b_binv_test_case(Bijectors.VecCholeskyBijector(:U), 3),
-        sum_b_binv_test_case(Bijectors.VecCholeskyBijector(:U), 0),
-        sum_b_binv_test_case(
+        b_binv_test_case(Bijectors.VecCorrBijector(), 3),
+        b_binv_test_case(Bijectors.VecCorrBijector(), 0),
+        b_binv_test_case(Bijectors.CorrBijector(), (3, 3)),
+        b_binv_test_case(Bijectors.CorrBijector(), (0, 0)),
+        b_binv_test_case(Bijectors.VecCholeskyBijector(:L), 3),
+        b_binv_test_case(Bijectors.VecCholeskyBijector(:L), 0),
+        b_binv_test_case(Bijectors.VecCholeskyBijector(:U), 3),
+        b_binv_test_case(Bijectors.VecCholeskyBijector(:U), 0),
+        b_binv_test_case(
             Bijectors.Coupling(Bijectors.Shift, Bijectors.PartitionMask(3, [1], [2])),
             3,
         ),
-        sum_b_binv_test_case(Bijectors.InvertibleBatchNorm(3), (3, 3)),
-        sum_b_binv_test_case(Bijectors.LeakyReLU(0.2), 3),
-        sum_b_binv_test_case(Bijectors.Logit(0.1, 0.3), 3),
-        sum_b_binv_test_case(Bijectors.PDBijector(), (3, 3)),
-        sum_b_binv_test_case(Bijectors.PDVecBijector(), 3),
-        sum_b_binv_test_case(Bijectors.Permute([
+        b_binv_test_case(Bijectors.InvertibleBatchNorm(3), (3, 3)),
+        b_binv_test_case(Bijectors.LeakyReLU(0.2), 3),
+        b_binv_test_case(Bijectors.Logit(0.1, 0.3), 3),
+        b_binv_test_case(Bijectors.PDBijector(), (3, 3)),
+        b_binv_test_case(Bijectors.PDVecBijector(), 3),
+        b_binv_test_case(Bijectors.Permute([
             0 1 0
             1 0 0
             0 0 1
         ]), (3, 3)),
-        sum_b_binv_test_case(Bijectors.PlanarLayer(3), (3, 3)),
-        sum_b_binv_test_case(Bijectors.RadialLayer(3), 3),
-        sum_b_binv_test_case(Bijectors.Reshape((2, 3), (3, 2)), (2, 3)),
-        sum_b_binv_test_case(Bijectors.Scale(0.2), 3),
-        sum_b_binv_test_case(Bijectors.Shift(-0.4), 3),
-        sum_b_binv_test_case(Bijectors.SignFlip(), 3),
-        sum_b_binv_test_case(Bijectors.SimplexBijector(), 3),
-        sum_b_binv_test_case(Bijectors.TruncatedBijector(-0.2, 0.5), 3),
+        b_binv_test_case(Bijectors.PlanarLayer(3), (3, 3)),
+        b_binv_test_case(Bijectors.RadialLayer(3), 3),
+        b_binv_test_case(Bijectors.Reshape((2, 3), (3, 2)), (2, 3)),
+        b_binv_test_case(Bijectors.Scale(0.2), 3),
+        b_binv_test_case(Bijectors.Shift(-0.4), 3),
+        b_binv_test_case(Bijectors.SignFlip(), 3),
+        b_binv_test_case(Bijectors.SimplexBijector(), 3),
+        b_binv_test_case(Bijectors.TruncatedBijector(-0.2, 0.5), 3),
 
-        # Below, some test cases that don't fit the sum_b_binv_test_case mold.
+        # Below, some test cases that don't fit the b_binv_test_case mold.
 
         TestCase(
             function (x)
@@ -71,7 +71,7 @@ end
                     [1.0, 0.2, 1.0],
                 )
                 binv = Bijectors.inverse(b)
-                return sum(binv(b(x)))
+                return binv(b(x))
             end,
             randn(Xoshiro(23));
             name = "RationalQuadraticSpline on scalar",
@@ -80,7 +80,7 @@ end
             function (x)
                 b = Bijectors.OrderedBijector()
                 binv = Bijectors.inverse(b)
-                return sum(binv(b(x)))
+                return binv(b(x))
             end,
             randn(Xoshiro(23), 7);
             name = "OrderedBijector",
