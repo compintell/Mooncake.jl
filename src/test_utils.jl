@@ -388,7 +388,7 @@ function test_rrule_interface(f_f̄, x_x̄...; rule)
         display(e)
         println()
         throw(ArgumentError(
-            "rrule!! for $(_typeof(f_fwds)) with argument types $(_typeof(x_fwds)) does not run."
+            "rule for $(_typeof(f_fwds)) with argument types $(_typeof(x_fwds)) does not run."
         ))
     end
     @test rrule_ret isa rrule_output_type(_typeof(y))
