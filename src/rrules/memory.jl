@@ -120,112 +120,6 @@ function _verify_fdata_value(p::Memory{P}, f::Memory{F}) where {P, F}
 end
 
 #
-# Array -- tangent interface implementation
-#
-
-@inline function zero_tangent_internal(x::Array, stackdict::Maybe{IdDict})
-    T = tangent_type(typeof(x))
-
-    # If we already have a tangent for this, just return that.
-    haskey(stackdict, x) && return stackdict[x]::T
-
-    # Construct a new tangent, log it in the `stackdict`, and return it.
-    dx = _new_(T)
-    Base.setfield!(dx, :size, x.size)
-    stackdict[x] = dx
-    Base.setfield!(dx, :ref, zero_tangent_internal(x.ref, stackdict))
-    return dx::T
-end
-
-function randn_tangent_internal(rng::AbstractRNG, x::Array, stackdict::Maybe{IdDict})
-    T = tangent_type(typeof(x))
-
-    # If we already have a tangent for this, just return that.
-    haskey(stackdict, x) && return stackdict[x]::T
-
-    # Construct a new tangent, log it in the `stackdict`, and return it.
-    dx = _new_(T)
-    Base.setfield!(dx, :size, x.size)
-    stackdict[x] = dx
-    Base.setfield!(dx, :ref, randn_tangent_internal(rng, x.ref, stackdict))
-    return dx::T
-end
-
-function increment!!(x::T, y::T) where {T<:Array}
-    return x === y ? x : _map_if_assigned!(increment!!, x, x, y)
-end
-
-set_to_zero!!(x::Array) = _map_if_assigned!(set_to_zero!!, x, x)
-
-function _scale(a::Float64, t::T) where {T<:Array}
-    t′ = T(undef, size(t)...)
-    return _map_if_assigned!(Base.Fix1(_scale, a), t′, t)
-end
-
-function _dot(t::T, s::T) where {T<:Array}
-    isbitstype(T) && return sum(_map(_dot, t, s))
-    return sum(
-        _map(eachindex(t)) do n
-            (isassigned(t, n) && isassigned(s, n)) ? _dot(t[n], s[n]) : 0.0
-        end;
-        init=0.0,
-    )
-end
-
-function _add_to_primal(x::Array{P, N}, t::Array{<:Any, N}) where {P, N}
-    x′ = Array{P, N}(undef, size(x)...)
-    return _map_if_assigned!(_add_to_primal, x′, x, t)
-end
-
-function _diff(p::P, q::P) where {P<:Array}
-    return _map_if_assigned!(_diff, tangent_type(P)(undef, size(p)), p, q)
-end
-
-# Rules
-
-@is_primitive(
-    MinimalCtx, Tuple{typeof(unsafe_copyto!), MemoryRef{P}, MemoryRef{P}, Int} where {P}
-)
-function rrule!!(
-    ::CoDual{typeof(unsafe_copyto!)},
-    dest::CoDual{MemoryRef{P}},
-    src::CoDual{MemoryRef{P}},
-    _n::CoDual{Int},
-) where {P}
-    n = primal(_n)
-
-    # Copy state of primal and fdata of dest.
-    dest_primal_copy = memoryref(Memory{P}(undef, n))
-    dest_fdata_copy = memoryref(Memory{tangent_type(P)}(undef, n))
-    unsafe_copyto!(dest_primal_copy, dest.x, n)
-    unsafe_copyto!(dest_fdata_copy, dest.dx, n)
-
-    # Apply primal computation to both primal and fdata.
-    unsafe_copyto!(dest.x, src.x, n)
-    unsafe_copyto!(dest.dx, src.dx, n)
-
-    function unsafe_copyto!_adjoint(::NoRData)
-
-        # Increment tangents in src by values in dest.
-        tmp = Memory{eltype(dest.dx)}(undef, n)
-        unsafe_copyto!(memoryref(tmp), dest.dx, n)
-
-        # Restore state of `dest`.
-        unsafe_copyto!(dest.x, dest_primal_copy, n)
-        unsafe_copyto!(dest.dx, dest_fdata_copy, n)
-
-        # Increment gradients.
-        @inbounds for i in 1:n
-            src_ref = memoryref(src.dx, i)
-            src_ref[] = increment!!(src_ref[], memoryref(tmp, i)[])
-        end
-
-        return ntuple(_ -> NoRData(), 4)
-    end
-    return dest, unsafe_copyto!_adjoint
-end
-
-#
 # MemoryRef
 #
 
@@ -302,6 +196,50 @@ tangent_type(::Type{<:MemoryRef{T}}, ::Type{NoRData}) where {T} = MemoryRef{T}
 tangent(f::MemoryRef, ::NoRData) = f
 
 _verify_fdata_value(p::MemoryRef, f::MemoryRef) = _verify_fdata_value(p.mem, f.mem)
+
+# Rules
+
+@is_primitive(
+    MinimalCtx, Tuple{typeof(unsafe_copyto!), MemoryRef{P}, MemoryRef{P}, Int} where {P}
+)
+function rrule!!(
+    ::CoDual{typeof(unsafe_copyto!)},
+    dest::CoDual{MemoryRef{P}},
+    src::CoDual{MemoryRef{P}},
+    _n::CoDual{Int},
+) where {P}
+    n = primal(_n)
+
+    # Copy state of primal and fdata of dest.
+    dest_primal_copy = memoryref(Memory{P}(undef, n))
+    dest_fdata_copy = memoryref(Memory{tangent_type(P)}(undef, n))
+    unsafe_copyto!(dest_primal_copy, dest.x, n)
+    unsafe_copyto!(dest_fdata_copy, dest.dx, n)
+
+    # Apply primal computation to both primal and fdata.
+    unsafe_copyto!(dest.x, src.x, n)
+    unsafe_copyto!(dest.dx, src.dx, n)
+
+    function unsafe_copyto!_adjoint(::NoRData)
+
+        # Increment tangents in src by values in dest.
+        tmp = Memory{eltype(dest.dx)}(undef, n)
+        unsafe_copyto!(memoryref(tmp), dest.dx, n)
+
+        # Restore state of `dest`.
+        unsafe_copyto!(dest.x, dest_primal_copy, n)
+        unsafe_copyto!(dest.dx, dest_fdata_copy, n)
+
+        # Increment gradients.
+        @inbounds for i in 1:n
+            src_ref = memoryref(src.dx, i)
+            src_ref[] = increment!!(src_ref[], memoryref(tmp, i)[])
+        end
+
+        return ntuple(_ -> NoRData(), 4)
+    end
+    return dest, unsafe_copyto!_adjoint
+end
 
 #
 # Array -- tangent interface implementation
