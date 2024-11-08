@@ -55,6 +55,8 @@ include("front_matter.jl")
         end
     elseif test_group == "gpu"
         include(joinpath("ext", "cuda", "cuda.jl"))
+    elseif test_group == "ext/diffeqbase"
+        include(joinpath("ext", "diffeqbase", "diffeqbase.jl"))
     elseif test_group == "ext/differentiation_interface"
         include(joinpath("ext", "differentiation_interface", "di.jl"))
     elseif test_group == "ext/dynamic_ppl"

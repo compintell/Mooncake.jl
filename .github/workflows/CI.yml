@@ -24,6 +24,7 @@ jobs:
           - 'aqua'
           - 'basic'
           - 'rrules'
+          - 'ext/diffeqbase'
           - 'ext/differentiation_interface'
           - 'ext/dynamic_ppl'
           - 'ext/logdensityproblemsad'
