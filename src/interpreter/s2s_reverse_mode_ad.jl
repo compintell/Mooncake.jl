@@ -682,7 +682,7 @@ __get_primal(x::CoDual) = primal(x)
 __get_primal(x) = x
 
 # Used in `make_ad_stmts!` method for `Expr(:call, ...)` and `Expr(:invoke, ...)`.
-@inline function __run_rvs_pass!(::Type{P}, ::Type{sig}, pb!!, ret_rev_data_ref::Ref, arg_rev_data_refs...) where {P, sig}
+@inline function __run_rvs_pass!(P::Type, ::Type{sig}, pb!!, ret_rev_data_ref::Ref, arg_rev_data_refs...) where {sig}
     tuple_map(increment_if_ref!, arg_rev_data_refs, pb!!(ret_rev_data_ref[]))
     set_ret_ref_to_zero!!(P, ret_rev_data_ref)
     return nothing
@@ -734,10 +734,10 @@ function DerivedRule(Tprimal, fwds_oc::T, pb::U, isva::V, nargs::W) where {T, U,
 end
 
 # Extends functionality defined for debug_mode.
-function verify_args(::DerivedRule{sig}, ::Tx) where {sig, Tx}
-    sig === Tx && return nothing
-    msg = "Arguments with sig $Tx do not match signature expected by rule, $sig"
-    throw(ArgumentError(msg))
+function verify_args(r::DerivedRule{sig}, x) where {sig}
+    Tx = Tuple{map(_typeof ∘ primal, __unflatten_codual_varargs(r.isva, x, r.nargs))...}
+    Tx <: sig && return nothing
+    throw(ArgumentError("Arguments with sig $Tx do not subtype rule signature, $sig"))
 end
 
 _copy(::Nothing) = nothing
@@ -1530,8 +1530,7 @@ end
 _copy(x::P) where {P<:LazyDerivedRule} = P(x.mi, x.debug_mode)
 
 @inline function (rule::LazyDerivedRule)(args::Vararg{Any, N}) where {N}
-    isdefined(rule, :rule) || _build_rule!(rule, args)
-    return rule.rule(args...)
+    return isdefined(rule, :rule) ? rule.rule(args...) : _build_rule!(rule, args)
 end
 
 struct BadRuleTypeException <: Exception
@@ -1561,20 +1560,25 @@ function Base.showerror(io::IO, err::BadRuleTypeException)
     println(io, msg)
 end
 
+_rtype(::Type{<:DebugRRule}) = Tuple{CoDual, DebugPullback}
+_rtype(T::Type{<:MistyClosure}) = _rtype(fieldtype(T, :oc))
+_rtype(::Type{<:OpaqueClosure{<:Any, <:R}}) where {R} = (@isdefined R) ? R : CoDual
+_rtype(T::Type{<:DerivedRule}) = Tuple{_rtype(fieldtype(T, :fwds_oc)), fieldtype(T, :pb)}
+
 @noinline function _build_rule!(rule::LazyDerivedRule{sig, Trule}, args) where {sig, Trule}
     derived_rule = build_rrule(get_interpreter(), rule.mi; debug_mode=rule.debug_mode)
     if derived_rule isa Trule
         rule.rule = derived_rule
+        result = derived_rule(args...)
     else
-        @warn "Unable to put rule in rule field. A `BadRuleTypeException` should be thrown."
+        @warn "Unable to put rule in rule field. A `BadRuleTypeException` might be thrown."
         err = BadRuleTypeException(rule.mi, sig, typeof(derived_rule), Trule)
-        try
+        result = try
             derived_rule(args...)
         catch
             throw(err)
         end
-        @warn "`BadRuleTypException was _not_ thrown. Throwing now."
-        throw(err)
+        @warn "`BadRuleTypException was _not_ thrown. Expect an error at some point."
     end
-    return nothing
+    return result::_rtype(Trule)
 end

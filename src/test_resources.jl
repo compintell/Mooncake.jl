@@ -525,7 +525,7 @@ end
 
 # Copied over from https://github.com/TuringLang/Turing.jl/issues/1140
 function _sum(x)
-    z = 0
+    z = 0 # this intentionally causes a type instability -- do not make this type stable.
     for i in eachindex(x)
         z += x[i]
     end
