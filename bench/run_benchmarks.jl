@@ -290,7 +290,7 @@ function benchmark_derived_rrules!!(rng_ctor)
         tags = fill(nothing, length(test_cases))
         return map(x -> x[4:end], test_cases), memory, ranges, tags
     end
-    return benchmark_rules!!(test_case_data, (lb=1e-3, ub=150), false)
+    return benchmark_rules!!(test_case_data, (lb=1e-3, ub=200), false)
 end
 
 function benchmark_inter_framework_rules()
@@ -299,7 +299,7 @@ function benchmark_inter_framework_rules()
     test_cases = map(last, test_case_data)
     memory = []
     ranges = fill(nothing, length(test_cases))
-    return benchmark_rules!!([(test_cases, memory, ranges, tags)], (lb=0.1, ub=150), true)
+    return benchmark_rules!!([(test_cases, memory, ranges, tags)], (lb=0.1, ub=200), true)
 end
 
 function flag_concerning_performance(ratios)
