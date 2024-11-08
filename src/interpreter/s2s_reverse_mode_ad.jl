@@ -734,12 +734,10 @@ function DerivedRule(Tprimal, fwds_oc::T, pb::U, isva::V, nargs::W) where {T, U,
 end
 
 # Extends functionality defined for debug_mode.
-function verify_args(rule::DerivedRule{sig}, x) where {sig}
-    uf_x = __unflatten_codual_varargs(rule.isva, x, rule.nargs)
-    Tx = Tuple{map(_typeof ∘ primal, uf_x)...}
+function verify_args(r::DerivedRule{sig}, x) where {sig}
+    Tx = Tuple{map(_typeof ∘ primal, __unflatten_codual_varargs(r.isva, x, r.nargs))...}
     Tx <: sig && return nothing
-    msg = "Arguments with sig $Tx do not subtype signature expected by rule, $sig"
-    throw(ArgumentError(msg))
+    throw(ArgumentError("Arguments with sig $Tx do not subtype rule signature, $sig"))
 end
 
 _copy(::Nothing) = nothing
