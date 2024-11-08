@@ -270,6 +270,10 @@ end
         TestUtils.test_rule(
             Xoshiro(123456), f, x...; perf_flag, interface_only, is_primitive=false
         )
+        TestUtils.test_rule(
+            Xoshiro(123456), f, x...;
+            perf_flag=:none, interface_only, is_primitive=false, debug_mode=true,
+        )
 
         # interp = Mooncake.get_interpreter()
         # codual_args = map(zero_codual, (f, x...))
