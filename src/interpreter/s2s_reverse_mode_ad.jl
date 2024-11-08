@@ -682,7 +682,7 @@ __get_primal(x::CoDual) = primal(x)
 __get_primal(x) = x
 
 # Used in `make_ad_stmts!` method for `Expr(:call, ...)` and `Expr(:invoke, ...)`.
-@inline function __run_rvs_pass!(::Type{P}, ::Type{sig}, pb!!, ret_rev_data_ref::Ref, arg_rev_data_refs...) where {P, sig}
+@inline function __run_rvs_pass!(P::Type, ::Type{sig}, pb!!, ret_rev_data_ref::Ref, arg_rev_data_refs...) where {sig}
     tuple_map(increment_if_ref!, arg_rev_data_refs, pb!!(ret_rev_data_ref[]))
     set_ret_ref_to_zero!!(P, ret_rev_data_ref)
     return nothing
@@ -734,8 +734,9 @@ function DerivedRule(Tprimal, fwds_oc::T, pb::U, isva::V, nargs::W) where {T, U,
 end
 
 # Extends functionality defined for debug_mode.
-function verify_args(::DerivedRule{sig}, x) where {sig}
-    Tx = Tuple{map(_typeof, x)...}
+function verify_args(rule::DerivedRule{sig}, x) where {sig}
+    uf_x = __unflatten_codual_varargs(rule.isva, x, rule.nargs)
+    Tx = Tuple{map(_typeof ∘ primal, uf_x)...}
     Tx <: sig && return nothing
     msg = "Arguments with sig $Tx do not subtype signature expected by rule, $sig"
     throw(ArgumentError(msg))
@@ -1561,12 +1562,14 @@ function Base.showerror(io::IO, err::BadRuleTypeException)
     println(io, msg)
 end
 
-return_type(T::Type{<:DebugRRule}) = return_type(fieldtype(T, :rule))
+return_type(T::Type{<:DebugRRule}) = Tuple{CoDual, DebugPullback}
 return_type(T::Type{<:MistyClosure}) = return_type(fieldtype(T, :oc))
 function return_type(::Type{<:Core.OpaqueClosure{<:Any, <:Treturn}}) where {Treturn}
     return (@isdefined Treturn) ? Treturn : CoDual
 end
-return_type(T::Type{<:DerivedRule}) = Tuple{return_type(fieldtype(T, :fwds_oc)), fieldtype(T, :pb)}
+function return_type(T::Type{<:DerivedRule})
+    return Tuple{return_type(fieldtype(T, :fwds_oc)), fieldtype(T, :pb)}
+end
 
 @noinline function _build_rule!(rule::LazyDerivedRule{sig, Trule}, args) where {sig, Trule}
     derived_rule = build_rrule(get_interpreter(), rule.mi; debug_mode=rule.debug_mode)
