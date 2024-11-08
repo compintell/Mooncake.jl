@@ -98,7 +98,7 @@ verify_args(_, x) = nothing
     try
         # Check that the input types are correct. If this check is not present, the passing
         # in arguments of the wrong type can result in a segfault.
-        verify_args(rule, map(primal, x))
+        verify_args(rule, x)
 
         # Use for-loop to keep the stack trace as simple as possible.
         for _x in x

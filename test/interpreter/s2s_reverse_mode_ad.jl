@@ -257,7 +257,11 @@ end
     @testset "LazyDerivedRule" begin
         fargs = (S2SGlobals.baz, 5.0)
         rule = build_rrule(fargs...)
-        @test_throws Mooncake.BadRuleTypeException rule(map(zero_fcodual, fargs)...)
+        msg = "Unable to put rule in rule field. A `BadRuleTypeException` might be thrown."
+        @test_logs(
+            (:warn, msg),
+            (@test_throws Mooncake.BadRuleTypeException rule(map(zero_fcodual, fargs)...)),
+        )
     end
     @testset "MooncakeRuleCompilationError" begin
         @test_throws(Mooncake.MooncakeRuleCompilationError, Mooncake.build_rrule(sin))
@@ -269,6 +273,10 @@ end
         @info "$n: $sig"
         TestUtils.test_rule(
             Xoshiro(123456), f, x...; perf_flag, interface_only, is_primitive=false
+        )
+        TestUtils.test_rule(
+            Xoshiro(123456), f, x...;
+            perf_flag=:none, interface_only, is_primitive=false, debug_mode=true,
         )
 
         # interp = Mooncake.get_interpreter()

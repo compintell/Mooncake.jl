@@ -31,6 +31,7 @@ jobs:
           - 'ext/nnlib'
           - 'ext/special_functions'
           - 'integration_testing/array'
+          - 'integration_testing/bijectors'
           - 'integration_testing/diff_tests'
           - 'integration_testing/distributions'
           - 'integration_testing/gp'
