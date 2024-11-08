@@ -16,7 +16,7 @@ const Maybe{T} = Union{Nothing, T}
 
 tangent_type(::Type{<:Memory{P}}) where {P} = Memory{tangent_type(P)}
 
-function zero_tangent_internal(x::Memory, stackdict::Maybe{IdDict})
+function zero_tangent_internal(x::Memory{P}, stackdict::Maybe{IdDict}) where {P}
 
     T = tangent_type(typeof(x))
 
@@ -120,128 +120,6 @@ function _verify_fdata_value(p::Memory{P}, f::Memory{F}) where {P, F}
 end
 
 #
-# MemoryRef
-#
-
-# Tangent Interface Implementation
-
-tangent_type(::Type{<:MemoryRef{P}}) where {P} = MemoryRef{tangent_type(P)}
-
-#=
-Given a new chunk of memory `m`, construct a `MemoryRef` which points to the same relative
-position in `x`, as `m` points to in its underlying `Memory` object. For example, in the
-following:
-```julia
-original_mem = Memory{Float64}(undef, 10)
-x = memoryref(original_mem, 4)
-new_mem = Memory{Float64}(undef, 10)
-new_x = construct_ref(x, new_mem)
-```
-`new_x` will point towards the 4th element of `new_mem`. Care is required of the length
-of `original_mem` is `0`. See implementation for details.
-=#
-function construct_ref(x::MemoryRef, m::Memory)
-    return isempty(m) ? memoryref(m) : memoryref(m, Core.memoryrefoffset(x))
-end
-
-function zero_tangent_internal(x::MemoryRef, stackdict::Maybe{IdDict})
-    return construct_ref(x, zero_tangent_internal(x.mem, stackdict))
-end
-
-function randn_tangent_internal(rng::AbstractRNG, x::MemoryRef, stackdict::Maybe{IdDict})
-    return construct_ref(x, randn_tangent_internal(rng, x.mem, stackdict))
-end
-
-function TestUtils.has_equal_data_internal(
-    x::P, y::P, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}
-) where {P<:MemoryRef}
-    equal_refs = Core.memoryrefoffset(x) == Core.memoryrefoffset(y)
-    equal_data = TestUtils.has_equal_data_internal(x.mem, y.mem, equal_undefs, d)
-    return equal_refs && equal_data
-end
-
-increment!!(x::P, y::P) where {P<:MemoryRef} = construct_ref(x, increment!!(x.mem, y.mem))
-
-function set_to_zero!!(x::MemoryRef)
-    set_to_zero!!(x.mem)
-    return x
-end
-
-_add_to_primal(p::MemoryRef, t::MemoryRef) = construct_ref(p, _add_to_primal(p.mem, t.mem))
-
-function _diff(p::P, q::P) where {P<:MemoryRef}
-    @assert Core.memoryrefoffset(p) == Core.memoryrefoffset(q)
-    return construct_ref(p, _diff(p.mem, q.mem))
-end
-
-function _dot(t::T, s::T) where {T<:MemoryRef}
-    @assert Core.memoryrefoffset(t) == Core.memoryrefoffset(s)
-    return _dot(t.mem, s.mem)
-end
-
-_scale(a::Float64, t::MemoryRef) = construct_ref(t, _scale(a, t.mem))
-
-function populate_address_map!(m::TestUtils.AddressMap, p::MemoryRef, t::MemoryRef)
-    return populate_address_map!(m, p.mem, t.mem)
-end
-
-# FData / RData Interface Implementation
-
-fdata_type(::Type{<:MemoryRef{T}}) where {T} = MemoryRef{T}
-
-rdata_type(::Type{<:MemoryRef}) = NoRData
-
-tangent_type(::Type{<:MemoryRef{T}}, ::Type{NoRData}) where {T} = MemoryRef{T}
-
-tangent(f::MemoryRef, ::NoRData) = f
-
-_verify_fdata_value(p::MemoryRef, f::MemoryRef) = _verify_fdata_value(p.mem, f.mem)
-
-# Rules
-
-@is_primitive(
-    MinimalCtx, Tuple{typeof(unsafe_copyto!), MemoryRef{P}, MemoryRef{P}, Int} where {P}
-)
-function rrule!!(
-    ::CoDual{typeof(unsafe_copyto!)},
-    dest::CoDual{MemoryRef{P}},
-    src::CoDual{MemoryRef{P}},
-    _n::CoDual{Int},
-) where {P}
-    n = primal(_n)
-
-    # Copy state of primal and fdata of dest.
-    dest_primal_copy = memoryref(Memory{P}(undef, n))
-    dest_fdata_copy = memoryref(Memory{tangent_type(P)}(undef, n))
-    unsafe_copyto!(dest_primal_copy, dest.x, n)
-    unsafe_copyto!(dest_fdata_copy, dest.dx, n)
-
-    # Apply primal computation to both primal and fdata.
-    unsafe_copyto!(dest.x, src.x, n)
-    unsafe_copyto!(dest.dx, src.dx, n)
-
-    function unsafe_copyto!_adjoint(::NoRData)
-
-        # Increment tangents in src by values in dest.
-        tmp = Memory{eltype(dest.dx)}(undef, n)
-        unsafe_copyto!(memoryref(tmp), dest.dx, n)
-
-        # Restore state of `dest`.
-        unsafe_copyto!(dest.x, dest_primal_copy, n)
-        unsafe_copyto!(dest.dx, dest_fdata_copy, n)
-
-        # Increment gradients.
-        @inbounds for i in 1:n
-            src_ref = memoryref(src.dx, i)
-            src_ref[] = increment!!(src_ref[], memoryref(tmp, i)[])
-        end
-
-        return ntuple(_ -> NoRData(), 4)
-    end
-    return dest, unsafe_copyto!_adjoint
-end
-
-#
 # Array -- tangent interface implementation
 #
 
@@ -301,6 +179,130 @@ end
 
 function _diff(p::P, q::P) where {P<:Array}
     return _map_if_assigned!(_diff, tangent_type(P)(undef, size(p)), p, q)
+end
+
+# Rules
+
+@is_primitive(
+    MinimalCtx, Tuple{typeof(unsafe_copyto!), MemoryRef{P}, MemoryRef{P}, Int} where {P}
+)
+function rrule!!(
+    ::CoDual{typeof(unsafe_copyto!)},
+    dest::CoDual{MemoryRef{P}},
+    src::CoDual{MemoryRef{P}},
+    _n::CoDual{Int},
+) where {P}
+    n = primal(_n)
+
+    # Copy state of primal and fdata of dest.
+    dest_primal_copy = memoryref(Memory{P}(undef, n))
+    dest_fdata_copy = memoryref(Memory{tangent_type(P)}(undef, n))
+    unsafe_copyto!(dest_primal_copy, dest.x, n)
+    unsafe_copyto!(dest_fdata_copy, dest.dx, n)
+
+    # Apply primal computation to both primal and fdata.
+    unsafe_copyto!(dest.x, src.x, n)
+    unsafe_copyto!(dest.dx, src.dx, n)
+
+    function unsafe_copyto!_adjoint(::NoRData)
+
+        # Increment tangents in src by values in dest.
+        tmp = Memory{eltype(dest.dx)}(undef, n)
+        unsafe_copyto!(memoryref(tmp), dest.dx, n)
+
+        # Restore state of `dest`.
+        unsafe_copyto!(dest.x, dest_primal_copy, n)
+        unsafe_copyto!(dest.dx, dest_fdata_copy, n)
+
+        # Increment gradients.
+        @inbounds for i in 1:n
+            src_ref = memoryref(src.dx, i)
+            src_ref[] = increment!!(src_ref[], memoryref(tmp, i)[])
+        end
+
+        return ntuple(_ -> NoRData(), 4)
+    end
+    return dest, unsafe_copyto!_adjoint
+end
+
+#
+# MemoryRef
+#
+
+# Tangent Interface Implementation
+
+tangent_type(::Type{<:MemoryRef{P}}) where {P} = MemoryRef{tangent_type(P)}
+
+#=
+Given a new chunk of memory `m`, construct a `MemoryRef` which points to the same relative
+position in `x`, as `m` points to in its underlying `Memory` object. For example, in the
+following:
+```julia
+original_mem = Memory{Float64}(undef, 10)
+x = memoryref(original_mem, 4)
+new_mem = Memory{Float64}(undef, 10)
+new_x = construct_ref(x, new_mem)
+```
+`new_x` will point towards the 4th element of `new_mem`. Care is required of the length
+of `original_mem` is `0`. See implementation for details.
+=#
+function construct_ref(x::MemoryRef, m::Memory)
+    return isempty(m) ? memoryref(m) : memoryref(m, Core.memoryrefoffset(x))
+end
+
+function zero_tangent_internal(x::MemoryRef, stackdict::Maybe{IdDict})
+    return construct_ref(x, zero_tangent_internal(x.mem, stackdict))
+end
+
+function randn_tangent_internal(rng::AbstractRNG, x::MemoryRef, stackdict::Maybe{IdDict})
+    return construct_ref(x, randn_tangent_internal(rng, x.mem, stackdict))
+end
+
+function TestUtils.has_equal_data_internal(
+    x::MemoryRef{P}, y::MemoryRef{P}, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}
+) where {P}
+    equal_refs = Core.memoryrefoffset(x) == Core.memoryrefoffset(y)
+    equal_data = TestUtils.has_equal_data_internal(x.mem, y.mem, equal_undefs, d)
+    return equal_refs && equal_data
+end
+
+increment!!(x::P, y::P) where {P<:MemoryRef} = construct_ref(x, increment!!(x.mem, y.mem))
+
+function set_to_zero!!(x::MemoryRef)
+    set_to_zero!!(x.mem)
+    return x
+end
+
+_add_to_primal(p::MemoryRef, t::MemoryRef) = construct_ref(p, _add_to_primal(p.mem, t.mem))
+
+function _diff(p::P, q::P) where {P<:MemoryRef}
+    @assert Core.memoryrefoffset(p) == Core.memoryrefoffset(q)
+    return construct_ref(p, _diff(p.mem, q.mem))
+end
+
+function _dot(t::T, s::T) where {T<:MemoryRef}
+    @assert Core.memoryrefoffset(t) == Core.memoryrefoffset(s)
+    return _dot(t.mem, s.mem)
+end
+
+_scale(a::Float64, t::MemoryRef) = construct_ref(t, _scale(a, t.mem))
+
+function populate_address_map!(m::TestUtils.AddressMap, p::MemoryRef, t::MemoryRef)
+    return populate_address_map!(m, p.mem, t.mem)
+end
+
+# FData / RData Interface Implementation
+
+fdata_type(::Type{<:MemoryRef{T}}) where {T} = MemoryRef{T}
+
+rdata_type(::Type{<:MemoryRef}) = NoRData
+
+tangent_type(::Type{<:MemoryRef{T}}, ::Type{NoRData}) where {T} = MemoryRef{T}
+
+tangent(f::MemoryRef, ::NoRData) = f
+
+function _verify_fdata_value(p::MemoryRef{P}, f::MemoryRef{T}) where {P, T}
+    _verify_fdata_value(p.mem, f.mem)
 end
 
 #
