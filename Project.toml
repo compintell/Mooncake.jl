@@ -1,11 +1,10 @@
 name = "Mooncake"
 uuid = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
 authors = ["Will Tebbutt, Hong Ge, and contributors"]
-version = "0.4.36"
+version = "0.4.38"
 
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
-AllocCheck = "9b6a8646-10ed-4001-bbdc-1d2f46dfbb1a"
 ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
 DiffRules = "b552c78f-8df3-52c6-915a-8e097449b14b"
 DiffTests = "de460e47-3fe3-5279-bb4a-814414816d5d"
