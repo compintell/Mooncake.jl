@@ -1560,14 +1560,10 @@ function Base.showerror(io::IO, err::BadRuleTypeException)
     println(io, msg)
 end
 
-return_type(T::Type{<:DebugRRule}) = Tuple{CoDual, DebugPullback}
-return_type(T::Type{<:MistyClosure}) = return_type(fieldtype(T, :oc))
-function return_type(::Type{<:Core.OpaqueClosure{<:Any, <:Treturn}}) where {Treturn}
-    return (@isdefined Treturn) ? Treturn : CoDual
-end
-function return_type(T::Type{<:DerivedRule})
-    return Tuple{return_type(fieldtype(T, :fwds_oc)), fieldtype(T, :pb)}
-end
+_rtype(::Type{<:DebugRRule}) = Tuple{CoDual, DebugPullback}
+_rtype(T::Type{<:MistyClosure}) = _rtype(fieldtype(T, :oc))
+_rtype(::Type{<:OpaqueClosure{<:Any, <:R}}) where {R} = (@isdefined R) ? R : CoDual
+_rtype(T::Type{<:DerivedRule}) = Tuple{_rtype(fieldtype(T, :fwds_oc)), fieldtype(T, :pb)}
 
 @noinline function _build_rule!(rule::LazyDerivedRule{sig, Trule}, args) where {sig, Trule}
     derived_rule = build_rrule(get_interpreter(), rule.mi; debug_mode=rule.debug_mode)
@@ -1584,5 +1580,5 @@ end
         end
         @warn "`BadRuleTypException was _not_ thrown. Expect an error at some point."
     end
-    return result::return_type(Trule)
+    return result::_rtype(Trule)
 end
