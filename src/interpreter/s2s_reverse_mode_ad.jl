@@ -734,9 +734,10 @@ function DerivedRule(Tprimal, fwds_oc::T, pb::U, isva::V, nargs::W) where {T, U,
 end
 
 # Extends functionality defined for debug_mode.
-function verify_args(::DerivedRule{sig}, ::Tx) where {sig, Tx}
-    sig === Tx && return nothing
-    msg = "Arguments with sig $Tx do not match signature expected by rule, $sig"
+function verify_args(::DerivedRule{sig}, x) where {sig}
+    Tx = Tuple{map(_typeof, x)...}
+    Tx <: sig && return nothing
+    msg = "Arguments with sig $Tx do not subtype signature expected by rule, $sig"
     throw(ArgumentError(msg))
 end
 
@@ -1530,8 +1531,7 @@ end
 _copy(x::P) where {P<:LazyDerivedRule} = P(x.mi, x.debug_mode)
 
 @inline function (rule::LazyDerivedRule)(args::Vararg{Any, N}) where {N}
-    isdefined(rule, :rule) || _build_rule!(rule, args)
-    return rule.rule(args...)
+    return isdefined(rule, :rule) ? rule.rule(args...) : _build_rule!(rule, args)
 end
 
 struct BadRuleTypeException <: Exception
@@ -1561,20 +1561,27 @@ function Base.showerror(io::IO, err::BadRuleTypeException)
     println(io, msg)
 end
 
+return_type(T::Type{<:DebugRRule}) = return_type(fieldtype(T, :rule))
+return_type(T::Type{<:MistyClosure}) = return_type(fieldtype(T, :oc))
+function return_type(::Type{<:Core.OpaqueClosure{<:Any, <:Treturn}}) where {Treturn}
+    return (@isdefined Treturn) ? Treturn : CoDual
+end
+return_type(T::Type{<:DerivedRule}) = Tuple{return_type(fieldtype(T, :fwds_oc)), fieldtype(T, :pb)}
+
 @noinline function _build_rule!(rule::LazyDerivedRule{sig, Trule}, args) where {sig, Trule}
     derived_rule = build_rrule(get_interpreter(), rule.mi; debug_mode=rule.debug_mode)
     if derived_rule isa Trule
         rule.rule = derived_rule
+        result = derived_rule(args...)
     else
-        @warn "Unable to put rule in rule field. A `BadRuleTypeException` should be thrown."
+        @warn "Unable to put rule in rule field. A `BadRuleTypeException` might be thrown."
         err = BadRuleTypeException(rule.mi, sig, typeof(derived_rule), Trule)
-        try
+        result = try
             derived_rule(args...)
         catch
             throw(err)
         end
-        @warn "`BadRuleTypException was _not_ thrown. Throwing now."
-        throw(err)
+        @warn "`BadRuleTypException was _not_ thrown. Expect an error at some point."
     end
-    return nothing
+    return result::return_type(Trule)
 end
