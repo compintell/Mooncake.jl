@@ -22,9 +22,9 @@ and calls
 rrule(zero_fcodual(+), zero_fcodual(5.0), zero_fcodual(4f0))
 ```
 then the type of `dz` on the reverse pass will be `Float64` (assuming everything happens correctly), and this rule will return a `Float64` as the rdata for `y`.
-However, the primal value of `y` is a `Float32`, so the appropriate tangent type is also `Float32`.
-This error may causes the reverse pass to fail loudly, but it may fail silently.
-It may cause an error much later in the reverse pass, making it hard to determine that the source of the error was the above rule.
+However, the primal value of `y` is a `Float32`, and `rdata_type(Float32)` is `Float32`, so returning a `Float64` is incorrect.
+This error might cause the reverse pass to fail loudly immediately, but it might also fail silently.
+It might cause an error much later in the reverse pass, making it hard to determine that the source of the error was the above rule.
 Worst of all, in some cases it could plausibly cause a segfault, which is more-or-less the worst kind of outcome possible.
 
 
