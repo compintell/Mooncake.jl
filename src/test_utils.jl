@@ -472,8 +472,6 @@ end
 
 __get_primals(xs) = map(x -> x isa CoDual ? primal(x) : x, xs)
 
-_eval(f, x...) = f(x...)
-
 @doc"""
     test_rule(
         rng, x...;
