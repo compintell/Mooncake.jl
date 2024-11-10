@@ -579,6 +579,11 @@ end
 
 tuple_with_union(x::Bool) = (x ? 5.0 : 5, nothing)
 
+struct NoDefaultCtor{T}
+    x::T
+    NoDefaultCtor(x::T) where {T} = new{T}(x)
+end
+
 function generate_test_functions()
     return Any[
         (false, :allocs, nothing, const_tester),
