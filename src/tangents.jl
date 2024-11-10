@@ -640,11 +640,26 @@ end
     _add_to_primal(p::P, t::T, unsafe::Bool=false) where {P, T}
 
 Adds `t` to `p`, returning a `P`. It must be the case that `tangent_type(P) == T`.
+
 If `unsafe` is `true` and `P` is a composite type, then `_add_to_primal` will construct a
 new instance of `P` by directly invoking the `:new` instruction for `P`, rather than
 attempting to use the default constructor for `P`. This is fine if you are confident that
 the new `P` constructed by adding `t` to `p` will always be a valid instance of `P`, but
 could cause problems if you are not confident of this.
+
+This is, for example, fine for the following type:
+```julia
+struct Foo{T}
+    x::Vector{T}
+    y::Vector{T}
+    function Foo(x::Vector{T}, y::Vector{T}) where {T}
+        @assert length(x) == length(y)
+        return new{T}(x, y)
+    end
+end
+```
+Here, the value returned by `_add_to_primal` will satisfy the invariant asserted in the
+inner constructor for `Foo`.
 """
 _add_to_primal(p, t) = _add_to_primal(p, t, false)
 _add_to_primal(x, ::NoTangent, ::Bool) = x
