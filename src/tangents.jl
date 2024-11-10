@@ -670,8 +670,8 @@ function Base.showerror(io::IO, err::AddToPrimalException)
         "default constructor for this type. There are two approaches to dealing with " *
         "this problem. The first is to avoid having to call `_add_to_primal` on this " *
         "type, which can be achieved by avoiding testing functions whose arguments are " *
-        "of this type. If this cannot be avoided, you should consider using " *
-        "`Mooncake._add_to_p` instead. " *
+        "of this type. If this cannot be avoided, you should consider using calling " *
+        "`Mooncake._add_to_primal` with its third positional argument set to `true`. " *
         "If you are using some of Mooncake's testing functionality, this can be achieved " *
         "by setting the `unsafe_perturb` setting to `true` -- check the docstring " *
         "for `Mooncake._add_to_primal` to ensure that your use case is unlikely to " *
