@@ -128,7 +128,8 @@ end
                 true
             end
         else
-            test_rule(Xoshiro(123456), case.func, case.arg; is_primitive=false)
+            rng = Xoshiro(123456)
+            test_rule(rng, case.func, case.arg; is_primitive=false, unsafe_perturb=true)
         end
     end
 end
