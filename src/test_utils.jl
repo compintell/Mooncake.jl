@@ -314,10 +314,6 @@ function test_rule_correctness(rng::AbstractRNG, x_x̄...; rule, unsafe_perturb:
 
     # Verify that inputs / outputs are the same under `f` and its rrule.
     @test has_equal_data(x_primal, map(primal, x_x̄_rule))
-    if !has_equal_data(y_primal, primal(y_ȳ_rule))
-        @show y_primal
-        @show primal(y_ȳ_rule)
-    end
     @test has_equal_data(y_primal, primal(y_ȳ_rule))
 
     # Query both `x_x̄` and `y`, because `x_x̄` may have been mutated by `f`.
