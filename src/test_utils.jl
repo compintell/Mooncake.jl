@@ -527,7 +527,9 @@ This function uses [`Mooncake.build_rrule`](@ref) to construct a rule. This will
     Typically this should be left at its default `false` value, but if you are finding that
     the tests are failing for a given rule, you may wish to temporarily set it to `true` in
     order to get access to additional information and automated testing.
-- `unsafe_perturb::Bool=false`: TODO, WRITE THIS ITEM
+- `unsafe_perturb::Bool=false`: value passed as the third argument to `_add_to_primal`.
+    Should usually be left `false` -- consult the docstring for `_add_to_primal` for more
+    info on when you might wish to set it to `true`.
 """
 function test_rule(
     rng::AbstractRNG, x...;
