@@ -35,9 +35,9 @@ function _dot(t::T, s::T) where {T<:Array}
     )
 end
 
-function _add_to_primal(x::Array{P, N}, t::Array{<:Any, N}) where {P, N}
+function _add_to_primal(x::Array{P, N}, t::Array{<:Any, N}, unsafe::Bool) where {P, N}
     x′ = Array{P, N}(undef, size(x)...)
-    return _map_if_assigned!(_add_to_primal, x′, x, t)
+    return _map_if_assigned!((x, t) -> _add_to_primal(x, t, unsafe), x′, x, t)
 end
 
 function _diff(p::P, q::P) where {V, N, P<:Array{V, N}}

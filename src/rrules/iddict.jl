@@ -24,9 +24,9 @@ function _scale(a::Float64, t::IdDict{K, V}) where {K, V}
     return IdDict{K, V}([k => _scale(a, v) for (k, v) in t])
 end
 _dot(p::T, q::T) where {T<:IdDict} = sum([_dot(p[k], q[k]) for k in keys(p)]; init=0.0)
-function _add_to_primal(p::IdDict{K, V}, t::IdDict{K}) where {K, V}
+function _add_to_primal(p::IdDict{K, V}, t::IdDict{K}, unsafe::Bool) where {K, V}
     ks = intersect(keys(p), keys(t))
-    return IdDict{K, V}([k => _add_to_primal(p[k], t[k]) for k in ks])
+    return IdDict{K, V}([k => _add_to_primal(p[k], t[k], unsafe) for k in ks])
 end
 function _diff(p::P, q::P) where {K, V, P<:IdDict{K, V}}
     @assert union(keys(p), keys(q)) == keys(p)

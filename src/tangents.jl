@@ -637,37 +637,78 @@ function _dot(t::T, s::T) where {T<:Union{Tangent, MutableTangent}}
 end
 
 """
-    _add_to_primal(p::P, t::T) where {P, T}
-
-Required for testing.
-_Not_ currently defined by default.
-`_containerlike_add_to_primal` is potentially what you want to target when implementing for
-a particular primal-tangent pair.
+    _add_to_primal(p::P, t::T, unsafe::Bool=false) where {P, T}
 
 Adds `t` to `p`, returning a `P`. It must be the case that `tangent_type(P) == T`.
+If `unsafe` is `true` and `P` is a composite type, then `_add_to_primal` will construct a
+new instance of `P` by directly invoking the `:new` instruction for `P`, rather than
+attempting to use the default constructor for `P`. This is fine if you are confident that
+the new `P` constructed by adding `t` to `p` will always be a valid instance of `P`, but
+could cause problems if you are not confident of this.
 """
-_add_to_primal(x, ::NoTangent) = x
-_add_to_primal(x::T, t::T) where {T<:IEEEFloat} = x + t
-function _add_to_primal(x::SimpleVector, t::Vector{Any})
-    return svec(map(n -> _add_to_primal(x[n], t[n]), eachindex(x))...)
+_add_to_primal(p, t) = _add_to_primal(p, t, false)
+_add_to_primal(x, ::NoTangent, ::Bool) = x
+_add_to_primal(x::T, t::T, ::Bool) where {T<:IEEEFloat} = x + t
+function _add_to_primal(x::SimpleVector, t::Vector{Any}, unsafe::Bool)
+    return svec(map(n -> _add_to_primal(x[n], t[n], unsafe), eachindex(x))...)
 end
-_add_to_primal(x::Tuple, t::Tuple) = _map(_add_to_primal, x, t)
-_add_to_primal(x::NamedTuple, t::NamedTuple) = _map(_add_to_primal, x, t)
-_add_to_primal(x, ::Tangent{NamedTuple{(), Tuple{}}}) = x
+function _add_to_primal(x::Tuple, t::Tuple, unsafe::Bool)
+    return _map((x, t) -> _add_to_primal(x, t, unsafe), x, t)
+end
+function _add_to_primal(x::NamedTuple, t::NamedTuple, unsafe::Bool)
+    return _map((x, t) -> _add_to_primal(x, t, unsafe), x, t)
+end
+_add_to_primal(x, ::Tangent{NamedTuple{(), Tuple{}}}, unsafe::Bool) = x
 
-function _add_to_primal(p::P, t::T) where {P, T<:Union{Tangent, MutableTangent}}
+struct AddToPrimalException <: Exception
+    primal_type::Type
+end
+
+function Base.showerror(io::IO, err::AddToPrimalException)
+    msg = "Attempted to construct an instance of $(err.primal_type) using the default " *
+        "constuctor. In most cases, this error is caused by the lack of existence of the " *
+        "default constructor for this type. There are two approaches to dealing with " *
+        "this problem. The first is to avoid having to call `_add_to_primal` on this " *
+        "type, which can be achieved by avoiding testing functions whose arguments are " *
+        "of this type. If this cannot be avoided, you should consider using " *
+        "`Mooncake._add_to_p` instead. " *
+        "If you are using some of Mooncake's testing functionality, this can be achieved " *
+        "by setting the `unsafe_perturb` setting to `true` -- check the docstring " *
+        "for `Mooncake._add_to_primal` to ensure that your use case is unlikely to " *
+        "cause problems."
+    println(io, msg)
+end
+
+function _add_to_primal(p::P, t::T, unsafe::Bool) where {P, T<:Union{Tangent, MutableTangent}}
     Tt = tangent_type(P)
     if Tt != typeof(t)
         throw(ArgumentError("p of type $P has tangent_type $Tt, but t is of type $T"))
     end
     tmp = map(fieldnames(P)) do f
         tf = getfield(t.fields, f)
-        isdefined(p, f) && is_init(tf) && return _add_to_primal(getfield(p, f), val(tf)) 
+        isdefined(p, f) && is_init(tf) && return _add_to_primal(getfield(p, f), val(tf), unsafe) 
         !isdefined(p, f) && !is_init(tf) && return FieldUndefined()
         throw(error("unable to handle undefined-ness"))
     end
     i = findfirst(==(FieldUndefined()), tmp)
-    return i === nothing ? P(tmp...) : P(tmp[1:i-1]...)
+
+    # If unsafe mode is enabled, then call `_new_` directly, and avoid the possibility that
+    # the default inner constructor for `P` does not exist.
+    if unsafe
+        return i === nothing ? _new_(P, tmp...) : _new_(P, tmp[1:i-1]...)
+    end
+
+    # If unsafe mode is disabled, try to use the default constructor for `P`. If this does
+    # not work, then throw an informative error message.
+    try 
+        return i === nothing ? P(tmp...) : P(tmp[1:i-1]...)
+    catch e
+        if e isa MethodError
+            throw(AddToPrimalException(P))
+        else
+            rethrow(e)
+        end
+    end
 end
 
 """
