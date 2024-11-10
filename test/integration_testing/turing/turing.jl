@@ -118,6 +118,6 @@ end
     )
         @info name
         f, x = build_turing_problem(sr(123), model, ex)
-        test_rule(sr(123456), f, x; interface_only=true, is_primitive=false)
+        test_rule(sr(123456), f, x; interface_only, is_primitive=false, unsafe_perturb=true)
     end
 end

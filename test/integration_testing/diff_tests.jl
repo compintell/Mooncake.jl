@@ -6,6 +6,6 @@
         TestResources.DIFFTESTS_FUNCTIONS[91:end], # skipping sparse_ldiv
     ))
         @info "$n: $(_typeof((f, x...)))"
-        test_rule(sr(123456), f, x...; interface_only=false, is_primitive=false)
+        test_rule(sr(123456), f, x...; is_primitive=false)
     end
 end
