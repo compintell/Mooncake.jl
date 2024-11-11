@@ -1,5 +1,4 @@
-# Import the rule for the matrix exponential for a restricted subset of all matrices.
-@from_rrule MinimalCtx Tuple{typeof(exp), Matrix{<:IEEEFloat}}
+@is_primitive MinimalCtx Tuple{typeof(exp), Matrix{<:IEEEFloat}}
 
 struct ExpPullback{P}
     pb
