@@ -283,35 +283,34 @@ function address_maps_are_consistent(x::AddressMap, y::AddressMap)
 end
 
 # Assumes that the interface has been tested, and we can simply check for numerical issues.
-function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...; rule)
-    @nospecialize rng f_f̄ x_x̄
+function test_rule_correctness(rng::AbstractRNG, x_x̄...; rule, unsafe_perturb::Bool)
+    @nospecialize rng x_x̄
 
     x_x̄ = map(_deepcopy, x_x̄) # defensive copy
 
     # Run original function on deep-copies of inputs.
-    f = primal(f_f̄)
     x = map(primal, x_x̄)
     x̄ = map(tangent, x_x̄)
 
     # Run primal, and ensure that we still have access to mutated inputs afterwards.
     x_primal = _deepcopy(x)
-    y_primal = f(x_primal...)
+    y_primal = x_primal[1](x_primal[2:end]...)
 
     # Use finite differences to estimate vjps
     ẋ = map(_x -> randn_tangent(rng, _x), x)
     ε = 1e-7
-    x′ = _add_to_primal(x, _scale(ε, ẋ))
-    y′ = f(x′...)
+    x′ = _add_to_primal(x, _scale(ε, ẋ), unsafe_perturb)
+    y′ = x′[1](x′[2:end]...)
     ẏ = _scale(1 / ε, _diff(y′, y_primal))
     ẋ_post = map((_x′, _x_p) -> _scale(1 / ε, _diff(_x′, _x_p)), x′, x_primal)
 
-    # Run `rrule!!` on copies of `f` and `x`. We use randomly generated tangents so that we
+    # Run rule on copies of `f` and `x`. We use randomly generated tangents so that we
     # can later verify that non-zero values do not get propagated by the rule.
     x̄_zero = map(zero_tangent, x)
     x̄_fwds = map(Mooncake.fdata, x̄_zero)
     x_x̄_rule = map((x, x̄_f) -> fcodual_type(_typeof(x))(_deepcopy(x), x̄_f), x, x̄_fwds)
     inputs_address_map = populate_address_map(map(primal, x_x̄_rule), map(tangent, x_x̄_rule))
-    y_ȳ_rule, pb!! = rule(to_fwds(f_f̄), x_x̄_rule...)
+    y_ȳ_rule, pb!! = rule(x_x̄_rule...)
 
     # Verify that inputs / outputs are the same under `f` and its rrule.
     @test has_equal_data(x_primal, map(primal, x_x̄_rule))
@@ -332,8 +331,8 @@ function test_rrule_numerical_correctness(rng::AbstractRNG, f_f̄, x_x̄...; rul
     x̄_init = map(set_to_zero!!, x̄_zero)
     ȳ = increment!!(ȳ_init, ȳ_delta)
     map(increment!!, x̄_init, x̄_delta)
-    _, x̄_rvs_inc... = pb!!(Mooncake.rdata(ȳ))
-    x̄_rvs = map((x, x_inc) -> increment!!(rdata(x), x_inc), x̄_delta, x̄_rvs_inc)
+    x̄_rvs_inc = pb!!(Mooncake.rdata(ȳ))
+    x̄_rvs = increment!!(map(rdata, x̄_delta), x̄_rvs_inc)
     x̄ = map(tangent, x̄_fwds, x̄_rvs)
 
     # Check that inputs have been returned to their original value.
@@ -481,6 +480,7 @@ __get_primals(xs) = map(x -> x isa CoDual ? primal(x) : x, xs)
         perf_flag::Symbol=:none,
         interp::Mooncake.MooncakeInterpreter=Mooncake.get_interpreter(),
         debug_mode::Bool=false,
+        unsafe_perturb::Bool=false,
     )
 
 Run standardised tests on the `rule` for `x`.
@@ -527,6 +527,9 @@ This function uses [`Mooncake.build_rrule`](@ref) to construct a rule. This will
     Typically this should be left at its default `false` value, but if you are finding that
     the tests are failing for a given rule, you may wish to temporarily set it to `true` in
     order to get access to additional information and automated testing.
+- `unsafe_perturb::Bool=false`: value passed as the third argument to `_add_to_primal`.
+    Should usually be left `false` -- consult the docstring for `_add_to_primal` for more
+    info on when you might wish to set it to `true`.
 """
 function test_rule(
     rng::AbstractRNG, x...;
@@ -535,16 +538,16 @@ function test_rule(
     perf_flag::Symbol=:none,
     interp::Mooncake.MooncakeInterpreter=Mooncake.get_interpreter(),
     debug_mode::Bool=false,
+    unsafe_perturb::Bool=false,
 )
     @nospecialize rng x
 
     # Construct the rule.
-    rule = Mooncake.build_rrule(interp, _typeof(__get_primals(x)); debug_mode)
+    sig = _typeof(__get_primals(x))
+    rule = Mooncake.build_rrule(interp, sig; debug_mode)
 
     # If something is primitive, then the rule should be `rrule!!`.
-    if is_primitive
-        @test rule == (debug_mode ? Mooncake.DebugRRule(rrule!!) : rrule!!)
-    end
+    is_primitive && @test rule == (debug_mode ? Mooncake.DebugRRule(rrule!!) : rrule!!)
 
     # Generate random tangents for anything that is not already a CoDual.
     x_x̄ = map(x -> x isa CoDual ? x : interface_only ? uninit_codual(x) : zero_codual(x), x)
@@ -553,14 +556,13 @@ function test_rule(
     test_rrule_interface(x_x̄...; rule)
 
     # Test that answers are numerically correct / consistent.
-    interface_only || test_rrule_numerical_correctness(rng, x_x̄...; rule)
+    interface_only || test_rule_correctness(rng, x_x̄...; rule, unsafe_perturb)
 
     # Test the performance of the rule.
     test_rrule_performance(perf_flag, rule, x_x̄...)
 
     # Test the interface again, in order to verify that caching is working correctly.
-    rule_2 = Mooncake.build_rrule(interp, _typeof(__get_primals(x)); debug_mode)
-    test_rrule_interface(x_x̄..., rule=rule_2)
+    test_rrule_interface(x_x̄..., rule=Mooncake.build_rrule(interp, sig; debug_mode))
 end
 
 
@@ -790,6 +792,7 @@ function test_tangent_consistency(rng::AbstractRNG, p::P; interface_only=false) 
     # Verify that operations required for finite difference testing to run, and produce the
     # correct output type.
     @test _add_to_primal(p, t) isa P
+    @test _add_to_primal(p, t, true) isa P
     @test _diff(p, p) isa T
     @test _dot(t, t) isa Float64
     @test _scale(11.0, t) isa T
@@ -798,9 +801,9 @@ function test_tangent_consistency(rng::AbstractRNG, p::P; interface_only=false) 
     # Run some basic numerical sanity checks on the output the functions required for finite
     # difference testing. These are necessary but insufficient conditions.
     if !interface_only
-        @test has_equal_data(_add_to_primal(p, z), p)
+        @test has_equal_data(_add_to_primal(p, z, true), p)
         if !has_equal_data(z, r)
-            @test !has_equal_data(_add_to_primal(p, r), p)
+            @test !has_equal_data(_add_to_primal(p, r, true), p)
         end
         @test has_equal_data(_diff(p, p), zero_tangent(p))
     end

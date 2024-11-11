@@ -72,8 +72,10 @@ end
 
 set_to_zero!!(x::Memory) = _map_if_assigned!(set_to_zero!!, x, x)
 
-function _add_to_primal(p::Memory{P}, t::Memory) where {P}
-    return _map_if_assigned!(_add_to_primal, Memory{P}(undef, length(p)), p, t)
+function _add_to_primal(p::Memory{P}, t::Memory, unsafe::Bool) where {P}
+    return _map_if_assigned!(
+        (p, t) -> _add_to_primal(p, t, unsafe), Memory{P}(undef, length(p)), p, t
+    )
 end
 
 function _diff(p::Memory{P}, q::Memory{P}) where {P}
@@ -172,9 +174,9 @@ function _dot(t::T, s::T) where {T<:Array}
     )
 end
 
-function _add_to_primal(x::Array{P, N}, t::Array{<:Any, N}) where {P, N}
+function _add_to_primal(x::Array{P, N}, t::Array{<:Any, N}, unsafe::Bool) where {P, N}
     x′ = Array{P, N}(undef, size(x)...)
-    return _map_if_assigned!(_add_to_primal, x′, x, t)
+    return _map_if_assigned!((x, t) -> _add_to_primal(x, t, unsafe), x′, x, t)
 end
 
 function _diff(p::P, q::P) where {P<:Array}
@@ -273,7 +275,9 @@ function set_to_zero!!(x::MemoryRef)
     return x
 end
 
-_add_to_primal(p::MemoryRef, t::MemoryRef) = construct_ref(p, _add_to_primal(p.mem, t.mem))
+function _add_to_primal(p::MemoryRef, t::MemoryRef, unsafe::Bool)
+    return construct_ref(p, _add_to_primal(p.mem, t.mem, unsafe))
+end
 
 function _diff(p::P, q::P) where {P<:MemoryRef}
     @assert Core.memoryrefoffset(p) == Core.memoryrefoffset(q)

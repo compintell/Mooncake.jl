@@ -2,7 +2,7 @@ using Pkg
 Pkg.activate(@__DIR__)
 Pkg.develop(; path = joinpath(@__DIR__, "..", "..", ".."))
 
-using Bijectors: Bijectors
+using Bijectors: Bijectors, inverse
 using LinearAlgebra: LinearAlgebra
 using Random: randn
 
@@ -25,8 +25,7 @@ function b_binv_test_case(bijector, dim; name = nothing, rng = Xoshiro(23))
     if name === nothing
         name = string(bijector)
     end
-    b_inv = Bijectors.inverse(bijector)
-    return TestCase(x -> bijector(b_inv(x)), randn(rng, dim); name = name)
+    return TestCase(x -> bijector(inverse(bijector)(x)), randn(rng, dim); name = name)
 end
 
 @testset "Bijectors integration tests" begin
@@ -43,7 +42,7 @@ end
             Bijectors.Coupling(Bijectors.Shift, Bijectors.PartitionMask(3, [1], [2])),
             3,
         ),
-        b_binv_test_case(Bijectors.InvertibleBatchNorm(3), (3, 3)),
+        b_binv_test_case(Bijectors.InvertibleBatchNorm(3; eps=1e-5, mtm=1e-1), (3, 3)),
         b_binv_test_case(Bijectors.LeakyReLU(0.2), 3),
         b_binv_test_case(Bijectors.Logit(0.1, 0.3), 3),
         b_binv_test_case(Bijectors.PDBijector(), (3, 3)),
@@ -128,7 +127,8 @@ end
                 true
             end
         else
-            test_rule(Xoshiro(123456), case.func, case.arg; is_primitive=false)
+            rng = Xoshiro(123456)
+            test_rule(rng, case.func, case.arg; is_primitive=false, unsafe_perturb=true)
         end
     end
 end

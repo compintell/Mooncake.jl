@@ -5,7 +5,7 @@ Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 using AbstractGPs, KernelFunctions, Mooncake, Test
 
 @testset "gp" begin
-    base_kernels = Any[
+    ks = Any[
         ZeroKernel(),
         ConstantKernel(; c=1.0),
         SEKernel(),
@@ -15,35 +15,37 @@ using AbstractGPs, KernelFunctions, Mooncake, Test
         LinearKernel(),
         PolynomialKernel(; degree=2, c=0.5),
     ]
-    simple_xs = Any[
-        randn(10),
-        randn(1),
-        range(0.0; step=0.1, length=11),
-        ColVecs(randn(2, 11)),
-        RowVecs(randn(9, 4)),
+    xs = Any[
+        (randn(10), randn(10)),
+        (randn(1), randn(1)),
+        (ColVecs(randn(2, 11)), ColVecs(randn(2, 11))),
+        (RowVecs(randn(3, 4)), RowVecs(randn(3, 4))),
     ]
-    d_2_xs = Any[ColVecs(randn(2, 11)), RowVecs(randn(9, 2))]
-    @testset "$k, $(typeof(x1))" for (k, x1) in vcat(
-        Any[(k, x) for k in base_kernels for x in simple_xs],
-        Any[(with_lengthscale(k, 1.1), x) for k in base_kernels for x in simple_xs],
-        Any[(with_lengthscale(k, rand(2)), x) for k in base_kernels for x in d_2_xs],
-        Any[(k ∘ LinearTransform(randn(2, 2)), x) for k in base_kernels for x in d_2_xs],
+    d_2_xs = Any[
+        (ColVecs(randn(2, 11)), ColVecs(randn(2, 11))),
+        (RowVecs(randn(9, 2)), RowVecs(randn(9, 2))),
+    ]
+    @testset "$k, $(typeof(x1))" for (k, x1, x2) in vcat(
+        Any[(k, x1, x2) for k in ks for (x1, x2) in xs],
+        Any[(with_lengthscale(k, 1.1), x1, x2) for k in ks for (x1, x2) in xs],
+        Any[(with_lengthscale(k, rand(2)), x1, x2) for k in ks for (x1, x2) in d_2_xs],
+        Any[(k ∘ LinearTransform(randn(2, 2)), x1, x2) for k in ks for (x1, x2) in d_2_xs],
         Any[
-            (k ∘ LinearTransform(Diagonal(randn(2))), x) for
-                k in base_kernels for x in d_2_xs
+            (k ∘ LinearTransform(Diagonal(randn(2))), x1, x2) for
+                k in ks for (x1, x2) in d_2_xs
         ],
     )
         fx = GP(k)(x1, 1.1)
-        @testset "$(_typeof(x))" for x in Any[
-            (kernelmatrix, k, x1, x1),
-            (kernelmatrix_diag, k, x1, x1),
+        @testset "$(_typeof(args))" for args in Any[
+            (kernelmatrix, k, x1, x2),
+            (kernelmatrix_diag, k, x1, x2),
             (kernelmatrix, k, x1),
             (kernelmatrix_diag, k, x1),
-            (rand, Xoshiro(123456), fx),
+            (fx -> rand(Xoshiro(123456), fx), fx),
             (logpdf, fx, rand(fx)),
         ]
-            @info typeof(x)
-            test_rule(sr(123456), x...; interface_only=true, is_primitive=false)
+            @info typeof(args)
+            test_rule(sr(123456), args...; is_primitive=false, unsafe_perturb=true)
         end
     end
 end
