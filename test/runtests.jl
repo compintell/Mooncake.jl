@@ -40,6 +40,8 @@ include("front_matter.jl")
             include(joinpath("rrules", "iddict.jl"))
             @info "lapack"
             include(joinpath("rrules", "lapack.jl"))
+            @info "linear_algebra"
+            include(joinpath("rrules", "linear_algebra.jl"))
             @info "low_level_maths"
             include(joinpath("rrules", "low_level_maths.jl"))
             @info "misc"
