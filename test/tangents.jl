@@ -164,6 +164,12 @@
             end
         end
     end
+    @testset "restricted inner constructor" begin
+        p = TestResources.NoDefaultCtor(5.0)
+        t = Mooncake.Tangent((x=5.0, ))
+        @test_throws Mooncake.AddToPrimalException Mooncake._add_to_primal(p, t)
+        @test Mooncake._add_to_primal(p, t, true) isa typeof(p)
+    end
 end
 
 # TODO: add the following test to `tangent_test_cases`

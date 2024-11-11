@@ -4,6 +4,7 @@ const CC = Core.Compiler
 
 using
     ADTypes,
+    ChainRules,
     DiffRules,
     ExprTools,
     FunctionWrappers,
@@ -84,6 +85,7 @@ include(joinpath("rrules", "fastmath.jl"))
 include(joinpath("rrules", "foreigncall.jl"))
 include(joinpath("rrules", "iddict.jl"))
 include(joinpath("rrules", "lapack.jl"))
+include(joinpath("rrules", "linear_algebra.jl"))
 include(joinpath("rrules", "low_level_maths.jl"))
 include(joinpath("rrules", "misc.jl"))
 include(joinpath("rrules", "new.jl"))
