@@ -22,6 +22,6 @@ temporalgps_logpdf_tester(k, x, y, s) = logpdf(build_gp(k)(x, s), y)
         f = temporalgps_logpdf_tester
         sig = _typeof((temporalgps_logpdf_tester, k, x, y, s))
         @info "$sig"
-        test_rule(Xoshiro(123456), f, k, x, y, s; is_primitive=false, debug_mode=false)
+        test_rule(Xoshiro(123456), f, k, x, y, s; is_primitive=false)
     end
 end
