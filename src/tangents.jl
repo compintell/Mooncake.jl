@@ -673,7 +673,6 @@ end
 function _add_to_primal(x::NamedTuple, t::NamedTuple, unsafe::Bool)
     return _map((x, t) -> _add_to_primal(x, t, unsafe), x, t)
 end
-_add_to_primal(x, ::Tangent{NamedTuple{(), Tuple{}}}, unsafe::Bool) = x
 
 struct AddToPrimalException <: Exception
     primal_type::Type
