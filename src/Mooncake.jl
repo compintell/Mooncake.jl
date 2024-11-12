@@ -29,6 +29,7 @@ using Core.Compiler: IRCode, NewInstruction
 using Core.Intrinsics: pointerref, pointerset
 using LinearAlgebra.BLAS: @blasfunc, BlasInt, trsm!
 using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!, potrf!, potrs!
+using FunctionWrappers: FunctionWrapper
 
 # Needs to be defined before various other things.
 function _foreigncall_ end
@@ -82,6 +83,7 @@ include(joinpath("rrules", "blas.jl"))
 include(joinpath("rrules", "builtins.jl"))
 include(joinpath("rrules", "fastmath.jl"))
 include(joinpath("rrules", "foreigncall.jl"))
+include(joinpath("rrules", "function_wrappers.jl"))
 include(joinpath("rrules", "iddict.jl"))
 include(joinpath("rrules", "lapack.jl"))
 include(joinpath("rrules", "linear_algebra.jl"))

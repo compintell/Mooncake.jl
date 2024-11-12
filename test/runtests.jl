@@ -36,6 +36,8 @@ include("front_matter.jl")
             include(joinpath("rrules", "fastmath.jl"))
             @info "foreigncall"
             include(joinpath("rrules", "foreigncall.jl"))
+            @info "function_wrappers"
+            include(joinpath("rrules", "function_wrappers.jl"))
             @info "iddict"
             include(joinpath("rrules", "iddict.jl"))
             @info "lapack"
