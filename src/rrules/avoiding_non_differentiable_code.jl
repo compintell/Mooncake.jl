@@ -9,7 +9,6 @@ end
 @zero_adjoint MinimalCtx Tuple{typeof(randn), AbstractRNG, Vararg}
 @zero_adjoint MinimalCtx Tuple{typeof(string), Vararg}
 @zero_adjoint MinimalCtx Tuple{Type{Symbol}, Vararg}
-@zero_adjoint MinimalCtx Tuple{typeof(==), Any, Any}
 @zero_adjoint MinimalCtx Tuple{Type{Float64}, Any, RoundingMode}
 @zero_adjoint MinimalCtx Tuple{Type{Float32}, Any, RoundingMode}
 @zero_adjoint MinimalCtx Tuple{Type{Float16}, Any, RoundingMode}
