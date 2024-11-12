@@ -334,8 +334,6 @@ tangent_type(::Type{Method}) = NoTangent
 
 tangent_type(::Type{<:Enum}) = NoTangent
 
-tangent_type(::Type{<:FunctionWrappers.FunctionWrapper}) = NoTangent
-
 function tangent_type(::Type{P}) where {N, P<:Tuple{Vararg{Any, N}}}
     # As with other types, tangent type of Union is Union of tangent types.
     P isa Union && return Union{tangent_type(P.a), tangent_type(P.b)}
