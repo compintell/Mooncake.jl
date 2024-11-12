@@ -22,7 +22,7 @@ const prob = ODEProblem(lotka_volterra!, u0, (0.0, 1.0), p)
 function build_and_solve(u0, tspan, p, sensealg)
     _prob = remake(prob; u0, p)
     sol = solve(_prob, Tsit5(); abstol=1e-14, reltol=1e-14, sensealg, saveat=0.01)
-    return sum(sol) + sum(sum(sol.u[end])) + sum(sol[end])
+    return sum(sol) + sum(sum(sol.u[end]))
 end
 
 function matrix_ode!(du, u, p, t)
