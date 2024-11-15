@@ -19,7 +19,7 @@ import ChainRulesCore
 
 using Base:
     IEEEFloat, unsafe_convert, unsafe_pointer_to_objref, pointer_from_objref, arrayref,
-    arrayset
+    arrayset, TwicePrecision, twiceprecision
 using Base.Experimental: @opaque
 using Base.Iterators: product
 using Core:
@@ -91,6 +91,7 @@ include(joinpath("rrules", "low_level_maths.jl"))
 include(joinpath("rrules", "misc.jl"))
 include(joinpath("rrules", "new.jl"))
 include(joinpath("rrules", "tasks.jl"))
+include(joinpath("rrules", "twice_precision.jl"))
 @static if VERSION >= v"1.11-rc4"
     include(joinpath("rrules", "memory.jl"))
 else

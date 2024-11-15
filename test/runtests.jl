@@ -52,6 +52,8 @@ include("front_matter.jl")
             include(joinpath("rrules", "new.jl"))
             @info "tasks"
             include(joinpath("rrules", "tasks.jl"))
+            @info "twice_precision"
+            include(joinpath("rrules", "twice_precision.jl"))
             @static if VERSION >= v"1.11.0-rc4"
                 @info "memory"
                 include(joinpath("rrules", "memory.jl"))
