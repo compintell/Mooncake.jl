@@ -86,7 +86,7 @@ function rrule!!(
 end
 
 @is_primitive MinimalCtx Tuple{Type{<:IEEEFloat}, TWP}
-function rrule!!(::CoDual{Type{P}}, x::CoDual{S}) where {P, S<:TWP}
+function rrule!!(::CoDual{Type{P}}, x::CoDual{S}) where {P<:IEEEFloat, S<:TWP}
     float_from_twice_precision_pb(dy::P) = NoRData(), S(dy)
     return zero_fcodual(P(x.x)), float_from_twice_precision_pb
 end
