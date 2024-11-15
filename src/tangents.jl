@@ -436,6 +436,8 @@ function zero_tangent(x::P) where {P}
     return zero_tangent_internal(x, isbitstype(P) ? nothing : IdDict())
 end
 
+const StackDict = Union{Nothing, IdDict}
+
 # the `stackdict` naming following convention of Julia's `deepcopy` and `deepcopy_internal`
 # https://github.com/JuliaLang/julia/blob/48d4fd48430af58502699fdf3504b90589df3852/base/deepcopy.jl#L35
 @inline zero_tangent_internal(::Union{Int8, Int16, Int32, Int64, Int128}, ::Any) = NoTangent()
