@@ -40,10 +40,12 @@ function TestUtils.populate_address_map!(m::TestUtils.AddressMap, p::IdDict, t::
     foreach(n -> TestUtils.populate_address_map!(m, p[n], t[n]), keys(p))
     return m
 end
-function TestUtils.has_equal_data(p::P, q::P; equal_undefs=true) where {P<:IdDict}
+function TestUtils.has_equal_data_internal(
+    p::P, q::P, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}
+) where {P<:IdDict}
     ks = union(keys(p), keys(q))
     ks != keys(p) && return false
-    return all([TestUtils.has_equal_data(p[k], q[k]; equal_undefs) for k in ks])
+    return all([TestUtils.has_equal_data_internal(p[k], q[k], equal_undefs, d) for k in ks])
 end
 
 fdata_type(::Type{T}) where {T<:IdDict} = T
