@@ -240,6 +240,22 @@ function rrule!!(
     return y, range_start_stop_length_pb
 end
 
+@is_primitive MinimalCtx Tuple{typeof(Base._exp_allowing_twice64), TwicePrecision{Float64}}
+function rrule!!(
+    ::CoDual{typeof(Base._exp_allowing_twice64)}, x::CoDual{TwicePrecision{Float64}}
+)
+    y = Base._exp_allowing_twice64(x.x)
+    _exp_allowing_twice64_pb(dy::Float64) = NoRData(), TwicePrecision(dy * y)
+    return zero_fcodual(y), _exp_allowing_twice64_pb
+end
+
+@is_primitive(MinimalCtx, Tuple{typeof(Base._log_twice64_unchecked), Float64})
+function rrule!!(::CoDual{typeof(Base._log_twice64_unchecked)}, x::CoDual{Float64})
+    _x = x.x
+    _log_twice64_pb(dy::TwicePrecision{Float64}) = NoRData(), Float64(dy) / _x
+    return zero_fcodual(Base._log_twice64_unchecked(_x)), _log_twice64_pb
+end
+
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:twice_precision})
     test_cases = Any[
         (
@@ -293,6 +309,11 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:twice_precisi
             false, :stability_and_allocs, nothing,
             Base.range_start_stop_length, -0.5, -11.7, 11,
         ),
+        (
+            false, :stability_and_allocs, nothing,
+            Base._exp_allowing_twice64, TwicePrecision(2.0),
+        ),
+        (false, :stability_and_allocs, nothing, Base._log_twice64_unchecked, 3.0),
     ]
     memory = Any[]
     return test_cases, memory
@@ -300,7 +321,8 @@ end
 
 function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:twice_precision})
     test_cases = Any[
-        # Constructors - test both construction and round-trip from / to Float64.
+
+        # Functionality in base/twiceprecision.jl
         (false, :allocs, nothing, TwicePrecision{Float64}, 5.0, 0.3),
         (false, :allocs, nothing, (x, y) -> Float64(TwicePrecision{Float64}(x, y)), 5.0, 0.3),
         (false, :allocs, nothing, TwicePrecision, 5.0, 0.3),
@@ -315,8 +337,6 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:twice_precision})
         (false, :none, nothing, x -> Float64(TwicePrecision{Float64}(x)), (5, 4)),
         (false, :none, nothing, TwicePrecision{Float64}, (5, 4), 3),
         (false, :none, nothing, (x, y) -> Float64(TwicePrecision{Float64}(x, y)), (5, 4), 3),
-
-        # Arithmetic.
         (false, :allocs, nothing, +, TwicePrecision(5.0), TwicePrecision(4.0)),
         (false, :allocs, nothing, +, 5.0, TwicePrecision(4.0)),
         (false, :allocs, nothing, +, TwicePrecision(5.0), 4.0),
@@ -325,10 +345,6 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:twice_precision})
         (false, :allocs, nothing, -, TwicePrecision(5.0), 4.0),
         (false, :allocs, nothing, *, 3.0, TwicePrecision(5.0, 1e-12)),
         (false, :allocs, nothing, *, 3, TwicePrecision(5.0, 1e-12)),
-
-
-        # (false, :allocs, nothing, range, 0.0, 5.6),
-        # (false, :allocs, nothing, (lb, ub) -> range(lb, ub; length=10), -0.45, 9.5),
         (
             false, :allocs, nothing,
             getindex,
@@ -339,6 +355,12 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:twice_precision})
             false, :allocs, nothing,
             +, range(0.0, 5.0; length=44), range(-33.0, 4.5; length=44),
         ),
+
+        # Functionality in base/range.jl
+        (false, :allocs, nothing, range, 0.0, 5.6),
+        (false, :allocs, nothing, (lb, ub) -> range(lb, ub; length=10), -0.45, 9.5),
+        (false, :allocs, nothing, Base._logrange_extra, 1.1, 3.5, 5),
+        (false, :allocs, nothing, logrange, 5.0, 10.0, 11),
     ]
     return test_cases, Any[]
 end
