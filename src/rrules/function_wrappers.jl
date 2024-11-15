@@ -26,11 +26,19 @@ function tangent_type(::Type{FunctionWrapper{R, A}}) where {R, A<:Tuple}
     return FunctionWrapperTangent{_construct_types(R, A)[1]}
 end
 
-import .TestUtils: has_equal_data
-has_equal_data(p::P, q::P) where {P<:FunctionWrapper} = has_equal_data(p.obj, q.obj)
-function has_equal_data(t::T, s::T) where {T<:FunctionWrapperTangent}
-    return has_equal_data(t.dobj_ref, s.dobj_ref)
+import .TestUtils: has_equal_data_internal
+function has_equal_data_internal(
+    p::P, q::P, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}
+) where {P<:FunctionWrapper}
+    return has_equal_data_internal(p.obj, q.obj, equal_undefs, d)
 end
+function has_equal_data_internal(
+    t::T, s::T, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}
+) where {T<:FunctionWrapperTangent}
+    return has_equal_data_internal(t.dobj_ref[], s.dobj_ref[], equal_undefs, d)
+end
+
+
 
 function _function_wrapper_tangent(R, obj::Tobj, A, obj_tangent) where {Tobj}
 
@@ -70,7 +78,7 @@ function zero_tangent_internal(
 ) where {R, A}
 
     # If we've seen this primal before, then we must return that tangent.
-    haskey(stackdict, p) && return stackdict[p]::T
+    haskey(stackdict, p) && return stackdict[p]::tangent_type(typeof(p))
 
     # We have not seen this primal before, create it and log it.
     obj_tangent = zero_tangent_internal(p.obj[], stackdict)
@@ -84,7 +92,7 @@ function randn_tangent_internal(
 ) where {R, A}
 
     # If we've seen this primal before, then we must return that tangent.
-    haskey(stackdict, p) && return stackdict[p]::T
+    haskey(stackdict, p) && return stackdict[p]::tangent_type(typeof(p))
 
     # We have not seen this primal before, create it and log it.
     obj_tangent = randn_tangent_internal(rng, p.obj[], stackdict)
