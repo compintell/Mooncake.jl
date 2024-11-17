@@ -240,6 +240,8 @@ function rrule!!(
     return y, range_start_stop_length_pb
 end
 
+@static if VERSION >= v"1.11"
+
 @is_primitive MinimalCtx Tuple{typeof(Base._exp_allowing_twice64), TwicePrecision{Float64}}
 function rrule!!(
     ::CoDual{typeof(Base._exp_allowing_twice64)}, x::CoDual{TwicePrecision{Float64}}
@@ -254,6 +256,8 @@ function rrule!!(::CoDual{typeof(Base._log_twice64_unchecked)}, x::CoDual{Float6
     _x = x.x
     _log_twice64_pb(dy::TwicePrecision{Float64}) = NoRData(), Float64(dy) / _x
     return zero_fcodual(Base._log_twice64_unchecked(_x)), _log_twice64_pb
+end
+
 end
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:twice_precision})
@@ -309,12 +313,17 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:twice_precisi
             false, :stability_and_allocs, nothing,
             Base.range_start_stop_length, -0.5, -11.7, 11,
         ),
-        (
-            false, :stability_and_allocs, nothing,
-            Base._exp_allowing_twice64, TwicePrecision(2.0),
-        ),
-        (false, :stability_and_allocs, nothing, Base._log_twice64_unchecked, 3.0),
     ]
+    @static if VERSION >= v"1.11"
+        extra_test_cases = Any[
+            (
+                false, :stability_and_allocs, nothing,
+                Base._exp_allowing_twice64, TwicePrecision(2.0),
+            ),
+            (false, :stability_and_allocs, nothing, Base._log_twice64_unchecked, 3.0),
+        ]
+        push!(test_cases, extra_test_cases)
+    end
     memory = Any[]
     return test_cases, memory
 end
@@ -359,8 +368,10 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:twice_precision})
         # Functionality in base/range.jl
         (false, :allocs, nothing, range, 0.0, 5.6),
         (false, :allocs, nothing, (lb, ub) -> range(lb, ub; length=10), -0.45, 9.5),
-        (false, :allocs, nothing, Base._logrange_extra, 1.1, 3.5, 5),
-        (false, :allocs, nothing, logrange, 5.0, 10.0, 11),
     ]
+    @static if VERSION >= v"1.11"
+        push!(test_cases, (false, :allocs, nothing, Base._logrange_extra, 1.1, 3.5, 5))
+        push!(test_cases, (false, :allocs, nothing, logrange, 5.0, 10.0, 11))
+    end
     return test_cases, Any[]
 end
