@@ -322,7 +322,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:twice_precisi
             ),
             (false, :stability_and_allocs, nothing, Base._log_twice64_unchecked, 3.0),
         ]
-        push!(test_cases, extra_test_cases)
+        test_cases = vcat(test_cases, extra_test_cases)
     end
     memory = Any[]
     return test_cases, memory
