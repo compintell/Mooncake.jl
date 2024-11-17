@@ -36,6 +36,8 @@ include("front_matter.jl")
             include(joinpath("rrules", "fastmath.jl"))
             @info "foreigncall"
             include(joinpath("rrules", "foreigncall.jl"))
+            @info "function_wrappers"
+            include(joinpath("rrules", "function_wrappers.jl"))
             @info "iddict"
             include(joinpath("rrules", "iddict.jl"))
             @info "lapack"
@@ -50,6 +52,8 @@ include("front_matter.jl")
             include(joinpath("rrules", "new.jl"))
             @info "tasks"
             include(joinpath("rrules", "tasks.jl"))
+            @info "twice_precision"
+            include(joinpath("rrules", "twice_precision.jl"))
             @static if VERSION >= v"1.11.0-rc4"
                 @info "memory"
                 include(joinpath("rrules", "memory.jl"))
@@ -63,8 +67,6 @@ include("front_matter.jl")
         include(joinpath("ext", "differentiation_interface", "di.jl"))
     elseif test_group == "ext/dynamic_ppl"
         include(joinpath("ext", "dynamic_ppl", "dynamic_ppl.jl"))
-    elseif test_group == "ext/logdensityproblemsad"
-        include(joinpath("ext", "logdensityproblemsad", "logdensityproblemsad.jl"))
     elseif test_group == "ext/luxlib"
         include(joinpath("ext", "luxlib", "luxlib.jl"))
     elseif test_group == "ext/nnlib"

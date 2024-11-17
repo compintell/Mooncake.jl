@@ -12,6 +12,7 @@ end
 @zero_adjoint MinimalCtx Tuple{Type{Float64}, Any, RoundingMode}
 @zero_adjoint MinimalCtx Tuple{Type{Float32}, Any, RoundingMode}
 @zero_adjoint MinimalCtx Tuple{Type{Float16}, Any, RoundingMode}
+@zero_adjoint MinimalCtx Tuple{typeof(==), Type, Type}
 
 function generate_hand_written_rrule!!_test_cases(
     rng_ctor, ::Val{:avoiding_non_differentiable_code}

@@ -27,7 +27,6 @@ jobs:
           - 'ext/diffeqbase'
           - 'ext/differentiation_interface'
           - 'ext/dynamic_ppl'
-          - 'ext/logdensityproblemsad'
           - 'ext/luxlib'
           - 'ext/nnlib'
           - 'ext/special_functions'
