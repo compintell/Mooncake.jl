@@ -19,7 +19,7 @@ import ChainRulesCore
 
 using Base:
     IEEEFloat, unsafe_convert, unsafe_pointer_to_objref, pointer_from_objref, arrayref,
-    arrayset
+    arrayset, TwicePrecision, twiceprecision
 using Base.Experimental: @opaque
 using Base.Iterators: product
 using Core:
@@ -29,6 +29,7 @@ using Core.Compiler: IRCode, NewInstruction
 using Core.Intrinsics: pointerref, pointerset
 using LinearAlgebra.BLAS: @blasfunc, BlasInt, trsm!
 using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!, potrf!, potrs!
+using FunctionWrappers: FunctionWrapper
 
 # Needs to be defined before various other things.
 function _foreigncall_ end
@@ -82,6 +83,7 @@ include(joinpath("rrules", "blas.jl"))
 include(joinpath("rrules", "builtins.jl"))
 include(joinpath("rrules", "fastmath.jl"))
 include(joinpath("rrules", "foreigncall.jl"))
+include(joinpath("rrules", "function_wrappers.jl"))
 include(joinpath("rrules", "iddict.jl"))
 include(joinpath("rrules", "lapack.jl"))
 include(joinpath("rrules", "linear_algebra.jl"))
@@ -89,6 +91,7 @@ include(joinpath("rrules", "low_level_maths.jl"))
 include(joinpath("rrules", "misc.jl"))
 include(joinpath("rrules", "new.jl"))
 include(joinpath("rrules", "tasks.jl"))
+include(joinpath("rrules", "twice_precision.jl"))
 @static if VERSION >= v"1.11-rc4"
     include(joinpath("rrules", "memory.jl"))
 else

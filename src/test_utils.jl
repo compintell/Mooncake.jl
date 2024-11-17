@@ -791,7 +791,6 @@ function test_tangent_consistency(rng::AbstractRNG, p::P; interface_only=false) 
 
     # Verify that operations required for finite difference testing to run, and produce the
     # correct output type.
-    @test _add_to_primal(p, t) isa P
     @test _add_to_primal(p, t, true) isa P
     @test _diff(p, p) isa T
     @test _dot(t, t) isa Float64

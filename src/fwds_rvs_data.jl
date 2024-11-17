@@ -533,7 +533,7 @@ zero_rdata(p::IEEEFloat) = zero(p)
     R == NoRData && return :(NoRData())
 
     # T ought to be a `Tangent`. If it's not, something has gone wrong.
-    !(T <: Tangent) && Expr(:call, error, "Unhandled type $T")
+    !(T <: Tangent) && return Expr(:call, error, "Unhandled type $T")
     rdata_field_zeros_exprs = ntuple(fieldcount(P)) do n
         R_field = rdata_field_type(P, n)
         if R_field <: PossiblyUninitTangent
