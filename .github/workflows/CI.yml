@@ -92,7 +92,7 @@ jobs:
           include-all-prereleases: false
       - uses: julia-actions/cache@v2
       - uses: julia-actions/julia-buildpkg@v1
-      - run: julia --project=${{ matrix.test_group.project }} --eval 'include(TARGET_DIR)'
+      - run: julia --project=${{ matrix.test_group.project }} --eval 'include(ENV["TARGET_DIR"])'
         env:
           TEST_GROUP: ${{ matrix.test_group.label }}
           TARGET_DIR: ${{ matrix.test_group.project }}
