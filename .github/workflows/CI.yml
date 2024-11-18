@@ -20,10 +20,44 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        test_group: ['aqua', 'basic', 'rrules']
+        version:
+          - '1'
+        arch:
+          - x64
+        include:
+          - test_group: 'basic'
+            version: '1.10'
+            arch: x64
+          - test_group: 'basic'
+            version: '1.10'
+            arch: x86
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ matrix.version }}
+          arch: ${{ matrix.arch }}
+          include-all-prereleases: false
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/julia-buildpkg@v1
+      - uses: julia-actions/julia-runtest@v1
+        env:
+          TEST_GROUP: ${{ matrix.test_group.label }}
+      - uses: julia-actions/julia-processcoverage@v1
+      - uses: codecov/codecov-action@v4
+        with:
+          files: lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+  extra:
+    name: ${{ matrix.test_group.label }}-${{ matrix.version }}-${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
+    strategy:
+      fail-fast: false
+      matrix:
         test_group: [
-          {project: '@.', label: 'aqua'},
-          {project: '@.', label: 'basic'},
-          {project: '@.', label: 'rrules'},
           {project: 'test/ext/differentiation_interface', label: 'ext/differentiation_interface'},
           {project: 'test/ext/dynamic_ppl', label: 'ext/dynamic_ppl'},
           {project: '@.', label: 'ext/luxlib'},
@@ -46,15 +80,9 @@ jobs:
         arch:
           - x64
         include:
-          - test_group: {project: '@.', label: 'basic'}
-            version: '1.10'
-            arch: x64
           - test_group: {project: '@.', label: 'integration_testing/turing'}
             version: '1.10'
             arch: x64
-          - test_group: {project: '@.', label: 'basic'}
-            version: '1.10'
-            arch: x86
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
@@ -64,9 +92,7 @@ jobs:
           include-all-prereleases: false
       - uses: julia-actions/cache@v2
       - uses: julia-actions/julia-buildpkg@v1
-      - uses: julia-actions/julia-runtest@v1
-        with:
-          project: 
+      - run: julia --project=bench --eval 'include("bench/run_benchmarks.jl"); main()'
         env:
           TEST_GROUP: ${{ matrix.test_group.label }}
       - uses: julia-actions/julia-processcoverage@v1
