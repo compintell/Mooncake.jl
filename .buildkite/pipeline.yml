@@ -6,12 +6,6 @@ steps:
     plugins:
       - JuliaCI/julia#v1:
           version: "1"
-    agents:
-      queue: "juliagpu"
-      cuda: "*"
-    if: build.message !~ /\[skip tests\]/
-    timeout_in_minutes: 60
-  - label: "Run Tests"
     command: julia --code-coverage=user --eval='include("test/run_extra.jl")'
     agents:
       queue: "juliagpu"
