@@ -6,6 +6,10 @@ steps:
     plugins:
       - JuliaCI/julia#v1:
           version: "1"
+      - JuliaCI/julia-coverage#v1:
+          dirs:
+            - src
+            - ext
     command: julia --code-coverage=user --eval='include("test/run_extra.jl")'
     agents:
       queue: "juliagpu"
@@ -15,14 +19,3 @@ steps:
     env:
       LABEL: cuda
       TEST_TYPE: ext
-  - label: "Process Coverage"
-    plugins:
-      - JuliaCI/julia-coverage#v1:
-          dirs:
-            - src
-            - ext
-    agents:
-      queue: "juliagpu"
-      cuda: "*"
-    if: build.message !~ /\[skip tests\]/
-    timeout_in_minutes: 60
