@@ -2,8 +2,9 @@ using Pkg
 Pkg.activate(@__DIR__)
 Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 
-using DiffEqBase, Mooncake, OrdinaryDiffEqTsit5, Random, SciMLSensitivity, Test
+using DiffEqBase, Mooncake, OrdinaryDiffEqTsit5, SciMLSensitivity, StableRNGs, Test
 using DiffEqBase: solve
+using Mooncake.TestUtils: test_rule
 
 function lotka_volterra!(du, u, p, t)
     x, y = u
@@ -62,14 +63,14 @@ end
     )
         @info sensealg
 
-        Mooncake.TestUtils.test_rule(
-            Xoshiro(123), build_and_solve, u0, tspan, p, sensealg;
+        test_rule(
+            StableRNG(123), build_and_solve, u0, tspan, p, sensealg;
             is_primitive=false, debug_mode=false,
         )
 
         sensealg in excluded_cases && continue
-        Mooncake.TestUtils.test_rule(
-            Xoshiro(123), build_and_solve_mat, u0_mat, tspan, p_mat, sensealg;
+        test_rule(
+            StableRNG(123), build_and_solve_mat, u0_mat, tspan, p_mat, sensealg;
             is_primitive=false, debug_mode=false,
         )
     end
