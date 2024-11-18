@@ -15,14 +15,14 @@ steps:
     env:
       LABEL: cuda
       TEST_TYPE: ext
-  # - label: "Process Coverage"
-  #   plugins:
-  #     - JuliaCI/julia-coverage#v1:
-  #         dirs:
-  #           - src
-  #           - ext
-  #   agents:
-  #     queue: "juliagpu"
-  #     cuda: "*"
-  #   if: build.message !~ /\[skip tests\]/
-  #   timeout_in_minutes: 60
+  - label: "Process Coverage"
+    plugins:
+      - JuliaCI/julia-coverage#v1:
+          dirs:
+            - src
+            - ext
+    agents:
+      queue: "juliagpu"
+      cuda: "*"
+    if: build.message !~ /\[skip tests\]/
+    timeout_in_minutes: 60
