@@ -2,7 +2,7 @@ using Pkg
 Pkg.activate(@__DIR__)
 Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 
-using CUDA, Mooncake, StableRNGs, Test
+using CUDA, JET, Mooncake, StableRNGs, Test
 using Mooncake.TestUtils: test_tangent, test_rule
 
 @testset "cuda" begin
