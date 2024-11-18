@@ -93,7 +93,7 @@ jobs:
       - uses: julia-actions/cache@v2
       - uses: julia-actions/julia-buildpkg@v1
       - run: |
-          if [ ${{ matrix.test_group.test_type }} == 'integration_testing' ]; then
+          if [ ${{ matrix.test_group.test_type }} == 'ext' ]; then
             julia --code-coverage=user --eval 'include("test/run_extra.jl")'
           else
             julia --eval 'include("test/run_extra.jl")'
