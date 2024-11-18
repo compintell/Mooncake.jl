@@ -21,40 +21,39 @@ jobs:
       fail-fast: false
       matrix:
         test_group:
-          - 'aqua'
-          - 'basic'
-          - 'rrules'
-          - 'ext/differentiation_interface'
-          - 'ext/dynamic_ppl'
-          - 'ext/luxlib'
-          - 'ext/nnlib'
-          - 'ext/special_functions'
-          - 'integration_testing/array'
-          - 'integration_testing/bijectors'
-          - 'integration_testing/diff_tests'
-          - 'integration_testing/distributions'
-          - 'integration_testing/gp'
-          - 'integration_testing/logexpfunctions'
-          - 'integration_testing/lux'
-          - 'integration_testing/misc'
-          - 'integration_testing/misc_abstract_array'
-          - 'integration_testing/temporalgps'
-          - 'integration_testing/turing'
+          - {project: @., label: 'aqua'}
+          - {project: @., label: 'basic'}
+          - {project: @., label: 'rrules'}
+          - {project: @., label: 'ext/differentiation_interface'}
+          - {project: @., label: 'ext/dynamic_ppl'}
+          - {project: @., label: 'ext/luxlib'}
+          - {project: @., label: 'ext/nnlib'}
+          - {project: @., label: 'ext/special_functions'}
+          - {project: @., label: 'integration_testing/array'}
+          - {project: @., label: 'integration_testing/bijectors'}
+          - {project: @., label: 'integration_testing/diff_tests'}
+          - {project: @., label: 'integration_testing/distributions'}
+          - {project: @., label: 'integration_testing/gp'}
+          - {project: @., label: 'integration_testing/logexpfunctions'}
+          - {project: @., label: 'integration_testing/lux'}
+          - {project: @., label: 'integration_testing/misc'}
+          - {project: @., label: 'integration_testing/misc_abstract_array'}
+          - {project: @., label: 'integration_testing/temporalgps'}
+          - {project: @., label: 'integration_testing/turing'}
         version:
           - '1'
         arch:
           - x64
         include:
-          - test_group: 'basic'
+          - test_group: {project: @., label: 'basic'}
             version: '1.10'
             arch: x64
-          - test_group: 'integration_testing/turing'
+          - test_group: {project: @., label: 'integration_testing/turing'}
             version: '1.10'
             arch: x64
-          - test_group: 'basic'
+          - test_group: {project: @., label: 'basic'}
             version: '1.10'
             arch: x86
-
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
@@ -65,8 +64,10 @@ jobs:
       - uses: julia-actions/cache@v2
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
+        with:
+          project: 
         env:
-          TEST_GROUP: ${{ matrix.test_group }}
+          TEST_GROUP: ${{ matrix.test_group.label }}
       - uses: julia-actions/julia-processcoverage@v1
       - uses: codecov/codecov-action@v4
         with:
