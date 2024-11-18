@@ -92,7 +92,12 @@ jobs:
           include-all-prereleases: false
       - uses: julia-actions/cache@v2
       - uses: julia-actions/julia-buildpkg@v1
-      - run: julia --code-coverage=user --eval 'include("test/run_extra.jl")'
+      - run: |
+          if [ ${{ matrix.test_group.test_type }} == 'integration_testing' ]; then
+            julia --code-coverage=user --eval 'include("test/run_extra.jl")'
+          else
+            julia --eval 'include("test/run_extra.jl")'
+          fi
         env:
           LABEL: ${{ matrix.test_group.label }}
           TEST_TYPE: ${{ matrix.test_group.test_type }}
