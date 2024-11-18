@@ -1,3 +1,10 @@
+using Pkg
+Pkg.activate(@__DIR__)
+Pkg.develop(; path = joinpath(@__DIR__, "..", "..", ".."))
+
+using LinearAlgebra, Mooncake, Random, StableRNGs, Test
+using Mooncake.TestUtils: test_rule
+
 @testset "misc_abstract_array" begin
     @testset for (interface_only, f, x...) in vcat(
         [
@@ -6,11 +13,11 @@
             (false, setindex!, randn(5), 4.0, 3),
             (false, setindex!, randn(5, 4), 3.0, 1, 3),
             (false, x -> getglobal(Main, :sin)(x), 5.0),
-            (false, x -> pointerref(bitcast(Ptr{Float64}, pointer_from_objref(Ref(x))), 1, 1), 5.0),
-            (false, (v, x) -> (pointerset(pointer(x), v, 2, 1); x), 3.0, randn(5)),
-            (false, x -> (pointerset(pointer(x), UInt8(3), 2, 1); x), rand(UInt8, 5)),
+            (false, x -> Base.pointerref(Base.bitcast(Ptr{Float64}, pointer_from_objref(Ref(x))), 1, 1), 5.0),
+            (false, (v, x) -> (Base.pointerset(pointer(x), v, 2, 1); x), 3.0, randn(5)),
+            (false, x -> (Base.pointerset(pointer(x), UInt8(3), 2, 1); x), rand(UInt8, 5)),
             (false, x -> Ref(x)[], 5.0),
-            (false, x -> unsafe_load(bitcast(Ptr{Float64}, pointer_from_objref(Ref(x)))), 5.0),
+            (false, x -> unsafe_load(Base.bitcast(Ptr{Float64}, pointer_from_objref(Ref(x)))), 5.0),
             (false, x -> unsafe_load(Base.unsafe_convert(Ptr{Float64}, x)), randn(5)),
             (false, view, randn(5, 4), 1, 1),
             (false, view, randn(5, 4), 2:3, 1),
@@ -57,7 +64,7 @@
         )) do (A, B, C)
             (false, mul!, A, B, C, randn(), randn())
         end),
-        vec(map(product(
+        vec(map(Iterators.product(
             Any[
                 LowerTriangular(randn(3, 3)),
                 UpperTriangular(randn(3, 3)),
@@ -83,7 +90,7 @@
             (false, mul!, A, B, C, randn(), randn())
         end),
     )
-        @info "$(_typeof((f, x...)))"
-        test_rule(Xoshiro(123456), f, x...; interface_only, is_primitive=false)
+        @info "$(typeof((f, x...)))"
+        test_rule(StableRNG(123456), f, x...; interface_only, is_primitive=false)
     end
 end

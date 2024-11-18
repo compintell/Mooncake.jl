@@ -494,7 +494,11 @@ function rrule!!(f::CoDual{typeof(Core.apply_type)}, args...)
     return CoDual{_typeof(T), NoFData}(T, NoFData()), NoPullback(f, args...)
 end
 
-# Core.compilerbarrier
+function rrule!!(::CoDual{typeof(compilerbarrier)}, setting::CoDual{Symbol}, val::CoDual)
+    compilerbarrier_pb(dout) = NoRData(), NoRData(), dout
+    return compilerbarrier(setting.x, val), compilerbarrier_pb
+end
+
 # Core.donotdelete
 # Core.finalizer
 # Core.get_binding_type
@@ -801,7 +805,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (true, :stability, nothing, Core._typevar, :T, Union{}, Any),
         (false, :none, _range, Core.apply_type, Vector, Float64),
         (false, :none, _range, Core.apply_type, Array, Float64, 2),
-        # Core.compilerbarrier -- NEEDS IMPLEMENTING AND TESTING
+        (false, :none, nothing, compilerbarrier, :type, 5.0),
         # Core.const_arrayref -- NEEDS IMPLEMENTING AND TESTING
         # Core.donotdelete -- NEEDS IMPLEMENTING AND TESTING
         # Core.finalizer -- NEEDS IMPLEMENTING AND TESTING

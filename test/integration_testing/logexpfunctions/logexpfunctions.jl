@@ -2,7 +2,10 @@ using Pkg
 Pkg.activate(@__DIR__)
 Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 
-using LogExpFunctions, Mooncake, Test
+using AllocCheck, LogExpFunctions, Mooncake, StableRNGs, Test
+using Mooncake.TestUtils: test_rule
+
+sr(n::Int) = StableRNG(n)
 
 @testset "logexpfunctions" begin
     @testset for (perf_flag, f, x...) in [
@@ -24,13 +27,13 @@ using LogExpFunctions, Mooncake, Test
         (:allocs, logmxp1, 0.02),
         (:allocs, logaddexp, -0.5, 0.4),
         (:allocs, logsubexp, -0.5, -5.0),
-        (:allocs, logsumexp, randn(5)),
-        (:allocs, logsumexp, randn(5, 4)),
-        (:allocs, logsumexp, randn(5, 4, 3)),
-        (:none, x -> logsumexp(x; dims=1), randn(5, 4)),
-        (:none, x -> logsumexp(x; dims=2), randn(5, 4)),
-        (:none, logsumexp!, rand(5), randn(5, 4)),
-        (:none, softmax, randn(10)),
+        (:allocs, logsumexp, randn(sr(1), 5)),
+        (:allocs, logsumexp, randn(sr(2), 5, 4)),
+        (:allocs, logsumexp, randn(sr(3), 5, 4, 3)),
+        (:none, x -> logsumexp(x; dims=1), randn(sr(4), 5, 4)),
+        (:none, x -> logsumexp(x; dims=2), randn(sr(5), 5, 4)),
+        (:none, logsumexp!, rand(sr(6), 5), randn(sr(7), 5, 4)),
+        (:none, softmax, randn(sr(7), 10)),
         (:allocs, cloglog, 0.5),
         (:allocs, cexpexp, -0.3),
         (:allocs, loglogistic, 0.5),
@@ -38,6 +41,6 @@ using LogExpFunctions, Mooncake, Test
         (:allocs, log1mlogistic, -0.9),
         (:allocs, logit1mexp, -0.6),
     ]
-        test_rule(Xoshiro(123456), f, x...; perf_flag, is_primitive=false)
+        test_rule(sr(123456), f, x...; perf_flag, is_primitive=false)
     end
 end

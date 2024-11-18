@@ -1,3 +1,10 @@
+using Pkg
+Pkg.activate(@__DIR__)
+Pkg.develop(; path = joinpath(@__DIR__, "..", "..", ".."))
+
+using JET, LinearAlgebra, Mooncake, Random, StableRNGs, Test
+using Mooncake: TestResources
+
 @testset "battery_tests" begin
     @testset "$(typeof(p))" for p in vcat(
         [
@@ -29,18 +36,18 @@
             view(randn(3, 3), 1:2, 1:1),
             Xoshiro(123456),
             Ref(5.0),
-            StructFoo(5.0, randn(5)),
-            MutableFoo(5.0, randn(5)),
-            TypeStableMutableStruct{Vector{Float64}}(5.0, randn(5)),
-            StructFoo(5.0),
-            MutableFoo(5.0),
-            TypeStableMutableStruct{Vector{Float64}}(5.0),
+            TestResources.StructFoo(5.0, randn(5)),
+            TestResources.MutableFoo(5.0, randn(5)),
+            TestResources.TypeStableMutableStruct{Vector{Float64}}(5.0, randn(5)),
+            TestResources.StructFoo(5.0),
+            TestResources.MutableFoo(5.0),
+            TestResources.TypeStableMutableStruct{Vector{Float64}}(5.0),
             LowerTriangular(randn(3, 3)),
             UpperTriangular(randn(3, 3)),
             UnitLowerTriangular(randn(3, 3)),
             UnitUpperTriangular(randn(2, 2)),
         ]
     )
-        TestUtils.test_data(sr(123), p)
+        Mooncake.TestUtils.test_data(StableRNG(123), p)
     end
 end

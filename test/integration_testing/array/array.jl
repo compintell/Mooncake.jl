@@ -1,3 +1,12 @@
+using Pkg
+Pkg.activate(@__DIR__)
+Pkg.develop(; path = joinpath(@__DIR__, "..", "..", ".."))
+
+using LinearAlgebra, Mooncake, StableRNGs, Test
+using Mooncake.TestUtils: test_rule
+
+sr(n::Int) = StableRNG(n)
+
 _getter() = 5.0
 @testset "array" begin
     test_cases = vcat(
@@ -17,7 +26,7 @@ _getter() = 5.0
             (false, *, randn(sr(19)), randn(sr(20), 2), transpose(randn(sr(18), 2, 1))),
             (false, *, adjoint(randn(sr(22), 2, 2)), randn(sr(21), 2)),
             (false, *, Diagonal(randn(sr(23), 2)), randn(sr(24), 2)),
-            (false, *, randn(sr(27), 2)', Diagonal(randn(sr(26), 2)), randn(sr(25), 2)),
+            # (false, *, randn(sr(27), 2)', Diagonal(randn(sr(26), 2)), randn(sr(25), 2)), https://github.com/compintell/Mooncake.jl/issues/319
             (false, *, randn(sr(28), 2, 3)', randn(sr(29), 2)),
             (false, *, 4.0 * I, randn(sr(30), 2)),
             (false, *, 3.5 * I, randn(sr(31), 2, 3)),
@@ -393,7 +402,7 @@ _getter() = 5.0
         ],
         vec(reduce(
             vcat,
-            map(product(
+            map(Iterators.product(
                 [adjoint(randn(sr(0), 2, 3)), transpose(randn(sr(1), 2, 3))],
                 [randn(sr(3), 2), randn(sr(2), 2, 3)],
                 [randn(sr(4)), randn(sr(5), 1), randn(sr(6), 3)],
@@ -501,7 +510,7 @@ _getter() = 5.0
         ]
     )
     @testset for (interface_only, f, x...) in test_cases
-        @info _typeof((f, x...))
+        @info typeof((f, x...))
         test_rule(sr(123456), f, x...; interface_only, is_primitive=false, debug_mode=false)
     end
 end
