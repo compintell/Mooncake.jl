@@ -1,8 +1,7 @@
-using Test
+include("front_matter.jl")
 
 @testset "Mooncake.jl" begin
     if test_group == "aqua"
-        include("front_matter.jl")
         Aqua.test_all(Mooncake)
     elseif test_group == "basic"
         include("front_matter.jl")
@@ -62,40 +61,6 @@ using Test
                 include(joinpath("rrules", "memory.jl"))
             end
         end
-    elseif test_group == "gpu"
-        include(joinpath("ext", "cuda", "cuda.jl"))
-    elseif test_group == "ext/differentiation_interface"
-        include(joinpath("ext", "differentiation_interface", "di.jl"))
-    elseif test_group == "ext/dynamic_ppl"
-        include(joinpath("ext", "dynamic_ppl", "dynamic_ppl.jl"))
-    elseif test_group == "ext/luxlib"
-        include(joinpath("ext", "luxlib", "luxlib.jl"))
-    elseif test_group == "ext/nnlib"
-        include(joinpath("ext", "nnlib", "nnlib.jl"))
-    elseif test_group == "ext/special_functions"
-        include(joinpath("ext", "special_functions", "special_functions.jl"))
-    elseif test_group == "integration_testing/array"
-        include(joinpath("integration_testing", "array.jl"))
-    elseif test_group == "integration_testing/bijectors"
-        include(joinpath("integration_testing", "bijectors", "bijectors.jl"))
-    elseif test_group == "integration_testing/diff_tests"
-        include(joinpath("integration_testing", "diff_tests.jl"))
-    elseif test_group == "integration_testing/distributions"
-        include(joinpath("integration_testing", "distributions", "distributions.jl"))
-    elseif test_group == "integration_testing/gp"
-        include(joinpath("integration_testing", "gp", "gp.jl"))
-    elseif test_group == "integration_testing/logexpfunctions"
-        include(joinpath("integration_testing", "logexpfunctions", "logexpfunctions.jl"))
-    elseif test_group == "integration_testing/lux"
-        include(joinpath("integration_testing", "lux", "lux.jl"))
-    elseif test_group == "integration_testing/misc"
-        include(joinpath("integration_testing", "battery_tests.jl"))
-    elseif test_group == "integration_testing/misc_abstract_array"
-        include(joinpath("integration_testing", "misc_abstract_array.jl"))
-    elseif test_group == "integration_testing/temporalgps"
-        include(joinpath("integration_testing", "temporalgps", "temporalgps.jl"))
-    elseif test_group == "integration_testing/turing"
-        include(joinpath("integration_testing", "turing", "turing.jl"))
     else
         throw(error("test_group=$(test_group) is not recognised"))
     end
