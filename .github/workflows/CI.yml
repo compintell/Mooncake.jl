@@ -43,7 +43,7 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
         env:
-          TEST_GROUP: ${{ matrix.test_group.label }}
+          TEST_GROUP: ${{ matrix.test_group }}
       - uses: julia-actions/julia-processcoverage@v1
       - uses: codecov/codecov-action@v4
         with:
@@ -60,20 +60,20 @@ jobs:
         test_group: [
           {test_type: 'ext', label: 'differentiation_interface'},
           {test_type: 'ext', label: 'dynamic_ppl'},
-          # {project: '@.', label: 'ext/luxlib'},
-          # {project: '@.', label: 'ext/nnlib'},
-          # {project: '@.', label: 'ext/special_functions'},
-          # {project: '@.', label: 'integration_testing/array'},
-          # {project: '@.', label: 'integration_testing/bijectors'},
-          # {project: '@.', label: 'integration_testing/diff_tests'},
-          # {project: '@.', label: 'integration_testing/distributions'},
-          # {project: '@.', label: 'integration_testing/gp'},
-          # {project: '@.', label: 'integration_testing/logexpfunctions'},
-          # {project: '@.', label: 'integration_testing/lux'},
-          # {project: '@.', label: 'integration_testing/misc'},
-          # {project: '@.', label: 'integration_testing/misc_abstract_array'},
-          # {project: '@.', label: 'integration_testing/temporalgps'},
-          # {project: '@.', label: 'integration_testing/turing'},
+          {test_type: 'ext', label: 'luxlib'},
+          {test_type: 'ext', label: 'nnlib'},
+          {test_type: 'ext', label: 'special_functions'},
+          {test_type: 'integration_testing', label: 'array'},
+          {test_type: 'integration_testing', label: 'bijectors'},
+          {test_type: 'integration_testing', label: 'diff_tests'},
+          {test_type: 'integration_testing', label: 'distributions'},
+          {test_type: 'integration_testing', label: 'gp'},
+          {test_type: 'integration_testing', label: 'logexpfunctions'},
+          {test_type: 'integration_testing', label: 'lux'},
+          {test_type: 'integration_testing', label: 'misc'},
+          {test_type: 'integration_testing', label: 'misc_abstract_array'},
+          {test_type: 'integration_testing', label: 'temporalgps'},
+          {test_type: 'integration_testing', label: 'turing'},
         ]
         version:
           - '1'
