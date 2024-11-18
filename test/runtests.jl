@@ -1,9 +1,9 @@
-include("front_matter.jl")
-
 @testset "Mooncake.jl" begin
     if test_group == "aqua"
+        include("front_matter.jl")
         Aqua.test_all(Mooncake)
     elseif test_group == "basic"
+        include("front_matter.jl")
         include("utils.jl")
         include("tangents.jl")
         include("fwds_rvs_data.jl")
@@ -24,6 +24,7 @@ include("front_matter.jl")
         include("config.jl")
         include("developer_tools.jl")
     elseif test_group == "rrules"
+        include("front_matter.jl")
         include("test_utils.jl")
         @testset "rrules" begin
             @info "avoiding_non_differentiable_code"

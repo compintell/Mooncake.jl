@@ -2,7 +2,8 @@ using Pkg
 Pkg.activate(@__DIR__)
 Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 
-using AbstractGPs, KernelFunctions, Mooncake, Test
+using AbstractGPs, KernelFunctions, LinearAlgebra, Mooncake, StableRNGs, Test
+using Mooncake.TestUtils: test_rule
 
 @testset "gp" begin
     ks = Any[
@@ -36,16 +37,16 @@ using AbstractGPs, KernelFunctions, Mooncake, Test
         ],
     )
         fx = GP(k)(x1, 1.1)
-        @testset "$(_typeof(args))" for args in Any[
+        @testset "$(typeof(args))" for args in Any[
             (kernelmatrix, k, x1, x2),
             (kernelmatrix_diag, k, x1, x2),
             (kernelmatrix, k, x1),
             (kernelmatrix_diag, k, x1),
-            (fx -> rand(Xoshiro(123456), fx), fx),
+            (fx -> rand(StableRNG(123456), fx), fx),
             (logpdf, fx, rand(fx)),
         ]
             @info typeof(args)
-            test_rule(sr(123456), args...; is_primitive=false, unsafe_perturb=true)
+            test_rule(StableRNG(123456), args...; is_primitive=false, unsafe_perturb=true)
         end
     end
 end

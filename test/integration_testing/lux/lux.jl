@@ -2,7 +2,8 @@ using Pkg
 Pkg.activate(@__DIR__)
 Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 
-using Mooncake, Lux, Test
+using Mooncake, Lux, StableRNGs, Test
+using Mooncake.TestUtils: test_rule
 
 @testset "lux" begin
     @testset "$(typeof(f))" for (f, x_f32) in Any[
@@ -43,9 +44,10 @@ using Mooncake, Lux, Test
         (Chain(Conv((3, 3), 2 => 6), InstanceNorm(6)), randn(Float32, 6, 6, 2, 2)),
         (Chain(Conv((3, 3), 2 => 6, tanh), InstanceNorm(6)), randn(Float32, 6, 6, 2, 2)),
     ]
-        @info "$(_typeof((f, x_f32...)))"
-        ps, st = f32(Lux.setup(sr(123456), f))
+        @info "$(typeof((f, x_f32...)))"
+        rng = StableRNG(123456)
+        ps, st = f32(Lux.setup(rng, f))
         x = f32(x_f32)
-        test_rule(sr(123456), f, x, ps, st; is_primitive=false, interface_only=true)
+        test_rule(rng, f, x, ps, st; is_primitive=false, interface_only=true)
     end
 end

@@ -2,7 +2,8 @@ using Pkg
 Pkg.activate(@__DIR__)
 Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 
-using Mooncake, NNlib, Test
+using JET, Mooncake, NNlib, StableRNGs, Test
+using Mooncake.TestUtils: test_rule
 using NNlib: dropout
 
 @testset "nnlib" begin
@@ -27,9 +28,18 @@ using NNlib: dropout
         (false, :none, true, batched_mul, randn(3, 2, 3), randn(2, 5, 3)),
 
         # dropout
-        (true, :none, false, (x, p) -> dropout(sr(1), x, p; dims=1), randn(2, 2), 0.5),
-        (true, :none, false, (x, p) -> dropout(sr(1), x, p; dims=2), randn(2, 2), 0.1),
-        (true, :none, false, (x, p) -> dropout(sr(1), x, p; dims=(1, 2)), randn(2, 2), 0.4),
+        (
+            true, :none, false,
+            (x, p) -> dropout(StableRNG(1), x, p; dims=1), randn(2, 2), 0.5,
+        ),
+        (
+            true, :none, false,
+            (x, p) -> dropout(StableRNG(1), x, p; dims=2), randn(2, 2), 0.1,
+        ),
+        (
+            true, :none, false,
+            (x, p) -> dropout(StableRNG(1), x, p; dims=(1, 2)), randn(2, 2), 0.4,
+        ),
 
         # softmax
         (false, :stability, true, softmax, randn(2)),
@@ -106,6 +116,6 @@ using NNlib: dropout
         (false, :none, false, x -> pad_constant(x, 1, 2.0; dims=:), x),
     ]
         @info "$(typeof(fargs))"
-        test_rule(sr(1), fargs...; perf_flag, is_primitive, interface_only)
+        test_rule(StableRNG(123), fargs...; perf_flag, is_primitive, interface_only)
     end
 end
