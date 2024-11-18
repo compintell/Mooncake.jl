@@ -13,8 +13,8 @@ steps:
     if: build.message !~ /\[skip tests\]/
     timeout_in_minutes: 60
     env:
-      LABEL: ext
-      TEST_TYPE: cuda
+      LABEL: cuda
+      TEST_TYPE: ext
   # - label: "Process Coverage"
   #   plugins:
   #     - JuliaCI/julia-coverage#v1:
