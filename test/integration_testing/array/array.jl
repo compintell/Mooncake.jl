@@ -1,3 +1,12 @@
+using Pkg
+Pkg.activate(@__DIR__)
+Pkg.develop(; path = joinpath(@__DIR__, "..", "..", ".."))
+
+using LinearAlgebra, Mooncake, StableRNGs, Test
+using Mooncake.TestUtils: test_rule
+
+sr(n::Int) = StableRNG(n)
+
 _getter() = 5.0
 @testset "array" begin
     test_cases = vcat(
@@ -393,7 +402,7 @@ _getter() = 5.0
         ],
         vec(reduce(
             vcat,
-            map(product(
+            map(Iterators.product(
                 [adjoint(randn(sr(0), 2, 3)), transpose(randn(sr(1), 2, 3))],
                 [randn(sr(3), 2), randn(sr(2), 2, 3)],
                 [randn(sr(4)), randn(sr(5), 1), randn(sr(6), 3)],
@@ -501,7 +510,7 @@ _getter() = 5.0
         ]
     )
     @testset for (interface_only, f, x...) in test_cases
-        @info _typeof((f, x...))
+        @info typeof((f, x...))
         test_rule(sr(123456), f, x...; interface_only, is_primitive=false, debug_mode=false)
     end
 end

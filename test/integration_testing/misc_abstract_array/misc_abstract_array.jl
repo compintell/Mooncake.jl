@@ -1,3 +1,10 @@
+using Pkg
+Pkg.activate(@__DIR__)
+Pkg.develop(; path = joinpath(@__DIR__, "..", "..", ".."))
+
+using LinearAlgebra, Mooncake, Random, StableRNGs, Test
+using Mooncake.TestUtils: test_rule
+
 @testset "misc_abstract_array" begin
     @testset for (interface_only, f, x...) in vcat(
         [
@@ -57,7 +64,7 @@
         )) do (A, B, C)
             (false, mul!, A, B, C, randn(), randn())
         end),
-        vec(map(product(
+        vec(map(Iterators.product(
             Any[
                 LowerTriangular(randn(3, 3)),
                 UpperTriangular(randn(3, 3)),
@@ -83,7 +90,7 @@
             (false, mul!, A, B, C, randn(), randn())
         end),
     )
-        @info "$(_typeof((f, x...)))"
-        test_rule(Xoshiro(123456), f, x...; interface_only, is_primitive=false)
+        @info "$(typeof((f, x...)))"
+        test_rule(StableRNG(123456), f, x...; interface_only, is_primitive=false)
     end
 end
