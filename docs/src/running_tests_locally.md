@@ -1,6 +1,8 @@
 # Running Tests Locally
 
-Mooncake.jl's test suite is fairly extensive. While you can use `Pkg.test` to run the test suite in the standard manner, this is not usually optimal in Mooncake.jl. When editing some code, you typically only want to run the tests associated with it, not the entire test suite.
+Mooncake.jl's test suite is fairly extensive. While you can use `Pkg.test` to run the test suite in the standard manner, this is not usually optimal in Mooncake.jl, and will not run all of the tests. When editing some code, you typically only want to run the tests associated with it, not the entire test suite.
+
+## Main Testing Functionality
 
 Mooncake's tests are organised as follows:
 1. Things that are required for most / all test suites are loaded up in `test/front_matter.jl`.
@@ -21,3 +23,12 @@ The purpose of this approach is to:
 
 If you find that this strategy leaves you running more of the test suite than you would like, consider copy + pasting specific tests into the REPL, or commenting out a chunk of tests in the file that you are editing during development (try not to commit this).
 I find this is rather crude strategy effective in practice.
+
+## Extension and Integration Testing
+
+Mooncake now has quite a lot of package extensions, and a large number of integration tests.
+Unfortunately, these come with a lot of additional dependencies.
+To avoid these dependencies causing CI to take much longer to run, we locate all tests for extensions and integration testing in their own environments. These can be found in the `test/ext` and `test/integration_testing` directories respectively.
+
+These directories comprise a single `.jl` file, and a `Project.toml`.
+You should run these tests by simply `include`ing the `.jl` file. Doing so will activate the environemnt, ensure that the correct version of Mooncake is used, and run the tests.
