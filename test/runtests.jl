@@ -1,3 +1,5 @@
+using Test
+
 @testset "Mooncake.jl" begin
     if test_group == "aqua"
         include("front_matter.jl")
