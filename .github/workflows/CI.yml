@@ -51,36 +51,36 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
   extra:
-    name: ${{ matrix.test_group.label }}-${{ matrix.version }}-${{ matrix.arch }}
+    name: ${{matrix.test_group.test_type}}-${{ matrix.test_group.label }}-${{ matrix.version }}-${{ matrix.arch }}
     runs-on: ubuntu-latest
     if: github.event_name != 'schedule'
     strategy:
       fail-fast: false
       matrix:
         test_group: [
-          {project: 'test/ext/differentiation_interface', label: 'ext/differentiation_interface'},
-          {project: 'test/ext/dynamic_ppl', label: 'ext/dynamic_ppl'},
-          {project: '@.', label: 'ext/luxlib'},
-          {project: '@.', label: 'ext/nnlib'},
-          {project: '@.', label: 'ext/special_functions'},
-          {project: '@.', label: 'integration_testing/array'},
-          {project: '@.', label: 'integration_testing/bijectors'},
-          {project: '@.', label: 'integration_testing/diff_tests'},
-          {project: '@.', label: 'integration_testing/distributions'},
-          {project: '@.', label: 'integration_testing/gp'},
-          {project: '@.', label: 'integration_testing/logexpfunctions'},
-          {project: '@.', label: 'integration_testing/lux'},
-          {project: '@.', label: 'integration_testing/misc'},
-          {project: '@.', label: 'integration_testing/misc_abstract_array'},
-          {project: '@.', label: 'integration_testing/temporalgps'},
-          {project: '@.', label: 'integration_testing/turing'},
+          {test_type: 'ext', label: 'differentiation_interface'},
+          {test_type: 'ext', label: 'dynamic_ppl'},
+          # {project: '@.', label: 'ext/luxlib'},
+          # {project: '@.', label: 'ext/nnlib'},
+          # {project: '@.', label: 'ext/special_functions'},
+          # {project: '@.', label: 'integration_testing/array'},
+          # {project: '@.', label: 'integration_testing/bijectors'},
+          # {project: '@.', label: 'integration_testing/diff_tests'},
+          # {project: '@.', label: 'integration_testing/distributions'},
+          # {project: '@.', label: 'integration_testing/gp'},
+          # {project: '@.', label: 'integration_testing/logexpfunctions'},
+          # {project: '@.', label: 'integration_testing/lux'},
+          # {project: '@.', label: 'integration_testing/misc'},
+          # {project: '@.', label: 'integration_testing/misc_abstract_array'},
+          # {project: '@.', label: 'integration_testing/temporalgps'},
+          # {project: '@.', label: 'integration_testing/turing'},
         ]
         version:
           - '1'
         arch:
           - x64
         include:
-          - test_group: {project: '@.', label: 'integration_testing/turing'}
+          - test_group: {test_type: 'integration_testing', label: 'turing'}
             version: '1.10'
             arch: x64
     steps:
@@ -92,7 +92,7 @@ jobs:
           include-all-prereleases: false
       - uses: julia-actions/cache@v2
       - uses: julia-actions/julia-buildpkg@v1
-      - run: julia --project=${{ matrix.test_group.project }} --eval 'include(ENV["TARGET_DIR"])'
+      - run: julia --project=${{ matrix.test_group.project }} --eval 'include("test/run_extra.jl")'
         env:
           TEST_GROUP: ${{ matrix.test_group.label }}
           TARGET_DIR: ${{ matrix.test_group.project }}
