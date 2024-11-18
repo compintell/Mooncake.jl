@@ -13,8 +13,6 @@ steps:
     timeout_in_minutes: 60
   - label: "Run Tests"
     command: julia --code-coverage=user --eval='include("test/run_extra.jl")'
-    plugins:
-      - JuliaCI/julia-test#v1: ~
     agents:
       queue: "juliagpu"
       cuda: "*"
@@ -23,14 +21,14 @@ steps:
     env:
       LABEL: ext
       TEST_TYPE: cuda
-  - label: "Process Coverage"
-    plugins:
-      - JuliaCI/julia-coverage#v1:
-          dirs:
-            - src
-            - ext
-    agents:
-      queue: "juliagpu"
-      cuda: "*"
-    if: build.message !~ /\[skip tests\]/
-    timeout_in_minutes: 60
+  # - label: "Process Coverage"
+  #   plugins:
+  #     - JuliaCI/julia-coverage#v1:
+  #         dirs:
+  #           - src
+  #           - ext
+  #   agents:
+  #     queue: "juliagpu"
+  #     cuda: "*"
+  #   if: build.message !~ /\[skip tests\]/
+  #   timeout_in_minutes: 60
