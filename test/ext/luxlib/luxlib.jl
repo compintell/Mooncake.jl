@@ -2,8 +2,9 @@ using Pkg
 Pkg.activate(@__DIR__)
 Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 
-using Lux, LuxLib, Mooncake, NNlib, Test
+using JET, Lux, LuxLib, Mooncake, NNlib, StableRNGs, Test
 using LuxLib.Impl: SLEEFActivations
+using Mooncake.TestUtils: test_rule
 
 @testset "luxlib" begin
     @testset "$(typeof(fargs))" for (interface_only, perf_flag, is_primitive, fargs...) in vcat(
@@ -65,6 +66,6 @@ using LuxLib.Impl: SLEEFActivations
             )
         end),
     )
-        test_rule(sr(1), fargs...; perf_flag, is_primitive, interface_only)
+        test_rule(StableRNG(123), fargs...; perf_flag, is_primitive, interface_only)
     end
 end

@@ -2,7 +2,8 @@ using Pkg
 Pkg.activate(@__DIR__)
 Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 
-using AbstractGPs, KernelFunctions, Mooncake, TemporalGPs, Test
+using AbstractGPs, KernelFunctions, Mooncake, StableRNGs, TemporalGPs, Test
+using Mooncake.TestUtils: test_rule
 
 build_gp(k) = to_sde(GP(k), SArrayStorage(Float64))
 
@@ -21,8 +22,8 @@ temporalgps_logpdf_tester(k, x, y, s) = logpdf(build_gp(k)(x, s), y)
         s = 1.0
         y = rand(build_gp(k)(x, s))
         f = temporalgps_logpdf_tester
-        sig = _typeof((temporalgps_logpdf_tester, k, x, y, s))
+        sig = typeof((temporalgps_logpdf_tester, k, x, y, s))
         @info "$sig"
-        test_rule(Xoshiro(123456), f, k, x, y, s; is_primitive=false)
+        test_rule(StableRNG(123456), f, k, x, y, s; is_primitive=false)
     end
 end

@@ -2,9 +2,8 @@ using Pkg
 Pkg.activate(@__DIR__)
 Pkg.develop(; path = joinpath(@__DIR__, "..", "..", ".."))
 
-using Bijectors: Bijectors, inverse
-using LinearAlgebra: LinearAlgebra
-using Random: randn
+using Bijectors, LinearAlgebra, Mooncake, StableRNGs, Test
+using Mooncake.TestUtils: test_rule
 
 """
 Type for specifying a test case for `test_rule`.
@@ -21,7 +20,7 @@ TestCase(f, arg; name = nothing, broken=false) = TestCase(f, arg, name, broken)
 """
 A helper function that returns a TestCase that evaluates bijector(inverse(bijector)(x))
 """
-function b_binv_test_case(bijector, dim; name = nothing, rng = Xoshiro(23))
+function b_binv_test_case(bijector, dim; name = nothing, rng = StableRNG(23))
     if name === nothing
         name = string(bijector)
     end
@@ -73,7 +72,7 @@ end
                 binv = Bijectors.inverse(b)
                 return binv(b(x))
             end,
-            randn(Xoshiro(23));
+            randn(StableRNG(23));
             name = "RationalQuadraticSpline on scalar",
         ),
         TestCase(
@@ -82,7 +81,7 @@ end
                 binv = Bijectors.inverse(b)
                 return binv(b(x))
             end,
-            randn(Xoshiro(23), 7);
+            randn(StableRNG(23), 7);
             name = "OrderedBijector",
         ),
         TestCase(
@@ -96,7 +95,7 @@ end
                 return Bijectors.logpdf(flow.dist, x) -
                        Bijectors.logabsdetjac(flow.transform, x)
             end,
-            randn(Xoshiro(23), 7);
+            randn(StableRNG(23), 7);
             name = "PlanarLayer7",
             # TODO(mhauru) Broken on v1.11 due to
             # https://github.com/compintell/Mooncake.jl/issues/319
@@ -115,7 +114,7 @@ end
                     Bijectors.logabsdetjac(flow.transform, x),
                 )
             end,
-            randn(Xoshiro(23), 11);
+            randn(StableRNG(23), 11);
             name = "PlanarLayer11",
         ),
     ]
@@ -123,11 +122,11 @@ end
     @testset "$(case.name)" for case in test_cases
         if case.broken
             @test_broken begin
-                test_rule(Xoshiro(123456), case.func, case.arg; is_primitive=false)
+                test_rule(StableRNG(123456), case.func, case.arg; is_primitive=false)
                 true
             end
         else
-            rng = Xoshiro(123456)
+            rng = StableRNG(123456)
             test_rule(rng, case.func, case.arg; is_primitive=false, unsafe_perturb=true)
         end
     end

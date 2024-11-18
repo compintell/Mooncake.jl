@@ -2,7 +2,8 @@ using Pkg
 Pkg.activate(@__DIR__)
 Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 
-using Mooncake, SpecialFunctions, Test
+using AllocCheck, JET, Mooncake, SpecialFunctions, StableRNGs, Test
+using Mooncake.TestUtils: test_rule
 
 # Rules in this file are only lightly tester, because they are all just @from_rrule rules.
 @testset "special_functions" begin
@@ -44,7 +45,7 @@ using Mooncake, SpecialFunctions, Test
         (:stability_and_allocs, ellipe, 0.3),
         (:stability_and_allocs, logfactorial, 3),
     ]
-        test_rule(Xoshiro(123456), f, x...; perf_flag)
+        test_rule(StableRNG(123456), f, x...; perf_flag)
     end
     @testset for (perf_flag, f, x...) in [
         (:allocs, logerf, 0.3, 0.5), # first branch
@@ -61,6 +62,6 @@ using Mooncake, SpecialFunctions, Test
         (:allocs, SpecialFunctions.loggamma1p, -0.3),
         (:none, SpecialFunctions.lambdaeta, 5.0),
     ]
-        test_rule(Xoshiro(123456), f, x...; perf_flag, is_primitive=false)
+        test_rule(StableRNG(123456), f, x...; perf_flag, is_primitive=false)
     end
 end

@@ -2,10 +2,22 @@ using Pkg
 Pkg.activate(@__DIR__)
 Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 
-using Distributions, FillArrays, Mooncake, LinearAlgebra, PDMats, Test
+using
+    AllocCheck,
+    JET,
+    Distributions,
+    FillArrays,
+    Mooncake,
+    LinearAlgebra,
+    PDMats,
+    StableRNGs,
+    Test
+
+using Mooncake.TestUtils: test_rule
 
 _sym(A) = A'A
 _pdmat(A) = PDMat(_sym(A) + 5I)
+sr(n::Int) = StableRNG(n)
 
 @testset "distributions" begin
     logpdf_test_cases = Any[
@@ -269,11 +281,11 @@ _pdmat(A) = PDMat(_sym(A) + 5I)
 
     @testset "$(typeof(d))" for (perf_flag, d, x) in logpdf_test_cases
         @info "$(map(typeof, (d, x)))"
-        test_rule(sr(123456), logpdf, d, x; perf_flag, is_primitive=false)
+        test_rule(StableRNG(123456), logpdf, d, x; perf_flag, is_primitive=false)
     end
 
     @testset "$name" for (perf_flag, name, f, x) in work_around_test_cases
         @info "$name"
-        test_rule(sr(123456), f, x...; perf_flag=perf_flag, is_primitive=false)
+        test_rule(StableRNG(123456), f, x...; perf_flag=perf_flag, is_primitive=false)
     end
 end
