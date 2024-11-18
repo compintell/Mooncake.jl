@@ -23,41 +23,38 @@ include("front_matter.jl")
         include("interface.jl")
         include("config.jl")
         include("developer_tools.jl")
-    elseif test_group == "rrules"
         include("test_utils.jl")
-        @testset "rrules" begin
-            @info "avoiding_non_differentiable_code"
-            include(joinpath("rrules", "avoiding_non_differentiable_code.jl"))
-            @info "blas"
-            include(joinpath("rrules", "blas.jl"))
-            @info "builtins"
-            include(joinpath("rrules", "builtins.jl"))
-            @info "fastmath"
-            include(joinpath("rrules", "fastmath.jl"))
-            @info "foreigncall"
-            include(joinpath("rrules", "foreigncall.jl"))
-            @info "function_wrappers"
-            include(joinpath("rrules", "function_wrappers.jl"))
-            @info "iddict"
-            include(joinpath("rrules", "iddict.jl"))
-            @info "lapack"
-            include(joinpath("rrules", "lapack.jl"))
-            @info "linear_algebra"
-            include(joinpath("rrules", "linear_algebra.jl"))
-            @info "low_level_maths"
-            include(joinpath("rrules", "low_level_maths.jl"))
-            @info "misc"
-            include(joinpath("rrules", "misc.jl"))
-            @info "new"
-            include(joinpath("rrules", "new.jl"))
-            @info "tasks"
-            include(joinpath("rrules", "tasks.jl"))
-            @info "twice_precision"
-            include(joinpath("rrules", "twice_precision.jl"))
-            @static if VERSION >= v"1.11.0-rc4"
-                @info "memory"
-                include(joinpath("rrules", "memory.jl"))
-            end
+    elseif test_group == "rrules/avoiding_non_differentiable_code"
+        include(joinpath("rrules", "avoiding_non_differentiable_code.jl"))
+    elseif test_group == "rrules/blas"
+        include(joinpath("rrules", "blas.jl"))
+    elseif test_group == "rrules/builtins"    
+        include(joinpath("rrules", "builtins.jl"))
+    elseif test_group == "rrules/fastmath"
+        include(joinpath("rrules", "fastmath.jl"))
+    elseif test_group == "rrules/foreigncall"
+        include(joinpath("rrules", "foreigncall.jl"))
+    elseif test_group == "rrules/functionwrappers"
+        include(joinpath("rrules", "function_wrappers.jl"))
+    elseif test_group == "rrules/iddict"
+        include(joinpath("rrules", "iddict.jl"))
+    elseif test_group == "rrules/lapack"
+        include(joinpath("rrules", "lapack.jl"))
+    elseif test_group == "rrules/linear_algebra"
+        include(joinpath("rrules", "linear_algebra.jl"))
+    elseif test_group == "rrules/low_level_maths"
+        include(joinpath("rrules", "low_level_maths.jl"))
+    elseif test_group == "rrules/misc"
+        include(joinpath("rrules", "misc.jl"))
+    elseif test_group == "rrules/new"
+        include(joinpath("rrules", "new.jl"))
+    elseif test_group == "rrules/tasks"
+        include(joinpath("rrules", "tasks.jl"))
+    elseif test_group == "rrules/twice_precision"
+        include(joinpath("rrules", "twice_precision.jl"))
+    elseif test_group == "rrules/memory"
+        @static if VERSION >= v"1.11.0-rc4"
+            include(joinpath("rrules", "memory.jl"))
         end
     else
         throw(error("test_group=$(test_group) is not recognised"))

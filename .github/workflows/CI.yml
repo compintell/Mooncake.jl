@@ -20,7 +20,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        test_group: ['aqua', 'basic', 'rrules']
+        test_group: [
+          'aqua',
+          'basic',
+          'rrules/avoiding_non_differentiable_code',
+          'rrules/blas',
+          'rrules/builtins',
+          'rrules/fastmath',
+          'rrules/foreigncall',
+          'rrules/functionwrappers',
+          'rrules/iddict',
+          'rrules/lapack',
+          'rrules/linear_algebra',
+          'rrules/low_level_maths',
+          'rrules/memory',
+          'rrules/misc',
+          'rrules/new',
+          'rrules/tasks',
+          'rrules/twice_precision',
+        ]
         version:
           - '1'
         arch:
