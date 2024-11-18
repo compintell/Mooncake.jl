@@ -141,6 +141,8 @@ tangent(f::FunctionWrapperTangent, ::NoRData) = f
 
 _verify_fdata_value(p::FunctionWrapper, t::FunctionWrapperTangent) = nothing
 
+to_cr_tangent(t::FunctionWrapperTangent) = t
+
 @is_primitive MinimalCtx Tuple{Type{<:FunctionWrapper}, Any}
 function rrule!!(::CoDual{Type{FunctionWrapper{R, A}}}, obj::CoDual{P}) where {R, A, P}
     t, obj_tangent_ref = _function_wrapper_tangent(R, obj.x, A, zero_tangent(obj.x, obj.dx))
