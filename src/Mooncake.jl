@@ -24,7 +24,7 @@ using Base.Experimental: @opaque
 using Base.Iterators: product
 using Core:
     Intrinsics, bitcast, SimpleVector, svec, ReturnNode, GotoNode, GotoIfNot, PhiNode,
-    PiNode, SSAValue, Argument, OpaqueClosure
+    PiNode, SSAValue, Argument, OpaqueClosure, compilerbarrier
 using Core.Compiler: IRCode, NewInstruction
 using Core.Intrinsics: pointerref, pointerset
 using LinearAlgebra.BLAS: @blasfunc, BlasInt, trsm!
