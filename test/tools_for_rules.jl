@@ -126,6 +126,15 @@ end
             (ones(5), ones(5)),
             (NoTangent(), ChainRulesCore.NoTangent()),
             ((5.0, 4.0), ChainRulesCore.Tangent{Any}(5.0, 4.0)),
+            ([ones(5), NoTangent()], [ones(5), ChainRulesCore.NoTangent()]),
+            (
+                Tangent((a=5.0, b=NoTangent())),
+                ChainRulesCore.Tangent{Any}(; a=5.0, b=ChainRulesCore.NoTangent()),
+            ),
+            (
+                MutableTangent((a=5.0, b=ones(3))),
+                ChainRulesCore.Tangent{Any}(; a=5.0, b=ones(3)),
+            ),
         ]
             @test Mooncake.to_cr_tangent(t) == t_cr
         end

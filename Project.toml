@@ -1,7 +1,7 @@
 name = "Mooncake"
 uuid = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
 authors = ["Will Tebbutt, Hong Ge, and contributors"]
-version = "0.4.44"
+version = "0.4.46"
 
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
@@ -27,6 +27,7 @@ DynamicPPL = "366bfd00-2699-11ea-058f-f148b4cae6d8"
 JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
 LuxLib = "82251201-b29d-42c6-8e01-566dec8acb11"
 NNlib = "872c559c-99b0-510c-b3b7-b6c96a88d5cd"
+SLEEFPirates = "476501e8-09a2-5ece-8869-fb82de89a1fa"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 
 [extensions]
@@ -36,6 +37,7 @@ MooncakeDiffEqBaseExt = "DiffEqBase"
 MooncakeDynamicPPLExt = "DynamicPPL"
 MooncakeJETExt = "JET"
 MooncakeLuxLibExt = "LuxLib"
+MooncakeLuxLibSLEEFPiratesExtension = ["LuxLib", "SLEEFPirates"]
 MooncakeNNlibExt = "NNlib"
 MooncakeSpecialFunctionsExt = "SpecialFunctions"
 
@@ -57,11 +59,12 @@ Graphs = "1"
 InteractiveUtils = "1"
 JET = "0.9"
 LinearAlgebra = "1"
-LuxLib = "1.2 - 1.3.3"
+LuxLib = "1"
 MistyClosures = "2"
 NNlib = "0.9"
 Pkg = "1"
 Random = "1"
+SLEEFPirates = "0.6.43"
 Setfield = "1"
 SpecialFunctions = "2"
 StableRNGs = "1"

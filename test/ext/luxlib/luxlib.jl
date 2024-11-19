@@ -2,8 +2,8 @@ using Pkg
 Pkg.activate(@__DIR__)
 Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 
-using JET, Lux, LuxLib, Mooncake, NNlib, StableRNGs, Test
-using LuxLib.Impl: SLEEFActivations
+using JET, Lux, LuxLib, Mooncake, NNlib, SLEEFPirates, StableRNGs, Test
+using LuxLib.Impl: sleefpirates_fast_act
 using Mooncake.TestUtils: test_rule
 
 @testset "luxlib" begin
@@ -13,25 +13,19 @@ using Mooncake.TestUtils: test_rule
             (false, :none, true, LuxLib.Impl.matmuladd, randn(5, 4), randn(4, 3), randn(5)),
             (false, :none, true, LuxLib.Impl.batched_matmul, randn(5, 4, 3), randn(4, 3, 3)),
             (false, :none, false, LuxLib.Impl.activation, Lux.relu, randn(5, 4)),
-            (
-                false, :none, false,
-                LuxLib.Impl.bias_activation_loop!,
-                randn(5, 4, 3),
-                Lux.relu,
-                randn(5, 4, 3),
-                randn(4),
-            ),
-            (
-                false, :none, false,
-                LuxLib.Impl.activation_loop!, randn(5, 3), NNlib.gelu, randn(5, 3),
-            ),
-            (false, :stability_and_allocs, true, SLEEFActivations.sigmoid_fast, randn()),
-            (false, :stability_and_allocs, true, SLEEFActivations.softplus, randn()),
-            (false, :stability_and_allocs, true, SLEEFActivations.logsigmoid, randn()),
-            (false, :stability_and_allocs, true, SLEEFActivations.swish, randn()),
-            (false, :stability_and_allocs, true, SLEEFActivations.lisht, randn()),
-            (false, :stability_and_allocs, true, SLEEFActivations.tanh, randn()),
-            (false, :stability_and_allocs, true, SLEEFActivations.tanh_fast, randn()),
+        ],
+        map(Any[
+            LuxLib.NNlib.sigmoid_fast,
+            LuxLib.NNlib.softplus,
+            LuxLib.NNlib.logsigmoid,
+            LuxLib.NNlib.swish,
+            LuxLib.NNlib.lisht,
+            Base.tanh,
+            LuxLib.NNlib.tanh_fast,
+        ]) do f
+            return (false, :stability_and_allocs, true, sleefpirates_fast_act(f), randn())
+        end,
+        Any[
             (
                 false, :stability_and_allocs, true,
                 LuxLib.Utils.static_training_mode_check,
