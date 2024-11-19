@@ -313,6 +313,8 @@ end
     replace_uses_with!(stmt, def::Union{Argument, SSAValue}, val)
 
 Replace all uses of `def` with `val` in the single statement `stmt`.
+Note: this function is highly incomplete, really only working correctly for a specific
+function in `ir_normalisation.jl`. You probably do not want to use it.
 """
 function replace_uses_with!(stmt, def::Union{Argument, SSAValue}, val)
     if stmt isa Expr
@@ -328,16 +330,4 @@ function replace_uses_with!(stmt, def::Union{Argument, SSAValue}, val)
     else
         return stmt
     end
-end
-
-"""
-    replace_uses_with(ir::IRCode, def::Union{Argument, SSAValue}, val)
-
-Replace all uses of `def` in `ir` with `val`.
-"""
-function replace_uses_with!(ir::IRCode, def::Union{Argument, SSAValue}, val)
-    for (n, stmt) in enumerate(stmt(ir.stmts))
-        statements[n] = replace_uses_with!(stmt, def, val)
-    end
-    return ir
 end

@@ -695,9 +695,6 @@ end
 @inline increment_ref!(x::Ref, t) = setindex!(x, increment!!(x[], t))
 @inline increment_ref!(::Base.RefValue{NoRData}, t) = nothing
 
-# Useful to have this function call for debugging when looking at the generated IRCode.
-@inline __pop_pb_stack!(stack) = pop!(stack)
-
 @inline function set_ret_ref_to_zero!!(::Type{P}, r::Ref{R}) where {P, R}
     r[] = zero_like_rdata_from_type(P)
 end

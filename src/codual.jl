@@ -101,5 +101,3 @@ end
 function fcodual_type(p::Type{Type{P}}) where {P}
     return @isdefined(P) ? CoDual{Type{P}, NoFData} : CoDual{_typeof(p), NoFData}
 end
-
-zero_rdata(x::CoDual) = zero_rdata(primal(x))
