@@ -4,6 +4,8 @@ using LuxLib, Mooncake, SLEEFPirates
 using Base: IEEEFloat
 using Mooncake: @from_rrule, DefaultCtx
 
+# Workaround for package load order problems. See
+# https://github.com/JuliaLang/julia/issues/56204#issuecomment-2419553167 for more context.
 function __init__()
     Base.generating_output() && return nothing
 
