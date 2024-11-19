@@ -234,8 +234,11 @@ Convert a Mooncake tangent into a type that ChainRules.jl `rrule`s expect to see
 """
 to_cr_tangent(t::IEEEFloat) = t
 to_cr_tangent(t::Array{<:IEEEFloat}) = t
-to_cr_tangent(::NoTangent) = ChainRulesCore.NoTangent()
-to_cr_tangent(t::Tuple) = ChainRulesCore.Tangent{Any}(t...)
+to_cr_tangent(t::Array) = map(to_cr_tangent, t)
+to_cr_tangent(::NoTangent) = CRC.NoTangent()
+to_cr_tangent(t::Tangent) = CRC.Tangent{Any}(; map(to_cr_tangent, t.fields)...)
+to_cr_tangent(t::MutableTangent) = CRC.Tangent{Any}(; map(to_cr_tangent, t.fields)...)
+to_cr_tangent(t::Tuple) = CRC.Tangent{Any}(map(to_cr_tangent, t)...)
 
 """
     increment_and_get_rdata!(fdata, zero_rdata, cr_tangent)
@@ -248,9 +251,9 @@ function increment_and_get_rdata!(f::Array{P}, ::NoRData, t::Array{P}) where {P<
     increment!!(f, t)
     return NoRData()
 end
-increment_and_get_rdata!(::Any, r, ::ChainRulesCore.NoTangent) = r
-function increment_and_get_rdata!(f, r, t::ChainRulesCore.Thunk)
-    return increment_and_get_rdata!(f, r, ChainRulesCore.unthunk(t))
+increment_and_get_rdata!(::Any, r, ::CRC.NoTangent) = r
+function increment_and_get_rdata!(f, r, t::CRC.Thunk)
+    return increment_and_get_rdata!(f, r, CRC.unthunk(t))
 end
 
 @doc"""
@@ -282,7 +285,7 @@ function rrule_wrapper(fargs::Vararg{CoDual, N}) where {N}
     # Run forwards-pass.
     primals = tuple_map(primal, fargs)
     lazy_rdata = tuple_map(Mooncake.lazy_zero_rdata, primals)
-    y_primal, cr_pb = ChainRulesCore.rrule(primals...)
+    y_primal, cr_pb = CRC.rrule(primals...)
     y_fdata = fdata(zero_tangent(y_primal))
 
     function pb!!(y_rdata)
@@ -306,7 +309,7 @@ function rrule_wrapper(::CoDual{typeof(Core.kwcall)}, fargs::Vararg{CoDual, N}) 
     # Run forwards-pass.
     primals = tuple_map(primal, fargs)
     lazy_rdata = tuple_map(lazy_zero_rdata, primals)
-    y_primal, cr_pb = Core.kwcall(primals[1], ChainRulesCore.rrule, primals[2:end]...)
+    y_primal, cr_pb = Core.kwcall(primals[1], CRC.rrule, primals[2:end]...)
     y_fdata = fdata(zero_tangent(y_primal))
 
     function pb!!(y_rdata)
@@ -318,7 +321,7 @@ function rrule_wrapper(::CoDual{typeof(Core.kwcall)}, fargs::Vararg{CoDual, N}) 
         cr_dfargs = cr_pb(cr_tangent)
 
         # Increment fdata and compute rdata.
-        kwargs_rdata = rdata(zero_tangent(fargs[1]))
+        kwargs_rdata = rdata(zero_tangent(primals[1]))
         args_rdata = map(fargs[2:end], lazy_rdata[2:end], cr_dfargs) do x, l_rdata, cr_dx
             return increment_and_get_rdata!(tangent(x), instantiate(l_rdata), cr_dx)
         end

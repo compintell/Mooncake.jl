@@ -280,7 +280,7 @@ function benchmark_hand_written_rrules!!(rng_ctor)
         tags = fill(nothing, length(test_cases))
         return map(x -> x[4:end], test_cases), memory, ranges, tags
     end
-    return benchmark_rules!!(test_case_data, (lb=1e-3, ub=25.0), false)
+    return benchmark_rules!!(test_case_data, (lb=1e-3, ub=50.0), false)
 end
 
 function benchmark_derived_rrules!!(rng_ctor)

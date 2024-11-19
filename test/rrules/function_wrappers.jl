@@ -7,6 +7,10 @@
     ]
         TestUtils.test_tangent_consistency(rng, p)
         TestUtils.test_fwds_rvs_data(rng, p)
+
+        # Check that we can run `to_cr_tangent` on tangents for FunctionWrappers.
+        t = zero_tangent(p)
+        @test Mooncake.to_cr_tangent(t) === t
     end
     TestUtils.run_rrule!!_test_cases(StableRNG, Val(:function_wrappers))
 end
