@@ -2,9 +2,11 @@
 
 Mooncake.jl's test suite is fairly extensive. While you can use `Pkg.test` to run the test suite in the standard manner, this is not usually optimal in Mooncake.jl, and will not run all of the tests. When editing some code, you typically only want to run the tests associated with it, not the entire test suite.
 
+There are two workflows for running tests, discussed below.
+
 ## Main Testing Functionality
 
-Mooncake's tests are organised as follows:
+For all code in `src`, Mooncake's tests are organised as follows:
 1. Things that are required for most / all test suites are loaded up in `test/front_matter.jl`.
 1. The tests for something in `src` are located in an identically-named file in `test`. e.g. the unit tests for `src/rrules/new.jl` are located in `test/rrules/new.jl`.
 
