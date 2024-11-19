@@ -55,22 +55,6 @@ end
     return LuxLib.Impl.bias_activation(act, LuxLib.Impl.conv(x, weight, cdims), bias)
 end
 
-# for f in [
-#     Impl.SLEEFActivations.sigmoid_fast,
-#     Impl.SLEEFActivations.softplus,
-#     Impl.SLEEFActivations.logsigmoid,
-#     Impl.SLEEFActivations.swish,
-#     Impl.SLEEFActivations.lisht,
-#     Impl.SLEEFActivations.tanh,
-#     Impl.SLEEFActivations.tanh_fast,
-# ]
-#     @from_rrule DefaultCtx Tuple{typeof(f), IEEEFloat}
-#     @from_rrule(
-#         DefaultCtx,
-#         Tuple{typeof(Broadcast.broadcasted), typeof(f), Union{IEEEFloat, Array{<:IEEEFloat}}},
-#     )
-# end
-
 Mooncake.@zero_adjoint DefaultCtx Tuple{typeof(static_training_mode_check), Vararg}
 
 # This is a really horrible hack that we need to do until Mooncake is able to support the
