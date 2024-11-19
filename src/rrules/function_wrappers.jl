@@ -141,6 +141,12 @@ tangent(f::FunctionWrapperTangent, ::NoRData) = f
 
 _verify_fdata_value(p::FunctionWrapper, t::FunctionWrapperTangent) = nothing
 
+# Will: to the best of my knowledge, no one has ever actually worked with FunctionWrappers
+# before in the ChainRules ecosystem. Consequently, it shouldn't matter what type we use
+# here. We might need to revise this is people start making use of FunctionWrappers in a
+# meaningful way inside of ChainRules, but it seems unlikely that this will ever happen.
+to_cr_tangent(t::FunctionWrapperTangent) = t
+
 @is_primitive MinimalCtx Tuple{Type{<:FunctionWrapper}, Any}
 function rrule!!(::CoDual{Type{FunctionWrapper{R, A}}}, obj::CoDual{P}) where {R, A, P}
     t, obj_tangent_ref = _function_wrapper_tangent(R, obj.x, A, zero_tangent(obj.x, obj.dx))
