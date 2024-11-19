@@ -7,7 +7,6 @@ using
     ChainRules,
     DiffRules,
     ExprTools,
-    FunctionWrappers,
     Graphs,
     InteractiveUtils,
     LinearAlgebra,
