@@ -32,18 +32,6 @@ import Mooncake:
     return bias_activation(act, Impl.matmul(weight, x), b)
 end
 
-# @mooncake_overlay function LuxLib.Impl.bias_activation_loop!(
-#     y::AbstractArray{yT, 3}, σ::F, x::AbstractArray{xT, 3}, bias::AbstractVector
-# ) where {F, xT, yT}
-#     return LuxLib.Impl.bias_activation_simd_loop!(y, σ, x, bias)
-# end
-
-# @mooncake_overlay function LuxLib.Impl.activation_loop!(
-#     y::AbstractArray, σ::F, x::AbstractArray
-# ) where {F}
-#     return LuxLib.Impl.activation_simd_loop!(y, σ, x)
-# end
-
 @mooncake_overlay function LuxLib.Impl.fused_conv(
     ::LuxLib.Impl.AbstractInternalArrayOpMode,
     act::F,
