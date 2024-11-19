@@ -802,14 +802,6 @@ function test_from_slack(x::AbstractVector{T}) where {T}
     return y
 end
 
-function value_dependent_control_flow(x, n)
-    while n > 0
-        x = cos(x)
-        n -= 1
-    end
-    return x
-end
-
 #
 # This is a version of setfield! in which there is an issue with the address map.
 # The method of setfield! is incorrectly implemented, so it errors. This is intentional,
@@ -825,18 +817,11 @@ end
 
 function Mooncake.rrule!!(::Mooncake.CoDual{typeof(my_setfield!)}, value, name, x)
     _name = primal(name)
-    old_x = isdefined(primal(value), _name) ? getfield(primal(value), _name) : nothing
-    function setfield!_pullback(dy, df, dvalue, ::NoTangent, dx)
-        new_dx = increment!!(dx, val(getfield(dvalue.fields, _name)))
-        new_dx = increment!!(new_dx, dy)
-        old_x !== nothing && setfield!(primal(value), _name, old_x)
-        return df, dvalue, NoTangent(), new_dx
-    end
     y = Mooncake.CoDual(
         setfield!(primal(value), _name, primal(x)),
         _setfield!(tangent(value), _name, tangent(x)),
     )
-    return y, setfield!_pullback
+    return y, nothing
 end
 
 # Tests brought in from DiffTests.jl

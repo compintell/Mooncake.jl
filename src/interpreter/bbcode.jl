@@ -580,12 +580,6 @@ end
 _to_ssas(d::Dict, x::IDGotoNode) = GotoNode(d[x.label].id)
 _to_ssas(d::Dict, x::IDGotoIfNot) = GotoIfNot(get(d, x.cond, x.cond), d[x.dest].id)
 
-# Compute the CFG associated to `insts`. All references to blocks must be references to
-# the SSAValue associated to the first statement in the block.
-function _compute_basic_blocks(insts::InstVector)
-    return CC.compute_basic_blocks(Any[inst.stmt for inst in insts])
-end
-
 # Replaces references to blocks by line-number with references to block numbers.
 function _lines_to_blocks(insts::InstVector, cfg::CC.CFG)
     return map(inst -> __lines_to_blocks(cfg, inst), insts)
