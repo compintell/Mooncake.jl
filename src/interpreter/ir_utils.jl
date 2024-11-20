@@ -81,7 +81,7 @@ end
 Pulls out the instructions from `insts`, and calls `__line_numbers_to_block_numbers!`.
 """
 function _lines_to_blocks(insts::InstVector, cfg::CC.CFG)::InstVector
-    stmts = __line_numbers_to_block_numbers!(map(x -> x.stmt, insts), cfg)
+    stmts = __line_numbers_to_block_numbers!(Any[x.stmt for x in insts], cfg)
     return map((inst, stmt) -> NewInstruction(inst; stmt), insts, stmts)
 end
 
