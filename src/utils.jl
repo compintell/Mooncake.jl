@@ -76,7 +76,7 @@ end
 end
 
 
-#=
+"""
     _map_if_assigned!(f, y::DenseArray, x::DenseArray{P}) where {P}
 
 For all `n`, if `x[n]` is assigned, then writes the value returned by `f(x[n])` to `y[n]`,
@@ -85,7 +85,7 @@ otherwise leaves `y[n]` unchanged.
 Equivalent to `map!(f, y, x)` if `P` is a bits type as element will always be assigned.
 
 Requires that `y` and `x` have the same size.
-=#
+"""
 function _map_if_assigned!(f::F, y::DenseArray, x::DenseArray{P}) where {F, P}
     @assert size(y) == size(x)
     @inbounds for n in eachindex(y)
@@ -96,14 +96,14 @@ function _map_if_assigned!(f::F, y::DenseArray, x::DenseArray{P}) where {F, P}
     return y
 end
 
-#=
+"""
     _map_if_assigned!(f::F, y::DenseArray, x1::DenseArray{P}, x2::DenseArray)
 
 Similar to the other method of `_map_if_assigned!` -- for all `n`, if `x1[n]` is assigned,
 writes `f(x1[n], x2[n])` to `y[n]`, otherwise leaves `y[n]` unchanged.
 
 Requires that `y`, `x1`, and `x2` have the same size.
-=#
+"""
 function _map_if_assigned!(f::F, y::DenseArray, x1::DenseArray{P}, x2::DenseArray) where {F, P}
     @assert size(y) == size(x1)
     @assert size(y) == size(x2)
@@ -115,30 +115,30 @@ function _map_if_assigned!(f::F, y::DenseArray, x1::DenseArray{P}, x2::DenseArra
     return y
 end
 
-#=
+"""
     _map(f, x...)
 
 Same as `map` but requires all elements of `x` to have equal length.
 The usual function `map` doesn't enforce this for `Array`s.
-=#
+"""
 @inline function _map(f::F, x::Vararg{Any, N}) where {F, N}
     @assert allequal(map(length, x))
     return map(f, x...)
 end
 
-#=
+"""
     is_vararg_and_sparam_names(m::Method)
 
 Returns a 2-tuple. The first element is true if `m` is a vararg method, and false if not.
 The second element contains the names of the static parameters associated to `m`.
-=#
+"""
 is_vararg_and_sparam_names(m::Method) = m.isva, sparam_names(m)
 
-#=
+"""
     is_vararg_and_sparam_names(sig)::Tuple{Bool, Vector{Symbol}}
 
 Finds the method associated to `sig`, and calls `is_vararg_and_sparam_names` on it.
-=#
+"""
 function is_vararg_and_sparam_names(sig)::Tuple{Bool, Vector{Symbol}}
     world = Base.get_world_counter()
     min = Base.RefValue{UInt}(typemin(UInt))
@@ -147,16 +147,20 @@ function is_vararg_and_sparam_names(sig)::Tuple{Bool, Vector{Symbol}}
     return is_vararg_and_sparam_names(only(ms).method)
 end
 
-#=
+"""
     is_vararg_and_sparam_names(mi::Core.MethodInstance)
 
 Calls `is_vararg_and_sparam_names` on `mi.def::Method`.
-=#
+"""
 function is_vararg_and_sparam_names(mi::Core.MethodInstance)::Tuple{Bool, Vector{Symbol}}
     return is_vararg_and_sparam_names(mi.def)
 end
 
-# Returns the names of all of the static parameters in `m`.
+"""
+    sparam_names(m::Core.Method)::Vector{Symbol}
+
+Returns the names of all of the static parameters in `m`.
+"""
 function sparam_names(m::Core.Method)::Vector{Symbol}
     whereparams = ExprTools.where_parameters(m.sig)
     whereparams === nothing && return Symbol[]

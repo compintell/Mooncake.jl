@@ -227,7 +227,7 @@ get_rev_data_id(::ADInfo, ::Any) = nothing
 """
     reverse_data_ref_stmts(info::ADInfo)
 
-Create the statements which initialise the reverse-data `Ref`s. These are of the form
+Create the statements which initialise the reverse-data `Ref`s.
 """
 function reverse_data_ref_stmts(info::ADInfo)
     return vcat(
@@ -235,12 +235,17 @@ function reverse_data_ref_stmts(info::ADInfo)
             (id, new_inst(Expr(:call, __make_ref, _type(info.arg_types[k]))))
         end,
         map(collect(info.ssa_rdata_ref_ids)) do (k, id)
-            (id, new_inst(Expr(:call, __make_ref, _type(info.ssa_insts[k]))))
+            (id, new_inst(Expr(:call, __make_ref, _type(info.ssa_insts[k].type))))
         end,
     )
 end
 
-# Helper for reverse_data_ref_stmts.
+"""
+    __make_ref(p::Type{P}) where {P}
+
+Helper for [reverse_data_ref_stmts](@ref). Constructs a `Ref` whose element type is the
+[`zero_like_rdata_type`](@ref) for `P`, and whose element is the zero-like rdata for `P`.
+"""
 @inline @generated function __make_ref(p::Type{P}) where {P}
     _P = @isdefined(P) ? P : _typeof(p)
     R = zero_like_rdata_type(_P)
@@ -258,12 +263,16 @@ end
 # Returns the number of arguments that the primal function has.
 num_args(info::ADInfo) = length(info.arg_types)
 
-# This struct is used to ensure that `ZeroRData`s, which are used as placeholder zero
-# elements whenever an actual instance of a zero rdata for a particular primal type cannot
-# be constructed without also having an instance of said type, never reach rules.
-# On the pullback, we increment the cotangent dy by an amount equal to zero. This ensures
-# that if it is a `ZeroRData`, we instead get an actual zero of the correct type. If it is
-# not a zero rdata, the computation _should_ be elided via inlining + constant prop.
+"""
+    RRuleZeroWrapper(rule)
+
+This struct is used to ensure that `ZeroRData`s, which are used as placeholder zero
+elements whenever an actual instance of a zero rdata for a particular primal type cannot
+be constructed without also having an instance of said type, never reach rules.
+On the pullback, we increment the cotangent dy by an amount equal to zero. This ensures
+that if it is a `ZeroRData`, we instead get an actual zero of the correct type. If it is
+not a zero rdata, the computation _should_ be elided via inlining + constant prop.
+"""
 struct RRuleZeroWrapper{Trule}
     rule::Trule
 end
@@ -283,7 +292,7 @@ end
     return y::CoDual, (pb!! isa NoPullback ? pb!! : RRuleWrapperPb(pb!!, l))
 end
 
-#=
+"""
     ADStmtInfo
 
 Data structure which contains the result of `make_ad_stmts!`. Fields are
@@ -295,7 +304,7 @@ Data structure which contains the result of `make_ad_stmts!`. Fields are
     per-block basis.
 - `fwds`: the instructions which run the forwards-pass of AD
 - `rvs`: the instructions which run the reverse-pass of AD / the pullback
-=#
+"""
 struct ADStmtInfo
     line::ID
     comms_id::Union{ID, Nothing}
@@ -303,8 +312,12 @@ struct ADStmtInfo
     rvs::Vector{IDInstPair}
 end
 
-# Convenient constructor for `ADStmtInfo`. If either `fwds` or `rvs` is not a vector,
-# `__vec` promotes it to a single-element `Vector`.
+"""
+    ad_stmt_info(line::ID, comms_id::Union{ID, Nothing}, fwds, rvs)
+
+Convenient constructor for `ADStmtInfo`. If either `fwds` or `rvs` is not a vector,
+`__vec` promotes it to a single-element `Vector`.
+"""
 function ad_stmt_info(line::ID, comms_id::Union{ID, Nothing}, fwds, rvs)
     if !(comms_id === nothing || in(comms_id, map(first, __vec(line, fwds))))
         throw(ArgumentError("comms_id not found in IDs of `fwds` instructions."))
@@ -317,14 +330,18 @@ __vec(line::ID, x::NewInstruction) = IDInstPair[(line, x)]
 __vec(line::ID, x::Vector{Tuple{ID, Any}}) = throw(error("boooo"))
 __vec(line::ID, x::Vector{IDInstPair}) = x
 
-# Return the element of `fwds` whose `ID` is the communcation `ID`. Returns `Nothing` if
-# `comms_id` is `nothing`.
+"""
+    comms_channel(info::ADStmtInfo)
+
+Return the element of `fwds` whose `ID` is the communcation `ID`. Returns `Nothing` if
+`comms_id` is `nothing`.
+"""
 function comms_channel(info::ADStmtInfo)
     info.comms_id === nothing && return nothing
     return only(filter(x -> x[1] == info.comms_id, info.fwds))
 end
 
-#=
+"""
     make_ad_stmts!(inst::NewInstruction, line::ID, info::ADInfo)::ADStmtInfo
 
 Every line in the primal code is associated to one or more lines in the forwards-pass of AD,
@@ -338,28 +355,36 @@ form of an `ADStmtInfo`.
 
 `info` is a data structure containing various bits of global information that certain types
 of nodes need access to.
-=#
+"""
 function make_ad_stmts! end
 
-# `nothing` as a statement in Julia IR indicates the presence of a line which will later be
-# removed. We emit a no-op on both the forwards- and reverse-passes. No shared data.
+#=
+    make_ad_stmts!(::Nothing, line::ID, ::ADInfo)
+
+`nothing` as a statement in Julia IR indicates the presence of a line which will later be
+removed. We emit a no-op on both the forwards- and reverse-passes. No shared data.
+=#
 function make_ad_stmts!(::Nothing, line::ID, ::ADInfo)
     return ad_stmt_info(line, nothing, nothing, nothing)
 end
 
-# `ReturnNode`s have a single field, `val`, for which there are three cases to consider:
-#
-# 1. `val` is undefined: this `ReturnNode` is unreachable. Consequently, we'll never hit the
-#   associated statements on the forwards-pass or pullback. We just return the original
-#   statement on the forwards-pass, and `nothing` on the reverse-pass.
-# 2. `val isa Union{Argument, ID}`: this is an active piece of data. Consequently, we know
-#   that it will be an `CoDual` already, and can just return it. Therefore `stmt`
-#   is returned as the forwards-pass (with any `Argument`s incremented). On the reverse-pass
-#   the associated rdata ref should be incremented with the rdata passed to the pullback,
-#   which lives in argument 2.
-# 3. `val` is defined, but not a `Union{Argument, ID}`: in this case we're returning a
-#   constant -- build a constant CoDual and return that. There is nothing to do on the
-#   reverse pass.
+#=
+    make_ad_stmts!(stmt::ReturnNode, line::ID, info::ADInfo)
+
+`ReturnNode`s have a single field, `val`, for which there are three cases to consider:
+
+1. `val` is undefined: this `ReturnNode` is unreachable. Consequently, we'll never hit the
+  associated statements on the forwards-pass or pullback. We just return the original
+  statement on the forwards-pass, and `nothing` on the reverse-pass.
+2. `val isa Union{Argument, ID}`: this is an active piece of data. Consequently, we know
+  that it will be an `CoDual` already, and can just return it. Therefore `stmt`
+  is returned as the forwards-pass (with any `Argument`s incremented). On the reverse-pass
+  the associated rdata ref should be incremented with the rdata passed to the pullback,
+  which lives in argument 2.
+3. `val` is defined, but not a `Union{Argument, ID}`: in this case we're returning a
+  constant -- build a constant CoDual and return that. There is nothing to do on the
+  reverse pass.
+=#
 function make_ad_stmts!(stmt::ReturnNode, line::ID, info::ADInfo)
     if !is_reachable_return_node(stmt)
         return ad_stmt_info(line, nothing, inc_args(stmt), nothing)
@@ -471,15 +496,23 @@ make_ad_stmts!(stmt::QuoteNode, line::ID, info::ADInfo) = const_ad_stmt(stmt, li
 # Literal constant.
 make_ad_stmts!(stmt, line::ID, info::ADInfo) = const_ad_stmt(stmt, line, info)
 
-# `make_ad_stmts!` for constants.
+"""
+    const_ad_stmt(stmt, line::ID, info::ADInfo)
+
+Implementation of `make_ad_stmts!` used for constants.
+"""
 function const_ad_stmt(stmt, line::ID, info::ADInfo)
     x = const_codual(stmt, info)
     return ad_stmt_info(line, nothing, x isa ID ? Expr(:call, identity, x) : x, nothing)
 end
 
-# Build a `CoDual` from `stmt`, with zero / uninitialised fdata. If the resulting CoDual is
-# a bits type, then it is returned. If it is not, then the CoDual is put into shared data,
-# and the ID associated to it in the forwards- and reverse-passes returned.
+"""
+    const_codual(stmt, info::ADInfo)
+
+Build a `CoDual` from `stmt`, with zero / uninitialised fdata. If the resulting CoDual is
+a bits type, then it is returned. If it is not, then the CoDual is put into shared data,
+and the ID associated to it in the forwards- and reverse-passes returned.
+"""
 function const_codual(stmt, info::ADInfo)
     v = get_const_primal_value(stmt)
     x = uninit_fcodual(v)
@@ -490,7 +523,11 @@ safe_for_literal(v) = v isa String || v isa Type || isbitstype(_typeof(v))
 
 inc_or_const(stmt, info::ADInfo) = is_active(stmt) ? __inc(stmt) : const_codual(stmt, info)
 
-# Get the value associated to `x`. For `GlobalRef`s, verify that `x` is indeed a constant.
+"""
+    get_const_primal_value(x::GlobalRef)
+
+Get the value associated to `x`. For `GlobalRef`s, verify that `x` is indeed a constant.
+"""
 function get_const_primal_value(x::GlobalRef)
     isconst(x) || unhandled_feature("Non-constant GlobalRef not supported: $x")
     return getglobal(x.mod, x.name)
@@ -689,7 +726,11 @@ end
 is_active(::Union{Argument, ID}) = true
 is_active(::Any) = false
 
-# Get a bound on the pullback type, given a rule and associated primal types.
+"""
+    pullback_type(Trule, arg_types)
+
+Get a bound on the pullback type, given a rule and associated primal types.
+"""
 function pullback_type(Trule, arg_types)
     T = Core.Compiler.return_type(Tuple{Trule, map(fcodual_type, arg_types)...})
     return T <: Tuple ? _pullback_type(T) : Any
@@ -707,8 +748,16 @@ end
 __get_primal(x::CoDual) = primal(x)
 __get_primal(x) = x
 
-# Used in `make_ad_stmts!` method for `Expr(:call, ...)` and `Expr(:invoke, ...)`.
-@inline function __run_rvs_pass!(P::Type, ::Type{sig}, pb!!, ret_rev_data_ref::Ref, arg_rev_data_refs...) where {sig}
+"""
+    __run_rvs_pass!(
+        P::Type, ::Type{sig}, pb!!, ret_rev_data_ref::Ref, arg_rev_data_refs...
+    ) where {sig}
+
+Used in `make_ad_stmts!` method for `Expr(:call, ...)` and `Expr(:invoke, ...)`.
+"""
+@inline function __run_rvs_pass!(
+    P::Type, ::Type{sig}, pb!!, ret_rev_data_ref::Ref, arg_rev_data_refs...
+) where {sig}
     tuple_map(increment_if_ref!, arg_rev_data_refs, pb!!(ret_rev_data_ref[]))
     set_ret_ref_to_zero!!(P, ret_rev_data_ref)
     return nothing
@@ -790,15 +839,23 @@ _copy(x) = copy(x)
     return fwds.fwds_oc.oc(uf_args...)::CoDual, fwds.pb
 end
 
-# If isva, inputs (5.0, (4.0, 3.0)) are transformed into (5.0, 4.0, 3.0).
+"""
+    __flatten_varargs(::Val{isva}, args, ::Val{nvargs}) where {isva, nvargs}
+
+If isva, inputs (5.0, (4.0, 3.0)) are transformed into (5.0, 4.0, 3.0).
+"""
 function __flatten_varargs(::Val{isva}, args, ::Val{nvargs}) where {isva, nvargs}
     isva || return args
     last_el = isa(args[end], NoRData) ? ntuple(n -> NoRData(), nvargs) : args[end]
     return (args[1:end-1]..., last_el...)
 end
 
-# If isva and nargs=2, then inputs `(CoDual(5.0, 0.0), CoDual(4.0, 0.0), CoDual(3.0, 0.0))`
-# are transformed into `(CoDual(5.0, 0.0), CoDual((5.0, 4.0), (0.0, 0.0)))`.
+"""
+    __unflatten_codual_varargs(::Val{isva}, args, ::Val{nargs}) where {isva, nargs}
+
+If isva and nargs=2, then inputs `(CoDual(5.0, 0.0), CoDual(4.0, 0.0), CoDual(3.0, 0.0))`
+are transformed into `(CoDual(5.0, 0.0), CoDual((5.0, 4.0), (0.0, 0.0)))`.
+"""
 function __unflatten_codual_varargs(::Val{isva}, args, ::Val{nargs}) where {isva, nargs}
     isva || return args
     group_primal = map(primal, args[nargs:end])
@@ -819,9 +876,13 @@ _is_primitive(C::Type, sig::Type) = is_primitive(C, sig)
 
 const RuleMC{A, R} = MistyClosure{OpaqueClosure{A, R}}
 
-# Compute the concrete type of the rule that will be returned from `build_rrule`. This is
-# important for performance in dynamic dispatch, and to ensure that recursion works
-# properly.
+"""
+    rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where {C}
+
+Compute the concrete type of the rule that will be returned from `build_rrule`. This is
+important for performance in dynamic dispatch, and to ensure that recursion works
+properly.
+"""
 function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where {C}
 
     if _is_primitive(C, sig_or_mi)
@@ -979,7 +1040,12 @@ function build_rrule(
     end
 end
 
-# Used by `build_rrule`, and the various debugging tools: primal_ir, fwds_ir, adjoint_ir.
+"""
+    generate_ir(
+        interp::MooncakeInterpreter, sig_or_mi; debug_mode=false, do_inline=true
+    )
+Used by `build_rrule`, and the various debugging tools: primal_ir, fwds_ir, adjoint_ir.
+"""
 function generate_ir(
     interp::MooncakeInterpreter, sig_or_mi; debug_mode=false, do_inline=true
 )
@@ -1022,25 +1088,37 @@ function generate_ir(
     return DerivedRuleInfo(ir, opt_fwd_ir, opt_rvs_ir, shared_data, info, isva)
 end
 
-# Given an `OpaqueClosure` `oc`, create a new `OpaqueClosure` of the same type, but with new
-# captured variables. This is needed for efficiency reasons -- if `build_rrule` is called
-# repeatedly with the same signature and intepreter, it is important to avoid recompiling
-# the `OpaqueClosure`s that it produces multiple times, because it can be quite expensive to
-# do so.
-@eval function replace_captures(oc::Toc, new_captures) where {Toc<:OpaqueClosure}
+"""
+    replace_captures(oc::Toc, new_captures) where {Toc<:OpaqueClosure}
+
+Given an `OpaqueClosure` `oc`, create a new `OpaqueClosure` of the same type, but with new
+captured variables. This is needed for efficiency reasons -- if `build_rrule` is called
+repeatedly with the same signature and intepreter, it is important to avoid recompiling
+the `OpaqueClosure`s that it produces multiple times, because it can be quite expensive to
+do so.
+"""
+function replace_captures(oc::Toc, new_captures) where {Toc<:OpaqueClosure}
+    return __replace_captures_internal(oc, new_captures)
+end
+
+@eval function __replace_captures_internal(oc::Toc, new_captures) where {Toc<:OpaqueClosure}
     return $(Expr(
         :new, :(Toc), :new_captures, :(oc.world), :(oc.source), :(oc.invoke), :(oc.specptr)
     ))
 end
 
-# Wrapper for `MistyClosure`s.
+"""
+    replace_captures(mc::Tmc, new_captures) where {Tmc<:MistyClosure}
+
+Same as `replace_captures` for `Core.OpaqueClosure`s, but returns a new `MistyClosure`.
+"""
 function replace_captures(mc::Tmc, new_captures) where {Tmc<:MistyClosure}
     return Tmc(replace_captures(mc.oc, new_captures), mc.ir)
 end
 
 const ADStmts = Vector{Tuple{ID, Vector{ADStmtInfo}}}
 
-#=
+"""
     create_comms_insts!(ad_stmts_blocks::ADStmts, info::ADInfo)
 
 This function produces code which can be inserted into the forwards-pass and reverse-pass at
@@ -1062,7 +1140,7 @@ For each basic block represented in `ADStmts`:
 Returns two a `Tuple{Vector{IDInstPair}, Vector{IDInstPair}`. The nth element of each
 `Vector` corresponds to the instructions to be inserted into the forwards- and reverse
 passes resp. for the nth block in `ad_stmts_blocks`.
-=#
+"""
 function create_comms_insts!(ad_stmts_blocks::ADStmts, info::ADInfo)
     insts = map(ad_stmts_blocks) do (_, ad_stmts)
 
@@ -1101,11 +1179,11 @@ function create_comms_insts!(ad_stmts_blocks::ADStmts, info::ADInfo)
     return map(first, insts), map(last, insts)
 end
 
-#=
+"""
     forwards_pass_ir(ir::BBCode, ad_stmts_blocks::ADStmts, info::ADInfo, Tshared_data)
 
 Produce the IR associated to the `OpaqueClosure` which runs most of the forwards-pass.
-=#
+"""
 function forwards_pass_ir(
     ir::BBCode, ad_stmts_blocks::ADStmts, fwds_comms_insts, info::ADInfo, Tshared_data
 )
@@ -1171,11 +1249,18 @@ function forwards_pass_ir(
     return remove_unreachable_blocks!(ir)
 end
 
-# Going via this function, rather than just calling push!, makes it very straightforward to
-# figure out much time is spent pushing to the block stack when profiling AD.
+"""
+    __push_blk_stack!(block_stack::BlockStack, id::Int32)
+
+Equivalent to `push!(block_stack, id)`. Going via this function, rather than just calling
+push! directly, is helpful for debugging and performance analysis -- it makes it very
+straightforward to figure out much time is spent pushing to the block stack when profiling.
+"""
 @inline __push_blk_stack!(block_stack::BlockStack, id::Int32) = push!(block_stack, id)
 
-@inline function __assemble_lazy_zero_rdata(r::Ref{T}, args::Vararg{CoDual, N}) where {T<:Tuple, N}
+@inline function __assemble_lazy_zero_rdata(
+    r::Ref{T}, args::Vararg{CoDual, N}
+) where {T<:Tuple, N}
     r[] = __make_tuples(T, args)
     return nothing
 end
@@ -1187,11 +1272,11 @@ end
     return Expr(:call, tuple, lazy_exprs...)
 end
 
-#=
+"""
     pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, Tshared_data)
 
 Produce the IR associated to the `OpaqueClosure` which runs most of the pullback.
-=#
+"""
 function pullback_ir(
     ir::BBCode, Tret, ad_stmts_blocks::ADStmts, pb_comms_insts, info::ADInfo, Tshared_data
 )
@@ -1333,14 +1418,14 @@ function pullback_ir(
     return remove_unreachable_blocks!(_sort_blocks!(pb_ir))
 end
 
-#=
+"""
     conclude_rvs_block(
         blk::BBlock, pred_ids::Vector{ID}, pred_is_unique_pred::Bool, info::ADInfo
     )
 
 Generates code which is inserted at the end of each counterpart block in the reverse-pass.
 Handles phi nodes, and choosing the correct next block to switch to.
-=#
+"""
 function conclude_rvs_block(
     blk::BBlock, pred_ids::Vector{ID}, pred_is_unique_pred::Bool, info::ADInfo
 )
@@ -1371,21 +1456,29 @@ function conclude_rvs_block(
     return vcat(deref_stmts, switch), new_blocks
 end
 
-# Helper functionality for conclude_rvs_block.
+"""
+    __get_value(edge::ID, x::IDPhiNode)
+
+Helper functionality for conclude_rvs_block.
+"""
 function __get_value(edge::ID, x::IDPhiNode)
     edge in x.edges || return nothing
     n = only(findall(==(edge), x.edges))
     return isassigned(x.values, n) ? x.values[n] : nothing
 end
 
-# Helper, used in conclude_rvs_block.
+"""
+    __deref_and_zero(::Type{P}, x::Ref) where {P}
+
+Helper, used in conclude_rvs_block.
+"""
 @inline function __deref_and_zero(::Type{P}, x::Ref) where {P}
     t = x[]
     x[] = Mooncake.zero_like_rdata_from_type(P)
     return t
 end
 
-#=
+"""
     rvs_phi_block(pred_id::ID, rdata_ids::Vector{ID}, values::Vector{Any}, info::ADInfo)
 
 Produces a `BBlock` which runs the reverse-pass for the edge associated to `pred_id` in a
@@ -1412,7 +1505,7 @@ on.
 
 The same ideas apply if `pred_id` were `#3`. The block would end with `#3`, and there would
 be two `increment_ref!` calls because both `%5` and `_2` are not constants.
-=#
+"""
 function rvs_phi_block(pred_id::ID, rdata_ids::Vector{ID}, values::Vector{Any}, info::ADInfo)
     @assert length(rdata_ids) == length(values)
     inc_stmts = map(rdata_ids, values) do id, val
@@ -1423,7 +1516,7 @@ function rvs_phi_block(pred_id::ID, rdata_ids::Vector{ID}, values::Vector{Any}, 
     return BBlock(ID(), vcat(inc_stmts, goto_stmt))
 end
 
-#=
+"""
     make_switch_stmts(
         pred_ids::Vector{ID}, target_ids::Vector{ID}, pred_is_unique_pred::Bool, info::ADInfo
     )
@@ -1445,7 +1538,7 @@ switch(
 
 In words: `make_switch_stmts` emits code which jumps to whichever block preceded the current
 block during the forwards-pass.
-=#
+"""
 function make_switch_stmts(
     pred_ids::Vector{ID}, target_ids::Vector{ID}, pred_is_unique_pred::Bool, info::ADInfo
 )
@@ -1480,15 +1573,23 @@ end
 function make_switch_stmts(pred_ids::Vector{ID}, pred_is_unique_pred::Bool, info::ADInfo)
     return make_switch_stmts(pred_ids, pred_ids, pred_is_unique_pred, info)
 end
+"""
+    __pop_blk_stack!(block_stack::BlockStack)
 
-# Going via this function, rather than just calling pop! directly, makes it easy to figure
-# out how much time is spent popping the block stack when profiling performance.
+Equivalent to `pop!(block_stack)`. Going via this function, rather than just calling `pop!`
+directly, makes it easy to figure out how much time is spent popping the block stack when
+profiling performance, and to know that this function was hit when debugging.
+"""
 @inline __pop_blk_stack!(block_stack::BlockStack) = pop!(block_stack)
 
-# Helper function emitted by `make_switch_stmts`.
+"""
+    __switch_case(id::Int32, predecessor_id::Int32)
+
+Helper function emitted by `make_switch_stmts`.
+"""
 __switch_case(id::Int32, predecessor_id::Int32) = !(id === predecessor_id)
 
-#=
+"""
     DynamicDerivedRule(interp::MooncakeInterpreter, debug_mode::Bool)
 
 For internal use only.
@@ -1497,7 +1598,7 @@ A callable data structure which, when invoked, calls an rrule specific to the dy
 of its arguments. Stores rules in an internal cache to avoid re-deriving.
 
 This is used to implement dynamic dispatch.
-=#
+"""
 struct DynamicDerivedRule{V}
     cache::V
     debug_mode::Bool
@@ -1517,7 +1618,7 @@ function (dynamic_rule::DynamicDerivedRule)(args::Vararg{Any, N}) where {N}
     return rule(args...)
 end
 
-#=
+"""
     LazyDerivedRule(interp, mi::Core.MethodInstance, debug_mode::Bool)
 
 For internal use only.
@@ -1534,7 +1635,7 @@ Note: the signature of the primal for which this is a rule is stored in the type
 reason to keep this around is for debugging -- it is very helpful to have this type visible
 in the stack trace when something goes wrong, as it allows you to trivially determine which
 bit of your code is the culprit.
-=#
+"""
 mutable struct LazyDerivedRule{primal_sig, Trule}
     debug_mode::Bool
     mi::Core.MethodInstance
