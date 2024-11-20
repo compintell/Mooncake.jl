@@ -62,4 +62,19 @@ In forward mode we shouldn't have to modify anything but `ir.stmts`.
 Do line by line transformation of the statements and then possibly refresh the CFG.
 
 Example of line-by-line transformations are in `make_ad_stmts!`.
-The `IRCode` nodes are not explicitly documented in <https://docs.julialang.org/en/v1/devdocs/ast/#Lowered-form> or <https://docs.julialang.org/en/v1/devdocs/ssair/#Main-SSA-data-structure>.
+The `IRCode` nodes are not explicitly documented in <https://docs.julialang.org/en/v1/devdocs/ast/#Lowered-form> or <https://docs.julialang.org/en/v1/devdocs/ssair/#Main-SSA-data-structure>. Might need completion of official docs, but Mooncake docs in the meantime.
+
+Inlining pass can prevent us from using high-level rules by inlining the function (e.g. unrolling a loop).
+The contexts in [`interpreter/contexts.jl`](../../src/interpreter/contexts.jl) are `MinimalCtx` (necessary for AD to work) and `DefaultCtx` (ensure that we hit all of the rules).
+Distinction between rules is not well maintained in Mooncake at the moment.
+The function `is_primitive` defines whether we should recurse into the function during AD and break it into parts, or look for a rule.
+Typically if we define a rule we should set `is_primitive` to `true` for the corresponding function.
+
+In [`interpreter/abstract_interpretation.jl`](../../src/interpreter/abstract_interpretation.jl) we interact with the Julia compiler.
+The most important part is preventing the compiler from inlining.
+
+The `MooncakeInterpreter` subtypes `Core.Compiler.AbstractInterpreter` to interpret Julia code.
+There are also Cthulhu, Enzyme, JET interpreters.
+Tells you how things get run.
+
+For second order we will need to adapt IR lookup to misty closures.
