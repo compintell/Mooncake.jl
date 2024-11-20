@@ -1,4 +1,4 @@
-#=
+"""
     SharedDataPairs()
 
 A data structure used to manage the captured data in the `OpaqueClosures` which implement
@@ -9,26 +9,26 @@ of the `pairs` field of this data structure means that `data` will be available 
 This is achieved by storing all of the data in the `pairs` field in the captured tuple which
 is passed to an `OpaqueClosure`, and extracting this data into registers associated to the
 corresponding `ID`s.
-=#
+"""
 struct SharedDataPairs
     pairs::Vector{Tuple{ID, Any}}
     SharedDataPairs() = new(Tuple{ID, Any}[])
 end
 
-#=
+"""
     add_data!(p::SharedDataPairs, data)::ID
 
 Puts `data` into `p`, and returns the `id` associated to it. This `id` should be assumed to
 be available during the forwards- and reverse-passes of AD, and it should further be assumed
 that the value associated to this `id` is always `data`.
-=#
+"""
 function add_data!(p::SharedDataPairs, data)::ID
     id = ID()
     push!(p.pairs, (id, data))
     return id
 end
 
-#=
+"""
     shared_data_tuple(p::SharedDataPairs)::Tuple
 
 Create the tuple that will constitute the captured variables in the forwards- and reverse-
@@ -42,10 +42,10 @@ then the output of this function is
 ```julia
 (5.0, "hello")
 ```
-=#
+"""
 shared_data_tuple(p::SharedDataPairs)::Tuple = tuple(map(last, p.pairs)...)
 
-#=
+"""
     shared_data_stmts(p::SharedDataPairs)::Vector{IDInstPair}
 
 Produce a sequence of id-statment pairs which will extract the data from
@@ -62,7 +62,7 @@ IDInstPair[
     (ID(3), new_inst(:(getfield(_1, 2)))),
 ]
 ```
-=#
+"""
 function shared_data_stmts(p::SharedDataPairs)::Vector{IDInstPair}
     return map(enumerate(p.pairs)) do (n, p)
         return (p[1], new_inst(Expr(:call, get_shared_data_field, Argument(1), n)))
@@ -71,16 +71,16 @@ end
 
 @inline get_shared_data_field(shared_data, n) = getfield(shared_data, n)
 
-#=
+"""
 The block stack is the stack used to keep track of which basic blocks are visited on the
 forwards pass, and therefore which blocks need to be visited on the reverse pass. There is
 one block stack per derived rule.
 By using Int32, we assume that there aren't more than `typemax(Int32)` unique basic blocks
 in a given function, which ought to be reasonable.
-=#
+"""
 const BlockStack = Stack{Int32}
 
-#=
+"""
     ADInfo
 
 This data structure is used to hold "global" information associated to a particular call to
@@ -119,7 +119,7 @@ codegen which produces the forwards- and reverse-passes.
     To achieve this, we construct a `LazyZeroRData` for each of the arguments on the
     forwards-pass, and make use of it on the reverse-pass. This field is the ID that will be
     associated to this information.
-=#
+"""
 struct ADInfo
     interp::MooncakeInterpreter
     block_stack_id::ID
@@ -176,20 +176,36 @@ function ADInfo(interp::MooncakeInterpreter, ir::BBCode, debug_mode::Bool)
     return ADInfo(interp, arg_types, ssa_insts, is_used_dict, debug_mode, zero_lazy_rdata_ref)
 end
 
-# Shortcut for `add_data!(info.shared_data_pairs, data)`.
+"""
+    add_data!(info::ADInfo, data)::ID
+
+Equivalent to `add_data!(info.shared_data_pairs, data)`.
+"""
 add_data!(info::ADInfo, data)::ID = add_data!(info.shared_data_pairs, data)
 
-# Returns `x` if it is a singleton, or the `ID` of the ssa which will contain it on the
-# forwards- and reverse-passes. The reason for this is that if something is a singleton, it
-# can be placed directly in the IR.
+"""
+    add_data_if_not_singleton!(p::Union{ADInfo, SharedDataPairs}, x)
+
+Returns `x` if it is a singleton, or the `ID` of the ssa which will contain it on the
+forwards- and reverse-passes. The reason for this is that if something is a singleton, it
+can be inserted directly into the IR.
+"""
 function add_data_if_not_singleton!(p::Union{ADInfo, SharedDataPairs}, x)
     return Base.issingletontype(_typeof(x)) ? x : add_data!(p, x)
 end
 
-# Returns `true` if `id` is used by any of the lines in the ir, false otherwise.
+"""
+    is_used(info::ADInfo, id::ID)::Bool
+
+Returns `true` if `id` is used by any of the lines in the ir, false otherwise.
+"""
 is_used(info::ADInfo, id::ID)::Bool = info.is_used_dict[id]
 
-# Returns the static / inferred type associated to `x`.
+"""
+    get_primal_type(info::ADInfo, x)
+
+Returns the static / inferred type associated to `x`.
+"""
 get_primal_type(info::ADInfo, x::Argument) = info.arg_types[x]
 get_primal_type(info::ADInfo, x::ID) = _type(info.ssa_insts[x].type)
 get_primal_type(::ADInfo, x::QuoteNode) = _typeof(x.value)
@@ -198,21 +214,31 @@ function get_primal_type(::ADInfo, x::GlobalRef)
     return isconst(x) ? _typeof(getglobal(x.mod, x.name)) : x.binding.ty
 end
 
-# Returns the `ID` associated to the line in the reverse pass which will contain the
-# reverse data for `x`. If `x` is not an `Argument` or `ID`, then `nothing` is returned.
+"""
+    get_rev_data_id(info::ADInfo, x)
+
+Returns the `ID` associated to the line in the reverse pass which will contain the
+reverse data for `x`. If `x` is not an `Argument` or `ID`, then `nothing` is returned.
+"""
 get_rev_data_id(info::ADInfo, x::Argument) = info.arg_rdata_ref_ids[x]
 get_rev_data_id(info::ADInfo, x::ID) = info.ssa_rdata_ref_ids[x]
 get_rev_data_id(::ADInfo, ::Any) = nothing
 
-# Create the statements which initialise the reverse-data `Ref`s.
-function reverse_data_ref_stmts(info::ADInfo)
-    arg_stmts = [(id, __ref(_type(info.arg_types[k]))) for (k, id) in info.arg_rdata_ref_ids]
-    ssa_stmts = [(id, __ref(_type(info.ssa_insts[k].type))) for (k, id) in info.ssa_rdata_ref_ids]
-    return vcat(arg_stmts, ssa_stmts)
-end
+"""
+    reverse_data_ref_stmts(info::ADInfo)
 
-# Helper for reverse_data_ref_stmts.
-__ref(P) = new_inst(Expr(:call, __make_ref, P))
+Create the statements which initialise the reverse-data `Ref`s. These are of the form
+"""
+function reverse_data_ref_stmts(info::ADInfo)
+    return vcat(
+        map(collect(info.arg_rdata_ref_ids)) do (k, id)
+            (id, new_inst(Expr(:call, __make_ref, _type(info.arg_types[k]))))
+        end,
+        map(collect(info.ssa_rdata_ref_ids)) do (k, id)
+            (id, new_inst(Expr(:call, __make_ref, _type(info.ssa_insts[k]))))
+        end,
+    )
+end
 
 # Helper for reverse_data_ref_stmts.
 @inline @generated function __make_ref(p::Type{P}) where {P}

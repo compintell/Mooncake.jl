@@ -108,15 +108,6 @@ A Union of the possible types of a terminator node.
 const Terminator = Union{Switch, IDGotoIfNot, IDGotoNode, ReturnNode}
 
 """
-    const InstVector = Vector{NewInstruction}
-
-Note: the `CC.NewInstruction` type is used to represent instructions because it has the
-correct fields. While it is only used to represent new instrucdtions in `Core.Compiler`, it
-is used to represent all instructions in `BBCode`.
-"""
-const InstVector = Vector{NewInstruction}
-
-"""
     BBlock(id::ID, stmt_ids::Vector{ID}, stmts::InstVector)
 
 A basic block data structure (not called `BasicBlock` to avoid accidental confusion with
@@ -627,40 +618,6 @@ _to_ssas(d::Dict, x::IDGotoNode) = GotoNode(d[x.label].id)
 _to_ssas(d::Dict, x::IDGotoIfNot) = GotoIfNot(get(d, x.cond, x.cond), d[x.dest].id)
 
 """
-    _lines_to_blocks(insts::InstVector, cfg::CC.CFG)::InstVector
-
-Replaces references to blocks by their line-number, with references to their block numbers.
-
-For example, if you encounter a `Compiler.GotoNode` in a `Compiler.CodeInfo`, its `label`
-field is an `Int` which refers to the line to jump to, whereas such a `Compiler.GotoNode`
-encountered in a `Compiler.IRCode` refers to a basic block number. In particular, if basic
-block number 5 begins at line 32, then a `Compiler.GotoNode` which refers to this block
-will contain the value `32` if found in a `Compiler.CodeInfo`, and `5` if found in a
-`Compiler.IRCode`. In this example, this function will replace `32` with `5`.
-"""
-function _lines_to_blocks(insts::InstVector, cfg::CC.CFG)::InstVector
-    return map(inst -> __lines_to_blocks(cfg, inst), insts)
-end
-
-function __lines_to_blocks(cfg::CC.CFG, inst::NewInstruction)
-    return NewInstruction(inst; stmt=__lines_to_blocks(cfg, inst.stmt))
-end
-function __lines_to_blocks(cfg::CC.CFG, stmt::GotoNode)
-    return GotoNode(CC.block_for_inst(cfg, stmt.label))
-end
-function __lines_to_blocks(cfg::CC.CFG, stmt::GotoIfNot)
-    return GotoIfNot(stmt.cond, CC.block_for_inst(cfg, stmt.dest))
-end
-function __lines_to_blocks(cfg::CC.CFG, stmt::PhiNode)
-    return PhiNode(Int32[CC.block_for_inst(cfg, Int(e)) for e in stmt.edges], stmt.values)
-end
-function __lines_to_blocks(cfg::CC.CFG, stmt::Expr)
-    Meta.isexpr(stmt, :enter) && throw(error("Cannot handle enter yet"))
-    return stmt
-end
-__lines_to_blocks(::CC.CFG, stmt) = stmt
-
-"""
     _remove_double_edges(ir::BBCode)::BBCode
 
 If the `dest` field of an `IDGotoIfNot` node in block `n` of `ir` points towards the `n+1`th
@@ -924,3 +881,27 @@ function _remove_unreachable_blocks!(blks::Vector{BBlock})
 
     return remaining_blks
 end
+
+"""
+    inc_args(stmt)
+
+Increment by `1` the `n` field of any `Argument`s present in `stmt`.
+"""
+inc_args(x::Expr) = Expr(x.head, map(__inc, x.args)...)
+inc_args(x::ReturnNode) = isdefined(x, :val) ? ReturnNode(__inc(x.val)) : x
+inc_args(x::IDGotoIfNot) = IDGotoIfNot(__inc(x.cond), x.dest)
+inc_args(x::IDGotoNode) = x
+function inc_args(x::IDPhiNode)
+    new_values = Vector{Any}(undef, length(x.values))
+    for n in eachindex(x.values)
+        if isassigned(x.values, n)
+            new_values[n] = __inc(x.values[n])
+        end
+    end
+    return IDPhiNode(x.edges, new_values)
+end
+inc_args(::Nothing) = nothing
+inc_args(x::GlobalRef) = x
+
+__inc(x::Argument) = Argument(x.n + 1)
+__inc(x) = x

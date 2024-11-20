@@ -219,7 +219,9 @@ if VERSION >= v"1.11-"
 """
     lift_memoryrefget_and_memoryrefset_builtins(inst)
 
-Replaces memoryrefget -> lmemoryrefget and memoryrefset! -> lmemoryrefset!.
+Replaces memoryrefget -> lmemoryrefget and memoryrefset! -> lmemoryrefset! if their final
+two arguments (`ordering` and `boundscheck`) are constants. See [`lmemoryrefget`] and
+[`lmemoryrefset!`](@ref) for more context.
 """
 function lift_memoryrefget_and_memoryrefset_builtins(inst)
     Meta.isexpr(inst, :call) || return inst

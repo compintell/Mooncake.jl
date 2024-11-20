@@ -1,4 +1,18 @@
-# the field containing the instructions in `IRCode` changed name in 1.11 from inst to stmt.
+"""
+    const InstVector = Vector{NewInstruction}
+
+Note: the `CC.NewInstruction` type is used to represent instructions because it has the
+correct fields. While it is only used to represent new instrucdtions in `Core.Compiler`, it
+is used to represent all instructions in `BBCode`.
+"""
+const InstVector = Vector{NewInstruction}
+
+"""
+    stmt(ir::CC.InstructionStream)
+
+Get the field containing the instructions in `ir`. This changed name in 1.11 from `inst` to
+`stmt`.
+"""
 stmt(ir::CC.InstructionStream) = @static VERSION < v"1.11.0-rc4" ? ir.inst : ir.stmt
 
 """
@@ -30,7 +44,9 @@ function ircode(
     return CC.IRCode(stmts, cfg, linetable, argtypes, meta, CC.VarState[])
 end
 
-#=
+"""
+    __line_numbers_to_block_numbers!(insts::Vector{Any}, cfg::CC.CFG)
+
 Converts any edges in `GotoNode`s, `GotoIfNot`s, `PhiNode`s, and `:enter` expressions which
 refer to line numbers into references to block numbers. The `cfg` provides the information
 required to perform this conversion.
@@ -39,7 +55,7 @@ For context, `CodeInfo` objects have references to line numbers, while `IRCode` 
 block numbers.
 
 This code is copied over directly from the body of `Core.Compiler.inflate_ir!`.
-=#
+"""
 function __line_numbers_to_block_numbers!(insts::Vector{Any}, cfg::CC.CFG)
     for i in eachindex(insts)
         stmt = insts[i]
@@ -59,9 +75,21 @@ function __line_numbers_to_block_numbers!(insts::Vector{Any}, cfg::CC.CFG)
     return insts
 end
 
-#=
+"""
+    _instructions_to_blocks(insts::InstVector, cfg::CC.CFG)::InstVector
+
+Pulls out the instructions from `insts`, and calls `__line_numbers_to_block_numbers!`.
+"""
+function _lines_to_blocks(insts::InstVector, cfg::CC.CFG)::InstVector
+    stmts = __line_numbers_to_block_numbers!(map(x -> x.stmt, insts), cfg)
+    return map((inst, stmt) -> NewInstruction(inst; stmt), insts, stmts)
+end
+
+"""
+    __insts_to_instruction_stream(insts::Vector{Any})
+
 Produces an instruction stream whose
-- `inst` field is `insts`,
+- `stmt` (v1.11 and up) / `inst` (v1.10) field is `insts`,
 - `type` field is all `Any`,
 - `info` field is all `Core.Compiler.NoCallInfo`,
 - `line` field is all `Int32(1)`, and
@@ -69,7 +97,7 @@ Produces an instruction stream whose
 
 As such, if you wish to ensure that your `IRCode` prints nicely, you should ensure that its
 linetable field has at least one element.
-=#
+"""
 function __insts_to_instruction_stream(insts::Vector{Any})
     return CC.InstructionStream(
         insts,
@@ -270,30 +298,6 @@ end
 Throw an `UnhandledLanguageFeatureException` with message `msg`.
 """
 unhandled_feature(msg::String) = throw(UnhandledLanguageFeatureException(msg))
-
-"""
-    inc_args(stmt)
-
-Increment by `1` the `n` field of any `Argument`s present in `stmt`.
-"""
-inc_args(x::Expr) = Expr(x.head, map(__inc, x.args)...)
-inc_args(x::ReturnNode) = isdefined(x, :val) ? ReturnNode(__inc(x.val)) : x
-inc_args(x::IDGotoIfNot) = IDGotoIfNot(__inc(x.cond), x.dest)
-inc_args(x::IDGotoNode) = x
-function inc_args(x::IDPhiNode)
-    new_values = Vector{Any}(undef, length(x.values))
-    for n in eachindex(x.values)
-        if isassigned(x.values, n)
-            new_values[n] = __inc(x.values[n])
-        end
-    end
-    return IDPhiNode(x.edges, new_values)
-end
-inc_args(::Nothing) = nothing
-inc_args(x::GlobalRef) = x
-
-__inc(x::Argument) = Argument(x.n + 1)
-__inc(x) = x
 
 """
     new_inst(stmt, type=Any, flag=CC.IR_FLAG_REFINED)::NewInstruction
