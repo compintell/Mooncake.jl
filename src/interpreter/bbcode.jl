@@ -283,9 +283,13 @@ function compute_all_successors(ir::BBCode)::Dict{ID, Vector{ID}}
     return _compute_all_successors(ir.blocks)
 end
 
-# Internal method. Just requires that a Vector of BBlocks are passed. This method is easier
-# to construct test cases for because there is no need to construct all the other stuff that
-# goes into a `BBCode`.
+"""
+    _compute_all_successors(blks::Vector{BBlock})::Dict{ID, Vector{ID}}
+
+Internal method implementing [`compute_all_successors`](@ref). Just requires that a Vector
+of BBlocks are passed. This method is easier to construct test cases for because there is no
+need to construct all the other stuff that goes into a `BBCode`.
+"""
 function _compute_all_successors(blks::Vector{BBlock})::Dict{ID, Vector{ID}}
     succs = map(enumerate(blks)) do (n, blk)
         return successors(terminator(blk), n, blks, n == length(blks))
@@ -312,6 +316,13 @@ function compute_all_predecessors(ir::BBCode)::Dict{ID, Vector{ID}}
     return _compute_all_predecessors(ir.blocks)
 end
 
+"""
+    _compute_all_predecessors(blks::Vector{BBlock})::Dict{ID, Vector{ID}}
+
+Internal method implementing [`compute_all_predecessors`](@ref). This method is easier to
+construct test cases for because it only requires the collection of `BBlocks`, not all of
+the other stuff that goes into a `BBCode`.
+"""
 function _compute_all_predecessors(blks::Vector{BBlock})::Dict{ID, Vector{ID}}
 
     successor_map = _compute_all_successors(blks)
