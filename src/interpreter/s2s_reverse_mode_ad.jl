@@ -243,7 +243,7 @@ end
 """
     __make_ref(p::Type{P}) where {P}
 
-Helper for [reverse_data_ref_stmts](@ref). Constructs a `Ref` whose element type is the
+Helper for [`reverse_data_ref_stmts`](@ref). Constructs a `Ref` whose element type is the
 [`zero_like_rdata_type`](@ref) for `P`, and whose element is the zero-like rdata for `P`.
 """
 @inline @generated function __make_ref(p::Type{P}) where {P}

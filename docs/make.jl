@@ -19,6 +19,9 @@ makedocs(
                 ),
             )
         ),
+        size_threshold_ignore=[
+            joinpath("developer_documentation", "internal_docstrings.md"),
+        ],
     ),
     modules=[Mooncake],
     checkdocs=:none,
