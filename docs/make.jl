@@ -40,6 +40,7 @@ makedocs(
         "Developer Documentation" => [
             "Running Tests Locally" => "running_tests_locally.md",
             "Developer Tools" => "developer_tools.md",
+            "compilation_process.md",
         ],
         "Known Limitations" => "known_limitations.md",
     ]
