@@ -40,13 +40,11 @@ jobs:
           'rrules/twice_precision',
         ]
         version:
+          - 'lts'
           - '1'
         arch:
           - x64
         include:
-          - test_group: 'basic'
-            version: '1.10'
-            arch: x64
           - test_group: 'basic'
             version: '1.10'
             arch: x86
