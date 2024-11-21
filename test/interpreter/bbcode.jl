@@ -278,5 +278,7 @@ end
             Mooncake.inc_args(IDPhiNode(ids, Any[Argument(1), 4])),
             IDPhiNode(ids, Any[Argument(2), 4]),
         )
+        @test Mooncake.inc_args(nothing) === nothing
+        @test Mooncake.inc_args(GlobalRef(Base, :sin)) == GlobalRef(Base, :sin)
     end
 end
