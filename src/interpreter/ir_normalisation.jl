@@ -8,7 +8,8 @@ unchanged, but makes AD more straightforward. In particular, replace
 3. `:splatnew` Expr`s with `:call`s to `Mooncake._splat_new_`,
 4. `Core.IntrinsicFunction`s with counterparts from `Mooncake.IntrinsicWrappers`,
 5. `getfield(x, 1)` with `lgetfield(x, Val(1))`, and related transformations,
-6. `gc_preserve_begin` / `gc_preserve_end` exprs so that memory release is delayed.
+6. `memoryrefget` calls to `lmemoryrefget` calls, and related transformations,
+7. `gc_preserve_begin` / `gc_preserve_end` exprs so that memory release is delayed.
 
 `spnames` are the names associated to the static parameters of `ir`. These are needed when
 handling `:foreigncall` expressions, in which it is not necessarily the case that all
@@ -218,7 +219,9 @@ if VERSION >= v"1.11-"
 """
     lift_memoryrefget_and_memoryrefset_builtins(inst)
 
-Replaces memoryrefget -> lmemoryrefget and memoryrefset! -> lmemoryrefset!.
+Replaces memoryrefget -> lmemoryrefget and memoryrefset! -> lmemoryrefset! if their final
+two arguments (`ordering` and `boundscheck`) are constants. See [`lmemoryrefget`] and
+[`lmemoryrefset!`](@ref) for more context.
 """
 function lift_memoryrefget_and_memoryrefset_builtins(inst)
     Meta.isexpr(inst, :call) || return inst

@@ -54,13 +54,6 @@ end
             Mooncake.UnhandledLanguageFeatureException, Mooncake.unhandled_feature("foo")
         )
     end
-    @testset "inc_args" begin
-        @test Mooncake.inc_args(Expr(:call, sin, Argument(4))) == Expr(:call, sin, Argument(5))
-        @test Mooncake.inc_args(ReturnNode(Argument(2))) == ReturnNode(Argument(3))
-        id = ID()
-        @test Mooncake.inc_args(IDGotoIfNot(Argument(1), id)) == IDGotoIfNot(Argument(2), id)
-        @test Mooncake.inc_args(IDGotoNode(id)) == IDGotoNode(id)
-    end
     @testset "replace_uses_with!" begin
         stmt = Expr(:call, sin, SSAValue(1))
         Mooncake.replace_uses_with!(stmt, SSAValue(1), 5.0)

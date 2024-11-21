@@ -901,9 +901,9 @@ Useful for implementation getfield-like rules for mutable structs, pointers, dic
 increment_rdata!!(t::T, r) where {T} = tangent(fdata(t), increment!!(rdata(t), r))::T
 
 """
-    zero_tangent(p, ::NoFData)
+    zero_tangent(primal, fdata)
 
-
+Equivalent to `tangent(fdata, rdata(zero_tangent(primal)))`.
 """
 zero_tangent(p, ::NoFData) = zero_tangent(p)
 

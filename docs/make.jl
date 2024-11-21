@@ -19,6 +19,9 @@ makedocs(
                 ),
             )
         ),
+        size_threshold_ignore=[
+            joinpath("developer_documentation", "internal_docstrings.md"),
+        ],
     ),
     modules=[Mooncake],
     checkdocs=:none,
@@ -28,20 +31,21 @@ makedocs(
     pages = [
         "Mooncake.jl" => "index.md",
         "Understanding Mooncake.jl" => [
-            "Introduction" => "understanding_intro.md",
-            "Algorithmic Differentiation" => "algorithmic_differentiation.md",
-            "Mooncake.jl's Rule System" => "mathematical_interpretation.md",
+            joinpath("understanding_mooncake", "introduction.md"),
+            joinpath("understanding_mooncake", "algorithmic_differentiation.md"),
+            joinpath("understanding_mooncake", "rule_system.md"),
         ],
         "Utilities" => [
-            "Tools for Rules" => "tools_for_rules.md",
-            "Debug Mode" => "debug_mode.md",
-            "Debugging and MWEs" => "debugging_and_mwes.md",
+            joinpath("utilities", "tools_for_rules.md"),
+            joinpath("utilities", "debug_mode.md"),
+            joinpath("utilities", "debugging_and_mwes.md"),
         ],
         "Developer Documentation" => [
-            "Running Tests Locally" => "running_tests_locally.md",
-            "Developer Tools" => "developer_tools.md",
+            joinpath("developer_documentation", "running_tests_locally.md"),
+            joinpath("developer_documentation", "developer_tools.md"),
+            joinpath("developer_documentation", "internal_docstrings.md"),
         ],
-        "Known Limitations" => "known_limitations.md",
+        "known_limitations.md",
     ]
 )
 
