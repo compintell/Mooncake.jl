@@ -45,6 +45,8 @@ struct IDPhiNode
     values::Vector{Any}
 end
 
+Base.:(==)(x::IDPhiNode, y::IDPhiNode) = x.edges == y.edges && x.values == y.values
+
 Base.copy(node::IDPhiNode) = IDPhiNode(copy(node.edges), copy(node.values))
 
 """
