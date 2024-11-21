@@ -5,7 +5,7 @@ steps:
   - label: "Julia v1"
     plugins:
       - JuliaCI/julia#v1:
-          version: "1"
+          version: "{{matrix}}"
       - JuliaCI/julia-coverage#v1:
           dirs:
             - src
@@ -19,3 +19,6 @@ steps:
     env:
       LABEL: cuda
       TEST_TYPE: ext
+    matrix:
+      - "1"
+      - "lts"
