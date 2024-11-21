@@ -21,4 +21,4 @@ steps:
       TEST_TYPE: ext
     matrix:
       - "1"
-      - "lts"
+      - "LTS"
