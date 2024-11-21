@@ -45,6 +45,8 @@ struct IDPhiNode
     values::Vector{Any}
 end
 
+Base.:(==)(x::IDPhiNode, y::IDPhiNode) = x.edges == y.edges && x.values == y.values
+
 Base.copy(node::IDPhiNode) = IDPhiNode(copy(node.edges), copy(node.values))
 
 """
@@ -106,15 +108,6 @@ end
 A Union of the possible types of a terminator node.
 """
 const Terminator = Union{Switch, IDGotoIfNot, IDGotoNode, ReturnNode}
-
-"""
-    const InstVector = Vector{NewInstruction}
-
-Note: the `CC.NewInstruction` type is used to represent instructions because it has the
-correct fields. While it is only used to represent new instrucdtions in `Core.Compiler`, it
-is used to represent all instructions in `BBCode`.
-"""
-const InstVector = Vector{NewInstruction}
 
 """
     BBlock(id::ID, stmt_ids::Vector{ID}, stmts::InstVector)
@@ -283,9 +276,13 @@ function compute_all_successors(ir::BBCode)::Dict{ID, Vector{ID}}
     return _compute_all_successors(ir.blocks)
 end
 
-# Internal method. Just requires that a Vector of BBlocks are passed. This method is easier
-# to construct test cases for because there is no need to construct all the other stuff that
-# goes into a `BBCode`.
+"""
+    _compute_all_successors(blks::Vector{BBlock})::Dict{ID, Vector{ID}}
+
+Internal method implementing [`compute_all_successors`](@ref). This method is easier to
+construct test cases for because it only requires the collection of `BBlocks`, not all of
+the other stuff that goes into a `BBCode`.
+"""
 function _compute_all_successors(blks::Vector{BBlock})::Dict{ID, Vector{ID}}
     succs = map(enumerate(blks)) do (n, blk)
         return successors(terminator(blk), n, blks, n == length(blks))
@@ -312,6 +309,13 @@ function compute_all_predecessors(ir::BBCode)::Dict{ID, Vector{ID}}
     return _compute_all_predecessors(ir.blocks)
 end
 
+"""
+    _compute_all_predecessors(blks::Vector{BBlock})::Dict{ID, Vector{ID}}
+
+Internal method implementing [`compute_all_predecessors`](@ref). This method is easier to
+construct test cases for because it only requires the collection of `BBlocks`, not all of
+the other stuff that goes into a `BBCode`.
+"""
 function _compute_all_predecessors(blks::Vector{BBlock})::Dict{ID, Vector{ID}}
 
     successor_map = _compute_all_successors(blks)
@@ -363,8 +367,12 @@ Computes the `Core.Compiler.CFG` object associated to this `bb_code`.
 """
 control_flow_graph(bb_code::BBCode)::Core.Compiler.CFG = _control_flow_graph(bb_code.blocks)
 
-# Internal function, used to implement control_flow_graph, but easier to write test cases
-# for because there is no need to construct an ensure BBCode object.
+"""
+    _control_flow_graph(blks::Vector{BBlock})::Core.Compiler.CFG
+
+Internal function, used to implement [`control_flow_graph`](@ref). Easier to write test
+cases for because there is no need to construct an ensure BBCode object, just the `BBlock`s.
+"""
 function _control_flow_graph(blks::Vector{BBlock})::Core.Compiler.CFG
 
     # Get IDs of predecessors and successors.
@@ -418,7 +426,12 @@ function BBCode(ir::IRCode)
     return BBCode(ir, blocks)
 end
 
-# Convert an InstructionStream into a list of `NewInstruction`s.
+
+"""
+    new_inst_vec(x::CC.InstructionStream)
+
+Convert an `Compiler.InstructionStream` into a list of `Compiler.NewInstruction`s.
+"""
 function new_inst_vec(x::CC.InstructionStream)
     return map((v..., ) -> NewInstruction(v...), stmt(x), x.type, x.info, x.line, x.flag)
 end
@@ -427,19 +440,27 @@ end
 const SSAToIdDict = Dict{SSAValue, ID}
 const BlockNumToIdDict = Dict{Integer, ID}
 
-# Assigns an ID to each line in `stmts`, and replaces each instance of an `SSAValue` in each
-# line with the corresponding `ID`. For example, a call statement of the form
-# `Expr(:call, :f, %4)` is be replaced with `Expr(:call, :f, id_assigned_to_%4)`.
+"""
+    _ssas_to_ids(insts::InstVector)::Tuple{Vector{ID}, InstVector}
+
+Assigns an ID to each line in `stmts`, and replaces each instance of an `SSAValue` in each
+line with the corresponding `ID`. For example, a call statement of the form
+`Expr(:call, :f, %4)` is be replaced with `Expr(:call, :f, id_assigned_to_%4)`.
+"""
 function _ssas_to_ids(insts::InstVector)::Tuple{Vector{ID}, InstVector}
     ids = map(_ -> ID(), insts)
     val_id_map = SSAToIdDict(zip(SSAValue.(eachindex(insts)), ids))
     return ids, map(Base.Fix1(_ssa_to_ids, val_id_map), insts)
 end
 
-# Produce a new instance of `x` in which all instances of `SSAValue`s are replaced with
-# the `ID`s prescribed by `d`, all basic block numbers are replaced with the `ID`s
-# prescribed by `d`, and `GotoIfNot`, `GotoNode`, and `PhiNode` instances are replaced with
-# the corresponding `ID` versions.
+"""
+    _ssa_to_ids(d::SSAToIdDict, inst::NewInstruction)
+
+Produce a new instance of `inst` in which all instances of `SSAValue`s are replaced with
+the `ID`s prescribed by `d`, all basic block numbers are replaced with the `ID`s
+prescribed by `d`, and `GotoIfNot`, `GotoNode`, and `PhiNode` instances are replaced with
+the corresponding `ID` versions.
+"""
 function _ssa_to_ids(d::SSAToIdDict, inst::NewInstruction)
     return NewInstruction(inst; stmt=_ssa_to_ids(d, inst.stmt))
 end
@@ -462,7 +483,12 @@ end
 _ssa_to_ids(d::SSAToIdDict, x::GotoNode) = x
 _ssa_to_ids(d::SSAToIdDict, x::GotoIfNot) = GotoIfNot(get(d, x.cond, x.cond), x.dest)
 
-# Replace all integers corresponding to references to blocks with IDs.
+"""
+    _block_nums_to_ids(insts::InstVector, cfg::CC.CFG)::Tuple{Vector{ID}, InstVector}
+
+Assign to each basic block in `cfg` an `ID`. Replace all integers referencing block numbers
+in `insts` with the corresponding `ID`. Return the `ID`s and the updated instructions.
+"""
 function _block_nums_to_ids(insts::InstVector, cfg::CC.CFG)::Tuple{Vector{ID}, InstVector}
     ids = map(_ -> ID(), cfg.blocks)
     block_num_id_map = BlockNumToIdDict(zip(eachindex(cfg.blocks), ids))
@@ -498,7 +524,7 @@ collection of `GotoIfNot` nodes.
 function CC.IRCode(bb_code::BBCode)
     bb_code = _lower_switch_statements(bb_code)
     bb_code = _remove_double_edges(bb_code)
-    insts = _ids_to_line_positions(bb_code)
+    insts = _ids_to_line_numbers(bb_code)
     cfg =  control_flow_graph(bb_code)
     insts = _lines_to_blocks(insts, cfg)
     return IRCode(
@@ -517,8 +543,12 @@ function CC.IRCode(bb_code::BBCode)
     )
 end
 
-# Converts all `Switch`s into a semantically-equivalent collection of `GotoIfNot`s. See the
-# `Switch` docstring for an explanation of what is going on here.
+"""
+    _lower_switch_statements(bb_code::BBCode)
+
+Converts all `Switch`s into a semantically-equivalent collection of `GotoIfNot`s. See the
+`Switch` docstring for an explanation of what is going on here.
+"""
 function _lower_switch_statements(bb_code::BBCode)
     new_blocks = Vector{BBlock}(undef, 0)
     for block in bb_code.blocks
@@ -545,9 +575,13 @@ function _lower_switch_statements(bb_code::BBCode)
     return BBCode(bb_code, new_blocks)
 end
 
-# Returns a `Vector{Any}` of statements in which each `ID` has been replaced by either an
-# `SSAValue`, or an `Int64` / `Int32` which refers to an `SSAValue`.
-function _ids_to_line_positions(bb_code::BBCode)::InstVector
+"""
+    _ids_to_line_numbers(bb_code::BBCode)::InstVector
+
+For each statement in `bb_code`, returns a `NewInstruction` in which every `ID` is replaced
+by either an `SSAValue`, or an `Int64` / `Int32` which refers to an `SSAValue`.
+"""
+function _ids_to_line_numbers(bb_code::BBCode)::InstVector
 
     # Construct map from `ID`s to `SSAValue`s.
     block_ids = [b.id for b in bb_code.blocks]
@@ -561,7 +595,12 @@ function _ids_to_line_positions(bb_code::BBCode)::InstVector
     return [_to_ssas(id_to_ssa_map, stmt) for stmt in concatenate_stmts(bb_code)]
 end
 
-# Like `_to_ids`, but converts IDs to SSAValues / (integers corresponding to ssas).
+"""
+    _to_ssas(d::Dict, inst::NewInstruction)
+
+Like `_ssas_to_ids`, but in reverse. Converts IDs to SSAValues / (integers corresponding
+to ssas).
+"""
 _to_ssas(d::Dict, inst::NewInstruction) = NewInstruction(inst; stmt=_to_ssas(d, inst.stmt))
 _to_ssas(d::Dict, x::ReturnNode) = isdefined(x, :val) ? ReturnNode(get(d, x.val, x.val)) : x
 _to_ssas(d::Dict, x::Expr) = Expr(x.head, map(a -> get(d, a, a), x.args)...)
@@ -580,31 +619,14 @@ end
 _to_ssas(d::Dict, x::IDGotoNode) = GotoNode(d[x.label].id)
 _to_ssas(d::Dict, x::IDGotoIfNot) = GotoIfNot(get(d, x.cond, x.cond), d[x.dest].id)
 
-# Replaces references to blocks by line-number with references to block numbers.
-function _lines_to_blocks(insts::InstVector, cfg::CC.CFG)
-    return map(inst -> __lines_to_blocks(cfg, inst), insts)
-end
+"""
+    _remove_double_edges(ir::BBCode)::BBCode
 
-function __lines_to_blocks(cfg::CC.CFG, inst::NewInstruction)
-    return NewInstruction(inst; stmt=__lines_to_blocks(cfg, inst.stmt))
-end
-function __lines_to_blocks(cfg::CC.CFG, stmt::GotoNode)
-    return GotoNode(CC.block_for_inst(cfg, stmt.label))
-end
-function __lines_to_blocks(cfg::CC.CFG, stmt::GotoIfNot)
-    return GotoIfNot(stmt.cond, CC.block_for_inst(cfg, stmt.dest))
-end
-function __lines_to_blocks(cfg::CC.CFG, stmt::PhiNode)
-    return PhiNode(Int32[CC.block_for_inst(cfg, Int(e)) for e in stmt.edges], stmt.values)
-end
-function __lines_to_blocks(cfg::CC.CFG, stmt::Expr)
-    Meta.isexpr(stmt, :enter) && throw(error("Cannot handle enter yet"))
-    return stmt
-end
-__lines_to_blocks(::CC.CFG, stmt) = stmt
-
-# If the `dest` field of a `GotoIfNot` node points towards the next block, replace it with
-# a `GotoNode`.
+If the `dest` field of an `IDGotoIfNot` node in block `n` of `ir` points towards the `n+1`th
+block then we have two edges from block `n` to block `n+1`. This transformation replaces all
+such `IDGotoIfNot` nodes with unconditional `IDGotoNode`s pointing towards the `n+1`th block
+in `ir`.
+"""
 function _remove_double_edges(ir::BBCode)
     new_blks = map(enumerate(ir.blocks)) do (n, blk)
         t = terminator(blk)
@@ -652,7 +674,7 @@ function _distance_to_entry(blks::Vector{BBlock})::Vector{Int}
     return dijkstra_shortest_paths(g, id_to_int[blks[1].id]).dists
 end
 
-#=
+"""
     _sort_blocks!(ir::BBCode)::BBCode
 
 Ensure that blocks appear in order of distance-from-entry-point, where distance the
@@ -666,14 +688,14 @@ there.
 WARNING: use with care. Only use if you are confident that arbitrary re-ordering of basic
 blocks in `ir` is valid. Notably, this does not hold if you have any `IDGotoIfNot` nodes in
 `ir`.
-=#
+"""
 function _sort_blocks!(ir::BBCode)::BBCode
     I = sortperm(_distance_to_entry(ir.blocks))
     ir.blocks .= ir.blocks[I]
     return ir
 end
 
-#=
+"""
     characterise_unique_predecessor_blocks(blks::Vector{BBlock}) ->
         Tuple{Dict{ID, Bool}, Dict{ID, Bool}}
 
@@ -700,7 +722,7 @@ working with cheap loops -- loops where the operations performed at each iterati
 are inexpensive -- for which minimising memory pressure is critical to performance. It is
 also important for single-block functions, because it can be used to entirely avoid using a
 block stack at all.
-=#
+"""
 function characterise_unique_predecessor_blocks(
     blks::Vector{BBlock}
 )::Tuple{Dict{ID, Bool}, Dict{ID, Bool}}
@@ -767,7 +789,14 @@ function characterise_used_ids(stmts::Vector{IDInstPair})::Dict{ID, Bool}
     return is_used
 end
 
-# Helper function used in characterise_used_ids.
+"""
+    _find_id_uses!(d::Dict{ID, Bool}, x)
+
+Helper function used in [`characterise_used_ids`](@ref). For all uses of `ID`s in `x`, set
+the corresponding value of `d` to `true`.
+
+For example, if `x = ReturnNode(ID(5))`, then this function sets `d[ID(5)] = true`.
+"""
 function _find_id_uses!(d::Dict{ID, Bool}, x::Expr)
     for arg in x.args
         in(arg, keys(d)) && setindex!(d, true, arg)
@@ -854,3 +883,27 @@ function _remove_unreachable_blocks!(blks::Vector{BBlock})
 
     return remaining_blks
 end
+
+"""
+    inc_args(stmt)
+
+Increment by `1` the `n` field of any `Argument`s present in `stmt`.
+"""
+inc_args(x::Expr) = Expr(x.head, map(__inc, x.args)...)
+inc_args(x::ReturnNode) = isdefined(x, :val) ? ReturnNode(__inc(x.val)) : x
+inc_args(x::IDGotoIfNot) = IDGotoIfNot(__inc(x.cond), x.dest)
+inc_args(x::IDGotoNode) = x
+function inc_args(x::IDPhiNode)
+    new_values = Vector{Any}(undef, length(x.values))
+    for n in eachindex(x.values)
+        if isassigned(x.values, n)
+            new_values[n] = __inc(x.values[n])
+        end
+    end
+    return IDPhiNode(x.edges, new_values)
+end
+inc_args(::Nothing) = nothing
+inc_args(x::GlobalRef) = x
+
+__inc(x::Argument) = Argument(x.n + 1)
+__inc(x) = x

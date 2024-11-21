@@ -1,4 +1,4 @@
-# Mooncake.jl and Reverse-Mode AD
+# Introduction
 
 The point of Mooncake.jl is to perform reverse-mode algorithmic differentiation (AD).
 The purpose of this section is to explain _what_ precisely is meant by this, and _how_ it can be interpreted mathematically.

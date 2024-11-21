@@ -61,7 +61,11 @@ MooncakeInterpreter() = MooncakeInterpreter(DefaultCtx)
 
 context_type(::MooncakeInterpreter{C}) where {C} = C
 
-# Globally cached interpreter. Should only be accessed via `get_interpreter`.
+"""
+    const GLOBAL_INTERPRETER
+
+Globally cached interpreter. Should only be accessed via `get_interpreter`.
+"""
 const GLOBAL_INTERPRETER = Ref(MooncakeInterpreter())
 
 """

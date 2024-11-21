@@ -267,4 +267,18 @@ end
         ]
         @test Mooncake.stmt(new_ir.stmts) == expected_stmts
     end
+    @testset "inc_args" begin
+        @test Mooncake.inc_args(Expr(:call, sin, Argument(4))) == Expr(:call, sin, Argument(5))
+        @test Mooncake.inc_args(ReturnNode(Argument(2))) == ReturnNode(Argument(3))
+        id = ID()
+        @test Mooncake.inc_args(IDGotoIfNot(Argument(1), id)) == IDGotoIfNot(Argument(2), id)
+        @test Mooncake.inc_args(IDGotoNode(id)) == IDGotoNode(id)
+        ids = [id, ID()]
+        @test ==(
+            Mooncake.inc_args(IDPhiNode(ids, Any[Argument(1), 4])),
+            IDPhiNode(ids, Any[Argument(2), 4]),
+        )
+        @test Mooncake.inc_args(nothing) === nothing
+        @test Mooncake.inc_args(GlobalRef(Base, :sin)) == GlobalRef(Base, :sin)
+    end
 end
