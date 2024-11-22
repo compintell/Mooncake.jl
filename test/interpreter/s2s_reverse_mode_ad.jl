@@ -143,10 +143,12 @@ end
                 line = id_line_1
                 stmt_info = make_ad_stmts!(PiNode(nothing, Union{}), line, info)
                 @test stmt_info isa ADStmtInfo
+                @test last(stmt_info.fwds)[1] == line
             end
             @testset "π (nothing, Nothing)" begin
                 stmt_info = make_ad_stmts!(PiNode(nothing, Nothing), id_line_1, info)
                 @test stmt_info isa ADStmtInfo
+                @test last(stmt_info.fwds)[1] == id_line_1
                 fwds_stmt = last(stmt_info.fwds)[2].stmt
                 @test fwds_stmt isa PiNode
                 @test fwds_stmt.typ == CoDual{Nothing, NoFData}
@@ -156,6 +158,7 @@ end
                 node = PiNode(nothing, CC.Const(nothing))
                 stmt_info = make_ad_stmts!(node, id_line_1, info)
                 @test stmt_info isa ADStmtInfo
+                @test last(stmt_info.fwds)[1] == id_line_1
                 fwds_stmt = last(stmt_info.fwds)[2].stmt
                 @test fwds_stmt isa PiNode
                 @test fwds_stmt.typ == CoDual{Nothing, NoFData}

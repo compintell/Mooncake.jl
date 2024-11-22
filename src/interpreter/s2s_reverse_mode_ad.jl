@@ -468,7 +468,7 @@ function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
         const_id = ID()
         fwds = [
             (const_id, new_inst(const_codual_stmt(stmt.val, info))),
-            (ID(), new_inst(PiNode(const_id, fcodual_type(_type(stmt.typ))))),
+            (line, new_inst(PiNode(const_id, fcodual_type(_type(stmt.typ))))),
         ]
         rvs = nothing
     end
