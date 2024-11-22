@@ -29,8 +29,15 @@ function rrule!!(f::CoDual{<:Core.Builtin}, args...)
         "which is specialised to this case. " *
         "Either way, please consider commenting on " *
         "https://github.com/compintell/Mooncake.jl/issues/208/ so that the issue can be " *
-        "fixed more widely."
+        "fixed more widely.\n" *
+        "For reproducibility, note that the full signature is:\n" *
+        "$(typeof((f, args...)))"
     ))
+end
+
+function Base.showerror(io::IO, err::MissingRuleForBuiltinException)
+    print(io, "MissingRuleForBuiltinException: ")
+    println(io, err.msg)
 end
 
 module IntrinsicsWrappers
