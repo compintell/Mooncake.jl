@@ -98,10 +98,11 @@ end
 This is where the action takes place.
 Roughly speaking, derivation of a rule for signature `sig = Tuple{F, X1, X2...}` proceeds as follows:
 1. look up the optimised `Compiler.IRCode` associated to `sig`.
-2. For each statement in `IRCode`, transform it according to a set of rules (listed below) to produce a new `IRCode`.
-3. Apply standard Julia optimisations to this new `IRCode` (type inference, inlining, scalar reduction of aggregates, dead code elimination, etc).
-4. Put this code inside a `Core.OpaqueClosure` in order to produce a executable object.
-5. Put this `Core.OpaqueClosure` inside a `DerivedFRule` object to handle various bits of bookkeeping around varargs.
+1. apply a series of standardising transformations to the `IRCode`.
+1. For each statement in `IRCode`, transform it according to a set of rules (listed below) to produce a new `IRCode`.
+1. Apply standard Julia optimisations to this new `IRCode` (type inference, inlining, scalar reduction of aggregates, dead code elimination, etc).
+1. Put this code inside a `Core.OpaqueClosure` in order to produce a executable object.
+1. Put this `Core.OpaqueClosure` inside a `DerivedFRule` object to handle various bits of bookkeeping around varargs.
 
 
 In order:
@@ -114,9 +115,26 @@ This function has methods with will return the `IRCode` associated to:
 1. `Base.MethodInstances` (relevant for `:invoke` expressions -- see [Statement Transformation](@ref) below)
 1. `MistyClosures.MistyClosure` objects, which is essential when computing higher order derivatives and Hessians by applying `Mooncake.jl` to itself.
 
+#### Standardisation
+
+We apply the following transformations to the Julia IR.
+They can all be found in `ir_normalisation.jl`:
+
+1. [`Mooncake.foreigncall_to_call`](@ref): convert `Expr(:foreigncall, ...)` expressions into `Expr(:call, Mooncake._foreigncall_, ...)` expressions.
+1. [`Mooncake.new_to_call`](@ref): convert `Expr(:new, ...)` expressions to `Expr(:call, Mooncake._new_, ...)` expressions.
+1. [`Mooncake.splatnew_to_call`](@ref): convert `Expr(:splatnew, ...)` expressions to `Expr(:call, Mooncake._splat_new_...)` expressions.
+1. [`Mooncake.intrinsic_to_function`](@ref): convert `Expr(:call, ::IntrinsicFunction, ...)` to calls to the corresponding function in [Mooncake.IntrinsicsWrappers](@ref).
+
+The purpose of converting `Expr(:foreigncall...)`, `Expr(:new, ...)` and `Expr(:splatnew, ...)` into `Expr(:call, ...)`s is to enable us to differentiate such expressions by adding methods to `frule!!(::Dual{typeof(Mooncake._foreigncall_)})`, `frule!!(::Dual{typeof(Mooncake._new_)})`, and `frule!!(::Dual{typeof(Mooncake._splat_new_)})`, in exactly the same way that we would for any other regular Julia function.
+
+The purpose of translating `Expr(:call, ::IntrinsicFunction, ...)` is to do with type stability -- see the docstring for the [Mooncake.IntrinsicsWrappers](@ref) module for more info.
+
+
 #### Statement Transformation
 
 Each statment which can appear in the Julia IR is transformed by a method of `Mooncake.make_fwds_ad_stmts`.
-While readers should simply refer to the methods of this function for the definitive explanation of what transformation is applied, and the rationale for applying it, we provide a high-level summary here.
+We provide here a high-level summary of the transformations for the most important Julia IR statements, and refer readers to the methods of `Mooncake.make_fwds_ad_stmts` for the definitive explanation of what transformation is applied, and the rationale for applying it.
 
-There are many types of statements which can appear in `IRCode`, but the most important five are:
+**`Expr(:invoke, MethodInstance, f, x...)` and `Expr(:call, f, x...)`**
+
+The basic idea with this transformation is to 
