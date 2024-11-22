@@ -176,7 +176,8 @@ the corresponding `function` from `Mooncake.IntrinsicsWrappers`, else return `in
 same way as `:foreigncall`. See `IntrinsicsWrappers.__cglobal` for more info.
 
 The purpose of this transformation is to make it possible to use dispatch to write rules for
-intrinsic calls using dispatch in a type-stable way.
+intrinsic calls using dispatch in a type-stable way. See [`IntrinsicsWrappers`](@ref) for
+more context.
 """
 function intrinsic_to_function(inst)
     return Meta.isexpr(inst, :call) ? Expr(:call, lift_intrinsic(inst.args...)...) : inst
