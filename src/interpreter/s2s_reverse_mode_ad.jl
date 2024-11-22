@@ -213,6 +213,10 @@ get_primal_type(::ADInfo, x) = _typeof(x)
 function get_primal_type(::ADInfo, x::GlobalRef)
     return isconst(x) ? _typeof(getglobal(x.mod, x.name)) : x.binding.ty
 end
+function get_primal_type(::ADInfo, x::Expr)
+    x.head === :boundscheck && return Bool
+    error("Unrecognised expression $x found in argument slot.")
+end
 
 """
     get_rev_data_id(info::ADInfo, x)
@@ -394,7 +398,11 @@ function make_ad_stmts!(stmt::ReturnNode, line::ID, info::ADInfo)
         rvs = new_inst(Expr(:call, increment_ref!, rdata_id, Argument(2)))
         return ad_stmt_info(line, nothing, inc_args(stmt), rvs)
     else
-        fwds = ReturnNode(const_codual(stmt.val, info))
+        const_id = ID()
+        fwds = [
+            (const_id, new_inst(const_codual_stmt(stmt.val, info))),
+            (ID(), new_inst(ReturnNode(const_id))),
+        ]
         return ad_stmt_info(line, nothing, fwds, nothing)
     end
 end
@@ -457,7 +465,11 @@ function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
     else
         # If the value of the PiNode is a constant / QuoteNode etc, then there is nothing to
         # do on the reverse-pass.
-        fwds = PiNode(const_codual(stmt.val, info), fcodual_type(_type(stmt.typ)))
+        const_id = ID()
+        fwds = [
+            (const_id, new_inst(const_codual_stmt(stmt.val, info))),
+            (ID(), new_inst(PiNode(const_id, fcodual_type(_type(stmt.typ))))),
+        ]
         rvs = nothing
     end
 
@@ -475,11 +487,11 @@ end
 function make_ad_stmts!(stmt::GlobalRef, line::ID, info::ADInfo)
     isconst(stmt) && return const_ad_stmt(stmt, line, info)
 
-    x = const_codual(getglobal(stmt.mod, stmt.name), info)
-    globalref_id = ID()
+    const_id, globalref_id = ID(), ID()
     fwds = [
         (globalref_id, new_inst(stmt)),
-        (line, new_inst(Expr(:call, __verify_const, globalref_id, x))),
+        (const_id, new_inst(const_codual_stmt(getglobal(stmt.mod, stmt.name), info))),
+        (line, new_inst(Expr(:call, __verify_const, globalref_id, const_id))),
     ]
     return ad_stmt_info(line, nothing, fwds, nothing)
 end
@@ -502,8 +514,22 @@ make_ad_stmts!(stmt, line::ID, info::ADInfo) = const_ad_stmt(stmt, line, info)
 Implementation of `make_ad_stmts!` used for constants.
 """
 function const_ad_stmt(stmt, line::ID, info::ADInfo)
-    x = const_codual(stmt, info)
-    return ad_stmt_info(line, nothing, x isa ID ? Expr(:call, identity, x) : x, nothing)
+    return ad_stmt_info(line, nothing, const_codual_stmt(stmt, info), nothing)
+end
+
+"""
+    const_codual_stmt(stmt, info::ADInfo)
+
+Returns a `:call` expression which will return a `CoDual` whose primal is `stmt`, and whose
+tangent is whatever `uninit_tangent` returns.
+"""
+function const_codual_stmt(stmt, info::ADInfo)
+    v = get_const_primal_value(stmt)
+    if safe_for_literal(v)
+        return Expr(:call, uninit_fcodual, v)
+    else
+        return Expr(:call, identity, add_data!(info, uninit_fcodual(v)))
+    end
 end
 
 """
@@ -519,9 +545,20 @@ function const_codual(stmt, info::ADInfo)
     return safe_for_literal(v) ? x : add_data!(info, x)
 end
 
-safe_for_literal(v) = v isa String || v isa Type || isbitstype(_typeof(v))
+function safe_for_literal(v)
+    v isa Expr && v.head === :boundscheck && return true
+    v isa String && return true
+    v isa Type && return true
+    v isa Tuple && all(safe_for_literal, v) && return true
+    isbitstype(_typeof(v)) && return true
+    return false
+end
 
 inc_or_const(stmt, info::ADInfo) = is_active(stmt) ? __inc(stmt) : const_codual(stmt, info)
+
+function inc_or_const_stmt(stmt, info::ADInfo)
+    return is_active(stmt) ? Expr(:call, identity, __inc(stmt)) : const_codual_stmt(stmt, info)
+end
 
 """
     get_const_primal_value(x::GlobalRef)
@@ -616,7 +653,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         # Make arguments to rrule call. Things which are not already CoDual must be made so.
         codual_arg_ids = map(_ -> ID(), collect(args))
         codual_args = map(args, codual_arg_ids) do arg, id
-            return (id, new_inst(Expr(:call, identity, inc_or_const(arg, info))))
+            return (id, new_inst(inc_or_const_stmt(arg, info)))
         end
 
         # Make call to rule.
@@ -691,8 +728,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
 
     elseif Meta.isexpr(stmt, :copyast)
         # Get constant out and shove it in shared storage.
-        x = const_codual(stmt.args[1], info)
-        return ad_stmt_info(line, nothing, Expr(:call, identity, x), nothing)
+        return ad_stmt_info(line, nothing, const_codual_stmt(stmt.args[1], info), nothing)
 
     elseif Meta.isexpr(stmt, :loopinfo)
         # Cannot pass loopinfo back through the optimiser for some reason.
