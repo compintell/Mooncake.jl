@@ -33,6 +33,47 @@ function rrule!!(f::CoDual{<:Core.Builtin}, args...)
     ))
 end
 
+"""
+    module IntrinsicsWrappers
+
+The purpose of this `module` is to associate to each function in `Core.Intrinsics` a regular
+Julia function.
+
+To understand the rationale for this observe that, unlike regular Julia functions, each
+`Core.IntrinsicFunction` in `Core.Intrinsics` does _not_ have its own type. Rather, they
+are instances of `Core.IntrinsicFunction`. To see this, observe that
+```jldoctest
+julia> typeof(Core.Intrinsics.add_float)
+Core.IntrinsicFunction
+
+julia> typeof(Core.Intrinsics.sub_float)
+Core.IntrinsicFunction
+```
+
+While we could simply write a rule for `Core.IntrinsicFunction`, this would (naively) lead
+to a large list of conditionals of the form
+```julia
+if f === Core.Intrinsics.add_float
+    # return add_float and its pullback
+elseif f === Core.Intrinsics.sub_float
+    # return add_float and its pullback
+elseif
+    ...
+end
+```
+which has the potential to cause quite substantial type instabilities.
+(This might not be true anymore -- see extended help for more context).
+
+Instead, we map each `Core.IntrinsicFunction` to one of the regular Julia functions in
+`Mooncake.IntrinsicsWrappers`, to which we can dispatch in the usual way.
+
+# Extended Help
+
+It is possible that owing to improvements in constant propagation in the Julia compiler in
+version 1.10, we actually _could_ get away with just writing a single method of `rrule!!` to
+handle all intrinsics, so this dispatch-based mechanism might be unnecessary. Someone should
+investigate this. Discussed at https://github.com/compintell/Mooncake.jl/issues/387 .
+"""
 module IntrinsicsWrappers
 
 using Base: IEEEFloat

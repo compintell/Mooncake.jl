@@ -75,6 +75,9 @@ If anything else, just return `inst`. See `Mooncake._foreigncall_` for details.
 to be called in the context of an `IRCode`, in which case the values of `sp_map` are given
 by the `sptypes` field of said `IRCode`. The keys should generally be obtained from the
 `Method` from which the `IRCode` is derived. See `Mooncake.normalise!` for more details.
+
+The purpose of this transformation is to make it possible to differentiate `:foreigncall`
+expressions in the same way as a primitive `:call` expression, i.e. via an `rrule!!`.
 """
 function foreigncall_to_call(inst, sp_map::Dict{Symbol, CC.VarState})
     if Meta.isexpr(inst, :foreigncall)
@@ -146,6 +149,9 @@ end
 
 If instruction `x` is a `:new` expression, replace it with a `:call` to `Mooncake._new_`.
 Otherwise, return `x`.
+
+The purpose of this transformation is to make it possible to differentiate `:new`
+expressions in the same way as a primitive `:call` expression, i.e. via an `rrule!!`.
 """
 new_to_call(x) = Meta.isexpr(x, :new) ? Expr(:call, _new_, x.args...) : x
 
@@ -154,6 +160,9 @@ new_to_call(x) = Meta.isexpr(x, :new) ? Expr(:call, _new_, x.args...) : x
 
 If instruction `x` is a `:splatnew` expression, replace it with a `:call` to
 `Mooncake._splat_new_`. Otherwise return `x`.
+
+The purpose of this transformation is to make it possible to differentiate `:splatnew`
+expressions in the same way as a primitive `:call` expression, i.e. via an `rrule!!`.
 """
 splatnew_to_call(x) = Meta.isexpr(x, :splatnew) ? Expr(:call, _splat_new_, x.args...) : x
 
@@ -165,6 +174,9 @@ the corresponding `function` from `Mooncake.IntrinsicsWrappers`, else return `in
 
 `cglobal` is a special case -- it requires that its first argument be static in exactly the
 same way as `:foreigncall`. See `IntrinsicsWrappers.__cglobal` for more info.
+
+The purpose of this transformation is to make it possible to use dispatch to write rules for
+intrinsic calls using dispatch in a type-stable way.
 """
 function intrinsic_to_function(inst)
     return Meta.isexpr(inst, :call) ? Expr(:call, lift_intrinsic(inst.args...)...) : inst
