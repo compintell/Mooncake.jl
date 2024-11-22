@@ -86,8 +86,8 @@ using NNlib: dropout
         (false, :none, true, NNlib.unfold, x, dense_cdims),
 
         # scatter
-        (false, :stability, true, NNlib.scatter, +, randn(2), [1, 3]),
-        (false, :stability, true, Core.kwcall, (;), NNlib.scatter, +, randn(2), [1, 3]),
+        (false, :none, true, NNlib.scatter, +, randn(2), [1, 3]),
+        (false, :none, true, Core.kwcall, (;), NNlib.scatter, +, randn(2), [1, 3]),
 
         # conv
         (false, :none, true, Core.kwcall, (;), conv, x, w, dense_cdims),
