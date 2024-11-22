@@ -9,6 +9,7 @@ This document
 1. specifies the semantics of a "rule" for forwards-mode AD,
 1. specifies how to implement rules by-hand for primitives, and
 1. specifies how to derive rules from `IRCode` algorithmically in general.
+1. discusses batched forwards-mode
 1. concludes with some notable technical differences between our forwards-mode AD implementation details and reverse-mode AD implementation details.
 
 ## Forwards-Rule Semantics
@@ -310,6 +311,14 @@ Consequently, we use `MistyClosure`s, in order to keep the `IRCode` readily acce
 
 See the implementation of `DerivedRule` (used in reverse-mode) for more context on this.
 _This_ is the "rule" that users get.
+
+## Batch Mode
+
+So far, we have assumed that we would only apply forwards-mode to a single tangent vector at a time.
+However, in practice, it is typically best to pass a collection of tangents through at a time.
+
+In order to do this, all of the transformation code listed above can remain the same, we will just need to devise a system of "batched tangents".
+Then, instead of propagating a "primal-tangent" pairs via `Dual`s, we propagate primal-tangent_batch pairs (perhaps also via `Dual`s).
 
 ## Forwards vs Reverse Implementation
 
