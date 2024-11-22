@@ -54,6 +54,8 @@ end
         @test Mooncake.get_primal_type(info, GlobalRef(Main, :___y)) == Float64
         @test Mooncake.get_primal_type(info, 5) == Int
         @test Mooncake.get_primal_type(info, QuoteNode(:hello)) == Symbol
+        @test Mooncake.get_primal_type(info, Expr(:boundscheck)) == Bool
+        @test_throws ErrorException Mooncake.get_primal_type(Expr(:call))
     end
     @testset "ADStmtInfo" begin
         # If the ID passes as the comms channel doesn't appear in the stmts for the forwards
