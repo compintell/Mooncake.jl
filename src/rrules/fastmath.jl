@@ -26,6 +26,9 @@ function rrule!!(::CoDual{typeof(Base.FastMath.sincos)}, x::CoDual{P}) where {P<
     return CoDual(y, NoFData()), sincos_fast_adj!!
 end
 
+@is_primitive MinimalCtx Tuple{typeof(Base.log), Union{IEEEFloat, Int}}
+@zero_adjoint MinimalCtx Tuple{typeof(log), Int}
+
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:fastmath})
     test_cases = Any[
         (false, :stability_and_allocs, nothing, Base.FastMath.exp10_fast, 0.5),
