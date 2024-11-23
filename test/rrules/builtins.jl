@@ -30,6 +30,12 @@
         invoke(Mooncake.rrule!!, Tuple{CoDual{<:Core.Builtin}}, zero_fcodual(getfield)),
     )
 
+    # Check that Base.showerror runs.
+    @test ==(
+        showerror(IOBuffer(; write=true), Mooncake.MissingRuleForBuiltinException("hmm")),
+        nothing,
+    )
+
     # Unhandled intrinsic throws an intelligible error.
     @test_throws(
         Mooncake.IntrinsicsWrappers.MissingIntrinsicWrapperException,
