@@ -248,7 +248,7 @@ If `is_primitive` returns `true` when applied to the signature constructed from 
 
 Static Dispatch:
 
-In the case of `:invoke` nodes we know for sure at compile time what `rule_for_f` must be.
+In the case of `:invoke` nodes we know for sure at rule compilation time what `rule_for_f` must be.
 We derive a rule for the call by passing `method_instance` to `Mooncake.build_frule`.
 (In practice, we might do this lazily, but while retaining enough information to maintain type stability. See the `Mooncake.LazyDerivedRule` for how this is handled in reverse-mode).
 
