@@ -12,7 +12,7 @@ This document
 1. discusses batched forwards-mode
 1. concludes with some notable technical differences between our forwards-mode AD implementation details and reverse-mode AD implementation details.
 
-## Forwards-Rule Semantics
+## Forwards-Rule Interface
 
 Loosely, a rule for a function simultaneously
 1. performs same computation as the original function, and
@@ -24,7 +24,8 @@ Consider a function call
 z = f(x, y)
 ```
 where `f` itself may contain data / state which is modified by executing `f`.
-A rule for `f` is a function, call it `rule_for_f`, such that
+`rule_for_f` is _some_ callable which claims to be a forwards-rule for `f`.
+For `rule_for_f` to be a valid forwards-rule for `f`, it must be applicable to `Dual`s as follows:
 ```julia
 z_dz = rule_for_f(Dual(f, df), Dual(x, dx), Dual(y, dy))::Dual
 ```
@@ -36,6 +37,9 @@ where:
 
 We refer readers to [Algorithmic Differentiation](@ref) to explain what we mean when we talk about the "derivative" above.
 We also discussed some worked examples shortly.
+
+Note that `rule_for_f` is an as-yet-unspecified callable which we introduced purely to specify the interface that a forwards-rule must satisfy.
+In [Hand-Written Rules](@ref) and [Derived Rules](@ref) below, we introduce two concrete ways to produce rules for `f`.
 
 ### Tangent Types
 
@@ -70,7 +74,7 @@ The [`Mooncake.@is_primitive`](@ref) macro can be used to implement this straigh
 
 ### `frule!!`
 
-Methods of `frule!!` do the actual differentiation.
+Methods of `frule!!` do the actual differentiation, and must satisfy the [Forwards-Rule Interface](@ref) discussed above.
 
 In what follows, we will refer to `frule!!`s for signatures.
 For example, the `frule!!` for signature `Tuple{typeof(sin), Float64}` is the rule which would differentiate calls like `sin(5.0)`.
@@ -111,6 +115,8 @@ end
 ## Derived Rules
 
 This is the "automatic" / "algorithmic" bit of AD!
+This is the second way of producing concrete callable objects which satisfy the [Forwards-Rule Interface](@ref) discussed above.
+The object which we will ultimately construct is an instance `Mooncake.DerivedFRule`.
 
 #### Worked Example: Julia Function
 
@@ -167,6 +173,10 @@ Observe that:
 1. Constants such as `Dual(Main.g, NoTangent())` appear directly in the code (here as `QuoteNode`s).
 
 (In practice it might be that we actually construct the `Dual`ed constants on the lines immediately preceding a call and rely on the compiler to optimise them back into the call directly).
+
+Here, as before, we have not specified exactly what `rule_for_f`, `rule_for_g`, and `rule_for_h` are.
+This is intentional -- they are just callables satisfying the [Forwards-Rule Interface](@ref).
+In the following we show how to derive `rule_for_f`, and show how `rule_for_g` and `rule_for_h` might be methods of `Mooncake.frule!!`, or themselves derived rules.
 
 #### Rule Derivation Outline
 
