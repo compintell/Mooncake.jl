@@ -6,7 +6,7 @@ The whole rule building is done statically based on types. The first method of `
 build_rrule(args...; debug_mode=false)
 ```
 
-The actual action happens in [`s2s_reverse_mode_ad.jl`](../../src/interpreter/s2s_reverse_mode_ad.jl).
+The actual action happens in [`s2s_reverse_mode_ad.jl`](https://github.com/compintell/Mooncake.jl/blob/main/src/interpreter/s2s_reverse_mode_ad.jl).
 This method handles either the function signature or the method instance:
 
 ```julia
@@ -38,11 +38,11 @@ The possible expressions one can encountered in lowered ASTs are documented [her
 
 Reverse-mode specific stuff: return type retrieval, `ADInfo`, `bbcode.jl`, `zero_like_rdata.jl`. The `BBCode` structure was a convenience for IR transformation.
 
-Beyond the [`interpreter`](../../src/interpreter/) folder, check out [`tangents.jl`](../../src/tangents.jl) for forward mode.
+Beyond the [`interpreter`](https://github.com/compintell/Mooncake.jl/blob/main/src/interpreter/) folder, check out [`tangents.jl`](https://github.com/compintell/Mooncake.jl/blob/main/src/tangents.jl) for forward mode.
 
 `FData` and `RData` are not useful in forward mode, `Tangent` is the right representation.
 
-For testing, `generate_test_functions` from [`test_resources.jl`](../../src/test_utils.jl) should all pass.
+For testing, `generate_test_functions` from [`test_resources.jl`](https://github.com/compintell/Mooncake.jl/blob/src/test_utils.jl) should all pass.
 Recycle the functionality from reverse mode test utils.
 
 To manipulate `IRCode`, check out the fields:
@@ -65,12 +65,12 @@ Example of line-by-line transformations are in `make_ad_stmts!`.
 The `IRCode` nodes are not explicitly documented in <https://docs.julialang.org/en/v1/devdocs/ast/#Lowered-form> or <https://docs.julialang.org/en/v1/devdocs/ssair/#Main-SSA-data-structure>. Might need completion of official docs, but Mooncake docs in the meantime.
 
 Inlining pass can prevent us from using high-level rules by inlining the function (e.g. unrolling a loop).
-The contexts in [`interpreter/contexts.jl`](../../src/interpreter/contexts.jl) are `MinimalCtx` (necessary for AD to work) and `DefaultCtx` (ensure that we hit all of the rules).
+The contexts in [`interpreter/contexts.jl`](https://github.com/compintell/Mooncake.jl/blob/src/interpreter/contexts.jl) are `MinimalCtx` (necessary for AD to work) and `DefaultCtx` (ensure that we hit all of the rules).
 Distinction between rules is not well maintained in Mooncake at the moment.
 The function `is_primitive` defines whether we should recurse into the function during AD and break it into parts, or look for a rule.
 Typically if we define a rule we should set `is_primitive` to `true` for the corresponding function.
 
-In [`interpreter/abstract_interpretation.jl`](../../src/interpreter/abstract_interpretation.jl) we interact with the Julia compiler.
+In [`interpreter/abstract_interpretation.jl`](https://github.com/compintell/Mooncake.jl/blob/src/interpreter/abstract_interpretation.jl) we interact with the Julia compiler.
 The most important part is preventing the compiler from inlining.
 
 The `MooncakeInterpreter` subtypes `Core.Compiler.AbstractInterpreter` to interpret Julia code.
