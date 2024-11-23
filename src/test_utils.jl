@@ -610,7 +610,7 @@ end
 _new_excluded(::Type) = false
 _new_excluded(::Type{<:Union{String}}) = true
 
-if VERSION < v"1.11-"
+@static if VERSION < v"1.11-"
     # Prior to 1.11, Arrays are special objects, with special constructors that don't
     # involve calling the `:new` instruction. From 1.11 onwards, they behave more like
     # regular mutable composite types, so calling `_new_` becomes meaningful.

@@ -107,7 +107,7 @@ function CC.method_table(interp::MooncakeInterpreter)
     return CC.OverlayMethodTable(interp.world, mooncake_method_table)
 end
 
-if VERSION < v"1.11.0"
+@static if VERSION < v"1.11.0"
     CC.get_world_counter(interp::MooncakeInterpreter) = interp.world
     get_inference_world(interp::CC.AbstractInterpreter) = CC.get_world_counter(interp)
 else
@@ -160,7 +160,7 @@ function Core.Compiler.abstract_call_gf_by_type(
     end
 end
 
-if VERSION < v"1.11-"
+@static if VERSION < v"1.11-"
 
 function CC.inlining_policy(
     interp::MooncakeInterpreter{C},

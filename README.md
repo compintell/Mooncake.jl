@@ -18,6 +18,9 @@ If you encounter a new version of `Mooncake.jl` in the wild, please consult this
 
 # Getting Started
 
+Check that you're running a version of Julia that Mooncake.jl supports.
+See the `SUPPORT_POLICY.md` file for more info.
+
 There are several ways to interact with `Mooncake.jl`.
 The one that we recommend people begin with is [`DifferentiationInterface.jl`](https://github.com/gdalle/DifferentiationInterface.jl/).
 For example, use it as follows to compute the gradient of a function mapping a `Vector{Float64}` to `Float64`.

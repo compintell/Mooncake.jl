@@ -34,7 +34,7 @@
 # Required to avoid an ambiguity.
 @zero_adjoint MinimalCtx Tuple{Type{Symbol}, TypeVar, Type}
 
-if VERSION >= v"1.11-"
+@static if VERSION >= v"1.11-"
     @zero_adjoint MinimalCtx Tuple{typeof(Random.hash_seed), Vararg}
     @zero_adjoint MinimalCtx Tuple{typeof(Base.dataids), Memory}
 end

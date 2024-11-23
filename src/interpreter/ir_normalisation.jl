@@ -214,7 +214,7 @@ __get_arg(x::QuoteNode) = x.value
 __get_arg(x) = x
 
 # memoryrefget and memoryrefset! were introduced in 1.11.
-if VERSION >= v"1.11-"
+@static if VERSION >= v"1.11-"
 
 """
     lift_memoryrefget_and_memoryrefset_builtins(inst)

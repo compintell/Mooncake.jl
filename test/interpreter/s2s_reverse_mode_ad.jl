@@ -54,6 +54,8 @@ end
         @test Mooncake.get_primal_type(info, GlobalRef(Main, :___y)) == Float64
         @test Mooncake.get_primal_type(info, 5) == Int
         @test Mooncake.get_primal_type(info, QuoteNode(:hello)) == Symbol
+        @test Mooncake.get_primal_type(info, Expr(:boundscheck)) == Bool
+        @test_throws ErrorException Mooncake.get_primal_type(info, Expr(:call))
     end
     @testset "ADStmtInfo" begin
         # If the ID passes as the comms channel doesn't appear in the stmts for the forwards
@@ -103,13 +105,13 @@ end
             @testset "literal" begin
                 stmt_info = make_ad_stmts!(ReturnNode(5.0), line, info)
                 @test stmt_info isa ADStmtInfo
-                @test stmt_info.fwds[1][2].stmt isa ReturnNode
+                @test stmt_info.fwds[2][2].stmt isa ReturnNode
             end
             @testset "GlobalRef" begin
                 node = ReturnNode(GlobalRef(S2SGlobals, :const_float))
                 stmt_info = make_ad_stmts!(node, line, info)
                 @test stmt_info isa ADStmtInfo
-                @test stmt_info.fwds[1][2].stmt isa ReturnNode
+                @test stmt_info.fwds[2][2].stmt isa ReturnNode
             end
         end
         @testset "IDGotoNode" begin
@@ -143,13 +145,14 @@ end
                 line = id_line_1
                 stmt_info = make_ad_stmts!(PiNode(nothing, Union{}), line, info)
                 @test stmt_info isa ADStmtInfo
+                @test last(stmt_info.fwds)[1] == line
             end
             @testset "π (nothing, Nothing)" begin
                 stmt_info = make_ad_stmts!(PiNode(nothing, Nothing), id_line_1, info)
                 @test stmt_info isa ADStmtInfo
-                fwds_stmt = only(stmt_info.fwds)[2].stmt
+                @test last(stmt_info.fwds)[1] == id_line_1
+                fwds_stmt = last(stmt_info.fwds)[2].stmt
                 @test fwds_stmt isa PiNode
-                @test fwds_stmt.val == CoDual(nothing, NoFData())
                 @test fwds_stmt.typ == CoDual{Nothing, NoFData}
                 @test only(stmt_info.rvs)[2].stmt === nothing
             end
@@ -157,9 +160,9 @@ end
                 node = PiNode(nothing, CC.Const(nothing))
                 stmt_info = make_ad_stmts!(node, id_line_1, info)
                 @test stmt_info isa ADStmtInfo
-                fwds_stmt = only(stmt_info.fwds)[2].stmt
+                @test last(stmt_info.fwds)[1] == id_line_1
+                fwds_stmt = last(stmt_info.fwds)[2].stmt
                 @test fwds_stmt isa PiNode
-                @test fwds_stmt.val == CoDual(nothing, NoFData())
                 @test fwds_stmt.typ == CoDual{Nothing, NoFData}
                 @test only(stmt_info.rvs)[2].stmt === nothing
             end
@@ -167,9 +170,8 @@ end
                 node = PiNode(GlobalRef(S2SGlobals, :const_float), Any)
                 stmt_info = make_ad_stmts!(node, id_line_1, info)
                 @test stmt_info isa ADStmtInfo
-                fwds_stmt = only(stmt_info.fwds)[2].stmt
+                fwds_stmt = last(stmt_info.fwds)[2].stmt
                 @test fwds_stmt isa PiNode
-                @test fwds_stmt.val == CoDual(5.0, NoFData())
                 @test fwds_stmt.typ == CoDual
                 @test only(stmt_info.rvs)[2].stmt === nothing
             end
@@ -192,7 +194,8 @@ end
             @testset "differentiable const globals" begin
                 stmt_info = make_ad_stmts!(GlobalRef(S2SGlobals, :const_float), ID(), info)
                 @test stmt_info isa Mooncake.ADStmtInfo
-                @test only(stmt_info.fwds)[2].stmt isa CoDual{Float64}
+                @test only(stmt_info.fwds)[2].stmt isa Expr
+                @test only(stmt_info.fwds)[2].stmt.args[1] === Mooncake.uninit_fcodual
             end
         end
         @testset "PhiCNode" begin
