@@ -32,19 +32,7 @@ Observe that this information means that whether or not something is a primitive
 particular context depends only on static information, not any run-time information that
 might live in a particular instance of `Ctx`.
 """
-function is_primitive(::Type{MinimalCtx}, sig::Type{<:Tuple})
-
-    # This is a very conservative hack.
-    # Suppose that `sig` is `Tuple{typeof(log), Union{Float64, Int}}`.
-    # We do not want to permit this call site to be inlined away, because the signature
-    # `Tuple{typeof(log), Float64}` should definitely return `true`.
-    # However, because this is a small Union (as opposed to a more arbitrary abstract type)
-    # the compiler may choose the inline it. Consequently, we take the _very_ conservative
-    # stance of asserting that any call which involves a Union should not be inlined.
-    any(P -> P isa Union, sig.parameters) && return true
-
-    return false
-end
+is_primitive(::Type{MinimalCtx}, sig::Type{<:Tuple}) = false
 is_primitive(::Type{DefaultCtx}, sig) = is_primitive(MinimalCtx, sig)
 
 """
