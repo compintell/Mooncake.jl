@@ -190,7 +190,7 @@ function optimise_ir!(ir::IRCode; show_ir=false, do_inline=true)
     ir = __strip_coverage!(ir)
     ir = CC.sroa_pass!(ir, inline_state)
 
-    if VERSION < v"1.11-"
+    @static if VERSION < v"1.11-"
         ir = CC.adce_pass!(ir, inline_state)
     else
         ir, _ = CC.adce_pass!(ir, inline_state)
@@ -227,7 +227,7 @@ function lookup_ir(interp::CC.AbstractInterpreter, tt::Type{<:Tuple}; optimize_u
     asts = []
     for match in get_matches(matches.matches)
         match = match::Core.MethodMatch
-        if VERSION < v"1.11-"
+        @static if VERSION < v"1.11-"
             meth = Base.func_for_method_checked(match.method, tt, match.sparams)
             (code, ty) = CC.typeinf_ircode(
                 interp, meth, match.spec_types, match.sparams, optimize_until
