@@ -39,7 +39,6 @@ function _foreigncall_ end
     frule!!(f::Dual, x::Dual...)
 
 Performs AD in forward mode, possibly modifying the inputs, and returns a `Dual`.
-```
 """
 function frule!! end
 
