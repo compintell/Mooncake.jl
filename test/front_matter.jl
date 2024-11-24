@@ -4,6 +4,7 @@ using
     BenchmarkTools,
     DiffRules,
     JET,
+    JuliaFormatter,
     LinearAlgebra,
     Random,
     StableRNGs,
