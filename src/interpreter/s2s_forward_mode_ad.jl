@@ -78,10 +78,10 @@ end
 
 function dualize_ir(ir::IRCode)
     new_stmts_stmt = map(make_fwd_ad_stmt, ir.stmts.stmt)
-    new_stmts_type = map(dual_type, ir.stmts.type)
+    new_stmts_type = fill(Any, length(ir.stmts.type))
     new_stmts_info = ir.stmts.info
     new_stmts_line = ir.stmts.line
-    new_stmts_flag = ir.stmts.flag
+    new_stmts_flag = fill(CC.IR_FLAG_REFINED, length(ir.stmts.flag))
     new_stmts = CC.InstructionStream(
         new_stmts_stmt,
         new_stmts_type,
@@ -108,13 +108,7 @@ function make_fwd_ad_stmt(stmt::Expr)
         mi = stmt.args[1]::Core.MethodInstance
         sig = mi.specTypes
         if is_primitive(C, sig)
-            shifted_args = map(stmt.args) do a
-                if a isa Core.Argument
-                    Core.Argument(a.n + 1)
-                else
-                    a
-                end
-            end
+            shifted_args = inc_args(stmt.args)
             new_stmt = Expr(
                 :call,
                 :($frule!!),
@@ -129,7 +123,6 @@ function make_fwd_ad_stmt(stmt::Expr)
     else
         throw(ArgumentError("Expressions of type `:$(stmt.head)` are not yet supported in forward mode"))
     end
-    return stmt
 end
 
 function make_fwd_ad_stmt(stmt::ReturnNode)
