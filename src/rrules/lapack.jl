@@ -13,7 +13,7 @@ for (fname, elty) in ((:dgetrf_, :Float64), (:sgetrf_, :Float32))
         _LDA::CoDual{$TInt}, # leading dimension of A
         _IPIV::CoDual{$TInt}, # pivot indices
         _INFO::CoDual{$TInt}, # some info of some kind
-        args::Vararg{Any, Nargs},
+        args::Vararg{Any,Nargs},
     ) where {Nargs}
         GC.@preserve args begin
             # Extract names.
@@ -34,8 +34,15 @@ for (fname, elty) in ((:dgetrf_, :Float64), (:sgetrf_, :Float32))
 
             # Run the primal.
             ccall(
-                $(blas_name(fname)), Cvoid, ($TInt, $TInt, Ptr{$elty}, $TInt, $TInt, $TInt),
-                M, N, A, LDA, IPIV, INFO,
+                $(blas_name(fname)),
+                Cvoid,
+                ($TInt, $TInt, Ptr{$elty}, $TInt, $TInt, $TInt),
+                M,
+                N,
+                A,
+                LDA,
+                IPIV,
+                INFO,
             )
 
             ipiv_vec = copy(unsafe_wrap(Array, IPIV, N_val))
@@ -46,7 +53,6 @@ for (fname, elty) in ((:dgetrf_, :Float64), (:sgetrf_, :Float32))
 
         dA = tangent(_A)
         function getrf_pb!!(::NoRData)
-
             GC.@preserve args begin
                 # Run reverse-pass.
                 L, U = UnitLowerTriangular(A_mat), UpperTriangular(A_mat)
@@ -71,7 +77,6 @@ for (fname, elty) in ((:dgetrf_, :Float64), (:sgetrf_, :Float32))
 end
 
 for (fname, elty) in ((:dtrtrs_, :Float64), (:strtrs_, :Float32))
-
     TInt = :(Ptr{BLAS.BlasInt})
     @eval @inline function rrule!!(
         ::CoDual{typeof(_foreigncall_)},
@@ -90,15 +95,14 @@ for (fname, elty) in ((:dtrtrs_, :Float64), (:strtrs_, :Float32))
         _B::CoDual{Ptr{$elty}},
         _ldb::CoDual{Ptr{BLAS.BlasInt}},
         _info::CoDual{Ptr{BLAS.BlasInt}},
-        args::Vararg{Any, Nargs},
+        args::Vararg{Any,Nargs},
     ) where {Nargs}
-
         GC.@preserve args begin
             # Load in data.
             ul_p, tA_p, diag_p = map(primal, (_ul, _tA, _diag))
             N_p, Nrhs_p, lda_p, ldb_p, info_p = map(primal, (_N, _Nrhs, _lda, _ldb, _info))
             ul, tA, diag, N, Nrhs, lda, ldb, info = map(
-                unsafe_load, (ul_p, tA_p, diag_p, N_p, Nrhs_p, lda_p, ldb_p, info_p),
+                unsafe_load, (ul_p, tA_p, diag_p, N_p, Nrhs_p, lda_p, ldb_p, info_p)
             )
 
             A = wrap_ptr_as_view(primal(_A), lda, N, N)
@@ -110,19 +114,39 @@ for (fname, elty) in ((:dtrtrs_, :Float64), (:strtrs_, :Float32))
                 $(blas_name(fname)),
                 Cvoid,
                 (
-                    Ptr{UInt8}, Ptr{UInt8}, Ptr{UInt8}, Ptr{BlasInt}, Ptr{BlasInt},
-                    Ptr{$elty}, Ptr{BlasInt}, Ptr{$elty}, Ptr{BlasInt}, Ptr{BlasInt},
-                    Clong, Clong, Clong,
+                    Ptr{UInt8},
+                    Ptr{UInt8},
+                    Ptr{UInt8},
+                    Ptr{BlasInt},
+                    Ptr{BlasInt},
+                    Ptr{$elty},
+                    Ptr{BlasInt},
+                    Ptr{$elty},
+                    Ptr{BlasInt},
+                    Ptr{BlasInt},
+                    Clong,
+                    Clong,
+                    Clong,
                 ),
-                ul_p, tA_p, diag_p, N_p, Nrhs_p, primal(_A), lda_p, primal(_B),ldb_p, info_p,
-                1, 1, 1,
+                ul_p,
+                tA_p,
+                diag_p,
+                N_p,
+                Nrhs_p,
+                primal(_A),
+                lda_p,
+                primal(_B),
+                ldb_p,
+                info_p,
+                1,
+                1,
+                1,
             )
         end
 
         _dA = tangent(_A)
         _dB = tangent(_B)
         function trtrs_pb!!(::NoRData)
-
             GC.@preserve args begin
                 # Compute cotangent of B.
                 dB = wrap_ptr_as_view(_dB, ldb, N, Nrhs)
@@ -163,13 +187,14 @@ for (fname, elty) in ((:dgetrs_, :Float64), (:sgetrs_, :Float32))
         _B::CoDual{Ptr{$elty}},
         _ldb::CoDual{Ptr{BlasInt}},
         _info::CoDual{Ptr{BlasInt}},
-        args::Vararg{Any, Nargs},
+        args::Vararg{Any,Nargs},
     ) where {Nargs}
-
         GC.@preserve args begin
             # Load in values.
             tA = Char(unsafe_load(primal(_tA)))
-            N, Nrhs, lda, ldb, info = map(unsafe_load ∘ primal, (_N, _Nrhs, _lda, _ldb, _info))
+            N, Nrhs, lda, ldb, info = map(
+                unsafe_load ∘ primal, (_N, _Nrhs, _lda, _ldb, _info)
+            )
             ipiv = unsafe_wrap(Vector{BlasInt}, primal(_ipiv), N)
             A = wrap_ptr_as_view(primal(_A), lda, N, N)
             B = wrap_ptr_as_view(primal(_B), ldb, N, Nrhs)
@@ -209,7 +234,6 @@ for (fname, elty) in ((:dgetrs_, :Float64), (:sgetrs_, :Float32))
         _dA = tangent(_A)
         _dB = tangent(_B)
         function getrs_pb!!(::NoRData)
-
             GC.@preserve args begin
                 dA = wrap_ptr_as_view(_dA, lda, N, N)
                 dB = wrap_ptr_as_view(_dB, ldb, N, Nrhs)
@@ -266,9 +290,8 @@ for (fname, elty) in ((:dgetri_, :Float64), (:sgetri_, :Float32))
         _work::CoDual{Ptr{$elty}},
         _lwork::CoDual{Ptr{BlasInt}},
         _info::CoDual{Ptr{BlasInt}},
-        args::Vararg{Any, Nargs},
+        args::Vararg{Any,Nargs},
     ) where {Nargs}
-
         GC.@preserve args begin
             # Pull out data.
             N_p, lda_p, lwork_p, info_p = map(primal, (_N, _lda, _lwork, _info))
@@ -279,12 +302,24 @@ for (fname, elty) in ((:dgetri_, :Float64), (:sgetri_, :Float32))
 
             # Run forwards-pass.
             ccall(
-                $(blas_name(fname)), Cvoid,
+                $(blas_name(fname)),
+                Cvoid,
                 (
-                    Ptr{BlasInt}, Ptr{$elty}, Ptr{BlasInt}, Ptr{BlasInt}, Ptr{$elty},
-                    Ptr{BlasInt}, Ptr{BlasInt},
+                    Ptr{BlasInt},
+                    Ptr{$elty},
+                    Ptr{BlasInt},
+                    Ptr{BlasInt},
+                    Ptr{$elty},
+                    Ptr{BlasInt},
+                    Ptr{BlasInt},
                 ),
-                N_p, A_p, lda_p, primal(_ipiv), primal(_work), lwork_p, info_p,
+                N_p,
+                A_p,
+                lda_p,
+                primal(_ipiv),
+                primal(_work),
+                lwork_p,
+                info_p,
             )
 
             p = LinearAlgebra.ipiv2perm(unsafe_wrap(Array, primal(_ipiv), N), N)
@@ -329,9 +364,8 @@ for (fname, elty) in ((:dpotrf_, :Float64), (:spotrf_, :Float32))
         _A::CoDual{Ptr{$elty}},
         _lda::CoDual{Ptr{BlasInt}},
         _info::CoDual{Ptr{BlasInt}},
-        args::Vararg{Any, Nargs},
+        args::Vararg{Any,Nargs},
     ) where {Nargs}
-
         GC.@preserve args begin
             # Pull out the data.
             uplo_p, N_p, A_p, lda_p, info_p = map(primal, (_uplo, _N, _A, _lda, _info))
@@ -343,15 +377,19 @@ for (fname, elty) in ((:dpotrf_, :Float64), (:spotrf_, :Float32))
 
             # Run forwards-pass.
             ccall(
-                $(blas_name(fname)), Cvoid,
+                $(blas_name(fname)),
+                Cvoid,
                 (Ptr{UInt8}, Ptr{BlasInt}, Ptr{$elty}, Ptr{BlasInt}, Ptr{BlasInt}),
-                uplo_p, N_p, A_p, lda_p, info_p,
+                uplo_p,
+                N_p,
+                A_p,
+                lda_p,
+                info_p,
             )
         end
 
         _dA = tangent(_A)
         function potrf_pb!!(::NoRData)
-
             GC.@preserve args begin
                 dA = wrap_ptr_as_view(_dA, lda, N, N)
                 dA2 = dA
@@ -395,9 +433,8 @@ for (fname, elty) in ((:dpotrs_, :Float64), (:spotrs_, :Float32))
         _B::CoDual{Ptr{$elty}},
         _ldb::CoDual{Ptr{BlasInt}},
         _info::CoDual{Ptr{BlasInt}},
-        args::Vararg{Any, Nargs},
+        args::Vararg{Any,Nargs},
     ) where {Nargs}
-
         GC.@preserve args begin
             # Pull out the data.
             uplo_p, N_p, Nrhs_p, A_p, lda_p, B_p, ldb_p, info_p = map(
@@ -412,19 +449,32 @@ for (fname, elty) in ((:dpotrs_, :Float64), (:spotrs_, :Float32))
 
             # Run forwards-pass.
             ccall(
-                $(blas_name(fname)), Cvoid,
+                $(blas_name(fname)),
+                Cvoid,
                 (
-                    Ptr{UInt8}, Ptr{BlasInt}, Ptr{BlasInt}, Ptr{$elty},
-                    Ptr{BlasInt}, Ptr{$elty}, Ptr{BlasInt}, Ptr{BlasInt},
+                    Ptr{UInt8},
+                    Ptr{BlasInt},
+                    Ptr{BlasInt},
+                    Ptr{$elty},
+                    Ptr{BlasInt},
+                    Ptr{$elty},
+                    Ptr{BlasInt},
+                    Ptr{BlasInt},
                 ),
-                uplo_p, N_p, Nrhs_p, A_p, lda_p, B_p, ldb_p, info_p,
+                uplo_p,
+                N_p,
+                Nrhs_p,
+                A_p,
+                lda_p,
+                B_p,
+                ldb_p,
+                info_p,
             )
         end
 
         _dA = tangent(_A)
         _dB = tangent(_B)
         function potrs_pb!!(::NoRData)
-
             GC.@preserve args begin
                 dA = wrap_ptr_as_view(_dA, lda, N, N)
                 dB = wrap_ptr_as_view(_dB, ldb, N, Nrhs)
@@ -467,72 +517,103 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
         ],
 
         # trtrs
-        vec(reduce(
-            vcat,
-            map(product(
-                ['U', 'L'], ['N', 'T', 'C'], ['N', 'U'], [1, 3], [1, 2])
-            ) do (ul, tA, diag, N, Nrhs)
-                As = [randn(N, N) + 10I, view(randn(15, 15) + 10I, 2:N+1, 2:N+1)]
-                Bs = [randn(N, Nrhs), view(randn(15, 15), 4:N+3, 3:N+2)]
-                return map(product(As, Bs)) do (A, B)
-                    (false, :none, nothing, trtrs!, ul, tA, diag, A, B)
-                end
-            end,
-        )),
+        vec(
+            reduce(
+                vcat,
+                map(
+                    product(['U', 'L'], ['N', 'T', 'C'], ['N', 'U'], [1, 3], [1, 2])
+                ) do (ul, tA, diag, N, Nrhs)
+                    As = [
+                        randn(N, N) + 10I, view(randn(15, 15) + 10I, 2:(N + 1), 2:(N + 1))
+                    ]
+                    Bs = [randn(N, Nrhs), view(randn(15, 15), 4:(N + 3), 3:(N + 2))]
+                    return map(product(As, Bs)) do (A, B)
+                        (false, :none, nothing, trtrs!, ul, tA, diag, A, B)
+                    end
+                end,
+            ),
+        ),
 
         # getrs
-        vec(reduce(
-            vcat,
-            map(product(['N', 'T'], [1, 9], [1, 2])) do (trans, N, Nrhs)
-                As = getrf!.([
-                    randn(N, N) + 5I,
-                    view(randn(15, 15) + 5I, 2:N+1, 2:N+1),
-                ])
-                Bs = [randn(N, Nrhs), view(randn(15, 15), 4:N+3, 3:Nrhs+2)]
-                return map(product(As, Bs)) do ((A, ipiv), B)
-                    (false, :none, nothing, getrs!, trans, A, ipiv, B)
-                end
-            end,
-        )),
+        vec(
+            reduce(
+                vcat,
+                map(product(['N', 'T'], [1, 9], [1, 2])) do (trans, N, Nrhs)
+                    As =
+                        getrf!.([
+                            randn(N, N) + 5I, view(randn(15, 15) + 5I, 2:(N + 1), 2:(N + 1))
+                        ])
+                    Bs = [randn(N, Nrhs), view(randn(15, 15), 4:(N + 3), 3:(Nrhs + 2))]
+                    return map(product(As, Bs)) do ((A, ipiv), B)
+                        (false, :none, nothing, getrs!, trans, A, ipiv, B)
+                    end
+                end,
+            ),
+        ),
 
         # getri
-        vec(reduce(
-            vcat,
-            map([1, 9]) do N
-                As = getrf!.([randn(N, N) + 5I, view(randn(15, 15) + I, 2:N+1, 2:N+1)])
-                As = getrf!.([randn(N, N) + 5I])
-                return map(As) do (A, ipiv)
-                    (false, :none, nothing, getri!, A, ipiv)
-                end
-            end,
-        )),
+        vec(
+            reduce(
+                vcat,
+                map([1, 9]) do N
+                    As =
+                        getrf!.([
+                            randn(N, N) + 5I, view(randn(15, 15) + I, 2:(N + 1), 2:(N + 1))
+                        ])
+                    As = getrf!.([randn(N, N) + 5I])
+                    return map(As) do (A, ipiv)
+                        (false, :none, nothing, getri!, A, ipiv)
+                    end
+                end,
+            ),
+        ),
 
         # potrf
-        vec(reduce(
-            vcat,
-            map([1, 3, 9]) do N
-                X = randn(N, N)
-                A = X * X' + I
-                return Any[
-                    (false, :none, nothing, potrf!, 'L', A),
-                    (false, :none, nothing, potrf!, 'U', A),
-                ]
-            end,
-        )),
+        vec(
+            reduce(
+                vcat,
+                map([1, 3, 9]) do N
+                    X = randn(N, N)
+                    A = X * X' + I
+                    return Any[
+                        (false, :none, nothing, potrf!, 'L', A),
+                        (false, :none, nothing, potrf!, 'U', A),
+                    ]
+                end,
+            ),
+        ),
 
         # potrs
-        vec(reduce(
-            vcat,
-            map(product([1, 3, 9], [1, 2])) do (N, Nrhs)
-                X = randn(N, N)
-                A = X * X' + I
-                B = randn(N, Nrhs)
-                return Any[
-                    (false, :none, nothing, potrs!, 'L', potrf!('L', copy(A))[1], copy(B)),
-                    (false, :none, nothing, potrs!, 'U', potrf!('U', copy(A))[1], copy(B)),
-                ]
-            end,
-        )),
+        vec(
+            reduce(
+                vcat,
+                map(product([1, 3, 9], [1, 2])) do (N, Nrhs)
+                    X = randn(N, N)
+                    A = X * X' + I
+                    B = randn(N, Nrhs)
+                    return Any[
+                        (
+                            false,
+                            :none,
+                            nothing,
+                            potrs!,
+                            'L',
+                            potrf!('L', copy(A))[1],
+                            copy(B),
+                        ),
+                        (
+                            false,
+                            :none,
+                            nothing,
+                            potrs!,
+                            'U',
+                            potrf!('U', copy(A))[1],
+                            copy(B),
+                        ),
+                    ]
+                end,
+            ),
+        ),
     )
     memory = Any[]
     return test_cases, memory

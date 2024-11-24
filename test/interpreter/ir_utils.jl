@@ -1,18 +1,16 @@
 module IRUtilsGlobalRefs
-    __x_1 = 5.0
-    const __x_2 = 5.0
-    __x_3::Float64 = 5.0
-    const __x_4::Float64 = 5.0
+__x_1 = 5.0
+const __x_2 = 5.0
+__x_3::Float64 = 5.0
+const __x_4::Float64 = 5.0
 end
 
 @testset "ir_utils" begin
-    @testset "ircode $(typeof(fargs))" for fargs in Any[
-        (sin, 5.0), (cos, 1.0),
-    ]
+    @testset "ircode $(typeof(fargs))" for fargs in Any[(sin, 5.0), (cos, 1.0)]
         # Construct a vector of instructions from known function.
         f, args... = fargs
         insts = only(code_typed(f, _typeof(args)))[1].code
-    
+
         # Use Mooncake.ircode to build an `IRCode`.
         argtypes = Any[map(_typeof, fargs)...]
         ir = Mooncake.ircode(insts, argtypes)
@@ -43,7 +41,7 @@ end
         @test Core.OpaqueClosure(ir)(5.0) == cos(sin(5.0))
     end
     @testset "lookup_ir" begin
-        tt = Tuple{typeof(sin), Float64}
+        tt = Tuple{typeof(sin),Float64}
         @test isa(
             Mooncake.lookup_ir(CC.NativeInterpreter(), tt; optimize_until=nothing)[1],
             CC.IRCode,

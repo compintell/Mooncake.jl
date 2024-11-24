@@ -5,20 +5,16 @@ using Base: IEEEFloat
 
 import LuxLib: Impl
 import LuxLib.Utils: static_training_mode_check
-import Mooncake:
-    @from_rrule,
-    DefaultCtx,
-    @mooncake_overlay,
-    CoDual
+import Mooncake: @from_rrule, DefaultCtx, @mooncake_overlay, CoDual
 
-@from_rrule(DefaultCtx, Tuple{typeof(Impl.matmul), Array{P}, Array{P}} where {P<:IEEEFloat})
+@from_rrule(DefaultCtx, Tuple{typeof(Impl.matmul),Array{P},Array{P}} where {P<:IEEEFloat})
 @from_rrule(
     DefaultCtx,
-    Tuple{typeof(Impl.matmuladd), Array{P}, Array{P}, Vector{P}} where {P<:IEEEFloat},
+    Tuple{typeof(Impl.matmuladd),Array{P},Array{P},Vector{P}} where {P<:IEEEFloat},
 )
 @from_rrule(
     DefaultCtx,
-    Tuple{typeof(Impl.batched_matmul), Array{P, 3}, Array{P, 3}} where {P<:IEEEFloat},
+    Tuple{typeof(Impl.batched_matmul),Array{P,3},Array{P,3}} where {P<:IEEEFloat},
 )
 
 # Re-implement a bunch of methods to ensure that Mooncake can differentiate them.
@@ -35,15 +31,15 @@ end
 @mooncake_overlay function LuxLib.Impl.fused_conv(
     ::LuxLib.Impl.AbstractInternalArrayOpMode,
     act::F,
-    weight::AbstractArray{wT, N},
-    x::AbstractArray{xT, N},
+    weight::AbstractArray{wT,N},
+    x::AbstractArray{xT,N},
     bias::LuxLib.Optional{<:AbstractVector},
     cdims::LuxLib.Impl.ConvDims,
-) where {F, wT, xT, N}
+) where {F,wT,xT,N}
     return LuxLib.Impl.bias_activation(act, LuxLib.Impl.conv(x, weight, cdims), bias)
 end
 
-Mooncake.@zero_adjoint DefaultCtx Tuple{typeof(static_training_mode_check), Vararg}
+Mooncake.@zero_adjoint DefaultCtx Tuple{typeof(static_training_mode_check),Vararg}
 
 # This is a really horrible hack that we need to do until Mooncake is able to support the
 # call-back-into-ad interface that ChainRules exposes.
@@ -61,18 +57,18 @@ function CRC.rrule(
     ::typeof(batchnorm_affine_normalize_internal),
     opmode::AbstractInternalArrayOpMode,
     ::typeof(identity),
-    x::AbstractArray{T, N},
+    x::AbstractArray{T,N},
     μ::AbstractVector,
     σ²::AbstractVector,
     γ::LuxLib.Optional{<:AbstractVector},
     β::LuxLib.Optional{<:AbstractVector},
     ϵ::Real,
-) where {T, N}
+) where {T,N}
     y = similar(
         x,
         promote_type(
             safe_eltype(x), safe_eltype(μ), safe_eltype(σ²), safe_eltype(γ), safe_eltype(β)
-        )
+        ),
     )
     γ′ = similar(
         x, promote_type(safe_eltype(γ), safe_eltype(σ²), safe_eltype(ϵ)), size(x, N - 1)
@@ -111,13 +107,13 @@ end
 @mooncake_overlay function batchnorm_affine_normalize_internal(
     opmode::LuxLib.AbstractInternalArrayOpMode,
     act::F,
-    x::AbstractArray{xT, 3},
+    x::AbstractArray{xT,3},
     μ::AbstractVector,
     σ²::AbstractVector,
-    γ::Union{Nothing, AbstractVector},
-    β::Union{Nothing, AbstractVector},
+    γ::Union{Nothing,AbstractVector},
+    β::Union{Nothing,AbstractVector},
     ϵ::Real,
-) where {F, xT}
+) where {F,xT}
     y = batchnorm_affine_normalize_internal(opmode, identity, x, μ, σ², γ, β, ϵ)
     LuxLib.Impl.activation!(y, opmode, act, y)
     return y
@@ -126,17 +122,18 @@ end
 @mooncake_overlay function batchnorm_affine_normalize_internal(
     opmode::LuxLib.AbstractInternalArrayOpMode,
     ::typeof(identity),
-    x::AbstractArray{xT, 3},
+    x::AbstractArray{xT,3},
     μ::AbstractVector,
     σ²::AbstractVector,
-    γ::Union{Nothing, AbstractVector},
-    β::Union{Nothing, AbstractVector},
+    γ::Union{Nothing,AbstractVector},
+    β::Union{Nothing,AbstractVector},
     ϵ::Real,
 ) where {xT}
-    y = similar(x,
+    y = similar(
+        x,
         promote_type(
             safe_eltype(x), safe_eltype(μ), safe_eltype(σ²), safe_eltype(γ), safe_eltype(β)
-        )
+        ),
     )
     batchnorm_affine_normalize_internal!(y, opmode, identity, x, μ, σ², γ, β, ϵ)
     return y

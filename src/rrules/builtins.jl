@@ -9,8 +9,7 @@
 # As of version 1.9.2 of Julia, there are exactly 139 examples of `Core.Builtin`s.
 #
 
-
-@is_primitive MinimalCtx Tuple{Core.Builtin, Vararg}
+@is_primitive MinimalCtx Tuple{Core.Builtin,Vararg}
 
 struct MissingRuleForBuiltinException <: Exception
     msg::String
@@ -18,26 +17,28 @@ end
 
 function rrule!!(f::CoDual{<:Core.Builtin}, args...)
     T_args = map(typeof ∘ primal, args)
-    throw(MissingRuleForBuiltinException(
-        "All built-in functions are primitives by default, as they do not have any Julia " *
-        "code to recurse into. This means that they must all have methods of `rrule!!` " *
-        "written for them by hand. " *
-        "The built-in $(primal(f)) has been called with arguments with types $T_args, " *
-        "but there is no specialised method of `rrule!!` for this built-in and these " *
-        "types. In order to fix this problem, you will either need to modify your code " *
-        "to avoid hitting this built-in function, or implement a method of `rrule!!` " *
-        "which is specialised to this case. " *
-        "Either way, please consider commenting on " *
-        "https://github.com/compintell/Mooncake.jl/issues/208/ so that the issue can be " *
-        "fixed more widely.\n" *
-        "For reproducibility, note that the full signature is:\n" *
-        "$(typeof((f, args...)))"
-    ))
+    throw(
+        MissingRuleForBuiltinException(
+            "All built-in functions are primitives by default, as they do not have any Julia " *
+            "code to recurse into. This means that they must all have methods of `rrule!!` " *
+            "written for them by hand. " *
+            "The built-in $(primal(f)) has been called with arguments with types $T_args, " *
+            "but there is no specialised method of `rrule!!` for this built-in and these " *
+            "types. In order to fix this problem, you will either need to modify your code " *
+            "to avoid hitting this built-in function, or implement a method of `rrule!!` " *
+            "which is specialised to this case. " *
+            "Either way, please consider commenting on " *
+            "https://github.com/compintell/Mooncake.jl/issues/208/ so that the issue can be " *
+            "fixed more widely.\n" *
+            "For reproducibility, note that the full signature is:\n" *
+            "$(typeof((f, args...)))",
+        ),
+    )
 end
 
 function Base.showerror(io::IO, err::MissingRuleForBuiltinException)
     print(io, "MissingRuleForBuiltinException: ")
-    println(io, err.msg)
+    return println(io, err.msg)
 end
 
 module IntrinsicsWrappers
@@ -46,9 +47,26 @@ using Base: IEEEFloat
 using Core: Intrinsics
 using Mooncake
 import ..Mooncake:
-    rrule!!, CoDual, primal, tangent, zero_tangent, NoPullback,
-    tangent_type, increment!!, @is_primitive, MinimalCtx, is_primitive, NoFData,
-    zero_rdata, NoRData, tuple_map, fdata, NoRData, rdata, increment_rdata!!, zero_fcodual
+    rrule!!,
+    CoDual,
+    primal,
+    tangent,
+    zero_tangent,
+    NoPullback,
+    tangent_type,
+    increment!!,
+    @is_primitive,
+    MinimalCtx,
+    is_primitive,
+    NoFData,
+    zero_rdata,
+    NoRData,
+    tuple_map,
+    fdata,
+    NoRData,
+    rdata,
+    increment_rdata!!,
+    zero_fcodual
 
 using Core.Intrinsics: atomic_pointerref
 
@@ -57,7 +75,8 @@ struct MissingIntrinsicWrapperException <: Exception
 end
 
 function translate(f)
-    msg = "Unable to translate the intrinsic $f into a regular Julia function. " *
+    msg =
+        "Unable to translate the intrinsic $f into a regular Julia function. " *
         "Please see github.com/compintell/Mooncake.jl/issues/208 for more discussion."
     throw(MissingIntrinsicWrapperException(msg))
 end
@@ -70,7 +89,7 @@ end
 macro intrinsic(name)
     expr = quote
         $name(x...) = Intrinsics.$name(x...)
-        (is_primitive)(::Type{MinimalCtx}, ::Type{<:Tuple{typeof($name), Vararg}}) = true
+        (is_primitive)(::Type{MinimalCtx}, ::Type{<:Tuple{typeof($name),Vararg}}) = true
         translate(::Val{Intrinsics.$name}) = $name
     end
     return esc(expr)
@@ -79,9 +98,9 @@ end
 macro inactive_intrinsic(name)
     expr = quote
         $name(x...) = Intrinsics.$name(x...)
-        (is_primitive)(::Type{MinimalCtx}, ::Type{<:Tuple{typeof($name), Vararg}}) = true
+        (is_primitive)(::Type{MinimalCtx}, ::Type{<:Tuple{typeof($name),Vararg}}) = true
         translate(::Val{Intrinsics.$name}) = $name
-        function rrule!!(f::CoDual{typeof($name)}, args::Vararg{Any, N}) where {N}
+        function rrule!!(f::CoDual{typeof($name)}, args::Vararg{Any,N}) where {N}
             return Mooncake.zero_adjoint(f, args...)
         end
     end
@@ -147,11 +166,12 @@ end
 @intrinsic bitcast
 function rrule!!(f::CoDual{typeof(bitcast)}, t::CoDual{Type{T}}, x) where {T}
     if T <: IEEEFloat
-        msg = "It is not permissible to bitcast to a differentiable type during AD, as " *
-        "this risks dropping tangents, and therefore risks silently giving the wrong " *
-        "answer. If this call to bitcast appears as part of the implementation of a " *
-        "differentiable function, you should write a rule for this function, or modify " *
-        "its implementation to avoid the bitcast."
+        msg =
+            "It is not permissible to bitcast to a differentiable type during AD, as " *
+            "this risks dropping tangents, and therefore risks silently giving the wrong " *
+            "answer. If this call to bitcast appears as part of the implementation of a " *
+            "differentiable function, you should write a rule for this function, or modify " *
+            "its implementation to avoid the bitcast."
         throw(ArgumentError(msg))
     end
     _x = primal(x)
@@ -184,10 +204,10 @@ named `Mooncake.IntrinsicsWrappers.__cglobal`, rather than
 If you examine the code associated with `Mooncake.intrinsic_to_function`, you will see that
 special handling of `cglobal` is used.
 """
-__cglobal(::Val{s}, x::Vararg{Any, N}) where {s, N} = cglobal(s, x...)
+__cglobal(::Val{s}, x::Vararg{Any,N}) where {s,N} = cglobal(s, x...)
 
 translate(::Val{Intrinsics.cglobal}) = __cglobal
-Mooncake.is_primitive(::Type{MinimalCtx}, ::Type{<:Tuple{typeof(__cglobal), Vararg}}) = true
+Mooncake.is_primitive(::Type{MinimalCtx}, ::Type{<:Tuple{typeof(__cglobal),Vararg}}) = true
 function rrule!!(f::CoDual{typeof(__cglobal)}, args...)
     return Mooncake.uninit_fcodual(__cglobal(map(primal, args)...)), NoPullback(f, args...)
 end
@@ -253,7 +273,7 @@ end
 @intrinsic fpext
 function rrule!!(
     ::CoDual{typeof(fpext)}, ::CoDual{Type{Pext}}, x::CoDual{P}
-) where {Pext<:IEEEFloat, P<:IEEEFloat}
+) where {Pext<:IEEEFloat,P<:IEEEFloat}
     fpext_adjoint!!(dy::Pext) = NoRData(), NoRData(), fptrunc(P, dy)
     return zero_fcodual(fpext(Pext, primal(x))), fpext_adjoint!!
 end
@@ -265,7 +285,7 @@ end
 @intrinsic fptrunc
 function rrule!!(
     ::CoDual{typeof(fptrunc)}, ::CoDual{Type{Ptrunc}}, x::CoDual{P}
-) where {Ptrunc<:IEEEFloat, P<:IEEEFloat}
+) where {Ptrunc<:IEEEFloat,P<:IEEEFloat}
     fptrunc_adjoint!!(dy::Ptrunc) = NoRData(), NoRData(), convert(P, dy)
     return zero_fcodual(fptrunc(Ptrunc, primal(x))), fptrunc_adjoint!!
 end
@@ -430,8 +450,8 @@ end
 
 end # IntrinsicsWrappers
 
-@zero_adjoint MinimalCtx Tuple{typeof(<:), Any, Any}
-@zero_adjoint MinimalCtx Tuple{typeof(===), Any, Any}
+@zero_adjoint MinimalCtx Tuple{typeof(<:),Any,Any}
+@zero_adjoint MinimalCtx Tuple{typeof(===),Any,Any}
 
 # Core._abstracttype
 
@@ -443,7 +463,7 @@ end # IntrinsicsWrappers
 # a pre-processing step.
 
 # A function with the same semantics as `Core._apply_iterate`, but which is differentiable.
-function _apply_iterate_equivalent(itr, f::F, args::Vararg{Any, N}) where {F, N}
+function _apply_iterate_equivalent(itr, f::F, args::Vararg{Any,N}) where {F,N}
     vec_args = reduce(vcat, map(collect, args))
     tuple_args = __vec_to_tuple(vec_args)
     return tuple_splat(f, tuple_args)
@@ -452,12 +472,12 @@ end
 # A primitive used to avoid exposing `_apply_iterate_equivalent` to `Core._apply_iterate`.
 __vec_to_tuple(v::Vector) = Tuple(v)
 
-@is_primitive MinimalCtx Tuple{typeof(__vec_to_tuple), Vector}
+@is_primitive MinimalCtx Tuple{typeof(__vec_to_tuple),Vector}
 
 function rrule!!(::CoDual{typeof(__vec_to_tuple)}, v::CoDual{<:Vector})
     dv = tangent(v)
     y = CoDual(Tuple(primal(v)), fdata(Tuple(dv)))
-    function vec_to_tuple_pb!!(dy::Union{Tuple, NoRData})
+    function vec_to_tuple_pb!!(dy::Union{Tuple,NoRData})
         if dy isa Tuple
             for n in eachindex(dy)
                 dv[n] = increment_rdata!!(dv[n], dy[n])
@@ -474,7 +494,7 @@ end
 # Core._call_latest
 
 # Doesn't do anything differentiable.
-@zero_adjoint MinimalCtx Tuple{typeof(Core._compute_sparams), Vararg}
+@zero_adjoint MinimalCtx Tuple{typeof(Core._compute_sparams),Vararg}
 
 # Core._equiv_typedef
 # Core._expr
@@ -501,7 +521,7 @@ end
 
 function rrule!!(f::CoDual{typeof(Core.apply_type)}, args...)
     T = Core.apply_type(tuple_map(primal, args)...)
-    return CoDual{_typeof(T), NoFData}(T, NoFData()), NoPullback(f, args...)
+    return CoDual{_typeof(T),NoFData}(T, NoFData()), NoPullback(f, args...)
 end
 
 function rrule!!(::CoDual{typeof(compilerbarrier)}, setting::CoDual{Symbol}, val::CoDual)
@@ -513,21 +533,22 @@ end
 # Core.finalizer
 # Core.get_binding_type
 
-function rrule!!(f::CoDual{typeof(Core.ifelse)}, cond, a::A, b::B) where {A, B}
+function rrule!!(f::CoDual{typeof(Core.ifelse)}, cond, a::A, b::B) where {A,B}
     _cond = primal(cond)
     p_a = primal(a)
     p_b = primal(b)
-    pb!! = if rdata_type(tangent_type(A)) == NoRData && rdata_type(tangent_type(B)) == NoRData
-        NoPullback(f, cond, a, b)
-    else
-        lazy_da = lazy_zero_rdata(p_a)
-        lazy_db = lazy_zero_rdata(p_b)
-        function ifelse_pullback!!(dc)
-            da = ifelse(_cond, dc, instantiate(lazy_da))
-            db = ifelse(_cond, instantiate(lazy_db), dc)
-            return NoRData(), NoRData(), da, db
+    pb!! =
+        if rdata_type(tangent_type(A)) == NoRData && rdata_type(tangent_type(B)) == NoRData
+            NoPullback(f, cond, a, b)
+        else
+            lazy_da = lazy_zero_rdata(p_a)
+            lazy_db = lazy_zero_rdata(p_b)
+            function ifelse_pullback!!(dc)
+                da = ifelse(_cond, dc, instantiate(lazy_da))
+                db = ifelse(_cond, instantiate(lazy_db), dc)
+                return NoRData(), NoRData(), da, db
+            end
         end
-    end
 
     # It's a good idea to split up applying ifelse to the primal and tangent. This is
     # because if you push a `CoDual` through ifelse, it _forces_ the construction of the
@@ -537,17 +558,17 @@ function rrule!!(f::CoDual{typeof(Core.ifelse)}, cond, a::A, b::B) where {A, B}
     return CoDual(ifelse(_cond, p_a, p_b), ifelse(_cond, tangent(a), tangent(b))), pb!!
 end
 
-@zero_adjoint MinimalCtx Tuple{typeof(Core.sizeof), Any}
+@zero_adjoint MinimalCtx Tuple{typeof(Core.sizeof),Any}
 
 # Core.svec
 
-@zero_adjoint MinimalCtx Tuple{typeof(applicable), Vararg}
-@zero_adjoint MinimalCtx Tuple{typeof(fieldtype), Vararg}
+@zero_adjoint MinimalCtx Tuple{typeof(applicable),Vararg}
+@zero_adjoint MinimalCtx Tuple{typeof(fieldtype),Vararg}
 
-const StandardFDataType = Union{Tuple, NamedTuple, FData, MutableTangent, NoFData}
+const StandardFDataType = Union{Tuple,NamedTuple,FData,MutableTangent,NoFData}
 
 function rrule!!(
-    f::CoDual{typeof(getfield)}, x::CoDual{P, <:StandardFDataType}, name::CoDual
+    f::CoDual{typeof(getfield)}, x::CoDual{P,<:StandardFDataType}, name::CoDual
 ) where {P}
     if tangent_type(P) == NoTangent
         y = uninit_fcodual(getfield(primal(x), primal(name)))
@@ -567,8 +588,8 @@ function rrule!!(
 end
 
 function rrule!!(
-    f::CoDual{typeof(getfield)}, x::CoDual{P, F}, name::CoDual, order::CoDual
-) where {P, F<:StandardFDataType}
+    f::CoDual{typeof(getfield)}, x::CoDual{P,F}, name::CoDual, order::CoDual
+) where {P,F<:StandardFDataType}
     if tangent_type(P) == NoTangent
         y = uninit_fcodual(getfield(primal(x), primal(name)))
         return y, NoPullback(f, x, name, order)
@@ -605,16 +626,16 @@ is_homogeneous_and_immutable(::Any) = false
 #     return y, pb!!
 # end
 
-@zero_adjoint MinimalCtx Tuple{typeof(getglobal), Any, Any}
+@zero_adjoint MinimalCtx Tuple{typeof(getglobal),Any,Any}
 
 # invoke
 
-@zero_adjoint MinimalCtx Tuple{typeof(isa), Any, Any}
-@zero_adjoint MinimalCtx Tuple{typeof(isdefined), Vararg}
+@zero_adjoint MinimalCtx Tuple{typeof(isa),Any,Any}
+@zero_adjoint MinimalCtx Tuple{typeof(isdefined),Vararg}
 
 # modifyfield!
 
-@zero_adjoint MinimalCtx Tuple{typeof(nfields), Any}
+@zero_adjoint MinimalCtx Tuple{typeof(nfields),Any}
 
 # replacefield!
 
@@ -638,7 +659,7 @@ end
 
 @inline tuple_pullback(dy::NoRData) = NoRData()
 
-function rrule!!(f::CoDual{typeof(tuple)}, args::Vararg{Any, N}) where {N}
+function rrule!!(f::CoDual{typeof(tuple)}, args::Vararg{Any,N}) where {N}
     primal_output = tuple(map(primal, args)...)
     if tangent_type(_typeof(primal_output)) == NoTangent
         return zero_fcodual(primal_output), NoPullback(f, args...)
@@ -656,10 +677,9 @@ function rrule!!(::CoDual{typeof(typeassert)}, x::CoDual, type::CoDual)
     return CoDual(typeassert(primal(x), primal(type)), tangent(x)), typeassert_pullback
 end
 
-@zero_adjoint MinimalCtx Tuple{typeof(typeof), Any}
+@zero_adjoint MinimalCtx Tuple{typeof(typeof),Any}
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
-
     _x = Ref(5.0) # data used in tests which aren't protected by GC.
     _dx = Ref(4.0)
     _a = Vector{Vector{Float64}}(undef, 3)
@@ -687,14 +707,26 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability, nothing, IntrinsicsWrappers.add_float_fast, 4.0, 5.0),
         (false, :stability, nothing, IntrinsicsWrappers.add_int, 1, 2),
         (false, :stability, nothing, IntrinsicsWrappers.and_int, 2, 3),
-        (false, :stability, nothing, IntrinsicsWrappers.ashr_int, 123456, 0x0000000000000020),
+        (
+            false,
+            :stability,
+            nothing,
+            IntrinsicsWrappers.ashr_int,
+            123456,
+            0x0000000000000020,
+        ),
         # atomic_fence -- NEEDS IMPLEMENTING AND TESTING
         # atomic_pointermodify -- NEEDS IMPLEMENTING AND TESTING
         # atomic_pointerref -- NEEDS IMPLEMENTING AND TESTING
         # atomic_pointerreplace -- NEEDS IMPLEMENTING AND TESTING
         (
-            true, :none, nothing,
-            IntrinsicsWrappers.atomic_pointerset, CoDual(p, dp), 1.0, :monotonic,
+            true,
+            :none,
+            nothing,
+            IntrinsicsWrappers.atomic_pointerset,
+            CoDual(p, dp),
+            1.0,
+            :monotonic,
         ),
         # atomic_pointerswap -- NEEDS IMPLEMENTING AND TESTING
         (false, :stability, nothing, IntrinsicsWrappers.bitcast, Int64, 5.0),
@@ -734,7 +766,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability, nothing, IntrinsicsWrappers.flipsign_int, 4, -3),
         (false, :stability, nothing, IntrinsicsWrappers.floor_llvm, 4.1),
         (false, :stability, nothing, IntrinsicsWrappers.fma_float, 5.0, 4.0, 3.0),
-        (true, :stability_and_allocs, nothing, IntrinsicsWrappers.fpext, Float64, 5f0),
+        (true, :stability_and_allocs, nothing, IntrinsicsWrappers.fpext, Float64, 5.0f0),
         (false, :stability, nothing, IntrinsicsWrappers.fpiseq, 4.1, 4.0),
         (false, :stability, nothing, IntrinsicsWrappers.fptosi, UInt32, 4.1),
         (false, :stability, nothing, IntrinsicsWrappers.fptoui, Int32, 4.1),
@@ -743,7 +775,14 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability, nothing, IntrinsicsWrappers.le_float, 4.1, 4.0),
         (false, :stability, nothing, IntrinsicsWrappers.le_float_fast, 4.1, 4.0),
         # llvm_call -- NEEDS IMPLEMENTING AND TESTING
-        (false, :stability, nothing, IntrinsicsWrappers.lshr_int, 1308622848, 0x0000000000000018),
+        (
+            false,
+            :stability,
+            nothing,
+            IntrinsicsWrappers.lshr_int,
+            1308622848,
+            0x0000000000000018,
+        ),
         (false, :stability, nothing, IntrinsicsWrappers.lt_float, 4.1, 4.0),
         (false, :stability, nothing, IntrinsicsWrappers.lt_float_fast, 4.1, 4.0),
         (false, :stability, nothing, IntrinsicsWrappers.mul_float, 5.0, 4.0),
@@ -761,14 +800,30 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability, nothing, IntrinsicsWrappers.or_int, 5, 5),
         (true, :stability, nothing, IntrinsicsWrappers.pointerref, CoDual(p, dp), 2, 1),
         (true, :stability, nothing, IntrinsicsWrappers.pointerref, CoDual(q, dq), 2, 1),
-        (true, :stability, nothing, IntrinsicsWrappers.pointerset, CoDual(p, dp), 5.0, 2, 1),
+        (
+            true,
+            :stability,
+            nothing,
+            IntrinsicsWrappers.pointerset,
+            CoDual(p, dp),
+            5.0,
+            2,
+            1,
+        ),
         (true, :stability, nothing, IntrinsicsWrappers.pointerset, CoDual(q, dq), 1, 2, 1),
         # rem_float -- untested and unimplemented because seemingly unused on master
         # rem_float_fast -- untested and unimplemented because seemingly unused on master
         (false, :stability, nothing, IntrinsicsWrappers.rint_llvm, 5),
         (false, :stability, nothing, IntrinsicsWrappers.sdiv_int, 5, 4),
         (false, :stability, nothing, IntrinsicsWrappers.sext_int, Int64, Int32(1308622848)),
-        (false, :stability, nothing, IntrinsicsWrappers.shl_int, 1308622848, 0xffffffffffffffe8),
+        (
+            false,
+            :stability,
+            nothing,
+            IntrinsicsWrappers.shl_int,
+            1308622848,
+            0xffffffffffffffe8,
+        ),
         (false, :stability, nothing, IntrinsicsWrappers.sitofp, Float64, 0),
         (false, :stability, nothing, IntrinsicsWrappers.sle_int, 5, 4),
         (false, :stability, nothing, IntrinsicsWrappers.slt_int, 4, 5),
@@ -850,11 +905,11 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :none, _range, getfield, MutableFoo(5.0, randn(5)), :b),
         (false, :stability_and_allocs, nothing, getfield, UnitRange{Int}(5:9), :start),
         (false, :stability_and_allocs, nothing, getfield, UnitRange{Int}(5:9), :stop),
-        (false, :stability_and_allocs, nothing, getfield, (5.0, ), 1),
+        (false, :stability_and_allocs, nothing, getfield, (5.0,), 1),
         (false, :stability_and_allocs, nothing, getfield, (5.0, 4.0), 1),
-        (false, :stability_and_allocs, nothing, getfield, (5.0, ), 1, false),
+        (false, :stability_and_allocs, nothing, getfield, (5.0,), 1, false),
         (false, :stability_and_allocs, nothing, getfield, (5.0, 4.0), 1, false),
-        (false, :stability_and_allocs, nothing, getfield, (1, ), 1, false),
+        (false, :stability_and_allocs, nothing, getfield, (1,), 1, false),
         (false, :stability_and_allocs, nothing, getfield, (1, 2), 1),
         (false, :stability_and_allocs, nothing, getfield, (a=5, b=4), 1),
         (false, :stability_and_allocs, nothing, getfield, (a=5, b=4), 2),
@@ -892,7 +947,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :stability_and_allocs, nothing, tuple),
         (false, :stability_and_allocs, nothing, tuple, 1),
         (false, :stability_and_allocs, nothing, tuple, 1, 5),
-        (false, :stability_and_allocs, nothing, tuple, 1.0, (5, )),
+        (false, :stability_and_allocs, nothing, tuple, 1.0, (5,)),
         (false, :stability, nothing, typeassert, 5.0, Float64),
         (false, :stability, nothing, typeassert, randn(5), Vector{Float64}),
         (false, :stability, nothing, typeof, 5.0),
@@ -906,37 +961,52 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :none, nothing, _apply_iterate_equivalent, Base.iterate, *, 5.0, 4.0),
         (false, :none, nothing, _apply_iterate_equivalent, Base.iterate, *, (5.0, 4.0)),
         (false, :none, nothing, _apply_iterate_equivalent, Base.iterate, *, [5.0, 4.0]),
-        (false, :none, nothing, _apply_iterate_equivalent, Base.iterate, *, [5.0], (4.0, )),
-        (false, :none, nothing, _apply_iterate_equivalent, Base.iterate, *, 3, (4.0, )),
+        (false, :none, nothing, _apply_iterate_equivalent, Base.iterate, *, [5.0], (4.0,)),
+        (false, :none, nothing, _apply_iterate_equivalent, Base.iterate, *, 3, (4.0,)),
         (
             # 33 arguments is the critical length at which splatting gives up on inferring,
             # and backs off to `Core._apply_iterate`. It's important to check this in order
             # to verify that we don't wind up in an infinite recursion.
-            false, :none, nothing,
-            _apply_iterate_equivalent, Base.iterate, +, randn(33),
+            false,
+            :none,
+            nothing,
+            _apply_iterate_equivalent,
+            Base.iterate,
+            +,
+            randn(33),
         ),
         (
             # Check that Core._apply_iterate gets lifted to _apply_iterate_equivalent.
-            false, :none, nothing,
-            x -> +(x...), randn(33),
+            false,
+            :none,
+            nothing,
+            x -> +(x...),
+            randn(33),
         ),
         (
-            false, :none, nothing,
-            (
-                function (x)
-                    rx = Ref(x)
-                    pointerref(bitcast(Ptr{Float64}, pointer_from_objref(rx)), 1, 1)
-                end
-            ),
+            false,
+            :none,
+            nothing,
+            (function (x)
+                rx = Ref(x)
+                return pointerref(bitcast(Ptr{Float64}, pointer_from_objref(rx)), 1, 1)
+            end),
             5.0,
         ),
         (
-            false, :none, nothing,
-            (v, x) -> (pointerset(pointer(x), v, 2, 1); x), 3.0, randn(5),
+            false,
+            :none,
+            nothing,
+            (v, x) -> (pointerset(pointer(x), v, 2, 1); x),
+            3.0,
+            randn(5),
         ),
         (
-            false, :none, nothing,
-            x -> (pointerset(pointer(x), UInt8(3), 2, 1); x), rand(UInt8, 5),
+            false,
+            :none,
+            nothing,
+            x -> (pointerset(pointer(x), UInt8(3), 2, 1); x),
+            rand(UInt8, 5),
         ),
         (false, :none, nothing, getindex, randn(5), [1, 1]),
         (false, :none, nothing, getindex, randn(5), [1, 2, 2]),

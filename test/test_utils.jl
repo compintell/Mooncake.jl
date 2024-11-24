@@ -22,18 +22,44 @@
         @test has_equal_data(Diagonal(ones(5)), Diagonal(ones(5)))
         @test has_equal_data("hello", "hello")
         @test !has_equal_data("hello", "goodbye")
-        @test has_equal_data(TypeUnstableMutableStruct(4.0, 5), TypeUnstableMutableStruct(4.0, 5))
-        @test !has_equal_data(TypeUnstableMutableStruct(4.0, 5), TypeUnstableMutableStruct(4.0, 6))
+        @test has_equal_data(
+            TypeUnstableMutableStruct(4.0, 5), TypeUnstableMutableStruct(4.0, 5)
+        )
+        @test !has_equal_data(
+            TypeUnstableMutableStruct(4.0, 5), TypeUnstableMutableStruct(4.0, 6)
+        )
         @test has_equal_data(TypeUnstableStruct(4.0, 5), TypeUnstableStruct(4.0, 5))
         @test !has_equal_data(TypeUnstableStruct(0.0), TypeUnstableStruct(4.0))
-        @test has_equal_data(make_circular_reference_struct(), make_circular_reference_struct())
-        @test has_equal_data(make_indirect_circular_reference_struct(), make_indirect_circular_reference_struct())
-        @test has_equal_data(make_circular_reference_array(), make_circular_reference_array())
-        @test has_equal_data(make_indirect_circular_reference_array(), make_indirect_circular_reference_array())
-        @test !has_equal_data((s = make_circular_reference_struct(); s.a = 1.0; s), (t = make_circular_reference_struct(); t.a = 2.0; t))
-        @test !has_equal_data((a = make_indirect_circular_reference_array(); a[1][1] = 1.0; a), (b = make_indirect_circular_reference_array(); b[1][1] = 2.0; b))
-        @test !has_equal_data((s = make_indirect_circular_reference_struct(); s.b.a = 1.0; s), (t = make_indirect_circular_reference_struct(); t.b.a = 2.0; t))
-        @test !has_equal_data((a = make_indirect_circular_reference_array(); a[1][1] = 1.0; a), (b = make_indirect_circular_reference_array(); b[1][1] = 2.0; b))
+        @test has_equal_data(
+            make_circular_reference_struct(), make_circular_reference_struct()
+        )
+        @test has_equal_data(
+            make_indirect_circular_reference_struct(),
+            make_indirect_circular_reference_struct(),
+        )
+        @test has_equal_data(
+            make_circular_reference_array(), make_circular_reference_array()
+        )
+        @test has_equal_data(
+            make_indirect_circular_reference_array(),
+            make_indirect_circular_reference_array(),
+        )
+        @test !has_equal_data(
+            (s = make_circular_reference_struct(); s.a = 1.0; s),
+            (t = make_circular_reference_struct(); t.a = 2.0; t),
+        )
+        @test !has_equal_data(
+            (a = make_indirect_circular_reference_array(); a[1][1] = 1.0; a),
+            (b = make_indirect_circular_reference_array(); b[1][1] = 2.0; b),
+        )
+        @test !has_equal_data(
+            (s = make_indirect_circular_reference_struct(); s.b.a = 1.0; s),
+            (t = make_indirect_circular_reference_struct(); t.b.a = 2.0; t),
+        )
+        @test !has_equal_data(
+            (a = make_indirect_circular_reference_array(); a[1][1] = 1.0; a),
+            (b = make_indirect_circular_reference_array(); b[1][1] = 2.0; b),
+        )
     end
     @testset "populate_address_map" begin
         @testset "primitive types" begin
@@ -56,7 +82,9 @@
             p2 = [p, p]
             t2 = [t, t]
             @test length(populate_address_map(p2, t2)) == 4
-            @test_throws AssertionError populate_address_map(p2, [zero_tangent(p), zero_tangent(p)])
+            @test_throws AssertionError populate_address_map(
+                p2, [zero_tangent(p), zero_tangent(p)]
+            )
         end
         @testset "immutable type" begin
             p = TestResources.StructFoo(5.0, randn(2))
@@ -75,11 +103,15 @@
             @test length(populate_address_map(p, t)) == 1
 
             p2 = (p, p)
-            @test_throws AssertionError populate_address_map(p2, (zero_tangent(p), zero_tangent(p)))
+            @test_throws AssertionError populate_address_map(
+                p2, (zero_tangent(p), zero_tangent(p))
+            )
 
             p = TestResources.MutableFoo(5.0, randn(2))
             p2 = (p, p)
-            @test_throws AssertionError populate_address_map(p2, (zero_tangent(p), zero_tangent(p)))
+            @test_throws AssertionError populate_address_map(
+                p2, (zero_tangent(p), zero_tangent(p))
+            )
         end
         @testset "views" begin
             p = view(randn(5, 4), 1:2, 1:3)

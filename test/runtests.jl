@@ -29,7 +29,7 @@ include("front_matter.jl")
         include(joinpath("rrules", "avoiding_non_differentiable_code.jl"))
     elseif test_group == "rrules/blas"
         include(joinpath("rrules", "blas.jl"))
-    elseif test_group == "rrules/builtins"    
+    elseif test_group == "rrules/builtins"
         include(joinpath("rrules", "builtins.jl"))
     elseif test_group == "rrules/fastmath"
         include(joinpath("rrules", "fastmath.jl"))

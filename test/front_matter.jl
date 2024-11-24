@@ -1,5 +1,4 @@
-using
-    AllocCheck,
+using AllocCheck,
     Aqua,
     BenchmarkTools,
     DiffRules,
@@ -11,7 +10,7 @@ using
     Mooncake,
     Test
 
-import ChainRulesCore
+using ChainRulesCore: ChainRulesCore
 
 using Base: unsafe_load, pointer_from_objref, IEEEFloat, TwicePrecision
 using Base.Iterators: product

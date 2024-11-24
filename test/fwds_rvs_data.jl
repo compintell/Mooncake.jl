@@ -1,19 +1,15 @@
 module FwdsRvsDataTestResources
-    struct Foo{A} end
+struct Foo{A} end
 end
 
 @testset "fwds_rvs_data" begin
     @testset "fdata_type / rdata_type($P)" for (P, F, R) in Any[
         (
-            Tuple{Any, Vector{Float64}},
-            Tuple{Any, Vector{Float64}},
-            Union{NoRData, Tuple{Any, NoRData}},
+            Tuple{Any,Vector{Float64}},
+            Tuple{Any,Vector{Float64}},
+            Union{NoRData,Tuple{Any,NoRData}},
         ),
-        (
-            Tuple{Any, Float64},
-            Union{NoFData, Tuple{Any, NoFData}},
-            Tuple{Any, Float64},
-        ),
+        (Tuple{Any,Float64}, Union{NoFData,Tuple{Any,NoFData}}, Tuple{Any,Float64}),
     ]
         @test fdata_type(tangent_type(P)) == F
         @test rdata_type(tangent_type(P)) == R
@@ -25,14 +21,14 @@ end
         @test Mooncake.can_produce_zero_rdata_from_type(Vector) == true
         @test Mooncake.zero_rdata_from_type(Vector) == NoRData()
         @test !Mooncake.can_produce_zero_rdata_from_type(FwdsRvsDataTestResources.Foo)
-        @test Mooncake.can_produce_zero_rdata_from_type(Tuple{Float64, Type{Float64}})
+        @test Mooncake.can_produce_zero_rdata_from_type(Tuple{Float64,Type{Float64}})
         @test ==(
             Mooncake.zero_rdata_from_type(FwdsRvsDataTestResources.Foo),
             Mooncake.CannotProduceZeroRDataFromType(),
         )
         @test !Mooncake.can_produce_zero_rdata_from_type(Tuple)
-        @test !Mooncake.can_produce_zero_rdata_from_type(Union{Tuple{Float64}, Tuple{Int}})
-        @test !Mooncake.can_produce_zero_rdata_from_type(Tuple{T, T} where {T<:Integer})
+        @test !Mooncake.can_produce_zero_rdata_from_type(Union{Tuple{Float64},Tuple{Int}})
+        @test !Mooncake.can_produce_zero_rdata_from_type(Tuple{T,T} where {T<:Integer})
         @test Mooncake.can_produce_zero_rdata_from_type(Type{Float64})
 
         # Edge case: Types with unbound type parameters.
@@ -51,14 +47,18 @@ end
             (Int, 5, true),
             (Int32, Int32(5), true),
             (Float64, 5.0, true),
-            (Float32, 5f0, true),
+            (Float32, 5.0f0, true),
             (Float16, Float16(5.0), true),
             (StructFoo, StructFoo(5.0), false),
             (StructFoo, StructFoo(5.0, randn(4)), false),
             (Type{Bool}, Bool, true),
-            (Type{Mooncake.TestResources.StableFoo}, Mooncake.TestResources.StableFoo, true),
-            (Tuple{Float64, Float64}, (5.0, 4.0), true),
-            (Tuple{Float64, Vararg{Float64}}, (5.0, 4.0, 3.0), false),
+            (
+                Type{Mooncake.TestResources.StableFoo},
+                Mooncake.TestResources.StableFoo,
+                true,
+            ),
+            (Tuple{Float64,Float64}, (5.0, 4.0), true),
+            (Tuple{Float64,Vararg{Float64}}, (5.0, 4.0, 3.0), false),
             (Type{Type{Tuple{T}} where {T}}, Type{Tuple{T}} where {T}, true),
         ]
             L = Mooncake.lazy_zero_rdata_type(P)
@@ -75,19 +75,21 @@ end
         )
     end
     @testset "misc fdata / rdata type checking" begin
-        @test(==(
-            Mooncake.rdata_type(tangent_type(Tuple{Union{Float32, Float64}})),
-            Tuple{Union{Float32, Float64}},
-        ))
-        @test(==(
-            Mooncake.rdata_type(tangent_type(Tuple{Union{Int32, Int}})), NoRData
-        ))
-        @test(==(
-            Mooncake.rdata_type(tangent_type(
-                Tuple{Union{Vector{Float32}, Vector{Float64}}}
-            )),
-            NoRData,
-        ))
+        @test(
+            ==(
+                Mooncake.rdata_type(tangent_type(Tuple{Union{Float32,Float64}})),
+                Tuple{Union{Float32,Float64}},
+            )
+        )
+        @test(==(Mooncake.rdata_type(tangent_type(Tuple{Union{Int32,Int}})), NoRData))
+        @test(
+            ==(
+                Mooncake.rdata_type(
+                    tangent_type(Tuple{Union{Vector{Float32},Vector{Float64}}})
+                ),
+                NoRData,
+            )
+        )
     end
 
     # Tests that the static type of an fdata / rdata is correct happen in
@@ -100,9 +102,9 @@ end
         end
         @testset "Tuple" begin
             @test_throws InvalidFDataException verify_fdata_value((), ())
-            @test_throws InvalidFDataException verify_fdata_value((5,), (NoFData(), ))
+            @test_throws InvalidFDataException verify_fdata_value((5,), (NoFData(),))
             @test_throws InvalidRDataException verify_rdata_value((), ())
-            @test_throws InvalidRDataException verify_rdata_value((5,), (NoRData(), ))
+            @test_throws InvalidRDataException verify_rdata_value((5,), (NoRData(),))
         end
         @testset "Ptr" begin
             @test verify_fdata_value(Ptr{Float64}(), Ptr{Float64}()) === nothing

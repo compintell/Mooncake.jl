@@ -10,7 +10,6 @@ build_gp(k) = to_sde(GP(k), SArrayStorage(Float64))
 temporalgps_logpdf_tester(k, x, y, s) = logpdf(build_gp(k)(x, s), y)
 
 @testset "temporalgps" begin
-
     xs = Any[
         collect(range(-5.0; step=0.1, length=1_000)),
         RegularSpacing(0.0, 0.1, 1_000),
