@@ -24,6 +24,7 @@ include("front_matter.jl")
         include("config.jl")
         include("developer_tools.jl")
         include("test_utils.jl")
+        include("forward.jl")
     elseif test_group == "rrules/avoiding_non_differentiable_code"
         include(joinpath("rrules", "avoiding_non_differentiable_code.jl"))
     elseif test_group == "rrules/blas"

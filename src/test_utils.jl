@@ -470,7 +470,7 @@ function test_rrule_performance(
     end
 end
 
-__get_primals(xs) = map(x -> x isa CoDual ? primal(x) : x, xs)
+__get_primals(xs) = map(x -> x isa Union{Dual,CoDual} ? primal(x) : x, xs)
 
 @doc"""
     test_rule(

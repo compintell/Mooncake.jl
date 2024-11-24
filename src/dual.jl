@@ -1,16 +1,13 @@
-struct Dual{P, T}
-    x::P
-    dx::T
+struct Dual{P,T}
+    primal::P
+    tangent::T
 end
 
-function Dual(x::P, dx::T) where {P,T}
-    if T != tangent_type(P)
-        throw(ArgumentError("Tried to build a `Dual(x, dx)` with `x::$P` and `dx::$T` but the correct tangent type is `$(tangent_type(P))`")
-    end
-    return Dual{P,T}(x, dx)
-end
-
-primal(x::Dual) = x.x
-tangent(x::Dual) = x.dx
+primal(x::Dual) = x.primal
+tangent(x::Dual) = x.tangent
 Base.copy(x::Dual) = Dual(copy(primal(x)), copy(tangent(x)))
 _copy(x::P) where {P<:Dual} = x
+
+zero_dual(x) = Dual(x, zero_tangent(x))
+
+dual_type(::Type{P}) where {P} = Dual{P,tangent_type(P)}
