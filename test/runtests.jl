@@ -17,6 +17,7 @@ include("front_matter.jl")
             include(joinpath("interpreter", "bbcode.jl"))
             include(joinpath("interpreter", "ir_normalisation.jl"))
             include(joinpath("interpreter", "zero_like_rdata.jl"))
+            include(joinpath("interpreter", "s2s_forward_mode_ad.jl"))
             include(joinpath("interpreter", "s2s_reverse_mode_ad.jl"))
         end
         include("tools_for_rules.jl")
@@ -24,7 +25,6 @@ include("front_matter.jl")
         include("config.jl")
         include("developer_tools.jl")
         include("test_utils.jl")
-        include("forward.jl")
     elseif test_group == "rrules/avoiding_non_differentiable_code"
         include(joinpath("rrules", "avoiding_non_differentiable_code.jl"))
     elseif test_group == "rrules/blas"
