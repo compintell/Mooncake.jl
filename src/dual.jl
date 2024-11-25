@@ -10,4 +10,13 @@ _copy(x::P) where {P<:Dual} = x
 
 zero_dual(x) = Dual(x, zero_tangent(x))
 
-dual_type(::Type{P}) where {P} = Dual{P,tangent_type(P)}
+function dual_type(::Type{P}) where {P}
+    P == DataType && return Dual
+    P isa Union && return Union{dual_type(P.a),dual_type(P.b)}
+    P <: UnionAll && return Dual # P is abstract, so we don't know its tangent type.
+    return isconcretetype(P) ? Dual{P,tangent_type(P)} : Dual
+end
+
+function dual_type(p::Type{Type{P}}) where {P}
+    return @isdefined(P) ? Dual{Type{P},NoTangent} : Dual{_typeof(p),NoTangent}
+end

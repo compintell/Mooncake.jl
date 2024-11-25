@@ -83,6 +83,8 @@ pb!!(1.0)
 """
 function rrule!! end
 
+include("interpreter/diffractor_compiler_utils.jl")
+
 include("utils.jl")
 include("tangents.jl")
 include("dual.jl")
@@ -103,8 +105,6 @@ include(joinpath("interpreter", "s2s_reverse_mode_ad.jl"))
 include("tools_for_rules.jl")
 include("test_utils.jl")
 include("test_resources.jl")
-
-include(joinpath("frules", "basic.jl"))
 
 include(joinpath("rrules", "avoiding_non_differentiable_code.jl"))
 include(joinpath("rrules", "blas.jl"))
