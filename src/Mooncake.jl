@@ -2,8 +2,7 @@ module Mooncake
 
 const CC = Core.Compiler
 
-using
-    ADTypes,
+using ADTypes,
     ChainRules,
     DiffRules,
     ExprTools,
@@ -18,14 +17,31 @@ using
 import ChainRulesCore as CRC
 
 using Base:
-    IEEEFloat, unsafe_convert, unsafe_pointer_to_objref, pointer_from_objref, arrayref,
-    arrayset, TwicePrecision, twiceprecision
+    IEEEFloat,
+    unsafe_convert,
+    unsafe_pointer_to_objref,
+    pointer_from_objref,
+    arrayref,
+    arrayset,
+    TwicePrecision,
+    twiceprecision
 using Base.Experimental: @opaque
 using Base.Iterators: product
 using Base.Meta: isexpr
 using Core:
-    Intrinsics, bitcast, SimpleVector, svec, ReturnNode, GotoNode, GotoIfNot, PhiNode,
-    PiNode, SSAValue, Argument, OpaqueClosure, compilerbarrier
+    Intrinsics,
+    bitcast,
+    SimpleVector,
+    svec,
+    ReturnNode,
+    GotoNode,
+    GotoIfNot,
+    PhiNode,
+    PiNode,
+    SSAValue,
+    Argument,
+    OpaqueClosure,
+    compilerbarrier
 using Core.Compiler: IRCode, NewInstruction
 using Core.Intrinsics: pointerref, pointerset
 using LinearAlgebra.BLAS: @blasfunc, BlasInt, trsm!
@@ -114,8 +130,7 @@ include("interface.jl")
 include("config.jl")
 include("developer_tools.jl")
 
-export
-    primal,
+export primal,
     tangent,
     randn_tangent,
     increment!!,

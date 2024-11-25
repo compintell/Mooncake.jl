@@ -1,18 +1,18 @@
 # Avoid troublesome bitcast magic -- we can't handle converting from pointer to UInt,
 # because we drop the gradient, because the tangent type of integers is NoTangent.
 # https://github.com/JuliaLang/julia/blob/9f9e989f241fad1ae03c3920c20a93d8017a5b8f/base/pointer.jl#L282
-@is_primitive MinimalCtx Tuple{typeof(Base.:(+)), Ptr, Integer}
+@is_primitive MinimalCtx Tuple{typeof(Base.:(+)),Ptr,Integer}
 function rrule!!(f::CoDual{typeof(Base.:(+))}, x::CoDual{<:Ptr}, y::CoDual{<:Integer})
     return CoDual(primal(x) + primal(y), tangent(x) + primal(y)), NoPullback(f, x, y)
 end
 
-@zero_adjoint MinimalCtx Tuple{typeof(randn), AbstractRNG, Vararg}
-@zero_adjoint MinimalCtx Tuple{typeof(string), Vararg}
-@zero_adjoint MinimalCtx Tuple{Type{Symbol}, Vararg}
-@zero_adjoint MinimalCtx Tuple{Type{Float64}, Any, RoundingMode}
-@zero_adjoint MinimalCtx Tuple{Type{Float32}, Any, RoundingMode}
-@zero_adjoint MinimalCtx Tuple{Type{Float16}, Any, RoundingMode}
-@zero_adjoint MinimalCtx Tuple{typeof(==), Type, Type}
+@zero_adjoint MinimalCtx Tuple{typeof(randn),AbstractRNG,Vararg}
+@zero_adjoint MinimalCtx Tuple{typeof(string),Vararg}
+@zero_adjoint MinimalCtx Tuple{Type{Symbol},Vararg}
+@zero_adjoint MinimalCtx Tuple{Type{Float64},Any,RoundingMode}
+@zero_adjoint MinimalCtx Tuple{Type{Float32},Any,RoundingMode}
+@zero_adjoint MinimalCtx Tuple{Type{Float16},Any,RoundingMode}
+@zero_adjoint MinimalCtx Tuple{typeof(==),Type,Type}
 
 function generate_hand_written_rrule!!_test_cases(
     rng_ctor, ::Val{:avoiding_non_differentiable_code}
@@ -21,17 +21,18 @@ function generate_hand_written_rrule!!_test_cases(
     _dx = Ref(4.0)
     test_cases = vcat(
         Any[
-            # Rules to avoid pointer type conversions.
-            (
-                true, :stability_and_allocs, nothing,
-                +,
-                CoDual(
-                    bitcast(Ptr{Float64}, pointer_from_objref(_x)),
-                    bitcast(Ptr{Float64}, pointer_from_objref(_dx)),
-                ),
-                2,
+        # Rules to avoid pointer type conversions.
+        (
+            true,
+            :stability_and_allocs,
+            nothing,
+            +,
+            CoDual(
+                bitcast(Ptr{Float64}, pointer_from_objref(_x)),
+                bitcast(Ptr{Float64}, pointer_from_objref(_dx)),
             ),
-        ],
+            2,
+        ),],
 
         # Rules in order to avoid introducing determinism.
         reduce(
@@ -63,7 +64,7 @@ function generate_hand_written_rrule!!_test_cases(
 end
 
 function generate_derived_rrule!!_test_cases(
-    rng_ctor, ::Val{:avoiding_non_differentiable_code},
+    rng_ctor, ::Val{:avoiding_non_differentiable_code}
 )
     return Any[], Any[]
 end

@@ -13,7 +13,7 @@ using Core: svec
 using ExprTools: combinedef
 using ..Mooncake: NoTangent, tangent_type, _typeof
 
-const PRIMALS = Tuple{Bool, Any, Tuple}[]
+const PRIMALS = Tuple{Bool,Any,Tuple}[]
 
 # Generate all of the composite types against which we might wish to test.
 function generate_primals()
@@ -32,7 +32,6 @@ function generate_primals()
         ns_always_def = 0:n_fields
 
         for fields in field_combinations, n_always_def in ns_always_def
-
             mutable_str = is_mutable ? "Mutable" : ""
             field_types = map(x -> x.type, fields)
             type_string = join(map(string, field_types), "_")
@@ -52,12 +51,14 @@ function generate_primals()
 
                     # Specify inner constructors.
                     map(n_always_def:n_fields) do n
-                        return combinedef(Dict(
-                            :head => :function,
-                            :name => name,
-                            :args => field_names[1:n],
-                            :body => Expr(:call, :new, field_names[1:n]...),
-                        ))
+                        return combinedef(
+                            Dict(
+                                :head => :function,
+                                :name => name,
+                                :args => field_names[1:n],
+                                :body => Expr(:call, :new, field_names[1:n]...),
+                            ),
+                        )
                     end...,
                 ),
             )
@@ -65,7 +66,7 @@ function generate_primals()
 
             t = @eval $name
             for n in n_always_def:n_fields
-                interface_only = any(x -> isbitstype(x.type), fields[n+1:end])
+                interface_only = any(x -> isbitstype(x.type), fields[(n + 1):end])
                 fields_copies = map(x -> deepcopy(x.primal), fields[1:n])
                 push!(PRIMALS, (interface_only, t, fields_copies))
             end
@@ -88,13 +89,41 @@ module TestUtils
 
 using Random, Mooncake, Test, InteractiveUtils
 using Mooncake:
-    CoDual, NoTangent, rrule!!, is_init, zero_codual, DefaultCtx, @is_primitive, val,
-    is_always_fully_initialised, get_tangent_field, set_tangent_field!, MutableTangent,
-    Tangent, _typeof, rdata, NoFData, to_fwds, uninit_fdata, zero_rdata,
-    zero_rdata_from_type, CannotProduceZeroRDataFromType, lazy_zero_rdata, instantiate,
-    can_produce_zero_rdata_from_type, increment_rdata!!, fcodual_type,
-    verify_fdata_type, verify_rdata_type, verify_fdata_value, verify_rdata_value,
-    InvalidFDataException, InvalidRDataException, uninit_codual, lgetfield, lsetfield!
+    CoDual,
+    NoTangent,
+    rrule!!,
+    is_init,
+    zero_codual,
+    DefaultCtx,
+    @is_primitive,
+    val,
+    is_always_fully_initialised,
+    get_tangent_field,
+    set_tangent_field!,
+    MutableTangent,
+    Tangent,
+    _typeof,
+    rdata,
+    NoFData,
+    to_fwds,
+    uninit_fdata,
+    zero_rdata,
+    zero_rdata_from_type,
+    CannotProduceZeroRDataFromType,
+    lazy_zero_rdata,
+    instantiate,
+    can_produce_zero_rdata_from_type,
+    increment_rdata!!,
+    fcodual_type,
+    verify_fdata_type,
+    verify_rdata_type,
+    verify_fdata_value,
+    verify_rdata_value,
+    InvalidFDataException,
+    InvalidRDataException,
+    uninit_codual,
+    lgetfield,
+    lsetfield!
 
 struct Shim end
 
@@ -118,20 +147,42 @@ that takes an additional `visited` dictionary to track visited objects and avoid
 recursion in cases of circular references.
 """
 function has_equal_data(x, y; equal_undefs=true)
-    return has_equal_data_internal(x, y, equal_undefs, Dict{Tuple{UInt, UInt}, Bool}())
+    return has_equal_data_internal(x, y, equal_undefs, Dict{Tuple{UInt,UInt},Bool}())
 end
 
-has_equal_data_internal(x::Type, y::Type, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}) = x == y
-has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}) where {T<:String} = x == y
-has_equal_data_internal(x::Core.TypeName, y::Core.TypeName, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}) = x == y
-function has_equal_data_internal(x::Float64, y::Float64, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool})
+function has_equal_data_internal(
+    x::Type, y::Type, equal_undefs::Bool, d::Dict{Tuple{UInt,UInt},Bool}
+)
+    return x == y
+end
+function has_equal_data_internal(
+    x::T, y::T, equal_undefs::Bool, d::Dict{Tuple{UInt,UInt},Bool}
+) where {T<:String}
+    return x == y
+end
+function has_equal_data_internal(
+    x::Core.TypeName, y::Core.TypeName, equal_undefs::Bool, d::Dict{Tuple{UInt,UInt},Bool}
+)
+    return x == y
+end
+function has_equal_data_internal(
+    x::Float64, y::Float64, equal_undefs::Bool, d::Dict{Tuple{UInt,UInt},Bool}
+)
     return (isapprox(x, y) && !isnan(x)) || (isnan(x) && isnan(y))
 end
-has_equal_data_internal(x::Module, y::Module, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}) = x == y
-function has_equal_data_internal(x::GlobalRef, y::GlobalRef; equal_undefs=true, d::Dict{Tuple{UInt, UInt}, Bool})
+function has_equal_data_internal(
+    x::Module, y::Module, equal_undefs::Bool, d::Dict{Tuple{UInt,UInt},Bool}
+)
+    return x == y
+end
+function has_equal_data_internal(
+    x::GlobalRef, y::GlobalRef; equal_undefs=true, d::Dict{Tuple{UInt,UInt},Bool}
+)
     return x.mod == y.mod && x.name == y.name
 end
-function has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}) where {T<:Array}
+function has_equal_data_internal(
+    x::T, y::T, equal_undefs::Bool, d::Dict{Tuple{UInt,UInt},Bool}
+) where {T<:Array}
     size(x) != size(y) && return false
 
     # The dictionary is used to detect circular references in the data structures.
@@ -163,10 +214,14 @@ function has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict{Tuple{U
     end
     return all(equality)
 end
-function has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}) where {T<:Core.SimpleVector}
+function has_equal_data_internal(
+    x::T, y::T, equal_undefs::Bool, d::Dict{Tuple{UInt,UInt},Bool}
+) where {T<:Core.SimpleVector}
     return all(map((a, b) -> has_equal_data_internal(a, b, equal_undefs, d), x, y))
 end
-function has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}) where {T}
+function has_equal_data_internal(
+    x::T, y::T, equal_undefs::Bool, d::Dict{Tuple{UInt,UInt},Bool}
+) where {T}
     isprimitivetype(T) && return isequal(x, y)
 
     id_pair = (objectid(x), objectid(y))
@@ -177,9 +232,17 @@ function has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict{Tuple{U
     d[id_pair] = true
 
     if ismutabletype(x)
-        return all(map(fieldnames(T)) do n
-            isdefined(x, n) ? has_equal_data_internal(getfield(x, n), getfield(y, n), equal_undefs, d) : true
-        end)
+        return all(
+            map(fieldnames(T)) do n
+                if isdefined(x, n)
+                    has_equal_data_internal(
+                        getfield(x, n), getfield(y, n), equal_undefs, d
+                    )
+                else
+                    true
+                end
+            end,
+        )
     else
         for n in fieldnames(T)
             if !isdefined(x, n) && !isdefined(y, n)
@@ -197,11 +260,15 @@ function has_equal_data_internal(x::T, y::T, equal_undefs::Bool, d::Dict{Tuple{U
         return true
     end
 end
-has_equal_data_internal(x::T, y::P, equal_undefs::Bool, d::Dict{Tuple{UInt,UInt},Bool}) where {T,P} = false
+function has_equal_data_internal(
+    x::T, y::P, equal_undefs::Bool, d::Dict{Tuple{UInt,UInt},Bool}
+) where {T,P}
+    return false
+end
 
 has_equal_data_up_to_undefs(x::T, y::T) where {T} = has_equal_data(x, y; equal_undefs=false)
 
-const AddressMap = Dict{Ptr{Nothing}, Ptr{Nothing}}
+const AddressMap = Dict{Ptr{Nothing},Ptr{Nothing}}
 
 """
     populate_address_map(primal, tangent)
@@ -217,7 +284,7 @@ Fills `m` with pairs mapping from memory addresses in `primal` to corresponding 
 addresses in `tangent`. If the same memory address appears multiple times in `primal`,
 throws an `AssertionError` if the same address is not mapped to in `tangent` each time.
 """
-function populate_address_map!(m::AddressMap, primal::P, tangent::T) where {P, T}
+function populate_address_map!(m::AddressMap, primal::P, tangent::T) where {P,T}
     isprimitivetype(P) && return m
     T === NoTangent && return m
     T === NoFData && return m
@@ -241,10 +308,10 @@ function populate_address_map!(m::AddressMap, primal::P, tangent::T) where {P, T
     return m
 end
 
-__get_data_field(t::Union{Tangent, MutableTangent}, n) = getfield(t.fields, n)
-__get_data_field(t::Union{Mooncake.FData, Mooncake.RData}, n) = getfield(t.data, n)
+__get_data_field(t::Union{Tangent,MutableTangent}, n) = getfield(t.fields, n)
+__get_data_field(t::Union{Mooncake.FData,Mooncake.RData}, n) = getfield(t.data, n)
 
-function populate_address_map!(m::AddressMap, p::P, t) where {P<:Union{Tuple, NamedTuple}}
+function populate_address_map!(m::AddressMap, p::P, t) where {P<:Union{Tuple,NamedTuple}}
     t isa NoFData && return m
     t isa NoTangent && return m
     foreach(n -> populate_address_map!(m, getfield(p, n), getfield(t, n)), fieldnames(P))
@@ -269,7 +336,7 @@ function populate_address_map!(m::AddressMap, p::Core.SimpleVector, t::Vector{An
     return m
 end
 
-populate_address_map!(m::AddressMap, p::Union{Core.TypeName, Type, Symbol, String}, t) = m
+populate_address_map!(m::AddressMap, p::Union{Core.TypeName,Type,Symbol,String}, t) = m
 
 """
     address_maps_are_consistent(x::AddressMap, y::AddressMap)
@@ -309,7 +376,9 @@ function test_rule_correctness(rng::AbstractRNG, x_x̄...; rule, unsafe_perturb:
     x̄_zero = map(zero_tangent, x)
     x̄_fwds = map(Mooncake.fdata, x̄_zero)
     x_x̄_rule = map((x, x̄_f) -> fcodual_type(_typeof(x))(_deepcopy(x), x̄_f), x, x̄_fwds)
-    inputs_address_map = populate_address_map(map(primal, x_x̄_rule), map(tangent, x_x̄_rule))
+    inputs_address_map = populate_address_map(
+        map(primal, x_x̄_rule), map(tangent, x_x̄_rule)
+    )
     y_ȳ_rule, pb!! = rule(x_x̄_rule...)
 
     # Verify that inputs / outputs are the same under `f` and its rrule.
@@ -339,7 +408,8 @@ function test_rule_correctness(rng::AbstractRNG, x_x̄...; rule, unsafe_perturb:
     @test all(map(has_equal_data_up_to_undefs, x, map(primal, x_x̄_rule)))
 
     # pullbacks increment, so have to compare to the incremented quantity.
-    @test _dot(ȳ_delta, ẏ) + _dot(x̄_delta, ẋ_post) ≈ _dot(x̄, ẋ) rtol=1e-3 atol=1e-3
+    @test _dot(ȳ_delta, ẏ) + _dot(x̄_delta, ẋ_post) ≈ _dot(x̄, ẋ) rtol = 1e-3 atol =
+        1e-3
 end
 
 get_address(x) = ismutable(x) ? pointer_from_objref(x) : nothing
@@ -347,7 +417,7 @@ get_address(x) = ismutable(x) ? pointer_from_objref(x) : nothing
 _deepcopy(x) = deepcopy(x)
 _deepcopy(x::Module) = x
 
-rrule_output_type(::Type{Ty}) where {Ty} = Tuple{Mooncake.fcodual_type(Ty), Any}
+rrule_output_type(::Type{Ty}) where {Ty} = Tuple{Mooncake.fcodual_type(Ty),Any}
 
 function test_rrule_interface(f_f̄, x_x̄...; rule)
     @nospecialize f_f̄ x_x̄
@@ -386,9 +456,11 @@ function test_rrule_interface(f_f̄, x_x̄...; rule)
     catch e
         display(e)
         println()
-        throw(ArgumentError(
-            "rule for $(_typeof(f_fwds)) with argument types $(_typeof(x_fwds)) does not run."
-        ))
+        throw(
+            ArgumentError(
+                "rule for $(_typeof(f_fwds)) with argument types $(_typeof(x_fwds)) does not run.",
+            ),
+        )
     end
     @test rrule_ret isa rrule_output_type(_typeof(y))
     y_ȳ, pb!! = rrule_ret
@@ -404,9 +476,11 @@ function test_rrule_interface(f_f̄, x_x̄...; rule)
     catch e
         display(e)
         println()
-        throw(ArgumentError(
-            "pullback for $(_typeof(f_f̄)) with argument types $(_typeof(x_x̄)) does not run."
-        ))
+        throw(
+            ArgumentError(
+                "pullback for $(_typeof(f_f̄)) with argument types $(_typeof(x_x̄)) does not run.",
+            ),
+        )
     end
 
     # Check that the pullback returns the correct number of things.
@@ -422,21 +496,23 @@ function test_rrule_interface(f_f̄, x_x̄...; rule)
     @test all(map((a, b) -> _typeof(a) == _typeof(rdata(b)), x̄_new, x̄))
 end
 
-function __forwards_and_backwards(rule, x_x̄::Vararg{Any, N}) where {N}
+function __forwards_and_backwards(rule, x_x̄::Vararg{Any,N}) where {N}
     out, pb!! = rule(x_x̄...)
     return pb!!(Mooncake.zero_rdata(primal(out)))
 end
 
 function test_rrule_performance(
-    performance_checks_flag::Symbol, rule::R, f_f̄::F, x_x̄::Vararg{Any, N}
-) where {R, F, N}
+    performance_checks_flag::Symbol, rule::R, f_f̄::F, x_x̄::Vararg{Any,N}
+) where {R,F,N}
 
     # Verify that a valid performance flag has been passed.
     valid_flags = (:none, :stability, :allocs, :stability_and_allocs)
     if !in(performance_checks_flag, valid_flags)
-        throw(ArgumentError(
-            "performance_checks=$performance_checks_flag. Must be one of $valid_flags"
-        ))
+        throw(
+            ArgumentError(
+                "performance_checks=$performance_checks_flag. Must be one of $valid_flags"
+            ),
+        )
     end
     performance_checks_flag == :none && return nothing
 
@@ -451,7 +527,7 @@ function test_rrule_performance(
         # Test reverse-pass stability.
         y_ȳ, pb!! = rule(to_fwds(f_f̄), map(to_fwds, _deepcopy(x_x̄))...)
         rvs_data = Mooncake.rdata(zero_tangent(primal(y_ȳ), tangent(y_ȳ)))
-        test_opt(Shim(), pb!!, (_typeof(rvs_data), ))
+        test_opt(Shim(), pb!!, (_typeof(rvs_data),))
     end
 
     if performance_checks_flag in (:allocs, :stability_and_allocs)
@@ -472,67 +548,68 @@ end
 
 __get_primals(xs) = map(x -> x isa Union{Dual,CoDual} ? primal(x) : x, xs)
 
-@doc"""
-    test_rule(
-        rng, x...;
-        interface_only=false,
-        is_primitive::Bool=true,
-        perf_flag::Symbol=:none,
-        interp::Mooncake.MooncakeInterpreter=Mooncake.get_interpreter(),
-        debug_mode::Bool=false,
-        unsafe_perturb::Bool=false,
-    )
+@doc """
+     test_rule(
+         rng, x...;
+         interface_only=false,
+         is_primitive::Bool=true,
+         perf_flag::Symbol=:none,
+         interp::Mooncake.MooncakeInterpreter=Mooncake.get_interpreter(),
+         debug_mode::Bool=false,
+         unsafe_perturb::Bool=false,
+     )
 
-Run standardised tests on the `rule` for `x`.
-The first element of `x` should be the primal function to test, and each other element a
-positional argument.
-In most cases, elements of `x` can just be the primal values, and `randn_tangent` can be
-relied upon to generate an appropriate tangent to test. Some notable exceptions exist
-though, in partcular `Ptr`s. In this case, the argument for which `randn_tangent` cannot be
-readily defined should be a `CoDual` containing the primal, and a _manually_ constructed
-tangent field.
+ Run standardised tests on the `rule` for `x`.
+ The first element of `x` should be the primal function to test, and each other element a
+ positional argument.
+ In most cases, elements of `x` can just be the primal values, and `randn_tangent` can be
+ relied upon to generate an appropriate tangent to test. Some notable exceptions exist
+ though, in partcular `Ptr`s. In this case, the argument for which `randn_tangent` cannot be
+ readily defined should be a `CoDual` containing the primal, and a _manually_ constructed
+ tangent field.
 
-This function uses [`Mooncake.build_rrule`](@ref) to construct a rule. This will use an
-`rrule!!` if one exists, and derive a rule otherwise.
+ This function uses [`Mooncake.build_rrule`](@ref) to construct a rule. This will use an
+ `rrule!!` if one exists, and derive a rule otherwise.
 
-# Arguments
-- `rng::AbstractRNG`: a random number generator
-- `x...`: the function (first element) and its arguments (the remainder)
+ # Arguments
+ - `rng::AbstractRNG`: a random number generator
+ - `x...`: the function (first element) and its arguments (the remainder)
 
-# Keyword Arguments
-- `interface_only::Bool=false`: test only that the interface is satisfied, without testing
-    correctness. This should generally be set to `false` (the default value), and only
-    enabled if the testing infrastructure is unable to test correctness for some reason
-    e.g. the returned value of the function is a `Ptr`, and appropriate tangents cannot,
-    therefore, be generated for it automatically.
-- `is_primitive::Bool=true`: check whether the thing that you are testing has a hand-written
-    `rrule!!`. This option is helpful if you are testing a new `rrule!!`, as it enables you
-    to verify that your method of `is_primitive` has returned the correct value, and that
-    you are actually testing a method of the `rrule!!` function -- a common mistake when
-    authoring a new `rrule!!` is to implement `is_primitive` incorrectly and to accidentally
-    wind up testing a rule which Mooncake has derived, as opposed to the one that you have
-    written. If you are testing something for which you have not
-    hand-written an `rrule!!`, or which you do not care whether it has a hand-written
-    `rrule!!` or not, you should set it to `false`.
-- `perf_flag::Symbol=:none`: the value of this symbol determines what kind of performance
-    tests should be performed. By default, none are performed. If you believe that a rule
-    should be allocation-free (iff the primal is allocation free), set this to `:allocs`. If
-    you hand-write an `rrule!!` and believe that your test case should be type stable, set
-    this to `:stability` (at present we cannot verify whether a derived rule is type stable
-    for technical reasons). If you believe that a hand-written rule should be _both_
-    allocation-free and type-stable, set this to `:stability_and_allocs`.
-- `interp::Mooncake.MooncakeInterpreter=Mooncake.get_interpreter()`: the abstract
-    interpreter to be used when testing this rule. The default should generally be used.
-- `debug_mode::Bool=false`: whether or not the rule should be tested in debug mode.
-    Typically this should be left at its default `false` value, but if you are finding that
-    the tests are failing for a given rule, you may wish to temporarily set it to `true` in
-    order to get access to additional information and automated testing.
-- `unsafe_perturb::Bool=false`: value passed as the third argument to `_add_to_primal`.
-    Should usually be left `false` -- consult the docstring for `_add_to_primal` for more
-    info on when you might wish to set it to `true`.
-"""
+ # Keyword Arguments
+ - `interface_only::Bool=false`: test only that the interface is satisfied, without testing
+     correctness. This should generally be set to `false` (the default value), and only
+     enabled if the testing infrastructure is unable to test correctness for some reason
+     e.g. the returned value of the function is a `Ptr`, and appropriate tangents cannot,
+     therefore, be generated for it automatically.
+ - `is_primitive::Bool=true`: check whether the thing that you are testing has a hand-written
+     `rrule!!`. This option is helpful if you are testing a new `rrule!!`, as it enables you
+     to verify that your method of `is_primitive` has returned the correct value, and that
+     you are actually testing a method of the `rrule!!` function -- a common mistake when
+     authoring a new `rrule!!` is to implement `is_primitive` incorrectly and to accidentally
+     wind up testing a rule which Mooncake has derived, as opposed to the one that you have
+     written. If you are testing something for which you have not
+     hand-written an `rrule!!`, or which you do not care whether it has a hand-written
+     `rrule!!` or not, you should set it to `false`.
+ - `perf_flag::Symbol=:none`: the value of this symbol determines what kind of performance
+     tests should be performed. By default, none are performed. If you believe that a rule
+     should be allocation-free (iff the primal is allocation free), set this to `:allocs`. If
+     you hand-write an `rrule!!` and believe that your test case should be type stable, set
+     this to `:stability` (at present we cannot verify whether a derived rule is type stable
+     for technical reasons). If you believe that a hand-written rule should be _both_
+     allocation-free and type-stable, set this to `:stability_and_allocs`.
+ - `interp::Mooncake.MooncakeInterpreter=Mooncake.get_interpreter()`: the abstract
+     interpreter to be used when testing this rule. The default should generally be used.
+ - `debug_mode::Bool=false`: whether or not the rule should be tested in debug mode.
+     Typically this should be left at its default `false` value, but if you are finding that
+     the tests are failing for a given rule, you may wish to temporarily set it to `true` in
+     order to get access to additional information and automated testing.
+ - `unsafe_perturb::Bool=false`: value passed as the third argument to `_add_to_primal`.
+     Should usually be left `false` -- consult the docstring for `_add_to_primal` for more
+     info on when you might wish to set it to `true`.
+ """
 function test_rule(
-    rng::AbstractRNG, x...;
+    rng::AbstractRNG,
+    x...;
     interface_only::Bool=false,
     is_primitive::Bool=true,
     perf_flag::Symbol=:none,
@@ -550,7 +627,13 @@ function test_rule(
     is_primitive && @test rule == (debug_mode ? Mooncake.DebugRRule(rrule!!) : rrule!!)
 
     # Generate random tangents for anything that is not already a CoDual.
-    x_x̄ = map(x -> x isa CoDual ? x : interface_only ? uninit_codual(x) : zero_codual(x), x)
+    x_x̄ = map(x -> if x isa CoDual
+        x
+    elseif interface_only
+        uninit_codual(x)
+    else
+        zero_codual(x)
+    end, x)
 
     # Test that the interface is basically satisfied (checks types / memory addresses).
     test_rrule_interface(x_x̄...; rule)
@@ -562,28 +645,30 @@ function test_rule(
     test_rrule_performance(perf_flag, rule, x_x̄...)
 
     # Test the interface again, in order to verify that caching is working correctly.
-    test_rrule_interface(x_x̄..., rule=Mooncake.build_rrule(interp, sig; debug_mode))
+    return test_rrule_interface(x_x̄...; rule=Mooncake.build_rrule(interp, sig; debug_mode))
 end
-
 
 function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)
     test_cases, memory = Mooncake.generate_hand_written_rrule!!_test_cases(rng_ctor, v)
-    GC.@preserve memory @testset "$f, $(_typeof(x))" for (interface_only, perf_flag, _, f, x...) in test_cases
+    GC.@preserve memory @testset "$f, $(_typeof(x))" for (
+        interface_only, perf_flag, _, f, x...
+    ) in test_cases
         test_rule(rng_ctor(123), f, x...; interface_only, perf_flag)
     end
 end
 
 function run_derived_rrule!!_test_cases(rng_ctor, v::Val)
     test_cases, memory = Mooncake.generate_derived_rrule!!_test_cases(rng_ctor, v)
-    GC.@preserve memory @testset "$f, $(typeof(x))" for
-        (interface_only, perf_flag, _, f, x...) in test_cases
+    GC.@preserve memory @testset "$f, $(typeof(x))" for (
+        interface_only, perf_flag, _, f, x...
+    ) in test_cases
         test_rule(rng_ctor(123), f, x...; interface_only, perf_flag, is_primitive=false)
     end
 end
 
 function run_rrule!!_test_cases(rng_ctor, v::Val)
     run_hand_written_rrule!!_test_cases(rng_ctor, v)
-    run_derived_rrule!!_test_cases(rng_ctor, v)
+    return run_derived_rrule!!_test_cases(rng_ctor, v)
 end
 
 #
@@ -594,8 +679,8 @@ generate_args(::typeof(===), x) = [(x, 0.0), (1.0, x)]
 function generate_args(::typeof(Core.ifelse), x)
     return [(true, x, 0.0), (false, x, 0.0), (true, 0.0, x), (false, 0.0, x)]
 end
-generate_args(::typeof(Core.sizeof), x) = [(x, )]
-generate_args(::typeof(Core.svec), x) = [(x, ), (x, x)]
+generate_args(::typeof(Core.sizeof), x) = [(x,)]
+generate_args(::typeof(Core.svec), x) = [(x,), (x, x)]
 function generate_args(::typeof(getfield), x)
     syms = filter(f -> isdefined(x, f), fieldnames(_typeof(x)))
     fs = vcat(syms..., eachindex(syms)...)
@@ -621,7 +706,7 @@ else
     # Consequently, it does not make sense to call `_new_` on them -- while this _can_ be
     # made to work, it typically yields segfaults in very short order, and I _believe_ it
     # should never occur in practice.
-    _new_excluded(::Type{<:Union{Memory, MemoryRef}}) = true
+    _new_excluded(::Type{<:Union{Memory,MemoryRef}}) = true
 end
 
 function generate_args(::typeof(Mooncake._new_), x)
@@ -643,9 +728,9 @@ function generate_args(::typeof(lsetfield!), x)
     end
     return map(n -> (x, Val(n), getfield(x, n)), vcat(names..., eachindex(names)...))
 end
-generate_args(::typeof(tuple), x) = [(x, ), (x, x), (x, x, x)]
+generate_args(::typeof(tuple), x) = [(x,), (x, x), (x, x, x)]
 generate_args(::typeof(typeassert), x) = [(x, _typeof(x))]
-generate_args(::typeof(typeof), x) = [(x, )]
+generate_args(::typeof(typeof), x) = [(x,)]
 
 function functions_for_all_types()
     return [===, Core.ifelse, Core.sizeof, isa, tuple, typeassert, typeof]
@@ -690,7 +775,9 @@ function test_rule_and_type_interactions(rng::AbstractRNG, p::P) where {P}
         arg_sets = generate_args(f, p)
         @testset for args in arg_sets
             test_rule(
-                rng, f, args...;
+                rng,
+                f,
+                args...;
                 interface_only=true,
                 is_primitive=true,
                 perf_flag=:none,
@@ -708,7 +795,7 @@ infers / optimises away.
 """
 function test_tangent_type(primal_type::Type, expected_tangent_type::Type)
     @test tangent_type(primal_type) == expected_tangent_type
-    test_opt(Shim(), tangent_type, Tuple{_typeof(primal_type)})
+    return test_opt(Shim(), tangent_type, Tuple{_typeof(primal_type)})
 end
 
 """
@@ -832,7 +919,7 @@ function test_set_tangent_field!_correctness(t1::T, t2::T) where {T<:MutableTang
     end
 end
 
-function check_allocs(::Any, f::F, x::Tuple{Vararg{Any, N}}) where {F, N}
+function check_allocs(::Any, f::F, x::Tuple{Vararg{Any,N}}) where {F,N}
     throw(error("Load AllocCheck.jl to use this functionality."))
 end
 
@@ -863,8 +950,8 @@ function test_tangent_performance(rng::AbstractRNG, p::P) where {P}
 
     # Check there are no allocations when there ought not to be.
     if !__tangent_generation_should_allocate(P)
-        test_opt(Shim(), Tuple{typeof(zero_tangent), P})
-        test_opt(Shim(), Tuple{typeof(randn_tangent), Xoshiro, P})
+        test_opt(Shim(), Tuple{typeof(zero_tangent),P})
+        test_opt(Shim(), Tuple{typeof(randn_tangent),Xoshiro,P})
     end
 
     # `increment!!` should always infer.
@@ -879,30 +966,27 @@ function test_tangent_performance(rng::AbstractRNG, p::P) where {P}
 
     # set_tangent_field! should never allocate.
     t isa MutableTangent && test_set_tangent_field!_performance(t, z)
-    t isa Union{MutableTangent, Tangent} && test_get_tangent_field_performance(t)
+    return t isa Union{MutableTangent,Tangent} && test_get_tangent_field_performance(t)
 end
 
 function test_allocations(t::T, z::T) where {T}
     check_allocs(Shim(), increment!!, (t, t))
     check_allocs(Shim(), increment!!, (t, z))
     check_allocs(Shim(), increment!!, (z, t))
-    check_allocs(Shim(), increment!!, (z, z))
+    return check_allocs(Shim(), increment!!, (z, z))
 end
 
 _set_tangent_field!(x, ::Val{i}, v) where {i} = set_tangent_field!(x, i, v)
 _get_tangent_field(x, ::Val{i}) where {i} = get_tangent_field(x, i)
 
-function test_set_tangent_field!_performance(t1::T, t2::T) where {V, T<:MutableTangent{V}}
+function test_set_tangent_field!_performance(t1::T, t2::T) where {V,T<:MutableTangent{V}}
     for n in 1:fieldcount(V)
         !is_init(t2.fields[n]) && continue
         v = get_tangent_field(t2, n)
 
         # Int mode.
         _set_tangent_field!(t1, Val(n), v)
-        report_opt(
-            Shim(),
-            Tuple{typeof(_set_tangent_field!), typeof(t1), Val{n}, typeof(v)},
-        )
+        report_opt(Shim(), Tuple{typeof(_set_tangent_field!),typeof(t1),Val{n},typeof(v)})
 
         if all(n -> !(fieldtype(V, n) <: Mooncake.PossiblyUninitTangent), 1:fieldcount(V))
             i = Val(n)
@@ -914,8 +998,7 @@ function test_set_tangent_field!_performance(t1::T, t2::T) where {V, T<:MutableT
         s = Val(fieldname(V, n))
         @inferred _set_tangent_field!(t1, s, v)
         report_opt(
-            Shim(),
-            Tuple{typeof(_set_tangent_field!), typeof(t1), typeof(s), typeof(v)},
+            Shim(), Tuple{typeof(_set_tangent_field!),typeof(t1),typeof(s),typeof(v)}
         )
 
         if all(n -> !(fieldtype(V, n) <: Mooncake.PossiblyUninitTangent), 1:fieldcount(V))
@@ -925,7 +1008,7 @@ function test_set_tangent_field!_performance(t1::T, t2::T) where {V, T<:MutableT
     end
 end
 
-function test_get_tangent_field_performance(t::Union{MutableTangent, Tangent})
+function test_get_tangent_field_performance(t::Union{MutableTangent,Tangent})
     V = Mooncake._typeof(t.fields)
     for n in 1:fieldcount(V)
         !is_init(t.fields[n]) && continue
@@ -934,20 +1017,20 @@ function test_get_tangent_field_performance(t::Union{MutableTangent, Tangent})
 
         # Int mode.
         i = Val(n)
-        report_opt(Shim(), Tuple{typeof(_get_tangent_field), typeof(t), typeof(i)})
+        report_opt(Shim(), Tuple{typeof(_get_tangent_field),typeof(t),typeof(i)})
         @inferred _get_tangent_field(t, i)
         @test count_allocs(_get_tangent_field, t, i) == 0
 
         # Symbol mode.
         s = Val(fieldname(V, n))
-        report_opt(Shim(), Tuple{typeof(_get_tangent_field), typeof(t), typeof(s)})
+        report_opt(Shim(), Tuple{typeof(_get_tangent_field),typeof(t),typeof(s)})
         @inferred _get_tangent_field(t, s)
         @test count_allocs(_get_tangent_field, t, s) == 0
     end
 end
 
 # Function barrier to ensure inference in value types.
-function count_allocs(f::F, x::Vararg{Any, N}) where {F, N}
+function count_allocs(f::F, x::Vararg{Any,N}) where {F,N}
     @allocations f(x...)
 end
 
@@ -974,21 +1057,21 @@ function __is_completely_stable_type(::Type{P}) where {P}
     return all(__is_completely_stable_type, fieldtypes(P))
 end
 
-@doc"""
-    test_tangent(rng::AbstractRNG, p::P, x::T, y::T, z_target::T) where {P, T}
+@doc """
+     test_tangent(rng::AbstractRNG, p::P, x::T, y::T, z_target::T) where {P, T}
 
-Verify that primal `p` with tangents `z_target`, `x`, and `y`, satisfies the tangent
-interface. If these tests pass, then it should be possible to write rules for primals
-of type `P`, and to test them using [`test_rule`](@ref).
+ Verify that primal `p` with tangents `z_target`, `x`, and `y`, satisfies the tangent
+ interface. If these tests pass, then it should be possible to write rules for primals
+ of type `P`, and to test them using [`test_rule`](@ref).
 
-It should be the case that `z_target` == `increment!!(x, y)`.
+ It should be the case that `z_target` == `increment!!(x, y)`.
 
-As always, there are limits to the errors that these tests can identify -- they form
-necessary but not sufficient conditions for the correctness of your code.
-"""
+ As always, there are limits to the errors that these tests can identify -- they form
+ necessary but not sufficient conditions for the correctness of your code.
+ """
 function test_tangent(
     rng::AbstractRNG, p::P, x::T, y::T, z_target::T; interface_only, perf=true
-) where {P, T}
+) where {P,T}
     @nospecialize rng p x y z_target
 
     # Check the interface.
@@ -1008,12 +1091,12 @@ function test_tangent(
     end
 
     # Check performance is as expected.
-    perf && test_tangent_performance(rng, p)
+    return perf && test_tangent_performance(rng, p)
 end
 
 function test_tangent(rng::AbstractRNG, p::P; interface_only=false, perf=true) where {P}
     test_tangent_consistency(rng, p; interface_only)
-    perf && test_tangent_performance(rng, p)
+    return perf && test_tangent_performance(rng, p)
 end
 
 function test_equality_comparison(x)
@@ -1115,7 +1198,7 @@ written in Mooncake itself.
 function test_data(rng::AbstractRNG, p::P; interface_only=false) where {P}
     test_tangent_consistency(rng, p; interface_only)
     test_fwds_rvs_data(rng, p)
-    test_rule_and_type_interactions(rng, p)
+    return test_rule_and_type_interactions(rng, p)
 end
 
 end

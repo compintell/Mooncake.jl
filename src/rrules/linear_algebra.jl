@@ -1,4 +1,4 @@
-@is_primitive MinimalCtx Tuple{typeof(exp), Matrix{<:IEEEFloat}}
+@is_primitive MinimalCtx Tuple{typeof(exp),Matrix{<:IEEEFloat}}
 
 struct ExpPullback{P}
     pb
@@ -20,8 +20,7 @@ end
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:linear_algebra})
     test_cases = Any[
-        (false, :none, nothing, exp, randn(3, 3)),
-        (false, :none, nothing, exp, randn(7, 7)),
+        (false, :none, nothing, exp, randn(3, 3)), (false, :none, nothing, exp, randn(7, 7))
     ]
     memory = Any[]
     return test_cases, memory

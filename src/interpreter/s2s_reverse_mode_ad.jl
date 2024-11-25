@@ -11,8 +11,8 @@ is passed to an `OpaqueClosure`, and extracting this data into registers associa
 corresponding `ID`s.
 """
 struct SharedDataPairs
-    pairs::Vector{Tuple{ID, Any}}
-    SharedDataPairs() = new(Tuple{ID, Any}[])
+    pairs::Vector{Tuple{ID,Any}}
+    SharedDataPairs() = new(Tuple{ID,Any}[])
 end
 
 """
@@ -126,12 +126,12 @@ struct ADInfo
     block_stack::BlockStack
     entry_id::ID
     shared_data_pairs::SharedDataPairs
-    arg_types::Dict{Argument, Any}
-    ssa_insts::Dict{ID, NewInstruction}
-    arg_rdata_ref_ids::Dict{Argument, ID}
-    ssa_rdata_ref_ids::Dict{ID, ID}
+    arg_types::Dict{Argument,Any}
+    ssa_insts::Dict{ID,NewInstruction}
+    arg_rdata_ref_ids::Dict{Argument,ID}
+    ssa_rdata_ref_ids::Dict{ID,ID}
     debug_mode::Bool
-    is_used_dict::Dict{ID, Bool}
+    is_used_dict::Dict{ID,Bool}
     lazy_zero_rdata_ref_id::ID
 end
 
@@ -139,9 +139,9 @@ end
 # See the definition of the ADInfo struct for info on the arguments.
 function ADInfo(
     interp::MooncakeInterpreter,
-    arg_types::Dict{Argument, Any},
-    ssa_insts::Dict{ID, NewInstruction},
-    is_used_dict::Dict{ID, Bool},
+    arg_types::Dict{Argument,Any},
+    ssa_insts::Dict{ID,NewInstruction},
+    is_used_dict::Dict{ID,Bool},
     debug_mode::Bool,
     zero_lazy_rdata_ref::Ref{<:Tuple},
 )
@@ -166,14 +166,16 @@ end
 # The constructor you should use for ADInfo if you _do_ have a BBCode lying around. See the
 # ADInfo struct for information regarding `interp` and `debug_mode`.
 function ADInfo(interp::MooncakeInterpreter, ir::BBCode, debug_mode::Bool)
-    arg_types = Dict{Argument, Any}(
+    arg_types = Dict{Argument,Any}(
         map(((n, t),) -> (Argument(n) => _type(t)), enumerate(ir.argtypes))
     )
     stmts = collect_stmts(ir)
-    ssa_insts = Dict{ID, NewInstruction}(stmts)
+    ssa_insts = Dict{ID,NewInstruction}(stmts)
     is_used_dict = characterise_used_ids(stmts)
     zero_lazy_rdata_ref = Ref{Tuple{map(lazy_zero_rdata_type ∘ _type, ir.argtypes)...}}()
-    return ADInfo(interp, arg_types, ssa_insts, is_used_dict, debug_mode, zero_lazy_rdata_ref)
+    return ADInfo(
+        interp, arg_types, ssa_insts, is_used_dict, debug_mode, zero_lazy_rdata_ref
+    )
 end
 
 """
@@ -190,7 +192,7 @@ Returns `x` if it is a singleton, or the `ID` of the ssa which will contain it o
 forwards- and reverse-passes. The reason for this is that if something is a singleton, it
 can be inserted directly into the IR.
 """
-function add_data_if_not_singleton!(p::Union{ADInfo, SharedDataPairs}, x)
+function add_data_if_not_singleton!(p::Union{ADInfo,SharedDataPairs}, x)
     return Base.issingletontype(_typeof(x)) ? x : add_data!(p, x)
 end
 
@@ -215,7 +217,7 @@ function get_primal_type(::ADInfo, x::GlobalRef)
 end
 function get_primal_type(::ADInfo, x::Expr)
     x.head === :boundscheck && return Bool
-    error("Unrecognised expression $x found in argument slot.")
+    return error("Unrecognised expression $x found in argument slot.")
 end
 
 """
@@ -283,14 +285,14 @@ end
 
 _copy(x::P) where {P<:RRuleZeroWrapper} = P(_copy(x.rule))
 
-struct RRuleWrapperPb{Tpb!!, Tl}
+struct RRuleWrapperPb{Tpb!!,Tl}
     pb!!::Tpb!!
     l::Tl
 end
 
 (rule::RRuleWrapperPb)(dy) = rule.pb!!(increment!!(dy, instantiate(rule.l)))
 
-@inline function (rule::RRuleZeroWrapper{R})(f::F, args::Vararg{CoDual, N}) where {R, F, N}
+@inline function (rule::RRuleZeroWrapper{R})(f::F, args::Vararg{CoDual,N}) where {R,F,N}
     y, pb!! = rule.rule(f, args...)
     l = lazy_zero_rdata(primal(y))
     return y::CoDual, (pb!! isa NoPullback ? pb!! : RRuleWrapperPb(pb!!, l))
@@ -311,7 +313,7 @@ Data structure which contains the result of `make_ad_stmts!`. Fields are
 """
 struct ADStmtInfo
     line::ID
-    comms_id::Union{ID, Nothing}
+    comms_id::Union{ID,Nothing}
     fwds::Vector{IDInstPair}
     rvs::Vector{IDInstPair}
 end
@@ -322,7 +324,7 @@ end
 Convenient constructor for `ADStmtInfo`. If either `fwds` or `rvs` is not a vector,
 `__vec` promotes it to a single-element `Vector`.
 """
-function ad_stmt_info(line::ID, comms_id::Union{ID, Nothing}, fwds, rvs)
+function ad_stmt_info(line::ID, comms_id::Union{ID,Nothing}, fwds, rvs)
     if !(comms_id === nothing || in(comms_id, map(first, __vec(line, fwds))))
         throw(ArgumentError("comms_id not found in IDs of `fwds` instructions."))
     end
@@ -331,7 +333,7 @@ end
 
 __vec(line::ID, x::Any) = __vec(line, new_inst(x))
 __vec(line::ID, x::NewInstruction) = IDInstPair[(line, x)]
-__vec(line::ID, x::Vector{Tuple{ID, Any}}) = throw(error("boooo"))
+__vec(line::ID, x::Vector{Tuple{ID,Any}}) = throw(error("boooo"))
 __vec(line::ID, x::Vector{IDInstPair}) = x
 
 """
@@ -557,7 +559,11 @@ end
 inc_or_const(stmt, info::ADInfo) = is_active(stmt) ? __inc(stmt) : const_codual(stmt, info)
 
 function inc_or_const_stmt(stmt, info::ADInfo)
-    return is_active(stmt) ? Expr(:call, identity, __inc(stmt)) : const_codual_stmt(stmt, info)
+    return if is_active(stmt)
+        Expr(:call, identity, __inc(stmt))
+    else
+        const_codual_stmt(stmt, info)
+    end
 end
 
 """
@@ -574,19 +580,19 @@ get_const_primal_value(x) = x
 
 # Mooncake does not yet handle `PhiCNode`s. Throw an error if one is encountered.
 function make_ad_stmts!(stmt::Core.PhiCNode, ::ID, ::ADInfo)
-    unhandled_feature("Encountered PhiCNode: $stmt")
+    return unhandled_feature("Encountered PhiCNode: $stmt")
 end
 
 # Mooncake does not yet handle `UpsilonNode`s. Throw an error if one is encountered.
 function make_ad_stmts!(stmt::Core.UpsilonNode, ::ID, ::ADInfo)
-    unhandled_feature(
+    return unhandled_feature(
         "Encountered UpsilonNode: $stmt. These are generated as part of some try / catch " *
         "/ finally blocks. At the present time, Mooncake.jl cannot differentiate through " *
         "these, so they must be avoided. Strategies for resolving this error include " *
         "re-writing code such that it avoids generating any UpsilonNodes, or writing a " *
         "rule to differentiate the code by hand. If you are in any doubt as to what to " *
         "do, please request assistance by opening an issue at " *
-        "github.com/compintell/Mooncake.jl."
+        "github.com/compintell/Mooncake.jl.",
     )
 end
 
@@ -597,7 +603,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
     if Meta.isexpr(stmt, :call) || is_invoke
 
         # Find the types of all arguments to this call / invoke.
-        args = ((is_invoke ? stmt.args[2:end] : stmt.args)..., )
+        args = ((is_invoke ? stmt.args[2:end] : stmt.args)...,)
         arg_types = map(arg -> get_primal_type(info, arg), args)
 
         # Special case: if the result of a call to getfield is un-used, then leave the
@@ -748,7 +754,8 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         return ad_stmt_info(line, nothing, stmt, nothing)
 
     elseif stmt.head == :(=) && stmt.args[1] isa GlobalRef
-        msg = "Encountered assignment to global variable: $(stmt.args[1]). " *
+        msg =
+            "Encountered assignment to global variable: $(stmt.args[1]). " *
             "Cannot differentiate through assignments to globals. " *
             "Please refactor your code to avoid assigning to a global, for example by " *
             "passing the variable in to the function as an argument."
@@ -759,7 +766,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
     end
 end
 
-is_active(::Union{Argument, ID}) = true
+is_active(::Union{Argument,ID}) = true
 is_active(::Any) = false
 
 """
@@ -768,16 +775,16 @@ is_active(::Any) = false
 Get a bound on the pullback type, given a rule and associated primal types.
 """
 function pullback_type(Trule, arg_types)
-    T = Core.Compiler.return_type(Tuple{Trule, map(fcodual_type, arg_types)...})
+    T = Core.Compiler.return_type(Tuple{Trule,map(fcodual_type, arg_types)...})
     return T <: Tuple ? _pullback_type(T) : Any
 end
 
 _pullback_type(::Core.TypeofBottom) = Any
 _pullback_type(T::DataType) = T.parameters[2]
-_pullback_type(T::Union) = Union{_pullback_type(T.a), _pullback_type(T.b)}
+_pullback_type(T::Union) = Union{_pullback_type(T.a),_pullback_type(T.b)}
 
 # Used by the getfield special-case in call / invoke statments.
-@inline function __fwds_pass_no_ad!(f::F, raw_args::Vararg{Any, N}) where {F, N}
+@inline function __fwds_pass_no_ad!(f::F, raw_args::Vararg{Any,N}) where {F,N}
     return tuple_splat(__get_primal(f), tuple_map(__get_primal, raw_args))
 end
 
@@ -806,8 +813,8 @@ end
 @inline increment_ref!(x::Ref, t) = setindex!(x, increment!!(x[], t))
 @inline increment_ref!(::Base.RefValue{NoRData}, t) = nothing
 
-@inline function set_ret_ref_to_zero!!(::Type{P}, r::Ref{R}) where {P, R}
-    r[] = zero_like_rdata_from_type(P)
+@inline function set_ret_ref_to_zero!!(::Type{P}, r::Ref{R}) where {P,R}
+    return r[] = zero_like_rdata_from_type(P)
 end
 @inline set_ret_ref_to_zero!!(::Type{P}, r::Base.RefValue{NoRData}) where {P} = nothing
 
@@ -816,7 +823,7 @@ end
 # between differing varargs conventions.
 #
 
-struct Pullback{Tprimal, Tpb_oc, Tisva<:Val, Tnvargs<:Val}
+struct Pullback{Tprimal,Tpb_oc,Tisva<:Val,Tnvargs<:Val}
     pb_oc::Tpb_oc
     isva::Tisva
     nvargs::Tnvargs
@@ -824,21 +831,21 @@ end
 
 function Pullback(
     Tprimal, pb_oc::Tpb_oc, isva::Tisva, nvargs::Tnvargs
-) where {Tpb_oc, Tisva, Tnvargs}
-    return Pullback{Tprimal, Tpb_oc, Tisva, Tnvargs}(pb_oc, isva, nvargs)
+) where {Tpb_oc,Tisva,Tnvargs}
+    return Pullback{Tprimal,Tpb_oc,Tisva,Tnvargs}(pb_oc, isva, nvargs)
 end
 
 @inline (pb::Pullback)(dy) = __flatten_varargs(pb.isva, pb.pb_oc[].oc(dy), pb.nvargs)
 
-struct DerivedRule{Tprimal, Tfwds_oc, Tpb, Tisva<:Val, Tnargs<:Val}
+struct DerivedRule{Tprimal,Tfwds_oc,Tpb,Tisva<:Val,Tnargs<:Val}
     fwds_oc::Tfwds_oc
     pb::Tpb
     isva::Tisva
     nargs::Tnargs
 end
 
-function DerivedRule(Tprimal, fwds_oc::T, pb::U, isva::V, nargs::W) where {T, U, V, W}
-    return DerivedRule{Tprimal, T, U, V, W}(fwds_oc, pb, isva, nargs)
+function DerivedRule(Tprimal, fwds_oc::T, pb::U, isva::V, nargs::W) where {T,U,V,W}
+    return DerivedRule{Tprimal,T,U,V,W}(fwds_oc, pb, isva, nargs)
 end
 
 # Extends functionality defined for debug_mode.
@@ -870,7 +877,7 @@ _copy(x::Type) = x
 
 _copy(x) = copy(x)
 
-@inline function (fwds::DerivedRule{P, Q, S})(args::Vararg{CoDual, N}) where {P, Q, S, N}
+@inline function (fwds::DerivedRule{P,Q,S})(args::Vararg{CoDual,N}) where {P,Q,S,N}
     uf_args = __unflatten_codual_varargs(fwds.isva, args, fwds.nargs)
     return fwds.fwds_oc.oc(uf_args...)::CoDual, fwds.pb
 end
@@ -880,10 +887,10 @@ end
 
 If isva, inputs (5.0, (4.0, 3.0)) are transformed into (5.0, 4.0, 3.0).
 """
-function __flatten_varargs(::Val{isva}, args, ::Val{nvargs}) where {isva, nvargs}
+function __flatten_varargs(::Val{isva}, args, ::Val{nvargs}) where {isva,nvargs}
     isva || return args
     last_el = isa(args[end], NoRData) ? ntuple(n -> NoRData(), nvargs) : args[end]
-    return (args[1:end-1]..., last_el...)
+    return (args[1:(end - 1)]..., last_el...)
 end
 
 """
@@ -892,7 +899,7 @@ end
 If isva and nargs=2, then inputs `(CoDual(5.0, 0.0), CoDual(4.0, 0.0), CoDual(3.0, 0.0))`
 are transformed into `(CoDual(5.0, 0.0), CoDual((5.0, 4.0), (0.0, 0.0)))`.
 """
-function __unflatten_codual_varargs(::Val{isva}, args, ::Val{nargs}) where {isva, nargs}
+function __unflatten_codual_varargs(::Val{isva}, args, ::Val{nargs}) where {isva,nargs}
     isva || return args
     group_primal = map(primal, args[nargs:end])
     if fdata_type(tangent_type(_typeof(group_primal))) == NoFData
@@ -900,7 +907,7 @@ function __unflatten_codual_varargs(::Val{isva}, args, ::Val{nargs}) where {isva
     else
         grouped_args = CoDual(group_primal, map(tangent, args[nargs:end]))
     end
-    return (args[1:nargs-1]..., grouped_args)
+    return (args[1:(nargs - 1)]..., grouped_args)
 end
 
 #
@@ -910,7 +917,7 @@ end
 _is_primitive(C::Type, mi::Core.MethodInstance) = is_primitive(C, mi.specTypes)
 _is_primitive(C::Type, sig::Type) = is_primitive(C, sig)
 
-const RuleMC{A, R} = MistyClosure{OpaqueClosure{A, R}}
+const RuleMC{A,R} = MistyClosure{OpaqueClosure{A,R}}
 
 """
     rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where {C}
@@ -920,7 +927,6 @@ important for performance in dynamic dispatch, and to ensure that recursion work
 properly.
 """
 function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where {C}
-
     if _is_primitive(C, sig_or_mi)
         return debug_mode ? DebugRRule{typeof(rrule!!)} : typeof(rrule!!)
     end
@@ -934,23 +940,23 @@ function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where 
     arg_fwds_types = Tuple{map(fcodual_type, arg_types)...}
     arg_rvs_types = Tuple{map(rdata_type ∘ tangent_type, arg_types)...}
     rvs_return_type = rdata_type(tangent_type(Treturn))
-    pb_oc_type = MistyClosure{OpaqueClosure{Tuple{rvs_return_type}, arg_rvs_types}}
-    pb_type = Pullback{sig, Base.RefValue{pb_oc_type}, Val{isva}, nvargs(isva, sig)}
+    pb_oc_type = MistyClosure{OpaqueClosure{Tuple{rvs_return_type},arg_rvs_types}}
+    pb_type = Pullback{sig,Base.RefValue{pb_oc_type},Val{isva},nvargs(isva, sig)}
     nargs = Val{length(ir.argtypes)}
 
     if isconcretetype(Treturn)
         Tderived_rule = DerivedRule{
-            sig, RuleMC{arg_fwds_types, fcodual_type(Treturn)}, pb_type, Val{isva}, nargs,
+            sig,RuleMC{arg_fwds_types,fcodual_type(Treturn)},pb_type,Val{isva},nargs
         }
         return debug_mode ? DebugRRule{Tderived_rule} : Tderived_rule
     else
         if debug_mode
-            return DebugRRule{DerivedRule{
-                sig, RuleMC{arg_fwds_types, P}, pb_type, Val{isva}, nargs,
-            }} where {P<:fcodual_type(Treturn)}
+            return DebugRRule{
+                DerivedRule{sig,RuleMC{arg_fwds_types,P},pb_type,Val{isva},nargs}
+            } where {P<:fcodual_type(Treturn)}
         else
             return DerivedRule{
-                sig, RuleMC{arg_fwds_types, P}, pb_type, Val{isva}, nargs,
+                sig,RuleMC{arg_fwds_types,P},pb_type,Val{isva},nargs
             } where {P<:fcodual_type(Treturn)}
         end
     end
@@ -965,18 +971,22 @@ struct MooncakeRuleCompilationError <: Exception
 end
 
 function Base.showerror(io::IO, err::MooncakeRuleCompilationError)
-    msg = "MooncakeRuleCompilationError: an error occured while Mooncake was compiling a " *
+    msg =
+        "MooncakeRuleCompilationError: an error occured while Mooncake was compiling a " *
         "rule to differentiate something. If the `caused by` error " *
         "message below does not make it clear to you how the problem can be fixed, " *
         "please open an issue at github.com/compintell/Mooncake.jl describing your " *
         "problem.\n" *
         "To replicate this error run the following:\n"
     println(io, msg)
-    println(io, "Mooncake.build_rrule(Mooncake.$(err.interp), $(err.sig); debug_mode=$(err.debug_mode))")
     println(
         io,
+        "Mooncake.build_rrule(Mooncake.$(err.interp), $(err.sig); debug_mode=$(err.debug_mode))",
+    )
+    return println(
+        io,
         "\nNote that you may need to `using` some additional packages if not all of the " *
-        "names printed in the above signature are available currently in your environment."
+        "names printed in the above signature are available currently in your environment.",
     )
 end
 
@@ -1023,10 +1033,12 @@ function build_rrule(
     # To avoid segfaults, ensure that we bail out if the interpreter's world age is greater
     # than the current world age.
     if Base.get_world_counter() > interp.world
-        throw(ArgumentError(
-            "World age associated to interp is behind current world age. Please " *
-            "a new interpreter for the current world age."
-        ))
+        throw(
+            ArgumentError(
+                "World age associated to interp is behind current world age. Please " *
+                "a new interpreter for the current world age.",
+            ),
+        )
     end
 
     # If we're compiling in debug mode, let the user know by default.
@@ -1055,7 +1067,9 @@ function build_rrule(
             sig = sig_or_mi isa Core.MethodInstance ? sig_or_mi.specTypes : sig_or_mi
             nargs = num_args(dri.info)
             if dri.isva
-                sig = Tuple{sig.parameters[1:nargs-1]..., Tuple{sig.parameters[nargs:end]...}}
+                sig = Tuple{
+                    sig.parameters[1:(nargs - 1)]...,Tuple{sig.parameters[nargs:end]...}
+                }
             end
 
             pb = Pullback(sig, Ref(rvs_oc), Val(dri.isva), nvargs(dri.isva, sig)())
@@ -1152,7 +1166,7 @@ function replace_captures(mc::Tmc, new_captures) where {Tmc<:MistyClosure}
     return Tmc(replace_captures(mc.oc, new_captures), mc.ir)
 end
 
-const ADStmts = Vector{Tuple{ID, Vector{ADStmtInfo}}}
+const ADStmts = Vector{Tuple{ID,Vector{ADStmtInfo}}}
 
 """
     create_comms_insts!(ad_stmts_blocks::ADStmts, info::ADInfo)
@@ -1223,7 +1237,6 @@ Produce the IR associated to the `OpaqueClosure` which runs most of the forwards
 function forwards_pass_ir(
     ir::BBCode, ad_stmts_blocks::ADStmts, fwds_comms_insts, info::ADInfo, Tshared_data
 )
-
     is_unique_pred, pred_is_unique_pred = characterise_unique_predecessor_blocks(ir.blocks)
 
     # Insert a block at the start which extracts all items from the captures field of the
@@ -1295,8 +1308,8 @@ straightforward to figure out much time is spent pushing to the block stack when
 @inline __push_blk_stack!(block_stack::BlockStack, id::Int32) = push!(block_stack, id)
 
 @inline function __assemble_lazy_zero_rdata(
-    r::Ref{T}, args::Vararg{CoDual, N}
-) where {T<:Tuple, N}
+    r::Ref{T}, args::Vararg{CoDual,N}
+) where {T<:Tuple,N}
     r[] = __make_tuples(T, args)
     return nothing
 end
@@ -1542,7 +1555,9 @@ on.
 The same ideas apply if `pred_id` were `#3`. The block would end with `#3`, and there would
 be two `increment_ref!` calls because both `%5` and `_2` are not constants.
 """
-function rvs_phi_block(pred_id::ID, rdata_ids::Vector{ID}, values::Vector{Any}, info::ADInfo)
+function rvs_phi_block(
+    pred_id::ID, rdata_ids::Vector{ID}, values::Vector{Any}, info::ADInfo
+)
     @assert length(rdata_ids) == length(values)
     inc_stmts = map(rdata_ids, values) do id, val
         stmt = Expr(:call, increment_if_ref!, get_rev_data_id(info, val), id)
@@ -1595,12 +1610,12 @@ function make_switch_stmts(
     end
 
     # Compare predecessor from primal with all possible predecessors.
-    conds = map(pred_ids[1:end-1]) do id
+    conds = map(pred_ids[1:(end - 1)]) do id
         return (ID(), new_inst(Expr(:call, __switch_case, id.id, prev_blk_id)))
     end
 
     # Switch statement to change to the predecessor.
-    switch_stmt = Switch(Any[c[1] for c in conds], target_ids[1:end-1], target_ids[end])
+    switch_stmt = Switch(Any[c[1] for c in conds], target_ids[1:(end - 1)], target_ids[end])
     switch = (ID(), new_inst(switch_stmt))
 
     return vcat((prev_blk_id, prev_blk), conds, switch)
@@ -1640,11 +1655,11 @@ struct DynamicDerivedRule{V}
     debug_mode::Bool
 end
 
-DynamicDerivedRule(debug_mode::Bool) = DynamicDerivedRule(Dict{Any, Any}(), debug_mode)
+DynamicDerivedRule(debug_mode::Bool) = DynamicDerivedRule(Dict{Any,Any}(), debug_mode)
 
-_copy(x::P) where {P<:DynamicDerivedRule} = P(Dict{Any, Any}(), x.debug_mode)
+_copy(x::P) where {P<:DynamicDerivedRule} = P(Dict{Any,Any}(), x.debug_mode)
 
-function (dynamic_rule::DynamicDerivedRule)(args::Vararg{Any, N}) where {N}
+function (dynamic_rule::DynamicDerivedRule)(args::Vararg{Any,N}) where {N}
     sig = Tuple{map(_typeof ∘ primal, args)...}
     rule = get(dynamic_rule.cache, sig, nothing)
     if rule === nothing
@@ -1672,24 +1687,24 @@ reason to keep this around is for debugging -- it is very helpful to have this t
 in the stack trace when something goes wrong, as it allows you to trivially determine which
 bit of your code is the culprit.
 """
-mutable struct LazyDerivedRule{primal_sig, Trule}
+mutable struct LazyDerivedRule{primal_sig,Trule}
     debug_mode::Bool
     mi::Core.MethodInstance
     rule::Trule
     function LazyDerivedRule(mi::Core.MethodInstance, debug_mode::Bool)
         interp = get_interpreter()
-        return new{mi.specTypes, rule_type(interp, mi; debug_mode)}(debug_mode, mi)
+        return new{mi.specTypes,rule_type(interp, mi; debug_mode)}(debug_mode, mi)
     end
-    function LazyDerivedRule{Tprimal_sig, Trule}(
+    function LazyDerivedRule{Tprimal_sig,Trule}(
         mi::Core.MethodInstance, debug_mode::Bool
-    ) where {Tprimal_sig, Trule}
-        return new{Tprimal_sig, Trule}(debug_mode, mi)
+    ) where {Tprimal_sig,Trule}
+        return new{Tprimal_sig,Trule}(debug_mode, mi)
     end
 end
 
 _copy(x::P) where {P<:LazyDerivedRule} = P(x.mi, x.debug_mode)
 
-@inline function (rule::LazyDerivedRule)(args::Vararg{Any, N}) where {N}
+@inline function (rule::LazyDerivedRule)(args::Vararg{Any,N}) where {N}
     return isdefined(rule, :rule) ? rule.rule(args...) : _build_rule!(rule, args)
 end
 
@@ -1712,20 +1727,21 @@ function Base.showerror(io::IO, err::BadRuleTypeException)
     println(io, "This error occured for $(err.mi) with signature:")
     println(io, err.sig)
     println(io)
-    msg = "Usually this error is indicative of something having gone wrong in the " *
+    msg =
+        "Usually this error is indicative of something having gone wrong in the " *
         "compilation of the rule in question. Look at the error message for the error " *
         "which caused this error (below) for more details. If the error below does not " *
         "immediately give you enough information to debug what is going on, consider " *
         "building the rule for the signature above, and inspecting the IR."
-    println(io, msg)
+    return println(io, msg)
 end
 
-_rtype(::Type{<:DebugRRule}) = Tuple{CoDual, DebugPullback}
+_rtype(::Type{<:DebugRRule}) = Tuple{CoDual,DebugPullback}
 _rtype(T::Type{<:MistyClosure}) = _rtype(fieldtype(T, :oc))
-_rtype(::Type{<:OpaqueClosure{<:Any, <:R}}) where {R} = (@isdefined R) ? R : CoDual
-_rtype(T::Type{<:DerivedRule}) = Tuple{_rtype(fieldtype(T, :fwds_oc)), fieldtype(T, :pb)}
+_rtype(::Type{<:OpaqueClosure{<:Any,<:R}}) where {R} = (@isdefined R) ? R : CoDual
+_rtype(T::Type{<:DerivedRule}) = Tuple{_rtype(fieldtype(T, :fwds_oc)),fieldtype(T, :pb)}
 
-@noinline function _build_rule!(rule::LazyDerivedRule{sig, Trule}, args) where {sig, Trule}
+@noinline function _build_rule!(rule::LazyDerivedRule{sig,Trule}, args) where {sig,Trule}
     derived_rule = build_rrule(get_interpreter(), rule.mi; debug_mode=rule.debug_mode)
     if derived_rule isa Trule
         rule.rule = derived_rule

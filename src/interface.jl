@@ -8,7 +8,7 @@ In-place version of `value_and_pullback!!` in which the arguments have been wrap
 if calling this function multiple times with different values of `x`, should be careful to
 ensure that you zero-out the tangent fields of `x` each time.
 """
-function __value_and_pullback!!(rule::R, ȳ::T, fx::Vararg{CoDual, N}) where {R, N, T}
+function __value_and_pullback!!(rule::R, ȳ::T, fx::Vararg{CoDual,N}) where {R,N,T}
     fx_fwds = tuple_map(to_fwds, fx)
     __verify_sig(rule, fx_fwds)
     out, pb!! = rule(fx_fwds...)
@@ -19,8 +19,8 @@ function __value_and_pullback!!(rule::R, ȳ::T, fx::Vararg{CoDual, N}) where {R
 end
 
 function __verify_sig(
-    rule::DerivedRule{<:Any, <:MistyClosure{<:OpaqueClosure{sig}}}, fx::Tfx
-) where {sig, Tfx}
+    rule::DerivedRule{<:Any,<:MistyClosure{<:OpaqueClosure{sig}}}, fx::Tfx
+) where {sig,Tfx}
     Pfx = typeof(__unflatten_codual_varargs(rule.isva, fx, rule.nargs))
     if sig != Pfx
         msg = "signature of arguments, $Pfx, not equal to signature required by rule, $sig."
@@ -67,16 +67,18 @@ Mooncake.__value_and_gradient!!(
 (4.0, (NoTangent(), [1.0, 1.0], [2.0, 2.0]))
 ```
 """
-function __value_and_gradient!!(rule::R, fx::Vararg{CoDual, N}) where {R, N}
+function __value_and_gradient!!(rule::R, fx::Vararg{CoDual,N}) where {R,N}
     fx_fwds = tuple_map(to_fwds, fx)
     __verify_sig(rule, fx_fwds)
     out, pb!! = rule(fx_fwds...)
     y = primal(out)
     if !(y isa IEEEFloat)
-        throw(ValueAndGradientReturnTypeError(
-            "When calling __value_and_gradient!!, return value of primal must be a " *
-            "subtype of IEEEFloat. Instead, found value of type $(typeof(y))."
-        ))
+        throw(
+            ValueAndGradientReturnTypeError(
+                "When calling __value_and_gradient!!, return value of primal must be a " *
+                "subtype of IEEEFloat. Instead, found value of type $(typeof(y)).",
+            ),
+        )
     end
     @assert y isa IEEEFloat
     @assert tangent(out) isa NoFData
@@ -113,7 +115,7 @@ use-case, consider pre-allocating the `CoDual`s and calling the other method of 
 function. The `CoDual`s should be primal-tangent pairs (as opposed to primal-fdata pairs).
 There are lots of ways to get this wrong though, so we generally advise against doing this.
 """
-function value_and_pullback!!(rule::R, ȳ, fx::Vararg{Any, N}) where {R, N}
+function value_and_pullback!!(rule::R, ȳ, fx::Vararg{Any,N}) where {R,N}
     return __value_and_pullback!!(rule, ȳ, __create_coduals(fx)...)
 end
 
@@ -140,7 +142,7 @@ value_and_gradient!!(rule, f, x, y)
 (4.0, (NoTangent(), [1.0, 1.0], [2.0, 2.0]))
 ```
 """
-function value_and_gradient!!(rule::R, fx::Vararg{Any, N}) where {R, N}
+function value_and_gradient!!(rule::R, fx::Vararg{Any,N}) where {R,N}
     return __value_and_gradient!!(rule, __create_coduals(fx)...)
 end
 
@@ -154,7 +156,7 @@ function __create_coduals(args)
                 "means that Mooncake.jl has encountered a self-referential type. Mooncake.jl " *
                 "is not presently able to handle self-referential types, so if you are " *
                 "indeed using a self-referential type somewhere, you will need to " *
-                "refactor to avoid it if you wish to use Mooncake.jl."
+                "refactor to avoid it if you wish to use Mooncake.jl.",
             )
         else
             rethrow(e)

@@ -1,6 +1,6 @@
 using Pkg
 Pkg.activate(@__DIR__)
-Pkg.develop(; path = joinpath(@__DIR__, "..", "..", ".."))
+Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 
 using Bijectors, LinearAlgebra, Mooncake, StableRNGs, Test
 using Mooncake.TestUtils: test_rule
@@ -15,16 +15,16 @@ struct TestCase
     broken::Bool
 end
 
-TestCase(f, arg; name = nothing, broken=false) = TestCase(f, arg, name, broken)
+TestCase(f, arg; name=nothing, broken=false) = TestCase(f, arg, name, broken)
 
 """
 A helper function that returns a TestCase that evaluates bijector(inverse(bijector)(x))
 """
-function b_binv_test_case(bijector, dim; name = nothing, rng = StableRNG(23))
+function b_binv_test_case(bijector, dim; name=nothing, rng=StableRNG(23))
     if name === nothing
         name = string(bijector)
     end
-    return TestCase(x -> bijector(inverse(bijector)(x)), randn(rng, dim); name = name)
+    return TestCase(x -> bijector(inverse(bijector)(x)), randn(rng, dim); name=name)
 end
 
 @testset "Bijectors integration tests" begin
@@ -38,8 +38,7 @@ end
         b_binv_test_case(Bijectors.VecCholeskyBijector(:U), 3),
         b_binv_test_case(Bijectors.VecCholeskyBijector(:U), 0),
         b_binv_test_case(
-            Bijectors.Coupling(Bijectors.Shift, Bijectors.PartitionMask(3, [1], [2])),
-            3,
+            Bijectors.Coupling(Bijectors.Shift, Bijectors.PartitionMask(3, [1], [2])), 3
         ),
         b_binv_test_case(Bijectors.InvertibleBatchNorm(3; eps=1e-5, mtm=1e-1), (3, 3)),
         b_binv_test_case(Bijectors.LeakyReLU(0.2), 3),
@@ -65,15 +64,13 @@ end
         TestCase(
             function (x)
                 b = Bijectors.RationalQuadraticSpline(
-                    [-0.2, 0.1, 0.5],
-                    [-0.3, 0.3, 0.9],
-                    [1.0, 0.2, 1.0],
+                    [-0.2, 0.1, 0.5], [-0.3, 0.3, 0.9], [1.0, 0.2, 1.0]
                 )
                 binv = Bijectors.inverse(b)
                 return binv(b(x))
             end,
             randn(StableRNG(23));
-            name = "RationalQuadraticSpline on scalar",
+            name="RationalQuadraticSpline on scalar",
         ),
         TestCase(
             function (x)
@@ -82,21 +79,20 @@ end
                 return binv(b(x))
             end,
             randn(StableRNG(23), 7);
-            name = "OrderedBijector",
+            name="OrderedBijector",
         ),
         TestCase(
             function (x)
                 layer = Bijectors.PlanarLayer(x[1:2], x[3:4], x[5:5])
                 flow = Bijectors.transformed(
-                    Bijectors.MvNormal(zeros(2), LinearAlgebra.I),
-                    layer,
+                    Bijectors.MvNormal(zeros(2), LinearAlgebra.I), layer
                 )
                 x = x[6:7]
                 return Bijectors.logpdf(flow.dist, x) -
                        Bijectors.logabsdetjac(flow.transform, x)
             end,
             randn(StableRNG(23), 7);
-            name = "PlanarLayer7",
+            name="PlanarLayer7",
             # TODO(mhauru) Broken on v1.11 due to
             # https://github.com/compintell/Mooncake.jl/issues/319
             broken=(VERSION >= v"1.11"),
@@ -105,8 +101,7 @@ end
             function (x)
                 layer = Bijectors.PlanarLayer(x[1:2], x[3:4], x[5:5])
                 flow = Bijectors.transformed(
-                    Bijectors.MvNormal(zeros(2), LinearAlgebra.I),
-                    layer,
+                    Bijectors.MvNormal(zeros(2), LinearAlgebra.I), layer
                 )
                 x = reshape(x[6:end], 2, :)
                 return sum(
@@ -115,7 +110,7 @@ end
                 )
             end,
             randn(StableRNG(23), 11);
-            name = "PlanarLayer11",
+            name="PlanarLayer11",
         ),
     ]
 

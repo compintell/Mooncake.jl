@@ -127,7 +127,7 @@ end
 # already have one with the right argument types. Credit to @oxinabox:
 # https://gist.github.com/oxinabox/cdcffc1392f91a2f6d80b2524726d802#file-example-jl-L54
 function __get_toplevel_mi_from_ir(ir, _module::Module)
-    mi = ccall(:jl_new_method_instance_uninit, Ref{Core.MethodInstance}, ());
+    mi = ccall(:jl_new_method_instance_uninit, Ref{Core.MethodInstance}, ())
     mi.specTypes = Tuple{map(_type, ir.argtypes)...}
     mi.def = _module
     return mi
@@ -136,7 +136,7 @@ end
 # Run type inference and constant propagation on the ir. Credit to @oxinabox:
 # https://gist.github.com/oxinabox/cdcffc1392f91a2f6d80b2524726d802#file-example-jl-L54
 function __infer_ir!(ir, interp::CC.AbstractInterpreter, mi::CC.MethodInstance)
-    method_info = CC.MethodInfo(#=propagate_inbounds=#true, nothing)
+    method_info = CC.MethodInfo(true, nothing) #=propagate_inbounds=#
     min_world = world = get_inference_world(interp)
     max_world = Base.get_world_counter()
     irsv = CC.IRInterpretationState(
@@ -184,7 +184,7 @@ function optimise_ir!(ir::IRCode; show_ir=false, do_inline=true)
     inline_state = CC.InliningState(local_interp)
     CC.verify_ir(ir)
     if do_inline
-        ir = CC.ssa_inlining_pass!(ir, inline_state, #=propagate_inbounds=#true)
+        ir = CC.ssa_inlining_pass!(ir, inline_state, true) #=propagate_inbounds=#
         ir = CC.compact!(ir)
     end
     ir = __strip_coverage!(ir)
@@ -222,7 +222,9 @@ there is no code found, or if more than one `IRCode` instance returned.
 
 Returns a tuple containing the `IRCode` and its return type.
 """
-function lookup_ir(interp::CC.AbstractInterpreter, tt::Type{<:Tuple}; optimize_until=nothing)
+function lookup_ir(
+    interp::CC.AbstractInterpreter, tt::Type{<:Tuple}; optimize_until=nothing
+)
     matches = CC.findall(tt, CC.method_table(interp))
     asts = []
     for match in get_matches(matches.matches)
@@ -242,7 +244,8 @@ function lookup_ir(interp::CC.AbstractInterpreter, tt::Type{<:Tuple}; optimize_u
         end
     end
     if isempty(asts)
-        msg = "No methods found for signature: $tt.\n" *
+        msg =
+            "No methods found for signature: $tt.\n" *
             "\n" *
             "This is often caused by accidentally trying to get Mooncake.jl to " *
             "differentiate a call (directly or indirectly) which does not exist. For " *
@@ -260,7 +263,9 @@ function lookup_ir(interp::CC.AbstractInterpreter, tt::Type{<:Tuple}; optimize_u
     return only(asts)
 end
 
-function lookup_ir(interp::CC.AbstractInterpreter, mi::Core.MethodInstance; optimize_until=nothing)
+function lookup_ir(
+    interp::CC.AbstractInterpreter, mi::Core.MethodInstance; optimize_until=nothing
+)
     return CC.typeinf_ircode(interp, mi.def, mi.specTypes, mi.sparam_vals, optimize_until)
 end
 
@@ -320,7 +325,7 @@ Replace all uses of `def` with `val` in the single statement `stmt`.
 Note: this function is highly incomplete, really only working correctly for a specific
 function in `ir_normalisation.jl`. You probably do not want to use it.
 """
-function replace_uses_with!(stmt, def::Union{Argument, SSAValue}, val)
+function replace_uses_with!(stmt, def::Union{Argument,SSAValue}, val)
     if stmt isa Expr
         stmt.args = Any[arg == def ? val : arg for arg in stmt.args]
         return stmt

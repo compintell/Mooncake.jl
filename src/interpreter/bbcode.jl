@@ -1,6 +1,6 @@
 # See the docstring for `BBCode` for some context on this file.
 
-const _id_count::Dict{Int, Int32} = Dict{Int, Int32}()
+const _id_count::Dict{Int,Int32} = Dict{Int,Int32}()
 
 """
     ID()
@@ -32,7 +32,7 @@ ensure determinism between two runs of the same function which makes use of `ID`
 This is akin to setting the random seed associated to a random number generator globally.
 """
 function seed_id!()
-    global _id_count[Threads.threadid()] = 0
+    return global _id_count[Threads.threadid()] = 0
 end
 
 """
@@ -107,7 +107,7 @@ end
 
 A Union of the possible types of a terminator node.
 """
-const Terminator = Union{Switch, IDGotoIfNot, IDGotoNode, ReturnNode}
+const Terminator = Union{Switch,IDGotoIfNot,IDGotoNode,ReturnNode}
 
 """
     BBlock(id::ID, stmt_ids::Vector{ID}, stmts::InstVector)
@@ -139,7 +139,7 @@ end
 """
     const IDInstPair = Tuple{ID, NewInstruction}
 """
-const IDInstPair = Tuple{ID, NewInstruction}
+const IDInstPair = Tuple{ID,NewInstruction}
 
 """
     BBlock(id::ID, inst_pairs::Vector{IDInstPair})
@@ -254,7 +254,7 @@ end
 Make a new `BBCode` whose `blocks` is given by `new_blocks`, and fresh copies are made of
 all other fields from `ir`.
 """
-function BBCode(ir::Union{IRCode, BBCode}, new_blocks::Vector{BBlock})
+function BBCode(ir::Union{IRCode,BBCode}, new_blocks::Vector{BBlock})
     return BBCode(
         new_blocks,
         CC.copy(ir.argtypes),
@@ -272,7 +272,7 @@ Base.copy(ir::BBCode) = BBCode(ir, copy(ir.blocks))
 
 Compute a map from the `ID of each `BBlock` in `ir` to its possible successors.
 """
-function compute_all_successors(ir::BBCode)::Dict{ID, Vector{ID}}
+function compute_all_successors(ir::BBCode)::Dict{ID,Vector{ID}}
     return _compute_all_successors(ir.blocks)
 end
 
@@ -283,15 +283,15 @@ Internal method implementing [`compute_all_successors`](@ref). This method is ea
 construct test cases for because it only requires the collection of `BBlocks`, not all of
 the other stuff that goes into a `BBCode`.
 """
-function _compute_all_successors(blks::Vector{BBlock})::Dict{ID, Vector{ID}}
+function _compute_all_successors(blks::Vector{BBlock})::Dict{ID,Vector{ID}}
     succs = map(enumerate(blks)) do (n, blk)
         return successors(terminator(blk), n, blks, n == length(blks))
     end
-    return Dict{ID, Vector{ID}}(zip(map(b -> b.id, blks), succs))
+    return Dict{ID,Vector{ID}}(zip(map(b -> b.id, blks), succs))
 end
 
 function successors(::Nothing, n::Int, blks::Vector{BBlock}, is_final_block::Bool)
-    return is_final_block ? ID[] : ID[blks[n+1].id]
+    return is_final_block ? ID[] : ID[blks[n + 1].id]
 end
 successors(t::IDGotoNode, ::Int, ::Vector{BBlock}, ::Bool) = [t.label]
 function successors(t::IDGotoIfNot, n::Int, blks::Vector{BBlock}, is_final_block::Bool)
@@ -305,7 +305,7 @@ successors(t::Switch, ::Int, ::Vector{BBlock}, ::Bool) = vcat(t.dests, t.fallthr
 
 Compute a map from the `ID of each `BBlock` in `ir` to its possible predecessors.
 """
-function compute_all_predecessors(ir::BBCode)::Dict{ID, Vector{ID}}
+function compute_all_predecessors(ir::BBCode)::Dict{ID,Vector{ID}}
     return _compute_all_predecessors(ir.blocks)
 end
 
@@ -316,13 +316,12 @@ Internal method implementing [`compute_all_predecessors`](@ref). This method is 
 construct test cases for because it only requires the collection of `BBlocks`, not all of
 the other stuff that goes into a `BBCode`.
 """
-function _compute_all_predecessors(blks::Vector{BBlock})::Dict{ID, Vector{ID}}
-
+function _compute_all_predecessors(blks::Vector{BBlock})::Dict{ID,Vector{ID}}
     successor_map = _compute_all_successors(blks)
 
     # Initialise predecessor map to be empty.
     ks = collect(keys(successor_map))
-    predecessor_map = Dict{ID, Vector{ID}}(zip(ks, map(_ -> ID[], ks)))
+    predecessor_map = Dict{ID,Vector{ID}}(zip(ks, map(_ -> ID[], ks)))
 
     # Find all predecessors by iterating through the successor map.
     for (k, succs) in successor_map
@@ -381,7 +380,7 @@ function _control_flow_graph(blks::Vector{BBlock})::Core.Compiler.CFG
 
     # Construct map from block ID to block number.
     block_ids = map(b -> b.id, blks)
-    id_to_num = Dict{ID, Int}(zip(block_ids, collect(eachindex(block_ids))))
+    id_to_num = Dict{ID,Int}(zip(block_ids, collect(eachindex(block_ids))))
 
     # Convert predecessor and successor IDs to numbers.
     preds = map(id -> sort(map(p -> id_to_num[p], preds_ids[id])), block_ids)
@@ -389,10 +388,10 @@ function _control_flow_graph(blks::Vector{BBlock})::Core.Compiler.CFG
 
     index = vcat(0, cumsum(map(length, blks))) .+ 1
     basic_blocks = map(eachindex(blks)) do n
-        stmt_range = Core.Compiler.StmtRange(index[n], index[n+1] - 1)
+        stmt_range = Core.Compiler.StmtRange(index[n], index[n + 1] - 1)
         return Core.Compiler.BasicBlock(stmt_range, preds[n], succs[n])
     end
-    return Core.Compiler.CFG(basic_blocks, index[2:end-1])
+    return Core.Compiler.CFG(basic_blocks, index[2:(end - 1)])
 end
 
 #
@@ -426,19 +425,18 @@ function BBCode(ir::IRCode)
     return BBCode(ir, blocks)
 end
 
-
 """
     new_inst_vec(x::CC.InstructionStream)
 
 Convert an `Compiler.InstructionStream` into a list of `Compiler.NewInstruction`s.
 """
 function new_inst_vec(x::CC.InstructionStream)
-    return map((v..., ) -> NewInstruction(v...), stmt(x), x.type, x.info, x.line, x.flag)
+    return map((v...,) -> NewInstruction(v...), stmt(x), x.type, x.info, x.line, x.flag)
 end
 
 # Maps from positional names (SSAValues for nodes, Integers for basic blocks) to IDs.
-const SSAToIdDict = Dict{SSAValue, ID}
-const BlockNumToIdDict = Dict{Integer, ID}
+const SSAToIdDict = Dict{SSAValue,ID}
+const BlockNumToIdDict = Dict{Integer,ID}
 
 """
     _ssas_to_ids(insts::InstVector)::Tuple{Vector{ID}, InstVector}
@@ -447,7 +445,7 @@ Assigns an ID to each line in `stmts`, and replaces each instance of an `SSAValu
 line with the corresponding `ID`. For example, a call statement of the form
 `Expr(:call, :f, %4)` is be replaced with `Expr(:call, :f, id_assigned_to_%4)`.
 """
-function _ssas_to_ids(insts::InstVector)::Tuple{Vector{ID}, InstVector}
+function _ssas_to_ids(insts::InstVector)::Tuple{Vector{ID},InstVector}
     ids = map(_ -> ID(), insts)
     val_id_map = SSAToIdDict(zip(SSAValue.(eachindex(insts)), ids))
     return ids, map(Base.Fix1(_ssa_to_ids, val_id_map), insts)
@@ -489,7 +487,7 @@ _ssa_to_ids(d::SSAToIdDict, x::GotoIfNot) = GotoIfNot(get(d, x.cond, x.cond), x.
 Assign to each basic block in `cfg` an `ID`. Replace all integers referencing block numbers
 in `insts` with the corresponding `ID`. Return the `ID`s and the updated instructions.
 """
-function _block_nums_to_ids(insts::InstVector, cfg::CC.CFG)::Tuple{Vector{ID}, InstVector}
+function _block_nums_to_ids(insts::InstVector, cfg::CC.CFG)::Tuple{Vector{ID},InstVector}
     ids = map(_ -> ID(), cfg.blocks)
     block_num_id_map = BlockNumToIdDict(zip(eachindex(cfg.blocks), ids))
     return ids, map(Base.Fix1(_block_num_to_ids, block_num_id_map), insts)
@@ -525,7 +523,7 @@ function CC.IRCode(bb_code::BBCode)
     bb_code = _lower_switch_statements(bb_code)
     bb_code = _remove_double_edges(bb_code)
     insts = _ids_to_line_numbers(bb_code)
-    cfg =  control_flow_graph(bb_code)
+    cfg = control_flow_graph(bb_code)
     insts = _lines_to_blocks(insts, cfg)
     return IRCode(
         CC.InstructionStream(
@@ -556,7 +554,7 @@ function _lower_switch_statements(bb_code::BBCode)
         if t isa Switch
 
             # Create new block without the `Switch`.
-            bb = BBlock(block.id, block.inst_ids[1:end-1], block.insts[1:end-1])
+            bb = BBlock(block.id, block.inst_ids[1:(end - 1)], block.insts[1:(end - 1)])
             push!(new_blocks, bb)
 
             # Create new blocks for each `GotoIfNot` from the `Switch`.
@@ -586,7 +584,7 @@ function _ids_to_line_numbers(bb_code::BBCode)::InstVector
     # Construct map from `ID`s to `SSAValue`s.
     block_ids = [b.id for b in bb_code.blocks]
     block_lengths = map(length, bb_code.blocks)
-    block_start_ssas = SSAValue.(vcat(1, cumsum(block_lengths)[1:end-1] .+ 1))
+    block_start_ssas = SSAValue.(vcat(1, cumsum(block_lengths)[1:(end - 1)] .+ 1))
     line_ids = concatenate_ids(bb_code)
     line_ssas = SSAValue.(eachindex(line_ids))
     id_to_ssa_map = Dict(zip(vcat(block_ids, line_ids), vcat(block_start_ssas, line_ssas)))
@@ -630,8 +628,8 @@ in `ir`.
 function _remove_double_edges(ir::BBCode)
     new_blks = map(enumerate(ir.blocks)) do (n, blk)
         t = terminator(blk)
-        if t isa IDGotoIfNot && t.dest == ir.blocks[n+1].id
-            new_insts = vcat(blk.insts[1:end-1], NewInstruction(t; stmt=IDGotoNode(t.dest)))
+        if t isa IDGotoIfNot && t.dest == ir.blocks[n + 1].id
+            new_insts = vcat(blk.insts[1:(end - 1)], NewInstruction(t; stmt=IDGotoNode(t.dest)))
             return BBlock(blk.id, blk.inst_ids, new_insts)
         else
             return blk
@@ -652,7 +650,7 @@ Returns a 2-tuple, whose first element is `g`, and whose second element is a map
 the `ID` associated to each basic block in `ir`, to the `Int` corresponding to its node
 index in `g`.
 """
-function _build_graph_of_cfg(blks::Vector{BBlock})::Tuple{SimpleDiGraph, Dict{ID, Int}}
+function _build_graph_of_cfg(blks::Vector{BBlock})::Tuple{SimpleDiGraph,Dict{ID,Int}}
     node_ints = collect(eachindex(blks))
     id_to_int = Dict(zip(map(blk -> blk.id, blks), node_ints))
     successors = _compute_all_successors(blks)
@@ -725,7 +723,7 @@ block stack at all.
 """
 function characterise_unique_predecessor_blocks(
     blks::Vector{BBlock}
-)::Tuple{Dict{ID, Bool}, Dict{ID, Bool}}
+)::Tuple{Dict{ID,Bool},Dict{ID,Bool}}
 
     # Obtain the block IDs in order -- this ensures that we get the entry block first.
     blk_ids = ID[b.id for b in blks]
@@ -733,7 +731,7 @@ function characterise_unique_predecessor_blocks(
     succs = _compute_all_successors(blks)
 
     # The bulk of blocks can be hanled by this general loop.
-    is_unique_pred = Dict{ID, Bool}()
+    is_unique_pred = Dict{ID,Bool}()
     for id in blk_ids
         ss = succs[id]
         is_unique_pred[id] = !isempty(ss) && all(s -> length(preds[s]) == 1, ss)
@@ -754,7 +752,7 @@ function characterise_unique_predecessor_blocks(
     end
 
     # pred_is_unique_pred is true if the unique predecessor to a block is a unique pred.
-    pred_is_unique_pred = Dict{ID, Bool}()
+    pred_is_unique_pred = Dict{ID,Bool}()
     for id in blk_ids
         pred_is_unique_pred[id] = length(preds[id]) == 1 && is_unique_pred[only(preds[id])]
     end
@@ -774,12 +772,12 @@ For each line in `stmts`, determine whether it is referenced anywhere else in th
 Returns a dictionary containing the results. An element is `false` if the corresponding
 `ID` is unused, and `true` if is used.
 """
-function characterise_used_ids(stmts::Vector{IDInstPair})::Dict{ID, Bool}
+function characterise_used_ids(stmts::Vector{IDInstPair})::Dict{ID,Bool}
     ids = first.(stmts)
     insts = last.(stmts)
 
     # Initialise to false.
-    is_used = Dict{ID, Bool}(zip(ids, fill(false, length(ids))))
+    is_used = Dict{ID,Bool}(zip(ids, fill(false, length(ids))))
 
     # Hunt through the instructions, flipping a value in is_used to true whenever an ID
     # is encountered which corresponds to an SSA.
@@ -797,29 +795,29 @@ the corresponding value of `d` to `true`.
 
 For example, if `x = ReturnNode(ID(5))`, then this function sets `d[ID(5)] = true`.
 """
-function _find_id_uses!(d::Dict{ID, Bool}, x::Expr)
+function _find_id_uses!(d::Dict{ID,Bool}, x::Expr)
     for arg in x.args
         in(arg, keys(d)) && setindex!(d, true, arg)
     end
 end
-function _find_id_uses!(d::Dict{ID, Bool}, x::IDGotoIfNot)
+function _find_id_uses!(d::Dict{ID,Bool}, x::IDGotoIfNot)
     return in(x.cond, keys(d)) && setindex!(d, true, x.cond)
 end
-_find_id_uses!(::Dict{ID, Bool}, ::IDGotoNode) = nothing
-function _find_id_uses!(d::Dict{ID, Bool}, x::PiNode)
+_find_id_uses!(::Dict{ID,Bool}, ::IDGotoNode) = nothing
+function _find_id_uses!(d::Dict{ID,Bool}, x::PiNode)
     return in(x.val, keys(d)) && setindex!(d, true, x.val)
 end
-function _find_id_uses!(d::Dict{ID, Bool}, x::IDPhiNode)
+function _find_id_uses!(d::Dict{ID,Bool}, x::IDPhiNode)
     v = x.values
     for n in eachindex(v)
         isassigned(v, n) && in(v[n], keys(d)) && setindex!(d, true, v[n])
     end
 end
-function _find_id_uses!(d::Dict{ID, Bool}, x::ReturnNode)
+function _find_id_uses!(d::Dict{ID,Bool}, x::ReturnNode)
     return isdefined(x, :val) && in(x.val, keys(d)) && setindex!(d, true, x.val)
 end
-_find_id_uses!(d::Dict{ID, Bool}, x::QuoteNode) = nothing
-_find_id_uses!(d::Dict{ID, Bool}, x) = nothing
+_find_id_uses!(d::Dict{ID,Bool}, x::QuoteNode) = nothing
+_find_id_uses!(d::Dict{ID,Bool}, x) = nothing
 
 """
     _is_reachable(blks::Vector{BBlock})::Vector{Bool}
