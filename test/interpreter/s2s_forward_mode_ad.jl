@@ -1,27 +1,34 @@
+using MistyClosures
 using Mooncake
 using Test
 
 x, dx = 2.0, 3.0
 xdual = Dual(x, dx)
 
-@testset "Manual frule" begin
-    sin_rule = build_frule(sin, x)
-    ydual = sin_rule(zero_dual(sin), xdual)
+sin_rule = build_frule(sin, x)
+ydual = sin_rule(zero_dual(sin), xdual)
 
-    @test primal(ydual) == sin(x)
-    @test tangent(ydual) == dx * cos(x)
-end
+@test primal(ydual) == sin(x)
+@test tangent(ydual) == dx * cos(x)
 
 function func(x)
-    y = sin(x)
-    z = cos(y)
-    return z
+    z = cos(x)
+    w = sin(z)
+    return w
 end
 
-@testset "Automatic frule" begin
-    func_rule = build_frule(func, x)
-    ydual = func_rule(zero_dual(func), xdual)
+ir = Base.code_ircode(func, (typeof(x),))[1][1]
+dual_ir = build_frule(func, x)
+comp = CC.compact!(dual_ir)
 
-    @test primal(ydual) == cos(sin(x))
-    @test tangent(ydual) ≈ dx * -sin(sin(x)) * cos(x)
-end
+dual_ir |> typeof
+
+oc = MistyClosure(dual_ir)
+
+oc.oc(zero_dual(func), xdual)
+
+func_rule = build_frule(func, x)
+ydual = func_rule(zero_dual(func), xdual)
+
+@test primal(ydual) == cos(sin(x))
+@test tangent(ydual) ≈ dx * -sin(sin(x)) * cos(x)
