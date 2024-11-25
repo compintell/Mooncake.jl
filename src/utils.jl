@@ -5,7 +5,7 @@ Central definition of typeof, which is specific to the use-required in this pack
 """
 _typeof(x) = Base._stable_typeof(x)
 _typeof(x::Tuple) = Tuple{tuple_map(_typeof, x)...}
-_typeof(x::NamedTuple{names}) where {names} = NamedTuple{names, _typeof(Tuple(x))}
+_typeof(x::NamedTuple{names}) where {names} = NamedTuple{names,_typeof(Tuple(x))}
 
 """
     tuple_map(f::F, x::Tuple) where {F}
@@ -37,28 +37,34 @@ end
 end
 
 for N in 1:128
-    @eval @inline function tuple_map(f::F, x::Tuple{Vararg{Any, $N}}) where {F}
+    @eval @inline function tuple_map(f::F, x::Tuple{Vararg{Any,$N}}) where {F}
         return $(Expr(:call, :tuple, map(n -> :(f(getfield(x, $n))), 1:N)...))
     end
-    @eval @inline function tuple_map(f::F, x::NamedTuple{names, <:Tuple{Vararg{Any, $N}}}) where {F, names}
-        return NamedTuple{names}($(Expr(:call, :tuple, map(n -> :(f(getfield(x, $n))), 1:N)...)))
-    end
     @eval @inline function tuple_map(
-        f, x::Tuple{Vararg{Any, $N}}, y::Tuple{Vararg{Any, $N}}
-    )
-        return $(Expr(:call, :tuple, map(n -> :(f(getfield(x, $n), getfield(y, $n))), 1:N)...))
+        f::F, x::NamedTuple{names,<:Tuple{Vararg{Any,$N}}}
+    ) where {F,names}
+        return NamedTuple{names}(
+            $(Expr(:call, :tuple, map(n -> :(f(getfield(x, $n))), 1:N)...))
+        )
+    end
+    @eval @inline function tuple_map(f, x::Tuple{Vararg{Any,$N}}, y::Tuple{Vararg{Any,$N}})
+        return $(Expr(
+            :call, :tuple, map(n -> :(f(getfield(x, $n), getfield(y, $n))), 1:N)...
+        ))
     end
     @eval @inline function tuple_map(
         f::F,
-        x::NamedTuple{names, <:Tuple{Vararg{Any, $N}}},
-        y::NamedTuple{names, <:Tuple{Vararg{Any, $N}}},
-    ) where {F, names}
-        return NamedTuple{names}($(Expr(:call, :tuple, map(n -> :(f(getfield(x, $n), getfield(y, $n))), 1:N)...)))
+        x::NamedTuple{names,<:Tuple{Vararg{Any,$N}}},
+        y::NamedTuple{names,<:Tuple{Vararg{Any,$N}}},
+    ) where {F,names}
+        return NamedTuple{names}(
+            $(Expr(:call, :tuple, map(n -> :(f(getfield(x, $n), getfield(y, $n))), 1:N)...))
+        )
     end
 end
 
 for N in 1:256
-    @eval @inline function tuple_splat(f, x::Tuple{Vararg{Any, $N}})
+    @eval @inline function tuple_splat(f, x::Tuple{Vararg{Any,$N}})
         return $(Expr(:call, :f, map(n -> :(getfield(x, $n)), 1:N)...))
     end
 end
@@ -71,10 +77,9 @@ end
     return Expr(:call, :f, :v, map(n -> :(x[$n]), 1:length(x.parameters))...)
 end
 
-@inline @generated function tuple_fill(val ,::Val{N}) where {N}
+@inline @generated function tuple_fill(val, ::Val{N}) where {N}
     return Expr(:call, :tuple, map(_ -> :val, 1:N)...)
 end
-
 
 """
     _map_if_assigned!(f, y::DenseArray, x::DenseArray{P}) where {P}
@@ -86,7 +91,7 @@ Equivalent to `map!(f, y, x)` if `P` is a bits type as element will always be as
 
 Requires that `y` and `x` have the same size.
 """
-function _map_if_assigned!(f::F, y::DenseArray, x::DenseArray{P}) where {F, P}
+function _map_if_assigned!(f::F, y::DenseArray, x::DenseArray{P}) where {F,P}
     @assert size(y) == size(x)
     @inbounds for n in eachindex(y)
         if isbitstype(P) || isassigned(x, n)
@@ -104,7 +109,9 @@ writes `f(x1[n], x2[n])` to `y[n]`, otherwise leaves `y[n]` unchanged.
 
 Requires that `y`, `x1`, and `x2` have the same size.
 """
-function _map_if_assigned!(f::F, y::DenseArray, x1::DenseArray{P}, x2::DenseArray) where {F, P}
+function _map_if_assigned!(
+    f::F, y::DenseArray, x1::DenseArray{P}, x2::DenseArray
+) where {F,P}
     @assert size(y) == size(x1)
     @assert size(y) == size(x2)
     @inbounds for n in eachindex(y)
@@ -121,7 +128,7 @@ end
 Same as `map` but requires all elements of `x` to have equal length.
 The usual function `map` doesn't enforce this for `Array`s.
 """
-@inline function _map(f::F, x::Vararg{Any, N}) where {F, N}
+@inline function _map(f::F, x::Vararg{Any,N}) where {F,N}
     @assert allequal(map(length, x))
     return map(f, x...)
 end
@@ -139,11 +146,13 @@ is_vararg_and_sparam_names(m::Method) = m.isva, sparam_names(m)
 
 Finds the method associated to `sig`, and calls `is_vararg_and_sparam_names` on it.
 """
-function is_vararg_and_sparam_names(sig)::Tuple{Bool, Vector{Symbol}}
+function is_vararg_and_sparam_names(sig)::Tuple{Bool,Vector{Symbol}}
     world = Base.get_world_counter()
     min = Base.RefValue{UInt}(typemin(UInt))
     max = Base.RefValue{UInt}(typemax(UInt))
-    ms = Base._methods_by_ftype(sig, nothing, -1, world, true, min, max, Ptr{Int32}(C_NULL))::Vector
+    ms = Base._methods_by_ftype(
+        sig, nothing, -1, world, true, min, max, Ptr{Int32}(C_NULL)
+    )::Vector
     return is_vararg_and_sparam_names(only(ms).method)
 end
 
@@ -152,7 +161,7 @@ end
 
 Calls `is_vararg_and_sparam_names` on `mi.def::Method`.
 """
-function is_vararg_and_sparam_names(mi::Core.MethodInstance)::Tuple{Bool, Vector{Symbol}}
+function is_vararg_and_sparam_names(mi::Core.MethodInstance)::Tuple{Bool,Vector{Symbol}}
     return is_vararg_and_sparam_names(mi.def)
 end
 
@@ -198,7 +207,7 @@ end
 
 Like `getfield`, but with the field and access order encoded as types.
 """
-lgetfield(x, ::Val{f}, ::Val{order}) where {f, order} = getfield(x, f, order)
+lgetfield(x, ::Val{f}, ::Val{order}) where {f,order} = getfield(x, f, order)
 
 """
     lsetfield!(value, name::Val, x, [order::Val])
@@ -216,6 +225,6 @@ lsetfield!(value, ::Val{name}, x) where {name} = setfield!(value, name, x)
 
 One-liner which calls the `:new` instruction with type `T` with arguments `x`.
 """
-@inline @generated function _new_(::Type{T}, x::Vararg{Any, N}) where {T, N}
+@inline @generated function _new_(::Type{T}, x::Vararg{Any,N}) where {T,N}
     return Expr(:new, :T, map(n -> :(x[$n]), 1:N)...)
 end

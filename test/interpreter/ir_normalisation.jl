@@ -1,9 +1,6 @@
 @testset "ir_normalisation" begin
     @testset "interpolate_boundschecks" begin
-        statements = Any[
-            Expr(:boundscheck, true),
-            Expr(:call, sin, SSAValue(1)),
-        ]
+        statements = Any[Expr(:boundscheck, true), Expr(:call, sin, SSAValue(1))]
         Mooncake._interpolate_boundschecks!(statements)
         @test statements[2].args[2] == true
     end
@@ -19,7 +16,7 @@
             0x0000000000000001,
             0x0000000000000001,
         )
-        sp_map = Dict{Symbol, CC.VarState}()
+        sp_map = Dict{Symbol,CC.VarState}()
         call = Mooncake.foreigncall_to_call(foreigncall, sp_map)
         @test Meta.isexpr(call, :call)
         @test call.args[1] == Mooncake._foreigncall_
@@ -89,10 +86,7 @@
             Expr(:call, setfield!, SSAValue(1), QuoteNode(:a), SSAValue(3)),
             Expr(:call, lsetfield!, SSAValue(1), Val(:a), SSAValue(3)),
         ),
-        (
-            Expr(:call, sin, SSAValue(1)),
-            Expr(:call, sin, SSAValue(1)),
-        ),
+        (Expr(:call, sin, SSAValue(1)), Expr(:call, sin, SSAValue(1))),
     ]
         @test Mooncake.lift_getfield_and_others(ex) == target
     end
@@ -117,14 +111,16 @@
             x = FinalizerObject()
             ptr = convert(Ptr{Bool}, Base.pointer_from_objref(x))
             GC.gc(true)
-            unsafe_load(ptr)
+            return unsafe_load(ptr)
         end
         @test test_no_preserve()
 
         # Check that if you insert a call to `gc_preserve`, the object is not finalised.
         function test_preserved()
             x = FinalizerObject()
-            _, pb!! = Mooncake.rrule!!(zero_fcodual(Mooncake.gc_preserve), Mooncake.zero_fcodual(x))
+            _, pb!! = Mooncake.rrule!!(
+                zero_fcodual(Mooncake.gc_preserve), Mooncake.zero_fcodual(x)
+            )
             ptr = convert(Ptr{Bool}, Base.pointer_from_objref(x))
             GC.gc(true)
             return unsafe_load(ptr), pb!!
@@ -134,7 +130,9 @@
 
         # Check that translation of expressions happens correctly.
         @test ==(
-            Mooncake.lift_gc_preservation(Expr(:gc_preserve_begin, Argument(1), SSAValue(2))),
+            Mooncake.lift_gc_preservation(
+                Expr(:gc_preserve_begin, Argument(1), SSAValue(2))
+            ),
             Expr(:call, Mooncake.gc_preserve, Argument(1), SSAValue(2)),
         )
         @test Mooncake.lift_gc_preservation(Expr(:gc_preserve_end, SSAValue(2))) === nothing

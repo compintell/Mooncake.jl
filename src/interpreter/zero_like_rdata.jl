@@ -21,7 +21,7 @@ of `R` and `ZeroRData` if an instance of `P` is needed.
 """
 function zero_like_rdata_type(::Type{P}) where {P}
     R = rdata_type(tangent_type(P))
-    return can_produce_zero_rdata_from_type(P) ? R : Union{R, ZeroRData}
+    return can_produce_zero_rdata_from_type(P) ? R : Union{R,ZeroRData}
 end
 
 """

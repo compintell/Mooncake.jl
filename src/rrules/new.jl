@@ -1,18 +1,22 @@
-@is_primitive MinimalCtx Tuple{typeof(_new_), Vararg}
+@is_primitive MinimalCtx Tuple{typeof(_new_),Vararg}
 
 function rrule!!(
-    f::CoDual{typeof(_new_)}, p::CoDual{Type{P}}, x::Vararg{CoDual, N}
-) where {P, N}
+    f::CoDual{typeof(_new_)}, p::CoDual{Type{P}}, x::Vararg{CoDual,N}
+) where {P,N}
     y = _new_(P, tuple_map(primal, x)...)
     F = fdata_type(tangent_type(P))
     R = rdata_type(tangent_type(P))
-    dy = F == NoFData ? NoFData() : build_fdata(P, tuple_map(primal, x), tuple_map(tangent, x))
+    dy = if F == NoFData
+        NoFData()
+    else
+        build_fdata(P, tuple_map(primal, x), tuple_map(tangent, x))
+    end
     pb!! = if ismutabletype(P)
         if F == NoFData
             NoPullback(f, p, x...)
         else
             function _mutable_new_pullback!!(::NoRData)
-                rdatas = tuple_map(rdata ∘ val,  Tuple(dy.fields)[1:N])
+                rdatas = tuple_map(rdata ∘ val, Tuple(dy.fields)[1:N])
                 return NoRData(), NoRData(), rdatas...
             end
         end
@@ -69,29 +73,58 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:new})
         (false, :stability_and_allocs, nothing, _new_, @NamedTuple{y::Float64}, 5.0),
         (false, :stability_and_allocs, nothing, _new_, @NamedTuple{y::Int, x::Int}, 5, 4),
         (
-            false, :stability_and_allocs, nothing,
-            _new_, @NamedTuple{y::Float64, x::Int}, 5.0, 4,
+            false,
+            :stability_and_allocs,
+            nothing,
+            _new_,
+            @NamedTuple{y::Float64, x::Int},
+            5.0,
+            4,
         ),
         (
-            false, :stability_and_allocs, nothing,
-            _new_, @NamedTuple{y::Vector{Float64}, x::Int}, randn(2), 4,
+            false,
+            :stability_and_allocs,
+            nothing,
+            _new_,
+            @NamedTuple{y::Vector{Float64}, x::Int},
+            randn(2),
+            4,
         ),
         (
-            false, :stability_and_allocs, nothing,
-            _new_, @NamedTuple{y::Vector{Float64}}, randn(2),
+            false,
+            :stability_and_allocs,
+            nothing,
+            _new_,
+            @NamedTuple{y::Vector{Float64}},
+            randn(2),
         ),
         (
-            false, :stability_and_allocs, nothing,
-            _new_, TestResources.TypeStableStruct{Float64}, 5, 4.0,
+            false,
+            :stability_and_allocs,
+            nothing,
+            _new_,
+            TestResources.TypeStableStruct{Float64},
+            5,
+            4.0,
         ),
         (false, :stability_and_allocs, nothing, _new_, UnitRange{Int64}, 5, 4),
         (
-            false, :stability_and_allocs, nothing,
-            _new_, TestResources.TypeStableMutableStruct{Float64}, 5.0, 4.0,
+            false,
+            :stability_and_allocs,
+            nothing,
+            _new_,
+            TestResources.TypeStableMutableStruct{Float64},
+            5.0,
+            4.0,
         ),
         (
-            false, :none, nothing,
-            _new_, TestResources.TypeStableMutableStruct{Any}, 5.0, 4.0,
+            false,
+            :none,
+            nothing,
+            _new_,
+            TestResources.TypeStableMutableStruct{Any},
+            5.0,
+            4.0,
         ),
         (false, :none, nothing, _new_, TestResources.StructFoo, 6.0, [1.0, 2.0]),
         (false, :none, nothing, _new_, TestResources.StructFoo, 6.0),
@@ -100,20 +133,36 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:new})
         (false, :stability_and_allocs, nothing, _new_, TestResources.StructNoFwds, 5.0),
         (false, :stability_and_allocs, nothing, _new_, TestResources.StructNoRvs, [5.0]),
         (
-            false, :stability_and_allocs, nothing,
-            _new_, LowerTriangular{Float64, Matrix{Float64}}, randn(2, 2),
+            false,
+            :stability_and_allocs,
+            nothing,
+            _new_,
+            LowerTriangular{Float64,Matrix{Float64}},
+            randn(2, 2),
         ),
         (
-            false, :stability_and_allocs, nothing,
-            _new_, UpperTriangular{Float64, Matrix{Float64}}, randn(2, 2),
+            false,
+            :stability_and_allocs,
+            nothing,
+            _new_,
+            UpperTriangular{Float64,Matrix{Float64}},
+            randn(2, 2),
         ),
         (
-            false, :stability_and_allocs, nothing,
-            _new_, UnitLowerTriangular{Float64, Matrix{Float64}}, randn(2, 2),
+            false,
+            :stability_and_allocs,
+            nothing,
+            _new_,
+            UnitLowerTriangular{Float64,Matrix{Float64}},
+            randn(2, 2),
         ),
         (
-            false, :stability_and_allocs, nothing,
-            _new_, UnitUpperTriangular{Float64, Matrix{Float64}}, randn(2, 2),
+            false,
+            :stability_and_allocs,
+            nothing,
+            _new_,
+            UnitUpperTriangular{Float64,Matrix{Float64}},
+            randn(2, 2),
         ),
     ]
     general_test_cases = map(TestTypes.PRIMALS) do (interface_only, P, args)

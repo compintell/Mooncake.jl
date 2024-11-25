@@ -2,16 +2,8 @@ using Pkg
 Pkg.activate(@__DIR__)
 Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 
-using
-    AllocCheck,
-    JET,
-    Distributions,
-    FillArrays,
-    Mooncake,
-    LinearAlgebra,
-    PDMats,
-    StableRNGs,
-    Test
+using AllocCheck,
+    JET, Distributions, FillArrays, Mooncake, LinearAlgebra, PDMats, StableRNGs, Test
 
 using Mooncake.TestUtils: test_rule
 
@@ -224,8 +216,18 @@ sr(n::Int) = StableRNG(n)
         (:none, LKJ(5, 1.1), rand(sr(123456), LKJ(5, 1.1))),
     ]
     work_around_test_cases = Any[
-        (:allocs, "InverseGamma", (a, b, x) -> logpdf(InverseGamma(a, b), x), (1.5, 1.4, 0.4)),
-        (:allocs, "NormalCanon", (m, s, x) -> logpdf(NormalCanon(m, s), x), (0.1, 1.0, -0.5)),
+        (
+            :allocs,
+            "InverseGamma",
+            (a, b, x) -> logpdf(InverseGamma(a, b), x),
+            (1.5, 1.4, 0.4),
+        ),
+        (
+            :allocs,
+            "NormalCanon",
+            (m, s, x) -> logpdf(NormalCanon(m, s), x),
+            (0.1, 1.0, -0.5),
+        ),
         (:none, "Categorical", x -> logpdf(Categorical(x, 1 - x), 1), 0.3),
         (
             :none,
@@ -254,10 +256,10 @@ sr(n::Int) = StableRNG(n)
         (
             :none,
             "left-truncated Beta",
-            (a, α, β, x) -> logpdf(truncated(Beta(α, β), lower=a), x),
+            (a, α, β, x) -> logpdf(truncated(Beta(α, β); lower=a), x),
             (0.1, 1.1, 1.3, 0.4),
         ),
-        (:none, "Dirichlet", (a, x) -> logpdf(Dirichlet(a), [x, 1-x]), ([1.5, 1.1], 0.6)),
+        (:none, "Dirichlet", (a, x) -> logpdf(Dirichlet(a), [x, 1 - x]), ([1.5, 1.1], 0.6)),
         (
             :none,
             "reshape",
@@ -266,8 +268,9 @@ sr(n::Int) = StableRNG(n)
         ),
         (:none, "vec", x -> logpdf(vec(LKJ(2, 1.1)), x), ([1.0, 0.489, 0.489, 1.0],)),
         (
-            :none, "LKJCholesky",
-            function(X, v)
+            :none,
+            "LKJCholesky",
+            function (X, v)
                 # LKJCholesky distributes over the Cholesky factorisation of correlation
                 # matrices, so the argument to `logpdf` must be such a matrix.
                 S = X'X
