@@ -133,7 +133,6 @@ function make_fwd_ad_stmts!(
     debug_mode,
 )
     C = context_type(interp)
-    dual_inst = dual_ir[SSAValue(i)]
     if isexpr(stmt, :invoke) || isexpr(stmt, :call)
         sig, mi = if isexpr(stmt, :invoke)
             mi = stmt.args[1]::Core.MethodInstance
@@ -146,17 +145,12 @@ function make_fwd_ad_stmts!(
         end
         shifted_args = inc_args(stmt).args
         if is_primitive(C, sig)
-            dual_inst[:stmt] = Expr(:call, _frule!!_funcnotdual, shifted_args[2:end]...)
-            dual_inst[:info] = CC.NoCallInfo()
-            dual_inst[:type] = Any
-            dual_inst[:flag] = CC.IR_FLAG_REFINED
+            call_frule = Expr(:call, _frule!!_funcnotdual, shifted_args[2:end]...)
+            replace_call!(dual_ir, SSAValue(i), call_frule)
         elseif isexpr(stmt, :invoke)
             rule = build_frule(interp, mi; debug_mode)
-            # modify the original statement to use `rule`
-            dual_inst[:stmt] = Expr(:call, rule, shifted_args[2:end]...)
-            dual_inst[:info] = CC.NoCallInfo()
-            dual_inst[:type] = Any
-            dual_inst[:flag] = CC.IR_FLAG_REFINED
+            call_rule = Expr(:call, rule, shifted_args[2:end]...)
+            replace_call!(dual_ir, SSAValue(i), call_rule)
         elseif isexpr(stmt, :call)
             throw(
                 ArgumentError("Expressions of type `:call` not supported in forward mode")
