@@ -12,20 +12,10 @@ ydual = sin_rule(zero_dual(sin), xdual)
 @test tangent(ydual) == dx * cos(x)
 
 function func(x)
-    z = cos(x)
-    w = sin(z)
-    return w
+    y = sin(x)
+    z = cos(y)
+    return z
 end
-
-ir = Base.code_ircode(func, (typeof(x),))[1][1]
-dual_ir = build_frule(func, x)
-comp = CC.compact!(dual_ir)
-
-dual_ir |> typeof
-
-oc = MistyClosure(dual_ir)
-
-oc.oc(zero_dual(func), xdual)
 
 func_rule = build_frule(func, x)
 ydual = func_rule(zero_dual(func), xdual)

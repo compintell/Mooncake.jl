@@ -37,9 +37,8 @@ function build_frule(
         else
             # Derive forward-pass IR, and shove in a `MistyClosure`.
             dual_ir = generate_dual_ir(interp, sig_or_mi; debug_mode)
-            return dual_ir  # TODO: remove
-            fwd_oc = MistyClosure(dual_ir; do_compile=true)
-            raw_rule = DerivedFRule(fwd_oc)
+            dual_oc = MistyClosure(dual_ir; do_compile=true)
+            raw_rule = DerivedFRule(dual_oc)
             rule = debug_mode ? DebugFRule(raw_rule) : raw_rule
             interp.oc_cache[oc_cache_key] = rule
             return rule
@@ -59,35 +58,6 @@ end
     return fwd.fwd_oc(args...)
 end
 
-mutable struct PrimalAndDualIR
-    primal::IRCode
-    dual::IRCode
-    dual_to_primal_SSA::Vector{Int}
-    primal_current_line::Int
-end
-
-function PrimalAndDualIR(primal::IRCode)
-    dual = copy(primal)
-    dual_to_primal_SSA = collect(1:length(primal.stmts))
-    primal_current_line = 0
-
-    # Modify argument types:
-    # - add one for the rule in front
-    # - convert the rest to dual types
-    for (a, P) in enumerate(primal.argtypes)
-        if P isa DataType
-            dual.argtypes[a] = dual_type(P)
-        elseif P isa Core.Const
-            dual.argtypes[a] = Dual  # TODO: improve
-        end
-    end
-    pushfirst!(dual.argtypes, Any)
-
-    return PrimalAndDualIR(primal, dual, dual_to_primal_SSA, primal_current_line)
-end
-
-export PrimalAndDualIR
-
 function generate_dual_ir(
     interp::MooncakeInterpreter, sig_or_mi; debug_mode=false, do_inline=true
 )
@@ -99,80 +69,94 @@ function generate_dual_ir(
     primal_ir, _ = lookup_ir(interp, sig_or_mi)
 
     # Normalise the IR.
-    isva, spnames = is_vararg_and_sparam_names(sig_or_mi)
-    ir = normalise!(primal_ir, spnames)
+    _, spnames = is_vararg_and_sparam_names(sig_or_mi)
+    primal_ir = normalise!(primal_ir, spnames)
 
-    # Differentiate the IR
-    pdir = PrimalAndDualIR(ir)
-    for i in 1:length(ir.stmts)
-        # betting on the fact that lines don't change before compact! is called, even with insertions
-        stmt = ir[SSAValue(i)][:stmt]
-        make_fwd_ad_stmts!(pdir, interp, stmt, i; debug_mode)
+    # Keep a copy of the primal IR around
+    dual_ir = copy(primal_ir)
+
+    # Modify dual argument types:
+    # - add one for the rule in front
+    # - convert the rest to dual types
+    for (a, P) in enumerate(primal_ir.argtypes)
+        if P isa DataType
+            dual_ir.argtypes[a] = dual_type(P)
+        elseif P isa Core.Const
+            dual_ir.argtypes[a] = Dual  # TODO: improve
+        end
     end
-    return pdir.dual  # TODO: remove
+    pushfirst!(dual_ir.argtypes, Any)
 
-    # Optimize the IR
+    # Differentiate dual IR
+    for i in 1:length(primal_ir.stmts)
+        stmt = primal_ir[SSAValue(i)][:stmt]
+        make_fwd_ad_stmts!(dual_ir, primal_ir, interp, stmt, i; debug_mode)
+    end
+
+    # Optimize dual IR
     opt_dual_ir = optimise_ir!(dual_ir; do_inline)
     return opt_dual_ir
 end
 
 """
-    make_fwd_ad_stmts!(pdir::PrimalAndDualIR, interpreter, stmt, i)
+    make_fwd_ad_stmts!(dual_ir, primal_ir, interpreter, stmt, i)
 
-Modify the dual part of `pdir` in-place to transform statement `stmt`, located at position `i` in the primal, into one or more derivative statements.
+Modify `dual_ir` in-place to transform statement `stmt`, located at position `i` in `primal_ir`, into one or more derivative statements.
+
+!!! warning
+    We must enforce the invariant that this function never deletes nor adds instructions.
 """
 function make_fwd_ad_stmts! end
 
 function make_fwd_ad_stmts!(
-    pdir::PrimalAndDualIR, ::MooncakeInterpreter, stmt::ReturnNode, i::Integer; kwargs...
+    dual_ir::IRCode,
+    primal_ir::IRCode,
+    ::MooncakeInterpreter,
+    stmt::ReturnNode,
+    i::Integer;
+    kwargs...,
 )
-    (; dual) = pdir
-    inst = dual[SSAValue(i)]
+    dual_inst = dual_ir[SSAValue(i)]
     # the return node becomes a Dual so it changes type
     # flag to re-run type inference
-    inst[:type] = Any
-    inst[:flag] = CC.IR_FLAG_REFINED
+    dual_inst[:type] = Any
+    dual_inst[:flag] = CC.IR_FLAG_REFINED
     return nothing
 end
 
 function make_fwd_ad_stmts!(
-    pdir::PrimalAndDualIR, interp::MooncakeInterpreter, stmt::Expr, i::Integer; debug_mode
+    dual_ir::IRCode,
+    primal_ir::IRCode,
+    interp::MooncakeInterpreter,
+    stmt::Expr,
+    i::Integer;
+    debug_mode,
 )
-    (; primal, dual, dual_to_primal_SSA) = pdir
-    i2 = findfirst(>=(i), dual_to_primal_SSA)
     C = context_type(interp)
+    dual_inst = dual_ir[SSAValue(i)]
     if isexpr(stmt, :invoke) || isexpr(stmt, :call)
         sig, mi = if isexpr(stmt, :invoke)
             mi = stmt.args[1]::Core.MethodInstance
             mi.specTypes, mi
         else
             sig_types = map(stmt.args) do a
-                get_forward_primal_type(ir, a)
+                get_forward_primal_type(primal_ir, a)
             end
             Tuple{sig_types...}, missing
         end
         shifted_args = inc_args(stmt).args
         if is_primitive(C, sig)
-            # insert instruction defining dual function
-            fd_stmt = Expr(:call, zero_dual, shifted_args[2])
-            fd_inst = CC.NewInstruction(fd_stmt, Any)
-            CC.insert_node!(dual, SSAValue(i2), fd_inst, false)
-            dual[SSAValue(i2)][:stmt] = Expr(
-                :call, frule!!, SSAValue(i2), shifted_args[3:end]...
-            )
-            dual[SSAValue(i2)][:info] = CC.NoCallInfo()
-            dual[SSAValue(i2)][:type] = Any
-            dual[SSAValue(i2)][:flag] = CC.IR_FLAG_REFINED
-
-            insert!(dual_to_primal_SSA, i2, i)
+            dual_inst[:stmt] = Expr(:call, _frule!!_funcnotdual, shifted_args[2:end]...)
+            dual_inst[:info] = CC.NoCallInfo()
+            dual_inst[:type] = Any
+            dual_inst[:flag] = CC.IR_FLAG_REFINED
         elseif isexpr(stmt, :invoke)
-            error("Not there yet")
             rule = build_frule(interp, mi; debug_mode)
             # modify the original statement to use `rule`
-            inst[:stmt] = Expr(:call, rule, shifted_args[2:end]...)
-            inst[:info] = CC.NoCallInfo()
-            inst[:type] = Any
-            inst[:flag] = CC.IR_FLAG_REFINED
+            dual_inst[:stmt] = Expr(:call, rule, shifted_args[2:end]...)
+            dual_inst[:info] = CC.NoCallInfo()
+            dual_inst[:type] = Any
+            dual_inst[:flag] = CC.IR_FLAG_REFINED
         elseif isexpr(stmt, :call)
             throw(
                 ArgumentError("Expressions of type `:call` not supported in forward mode")
