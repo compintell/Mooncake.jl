@@ -10,7 +10,8 @@ This document
 1. specifies how to implement rules by-hand for primitives, and
 1. specifies how to derive rules from `IRCode` algorithmically in general.
 1. discusses batched forwards-mode
-1. concludes with some notable technical differences between our forwards-mode AD implementation details and reverse-mode AD implementation details.
+1. discusses some notable technical differences between our forwards-mode AD implementation details and reverse-mode AD implementation details, and
+1. concludes with a brief comparison with ForwardDiff.jl.
 
 ## Forwards-Rule Interface
 
@@ -200,7 +201,7 @@ This is done using `Mooncake.lookup_ir`.
 This function has methods with will return the `IRCode` associated to:
 1. signatures (e.g. `Tuple{typeof(f), Float64}`)
 1. `Base.MethodInstances` (relevant for `:invoke` expressions -- see [Statement Transformation](@ref) below)
-1. `MistyClosures.MistyClosure` objects, which is essential when computing higher order derivatives and Hessians by applying `Mooncake.jl` to itself.
+1. `MistyClosures.MistyClosure` objects, which is essential when computing higher order derivatives and Hessians by applying Mooncake.jl to itself.
 
 #### Standardisation
 
