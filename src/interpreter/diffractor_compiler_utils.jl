@@ -117,7 +117,7 @@ function find_end_of_phi_block(ir::IRCode, start_search_idx::Int)
     return end_search_idx
 end
 
-function replace_call!(ir::IRCode, idx::SSAValue, new_call::Expr)
+function replace_call!(ir::IRCode, idx::SSAValue, new_call)
     ir[idx][:inst] = new_call
     ir[idx][:type] = Any
     ir[idx][:info] = CC.NoCallInfo()

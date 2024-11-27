@@ -156,6 +156,8 @@ function make_fwd_ad_stmts!(
                 ArgumentError("Expressions of type `:call` not supported in forward mode")
             )
         end
+    elseif Meta.isexpr(stmt, :code_coverage_effect)
+        replace_call!(dual_ir, SSAValue(i), nothing)
     else
         throw(
             ArgumentError(
