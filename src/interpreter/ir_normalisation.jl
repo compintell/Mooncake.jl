@@ -21,7 +21,7 @@ from which the `IRCode` is derived must be consulted. `Mooncake.is_vararg_and_sp
 provides a convenient way to do this.
 """
 function normalise!(ir::IRCode, spnames::Vector{Symbol})
-    sp_map = Dict{Symbol, CC.VarState}(zip(spnames, ir.sptypes))
+    sp_map = Dict{Symbol,CC.VarState}(zip(spnames, ir.sptypes))
     ir = interpolate_boundschecks!(ir)
     ir = CC.compact!(ir)
     for (n, inst) in enumerate(stmt(ir.stmts))
@@ -79,13 +79,13 @@ by the `sptypes` field of said `IRCode`. The keys should generally be obtained f
 The purpose of this transformation is to make it possible to differentiate `:foreigncall`
 expressions in the same way as a primitive `:call` expression, i.e. via an `rrule!!`.
 """
-function foreigncall_to_call(inst, sp_map::Dict{Symbol, CC.VarState})
+function foreigncall_to_call(inst, sp_map::Dict{Symbol,CC.VarState})
     if Meta.isexpr(inst, :foreigncall)
         # See Julia's AST devdocs for info on `:foreigncall` expressions.
         args = inst.args
         name = __extract_foreigncall_name(args[1])
         RT = Val(interpolate_sparams(args[2], sp_map))
-        AT = (map(x -> Val(interpolate_sparams(x, sp_map)), args[3])..., )
+        AT = (map(x -> Val(interpolate_sparams(x, sp_map)), args[3])...,)
         nreq = Val(args[4])
         calling_convention = Val(args[5] isa QuoteNode ? args[5].value : args[5])
         x = args[6:end]
@@ -116,7 +116,7 @@ end
 
 # Copied from Umlaut.jl. Originally, adapted from
 # https://github.com/JuliaDebug/JuliaInterpreter.jl/blob/aefaa300746b95b75f99d944a61a07a8cb145ef3/src/optimize.jl#L239
-function interpolate_sparams(@nospecialize(t::Type), sparams::Dict{Symbol, CC.VarState})
+function interpolate_sparams(@nospecialize(t::Type), sparams::Dict{Symbol,CC.VarState})
     t isa Core.TypeofBottom && return t
     while t isa UnionAll
         t = t.body
@@ -205,15 +205,20 @@ Does the same for...
 function lift_getfield_and_others(inst)
     Meta.isexpr(inst, :call) || return inst
     f = __get_arg(inst.args[1])
-    if f === getfield && length(inst.args) == 3 && inst.args[3] isa Union{QuoteNode, Int}
+    if f === getfield && length(inst.args) == 3 && inst.args[3] isa Union{QuoteNode,Int}
         field = inst.args[3]
         new_field = field isa Int ? Val(field) : Val(field.value)
         return Expr(:call, lgetfield, inst.args[2], new_field)
-    elseif f === getfield && length(inst.args) == 4 && inst.args[3] isa Union{QuoteNode, Int} && inst.args[4] isa Bool
+    elseif f === getfield &&
+        length(inst.args) == 4 &&
+        inst.args[3] isa Union{QuoteNode,Int} &&
+        inst.args[4] isa Bool
         field = inst.args[3]
         new_field = field isa Int ? Val(field) : Val(field.value)
         return Expr(:call, lgetfield, inst.args[2], new_field, Val(inst.args[4]))
-    elseif f === setfield! && length(inst.args) == 4 && inst.args[3] isa Union{QuoteNode, Int}
+    elseif f === setfield! &&
+        length(inst.args) == 4 &&
+        inst.args[3] isa Union{QuoteNode,Int}
         name = inst.args[3]
         new_name = name isa Int ? Val(name) : Val(name.value)
         return Expr(:call, lsetfield!, inst.args[2], new_name, inst.args[4])
@@ -227,47 +232,49 @@ __get_arg(x::QuoteNode) = x.value
 __get_arg(x) = x
 
 # memoryrefget and memoryrefset! were introduced in 1.11.
-if VERSION >= v"1.11-"
+@static if VERSION >= v"1.11-"
+    """
+        lift_memoryrefget_and_memoryrefset_builtins(inst)
 
-"""
-    lift_memoryrefget_and_memoryrefset_builtins(inst)
-
-Replaces memoryrefget -> lmemoryrefget and memoryrefset! -> lmemoryrefset! if their final
-two arguments (`ordering` and `boundscheck`) are constants. See [`lmemoryrefget`] and
-[`lmemoryrefset!`](@ref) for more context.
-"""
-function lift_memoryrefget_and_memoryrefset_builtins(inst)
-    Meta.isexpr(inst, :call) || return inst
-    f = __get_arg(inst.args[1])
-    if f == Core.memoryrefget && length(inst.args) == 4
-        ordering = inst.args[3]
-        boundscheck = inst.args[4]
-        if ordering isa QuoteNode && boundscheck isa Bool
-            new_ordering = Val(ordering.value)
-            return Expr(:call, lmemoryrefget, inst.args[2], new_ordering, Val(boundscheck))
+    Replaces memoryrefget -> lmemoryrefget and memoryrefset! -> lmemoryrefset! if their final
+    two arguments (`ordering` and `boundscheck`) are constants. See [`lmemoryrefget`] and
+    [`lmemoryrefset!`](@ref) for more context.
+    """
+    function lift_memoryrefget_and_memoryrefset_builtins(inst)
+        Meta.isexpr(inst, :call) || return inst
+        f = __get_arg(inst.args[1])
+        if f == Core.memoryrefget && length(inst.args) == 4
+            ordering = inst.args[3]
+            boundscheck = inst.args[4]
+            if ordering isa QuoteNode && boundscheck isa Bool
+                new_ordering = Val(ordering.value)
+                return Expr(
+                    :call, lmemoryrefget, inst.args[2], new_ordering, Val(boundscheck)
+                )
+            else
+                return inst
+            end
+        elseif f == Core.memoryrefset! && length(inst.args) == 5
+            ordering = inst.args[4]
+            boundscheck = inst.args[5]
+            if ordering isa QuoteNode && boundscheck isa Bool
+                new_ordering = Val(ordering.value)
+                bc = Val(boundscheck)
+                return Expr(
+                    :call, lmemoryrefset!, inst.args[2], inst.args[3], new_ordering, bc
+                )
+            else
+                return inst
+            end
         else
             return inst
         end
-    elseif f == Core.memoryrefset! && length(inst.args) == 5
-        ordering = inst.args[4]
-        boundscheck = inst.args[5]
-        if ordering isa QuoteNode && boundscheck isa Bool
-            new_ordering = Val(ordering.value)
-            bc = Val(boundscheck)
-            return Expr(:call, lmemoryrefset!, inst.args[2], inst.args[3], new_ordering, bc)
-        else
-            return inst
-        end
-    else
-        return inst
     end
-end
 
 else
 
-# memoryrefget and memoryrefset! do not exist before v1.11.
-lift_memoryrefget_and_memoryrefset_builtins(inst) = inst
-
+    # memoryrefget and memoryrefset! do not exist before v1.11.
+    lift_memoryrefget_and_memoryrefset_builtins(inst) = inst
 end
 
 """
@@ -278,7 +285,7 @@ until the pullback that it returns is run.
 """
 @inline gc_preserve(xs...) = nothing
 
-@is_primitive MinimalCtx Tuple{typeof(gc_preserve), Vararg{Any, N}} where {N}
+@is_primitive MinimalCtx Tuple{typeof(gc_preserve),Vararg{Any,N}} where {N}
 
 function rrule!!(f::CoDual{typeof(gc_preserve)}, xs::CoDual...)
     pb = NoPullback(f, xs...)

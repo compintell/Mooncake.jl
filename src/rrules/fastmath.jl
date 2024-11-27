@@ -1,30 +1,39 @@
-@is_primitive MinimalCtx Tuple{typeof(Base.FastMath.exp_fast), IEEEFloat}
-function rrule!!(::CoDual{typeof(Base.FastMath.exp_fast)}, x::CoDual{P}) where {P<:IEEEFloat}
+@is_primitive MinimalCtx Tuple{typeof(Base.FastMath.exp_fast),IEEEFloat}
+function rrule!!(
+    ::CoDual{typeof(Base.FastMath.exp_fast)}, x::CoDual{P}
+) where {P<:IEEEFloat}
     yp = Base.FastMath.exp_fast(primal(x))
     exp_fast_pb!!(dy::P) = NoRData(), dy * yp
     return CoDual(yp, NoFData()), exp_fast_pb!!
 end
 
-@is_primitive MinimalCtx Tuple{typeof(Base.FastMath.exp2_fast), IEEEFloat}
-function rrule!!(::CoDual{typeof(Base.FastMath.exp2_fast)}, x::CoDual{P}) where {P<:IEEEFloat}
+@is_primitive MinimalCtx Tuple{typeof(Base.FastMath.exp2_fast),IEEEFloat}
+function rrule!!(
+    ::CoDual{typeof(Base.FastMath.exp2_fast)}, x::CoDual{P}
+) where {P<:IEEEFloat}
     yp = Base.FastMath.exp2_fast(primal(x))
     exp2_fast_pb!!(dy::P) = NoRData(), dy * yp * log(2)
     return CoDual(yp, NoFData()), exp2_fast_pb!!
 end
 
-@is_primitive MinimalCtx Tuple{typeof(Base.FastMath.exp10_fast), IEEEFloat}
-function rrule!!(::CoDual{typeof(Base.FastMath.exp10_fast)}, x::CoDual{P}) where {P<:IEEEFloat}
+@is_primitive MinimalCtx Tuple{typeof(Base.FastMath.exp10_fast),IEEEFloat}
+function rrule!!(
+    ::CoDual{typeof(Base.FastMath.exp10_fast)}, x::CoDual{P}
+) where {P<:IEEEFloat}
     yp = Base.FastMath.exp10_fast(primal(x))
     exp2_fast_pb!!(dy::P) = NoRData(), dy * yp * log(10)
     return CoDual(yp, NoFData()), exp2_fast_pb!!
 end
 
-@is_primitive MinimalCtx Tuple{typeof(Base.FastMath.sincos), IEEEFloat}
+@is_primitive MinimalCtx Tuple{typeof(Base.FastMath.sincos),IEEEFloat}
 function rrule!!(::CoDual{typeof(Base.FastMath.sincos)}, x::CoDual{P}) where {P<:IEEEFloat}
     y = Base.FastMath.sincos(primal(x))
-    sincos_fast_adj!!(dy::Tuple{P, P}) = NoRData(), dy[1] * y[2] - dy[2] * y[1]
+    sincos_fast_adj!!(dy::Tuple{P,P}) = NoRData(), dy[1] * y[2] - dy[2] * y[1]
     return CoDual(y, NoFData()), sincos_fast_adj!!
 end
+
+@is_primitive MinimalCtx Tuple{typeof(Base.log),Union{IEEEFloat,Int}}
+@zero_adjoint MinimalCtx Tuple{typeof(log),Int}
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:fastmath})
     test_cases = Any[
@@ -79,15 +88,25 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:fastmath})
         (false, :allocs, nothing, Base.FastMath.lt_fast, 5.0, 0.4),
         (false, :allocs, nothing, Base.FastMath.max_fast, 5.0, 4.0),
         (
-            false, :none, nothing,
-            Base.FastMath.maximum!_fast, sin, [0.0, 0.0], [5.0 4.0; 3.0 2.0],
+            false,
+            :none,
+            nothing,
+            Base.FastMath.maximum!_fast,
+            sin,
+            [0.0, 0.0],
+            [5.0 4.0; 3.0 2.0],
         ),
         (false, :allocs, nothing, Base.FastMath.maximum_fast, [5.0, 4.0, 3.0]),
         (false, :allocs, nothing, Base.FastMath.min_fast, 5.0, 4.0),
         (false, :allocs, nothing, Base.FastMath.min_fast, 4.0, 5.0),
         (
-            false, :none, nothing,
-            Base.FastMath.minimum!_fast, sin, [0.0, 0.0], [5.0 4.0; 3.0 2.0],
+            false,
+            :none,
+            nothing,
+            Base.FastMath.minimum!_fast,
+            sin,
+            [0.0, 0.0],
+            [5.0 4.0; 3.0 2.0],
         ),
         (false, :allocs, nothing, Base.FastMath.minimum_fast, [5.0, 3.0, 4.0]),
         (false, :allocs, nothing, Base.FastMath.minmax_fast, 5.0, 4.0),
@@ -110,5 +129,3 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:fastmath})
     memory = Any[]
     return test_cases, memory
 end
-
-

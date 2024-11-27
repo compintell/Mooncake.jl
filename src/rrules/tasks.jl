@@ -53,7 +53,7 @@ function get_tangent_field(t::TaskTangent, f)
     throw(error("Unhandled field $f"))
 end
 
-const TaskCoDual = CoDual{Task, TaskTangent}
+const TaskCoDual = CoDual{Task,TaskTangent}
 
 function rrule!!(::CoDual{typeof(lgetfield)}, x::TaskCoDual, ::CoDual{Val{f}}) where {f}
     dx = x.dx
@@ -83,7 +83,15 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:tasks})
     test_cases = Any[
         (false, :none, nothing, lgetfield, Task(() -> nothing), Val(:rngState1)),
         (false, :none, nothing, getfield, Task(() -> nothing), :rngState1),
-        (false, :none, nothing, lsetfield!, Task(() -> nothing), Val(:rngState1), UInt64(5)),
+        (
+            false,
+            :none,
+            nothing,
+            lsetfield!,
+            Task(() -> nothing),
+            Val(:rngState1),
+            UInt64(5),
+        ),
         (false, :stability_and_allocs, nothing, current_task),
     ]
     memory = Any[]
@@ -91,12 +99,13 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:tasks})
 end
 
 function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:tasks})
-    test_cases = Any[
-        (
-            false, :none, nothing,
-            (rng) -> (Random.seed!(rng, 0); rand(rng)), Random.default_rng(),
-        ),
-    ]
+    test_cases = Any[(
+        false,
+        :none,
+        nothing,
+        (rng) -> (Random.seed!(rng, 0); rand(rng)),
+        Random.default_rng(),
+    ),]
     memory = Any[]
     return test_cases, memory
 end

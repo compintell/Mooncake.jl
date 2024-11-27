@@ -12,12 +12,11 @@
 
 # Tangent Interface Implementation
 
-const Maybe{T} = Union{Nothing, T}
+const Maybe{T} = Union{Nothing,T}
 
 tangent_type(::Type{<:Memory{P}}) where {P} = Memory{tangent_type(P)}
 
 function zero_tangent_internal(x::Memory{P}, stackdict::Maybe{IdDict}) where {P}
-
     T = tangent_type(typeof(x))
 
     # If no stackdict is provided, then the caller promises that there is no need for it.
@@ -47,7 +46,7 @@ function randn_tangent_internal(rng::AbstractRNG, x::Memory, stackdict::Maybe{Id
 end
 
 function TestUtils.has_equal_data_internal(
-    x::Memory{P}, y::Memory{P}, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}
+    x::Memory{P}, y::Memory{P}, equal_undefs::Bool, d::Dict{Tuple{UInt,UInt},Bool}
 ) where {P}
     length(x) == length(y) || return false
     id_pair = (objectid(x), objectid(y))
@@ -79,7 +78,7 @@ function _add_to_primal(p::Memory{P}, t::Memory, unsafe::Bool) where {P}
 end
 
 function _diff(p::Memory{P}, q::Memory{P}) where {P}
-    return _map_if_assigned!(_diff, Memory{tangent_type(P)}(undef, length(p)), p ,q)
+    return _map_if_assigned!(_diff, Memory{tangent_type(P)}(undef, length(p)), p, q)
 end
 
 function _dot(t::Memory{T}, s::Memory{T}) where {T}
@@ -112,9 +111,10 @@ tangent_type(::Type{F}, ::Type{NoRData}) where {F<:Memory} = F
 
 tangent(f::Memory, ::NoRData) = f
 
-function _verify_fdata_value(p::Memory{P}, f::Memory{F}) where {P, F}
+function _verify_fdata_value(p::Memory{P}, f::Memory{F}) where {P,F}
     if length(p) != length(f)
-        msg = "length(p) == $(length(p)) but length(f) == $(length(f)). " *
+        msg =
+            "length(p) == $(length(p)) but length(f) == $(length(f)). " *
             "p isa Memory{$P} and f isa Memory{$F}"
         throw(error(msg))
     end
@@ -174,8 +174,8 @@ function _dot(t::T, s::T) where {T<:Array}
     )
 end
 
-function _add_to_primal(x::Array{P, N}, t::Array{<:Any, N}, unsafe::Bool) where {P, N}
-    x′ = Array{P, N}(undef, size(x)...)
+function _add_to_primal(x::Array{P,N}, t::Array{<:Any,N}, unsafe::Bool) where {P,N}
+    x′ = Array{P,N}(undef, size(x)...)
     return _map_if_assigned!((x, t) -> _add_to_primal(x, t, unsafe), x′, x, t)
 end
 
@@ -186,7 +186,7 @@ end
 # Rules
 
 @is_primitive(
-    MinimalCtx, Tuple{typeof(unsafe_copyto!), MemoryRef{P}, MemoryRef{P}, Int} where {P}
+    MinimalCtx, Tuple{typeof(unsafe_copyto!),MemoryRef{P},MemoryRef{P},Int} where {P}
 )
 function rrule!!(
     ::CoDual{typeof(unsafe_copyto!)},
@@ -261,7 +261,7 @@ function randn_tangent_internal(rng::AbstractRNG, x::MemoryRef, stackdict::Maybe
 end
 
 function TestUtils.has_equal_data_internal(
-    x::MemoryRef{P}, y::MemoryRef{P}, equal_undefs::Bool, d::Dict{Tuple{UInt, UInt}, Bool}
+    x::MemoryRef{P}, y::MemoryRef{P}, equal_undefs::Bool, d::Dict{Tuple{UInt,UInt},Bool}
 ) where {P}
     equal_refs = Core.memoryrefoffset(x) == Core.memoryrefoffset(y)
     equal_data = TestUtils.has_equal_data_internal(x.mem, y.mem, equal_undefs, d)
@@ -305,8 +305,8 @@ tangent_type(::Type{<:MemoryRef{T}}, ::Type{NoRData}) where {T} = MemoryRef{T}
 
 tangent(f::MemoryRef, ::NoRData) = f
 
-function _verify_fdata_value(p::MemoryRef{P}, f::MemoryRef{T}) where {P, T}
-    _verify_fdata_value(p.mem, f.mem)
+function _verify_fdata_value(p::MemoryRef{P}, f::MemoryRef{T}) where {P,T}
+    return _verify_fdata_value(p.mem, f.mem)
 end
 
 #
@@ -317,17 +317,15 @@ _val(::Val{c}) where {c} = c
 
 using Core: memoryref_isassigned, memoryrefget, memoryrefset!, memoryrefnew, memoryrefoffset
 
-@zero_adjoint(
-    MinimalCtx, Tuple{typeof(memoryref_isassigned), GenericMemoryRef, Symbol, Bool}
-)
+@zero_adjoint(MinimalCtx, Tuple{typeof(memoryref_isassigned),GenericMemoryRef,Symbol,Bool})
 
 @inline function lmemoryrefget(
     x::MemoryRef, ::Val{ordering}, ::Val{boundscheck}
-) where {ordering, boundscheck}
+) where {ordering,boundscheck}
     return memoryrefget(x, ordering, boundscheck)
 end
 
-@is_primitive MinimalCtx Tuple{typeof(lmemoryrefget), MemoryRef, Val, Val}
+@is_primitive MinimalCtx Tuple{typeof(lmemoryrefget),MemoryRef,Val,Val}
 @inline function rrule!!(
     ::CoDual{typeof(lmemoryrefget)},
     x::CoDual{<:MemoryRef},
@@ -386,32 +384,32 @@ end
     return CoDual(y, dy), NoPullback(f, x, ii, boundscheck)
 end
 
-@zero_adjoint MinimalCtx Tuple{typeof(memoryrefoffset), GenericMemoryRef}
+@zero_adjoint MinimalCtx Tuple{typeof(memoryrefoffset),GenericMemoryRef}
 
 # Core.memoryrefreplace!
 
 @inline function lmemoryrefset!(
     x::MemoryRef, value, ::Val{ordering}, ::Val{boundscheck}
-) where {ordering, boundscheck}
+) where {ordering,boundscheck}
     return memoryrefset!(x, value, ordering, boundscheck)
 end
 
-@is_primitive MinimalCtx Tuple{typeof(lmemoryrefset!), MemoryRef, Any, Val, Val}
+@is_primitive MinimalCtx Tuple{typeof(lmemoryrefset!),MemoryRef,Any,Val,Val}
 
 @inline function rrule!!(
     ::CoDual{typeof(lmemoryrefset!)},
-    x::CoDual{<:MemoryRef{P}, <:MemoryRef{V}},
+    x::CoDual{<:MemoryRef{P},<:MemoryRef{V}},
     value::CoDual,
     _ordering::CoDual{<:Val},
     _boundscheck::CoDual{<:Val},
-) where {P, V}
+) where {P,V}
     ordering = primal(_ordering)
     bc = primal(_boundscheck)
 
     isbitstype(P) && return isbits_lmemoryrefset!_rule(x, value, ordering, bc)
 
     to_save = isassigned(x.x)
-    old_x = Ref{Tuple{P, V}}()
+    old_x = Ref{Tuple{P,V}}()
     if to_save
         old_x[] = (
             memoryrefget(x.x, _val(ordering), _val(bc)),
@@ -452,11 +450,11 @@ end
 
 @inline function rrule!!(
     ::CoDual{typeof(memoryrefset!)},
-    x::CoDual{<:MemoryRef{P}, <:MemoryRef{V}},
+    x::CoDual{<:MemoryRef{P},<:MemoryRef{V}},
     value::CoDual,
     ordering::CoDual{Symbol},
     boundscheck::CoDual{Bool},
-) where {P, V}
+) where {P,V}
     y, adj = rrule!!(
         zero_fcodual(lmemoryrefset!),
         x,
@@ -474,11 +472,9 @@ end
 
 # _new_ and _new_-adjacent rules for Memory, MemoryRef, and Array.
 
-@is_primitive MinimalCtx Tuple{Type{<:Memory}, UndefInitializer, Int}
+@is_primitive MinimalCtx Tuple{Type{<:Memory},UndefInitializer,Int}
 function rrule!!(
-    ::CoDual{Type{Memory{P}}},
-    ::CoDual{UndefInitializer},
-    n::CoDual{Int},
+    ::CoDual{Type{Memory{P}}}, ::CoDual{UndefInitializer}, n::CoDual{Int}
 ) where {P}
     x = Memory{P}(undef, primal(n))
     dx = zero_tangent_internal(x, nothing)
@@ -498,12 +494,12 @@ end
 
 function rrule!!(
     ::CoDual{typeof(_new_)},
-    ::CoDual{Type{Array{P, N}}},
+    ::CoDual{Type{Array{P,N}}},
     ref::CoDual{MemoryRef{P}},
-    size::CoDual{<:NTuple{N, Int}},
-) where {P, N}
-    y = _new_(Array{P, N}, ref.x, size.x)
-    dy = _new_(Array{tangent_type(P), N}, ref.dx, size.x)
+    size::CoDual{<:NTuple{N,Int}},
+) where {P,N}
+    y = _new_(Array{P,N}, ref.x, size.x)
+    dy = _new_(Array{tangent_type(P),N}, ref.dx, size.x)
     return CoDual(y, dy), NoPullback(ntuple(_ -> NoRData(), 4))
 end
 
@@ -511,10 +507,10 @@ end
 
 function rrule!!(
     ::CoDual{typeof(lgetfield)},
-    x::CoDual{<:Memory, <:Memory},
+    x::CoDual{<:Memory,<:Memory},
     ::CoDual{Val{name}},
     ::CoDual{Val{order}},
-) where {name, order}
+) where {name,order}
     y = getfield(primal(x), name, order)
     wants_length = name === 1 || name === :length
     dy = wants_length ? NoFData() : bitcast(Ptr{NoTangent}, x.dx.ptr)
@@ -523,10 +519,10 @@ end
 
 function rrule!!(
     ::CoDual{typeof(lgetfield)},
-    x::CoDual{<:MemoryRef, <:MemoryRef},
+    x::CoDual{<:MemoryRef,<:MemoryRef},
     ::CoDual{Val{name}},
     ::CoDual{Val{order}},
-) where {name, order}
+) where {name,order}
     y = getfield(primal(x), name, order)
     wants_offset = name === 1 || name === :ptr_or_offset
     dy = wants_offset ? bitcast(Ptr{NoTangent}, x.dx.ptr_or_offset) : x.dx.mem
@@ -535,20 +531,20 @@ end
 
 function rrule!!(
     ::CoDual{typeof(lgetfield)},
-    x::CoDual{<:Array, <:Array},
+    x::CoDual{<:Array,<:Array},
     ::CoDual{Val{name}},
     ::CoDual{Val{order}},
-) where {name, order}
+) where {name,order}
     y = getfield(primal(x), name, order)
     wants_size = name === 2 || name === :size
     dy = wants_size ? NoFData() : x.dx.ref
     return CoDual(y, dy), NoPullback(ntuple(_ -> NoRData(), 4))
 end
 
-const _MemTypes = Union{Memory, MemoryRef, Array}
+const _MemTypes = Union{Memory,MemoryRef,Array}
 
 function rrule!!(
-    f::CoDual{typeof(lgetfield)}, x::CoDual{<:_MemTypes, <:_MemTypes}, name::CoDual{<:Val}
+    f::CoDual{typeof(lgetfield)}, x::CoDual{<:_MemTypes,<:_MemTypes}, name::CoDual{<:Val}
 )
     y, adj = rrule!!(f, x, name, zero_fcodual(Val(:not_atomic)))
     ternary_lgetfield_adjoint(dy) = adj(dy)[1:3]
@@ -556,8 +552,9 @@ function rrule!!(
 end
 
 function rrule!!(
-    ::CoDual{typeof(getfield)}, x::CoDual{<:_MemTypes, <:_MemTypes},
-    name::CoDual{<:Union{Int, Symbol}},
+    ::CoDual{typeof(getfield)},
+    x::CoDual{<:_MemTypes,<:_MemTypes},
+    name::CoDual{<:Union{Int,Symbol}},
     order::CoDual{Symbol},
 )
     y, adj = rrule!!(
@@ -572,8 +569,8 @@ end
 
 function rrule!!(
     f::CoDual{typeof(getfield)},
-    x::CoDual{<:_MemTypes, <:_MemTypes},
-    name::CoDual{<:Union{Int, Symbol}},
+    x::CoDual{<:_MemTypes,<:_MemTypes},
+    name::CoDual{<:Union{Int,Symbol}},
 )
     y, adj = rrule!!(f, x, name, zero_fcodual(:not_atomic))
     ternary_getfield_adjoint(dy) = adj(dy)[1:3]
@@ -582,7 +579,7 @@ end
 
 @inline function rrule!!(
     ::CoDual{typeof(lsetfield!)},
-    value::CoDual{<:Array, <:Array},
+    value::CoDual{<:Array,<:Array},
     ::CoDual{Val{name}},
     x::CoDual,
 ) where {name}
@@ -600,7 +597,7 @@ end
 
 # Misc. other rules which are required for correctness.
 
-@is_primitive MinimalCtx Tuple{typeof(copy), Array}
+@is_primitive MinimalCtx Tuple{typeof(copy),Array}
 function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Array})
     dx = tangent(a)
     dy = copy(dx)
@@ -612,11 +609,11 @@ function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Array})
     return y, copy_pullback!!
 end
 
-@is_primitive MinimalCtx Tuple{typeof(fill!), Array{<:Union{UInt8, Int8}}, Integer}
-@is_primitive MinimalCtx Tuple{typeof(fill!), Memory{<:Union{UInt8, Int8}}, Integer}
+@is_primitive MinimalCtx Tuple{typeof(fill!),Array{<:Union{UInt8,Int8}},Integer}
+@is_primitive MinimalCtx Tuple{typeof(fill!),Memory{<:Union{UInt8,Int8}},Integer}
 function rrule!!(
     ::CoDual{typeof(fill!)}, a::CoDual{T}, x::CoDual{<:Integer}
-) where {V<:Union{UInt8, Int8}, T<:Union{Array{V}, Memory{V}}}
+) where {V<:Union{UInt8,Int8},T<:Union{Array{V},Memory{V}}}
     pa = primal(a)
     old_value = copy(pa)
     fill!(pa, primal(x))
@@ -689,41 +686,64 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:memory})
         [(false, :none, nothing, getfield, m, 1) for m in mems],
 
         # Rules for `MemoryRef`
-        [(false, :none, nothing, memoryref_isassigned, mem_ref, :not_atomic, bc) for
+        [
+            (false, :none, nothing, memoryref_isassigned, mem_ref, :not_atomic, bc) for
             mem_ref in mem_refs for bc in [false, true]
         ],
-        [(false, :none, nothing, memoryrefget, mem_ref, :not_atomic, bc) for
+        [
+            (false, :none, nothing, memoryrefget, mem_ref, :not_atomic, bc) for
             mem_ref in filter(isassigned, mem_refs) for bc in [false, true]
         ],
         [(false, :none, nothing, memoryrefnew, mem) for mem in mems],
-        [(false, :none, nothing, memoryrefnew, mem, 1) for
+        [
+            (false, :none, nothing, memoryrefnew, mem, 1) for
             mem in filter(x -> length(x.mem) > Core.memoryrefoffset(x), mem_refs)
         ],
-        [(false, :none, nothing, memoryrefnew, mem, 1, bc) for
+        [
+            (false, :none, nothing, memoryrefnew, mem, 1, bc) for
             mem in filter(x -> length(x.mem) > Core.memoryrefoffset(x), mem_refs) for
             bc in [false, true]
         ],
         [(false, :none, nothing, memoryrefoffset, mem_ref) for mem_ref in mem_refs],
         [
-            (false, :none, nothing, lmemoryrefset!, mem_ref, sample_value, Val(:not_atomic), bc) for
-            (mem_ref, sample_value) in assignable_refs for
+            (
+                false,
+                :none,
+                nothing,
+                lmemoryrefset!,
+                mem_ref,
+                sample_value,
+                Val(:not_atomic),
+                bc,
+            ) for (mem_ref, sample_value) in assignable_refs for
             bc in [Val(false), Val(true)]
         ],
         [
-            (false, :none, nothing, memoryrefset!, mem_ref, sample_value, :not_atomic, bc) for
-            (mem_ref, sample_value) in assignable_refs for
-            bc in [false, true]
+            (false, :none, nothing, memoryrefset!, mem_ref, sample_value, :not_atomic, bc)
+            for (mem_ref, sample_value) in assignable_refs for bc in [false, true]
         ],
-        (false, :stability, nothing, unsafe_copyto!, randn(rng, 10).ref, randn(rng, 8).ref, 5),
         (
-            false, :stability, nothing,
+            false,
+            :stability,
+            nothing,
+            unsafe_copyto!,
+            randn(rng, 10).ref,
+            randn(rng, 8).ref,
+            5,
+        ),
+        (
+            false,
+            :stability,
+            nothing,
             unsafe_copyto!,
             memoryref(randn(rng, 10).ref, 2),
             memoryref(randn(rng, 8).ref, 3),
             4,
         ),
         (
-            false, :stability, nothing,
+            false,
+            :stability,
+            nothing,
             unsafe_copyto!,
             [randn(rng, 10), randn(rng, 5)].ref,
             [randn(rng, 10), randn(rng, 3)].ref,
@@ -731,39 +751,64 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:memory})
         ),
 
         # Rules for `Array`
-        (false, :stability, nothing, _new_, Vector{Float64}, randn(rng, 10).ref, (10, )),
+        (false, :stability, nothing, _new_, Vector{Float64}, randn(rng, 10).ref, (10,)),
         (
-            false, :stability, nothing,
+            false,
+            :stability,
+            nothing,
             _new_,
             Vector{Vector{Float64}},
             [randn(rng, 10), randn(rng, 5)].ref,
-            (2, ),
+            (2,),
         ),
-        (
-            false, :none, nothing,
-            _new_,
-            Vector{Any},
-            [1, randn(rng, 5)].ref,
-            (2, ),
-        ),
+        (false, :none, nothing, _new_, Vector{Any}, [1, randn(rng, 5)].ref, (2,)),
         (false, :stability, nothing, _new_, Matrix{Float64}, randn(rng, 12).ref, (4, 3)),
-        (false, :stability, nothing, _new_, Array{Float64, 3}, randn(rng, 12).ref, (4, 1, 3)),
+        (
+            false,
+            :stability,
+            nothing,
+            _new_,
+            Array{Float64,3},
+            randn(rng, 12).ref,
+            (4, 1, 3),
+        ),
         [
             (false, :stability, nothing, lgetfield, randn(rng, 10), f) for
-                f in [Val(:ref), Val(:size), Val(1), Val(2)]
+            f in [Val(:ref), Val(:size), Val(1), Val(2)]
         ],
-        [
-            (false, :none, nothing, getfield, randn(rng, 10), f) for
-                f in [:ref, :size, 1, 2]
-        ],
-        (false, :stability_and_allocs, nothing, lsetfield!, randn(rng, 10), Val(:ref), randn(rng, 10).ref),
-        (false, :stability_and_allocs, nothing, lsetfield!, randn(rng, 10), Val(1), randn(rng, 10).ref),
-        (false, :stability_and_allocs, nothing, lsetfield!, randn(rng, 10), Val(:size), (10, )),
-        (false, :stability_and_allocs, nothing, lsetfield!, randn(rng, 10), Val(2), (10, )),
+        [(false, :none, nothing, getfield, randn(rng, 10), f) for f in [:ref, :size, 1, 2]],
+        (
+            false,
+            :stability_and_allocs,
+            nothing,
+            lsetfield!,
+            randn(rng, 10),
+            Val(:ref),
+            randn(rng, 10).ref,
+        ),
+        (
+            false,
+            :stability_and_allocs,
+            nothing,
+            lsetfield!,
+            randn(rng, 10),
+            Val(1),
+            randn(rng, 10).ref,
+        ),
+        (
+            false,
+            :stability_and_allocs,
+            nothing,
+            lsetfield!,
+            randn(rng, 10),
+            Val(:size),
+            (10,),
+        ),
+        (false, :stability_and_allocs, nothing, lsetfield!, randn(rng, 10), Val(2), (10,)),
         (false, :none, nothing, setfield!, randn(rng, 10), :ref, randn(rng, 10).ref),
         (false, :none, nothing, setfield!, randn(rng, 10), 1, randn(rng, 10).ref),
-        (false, :none, nothing, setfield!, randn(rng, 10), :size, (10, )),
-        (false, :none, nothing, setfield!, randn(rng, 10), 2, (10, )),
+        (false, :none, nothing, setfield!, randn(rng, 10), :size, (10,)),
+        (false, :none, nothing, setfield!, randn(rng, 10), 2, (10,)),
     )
     memory = Any[]
     return test_cases, memory
@@ -773,15 +818,15 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:memory})
     rng = rng_ctor(123)
     x = Memory{Float64}(randn(rng, 10))
     test_cases = Any[
-        (true, :none, nothing, Array{Float64, 0}, undef),
-        (true, :none, nothing, Array{Float64, 1}, undef, 5),
-        (true, :none, nothing, Array{Float64, 2}, undef, 5, 4),
-        (true, :none, nothing, Array{Float64, 3}, undef, 5, 4, 3),
-        (true, :none, nothing, Array{Float64, 4}, undef, 5, 4, 3, 2),
-        (true, :none, nothing, Array{Float64, 5}, undef, 5, 4, 3, 2, 1),
-        (true, :none, nothing, Array{Float64, 0}, undef, ()),
-        (true, :none, nothing, Array{Float64, 4}, undef, (2, 3, 4, 5)),
-        (true, :none, nothing, Array{Float64, 5}, undef, (2, 3, 4, 5, 6)),
+        (true, :none, nothing, Array{Float64,0}, undef),
+        (true, :none, nothing, Array{Float64,1}, undef, 5),
+        (true, :none, nothing, Array{Float64,2}, undef, 5, 4),
+        (true, :none, nothing, Array{Float64,3}, undef, 5, 4, 3),
+        (true, :none, nothing, Array{Float64,4}, undef, 5, 4, 3, 2),
+        (true, :none, nothing, Array{Float64,5}, undef, 5, 4, 3, 2, 1),
+        (true, :none, nothing, Array{Float64,0}, undef, ()),
+        (true, :none, nothing, Array{Float64,4}, undef, (2, 3, 4, 5)),
+        (true, :none, nothing, Array{Float64,5}, undef, (2, 3, 4, 5, 6)),
         (false, :none, nothing, copy, randn(5, 4)),
         (false, :none, nothing, Base._deletebeg!, randn(5), 0),
         (false, :none, nothing, Base._deletebeg!, randn(5), 2),
@@ -802,12 +847,26 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:memory})
         (false, :none, nothing, sizehint!, randn(5), 10),
         (false, :none, nothing, unsafe_copyto!, randn(4), 2, randn(3), 1, 2),
         (
-            false, :none, nothing,
-            unsafe_copyto!, [rand(3) for _ in 1:5], 2, [rand(4) for _ in 1:4], 1, 3,
+            false,
+            :none,
+            nothing,
+            unsafe_copyto!,
+            [rand(3) for _ in 1:5],
+            2,
+            [rand(4) for _ in 1:4],
+            1,
+            3,
         ),
         (
-            false, :none, nothing,
-            unsafe_copyto!, Vector{Any}(undef, 5), 2, Any[rand() for _ in 1:4], 1, 3,
+            false,
+            :none,
+            nothing,
+            unsafe_copyto!,
+            Vector{Any}(undef, 5),
+            2,
+            Any[rand() for _ in 1:4],
+            1,
+            3,
         ),
         (false, :none, nothing, x -> unsafe_copyto!(memoryref(x, 1), memoryref(x), 3), x),
         (false, :none, nothing, x -> unsafe_copyto!(memoryref(x), memoryref(x), 3), x),

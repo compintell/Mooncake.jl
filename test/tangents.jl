@@ -1,71 +1,73 @@
 @testset "tangents" begin
-
     @testset "tangent_type($primal_type)" for (primal_type, expected_tangent_type) in Any[
 
         ## Tuples
 
         # Unions of Tuples.
-        (Union{Tuple{Float64}, Tuple{Float32}}, Union{Tuple{Float64}, Tuple{Float32}}),
-        (Union{Tuple{Float64}, Tuple{Int}}, Union{Tuple{Float64}, NoTangent}),
-        (Union{Tuple{}, Tuple{Int}}, NoTangent),
+        (Union{Tuple{Float64},Tuple{Float32}}, Union{Tuple{Float64},Tuple{Float32}}),
+        (Union{Tuple{Float64},Tuple{Int}}, Union{Tuple{Float64},NoTangent}),
+        (Union{Tuple{},Tuple{Int}}, NoTangent),
         (
-            Union{Tuple{Float64}, Tuple{Int}, Tuple{Float64, Int}},
-            Union{Tuple{Float64}, NoTangent, Tuple{Float64, NoTangent}},
+            Union{Tuple{Float64},Tuple{Int},Tuple{Float64,Int}},
+            Union{Tuple{Float64},NoTangent,Tuple{Float64,NoTangent}},
         ),
-        (Union{Tuple{Float64}, Tuple{Any}}, Union{NoTangent, Tuple{Any}}),
+        (Union{Tuple{Float64},Tuple{Any}}, Union{NoTangent,Tuple{Any}}),
 
         # UnionAlls of Tuples.
-        (Tuple{T} where {T}, Union{NoTangent, Tuple{Any}}),
-        (Tuple{T, T} where {T<:Real}, Union{NoTangent, Tuple{Any, Any}}),
-        (Tuple{Float64, T} where {T<:Int}, Tuple{Float64, NoTangent}),
-        (Union{Tuple{T}, Tuple{T, T}} where {T<:Real}, Any),
+        (Tuple{T} where {T}, Union{NoTangent,Tuple{Any}}),
+        (Tuple{T,T} where {T<:Real}, Union{NoTangent,Tuple{Any,Any}}),
+        (Tuple{Float64,T} where {T<:Int}, Tuple{Float64,NoTangent}),
+        (Union{Tuple{T},Tuple{T,T}} where {T<:Real}, Any),
 
         # Edge case: (provably) empty Tuple.
         (Tuple{}, NoTangent),
 
         # Vararg Tuples
         (Tuple, Any),
-        (Tuple{Float64, Vararg}, Any),
-        (Tuple{Float64, Vararg{Int}}, Any),
+        (Tuple{Float64,Vararg}, Any),
+        (Tuple{Float64,Vararg{Int}}, Any),
         (Tuple{Vararg{Int}}, Any),
-        (Tuple{Int, Vararg{Int}}, Any),
+        (Tuple{Int,Vararg{Int}}, Any),
 
         # Simple Tuples.
         (Tuple{Int}, NoTangent),
-        (Tuple{Vararg{Int, 250}}, NoTangent),
-        (Tuple{Int, Int}, NoTangent),
-        (Tuple{DataType, Int}, NoTangent),
-        (Tuple{DataType, Vararg{Int, 100}}, NoTangent),
-        (Tuple{DataType, Type{Float64}}, NoTangent),
-        (Tuple{DataType, Vararg{Type{Float64}, 100}}, NoTangent),
-        (Tuple{Any}, Union{NoTangent, Tuple{Any}}),
-        (Tuple{Any, Any}, Union{NoTangent, Tuple{Any, Any}}),
-        (Tuple{Int, Any}, Union{NoTangent, Tuple{NoTangent, Any}}),
-        (Tuple{Int, Float64}, Tuple{NoTangent, Float64}),
-        (Tuple{Int, Vararg{Float64, 100}}, Tuple{NoTangent, Vararg{Float64, 100}}),
-        (Tuple{Type{Float64}, Float64}, Tuple{NoTangent, Float64}),
-        (Tuple{DataType, Vararg{Float32, 100}}, Tuple{NoTangent, Vararg{Float32, 100}}),
-        (Tuple{Tuple{Type{Int}}, Float64}, Tuple{NoTangent, Float64}),
+        (Tuple{Vararg{Int,250}}, NoTangent),
+        (Tuple{Int,Int}, NoTangent),
+        (Tuple{DataType,Int}, NoTangent),
+        (Tuple{DataType,Vararg{Int,100}}, NoTangent),
+        (Tuple{DataType,Type{Float64}}, NoTangent),
+        (Tuple{DataType,Vararg{Type{Float64},100}}, NoTangent),
+        (Tuple{Any}, Union{NoTangent,Tuple{Any}}),
+        (Tuple{Any,Any}, Union{NoTangent,Tuple{Any,Any}}),
+        (Tuple{Int,Any}, Union{NoTangent,Tuple{NoTangent,Any}}),
+        (Tuple{Int,Float64}, Tuple{NoTangent,Float64}),
+        (Tuple{Int,Vararg{Float64,100}}, Tuple{NoTangent,Vararg{Float64,100}}),
+        (Tuple{Type{Float64},Float64}, Tuple{NoTangent,Float64}),
+        (Tuple{DataType,Vararg{Float32,100}}, Tuple{NoTangent,Vararg{Float32,100}}),
+        (Tuple{Tuple{Type{Int}},Float64}, Tuple{NoTangent,Float64}),
 
         ## NamedTuple
 
         # Unions of NamedTuples.
         (
-            Union{@NamedTuple{a::Float64}, @NamedTuple{b::Float64}},
-            Union{@NamedTuple{a::Float64}, @NamedTuple{b::Float64}},
+            Union{@NamedTuple{a::Float64},@NamedTuple{b::Float64}},
+            Union{@NamedTuple{a::Float64},@NamedTuple{b::Float64}},
         ),
         (
-            Union{@NamedTuple{a::Float64}, @NamedTuple{}},
-            Union{@NamedTuple{a::Float64}, NoTangent},
+            Union{@NamedTuple{a::Float64},@NamedTuple{}},
+            Union{@NamedTuple{a::Float64},NoTangent},
         ),
-        (Union{@NamedTuple{a::Float64}, @NamedTuple{a::Any}}, Any),
+        (Union{@NamedTuple{a::Float64},@NamedTuple{a::Any}}, Any),
 
         # UnionAlls of NamedTuples.
-        (@NamedTuple{a::T} where {T}, Union{NoTangent, NamedTuple{(:a,)}}),
-        (@NamedTuple{a::T, b::T} where {T<:Real}, Union{NoTangent, NamedTuple{(:a, :b)}}),
-        (@NamedTuple{a::Float64, b::T} where {T<:Int}, Union{NoTangent, NamedTuple{(:a, :b)}}),
-        (Union{@NamedTuple{a::T}, @NamedTuple{b::T, c::T}} where {T<:Any}, Any),
-        (Union{@NamedTuple{T, Float64}, @NamedTuple{T, Float64, Int}} where {T}, Any),
+        (@NamedTuple{a::T} where {T}, Union{NoTangent,NamedTuple{(:a,)}}),
+        (@NamedTuple{a::T, b::T} where {T<:Real}, Union{NoTangent,NamedTuple{(:a, :b)}}),
+        (
+            @NamedTuple{a::Float64, b::T} where {T<:Int},
+            Union{NoTangent,NamedTuple{(:a, :b)}},
+        ),
+        (Union{@NamedTuple{a::T},@NamedTuple{b::T, c::T}} where {T<:Any}, Any),
+        (Union{@NamedTuple{T, Float64},@NamedTuple{T, Float64, Int}} where {T}, Any),
 
         # Edge case
         (@NamedTuple{}, NoTangent),
@@ -80,12 +82,16 @@
         (@NamedTuple{a::Int, b::Any}, Any),
         (@NamedTuple{b::Int, a::Float64}, @NamedTuple{b::NoTangent, a::Float64}),
         (@NamedTuple{a::Type{Float64}, b::Float64}, @NamedTuple{a::NoTangent, b::Float64}),
-        (@NamedTuple{a::Tuple{Type{Int}}, b::Float64}, @NamedTuple{a::NoTangent, b::Float64}),
+        (
+            @NamedTuple{a::Tuple{Type{Int}}, b::Float64},
+            @NamedTuple{a::NoTangent, b::Float64}
+        ),
     ]
         TestUtils.test_tangent_type(primal_type, expected_tangent_type)
     end
 
-    @testset "$(typeof(data))" for (interface_only, data...) in Mooncake.tangent_test_cases()
+    @testset "$(typeof(data))" for (interface_only, data...) in
+                                   Mooncake.tangent_test_cases()
         test_tangent(Xoshiro(123456), data...; interface_only)
     end
 
@@ -166,7 +172,7 @@
     end
     @testset "restricted inner constructor" begin
         p = TestResources.NoDefaultCtor(5.0)
-        t = Mooncake.Tangent((x=5.0, ))
+        t = Mooncake.Tangent((x=5.0,))
         @test_throws Mooncake.AddToPrimalException Mooncake._add_to_primal(p, t)
         @test Mooncake._add_to_primal(p, t, true) isa typeof(p)
     end
@@ -186,7 +192,9 @@ end
         bar = Mooncake.TestResources.TypeUnstableStruct(5.0, 1.0)
         @test ==(
             Mooncake.zero_tangent(bar),
-            Tangent{@NamedTuple{a::Float64, b::PossiblyUninitTangent{Any}}}((a=0.0, b=PossiblyUninitTangent{Any}(0.0)))
+            Tangent{@NamedTuple{a::Float64, b::PossiblyUninitTangent{Any}}}((
+                a=0.0, b=PossiblyUninitTangent{Any}(0.0)
+            )),
         )
     end
 
@@ -269,14 +277,12 @@ end
 #     return filter(!isabstracttype, types_in(m))
 # end
 
-
 # # Primitives are required to explicitly declare a method of `zero_tangent` which applies
 # # to them. They must not hit the generic fallback. This function checks that there are no
 # # primitives within the specified module which don't hit a generic fallback.
 # function verify_zero_for_primitives_in(m::Module)
 #     return filter(t -> isprimitivetype(t), types_in(m))
 # end
-
 
 # # A toy type on which to test tangent stuff in a variety of situations.
 # struct Foo{T, V}

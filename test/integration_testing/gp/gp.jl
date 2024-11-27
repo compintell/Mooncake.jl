@@ -32,12 +32,12 @@ using Mooncake.TestUtils: test_rule
         Any[(with_lengthscale(k, 1.1), x1, x2) for k in ks for (x1, x2) in xs],
         Any[(with_lengthscale(k, rand(rng, 2)), x1, x2) for k in ks for (x1, x2) in d_2_xs],
         Any[
-            (k ∘ LinearTransform(randn(rng, 2, 2)), x1, x2) for 
-                k in ks for (x1, x2) in d_2_xs
+            (k ∘ LinearTransform(randn(rng, 2, 2)), x1, x2) for k in ks for
+            (x1, x2) in d_2_xs
         ],
         Any[
-            (k ∘ LinearTransform(Diagonal(randn(rng, 2))), x1, x2) for
-                k in ks for (x1, x2) in d_2_xs
+            (k ∘ LinearTransform(Diagonal(randn(rng, 2))), x1, x2) for k in ks for
+            (x1, x2) in d_2_xs
         ],
     )
         fx = GP(k)(x1, 1.1)

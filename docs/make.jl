@@ -9,26 +9,18 @@ DocMeta.setdocmeta!(
     recursive=true,
 )
 
-makedocs(
+makedocs(;
     sitename="Mooncake.jl",
     format=Documenter.HTML(;
-        mathengine = Documenter.KaTeX(
-            Dict(
-                :macros => Dict(
-                    "\\RR" => "\\mathbb{R}",
-                ),
-            )
-        ),
+        mathengine=Documenter.KaTeX(Dict(:macros => Dict("\\RR" => "\\mathbb{R}"))),
         size_threshold_ignore=[
-            joinpath("developer_documentation", "internal_docstrings.md"),
+            joinpath("developer_documentation", "internal_docstrings.md")
         ],
     ),
     modules=[Mooncake],
     checkdocs=:none,
-    plugins=[
-        CitationBibliography(joinpath(@__DIR__, "src", "refs.bib"); style=:numeric),
-    ],
-    pages = [
+    plugins=[CitationBibliography(joinpath(@__DIR__, "src", "refs.bib"); style=:numeric)],
+    pages=[
         "Mooncake.jl" => "index.md",
         "Understanding Mooncake.jl" => [
             joinpath("understanding_mooncake", "introduction.md"),
@@ -47,7 +39,7 @@ makedocs(
             joinpath("developer_documentation", "internal_docstrings.md"),
         ],
         "known_limitations.md",
-    ]
+    ],
 )
 
-deploydocs(repo="github.com/compintell/Mooncake.jl.git", push_preview=true)
+deploydocs(; repo="github.com/compintell/Mooncake.jl.git", push_preview=true)

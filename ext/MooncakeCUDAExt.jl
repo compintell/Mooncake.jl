@@ -38,7 +38,7 @@ set_to_zero!!(x::CuArray{<:IEEEFloat}) = x .= 0
 _add_to_primal(x::P, y::P, ::Bool) where {P<:CuArray{<:IEEEFloat}} = x + y
 _diff(x::P, y::P) where {P<:CuArray{<:IEEEFloat}} = x - y
 _dot(x::P, y::P) where {P<:CuArray{<:IEEEFloat}} = Float64(dot(x, y))
-_scale(x::Float64, y::P) where {T<:IEEEFloat, P<:CuArray{T}} = T(x) * y
+_scale(x::Float64, y::P) where {T<:IEEEFloat,P<:CuArray{T}} = T(x) * y
 function populate_address_map!(m::AddressMap, p::CuArray, t::CuArray)
     k = pointer_from_objref(p)
     v = pointer_from_objref(t)
@@ -55,9 +55,7 @@ end
 
 # Basic rules for operating on CuArrays.
 
-@is_primitive(
-    MinimalCtx, Tuple{Type{<:CuArray}, UndefInitializer, Vararg{Int, N}} where {N},
-)
+@is_primitive(MinimalCtx, Tuple{Type{<:CuArray},UndefInitializer,Vararg{Int,N}} where {N},)
 function rrule!!(
     p::CoDual{Type{P}}, init::CoDual{UndefInitializer}, dims::CoDual{Int}...
 ) where {P<:CuArray{<:Base.IEEEFloat}}

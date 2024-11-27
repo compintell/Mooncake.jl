@@ -1,5 +1,5 @@
 module BBCodeTestCases
-    test_phi_node(x::Ref{Union{Float32, Float64}}) = sin(x[])
+test_phi_node(x::Ref{Union{Float32,Float64}}) = sin(x[])
 end
 
 @testset "bbcode" begin
@@ -36,18 +36,19 @@ end
 
         # Final statment is regular instruction, so newly inserted instruction should go at
         # the end of the block.
-        @test Mooncake.insert_before_terminator!(bb, ID(), new_inst(ReturnNode(5))) === nothing
+        @test Mooncake.insert_before_terminator!(bb, ID(), new_inst(ReturnNode(5))) ===
+            nothing
         @test bb.insts[end].stmt === ReturnNode(5)
 
         # Final statement is now a Terminator, so insertion should happen before it.
         @test Mooncake.insert_before_terminator!(bb, ID(), new_inst(nothing)) === nothing
         @test bb.insts[end].stmt === ReturnNode(5)
-        @test bb.insts[end-1].stmt === nothing
+        @test bb.insts[end - 1].stmt === nothing
     end
     @testset "BBCode $f" for (f, P) in [
         (TestResources.test_while_loop, Tuple{Float64}),
         (sin, Tuple{Float64}),
-        (BBCodeTestCases.test_phi_node, Tuple{Ref{Union{Float32, Float64}}}),
+        (BBCodeTestCases.test_phi_node, Tuple{Ref{Union{Float32,Float64}}}),
     ]
         ir = Base.code_ircode(f, P)[1][1]
         bb_code = BBCode(ir)
@@ -61,10 +62,10 @@ end
         @test all(map(==, ir.stmts.line, new_ir.stmts.line))
         @test all(map(==, ir.stmts.flag, new_ir.stmts.flag))
         @test length(Mooncake.collect_stmts(bb_code)) == length(stmt(ir.stmts))
-        @test Mooncake.id_to_line_map(bb_code) isa Dict{ID, Int}
+        @test Mooncake.id_to_line_map(bb_code) isa Dict{ID,Int}
     end
     @testset "control_flow_graph" begin
-        ir = Base.code_ircode_by_type(Tuple{typeof(sin), Float64})[1][1]
+        ir = Base.code_ircode_by_type(Tuple{typeof(sin),Float64})[1][1]
         bb = BBCode(ir)
         new_ir = Core.Compiler.IRCode(bb)
         cfg = Mooncake.control_flow_graph(bb)
@@ -150,7 +151,7 @@ end
         @testset "_find_id_uses!" begin
             @testset "Expr" begin
                 id = ID()
-                d = Dict{ID, Bool}(id => false)
+                d = Dict{ID,Bool}(id => false)
                 Mooncake._find_id_uses!(d, Expr(:call, sin, 5))
                 @test d[id] == false
                 Mooncake._find_id_uses!(d, Expr(:call, sin, id))
@@ -158,7 +159,7 @@ end
             end
             @testset "IDGotoIfNot" begin
                 id = ID()
-                d = Dict{ID, Bool}(id => false)
+                d = Dict{ID,Bool}(id => false)
                 Mooncake._find_id_uses!(d, IDGotoIfNot(ID(), ID()))
                 @test d[id] == false
                 Mooncake._find_id_uses!(d, IDGotoIfNot(true, ID()))
@@ -168,13 +169,13 @@ end
             end
             @testset "IDGotoNode" begin
                 id = ID()
-                d = Dict{ID, Bool}(id => false)
+                d = Dict{ID,Bool}(id => false)
                 Mooncake._find_id_uses!(d, IDGotoNode(ID()))
                 @test d[id] == false
             end
             @testset "IDPhiNode" begin
                 id = ID()
-                d = Dict{ID, Bool}(id => false)
+                d = Dict{ID,Bool}(id => false)
                 Mooncake._find_id_uses!(d, IDPhiNode([ID()], Vector{Any}(undef, 1)))
                 @test d[id] == false
                 Mooncake._find_id_uses!(d, IDPhiNode([ID()], Any[id]))
@@ -182,7 +183,7 @@ end
             end
             @testset "PiNode" begin
                 id = ID()
-                d = Dict{ID, Bool}(id => false)
+                d = Dict{ID,Bool}(id => false)
                 Mooncake._find_id_uses!(d, PiNode(false, Bool))
                 @test d[id] == false
                 Mooncake._find_id_uses!(d, PiNode(id, Bool))
@@ -190,7 +191,7 @@ end
             end
             @testset "ReturnNode" begin
                 id = ID()
-                d = Dict{ID, Bool}(id => false)
+                d = Dict{ID,Bool}(id => false)
                 Mooncake._find_id_uses!(d, ReturnNode())
                 @test d[id] == false
                 Mooncake._find_id_uses!(d, ReturnNode(5))
@@ -203,7 +204,7 @@ end
             id_1 = ID()
             id_2 = ID()
             id_3 = ID()
-            stmts = Tuple{ID, Core.Compiler.NewInstruction}[
+            stmts = Tuple{ID,Core.Compiler.NewInstruction}[
                 (id_1, new_inst(Expr(:call, sin, Argument(1)))),
                 (id_2, new_inst(Expr(:call, cos, id_1))),
                 (id_3, new_inst(ReturnNode(id_2))),
@@ -261,17 +262,17 @@ end
         # Get the IRCode, and ensure that the statements in it agree with what is expected.
         new_ir = CC.IRCode(new_bb_ir)
         expected_stmts = Any[
-            GotoNode(2),
-            PhiNode(Int32[1], Any[true]),
-            ReturnNode(SSAValue(2)),
+            GotoNode(2), PhiNode(Int32[1], Any[true]), ReturnNode(SSAValue(2))
         ]
         @test Mooncake.stmt(new_ir.stmts) == expected_stmts
     end
     @testset "inc_args" begin
-        @test Mooncake.inc_args(Expr(:call, sin, Argument(4))) == Expr(:call, sin, Argument(5))
+        @test Mooncake.inc_args(Expr(:call, sin, Argument(4))) ==
+            Expr(:call, sin, Argument(5))
         @test Mooncake.inc_args(ReturnNode(Argument(2))) == ReturnNode(Argument(3))
         id = ID()
-        @test Mooncake.inc_args(IDGotoIfNot(Argument(1), id)) == IDGotoIfNot(Argument(2), id)
+        @test Mooncake.inc_args(IDGotoIfNot(Argument(1), id)) ==
+            IDGotoIfNot(Argument(2), id)
         @test Mooncake.inc_args(IDGotoNode(id)) == IDGotoNode(id)
         ids = [id, ID()]
         @test ==(

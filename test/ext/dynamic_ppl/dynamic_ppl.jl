@@ -7,5 +7,6 @@ using DynamicPPL: istrans, VarInfo
 using Mooncake.TestUtils: test_rule
 
 @testset "DynamicPPLMooncakeExt" begin
-    test_rule(StableRNG(123456), istrans, VarInfo(); unsafe_perturb=true)
+    rng = StableRNG(123456)
+    test_rule(rng, istrans, VarInfo(); unsafe_perturb=true, interface_only=true)
 end

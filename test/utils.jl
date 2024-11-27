@@ -5,7 +5,7 @@
         @test _typeof(Float64) == Type{Float64}
         @test _typeof(Vector{Int}) == Type{Vector{Int}}
         @test _typeof(Vector{T} where {T}) == Type{Vector}
-        @test _typeof((5.0, Float64)) == Tuple{Float64, Type{Float64}}
+        @test _typeof((5.0, Float64)) == Tuple{Float64,Type{Float64}}
         @test _typeof((a=5.0, b=Float64)) == @NamedTuple{a::Float64, b::Type{Float64}}
     end
     @testset "tuple_map" begin
@@ -22,8 +22,8 @@
         )
 
         # Require that length of arguments are equal.
-        @test_throws ArgumentError Mooncake.tuple_map(*, (5.0, 4.0), (4.0, ))
-        @test_throws ArgumentError Mooncake.tuple_map(*, (4.0, ), (5.0, 4.0))
+        @test_throws ArgumentError Mooncake.tuple_map(*, (5.0, 4.0), (4.0,))
+        @test_throws ArgumentError Mooncake.tuple_map(*, (4.0,), (5.0, 4.0))
     end
     @testset "_map_if_assigned!" begin
         @testset "unary bits type" begin
@@ -74,7 +74,7 @@
         y = randn(10)
         @test Mooncake._map(*, x, y) == map(*, x, y)
         @assert length(map(*, x, randn(11))) == 10
-        @test_throws AssertionError Mooncake._map(*, x, randn(11)) 
+        @test_throws AssertionError Mooncake._map(*, x, randn(11))
     end
     @testset "is_always_initialised" begin
         @test Mooncake.is_always_initialised(TestResources.StructFoo, 1)

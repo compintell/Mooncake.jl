@@ -54,7 +54,9 @@ true
 """
 function fwd_ir(
     sig::Type{<:Tuple};
-    interp=get_interpreter(), debug_mode::Bool=false, do_inline::Bool=true
+    interp=get_interpreter(),
+    debug_mode::Bool=false,
+    do_inline::Bool=true,
 )::IRCode
     return generate_ir(interp, sig; debug_mode, do_inline).fwd_ir
 end
@@ -93,7 +95,9 @@ true
 """
 function rvs_ir(
     sig::Type{<:Tuple};
-    interp=get_interpreter(), debug_mode::Bool=false, do_inline::Bool=true
+    interp=get_interpreter(),
+    debug_mode::Bool=false,
+    do_inline::Bool=true,
 )::IRCode
     return generate_ir(interp, sig; debug_mode, do_inline).rvs_ir
 end

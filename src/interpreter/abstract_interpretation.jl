@@ -16,10 +16,10 @@ struct ClosureCacheKey
 end
 
 struct MooncakeCache
-    dict::IdDict{Core.MethodInstance, Core.CodeInstance}
+    dict::IdDict{Core.MethodInstance,Core.CodeInstance}
 end
 
-MooncakeCache() = MooncakeCache(IdDict{Core.MethodInstance, Core.CodeInstance}())
+MooncakeCache() = MooncakeCache(IdDict{Core.MethodInstance,Core.CodeInstance}())
 
 # The method table used by `Mooncake.@mooncake_overlay`.
 Base.Experimental.@MethodTable mooncake_method_table
@@ -31,16 +31,16 @@ struct MooncakeInterpreter{C} <: CC.AbstractInterpreter
     opt_params::CC.OptimizationParams
     inf_cache::Vector{CC.InferenceResult}
     code_cache::MooncakeCache
-    oc_cache::Dict{ClosureCacheKey, Any}
+    oc_cache::Dict{ClosureCacheKey,Any}
     function MooncakeInterpreter(
         ::Type{C};
         meta=nothing,
         world::UInt=Base.get_world_counter(),
         inf_params::CC.InferenceParams=CC.InferenceParams(),
         opt_params::CC.OptimizationParams=CC.OptimizationParams(),
-        inf_cache::Vector{CC.InferenceResult}=CC.InferenceResult[], 
+        inf_cache::Vector{CC.InferenceResult}=CC.InferenceResult[],
         code_cache::MooncakeCache=MooncakeCache(),
-        oc_cache::Dict{ClosureCacheKey, Any}=Dict{ClosureCacheKey, Any}(),
+        oc_cache::Dict{ClosureCacheKey,Any}=Dict{ClosureCacheKey,Any}(),
     ) where {C}
         return new{C}(meta, world, inf_params, opt_params, inf_cache, code_cache, oc_cache)
     end
@@ -54,7 +54,7 @@ end
 Base.show(io::IO, mc::MooncakeInterpreter) = _show_interp(io, MIME"text/plain"(), mc)
 
 function _show_interp(io::IO, ::MIME"text/plain", ::MooncakeInterpreter)
-    print(io, "MooncakeInterpreter()")
+    return print(io, "MooncakeInterpreter()")
 end
 
 MooncakeInterpreter() = MooncakeInterpreter(DefaultCtx)
@@ -107,7 +107,7 @@ function CC.method_table(interp::MooncakeInterpreter)
     return CC.OverlayMethodTable(interp.world, mooncake_method_table)
 end
 
-if VERSION < v"1.11.0"
+@static if VERSION < v"1.11.0"
     CC.get_world_counter(interp::MooncakeInterpreter) = interp.world
     get_inference_world(interp::CC.AbstractInterpreter) = CC.get_world_counter(interp)
 else
@@ -119,7 +119,7 @@ end
 _type(x::Type) = x
 _type(x::CC.Const) = _typeof(x.val)
 _type(x::CC.PartialStruct) = x.typ
-_type(x::CC.Conditional) = Union{_type(x.thentype), _type(x.elsetype)}
+_type(x::CC.Conditional) = Union{_type(x.thentype),_type(x.elsetype)}
 _type(::CC.PartialTypeVar) = TypeVar
 
 struct NoInlineCallInfo <: CC.CallInfo
@@ -160,49 +160,43 @@ function Core.Compiler.abstract_call_gf_by_type(
     end
 end
 
-if VERSION < v"1.11-"
-
-function CC.inlining_policy(
-    interp::MooncakeInterpreter{C},
-    @nospecialize(src),
-    @nospecialize(info::CC.CallInfo),
-    stmt_flag::UInt8,
-    mi::Core.MethodInstance,
-    argtypes::Vector{Any},
-) where {C}
-
-    # Do not inline away primitives.
-    info isa NoInlineCallInfo && return nothing
-
-    # If not a primitive, AD doesn't care about it. Use the usual inlining strategy.
-    return @invoke CC.inlining_policy(
-        interp::CC.AbstractInterpreter,
-        src::Any,
-        info::CC.CallInfo,
+@static if VERSION < v"1.11-"
+    function CC.inlining_policy(
+        interp::MooncakeInterpreter{C},
+        @nospecialize(src),
+        @nospecialize(info::CC.CallInfo),
         stmt_flag::UInt8,
         mi::Core.MethodInstance,
         argtypes::Vector{Any},
-    )
-end
+    ) where {C}
+
+        # Do not inline away primitives.
+        info isa NoInlineCallInfo && return nothing
+
+        # If not a primitive, AD doesn't care about it. Use the usual inlining strategy.
+        return @invoke CC.inlining_policy(
+            interp::CC.AbstractInterpreter,
+            src::Any,
+            info::CC.CallInfo,
+            stmt_flag::UInt8,
+            mi::Core.MethodInstance,
+            argtypes::Vector{Any},
+        )
+    end
 
 else # 1.11 and up.
-
-function CC.inlining_policy(
-    interp::MooncakeInterpreter,
-    @nospecialize(src),
-    @nospecialize(info::CC.CallInfo),
-    stmt_flag::UInt32,
-)
-    # Do not inline away primitives.
-    info isa NoInlineCallInfo && return nothing
-
-    # If not a primitive, AD doesn't care about it. Use the usual inlining strategy.
-    return @invoke CC.inlining_policy(
-        interp::CC.AbstractInterpreter,
-        src::Any,
-        info::CC.CallInfo,
+    function CC.inlining_policy(
+        interp::MooncakeInterpreter,
+        @nospecialize(src),
+        @nospecialize(info::CC.CallInfo),
         stmt_flag::UInt32,
     )
-end
+        # Do not inline away primitives.
+        info isa NoInlineCallInfo && return nothing
 
+        # If not a primitive, AD doesn't care about it. Use the usual inlining strategy.
+        return @invoke CC.inlining_policy(
+            interp::CC.AbstractInterpreter, src::Any, info::CC.CallInfo, stmt_flag::UInt32
+        )
+    end
 end

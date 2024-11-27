@@ -1,5 +1,4 @@
 @testset "misc" begin
-
     @testset "misc utility" begin
         x = randn(4, 5)
         p = Base.unsafe_convert(Ptr{Float64}, x)

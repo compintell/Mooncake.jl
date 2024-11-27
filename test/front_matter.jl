@@ -1,16 +1,16 @@
-using
-    AllocCheck,
+using AllocCheck,
     Aqua,
     BenchmarkTools,
     DiffRules,
     JET,
+    JuliaFormatter,
     LinearAlgebra,
     Random,
     StableRNGs,
     Mooncake,
     Test
 
-import ChainRulesCore
+using ChainRulesCore: ChainRulesCore
 
 using Base: unsafe_load, pointer_from_objref, IEEEFloat, TwicePrecision
 using Base.Iterators: product

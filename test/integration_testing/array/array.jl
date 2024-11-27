@@ -1,6 +1,6 @@
 using Pkg
 Pkg.activate(@__DIR__)
-Pkg.develop(; path = joinpath(@__DIR__, "..", "..", ".."))
+Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 
 using LinearAlgebra, Mooncake, StableRNGs, Test
 using Mooncake.TestUtils: test_rule
@@ -119,7 +119,7 @@ _getter() = 5.0
             (
                 false,
                 *,
-                randn(sr(0), ),
+                randn(sr(0)),
                 adjoint(randn(sr(1), 2, 1)),
                 randn(sr(2), 2, 3),
                 randn(sr(3), 3),
@@ -400,16 +400,20 @@ _getter() = 5.0
             (false, x -> minimum(cos, x; dims=2), randn(sr(7), 3, 2)),
             (false, minimum!, sin, randn(sr(9), 2), randn(sr(8), 2, 3)),
         ],
-        vec(reduce(
-            vcat,
-            map(Iterators.product(
-                [adjoint(randn(sr(0), 2, 3)), transpose(randn(sr(1), 2, 3))],
-                [randn(sr(3), 2), randn(sr(2), 2, 3)],
-                [randn(sr(4)), randn(sr(5), 1), randn(sr(6), 3)],
-            )) do (A, b, z)
-                (false, muladd, A, b, z)
-            end,
-        )),
+        vec(
+            reduce(
+                vcat,
+                map(
+                    Iterators.product(
+                        [adjoint(randn(sr(0), 2, 3)), transpose(randn(sr(1), 2, 3))],
+                        [randn(sr(3), 2), randn(sr(2), 2, 3)],
+                        [randn(sr(4)), randn(sr(5), 1), randn(sr(6), 3)],
+                    ),
+                ) do (A, b, z)
+                    (false, muladd, A, b, z)
+                end,
+            ),
+        ),
         Any[
             (false, ndims, randn(sr(7), 2)),
             (false, ndims, randn(sr(8), 1, 2, 1, 1, 1)),
@@ -507,7 +511,7 @@ _getter() = 5.0
             (false, view, randn(sr(0), 3, 2), :, :),
             (false, zero, randn(sr(1), 3)),
             (false, zero, randn(sr(2), 2, 3)),
-        ]
+        ],
     )
     @testset for (interface_only, f, x...) in test_cases
         @info typeof((f, x...))
