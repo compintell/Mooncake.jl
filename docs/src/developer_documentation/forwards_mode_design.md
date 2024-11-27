@@ -7,9 +7,9 @@ It should do so to a sufficient level of depth to enable the interested reader t
 
 This document
 1. specifies the semantics of a "rule" for forwards-mode AD,
-1. specifies how to implement rules by-hand for primitives, and
-1. specifies how to derive rules from `IRCode` algorithmically in general.
-1. discusses batched forwards-mode
+1. specifies how to implement rules by-hand for primitives,
+1. specifies how to derive rules from `IRCode` algorithmically in general,
+1. discusses batched forwards-mode,
 1. discusses some notable technical differences between our forwards-mode AD implementation details and reverse-mode AD implementation details, and
 1. concludes with a brief comparison with ForwardDiff.jl.
 
