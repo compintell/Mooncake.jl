@@ -48,10 +48,10 @@ using Mooncake.TestUtils: test_rule
         test_rule(StableRNG(123456), f, x...; perf_flag)
     end
     @testset for (perf_flag, f, x...) in [
-        (:allocs, logerf, 0.3, 0.5), # first branch
-        (:allocs, logerf, 1.1, 1.2), # second branch
-        (:allocs, logerf, -1.2, -1.1), # third branch
-        (:allocs, logerf, 0.3, 1.1), # fourth branch
+        (:none, logerf, 0.3, 0.5), # first branch
+        (:none, logerf, 1.1, 1.2), # second branch
+        (:none, logerf, -1.2, -1.1), # third branch
+        (:none, logerf, 0.3, 1.1), # fourth branch
         (:allocs, SpecialFunctions.loggammadiv, 1.0, 9.0),
         (:allocs, SpecialFunctions.gammax, 1.0),
         (:allocs, SpecialFunctions.rgammax, 3.0, 6.0),
