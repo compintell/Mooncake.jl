@@ -16,10 +16,10 @@ This document
 ## Forwards-Rule Interface
 
 Loosely, a rule for a function simultaneously
-1. performs same computation as the original function, and
+1. performs the same computation as the original function, and
 1. computes the Frechet derivative.
 
-This is best made concrete through a worked example.
+This is best explained through a worked example.
 Consider a function call
 ```julia
 z = f(x, y)
@@ -58,7 +58,7 @@ it must always hold that `T = tangent_type(P)`.
 
 ### Testing
 
-Suppose that we have (somehow) produced a supposed forwards-rule. To check that it is correctly implemented, we must
+Suppose that we have (somehow) produced a supposed forwards-rule. To check that it is correctly implemented, we must ensure that
 1. all primal state after running the rule is approximately the same as all primal state after running the primal, and
 2. the inner product between all tangents (both output and input) and a random tangent vector after running the rule is approximately the same as the estimate of the same quantity produced by finite differencing or reverse-mode AD.
 
@@ -71,7 +71,7 @@ Hand-written rules are implemented by writing methods of two functions: `is_prim
 ### `is_primitive`
 
 `is_primitive(::Type{<:Union{MinimalForwardsCtx, DefaultForwardsCtx}}, signature::Type{<:Tuple})` should return `true` if AD must attempt to differentiate a call by passing the arguments to `frule!!`, and `false` otherwise.
-The [`Mooncake.@is_primitive`](@ref) macro can be used to implement this straightforwardly.
+The [`Mooncake.@is_primitive`](@ref) macro helps makes implementing this very easy.
 
 ### `frule!!`
 
@@ -158,7 +158,7 @@ julia> Base.code_ircode_by_type(Tuple{typeof(f), Float64})
 4 └──      return %2
    => Float64
 ```
-Recall that `_2` is the second argument, in this case the `Float64`, and `%1` and `%2` are `SSAValue`s.
+Recall that `_2` is the second argument, in this case a `Float64`, and `%1` and `%2` are `SSAValue`s.
 Roughly speaking, the forwards-mode IR for the (ficiticious) function `rule_for_f` should look something like:
 ```julia
 julia> Base.code_ircode_by_type(Tuple{typeof(rule_for_f), Dual{typeof(f), NoTangent}, Dual{Float64, Float64}})
@@ -189,7 +189,7 @@ This function accepts as arguments a context and a signature / `Base.MethodInsta
 1. Apply a series of standardising transformations to the `IRCode`.
 1. Transform each statement according to a set of rules to produce a new `IRCode`.
 1. Apply standard Julia optimisations to this new `IRCode`.
-1. Put this code inside a `MistyClosure` in order to produce a executable object.
+1. Put this code inside a `MistyClosure` in order to produce an executable object.
 1. Wrap this `MistyClosure` in a `DerivedFRule` to handle various bits of book-keeping around varargs.
 
 
