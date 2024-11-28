@@ -196,13 +196,7 @@ function prepare_pullback_cache(fx...; kwargs...)
 
     # Construct cache for output. Check that `copy!`ing appears to work.
     y_cache = copy(primal(y))
-    try
-        _copy!!(y_cache, primal(y))
-    catch
-        error("Unable to apply `copy!` to the output.")
-    end
-
-    return Cache(rule, y_cache, tangents)
+    return Cache(rule,  _copy!!(y_cache, primal(y)), tangents)
 end
 
 """
