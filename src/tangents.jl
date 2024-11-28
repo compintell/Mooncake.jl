@@ -623,7 +623,7 @@ Set `x` to its zero element (`x` should be a tangent, so the zero must exist).
 """
 set_to_zero!!(::NoTangent) = NoTangent()
 set_to_zero!!(x::Base.IEEEFloat) = zero(x)
-set_to_zero!!(x::Union{Tuple,NamedTuple}) = map(set_to_zero!!, x)
+set_to_zero!!(x::Union{Tuple,NamedTuple}) = tuple_map(set_to_zero!!, x)
 function set_to_zero!!(x::T) where {T<:PossiblyUninitTangent}
     return is_init(x) ? T(set_to_zero!!(val(x))) : x
 end
