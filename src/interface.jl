@@ -177,6 +177,8 @@ _copy!!(::Number, src::Number) = src
 """
     prepare_pullback_cache(f, x...)
 
+WARNING: experimental functionality. Interface subject to change without warning!
+
 Returns a `cache` which can be passed to `value_and_gradient!!`. See the docstring for
 [`value_and_gradient!!`](@ref) for more info.
 """
@@ -206,6 +208,8 @@ end
 """
     value_and_pullback!!(cache::Cache, ȳ, f, x...)
 
+WARNING: experimental functionality. Interface subject to change without warning!
+
 Like other methods of `value_and_pullback!!`, but makes use of the `cache` object in order
 to avoid having to re-allocate various tangent objects repeatedly.
 
@@ -225,6 +229,8 @@ end
 """
     prepare_gradient_cache(f, x...)
 
+WARNING: experimental functionality. Interface subject to change without warning!
+
 Returns a `cache` which can be passed to `value_and_gradient!!`. See the docstring for
 [`value_and_gradient!!`](@ref) for more info.
 """
@@ -238,6 +244,8 @@ end
 
 """
     value_and_gradient!!(cache::Cache, fx::Vararg{Any, N}) where {N}
+
+WARNING: experimental functionality. Interface subject to change without warning!
 
 Like other methods of `value_and_gradient!!`, but makes use of the `cache` object in order
 to avoid having to re-allocate various tangent objects repeatedly.
