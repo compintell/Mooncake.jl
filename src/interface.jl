@@ -127,7 +127,7 @@ Equivalent to `value_and_pullback!!(rule, 1.0, f, x...)`, and assumes `f` return
 `Float64`.
 
 *Note:* There are lots of subtle ways to mis-use `value_and_pullback!!`, so we generally
-recommend using [`Mooncake.value_and_gradient!!`](@ref) (this function) where possible. The
+recommend using `Mooncake.value_and_gradient!!` (this function) where possible. The
 docstring for `value_and_pullback!!` is useful for understanding this function though.
 
 An example:
@@ -180,7 +180,7 @@ _copy!!(::Number, src::Number) = src
 WARNING: experimental functionality. Interface subject to change without warning!
 
 Returns a `cache` which can be passed to `value_and_gradient!!`. See the docstring for
-[`Mooncake.value_and_gradient!!`](@ref) for more info.
+`Mooncake.value_and_gradient!!` for more info.
 """
 function prepare_pullback_cache(fx...; kwargs...)
 
@@ -227,7 +227,7 @@ end
 WARNING: experimental functionality. Interface subject to change without warning!
 
 Returns a `cache` which can be passed to `value_and_gradient!!`. See the docstring for
-[`Mooncake.value_and_gradient!!`](@ref) for more info.
+`Mooncake.value_and_gradient!!` for more info.
 """
 function prepare_gradient_cache(fx...; kwargs...)
     rule = build_rrule(fx...; kwargs...)
