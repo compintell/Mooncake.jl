@@ -66,6 +66,8 @@ end
     @testset "value_and_pullback!!" begin
         @testset "($(typeof(fargs))" for (ȳ, fargs...) in Any[
             (randn(10), identity, randn(10)),
+            (randn(), sin, randn(Float64)),
+            (randn(), sum, randn(Float64)),
         ]
             rule = build_rrule(fargs...)
             f, args... = fargs
