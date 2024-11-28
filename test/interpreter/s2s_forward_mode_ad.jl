@@ -22,7 +22,7 @@ function func(x)
 end
 
 ir = Base.code_ircode(func, (Int,))[1][1]
-irfunc_rule = build_frule(func, x)
+func_rule = build_frule(func, x)
 ydual = func_rule(zero_dual(func), xdual)
 
 @test primal(ydual) == cos(sin(x))

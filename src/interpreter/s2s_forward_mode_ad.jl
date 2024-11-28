@@ -161,7 +161,7 @@ function modify_fwd_ad_stmts!(
 end
 
 # TODO: wrapping in Dual must not be systematic (e.g. Argument or SSAValue)
-_frule!!_makedual(f, args::Vararg{Any,N}) where {N} = frule!!(make_dual.(args)...)
+_frule!!_makedual(f, args::Vararg{Any,N}) where {N} = frule!!(make_dual.((f, args...))...)
 
 struct DynamicFRule{V}
     cache::V
