@@ -127,8 +127,8 @@ Equivalent to `value_and_pullback!!(rule, 1.0, f, x...)`, and assumes `f` return
 `Float64`.
 
 *Note:* There are lots of subtle ways to mis-use `value_and_pullback!!`, so we generally
-recommend using [`value_and_gradient!!`](@ref) (this function) where possible. The docstring for
-`value_and_pullback!!` is useful for understanding this function though.
+recommend using [`Mooncake.value_and_gradient!!`](@ref) (this function) where possible. The
+docstring for `value_and_pullback!!` is useful for understanding this function though.
 
 An example:
 ```jldoctest
@@ -180,7 +180,7 @@ _copy!!(::Number, src::Number) = src
 WARNING: experimental functionality. Interface subject to change without warning!
 
 Returns a `cache` which can be passed to `value_and_gradient!!`. See the docstring for
-[`value_and_gradient!!`](@ref) for more info.
+[`Mooncake.value_and_gradient!!`](@ref) for more info.
 """
 function prepare_pullback_cache(fx...; kwargs...)
 
@@ -215,8 +215,9 @@ if you run this function again with different arguments. Therefore, if you need 
 values returned by this function around over multiple calls to this function with the same
 `cache`, you should take a copy of them before calling again.
 """
-function value_and_pullback!!(cache::Cache, ȳ, fx::Vararg{Any,N}) where {N}
-    coduals = map(CoDual, fx, map(set_to_zero!!, cache.tangents))
+function value_and_pullback!!(cache::Cache, ȳ, f::F, x::Vararg{Any,N}) where {F,N}
+    tangents = tuple_map(set_to_zero!!, cache.tangents)
+    coduals = tuple_map(CoDual, (f, x...), tangents)
     return __value_and_pullback!!(cache.rule, ȳ, coduals...; y_cache=cache.y_cache)
 end
 
@@ -226,7 +227,7 @@ end
 WARNING: experimental functionality. Interface subject to change without warning!
 
 Returns a `cache` which can be passed to `value_and_gradient!!`. See the docstring for
-[`value_and_gradient!!`](@ref) for more info.
+[`Mooncake.value_and_gradient!!`](@ref) for more info.
 """
 function prepare_gradient_cache(fx...; kwargs...)
     rule = build_rrule(fx...; kwargs...)
@@ -252,7 +253,7 @@ if you run this function again with different arguments. Therefore, if you need 
 values returned by this function around over multiple calls to this function with the same
 `cache`, you should take a copy of them before calling again.
 """
-function value_and_gradient!!(cache::Cache, fx::Vararg{Any,N}) where {N}
-    coduals = map(CoDual, fx, map(set_to_zero!!, cache.tangents))
+function value_and_gradient!!(cache::Cache, f::F, x::Vararg{Any,N}) where {F,N}
+    coduals = tuple_map(CoDual, (f, x...), tuple_map(set_to_zero!!, cache.tangents))
     return __value_and_gradient!!(cache.rule, coduals...)
 end
