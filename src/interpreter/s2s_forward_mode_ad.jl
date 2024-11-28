@@ -72,7 +72,14 @@ function generate_dual_ir(
     _, spnames = is_vararg_and_sparam_names(sig_or_mi)
     primal_ir = normalise!(primal_ir, spnames)
 
-    # Keep a copy of the primal IR around
+    # Insert statements into primal IR
+    for i in 1:length(primal_ir.stmts)
+        stmt = primal_ir[SSAValue(i)][:stmt]
+        insert_fwd_ad_stmts!(primal_ir, interp, stmt, i; debug_mode)
+    end
+    primal_ir = CC.compact!(primal_ir)
+
+    # Keep a copy of the primal IR with the insertions
     dual_ir = copy(primal_ir)
 
     # Modify dual argument types:
@@ -87,28 +94,95 @@ function generate_dual_ir(
     end
     pushfirst!(dual_ir.argtypes, Any)
 
-    # Differentiate dual IR
-    for i in 1:length(primal_ir.stmts)
-        stmt = primal_ir[SSAValue(i)][:stmt]
-        make_fwd_ad_stmts!(dual_ir, primal_ir, interp, stmt, i; debug_mode)
+    # Modify dual IR without insertions
+    for i in 1:length(dual_ir.stmts)
+        stmt = dual_ir[SSAValue(i)][:stmt]
+        modify_fwd_ad_stmts!(dual_ir, primal_ir, interp, stmt, i; debug_mode)
     end
+    dual_ir = CC.compact!(dual_ir)  # skippable but good practice
+
+    CC.verify_ir(dual_ir)
 
     # Optimize dual IR
     opt_dual_ir = optimise_ir!(dual_ir; do_inline)
     return opt_dual_ir
 end
 
-"""
-    make_fwd_ad_stmts!(dual_ir, primal_ir, interpreter, stmt, i)
+## Insertion (only GotoIfNot)
 
-Modify `dual_ir` in-place to transform statement `stmt`, located at position `i` in `primal_ir`, into one or more derivative statements.
+function insert_fwd_ad_stmts!(
+    primal_ir::IRCode, ::MooncakeInterpreter, stmt, i::Integer; kwargs...
+)
+    return nothing
+end
 
-!!! warning
-    We must enforce the invariant that this function never deletes nor adds instructions.
-"""
-function make_fwd_ad_stmts! end
+function insert_fwd_ad_stmts!(
+    primal_ir::IRCode, ::MooncakeInterpreter, stmt::GotoIfNot, i::Integer; kwargs...
+)
+    get_primal_inst = CC.NewInstruction(Expr(:call, _primal, stmt.cond), Any)
+    return CC.insert_node!(primal_ir, CC.SSAValue(i), get_primal_inst, false)
+end
 
-function make_fwd_ad_stmts!(
+## Modification
+
+function modify_fwd_ad_stmts!(
+    dual_ir::IRCode,
+    primal_ir::IRCode,
+    ::MooncakeInterpreter,
+    stmt::Nothing,
+    i::Integer;
+    kwargs...,
+)
+    return nothing
+end
+
+function modify_fwd_ad_stmts!(
+    dual_ir::IRCode,
+    primal_ir::IRCode,
+    ::MooncakeInterpreter,
+    stmt::Union{GotoNode,Core.GotoIfNot},
+    i::Integer;
+    kwargs...,
+)
+    return nothing
+end
+
+function modify_fwd_ad_stmts!(
+    dual_ir::IRCode,
+    primal_ir::IRCode,
+    ::MooncakeInterpreter,
+    stmt::GotoIfNot,
+    i::Integer;
+    kwargs...,
+)
+    return Mooncake.replace_call!(
+        dual_ir, CC.SSAValue(i), Core.GotoIfNot(CC.SSAValue(i - 1), stmt.dest)
+    )
+end
+
+# TODO: wrapping in Dual must not be systematic (e.g. Argument or SSAValue)
+_frule!!_makedual(f, args::Vararg{Any,N}) where {N} = frule!!(make_dual.(args)...)
+
+struct DynamicFRule{V}
+    cache::V
+    debug_mode::Bool
+end
+
+DynamicFRule(debug_mode::Bool) = DynamicFRule(Dict{Any,Any}(), debug_mode)
+
+_copy(x::P) where {P<:DynamicFRule} = P(Dict{Any,Any}(), x.debug_mode)
+
+function (dynamic_rule::DynamicFRule)(args::Vararg{Any,N}) where {N}
+    sig = Tuple{map(_typeof ∘ primal, args)...}
+    rule = get(dynamic_rule.cache, sig, nothing)
+    if rule === nothing
+        rule = build_frule(get_interpreter(), sig; debug_mode=dynamic_rule.debug_mode)
+        dynamic_rule.cache[sig] = rule
+    end
+    return rule(args...)
+end
+
+function modify_fwd_ad_stmts!(
     dual_ir::IRCode,
     primal_ir::IRCode,
     ::MooncakeInterpreter,
@@ -116,15 +190,28 @@ function make_fwd_ad_stmts!(
     i::Integer;
     kwargs...,
 )
-    dual_inst = dual_ir[SSAValue(i)]
     # the return node becomes a Dual so it changes type
     # flag to re-run type inference
-    dual_inst[:type] = Any
-    dual_inst[:flag] = CC.IR_FLAG_REFINED
+    dual_ir[SSAValue(i)][:type] = Any
+    dual_ir[SSAValue(i)][:flag] = CC.IR_FLAG_REFINED
     return nothing
 end
 
-function make_fwd_ad_stmts!(
+function modify_fwd_ad_stmts!(
+    dual_ir::IRCode,
+    primal_ir::IRCode,
+    ::MooncakeInterpreter,
+    stmt::PhiNode,
+    i::Integer;
+    kwargs...,
+)
+    dual_ir[SSAValue(i)][:stmt] = inc_args(stmt)  # TODO: translate constants into constant Duals
+    dual_ir[SSAValue(i)][:type] = Any
+    dual_ir[SSAValue(i)][:flag] = CC.IR_FLAG_REFINED
+    return nothing
+end
+
+function modify_fwd_ad_stmts!(
     dual_ir::IRCode,
     primal_ir::IRCode,
     interp::MooncakeInterpreter,
@@ -132,7 +219,6 @@ function make_fwd_ad_stmts!(
     i::Integer;
     debug_mode,
 )
-    C = context_type(interp)
     if isexpr(stmt, :invoke) || isexpr(stmt, :call)
         sig, mi = if isexpr(stmt, :invoke)
             mi = stmt.args[1]::Core.MethodInstance
@@ -143,18 +229,23 @@ function make_fwd_ad_stmts!(
             end
             Tuple{sig_types...}, missing
         end
-        shifted_args = inc_args(stmt).args
-        if is_primitive(C, sig)
-            call_frule = Expr(:call, _frule!!_funcnotdual, shifted_args[2:end]...)
+        shifted_args = if isexpr(stmt, :invoke)
+            inc_args(stmt).args[2:end]  # first arg is method instance
+        else
+            inc_args(stmt).args
+        end
+        if is_primitive(context_type(interp), sig)
+            call_frule = Expr(:call, _frule!!_makedual, shifted_args...)
             replace_call!(dual_ir, SSAValue(i), call_frule)
-        elseif isexpr(stmt, :invoke)
-            rule = build_frule(interp, mi; debug_mode)
-            call_rule = Expr(:call, rule, shifted_args[2:end]...)
+        else
+            if isexpr(stmt, :invoke)
+                rule = build_frule(interp, mi; debug_mode)
+            else
+                @assert isexpr(stmt, :call)
+                rule = DynamicFRule(debug_mode)
+            end
+            call_rule = Expr(:call, rule, shifted_args...)
             replace_call!(dual_ir, SSAValue(i), call_rule)
-        elseif isexpr(stmt, :call)
-            throw(
-                ArgumentError("Expressions of type `:call` not supported in forward mode")
-            )
         end
     elseif Meta.isexpr(stmt, :code_coverage_effect)
         replace_call!(dual_ir, SSAValue(i), nothing)

@@ -100,8 +100,11 @@ macro inactive_intrinsic(name)
         $name(x...) = Intrinsics.$name(x...)
         (is_primitive)(::Type{MinimalCtx}, ::Type{<:Tuple{typeof($name),Vararg}}) = true
         translate(::Val{Intrinsics.$name}) = $name
-        function rrule!!(f::CoDual{typeof($name)}, args::Vararg{Any,N}) where {N}
+        function frule!!(f::Dual{typeof($name)}, args::Vararg{Any,N}) where {N}
             return Mooncake.zero_adjoint(f, args...)
+        end
+        function frule!!(f::Dual{typeof($name)}, args::Vararg{Any,N}) where {N}
+            return Mooncake.zero_dual(f(args...))
         end
     end
     return esc(expr)

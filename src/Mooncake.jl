@@ -58,8 +58,6 @@ Performs AD in forward mode, possibly modifying the inputs, and returns a `Dual`
 """
 function frule!! end
 
-_frule!!_funcnotdual(f, args::Vararg{Any,N}) where {N} = frule!!(zero_dual(f), args...)
-
 """
     rrule!!(f::CoDual, x::CoDual...)
 

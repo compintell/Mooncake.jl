@@ -20,3 +20,9 @@ end
 function dual_type(p::Type{Type{P}}) where {P}
     return @isdefined(P) ? Dual{Type{P},NoTangent} : Dual{_typeof(p),NoTangent}
 end
+
+_primal(x) = x
+_primal(x::Dual) = primal(x)
+
+make_dual(x) = zero_dual(x)
+make_dual(x::Dual) = x

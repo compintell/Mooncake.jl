@@ -13,11 +13,16 @@ ydual = sin_rule(zero_dual(sin), xdual)
 
 function func(x)
     y = sin(x)
-    z = cos(y)
+    if x[1] > 0
+        z = cos(y)
+    else
+        z = sin(y)
+    end
     return z
 end
 
-func_rule = build_frule(func, x)
+ir = Base.code_ircode(func, (Int,))[1][1]
+irfunc_rule = build_frule(func, x)
 ydual = func_rule(zero_dual(func), xdual)
 
 @test primal(ydual) == cos(sin(x))
