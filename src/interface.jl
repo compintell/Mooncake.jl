@@ -16,7 +16,7 @@ function __value_and_pullback!!(
     out, pb!! = rule(fx_fwds...)
     @assert _typeof(tangent(out)) == fdata_type(T)
     increment!!(tangent(out), fdata(ȳ))
-    v = y_cache === nothing ? copy(primal(out)) : copyto!(y_cache, primal(out))
+    v = y_cache === nothing ? copy(primal(out)) : _copy!!(y_cache, primal(out))
     return v, tuple_map((f, r) -> tangent(fdata(tangent(f)), r), fx, pb!!(rdata(ȳ)))
 end
 
@@ -171,19 +171,22 @@ struct Cache{Trule, Ty_cache, Ttangents<:Tuple}
     tangents::Ttangents
 end
 
+_copy!!(dst, src) = copy!(dst, src)
+_copy!!(::Number, src::Number) = src
+
 """
     prepare_pullback_cache(f, x...)
 
 Returns a `cache` which can be passed to `value_and_gradient!!`. See the docstring for
 [`value_and_gradient!!`](@ref) for more info.
 """
-function prepare_pullback_cache(fx...)
+function prepare_pullback_cache(fx...; kwargs...)
 
     # Take a copy before mutating.
     fx = deepcopy(fx)
 
     # Construct rule and tangents.
-    rule = build_rrule(fx...)
+    rule = build_rrule(get_interpreter(), Tuple{map(_typeof, fx)...}; kwargs...)
     tangents = map(zero_tangent, fx)
 
     # Run the rule forwards -- this should do a decent chunk of pre-allocation.
@@ -192,7 +195,7 @@ function prepare_pullback_cache(fx...)
     # Construct cache for output. Check that `copy!`ing appears to work.
     y_cache = copy(primal(y))
     try
-        copy!(y_cache, primal(y))
+        _copy!!(y_cache, primal(y))
     catch
         error("Unable to apply `copy!` to the output.")
     end
@@ -215,7 +218,7 @@ values returned by this function around over multiple calls to this function wit
 `cache`, you should take a copy of them before calling again.
 """
 function value_and_pullback!!(cache::Cache, ȳ, fx::Vararg{Any, N}) where {N}
-    coduals = map(CoDual, fx, cache.tangents)
+    coduals = map(CoDual, fx, map(set_to_zero!!, cache.tangents))
     return __value_and_pullback!!(cache.rule, ȳ, coduals...; y_cache=cache.y_cache)
 end
 
@@ -225,8 +228,8 @@ end
 Returns a `cache` which can be passed to `value_and_gradient!!`. See the docstring for
 [`value_and_gradient!!`](@ref) for more info.
 """
-function prepare_gradient_cache(fx...)
-    rule = build_rrule(fx...)
+function prepare_gradient_cache(fx...; kwargs...)
+    rule = build_rrule(fx...; kwargs...)
     tangents = map(zero_tangent, fx)
     y, _ = rule(map((x, dx) -> CoDual(x, fdata(dx)), fx, tangents)...)
     primal(y) isa IEEEFloat || throw_val_and_grad_ret_type_error(primal(y))
@@ -248,5 +251,6 @@ values returned by this function around over multiple calls to this function wit
 `cache`, you should take a copy of them before calling again.
 """
 function value_and_gradient!!(cache::Cache, fx::Vararg{Any, N}) where {N}
-    return __value_and_gradient!!(cache.rule, map(CoDual, fx, cache.tangents)...)
+    coduals = map(CoDual, fx, map(set_to_zero!!, cache.tangents))
+    return __value_and_gradient!!(cache.rule, coduals...)
 end
