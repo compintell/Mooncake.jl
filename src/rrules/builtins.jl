@@ -49,6 +49,7 @@ using Mooncake
 import ..Mooncake:
     rrule!!,
     CoDual,
+    Dual,
     primal,
     tangent,
     zero_tangent,
@@ -66,7 +67,8 @@ import ..Mooncake:
     NoRData,
     rdata,
     increment_rdata!!,
-    zero_fcodual
+    zero_fcodual,
+    zero_dual
 
 using Core.Intrinsics: atomic_pointerref
 
