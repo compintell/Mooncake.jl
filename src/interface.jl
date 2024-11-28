@@ -9,7 +9,7 @@ if calling this function multiple times with different values of `x`, should be 
 ensure that you zero-out the tangent fields of `x` each time.
 """
 function __value_and_pullback!!(
-    rule::R, ȳ::T, fx::Vararg{CoDual,N}; y_cache=nothing,
+    rule::R, ȳ::T, fx::Vararg{CoDual,N}; y_cache=nothing
 ) where {R,N,T}
     fx_fwds = tuple_map(to_fwds, fx)
     __verify_sig(rule, fx_fwds)
@@ -165,7 +165,7 @@ function __create_coduals(args)
     end
 end
 
-struct Cache{Trule, Ty_cache, Ttangents<:Tuple}
+struct Cache{Trule,Ty_cache,Ttangents<:Tuple}
     rule::Trule
     y_cache::Ty_cache
     tangents::Ttangents
@@ -221,7 +221,7 @@ if you run this function again with different arguments. Therefore, if you need 
 values returned by this function around over multiple calls to this function with the same
 `cache`, you should take a copy of them before calling again.
 """
-function value_and_pullback!!(cache::Cache, ȳ, fx::Vararg{Any, N}) where {N}
+function value_and_pullback!!(cache::Cache, ȳ, fx::Vararg{Any,N}) where {N}
     coduals = map(CoDual, fx, map(set_to_zero!!, cache.tangents))
     return __value_and_pullback!!(cache.rule, ȳ, coduals...; y_cache=cache.y_cache)
 end
@@ -258,7 +258,7 @@ if you run this function again with different arguments. Therefore, if you need 
 values returned by this function around over multiple calls to this function with the same
 `cache`, you should take a copy of them before calling again.
 """
-function value_and_gradient!!(cache::Cache, fx::Vararg{Any, N}) where {N}
+function value_and_gradient!!(cache::Cache, fx::Vararg{Any,N}) where {N}
     coduals = map(CoDual, fx, map(set_to_zero!!, cache.tangents))
     return __value_and_gradient!!(cache.rule, coduals...)
 end
