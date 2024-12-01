@@ -22,9 +22,19 @@
         @test call.args[1] == Mooncake._foreigncall_
     end
     @testset "fix_up_invoke_inference!" begin
-        sig = Tuple{typeof(TestResources.inplace_invoke!),Vector{Float64}}
-        ir = Base.code_ircode_by_type(sig)[1][1]
-        ir.stmts.type[1] = Any
+        ir = Mooncake.ircode(
+            Any[
+                Expr(
+                    :invoke,
+                    Base.method_instance(TestResources.inplace_invoke!, (Vector{Float64}, )),
+                    TestResources.inplace_invoke!,
+                    Argument(2),
+                ),
+                ReturnNode(nothing),
+            ],
+            Any[Any, Vector{Float64}],
+        )
+        @test ir.stmts.type[1] == Any
         ir = Mooncake.fix_up_invoke_inference!(ir)
         @test ir.stmts.type[1] == Nothing
     end
