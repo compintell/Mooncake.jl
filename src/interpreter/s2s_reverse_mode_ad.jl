@@ -952,12 +952,12 @@ function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where 
     else
         if debug_mode
             return DebugRRule{
-                DerivedRule{sig,RuleMC{arg_fwds_types,P},pb_type,Val{isva},nargs}
-            } where {P<:fcodual_type(Treturn)}
+                DerivedRule{sig,RuleMC{arg_fwds_types,fcodual_type(Treturn)},pb_type,Val{isva},nargs}
+            }# where {P<:fcodual_type(Treturn)}
         else
             return DerivedRule{
-                sig,RuleMC{arg_fwds_types,P},pb_type,Val{isva},nargs
-            } where {P<:fcodual_type(Treturn)}
+                sig,RuleMC{arg_fwds_types,fcodual_type(Treturn)},pb_type,Val{isva},nargs
+            }# where {P<:fcodual_type(Treturn)}
         end
     end
 end
@@ -1738,7 +1738,8 @@ end
 
 _rtype(::Type{<:DebugRRule}) = Tuple{CoDual,DebugPullback}
 _rtype(T::Type{<:MistyClosure}) = _rtype(fieldtype(T, :oc))
-_rtype(::Type{<:OpaqueClosure{<:Any,<:R}}) where {R} = (@isdefined R) ? R : CoDual
+# _rtype(::Type{<:OpaqueClosure{<:Any,<:R}}) where {R} = (@isdefined R) ? R : CoDual
+_rtype(::Type{<:OpaqueClosure{<:Any,R}}) where {R} = R
 _rtype(T::Type{<:DerivedRule}) = Tuple{_rtype(fieldtype(T, :fwds_oc)),fieldtype(T, :pb)}
 
 @noinline function _build_rule!(rule::LazyDerivedRule{sig,Trule}, args) where {sig,Trule}
