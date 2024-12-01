@@ -113,7 +113,8 @@ function fix_up_invoke_inference!(ir::IRCode)::IRCode
     for n in 1:length(stmts)
         if Meta.isexpr(stmt(stmts)[n], :invoke) && _type(stmts.type[n]) == Any
             mi = stmt(stmts)[n].args[1]::Core.MethodInstance
-            stmts.type[n] = mi.cache.rettype
+            R = isdefined(mi, :cache) ? mi.cache.rettype : CC.return_type(mi.specTypes)
+            stmts.type[n] = R
         end
     end
     return ir
