@@ -24,7 +24,7 @@
     @testset "fix_up_invoke_inference!" begin
         sig = Tuple{typeof(TestResources.inplace_invoke!), Vector{Float64}}
         ir = Base.code_ircode_by_type(sig)[1][1]
-        @test ir.stmts.type[1] == Any
+        ir.stmts.type[1] = Any
         ir = Mooncake.fix_up_invoke_inference!(ir)
         @test ir.stmts.type[1] == Nothing
     end
