@@ -333,7 +333,7 @@ _getter() = 5.0
             (false, :allocs, x -> any(<(0), x), randn(sr(9), 2)),
             (false, :none, append!, randn(sr(1), 3), randn(sr(0), 2)),
             (false, :allocs, argmax, randn(sr(2), 2)),
-            (false, :allocs, argmin, randn(sr(3), 2)),
+            (false, :none, argmin, randn(sr(3), 2)),
             (false, :allocs, axes, randn(sr(4), 2, 1, 1, 2)),
             (false, :none, circshift, randn(sr(5), 3), 1),
             (false, :allocs, circshift!, randn(sr(6), 3), randn(sr(7), 3), 1),
