@@ -349,7 +349,7 @@ function _findall(cond, ind::Int, x::Tuple)
     return cond(x[1]) ? (ind, tail...) : tail
 end
 
-function split_tangent_type(tangent_types)
+function split_union_tuple_type(tangent_types)
 
     # Create first split.
     ta_types = map(tangent_types) do T
@@ -393,7 +393,7 @@ function tangent_type(::Type{P}) where {N,P<:Tuple{Vararg{Any,N}}}
     union_fields = _findall(Base.Fix2(isa, Union), 1, tangent_types)
     if length(union_fields) == 1 &&
         all(p -> p isa Union || isconcretetype(p), tangent_types)
-        return split_tangent_type(tangent_types)
+        return split_union_tuple_type(tangent_types)
     end
 
     # If it's _possible_ for a subtype of `P` to have tangent type `NoTangent`, then we must
