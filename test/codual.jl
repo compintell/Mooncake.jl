@@ -17,7 +17,7 @@
         (
             Union{Float64,Int},
             Union{CoDual{Float64,Float64},CoDual{Int,NoTangent}},
-            Union{CoDual{Float64,NoFData},CoDual{Int,NoFData}}
+            Union{CoDual{Float64,NoFData},CoDual{Int,NoFData}},
         ),
         (UnionAll, CoDual, CoDual),
 
@@ -54,8 +54,7 @@
                 CoDual{Tuple{Nothing,Float64},Tuple{NoTangent,Float64}},
             },
             Union{
-                CoDual{Tuple{Nothing,Int},NoFData},
-                CoDual{Tuple{Nothing,Float64},NoFData},
+                CoDual{Tuple{Nothing,Int},NoFData},CoDual{Tuple{Nothing,Float64},NoFData}
             },
         ),
 
