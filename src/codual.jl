@@ -39,6 +39,16 @@ The type of the `CoDual` which contains instances of `P` and associated tangents
 function codual_type(::Type{P}) where {P}
     P == DataType && return CoDual
     P isa Union && return Union{codual_type(P.a),codual_type(P.b)}
+
+    if P <: Tuple && !all(isconcretetype, P.parameters)
+        field_types = (P.parameters..., )
+        union_fields = findall(Base.Fix2(isa, Union), field_types)
+        if length(union_fields) == 1 && all(p -> p isa Union || isconcretetype(p), field_types)
+            P_split = split_tangent_type(field_types)
+            return Union{codual_type(P_split.a), codual_type(P_split.b)}
+        end
+    end
+
     P <: UnionAll && return CoDual # P is abstract, so we don't know its tangent type.
     return isconcretetype(P) ? CoDual{P,tangent_type(P)} : CoDual
 end
@@ -91,10 +101,28 @@ See implementation for details, as this function is subject to change.
 
 The type of the `CoDual` which contains instances of `P` and its fdata.
 """
-function fcodual_type(::Type{P}) where {P}
+@inline function fcodual_type(::Type{P}) where {P}
+
+    P == Union{} && return CoDual
+
     P == DataType && return CoDual
+
+    # Small Unions of types result in small unions of codual types.
     P isa Union && return Union{fcodual_type(P.a),fcodual_type(P.b)}
+
+    if P <: Tuple && !all(isconcretetype, (P.parameters..., ))
+        field_types = (P.parameters..., )
+        union_fields = _findall(Base.Fix2(isa, Union), 1, field_types)
+        if length(union_fields) == 1 && all(p -> p isa Union || isconcretetype(p), field_types)
+            P_split = split_tangent_type(field_types)
+            return Union{fcodual_type(P_split.a), fcodual_type(P_split.b)}
+        end
+    end
+
+    # If `P` is a UnionAll, then give up.
     P <: UnionAll && return CoDual
+
+    # If `P` is a concrete type, we can do accurate inference. Otherwise give up.
     return isconcretetype(P) ? CoDual{P,fdata_type(tangent_type(P))} : CoDual
 end
 

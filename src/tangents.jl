@@ -342,6 +342,30 @@ tangent_type(::Type{Method}) = NoTangent
 
 tangent_type(::Type{<:Enum}) = NoTangent
 
+# Inferable version of `findall` for `Tuple`s.
+_findall(::Any, ::Int, ::Tuple{}) = ()
+function _findall(cond, ind::Int, x::Tuple)
+    tail = _findall(cond, ind + 1, x[2:end])
+    return cond(x[1]) ? (ind, tail...) : tail
+end
+
+function split_tangent_type(tangent_types)
+
+    # Create first split.
+    ta_types = map(tangent_types) do T
+        return T isa Union ? T.a : T
+    end
+    ta = Tuple{ta_types...}
+
+    # Create second split.
+    tb_types = map(tangent_types) do T
+        return T isa Union ? T.b : T
+    end
+    tb = Tuple{tb_types...}
+
+    return Union{ta, tb}
+end
+
 function tangent_type(::Type{P}) where {N,P<:Tuple{Vararg{Any,N}}}
     # As with other types, tangent type of Union is Union of tangent types.
     P isa Union && return Union{tangent_type(P.a),tangent_type(P.b)}
@@ -364,6 +388,12 @@ function tangent_type(::Type{P}) where {N,P<:Tuple{Vararg{Any,N}}}
     T = Tuple{tangent_types...}
     T_all_notangent = Tuple{Vararg{NoTangent,length(tangent_types)}}
     T <: T_all_notangent && return NoTangent
+
+    # If exactly one of the field types is a Union, then split.
+    union_fields = _findall(Base.Fix2(isa, Union), 1, tangent_types)
+    if length(union_fields) == 1 && all(p -> p isa Union || isconcretetype(p), tangent_types)
+        return split_tangent_type(tangent_types)
+    end
 
     # If it's _possible_ for a subtype of `P` to have tangent type `NoTangent`, then we must
     # account for that by returning the union of `NoTangent` and `T`. For example, if
