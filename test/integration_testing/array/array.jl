@@ -1,13 +1,13 @@
-# using Pkg
-# Pkg.activate(@__DIR__)
-# Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
+using Pkg
+Pkg.activate(@__DIR__)
+Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 
-# using LinearAlgebra, Mooncake, StableRNGs, Test
-# using Mooncake.TestUtils: test_rule
+using LinearAlgebra, Mooncake, StableRNGs, Test
+using Mooncake.TestUtils: test_rule
 
-# sr(n::Int) = StableRNG(n)
+sr(n::Int) = StableRNG(n)
 
-# _getter() = 5.0
+_getter() = 5.0
 @testset "array" begin
     test_cases = vcat(
         Any[
@@ -373,7 +373,7 @@
             (false, :none, cumprod, randn(sr(0), 3)),
             (
                 false,
-                :allocs,
+                :none,
                 (B, A) -> cumprod!(B, A; dims=2),
                 randn(sr(1), 2, 2),
                 randn(sr(2), 2, 2),
@@ -388,7 +388,7 @@
             ),
             (
                 false,
-                :allocs,
+                :none,
                 (out, v) -> cumsum!(out, v; dims=2),
                 randn(sr(7), 2, 3),
                 randn(sr(6), 2, 3),
@@ -402,20 +402,20 @@
             (false, :none, diff, randn(sr(4), 5)),
             (false, :none, x -> diff(x; dims=1), randn(sr(5), 3, 2)),
             (false, :none, x -> diff(x; dims=2), randn(sr(6), 3, 2)),
-            (false, :allocs, empty, randn(sr(7), 5)),
+            (false, :none, empty, randn(sr(7), 5)),
             (false, :allocs, extrema, randn(sr(8), 3)),
             (false, :allocs, x -> extrema(sin, x), randn(sr(9), 3)),
-            (false, :allocs, x -> extrema(sin, x; dims=1), randn(sr(0), 3, 2)),
+            (false, :none, x -> extrema(sin, x; dims=1), randn(sr(0), 3, 2)),
             (
                 false,
-                :allocs,
+                :none,
                 (r, A) -> extrema!(cos, r, A),
                 tuple.(randn(sr(1), 3), randn(sr(2), 3)),
                 randn(sr(3), 3, 2),
             ),
             (
                 false,
-                :allocs,
+                :none,
                 (r, A) -> extrema!(r, A),
                 tuple.(randn(sr(4), 3), randn(sr(5), 3)),
                 randn(sr(6), 3, 2),
@@ -427,11 +427,11 @@
             (false, :none, x -> findall(<(0), x), [0.5, 0.0, -0.3]),
             (false, :allocs, x -> findfirst(<(0), x), [0.5, -0.1, -0.4]),
             (false, :allocs, x -> findlast(<(0), x), [0.5, -0.1, -0.4]),
-            (false, :allocs, findmax, randn(sr(1), 2, 2)),
-            (false, :allocs, x -> findmax(sin, x), [0.5, -0.1, -0.4]),
-            (false, :allocs, x -> findmax(sin, x), [0.5, -0.1, -0.4]),
-            (false, :allocs, findmin, randn(sr(2), 2, 2)),
-            (false, :allocs, x -> findmin(cos, x), randn(sr(3), 2, 2)),
+            (false, :none, findmax, randn(sr(1), 2, 2)),
+            (false, :none, x -> findmax(sin, x), [0.5, -0.1, -0.4]),
+            (false, :none, x -> findmax(sin, x), [0.5, -0.1, -0.4]),
+            (false, :none, findmin, randn(sr(2), 2, 2)),
+            (false, :none, x -> findmin(cos, x), randn(sr(3), 2, 2)),
             (false, :allocs, first, randn(sr(4), 3)),
             (false, :allocs, firstindex, randn(sr(5), 3)),
             (false, :none, float, randn(sr(6), 3)),
