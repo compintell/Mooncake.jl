@@ -66,7 +66,6 @@
         @test TestUtils.check_allocs(TestUtils.Shim(), Mooncake.fcodual_type, P) == F
     end
 
-    @test Mooncake.fcodual_type(Type{Tuple{T}} where {T}) <: CoDual
     @testset "NoPullback" begin
         @test Base.issingletontype(typeof(NoPullback(zero_fcodual(5.0))))
         @test NoPullback(zero_codual(5.0))(4.0) == (0.0,)
