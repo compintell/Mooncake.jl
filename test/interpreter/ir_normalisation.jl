@@ -26,7 +26,7 @@
             Any[
                 Expr(
                     :invoke,
-                    Base.method_instance(TestResources.inplace_invoke!, (Vector{Float64}, )),
+                    Base.method_instance(TestResources.inplace_invoke!, (Vector{Float64},)),
                     TestResources.inplace_invoke!,
                     Argument(2),
                 ),
