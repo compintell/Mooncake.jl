@@ -21,6 +21,13 @@
         @test Meta.isexpr(call, :call)
         @test call.args[1] == Mooncake._foreigncall_
     end
+    @testset "fix_up_invoke_inference!" begin
+        sig = Tuple{typeof(TestResources.inplace_invoke!), Vector{Float64}}
+        ir = Base.code_ircode_by_type(sig)[1][1]
+        @test ir.stmts.type[1] == Any
+        ir = Mooncake.fix_up_invoke_inference!(ir)
+        @test ir.stmts.type[1] == Nothing
+    end
     @testset "new_to_call" begin
         new_ex = Expr(:new, GlobalRef(Mooncake, :Foo), SSAValue(1), :hi)
         call_ex = Mooncake.new_to_call(new_ex)

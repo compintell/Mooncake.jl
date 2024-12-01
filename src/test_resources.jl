@@ -592,6 +592,16 @@ struct NoDefaultCtor{T}
     NoDefaultCtor(x::T) where {T} = new{T}(x)
 end
 
+function __inplace_function!(x::Vector{Float64})
+    x .*= 2
+    return nothing
+end
+
+function inplace_invoke!(x::Vector{Float64})
+    __inplace_function!(x)
+    return nothing
+end
+
 function generate_test_functions()
     return Any[
         (false, :allocs, nothing, const_tester),
