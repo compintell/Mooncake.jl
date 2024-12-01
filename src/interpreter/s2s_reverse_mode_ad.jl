@@ -952,7 +952,9 @@ function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where 
     else
         if debug_mode
             return DebugRRule{
-                DerivedRule{sig,RuleMC{arg_fwds_types,fcodual_type(Treturn)},pb_type,Val{isva},nargs}
+                DerivedRule{
+                    sig,RuleMC{arg_fwds_types,fcodual_type(Treturn)},pb_type,Val{isva},nargs
+                },
             }# where {P<:fcodual_type(Treturn)}
         else
             return DerivedRule{

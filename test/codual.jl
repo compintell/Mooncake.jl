@@ -15,26 +15,25 @@
 
         # Tuples:
         # Concrete tuples:
-        (Tuple{Float64}, CoDual{Tuple{Float64}, Tuple{Float64}}),
-        (Tuple{Float64, Float32}, CoDual{Tuple{Float64, Float32}, Tuple{Float64, Float32}}),
+        (Tuple{Float64}, CoDual{Tuple{Float64},Tuple{Float64}}),
+        (Tuple{Float64,Float32}, CoDual{Tuple{Float64,Float32},Tuple{Float64,Float32}}),
         (
-            Tuple{Int, Float64, Float32},
-            CoDual{Tuple{Int, Float64, Float32}, Tuple{NoTangent, Float64, Float32}},
+            Tuple{Int,Float64,Float32},
+            CoDual{Tuple{Int,Float64,Float32},Tuple{NoTangent,Float64,Float32}},
         ),
 
         # Small-Union Tuples
         (
-            Tuple{Union{Float32, Float64}},
+            Tuple{Union{Float32,Float64}},
             Union{
-                CoDual{Tuple{Float32}, Tuple{Float32}},
-                CoDual{Tuple{Float64}, Tuple{Float64}},
+                CoDual{Tuple{Float32},Tuple{Float32}},CoDual{Tuple{Float64},Tuple{Float64}}
             },
         ),
         (
-            Tuple{Nothing, Union{Int, Float64}},
+            Tuple{Nothing,Union{Int,Float64}},
             Union{
-                CoDual{Tuple{Nothing, Int}, NoTangent},
-                CoDual{Tuple{Nothing, Float64}, Tuple{NoTangent, Float64}},
+                CoDual{Tuple{Nothing,Int},NoTangent},
+                CoDual{Tuple{Nothing,Float64},Tuple{NoTangent,Float64}},
             },
         ),
 

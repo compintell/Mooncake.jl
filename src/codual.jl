@@ -41,11 +41,12 @@ function codual_type(::Type{P}) where {P}
     P isa Union && return Union{codual_type(P.a),codual_type(P.b)}
 
     if P <: Tuple && !all(isconcretetype, P.parameters)
-        field_types = (P.parameters..., )
+        field_types = (P.parameters...,)
         union_fields = findall(Base.Fix2(isa, Union), field_types)
-        if length(union_fields) == 1 && all(p -> p isa Union || isconcretetype(p), field_types)
+        if length(union_fields) == 1 &&
+            all(p -> p isa Union || isconcretetype(p), field_types)
             P_split = split_tangent_type(field_types)
-            return Union{codual_type(P_split.a), codual_type(P_split.b)}
+            return Union{codual_type(P_split.a),codual_type(P_split.b)}
         end
     end
 
@@ -102,7 +103,6 @@ See implementation for details, as this function is subject to change.
 The type of the `CoDual` which contains instances of `P` and its fdata.
 """
 @inline function fcodual_type(::Type{P}) where {P}
-
     P == Union{} && return CoDual
 
     P == DataType && return CoDual
@@ -110,12 +110,13 @@ The type of the `CoDual` which contains instances of `P` and its fdata.
     # Small Unions of types result in small unions of codual types.
     P isa Union && return Union{fcodual_type(P.a),fcodual_type(P.b)}
 
-    if P <: Tuple && !all(isconcretetype, (P.parameters..., ))
-        field_types = (P.parameters..., )
+    if P <: Tuple && !all(isconcretetype, (P.parameters...,))
+        field_types = (P.parameters...,)
         union_fields = _findall(Base.Fix2(isa, Union), 1, field_types)
-        if length(union_fields) == 1 && all(p -> p isa Union || isconcretetype(p), field_types)
+        if length(union_fields) == 1 &&
+            all(p -> p isa Union || isconcretetype(p), field_types)
             P_split = split_tangent_type(field_types)
-            return Union{fcodual_type(P_split.a), fcodual_type(P_split.b)}
+            return Union{fcodual_type(P_split.a),fcodual_type(P_split.b)}
         end
     end
 

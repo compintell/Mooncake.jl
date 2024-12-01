@@ -363,7 +363,7 @@ function split_tangent_type(tangent_types)
     end
     tb = Tuple{tb_types...}
 
-    return Union{ta, tb}
+    return Union{ta,tb}
 end
 
 function tangent_type(::Type{P}) where {N,P<:Tuple{Vararg{Any,N}}}
@@ -391,7 +391,8 @@ function tangent_type(::Type{P}) where {N,P<:Tuple{Vararg{Any,N}}}
 
     # If exactly one of the field types is a Union, then split.
     union_fields = _findall(Base.Fix2(isa, Union), 1, tangent_types)
-    if length(union_fields) == 1 && all(p -> p isa Union || isconcretetype(p), tangent_types)
+    if length(union_fields) == 1 &&
+        all(p -> p isa Union || isconcretetype(p), tangent_types)
         return split_tangent_type(tangent_types)
     end
 
