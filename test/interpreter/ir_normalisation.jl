@@ -22,21 +22,19 @@
         @test call.args[1] == Mooncake._foreigncall_
     end
     @testset "fix_up_invoke_inference!" begin
-        ir = Mooncake.ircode(
-            Any[
-                Expr(
-                    :invoke,
-                    Base.method_instance(TestResources.inplace_invoke!, (Vector{Float64},)),
-                    TestResources.inplace_invoke!,
-                    Argument(2),
-                ),
-                ReturnNode(nothing),
-            ],
-            Any[Any, Vector{Float64}],
-        )
-        @test ir.stmts.type[1] == Any
-        ir = Mooncake.fix_up_invoke_inference!(ir)
-        @test ir.stmts.type[1] == Nothing
+        if VERSION >= v"1.11" # Base.method_instance does not exist on 1.10.
+            mi = Base.method_instance(TestResources.inplace_invoke!, (Vector{Float64},))
+            ir = Mooncake.ircode(
+                Any[
+                    Expr(:invoke, mi, TestResources.inplace_invoke!, Argument(2)),
+                    ReturnNode(nothing),
+                ],
+                Any[Any, Vector{Float64}],
+            )
+            @test ir.stmts.type[1] == Any
+            ir = Mooncake.fix_up_invoke_inference!(ir)
+            @test ir.stmts.type[1] == Nothing
+        end
     end
     @testset "new_to_call" begin
         new_ex = Expr(:new, GlobalRef(Mooncake, :Foo), SSAValue(1), :hi)
