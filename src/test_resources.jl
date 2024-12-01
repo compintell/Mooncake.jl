@@ -584,6 +584,8 @@ function typevar_tester()
 end
 
 tuple_with_union(x::Bool) = (x ? 5.0 : 5, nothing)
+tuple_with_union_2(x::Bool) = (x ? 5.0 : 5, x ? 5 : 5.0)
+tuple_with_union_3(x::Bool, y::Bool) = (x ? 5.0 : (y ? 5 : nothing), nothing)
 
 struct NoDefaultCtor{T}
     x::T

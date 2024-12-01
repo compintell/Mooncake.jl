@@ -249,6 +249,8 @@ end
             Tuple{typeof(TestResources.foo),Float64},
             Tuple{typeof(TestResources.type_unstable_tester_0),Ref{Any}},
             Tuple{typeof(TestResources.tuple_with_union),Bool},
+            Tuple{typeof(TestResources.tuple_with_union_2),Bool},
+            Tuple{typeof(TestResources.tuple_with_union_3),Bool,Bool},
         ],
         debug_mode in [true, false]
 
