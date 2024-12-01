@@ -944,24 +944,10 @@ function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where 
     pb_type = Pullback{sig,Base.RefValue{pb_oc_type},Val{isva},nvargs(isva, sig)}
     nargs = Val{length(ir.argtypes)}
 
-    if isconcretetype(Treturn)
-        Tderived_rule = DerivedRule{
-            sig,RuleMC{arg_fwds_types,fcodual_type(Treturn)},pb_type,Val{isva},nargs
-        }
-        return debug_mode ? DebugRRule{Tderived_rule} : Tderived_rule
-    else
-        if debug_mode
-            return DebugRRule{
-                DerivedRule{
-                    sig,RuleMC{arg_fwds_types,fcodual_type(Treturn)},pb_type,Val{isva},nargs
-                },
-            }# where {P<:fcodual_type(Treturn)}
-        else
-            return DerivedRule{
-                sig,RuleMC{arg_fwds_types,fcodual_type(Treturn)},pb_type,Val{isva},nargs
-            }# where {P<:fcodual_type(Treturn)}
-        end
-    end
+    Tderived_rule = DerivedRule{
+        sig,RuleMC{arg_fwds_types,fcodual_type(Treturn)},pb_type,Val{isva},nargs
+    }
+    return debug_mode ? DebugRRule{Tderived_rule} : Tderived_rule
 end
 
 nvargs(isva, sig) = Val{isva ? length(sig.parameters[end].parameters) : 0}
@@ -1740,7 +1726,6 @@ end
 
 _rtype(::Type{<:DebugRRule}) = Tuple{CoDual,DebugPullback}
 _rtype(T::Type{<:MistyClosure}) = _rtype(fieldtype(T, :oc))
-# _rtype(::Type{<:OpaqueClosure{<:Any,<:R}}) where {R} = (@isdefined R) ? R : CoDual
 _rtype(::Type{<:OpaqueClosure{<:Any,R}}) where {R} = R
 _rtype(T::Type{<:DerivedRule}) = Tuple{_rtype(fieldtype(T, :fwds_oc)),fieldtype(T, :pb)}
 
