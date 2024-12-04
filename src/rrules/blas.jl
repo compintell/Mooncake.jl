@@ -944,81 +944,78 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
         # BLAS LEVEL 2
         #
 
-        # # trmv!
-        # vec(
-        #     reduce(
-        #         vcat,
-        #         map(product(['L', 'U'], t_flags, ['N', 'U'], [1, 3])) do (ul, tA, dA, N)
-        #             As = [randn(N, N), view(randn(15, 15), 3:(N + 2), 4:(N + 3))]
-        #             bs = [randn(N), view(randn(14), 4:(N + 3))]
-        #             return map(product(As, bs)) do (A, b)
-        #                 (false, :none, nothing, BLAS.trmv!, ul, tA, dA, A, b)
-        #             end
-        #         end,
-        #     ),
-        # ),
+        # trmv!
+        vec(
+            reduce(
+                vcat,
+                map(product(['L', 'U'], t_flags, ['N', 'U'], [1, 3])) do (ul, tA, dA, N)
+                    As = [randn(N, N), view(randn(15, 15), 3:(N + 2), 4:(N + 3))]
+                    bs = [randn(N), view(randn(14), 4:(N + 3))]
+                    return map(product(As, bs)) do (A, b)
+                        (false, :none, nothing, BLAS.trmv!, ul, tA, dA, A, b)
+                    end
+                end,
+            ),
+        ),
 
-        # #
-        # # BLAS LEVEL 3
-        # #
+        #
+        # BLAS LEVEL 3
+        #
 
-        # # aliased gemm!
-        # vec(
-        #     map(product(t_flags, t_flags)) do (tA, tB)
-        #         A = randn(5, 5)
-        #         B = randn(5, 5)
-        #         (false, :none, nothing, aliased_gemm!, tA, tB, randn(), randn(), A, B)
-        #     end,
-        # ),
+        # aliased gemm!
+        vec(
+            map(product(t_flags, t_flags)) do (tA, tB)
+                A = randn(5, 5)
+                B = randn(5, 5)
+                (false, :none, nothing, aliased_gemm!, tA, tB, randn(), randn(), A, B)
+            end,
+        ),
 
-        # # syrk!
-        # vec(
-        #     map(product(['U', 'L'], t_flags)) do (uplo, t)
-        #         A = t == 'N' ? randn(3, 4) : randn(4, 3)
-        #         C = randn(3, 3)
-        #         return (false, :none, nothing, BLAS.syrk!, uplo, t, randn(), A, randn(), C)
-        #     end,
-        # ),
+        # syrk!
+        vec(
+            map(product(['U', 'L'], t_flags)) do (uplo, t)
+                A = t == 'N' ? randn(3, 4) : randn(4, 3)
+                C = randn(3, 3)
+                return (false, :none, nothing, BLAS.syrk!, uplo, t, randn(), A, randn(), C)
+            end,
+        ),
 
-        # # trmm!
-        # vec(
-        #     reduce(
-        #         vcat,
-        #         map(
-        #             product(['L', 'R'], ['U', 'L'], t_flags, ['N', 'U'], [1, 3], [1, 2])
-        #         ) do (side, ul, tA, dA, M, N)
-        #             t = tA == 'N'
-        #             R = side == 'L' ? M : N
-        #             As = [randn(R, R), view(randn(15, 15), 3:(R + 2), 4:(R + 3))]
-        #             Bs = [randn(M, N), view(randn(15, 15), 2:(M + 1), 5:(N + 4))]
-        #             return map(product(As, Bs)) do (A, B)
-        #                 (false, :none, nothing, BLAS.trmm!, side, ul, tA, dA, randn(), A, B)
-        #             end
-        #         end,
-        #     ),
-        # ),
+        # trmm!
+        vec(
+            reduce(
+                vcat,
+                map(
+                    product(['L', 'R'], ['U', 'L'], t_flags, ['N', 'U'], [1, 3], [1, 2])
+                ) do (side, ul, tA, dA, M, N)
+                    t = tA == 'N'
+                    R = side == 'L' ? M : N
+                    As = [randn(R, R), view(randn(15, 15), 3:(R + 2), 4:(R + 3))]
+                    Bs = [randn(M, N), view(randn(15, 15), 2:(M + 1), 5:(N + 4))]
+                    return map(product(As, Bs)) do (A, B)
+                        (false, :none, nothing, BLAS.trmm!, side, ul, tA, dA, randn(), A, B)
+                    end
+                end,
+            ),
+        ),
 
-        # # trsm!
-        # vec(
-        #     reduce(
-        #         vcat,
-        #         map(
-        #             product(['L', 'R'], ['U', 'L'], t_flags, ['N', 'U'], [1, 3], [1, 2])
-        #         ) do (side, ul, tA, dA, M, N)
-        #             t = tA == 'N'
-        #             R = side == 'L' ? M : N
-        #             As = [randn(R, R) + 5I, view(randn(15, 15), 3:(R + 2), 4:(R + 3)) + 5I]
-        #             Bs = [randn(M, N), view(randn(15, 15), 2:(M + 1), 5:(N + 4))]
-        #             return map(product(As, Bs)) do (A, B)
-        #                 (false, :none, nothing, BLAS.trsm!, side, ul, tA, dA, randn(), A, B)
-        #             end
-        #         end,
-        #     ),
-        # ),
+        # trsm!
+        vec(
+            reduce(
+                vcat,
+                map(
+                    product(['L', 'R'], ['U', 'L'], t_flags, ['N', 'U'], [1, 3], [1, 2])
+                ) do (side, ul, tA, dA, M, N)
+                    t = tA == 'N'
+                    R = side == 'L' ? M : N
+                    As = [randn(R, R) + 5I, view(randn(15, 15), 3:(R + 2), 4:(R + 3)) + 5I]
+                    Bs = [randn(M, N), view(randn(15, 15), 2:(M + 1), 5:(N + 4))]
+                    return map(product(As, Bs)) do (A, B)
+                        (false, :none, nothing, BLAS.trsm!, side, ul, tA, dA, randn(), A, B)
+                    end
+                end,
+            ),
+        ),
     )
     memory = Any[]
     return test_cases, memory
 end
-
-# (LinearAlgebra.BLAS.gemv!, 'C', 0.590018377085487, [-0.1649542689048906 -0.3768619362378715 0.21820420179985453], [-0.6166805904070164], 0.9396256680261462, [0.10441370237127748, -1.080300808477837, -1.6093639101080217])
-# (LinearAlgebra.BLAS.gemv!, 'C', 0.590018377085487, [0.45055680303051326 0.17121842612433663 0.3810898269154567], [-0.6166805904070164], 0.9396256680261462, [0.10441370237127748, -1.080300808477837, -1.6093639101080217])
