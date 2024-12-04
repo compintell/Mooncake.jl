@@ -168,27 +168,32 @@ Following either resource will yield the derivative:
 ```math
 D f [X] (\dot{X}) = \dot{X}^\top X + X^\top \dot{X}
 ```
-Observe that this is indeed a linear operator (i.e. it is linear in its argument, ``\dot{X}``).
-(You can always plug it in to the definition of the Frechet derivative to confirm that it is indeed the derivative.)
+Observe that this is indeed a linear operator (i.e. it is linear in its argument, ``\dot{X}``). For the rest of this example, we use the matrix A as the coordinate-form representation of the operator ``Df\left[X\right]:\mathbb{R}^{N\times M}\rightarrow\mathbb{R}^{N\times M}``, with respect to the elementary basis of ``\mathbb{R}^{N\times M}``.
 
-In order to perform reverse-mode AD, we need to find the adjoint operator.
-Using the usual definition of the inner product between matrices,
+Our goal is to find the adjoint operator by inspection. The equation that we inspect comes from the definition of the usual inner product of matrices: 
 ```math
-\langle X, Y \rangle := \textrm{tr} (X^\top Y)
+\begin{align*}
+\forall A,B\in\mathbb{R}^{N\times M}, & \left\langle A,B\right\rangle :=\text{tr}\left(A^{T}B\right).
+\end{align*}
 ```
-we can rearrange the inner product as follows:
+Let ``V:=\dot{X}`` and ``U:=\bar{Y}`` to reduce clutter. Apply this inner product to the adjoint operator condition, where the matrix ``B`` is the coordinate-form representation of the adjoint operator:
 ```math
-\begin{align}
-    \langle \bar{Y}, D f [X] (\dot{X}) \rangle &= \langle \bar{Y}, \dot{X}^\top X + X^\top \dot{X} \rangle \nonumber \\
-        &= \textrm{tr} (\bar{Y}^\top \dot{X}^\top X) + \textrm{tr}(\bar{Y}^\top X^\top \dot{X}) \nonumber \\
-        &= \textrm{tr} ( [\bar{Y} X^\top]^\top \dot{X}) + \textrm{tr}( [X \bar{Y}]^\top \dot{X}) \nonumber \\
-        &= \langle \bar{Y} X^\top + X \bar{Y}, \dot{X} \rangle. \nonumber
-\end{align}
+\begin{align*}
+\left\langle BU,V\right\rangle  & =\left\langle U,AV\right\rangle ,\\
+ & =\left\langle U,V^{T}X+X^{T}V\right\rangle ,\\
+ & =\text{tr}\left(U^{T}\left(V^{T}X+X^{T}V\right)\right),\\
+ & =\text{tr}\left(V^{T}XU^{T}\right)+\text{tr}\left(U^{T}X^{T}V\right),\\
+ & =\left\langle V,XU^{T}\right\rangle +\left\langle U^{T}X^{T},V\right\rangle ,\\
+ & =\left\langle XU^{T}+XU,V\right\rangle ,
+\end{align*}
 ```
-We can read off the adjoint operator from the first argument to the inner product:
+ for any matrices ``A\in\mathbb{R}^{N\times M}``, ``B\in\mathbb{R}^{M\times L}``, and ``C\in\mathbb{R}^{L\times N}`` for some ``N``, ``M``, ``L``. By inspection, the coordinate-form of the adjoint operator is given by the matrix
 ```math
-D f [X]^\ast (\bar{Y}) = \bar{Y} X^\top + X \bar{Y}.
+\begin{align*}
+B=Df\left[X\right]^{*}\left(U\right)= & XU^{T}+XU,
+\end{align*}
 ```
+where ``U:=\bar{Y}`` in this example.
 
 #### AD of a Julia function: a trivial example
 
