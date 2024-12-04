@@ -812,7 +812,8 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
                     ys = [randn(M), view(randn(15), 2:(M + 1)), view(randn(30), 2:2:(2M))]
                     return map(Iterators.product(As, xs, ys)) do (A, x, y)
                         a = randn()
-                        (false, :stability, (1.0, 5.0), BLAS.gemv!, tA, a, A, x, randn(), y)
+                        b = randn()
+                        (false, :stability, (1.0, 5.0), BLAS.gemv!, tA, a, A, x, b, y)
                     end
                 end,
             ),
@@ -878,33 +879,10 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
                         B = randn(5, 7)
                         vB = view(randn(15, 15), 1:5, 1:7)
                         C = randn(5, 7)
+                        flags = (false, :stability, nothing)
                         return Any[
-                            (
-                                false,
-                                :stability,
-                                nothing,
-                                BLAS.symm!,
-                                side,
-                                uplo,
-                                α,
-                                A,
-                                B,
-                                β,
-                                C,
-                            ),
-                            (
-                                false,
-                                :stability,
-                                nothing,
-                                BLAS.symm!,
-                                side,
-                                uplo,
-                                α,
-                                vA,
-                                vB,
-                                β,
-                                C,
-                            ),
+                            (flags..., BLAS.symm!, side, uplo, α, A, B, β, C),
+                            (flags..., BLAS.symm!, side, uplo, α, vA, vB, β, C),
                         ]
                     end,
                 ),
@@ -991,8 +969,9 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
                     R = side == 'L' ? M : N
                     As = [randn(R, R), view(randn(15, 15), 3:(R + 2), 4:(R + 3))]
                     Bs = [randn(M, N), view(randn(15, 15), 2:(M + 1), 5:(N + 4))]
+                    flags = (false, :none, nothing)
                     return map(product(As, Bs)) do (A, B)
-                        (false, :none, nothing, BLAS.trmm!, side, ul, tA, dA, randn(), A, B)
+                        (flags..., BLAS.trmm!, side, ul, tA, dA, randn(), A, B)
                     end
                 end,
             ),
@@ -1009,8 +988,9 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
                     R = side == 'L' ? M : N
                     As = [randn(R, R) + 5I, view(randn(15, 15), 3:(R + 2), 4:(R + 3)) + 5I]
                     Bs = [randn(M, N), view(randn(15, 15), 2:(M + 1), 5:(N + 4))]
+                    flags = (false, :none, nothing)
                     return map(product(As, Bs)) do (A, B)
-                        (false, :none, nothing, BLAS.trsm!, side, ul, tA, dA, randn(), A, B)
+                        (flags..., BLAS.trsm!, side, ul, tA, dA, randn(), A, B)
                     end
                 end,
             ),
