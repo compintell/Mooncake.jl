@@ -810,10 +810,9 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
                     ]
                     xs = [randn(N), view(randn(15), 3:(N + 2)), view(randn(30), 1:2:(2N))]
                     ys = [randn(M), view(randn(15), 2:(M + 1)), view(randn(30), 2:2:(2M))]
+                    flags = false, :stability, (lb=1e-3, ub=5.0)
                     return map(Iterators.product(As, xs, ys)) do (A, x, y)
-                        a = randn()
-                        b = randn()
-                        (false, :stability, (1.0, 5.0), BLAS.gemv!, tA, a, A, x, b, y)
+                        return (flags..., BLAS.gemv!, tA, randn(), A, x, randn(), y)
                     end
                 end,
             ),
