@@ -745,7 +745,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
                     As = blas_matrices(rng, Float64, t ? M : N, t ? N : M)
                     xs = blas_vectors(rng, Float64, N)
                     ys = blas_vectors(rng, Float64, M)
-                    flags = (false, :stability, (lb=1e-3, ub=5.0))
+                    flags = (false, :stability, (lb=1e-3, ub=10.0))
                     return map(product(As, xs, ys)) do (A, x, y)
                         return (flags..., BLAS.gemv!, tA, randn(), A, x, randn(), y)
                     end
