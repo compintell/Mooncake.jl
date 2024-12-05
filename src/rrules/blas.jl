@@ -21,8 +21,9 @@ function tri!(A, u::Char, d::Char)
     return u == 'L' ? tril!(A, d == 'U' ? -1 : 0) : triu!(A, d == 'U' ? 1 : 0)
 end
 
-const MatrixOrView{T} = Union{Matrix{T},SubArray{T,2,Matrix{T}}}
-const VecOrView{T} = Union{Vector{T},SubArray{T,1,Vector{T}}}
+const MatrixOrView{T} = Union{Matrix{T},SubArray{T,2,<:Array{T}}}
+const VecOrView{T} = Union{Vector{T},SubArray{T,1,<:Array{T}}}
+const BlasRealFloat = Union{Float32,Float64}
 
 #
 # Utility
@@ -137,7 +138,7 @@ end
     MinimalCtx,
     Tuple{
         typeof(BLAS.gemv!),Char,P,MatrixOrView{P},VecOrView{P},P,VecOrView{P}
-    } where {P<:Union{Float32,Float64}},
+    } where {P<:BlasRealFloat},
 )
 
 @inline function rrule!!(
@@ -148,7 +149,7 @@ end
     _x::CoDual{<:VecOrView{P}},
     _beta::CoDual{P},
     _y::CoDual{<:VecOrView{P}},
-) where {P<:Union{Float32,Float64}}
+) where {P<:BlasRealFloat}
 
     # Pull out primals and tangents (the latter only where necessary).
     trans = _tA.x
@@ -192,8 +193,8 @@ end
 @is_primitive(
     MinimalCtx,
     Tuple{
-        typeof(BLAS.symv!),Char,T,MatrixOrView{T},Vector{T},T,Vector{T}
-    } where {T<:Union{Float32,Float64}},
+        typeof(BLAS.symv!),Char,T,MatrixOrView{T},VecOrView{T},T,VecOrView{T}
+    } where {T<:BlasRealFloat},
 )
 
 function rrule!!(
@@ -201,10 +202,10 @@ function rrule!!(
     uplo::CoDual{Char},
     alpha::CoDual{T},
     A_dA::CoDual{<:MatrixOrView{T}},
-    x_dx::CoDual{Vector{T}},
+    x_dx::CoDual{<:VecOrView{T}},
     beta::CoDual{T},
-    y_dy::CoDual{Vector{T}},
-) where {T<:Union{Float32,Float64}}
+    y_dy::CoDual{<:VecOrView{T}},
+) where {T<:BlasRealFloat}
 
     # Extract primals.
     ul = primal(uplo)
@@ -329,7 +330,7 @@ end
     MinimalCtx,
     Tuple{
         typeof(BLAS.gemm!),Char,Char,T,MatrixOrView{T},MatrixOrView{T},T,Matrix{T}
-    } where {T<:Union{Float32,Float64}},
+    } where {T<:BlasRealFloat},
 )
 
 function rrule!!(
@@ -341,7 +342,7 @@ function rrule!!(
     B::CoDual{<:MatrixOrView{T}},
     beta::CoDual{T},
     C::CoDual{Matrix{T}},
-) where {T<:Union{Float32,Float64}}
+) where {T<:BlasRealFloat}
     tA = primal(transA)
     tB = primal(transB)
     a = primal(alpha)
@@ -486,7 +487,7 @@ end
     MinimalCtx,
     Tuple{
         typeof(BLAS.symm!),Char,Char,T,MatrixOrView{T},MatrixOrView{T},T,Matrix{T}
-    } where {T<:Union{Float32,Float64}},
+    } where {T<:BlasRealFloat},
 )
 
 function rrule!!(
@@ -498,7 +499,7 @@ function rrule!!(
     B_dB::CoDual{<:MatrixOrView{T}},
     beta::CoDual{T},
     C_dC::CoDual{Matrix{T}},
-) where {T<:Union{Float32,Float64}}
+) where {T<:BlasRealFloat}
 
     # Extract primals.
     s = primal(side)
@@ -787,10 +788,34 @@ for (trsm, elty) in ((:dtrsm_, :Float64), (:strsm_, :Float32))
     end
 end
 
+function blas_matrices(rng::AbstractRNG, P::Type{<:BlasRealFloat}, p::Int, q::Int)
+    Xs = Any[
+        randn(rng, P, p, q),
+        view(randn(rng, P, p + 5, 2q), 3:(p + 2), 1:2:(2q)),
+        view(randn(rng, P, 3p, 3, 2q), (p + 1):(2p), 2, 1:2:(2q)),
+    ]
+    @assert all(X -> size(X) == (p, q), Xs)
+    @assert all(Base.Fix2(isa, AbstractMatrix{P}), Xs)
+    return Xs
+end
+
+function blas_vectors(rng::AbstractRNG, P::Type{<:BlasRealFloat}, p::Int)
+    xs = Any[
+        randn(rng, P, p),
+        view(randn(rng, P, p + 5), 3:(p + 2)),
+        view(randn(rng, P, 3p), 1:2:(2p)),
+        view(randn(rng, P, 3p, 3), 1:2:(2p), 2),
+    ]
+    @assert all(x -> length(x) == p, xs)
+    @assert all(Base.Fix2(isa, AbstractVector{P}), xs)
+    return xs
+end
+
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
     t_flags = ['N', 'T', 'C']
     alphas = [1.0, -0.25]
     betas = [0.0, 0.33]
+    rng = rng_ctor(123456)
 
     test_cases = vcat(
 
@@ -800,17 +825,10 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
                 vcat,
                 map(product(t_flags, [1, 3], [1, 2])) do (tA, M, N)
                     t = tA == 'N'
-                    As = [
-                        t ? randn(M, N) : randn(N, M),
-                        view(
-                            randn(15, 15),
-                            t ? (3:(M + 2)) : (2:(N + 1)),
-                            t ? (2:(N + 1)) : (3:(M + 2)),
-                        ),
-                    ]
-                    xs = [randn(N), view(randn(15), 3:(N + 2)), view(randn(30), 1:2:(2N))]
-                    ys = [randn(M), view(randn(15), 2:(M + 1)), view(randn(30), 2:2:(2M))]
-                    flags = false, :stability, (lb=1e-3, ub=5.0)
+                    As = blas_matrices(rng, Float64, t ? M : N, t ? N : M)
+                    xs = blas_vectors(rng, Float64, N)
+                    ys = blas_vectors(rng, Float64, M)
+                    flags = (false, :stability, (lb=1e-3, ub=5.0))
                     return map(Iterators.product(As, xs, ys)) do (A, x, y)
                         return (flags..., BLAS.gemv!, tA, randn(), A, x, randn(), y)
                     end
@@ -819,48 +837,32 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
         ),
 
         # symv!
-        vec(
-            reduce(
-                vcat,
-                vec(
-                    map(product(['L', 'U'], alphas, betas)) do (uplo, α, β)
-                        A = randn(5, 5)
-                        vA = view(randn(15, 15), 1:5, 1:5)
-                        x = randn(5)
-                        y = randn(5)
-                        return Any[
-                            (false, :stability, nothing, BLAS.symv!, uplo, α, A, x, β, y),
-                            (false, :stability, nothing, BLAS.symv!, uplo, α, vA, x, β, y),
-                        ]
-                    end,
-                ),
-            ),
-        ),
+        vec(reduce(
+            vcat,
+            map(product(['L', 'U'], alphas, betas)) do (uplo, α, β)
+                As = blas_matrices(rng, Float64, 5, 5)
+                ys = blas_vectors(rng, Float64, 5)
+                xs = blas_vectors(rng, Float64, 5)
+                flags = (false, :stability, nothing)
+                return map(Iterators.product(As, xs, ys)) do (A, x, y)
+                    (flags..., BLAS.symv!, uplo, α, A, x, β, y)
+                end
+            end,
+        )),
 
         # gemm!
         vec(
             reduce(
                 vcat,
-                vec(
-                    map(product(t_flags, t_flags, alphas, betas)) do (tA, tB, a, b)
-                        A = tA == 'N' ? randn(3, 4) : randn(4, 3)
-                        B = tB == 'N' ? randn(4, 5) : randn(5, 4)
-                        As = if tA == 'N'
-                            [randn(3, 4), view(randn(15, 15), 2:4, 3:6)]
-                        else
-                            [randn(4, 3), view(randn(15, 15), 2:5, 3:5)]
-                        end
-                        Bs = if tB == 'N'
-                            [randn(4, 5), view(randn(15, 15), 1:4, 2:6)]
-                        else
-                            [randn(5, 4), view(randn(15, 15), 1:5, 3:6)]
-                        end
-                        C = randn(3, 5)
-                        return map(product(As, Bs)) do (A, B)
-                            (false, :stability, nothing, BLAS.gemm!, tA, tB, a, A, B, b, C)
-                        end
-                    end,
-                ),
+                map(product(t_flags, t_flags, alphas, betas)) do (tA, tB, a, b)
+                    As = blas_matrices(rng, Float64, tA == 'N' ? 3 : 4, tA == 'N' ? 4 : 3)
+                    Bs = blas_matrices(rng, Float64, tB == 'N' ? 4 : 5, tB == 'N' ? 5 : 4)
+                    C = randn(rng, 3, 5)
+                    flags = (false, :stability, nothing)
+                    return map(product(As, Bs)) do (A, B)
+                        (flags..., BLAS.gemm!, tA, tB, a, A, B, b, C)
+                    end
+                end,
             ),
         ),
 
@@ -868,23 +870,16 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
         vec(
             reduce(
                 vcat,
-                vec(
-                    map(
-                        product(['L', 'R'], ['L', 'U'], alphas, betas)
-                    ) do (side, uplo, α, β)
-                        nA = side == 'L' ? 5 : 7
-                        A = randn(nA, nA)
-                        vA = view(randn(15, 15), 1:nA, 1:nA)
-                        B = randn(5, 7)
-                        vB = view(randn(15, 15), 1:5, 1:7)
-                        C = randn(5, 7)
-                        flags = (false, :stability, nothing)
-                        return Any[
-                            (flags..., BLAS.symm!, side, uplo, α, A, B, β, C),
-                            (flags..., BLAS.symm!, side, uplo, α, vA, vB, β, C),
-                        ]
-                    end,
-                ),
+                map(product(['L', 'R'], ['L', 'U'], alphas, betas)) do (side, uplo, α, β)
+                    nA = side == 'L' ? 5 : 7
+                    As = blas_matrices(rng, Float64, nA, nA)
+                    Bs = blas_matrices(rng, Float64, 5, 7)
+                    C = randn(rng, 5, 7)
+                    flags = (false, :stability, nothing)
+                    return map(product(As, Bs)) do (A, B)
+                        (flags..., BLAS.symm!, side, uplo, α, A, B, β, C)
+                    end
+                end,
             ),
         ),
     )
