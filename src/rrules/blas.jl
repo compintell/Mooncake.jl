@@ -329,7 +329,7 @@ end
 @is_primitive(
     MinimalCtx,
     Tuple{
-        typeof(BLAS.gemm!),Char,Char,T,MatrixOrView{T},MatrixOrView{T},T,Matrix{T}
+        typeof(BLAS.gemm!),Char,Char,T,MatrixOrView{T},MatrixOrView{T},T,MatrixOrView{T}
     } where {T<:BlasRealFloat},
 )
 
@@ -341,7 +341,7 @@ function rrule!!(
     A::CoDual{<:MatrixOrView{T}},
     B::CoDual{<:MatrixOrView{T}},
     beta::CoDual{T},
-    C::CoDual{Matrix{T}},
+    C::CoDual{<:MatrixOrView{T}},
 ) where {T<:BlasRealFloat}
     tA = primal(transA)
     tB = primal(transB)
@@ -361,7 +361,7 @@ function rrule!!(
     else
         tmp = BLAS.gemm(tA, tB, one(T), p_A, p_B)
         tmp_ref[] = tmp
-        BLAS.axpby!(a, tmp, b, p_C)
+        p_C .= a .* tmp .+ b .* p_C
     end
 
     function gemm!_pb!!(::NoRData)
@@ -373,7 +373,7 @@ function rrule!!(
         BLAS.copyto!(p_C, p_C_copy)
 
         # Compute pullback w.r.t. beta.
-        db = BLAS.dot(dC, p_C)
+        db = dot(dC, p_C)
 
         # Increment cotangents.
         if tA == 'N'
@@ -386,7 +386,7 @@ function rrule!!(
         else
             BLAS.gemm!('T', tA == 'N' ? 'N' : 'T', a, dC, p_A, one(T), dB)
         end
-        BLAS.scal!(b, dC)
+        dC .*= b
 
         return NoRData(), NoRData(), NoRData(), da, NoRData(), NoRData(), db, NoRData()
     end
@@ -486,7 +486,7 @@ end
 @is_primitive(
     MinimalCtx,
     Tuple{
-        typeof(BLAS.symm!),Char,Char,T,MatrixOrView{T},MatrixOrView{T},T,Matrix{T}
+        typeof(BLAS.symm!),Char,Char,T,MatrixOrView{T},MatrixOrView{T},T,MatrixOrView{T}
     } where {T<:BlasRealFloat},
 )
 
@@ -498,7 +498,7 @@ function rrule!!(
     A_dA::CoDual{<:MatrixOrView{T}},
     B_dB::CoDual{<:MatrixOrView{T}},
     beta::CoDual{T},
-    C_dC::CoDual{Matrix{T}},
+    C_dC::CoDual{<:MatrixOrView{T}},
 ) where {T<:BlasRealFloat}
 
     # Extract primals.
@@ -520,7 +520,7 @@ function rrule!!(
     else
         tmp = BLAS.symm(s, ul, one(T), A, B)
         tmp_ref[] = tmp
-        BLAS.axpby!(α, tmp, β, C)
+        C .= α .* tmp .+ β .* C
     end
 
     function symm!_adjoint(::NoRData)
@@ -556,7 +556,7 @@ function rrule!!(
         dβ = dot(dC, C)
 
         # gradient w.r.t. C.
-        BLAS.scal!(β, dC)
+        dC .*= β
 
         return NoRData(), NoRData(), NoRData(), dα, NoRData(), NoRData(), dβ, NoRData()
     end
@@ -829,7 +829,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
                     xs = blas_vectors(rng, Float64, N)
                     ys = blas_vectors(rng, Float64, M)
                     flags = (false, :stability, (lb=1e-3, ub=5.0))
-                    return map(Iterators.product(As, xs, ys)) do (A, x, y)
+                    return map(product(As, xs, ys)) do (A, x, y)
                         return (flags..., BLAS.gemv!, tA, randn(), A, x, randn(), y)
                     end
                 end,
@@ -837,18 +837,19 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
         ),
 
         # symv!
-        vec(reduce(
-            vcat,
-            map(product(['L', 'U'], alphas, betas)) do (uplo, α, β)
-                As = blas_matrices(rng, Float64, 5, 5)
-                ys = blas_vectors(rng, Float64, 5)
-                xs = blas_vectors(rng, Float64, 5)
-                flags = (false, :stability, nothing)
-                return map(Iterators.product(As, xs, ys)) do (A, x, y)
-                    (flags..., BLAS.symv!, uplo, α, A, x, β, y)
-                end
-            end,
-        )),
+        vec(
+            reduce(
+                vcat,
+                map(product(['L', 'U'], alphas, betas)) do (uplo, α, β)
+                    As = blas_matrices(rng, Float64, 5, 5)
+                    ys = blas_vectors(rng, Float64, 5)
+                    xs = blas_vectors(rng, Float64, 5)
+                    return map(product(As, xs, ys)) do (A, x, y)
+                        (false, :stability, nothing, BLAS.symv!, uplo, α, A, x, β, y)
+                    end
+                end,
+            ),
+        ),
 
         # gemm!
         vec(
@@ -857,10 +858,9 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
                 map(product(t_flags, t_flags, alphas, betas)) do (tA, tB, a, b)
                     As = blas_matrices(rng, Float64, tA == 'N' ? 3 : 4, tA == 'N' ? 4 : 3)
                     Bs = blas_matrices(rng, Float64, tB == 'N' ? 4 : 5, tB == 'N' ? 5 : 4)
-                    C = randn(rng, 3, 5)
-                    flags = (false, :stability, nothing)
-                    return map(product(As, Bs)) do (A, B)
-                        (flags..., BLAS.gemm!, tA, tB, a, A, B, b, C)
+                    Cs = blas_matrices(rng, Float64, 3, 5)
+                    return map(product(As, Bs, Cs)) do (A, B, C)
+                        (false, :none, nothing, BLAS.gemm!, tA, tB, a, A, B, b, C)
                     end
                 end,
             ),
@@ -874,10 +874,9 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
                     nA = side == 'L' ? 5 : 7
                     As = blas_matrices(rng, Float64, nA, nA)
                     Bs = blas_matrices(rng, Float64, 5, 7)
-                    C = randn(rng, 5, 7)
-                    flags = (false, :stability, nothing)
-                    return map(product(As, Bs)) do (A, B)
-                        (flags..., BLAS.symm!, side, uplo, α, A, B, β, C)
+                    Cs = blas_matrices(rng, Float64, 5, 7)
+                    return map(product(As, Bs, Cs)) do (A, B, C)
+                        (false, :stability, nothing, BLAS.symm!, side, uplo, α, A, B, β, C)
                     end
                 end,
             ),
