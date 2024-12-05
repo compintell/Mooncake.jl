@@ -1,5 +1,4 @@
 include("front_matter.jl")
-@show ENV["JULIA_PKG_SERVER_REGISTRY_PREFERENCE"]
 
 @testset "Mooncake.jl" begin
     if test_group == "quality"
