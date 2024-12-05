@@ -159,41 +159,80 @@ We will put all of these problems in a single general framework later on.
 #### An Example with Matrix Calculus
 
 We have introduced some mathematical abstraction in order to simplify the calculations involved in AD.
-To this end, we consider differentiating ``f(X) := X^\top X``.
+Let's consider differentiating the function
+```math
+\begin{align*}
+f:\mathbb{R}^{M\times N} & \rightarrow\mathbb{R}^{N\times N},\\
+X & \mapsto X^{T}X.
+\end{align*}
+```
 Results for this and similar operations are given by [giles2008extended](@cite).
 A similar operation, but which maps from matrices to ``\RR`` is discussed in Lecture 4 part 2 of the MIT course mentioned previouly.
-Both [giles2008extended](@cite) and [Lecture 4 part 2](https://ocw.mit.edu/courses/18-s096-matrix-calculus-for-machine-learning-and-beyond-january-iap-2023/resources/ocw_18s096_lecture04-part2_2023jan26_mp4/) provide approaches to obtaining the derivative of this function.
-
-Following either resource will yield the derivative:
+Both [giles2008extended](@cite) and [Lecture 4 part 2](https://ocw.mit.edu/courses/18-s096-matrix-calculus-for-machine-learning-and-beyond-january-iap-2023/resources/ocw_18s096_lecture04-part2_2023jan26_mp4/) provide approaches to obtaining the derivative of this function. Following either resource will yield the derivative:
 ```math
 D f [X] (\dot{X}) = \dot{X}^\top X + X^\top \dot{X}
 ```
-Observe that this is indeed a linear operator (i.e. it is linear in its argument, ``\dot{X}``). For the rest of this example, we use the matrix A as the coordinate-form representation of the operator ``Df\left[X\right]:\mathbb{R}^{N\times M}\rightarrow\mathbb{R}^{N\times M}``, with respect to the elementary basis of ``\mathbb{R}^{N\times M}``.
+Observe that this is indeed a linear operator (i.e. it is linear in its argument, ``\dot{X}``).
 
-Our goal is to find the adjoint operator by inspection. The equation that we inspect comes from the definition of the usual inner product of matrices: 
+Before we can discuss adjoint operators, we need to choose an inner product for our problem. In this example, we use the usual dot product as the inner products for the vector spaces involved. In matrix notation, the inner products ``g`` and ``h`` are expressed as: 
 ```math
 \begin{align*}
-\forall A,B\in\mathbb{R}^{N\times M}, & \left\langle A,B\right\rangle :=\text{tr}\left(A^{T}B\right).
+\forall A,B\in\mathbb{R}^{M\times N}, & g\left(A,B\right)=\text{tr}\left(A^{T}B\right)=\sum_{i}A_{i}B_{i},\\
+\forall A,B\in\mathbb{R}^{N\times N}, & h\left(A,B\right)=\text{tr}\left(A^{T}B\right)=\sum_{i}A_{i}B_{i}.
 \end{align*}
 ```
-Let ``V:=\dot{X}`` and ``U:=\bar{Y}`` to reduce clutter. Apply this inner product to the adjoint operator condition, where the matrix ``B`` is the coordinate-form representation of the adjoint operator:
+
+For a given ``X\in\mathbb{R}^{M\times N}``, let ``\mathcal{A}_{X}:=Df\left[X\right]``
+where 
 ```math
 \begin{align*}
-\left\langle BU,V\right\rangle  & =\left\langle U,AV\right\rangle ,\\
- & =\left\langle U,V^{T}X+X^{T}V\right\rangle ,\\
+Df\left[X\right]:\mathbb{R}^{M\times N} & \rightarrow\mathbb{R}^{N\times N}\\
+V & \mapsto V^{T}X+X^{T}V.
+\end{align*}
+ By definition, an adjoint ``\mathcal{B}_{f\left(X\right)}:\mathbb{R}^{N\times N}\rightarrow\mathbb{R}^{M\times N}``
+of ``\mathcal{A}_{X}`` with respect to the inner products ``g`` and
+``h`` must satisfy 
+\begin{align*}
+\forall V\in\mathbb{R}^{M\times N},U\in\mathbb{R}^{N\times N}, & g\left(\mathcal{B}_{f\left(X\right)}U,V\right)=h\left(U,\mathcal{A}_{X}V\right).
+\end{align*}
+```
+ Our goal is to find an expression for the adjoint operator by inspection:
+```math
+\begin{align*}
+\forall V\in\mathbb{R}^{M\times N}, & \forall U\in\mathbb{R}^{N\times N},\\
+g\left(\mathcal{B}_{f\left(X\right)}U,V\right) & =h\left(U,\mathcal{A}_{X}V\right),\\
+ & =h\left(U,V^{T}X+X^{T}V\right),\\
  & =\text{tr}\left(U^{T}\left(V^{T}X+X^{T}V\right)\right),\\
  & =\text{tr}\left(V^{T}XU^{T}\right)+\text{tr}\left(U^{T}X^{T}V\right),\\
- & =\left\langle V,XU^{T}\right\rangle +\left\langle U^{T}X^{T},V\right\rangle ,\\
- & =\left\langle XU^{T}+XU,V\right\rangle ,
+ & =g\left(V,XU^{T}\right)+h\left(U^{T}X^{T},V\right),\\
+ & =g\left(XU^{T}+XU,V\right),
 \end{align*}
 ```
- for any matrices ``A\in\mathbb{R}^{N\times M}``, ``B\in\mathbb{R}^{M\times L}``, and ``C\in\mathbb{R}^{L\times N}`` for some ``N``, ``M``, ``L``. By inspection, the coordinate-form of the adjoint operator is given by the matrix
+ where we used the symmetric and linearity property of inner products,
+as well as the cyclic property for trace: 
 ```math
 \begin{align*}
-B=Df\left[X\right]^{*}\left(U\right)= & XU^{T}+XU,
+\text{tr}\left(U^{T}V^{T}X\right) & =\text{tr}\left(V^{T}XU^{T}\right).
 \end{align*}
 ```
-where ``U:=\bar{Y}`` in this example.
+By inspection, the action of ``\mathcal{B}_{f\left(X\right)}`` on an
+input ``U\in\mathbb{R}^{N\times N}`` is 
+```math
+\begin{align*}
+\mathcal{B}_{f\left(X\right)}U=Df\left[X\right]^{*}\left(U\right)= & XU^{T}+XU.
+\end{align*}
+```
+ If we adopt the nomenclature from our earlier discussions, we have
+``\forall X\in\mathbb{R}^{N\times M}``, 
+```math
+\begin{align*}
+U & :=\bar{Y},\\
+V & :=\dot{X},\\
+Df\left[X\right]^{*}:\mathbb{R}^{N\times N} & \rightarrow\mathbb{R}^{M\times N}\\
+\bar{Y} & \mapsto X\left(\bar{Y}\right)^{T}+X\bar{Y}.
+\end{align*}
+```
+
 
 #### AD of a Julia function: a trivial example
 
