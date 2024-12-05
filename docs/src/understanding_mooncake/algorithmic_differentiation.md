@@ -159,36 +159,82 @@ We will put all of these problems in a single general framework later on.
 #### An Example with Matrix Calculus
 
 We have introduced some mathematical abstraction in order to simplify the calculations involved in AD.
-To this end, we consider differentiating ``f(X) := X^\top X``.
+Let's consider differentiating the function
+```math
+\begin{align*}
+f:\mathbb{R}^{M\times N} & \rightarrow\mathbb{R}^{N\times N},\\
+X & \mapsto X^{T}X.
+\end{align*}
+```
 Results for this and similar operations are given by [giles2008extended](@cite).
 A similar operation, but which maps from matrices to ``\RR`` is discussed in Lecture 4 part 2 of the MIT course mentioned previouly.
-Both [giles2008extended](@cite) and [Lecture 4 part 2](https://ocw.mit.edu/courses/18-s096-matrix-calculus-for-machine-learning-and-beyond-january-iap-2023/resources/ocw_18s096_lecture04-part2_2023jan26_mp4/) provide approaches to obtaining the derivative of this function.
-
-Following either resource will yield the derivative:
+Both [giles2008extended](@cite) and [Lecture 4 part 2](https://ocw.mit.edu/courses/18-s096-matrix-calculus-for-machine-learning-and-beyond-january-iap-2023/resources/ocw_18s096_lecture04-part2_2023jan26_mp4/) provide approaches to obtaining the derivative of this function. Following either resource will yield the derivative:
 ```math
 D f [X] (\dot{X}) = \dot{X}^\top X + X^\top \dot{X}
 ```
 Observe that this is indeed a linear operator (i.e. it is linear in its argument, ``\dot{X}``).
-(You can always plug it in to the definition of the Frechet derivative to confirm that it is indeed the derivative.)
 
-In order to perform reverse-mode AD, we need to find the adjoint operator.
-Using the usual definition of the inner product between matrices,
+Before we can discuss adjoint operators, we need to choose an inner product for our problem. In this example, we use the usual dot product as the inner products for the vector spaces involved. In matrix notation, the inner products ``g`` and ``h`` are expressed as: 
 ```math
-\langle X, Y \rangle := \textrm{tr} (X^\top Y)
+\begin{align*}
+\forall A,B\in\mathbb{R}^{M\times N}, & g\left(A,B\right)=\text{tr}\left(A^{T}B\right)=\sum_{i}A_{i}B_{i},\\
+\forall A,B\in\mathbb{R}^{N\times N}, & h\left(A,B\right)=\text{tr}\left(A^{T}B\right)=\sum_{i}A_{i}B_{i}.
+\end{align*}
 ```
-we can rearrange the inner product as follows:
+
+For a given ``X\in\mathbb{R}^{M\times N}``, let ``\mathcal{A}_{X}:=Df\left[X\right]``
+where 
 ```math
-\begin{align}
-    \langle \bar{Y}, D f [X] (\dot{X}) \rangle &= \langle \bar{Y}, \dot{X}^\top X + X^\top \dot{X} \rangle \nonumber \\
-        &= \textrm{tr} (\bar{Y}^\top \dot{X}^\top X) + \textrm{tr}(\bar{Y}^\top X^\top \dot{X}) \nonumber \\
-        &= \textrm{tr} ( [\bar{Y} X^\top]^\top \dot{X}) + \textrm{tr}( [X \bar{Y}]^\top \dot{X}) \nonumber \\
-        &= \langle \bar{Y} X^\top + X \bar{Y}, \dot{X} \rangle. \nonumber
-\end{align}
+\begin{align*}
+Df\left[X\right]:\mathbb{R}^{M\times N} & \rightarrow\mathbb{R}^{N\times N}\\
+V & \mapsto V^{T}X+X^{T}V.
+\end{align*}
 ```
-We can read off the adjoint operator from the first argument to the inner product:
+ By definition, an adjoint ``\mathcal{B}_{f\left(X\right)}:\mathbb{R}^{N\times N}\rightarrow\mathbb{R}^{M\times N}``
+of ``\mathcal{A}_{X}`` with respect to the inner products ``g`` and
+``h`` must satisfy 
 ```math
-D f [X]^\ast (\bar{Y}) = \bar{Y} X^\top + X \bar{Y}.
+\begin{align*}
+\forall V\in\mathbb{R}^{M\times N},U\in\mathbb{R}^{N\times N}, & g\left(\mathcal{B}_{f\left(X\right)}U,V\right)=h\left(U,\mathcal{A}_{X}V\right).
+\end{align*}
 ```
+ Our goal is to find an expression for the adjoint operator by inspection:
+```math
+\begin{align*}
+\forall V\in\mathbb{R}^{M\times N}, & \forall U\in\mathbb{R}^{N\times N},\\
+g\left(\mathcal{B}_{f\left(X\right)}U,V\right) & =h\left(U,\mathcal{A}_{X}V\right),\\
+ & =h\left(U,V^{T}X+X^{T}V\right),\\
+ & =\text{tr}\left(U^{T}\left(V^{T}X+X^{T}V\right)\right),\\
+ & =\text{tr}\left(V^{T}XU^{T}\right)+\text{tr}\left(U^{T}X^{T}V\right),\\
+ & =g\left(V,XU^{T}\right)+g\left(U^{T}X^{T},V\right),\\
+ & =g\left(XU^{T}+XU,V\right),
+\end{align*}
+```
+ where we used the symmetric and linearity property of inner products,
+as well as the cyclic property for trace: 
+```math
+\begin{align*}
+\text{tr}\left(U^{T}V^{T}X\right) & =\text{tr}\left(V^{T}XU^{T}\right).
+\end{align*}
+```
+By inspection, the action of ``\mathcal{B}_{f\left(X\right)}`` on an
+input ``U\in\mathbb{R}^{N\times N}`` is 
+```math
+\begin{align*}
+\mathcal{B}_{f\left(X\right)}U=Df\left[X\right]^{*}\left(U\right)= & XU^{T}+XU.
+\end{align*}
+```
+ If we adopt the nomenclature from our earlier discussions, we have
+``\forall X\in\mathbb{R}^{N\times M}``, 
+```math
+\begin{align*}
+U & :=\bar{Y},\\
+V & :=\dot{X},\\
+Df\left[X\right]^{*}:\mathbb{R}^{N\times N} & \rightarrow\mathbb{R}^{M\times N}\\
+\bar{Y} & \mapsto X\left(\bar{Y}\right)^{T}+X\bar{Y}.
+\end{align*}
+```
+
 
 #### AD of a Julia function: a trivial example
 
