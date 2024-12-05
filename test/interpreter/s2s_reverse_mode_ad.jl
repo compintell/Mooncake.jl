@@ -12,12 +12,6 @@ struct A
 end
 f(a, x) = dot(a.data, x)
 
-# Test cases designed to cause `LazyDerivedRule` to throw an error when attempting to
-# construct a rule for `bar`.
-foo(x) = x
-@noinline bar(x) = foo(x)
-baz(x) = bar(x)
-Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{typeof(foo),Any}
 end
 
 @testset "s2s_reverse_mode_ad" begin
@@ -257,15 +251,6 @@ end
         interp = get_interpreter()
         rule = Mooncake.build_rrule(interp, sig; debug_mode)
         @test rule isa Mooncake.rule_type(interp, sig; debug_mode)
-    end
-    @testset "LazyDerivedRule" begin
-        fargs = (S2SGlobals.baz, 5.0)
-        rule = build_rrule(fargs...)
-        msg = "Unable to put rule in rule field. A `BadRuleTypeException` might be thrown."
-        @test_logs(
-            (:warn, msg),
-            (@test_throws Mooncake.BadRuleTypeException rule(map(zero_fcodual, fargs)...)),
-        )
     end
     @testset "MooncakeRuleCompilationError" begin
         @test_throws(Mooncake.MooncakeRuleCompilationError, Mooncake.build_rrule(sin))

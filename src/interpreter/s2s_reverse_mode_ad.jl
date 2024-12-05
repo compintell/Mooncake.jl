@@ -1735,14 +1735,12 @@ _rtype(T::Type{<:DerivedRule}) = Tuple{_rtype(fieldtype(T, :fwds_oc)),fieldtype(
         rule.rule = derived_rule
         result = derived_rule(args...)
     else
-        @warn "Unable to put rule in rule field. A `BadRuleTypeException` might be thrown."
         err = BadRuleTypeException(rule.mi, sig, typeof(derived_rule), Trule)
         result = try
             derived_rule(args...)
         catch
             throw(err)
         end
-        @warn "`BadRuleTypException was _not_ thrown. Expect an error at some point."
     end
     return result::_rtype(Trule)
 end
