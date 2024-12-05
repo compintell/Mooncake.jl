@@ -189,9 +189,11 @@ where
 Df\left[X\right]:\mathbb{R}^{M\times N} & \rightarrow\mathbb{R}^{N\times N}\\
 V & \mapsto V^{T}X+X^{T}V.
 \end{align*}
+```
  By definition, an adjoint ``\mathcal{B}_{f\left(X\right)}:\mathbb{R}^{N\times N}\rightarrow\mathbb{R}^{M\times N}``
 of ``\mathcal{A}_{X}`` with respect to the inner products ``g`` and
 ``h`` must satisfy 
+```math
 \begin{align*}
 \forall V\in\mathbb{R}^{M\times N},U\in\mathbb{R}^{N\times N}, & g\left(\mathcal{B}_{f\left(X\right)}U,V\right)=h\left(U,\mathcal{A}_{X}V\right).
 \end{align*}
