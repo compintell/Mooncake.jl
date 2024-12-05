@@ -204,7 +204,7 @@ g\left(\mathcal{B}_{f\left(X\right)}U,V\right) & =h\left(U,\mathcal{A}_{X}V\righ
  & =h\left(U,V^{T}X+X^{T}V\right),\\
  & =\text{tr}\left(U^{T}\left(V^{T}X+X^{T}V\right)\right),\\
  & =\text{tr}\left(V^{T}XU^{T}\right)+\text{tr}\left(U^{T}X^{T}V\right),\\
- & =g\left(V,XU^{T}\right)+h\left(U^{T}X^{T},V\right),\\
+ & =g\left(V,XU^{T}\right)+g\left(U^{T}X^{T},V\right),\\
  & =g\left(XU^{T}+XU,V\right),
 \end{align*}
 ```
