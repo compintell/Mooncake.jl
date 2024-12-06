@@ -9,6 +9,7 @@ Base.copy(x::Dual) = Dual(copy(primal(x)), copy(tangent(x)))
 _copy(x::P) where {P<:Dual} = x
 
 zero_dual(x) = Dual(x, zero_tangent(x))
+randn_dual(rng::AbstractRNG, x) = Dual(x, randn_tangent(rng, x))
 
 function dual_type(::Type{P}) where {P}
     P == DataType && return Dual
@@ -32,6 +33,4 @@ make_dual(x::Dual) = x
 
 Check that the type of `tangent(x)` is the tangent type of the type of `primal(x)`.
 """
-function verify_dual_type(x::Dual)
-    return tangent_type(typeof(primal(x))) == typeof(tangent(x))
-end
+verify_dual_type(x::Dual) = tangent_type(typeof(primal(x))) == typeof(tangent(x))
