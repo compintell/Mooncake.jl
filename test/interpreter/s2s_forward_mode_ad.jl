@@ -4,6 +4,18 @@ using Test
 using Core.Compiler: SSAValue
 const CC = Core.Compiler
 
+@testset "s2s_forward_mode_ad" begin
+    test_cases = collect(enumerate(TestResources.generate_test_functions()))[1:1]
+    @testset "$(_typeof((f, x...)))" for (n, (interface_only, _, _, f, x...)) in test_cases
+        sig = _typeof((f, x...))
+        @info "$n: $sig"
+        TestUtils.test_rule(
+            Xoshiro(123456), f, x...; perf_flag, interface_only, is_primitive=false
+        )
+    end
+end
+
+
 #=
 x, dx = 2.0, 3.0
 xdual = Dual(x, dx)
