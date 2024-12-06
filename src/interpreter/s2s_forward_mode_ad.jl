@@ -187,11 +187,35 @@ function modify_fwd_ad_stmts!(
     return nothing
 end
 
+function modify_fwd_ad_stmts!(
+    dual_ir::CC.IncrementalCompact,
+    primal_ir::IRCode,
+    ::MooncakeInterpreter,
+    stmt::PiNode,
+    i::Integer;
+    kwargs...,
+)
+    dual_ir[SSAValue(i)][:stmt] = inc_args(
+        PiNode(stmt.val, Dual{stmt.typ,tangent_type(stmt.typ)})
+    )  # TODO: improve?
+    dual_ir[SSAValue(i)][:type] = Any
+    dual_ir[SSAValue(i)][:flag] = CC.IR_FLAG_REFINED
+    return nothing
+end
+
 ## Modification of IR nodes - expressions
 
+struct DualArguments{FR}
+    frule::FR
+end
+
+function Base.show(io::IO, da::DualArguments)
+    return print(io, "DualArguments($(da.frule))")
+end
+
 # TODO: wrapping in Dual must not be systematic (e.g. Argument or SSAValue)
-function _frule!!_makedual(f::F, args::Vararg{Any,N}) where {F,N}
-    return frule!!(tuple_map(_dual, (f, args...))...)
+function (da::DualArguments)(f::F, args::Vararg{Any,N}) where {F,N}
+    return da.frule(tuple_map(_dual, (f, args...))...)
 end
 
 struct DynamicFRule{V}
@@ -238,7 +262,7 @@ function modify_fwd_ad_stmts!(
             inc_args(stmt).args
         end
         if is_primitive(context_type(interp), sig)
-            call_frule = Expr(:call, _frule!!_makedual, shifted_args...)
+            call_frule = Expr(:call, DualArguments(frule!!), shifted_args...)
             replace_call!(dual_ir, SSAValue(i), call_frule)
         else
             if isexpr(stmt, :invoke)
@@ -248,7 +272,7 @@ function modify_fwd_ad_stmts!(
                 rule = DynamicFRule(debug_mode)
             end
             # TODO: could this insertion of a naked rule in the IR cause a memory leak?
-            call_rule = Expr(:call, rule, shifted_args...)
+            call_rule = Expr(:call, DualArguments(rule), shifted_args...)
             replace_call!(dual_ir, SSAValue(i), call_rule)
         end
     elseif isexpr(stmt, :boundscheck)

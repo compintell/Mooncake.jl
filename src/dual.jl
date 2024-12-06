@@ -34,3 +34,5 @@ _dual(x::Dual) = x
 Check that the type of `tangent(x)` is the tangent type of the type of `primal(x)`.
 """
 verify_dual_type(x::Dual) = tangent_type(typeof(primal(x))) == typeof(tangent(x))
+
+@inline uninit_dual(x::P) where {P} = Dual(x, uninit_tangent(x))

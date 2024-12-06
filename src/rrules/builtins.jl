@@ -164,6 +164,11 @@ function rrule!!(::CoDual{typeof(abs_float)}, x)
 end
 
 @intrinsic add_float
+function frule!!(::Dual{typeof(add_float)}, a, b)
+    c = add_float(primal(a), primal(b))
+    d = add_float(tangent(a), tangent(b))
+    return Dual(c, d)
+end
 function rrule!!(::CoDual{typeof(add_float)}, a, b)
     add_float_pb!!(c̄) = NoRData(), c̄, c̄
     c = add_float(primal(a), primal(b))
@@ -350,6 +355,11 @@ end
 @inactive_intrinsic lt_float_fast
 
 @intrinsic mul_float
+function frule!!(::Dual{typeof(mul_float)}, a, b)
+    p = mul_float(primal(a), primal(b))
+    dp = add_float(mul_float(primal(a), tangent(b)), mul_float(primal(b), tangent(a)))
+    return Dual(p, dp)
+end
 function rrule!!(::CoDual{typeof(mul_float)}, a, b)
     _a = primal(a)
     _b = primal(b)
