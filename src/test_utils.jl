@@ -399,7 +399,7 @@ function test_frule_correctness(rng::AbstractRNG, x_ẋ...; frule, unsafe_pertur
 end
 
 # Assumes that the interface has been tested, and we can simply check for numerical issues.
-function test_rrule_correctness(rng::AbstractRNG, x_x̄...; rule, unsafe_perturb::Bool)
+function test_rrule_correctness(rng::AbstractRNG, x_x̄...; rrule, unsafe_perturb::Bool)
     @nospecialize rng x_x̄
 
     x_x̄ = map(_deepcopy, x_x̄) # defensive copy
@@ -428,7 +428,7 @@ function test_rrule_correctness(rng::AbstractRNG, x_x̄...; rule, unsafe_perturb
     inputs_address_map = populate_address_map(
         map(primal, x_x̄_rule), map(tangent, x_x̄_rule)
     )
-    y_ȳ_rule, pb!! = rule(x_x̄_rule...)
+    y_ȳ_rule, pb!! = rrule(x_x̄_rule...)
 
     # Verify that inputs / outputs are the same under `f` and its rrule.
     @test has_equal_data(x_primal, map(primal, x_x̄_rule))
@@ -533,7 +533,7 @@ function test_rrule_interface(f_f̄, x_x̄...; rrule)
     # Throw a meaningful exception if the rrule doesn't run at all.
     x_addresses = map(get_address, x)
     rrule_ret = try
-        rule(f_fwds, x_fwds...)
+        rrule(f_fwds, x_fwds...)
     catch e
         display(e)
         println()
