@@ -753,11 +753,7 @@ function test_rule(
     end
 
     # Generate random tangents for anything that is not already a CoDual.
-    x_ẋ = map(x -> if x isa Dual
-        x
-    else
-        zero_dual(x)
-    end, x)
+    x_ẋ = map(x -> x isa Dual ? x : zero_dual(x), x)
 
     x_x̄ = map(x -> if x isa CoDual
         x
