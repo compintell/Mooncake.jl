@@ -26,3 +26,12 @@ _primal(x::Dual) = primal(x)
 
 make_dual(x) = zero_dual(x)
 make_dual(x::Dual) = x
+
+"""
+    verify_dual_type(x::Dual)
+
+Check that the type of `tangent(x)` is the tangent type of the type of `primal(x)`.
+"""
+function verify_dual_type(x::Dual)
+    return tangent_type(typeof(primal(x))) == typeof(tangent(x))
+end
