@@ -104,7 +104,7 @@ function generate_dual_ir(
     return opt_dual_ir
 end
 
-## Modification
+## Modification of IR nodes
 
 function modify_fwd_ad_stmts!(
     dual_ir::CC.IncrementalCompact,
@@ -137,7 +137,9 @@ function modify_fwd_ad_stmts!(
     kwargs...,
 )
     # replace GotoIfNot with the call to primal
-    Mooncake.replace_call!(dual_ir, CC.SSAValue(i), Expr(:call, _primal, stmt.cond))
+    Mooncake.replace_call!(
+        dual_ir, CC.SSAValue(i), Expr(:call, _primal, inc_args(stmt).cond)
+    )
     # reinsert the GotoIfNot right after the call to primal
     # (incremental insertion cannot be done before "where we are")
     new_gotoifnot_inst = CC.NewInstruction(
@@ -153,31 +155,6 @@ function modify_fwd_ad_stmts!(
     return nothing
 end
 
-# TODO: wrapping in Dual must not be systematic (e.g. Argument or SSAValue)
-function _frule!!_makedual(f::F, args::Vararg{Any,N}) where {F,N}
-    return frule!!(tuple_map(make_dual, (f, args...))...)
-end
-
-struct DynamicFRule{V}
-    cache::V
-    debug_mode::Bool
-end
-
-DynamicFRule(debug_mode::Bool) = DynamicFRule(Dict{Any,Any}(), debug_mode)
-
-_copy(x::P) where {P<:DynamicFRule} = P(Dict{Any,Any}(), x.debug_mode)
-
-function (dynamic_rule::DynamicFRule)(args::Vararg{Any,N}) where {N}
-    args_dual = map(make_dual, args)  # TODO: don't turn everything into a Dual, be clever with Argument and SSAValue
-    sig = Tuple{map(_typeof ∘ primal, args_dual)...}
-    rule = get(dynamic_rule.cache, sig, nothing)
-    if rule === nothing
-        rule = build_frule(get_interpreter(), sig; debug_mode=dynamic_rule.debug_mode)
-        dynamic_rule.cache[sig] = rule
-    end
-    return rule(args_dual...)
-end
-
 function modify_fwd_ad_stmts!(
     dual_ir::CC.IncrementalCompact,
     primal_ir::IRCode,
@@ -186,11 +163,13 @@ function modify_fwd_ad_stmts!(
     i::Integer;
     kwargs...,
 )
-    # the return node becomes a Dual so it changes type
-    # flag to re-run type inference
-    dual_ir[SSAValue(i)][:stmt] = inc_args(stmt)
-    dual_ir[SSAValue(i)][:type] = Any
-    dual_ir[SSAValue(i)][:flag] = CC.IR_FLAG_REFINED
+    # make sure that we always return a Dual even when it's a constant
+    Mooncake.replace_call!(dual_ir, CC.SSAValue(i), Expr(:call, _dual, inc_args(stmt).val))
+    # return the result from the previous Dual conversion
+    new_return_inst = CC.NewInstruction(
+        Core.ReturnNode(CC.SSAValue(i)), Any, CC.NoCallInfo(), Int32(1), CC.IR_FLAG_REFINED
+    )
+    CC.insert_node_here!(dual_ir, new_return_inst, true)
     return nothing
 end
 
@@ -206,6 +185,33 @@ function modify_fwd_ad_stmts!(
     dual_ir[SSAValue(i)][:type] = Any
     dual_ir[SSAValue(i)][:flag] = CC.IR_FLAG_REFINED
     return nothing
+end
+
+## Modification of IR nodes - expressions
+
+# TODO: wrapping in Dual must not be systematic (e.g. Argument or SSAValue)
+function _frule!!_makedual(f::F, args::Vararg{Any,N}) where {F,N}
+    return frule!!(tuple_map(_dual, (f, args...))...)
+end
+
+struct DynamicFRule{V}
+    cache::V
+    debug_mode::Bool
+end
+
+DynamicFRule(debug_mode::Bool) = DynamicFRule(Dict{Any,Any}(), debug_mode)
+
+_copy(x::P) where {P<:DynamicFRule} = P(Dict{Any,Any}(), x.debug_mode)
+
+function (dynamic_rule::DynamicFRule)(args::Vararg{Any,N}) where {N}
+    args_dual = map(_dual, args)  # TODO: don't turn everything into a Dual, be clever with Argument and SSAValue
+    sig = Tuple{map(_typeof ∘ primal, args_dual)...}
+    rule = get(dynamic_rule.cache, sig, nothing)
+    if rule === nothing
+        rule = build_frule(get_interpreter(), sig; debug_mode=dynamic_rule.debug_mode)
+        dynamic_rule.cache[sig] = rule
+    end
+    return rule(args_dual...)
 end
 
 function modify_fwd_ad_stmts!(

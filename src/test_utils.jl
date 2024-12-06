@@ -395,7 +395,8 @@ function test_frule_correctness(rng::AbstractRNG, x_ẋ...; frule, unsafe_pertur
     # Any linear projection of the outputs ought to do.
     x̄ = map(Base.Fix1(randn_tangent, rng), x′)
     ȳ = randn_tangent(rng, y′)
-    @test _dot(ȳ, ẏ_fd) + _dot(x̄, ẋ_fd) ≈ _dot(ȳ, ẏ_ad) + _dot(x̄, ẋ_ad) rtol=1e-3 atol=1e-3
+    @test _dot(ȳ, ẏ_fd) + _dot(x̄, ẋ_fd) ≈ _dot(ȳ, ẏ_ad) + _dot(x̄, ẋ_ad) rtol = 1e-3 atol =
+        1e-3
 end
 
 # Assumes that the interface has been tested, and we can simply check for numerical issues.
@@ -771,35 +772,51 @@ function test_rule(
         zero_codual(x)
     end, x)
 
-    # Test that the interface is basically satisfied (checks types / memory addresses).
-    if forward
-        test_frule_interface(x_ẋ...; frule)
-    else
-        test_rrule_interface(x_x̄...; rrule)
+    testset = @testset "$(typeof(x))" begin
+        # Test that the interface is basically satisfied (checks types / memory addresses).
+        @testset "Interface (1)" begin
+            if forward
+                test_frule_interface(x_ẋ...; frule)
+            else
+                test_rrule_interface(x_x̄...; rrule)
+            end
+        end
+
+        # Test that answers are numerically correct / consistent.
+        @testset "Correctness" begin
+            if forward
+                interface_only ||
+                    test_frule_correctness(rng, x_ẋ...; frule, unsafe_perturb)
+            else
+                interface_only ||
+                    test_rrule_correctness(rng, x_x̄...; rrule, unsafe_perturb)
+            end
+        end
+
+        # Test the performance of the rule.
+        @testset "Performance" begin
+            if forward
+                test_frule_performance(perf_flag, frule, x_ẋ...)
+            else
+                test_rrule_performance(perf_flag, rrule, x_x̄...)
+            end
+        end
+
+        # Test the interface again, in order to verify that caching is working correctly.
+        @testset "Interface (2)" begin
+            if forward
+                test_frule_interface(
+                    x_ẋ...; frule=Mooncake.build_frule(interp, sig; debug_mode)
+                )
+            else
+                test_rrule_interface(
+                    x_x̄...; rrule=Mooncake.build_rrule(interp, sig; debug_mode)
+                )
+            end
+        end
     end
 
-    # Test that answers are numerically correct / consistent.
-    if forward
-        interface_only || test_frule_correctness(rng, x_ẋ...; frule, unsafe_perturb)
-    else
-        interface_only || test_rrule_correctness(rng, x_x̄...; rrule, unsafe_perturb)
-    end
-
-    # Test the performance of the rule.
-    if forward
-        test_frule_performance(perf_flag, frule, x_ẋ...)
-    else
-        test_rrule_performance(perf_flag, rrule, x_x̄...)
-    end
-
-    # Test the interface again, in order to verify that caching is working correctly.
-    if forward
-        test_frule_interface(x_ẋ...; frule=Mooncake.build_frule(interp, sig; debug_mode))
-    else
-        test_rrule_interface(x_x̄...; rrule=Mooncake.build_rrule(interp, sig; debug_mode))
-    end
-
-    return nothing
+    return testset
 end
 
 function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)

@@ -25,8 +25,8 @@ end
 _primal(x) = x
 _primal(x::Dual) = primal(x)
 
-make_dual(x) = zero_dual(x)
-make_dual(x::Dual) = x
+_dual(x) = zero_dual(x)
+_dual(x::Dual) = x
 
 """
     verify_dual_type(x::Dual)
