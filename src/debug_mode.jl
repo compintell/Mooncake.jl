@@ -92,7 +92,7 @@ for `DebugRRule` for details.
     return y::CoDual, DebugPullback(pb, primal(y), map(primal, x))
 end
 
-# DerivedRRule adds a method to this function.
+# DerivedRule adds a method to this function.
 verify_args(_, x) = nothing
 
 @noinline function verify_fwds_inputs(rule, @nospecialize(x::Tuple))

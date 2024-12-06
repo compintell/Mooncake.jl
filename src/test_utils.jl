@@ -919,7 +919,7 @@ function test_set_tangent_field!_correctness(t1::T, t2::T) where {T<:MutableTang
     end
 end
 
-function check_allocs(::Any, f::F, x::Tuple{Vararg{Any,N}}) where {F,N}
+function check_allocs(::Any, f::F, x::Vararg{Any,N}) where {F,N}
     throw(error("Load AllocCheck.jl to use this functionality."))
 end
 
@@ -970,10 +970,10 @@ function test_tangent_performance(rng::AbstractRNG, p::P) where {P}
 end
 
 function test_allocations(t::T, z::T) where {T}
-    check_allocs(Shim(), increment!!, (t, t))
-    check_allocs(Shim(), increment!!, (t, z))
-    check_allocs(Shim(), increment!!, (z, t))
-    return check_allocs(Shim(), increment!!, (z, z))
+    check_allocs(Shim(), increment!!, t, t)
+    check_allocs(Shim(), increment!!, t, z)
+    check_allocs(Shim(), increment!!, z, t)
+    return check_allocs(Shim(), increment!!, z, z)
 end
 
 _set_tangent_field!(x, ::Val{i}, v) where {i} = set_tangent_field!(x, i, v)

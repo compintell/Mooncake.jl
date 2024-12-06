@@ -584,10 +584,22 @@ function typevar_tester()
 end
 
 tuple_with_union(x::Bool) = (x ? 5.0 : 5, nothing)
+tuple_with_union_2(x::Bool) = (x ? 5.0 : 5, x ? 5 : 5.0)
+tuple_with_union_3(x::Bool, y::Bool) = (x ? 5.0 : (y ? 5 : nothing), nothing)
 
 struct NoDefaultCtor{T}
     x::T
     NoDefaultCtor(x::T) where {T} = new{T}(x)
+end
+
+@noinline function __inplace_function!(x::Vector{Float64})
+    x .*= 2
+    return nothing
+end
+
+function inplace_invoke!(x::Vector{Float64})
+    __inplace_function!(x)
+    return nothing
 end
 
 function generate_test_functions()
@@ -814,6 +826,7 @@ function generate_test_functions()
         (false, :none, nothing, hvcat, (2, 2), 3.0, 2.0, 0.0, 1.0),
         (false, :none, nothing, partial_typevar_tester),
         (false, :none, nothing, typevar_tester),
+        (false, :allocs, nothing, inplace_invoke!, randn(1_024)),
     ]
 end
 

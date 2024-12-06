@@ -1,5 +1,5 @@
 """
-    __value_and_pullback!!(rule, ȳ, f::CoDual, x::CoDual...)
+    __value_and_pullback!!(rule, ȳ, f::CoDual, x::CoDual...; y_cache=nothing)
 
 *Note:* this is not part of the public Mooncake.jl interface, and may change without warning.
 
@@ -8,13 +8,15 @@ In-place version of `value_and_pullback!!` in which the arguments have been wrap
 if calling this function multiple times with different values of `x`, should be careful to
 ensure that you zero-out the tangent fields of `x` each time.
 """
-function __value_and_pullback!!(rule::R, ȳ::T, fx::Vararg{CoDual,N}) where {R,N,T}
+function __value_and_pullback!!(
+    rule::R, ȳ::T, fx::Vararg{CoDual,N}; y_cache=nothing
+) where {R,N,T}
     fx_fwds = tuple_map(to_fwds, fx)
     __verify_sig(rule, fx_fwds)
     out, pb!! = rule(fx_fwds...)
     @assert _typeof(tangent(out)) == fdata_type(T)
     increment!!(tangent(out), fdata(ȳ))
-    v = copy(primal(out))
+    v = y_cache === nothing ? copy(primal(out)) : _copy!!(y_cache, primal(out))
     return v, tuple_map((f, r) -> tangent(fdata(tangent(f)), r), fx, pb!!(rdata(ȳ)))
 end
 
@@ -36,6 +38,15 @@ __verify_sig(::typeof(rrule!!), fx::Tuple) = nothing
 
 struct ValueAndGradientReturnTypeError <: Exception
     msg::String
+end
+
+function throw_val_and_grad_ret_type_error(y)
+    throw(
+        ValueAndGradientReturnTypeError(
+            "When calling __value_and_gradient!!, return value of primal must be a " *
+            "subtype of IEEEFloat. Instead, found value of type $(typeof(y)).",
+        ),
+    )
 end
 
 """
@@ -72,17 +83,7 @@ function __value_and_gradient!!(rule::R, fx::Vararg{CoDual,N}) where {R,N}
     __verify_sig(rule, fx_fwds)
     out, pb!! = rule(fx_fwds...)
     y = primal(out)
-    if !(y isa IEEEFloat)
-        throw(
-            ValueAndGradientReturnTypeError(
-                "When calling __value_and_gradient!!, return value of primal must be a " *
-                "subtype of IEEEFloat. Instead, found value of type $(typeof(y)).",
-            ),
-        )
-    end
-    @assert y isa IEEEFloat
-    @assert tangent(out) isa NoFData
-
+    y isa IEEEFloat || throw_val_and_grad_ret_type_error(y)
     return y, tuple_map((f, r) -> tangent(fdata(tangent(f)), r), fx, pb!!(one(y)))
 end
 
@@ -126,8 +127,8 @@ Equivalent to `value_and_pullback!!(rule, 1.0, f, x...)`, and assumes `f` return
 `Float64`.
 
 *Note:* There are lots of subtle ways to mis-use `value_and_pullback!!`, so we generally
-recommend using [`value_and_gradient!!`](@ref) (this function) where possible. The docstring for
-`value_and_pullback!!` is useful for understanding this function though.
+recommend using `Mooncake.value_and_gradient!!` (this function) where possible. The
+docstring for `value_and_pullback!!` is useful for understanding this function though.
 
 An example:
 ```jldoctest
@@ -162,4 +163,97 @@ function __create_coduals(args)
             rethrow(e)
         end
     end
+end
+
+struct Cache{Trule,Ty_cache,Ttangents<:Tuple}
+    rule::Trule
+    y_cache::Ty_cache
+    tangents::Ttangents
+end
+
+_copy!!(dst, src) = copy!(dst, src)
+_copy!!(::Number, src::Number) = src
+
+"""
+    prepare_pullback_cache(f, x...)
+
+WARNING: experimental functionality. Interface subject to change without warning!
+
+Returns a `cache` which can be passed to `value_and_gradient!!`. See the docstring for
+`Mooncake.value_and_gradient!!` for more info.
+"""
+function prepare_pullback_cache(fx...; kwargs...)
+
+    # Take a copy before mutating.
+    fx = deepcopy(fx)
+
+    # Construct rule and tangents.
+    rule = build_rrule(get_interpreter(), Tuple{map(_typeof, fx)...}; kwargs...)
+    tangents = map(zero_tangent, fx)
+
+    # Run the rule forwards -- this should do a decent chunk of pre-allocation.
+    y, _ = rule(map((x, dx) -> CoDual(x, fdata(dx)), fx, tangents)...)
+
+    # Construct cache for output. Check that `copy!`ing appears to work.
+    y_cache = copy(primal(y))
+    return Cache(rule, _copy!!(y_cache, primal(y)), tangents)
+end
+
+"""
+    value_and_pullback!!(cache::Cache, ȳ, f, x...)
+
+WARNING: experimental functionality. Interface subject to change without warning!
+
+Like other methods of `value_and_pullback!!`, but makes use of the `cache` object in order
+to avoid having to re-allocate various tangent objects repeatedly.
+
+You must ensure that `f` and `x` are the same types and sizes as those used to construct
+`cache`.
+
+Warning: any mutable components of values returned by `value_and_gradient!!` will be mutated
+if you run this function again with different arguments. Therefore, if you need to keep the
+values returned by this function around over multiple calls to this function with the same
+`cache`, you should take a copy of them before calling again.
+"""
+function value_and_pullback!!(cache::Cache, ȳ, f::F, x::Vararg{Any,N}) where {F,N}
+    tangents = tuple_map(set_to_zero!!, cache.tangents)
+    coduals = tuple_map(CoDual, (f, x...), tangents)
+    return __value_and_pullback!!(cache.rule, ȳ, coduals...; y_cache=cache.y_cache)
+end
+
+"""
+    prepare_gradient_cache(f, x...)
+
+WARNING: experimental functionality. Interface subject to change without warning!
+
+Returns a `cache` which can be passed to `value_and_gradient!!`. See the docstring for
+`Mooncake.value_and_gradient!!` for more info.
+"""
+function prepare_gradient_cache(fx...; kwargs...)
+    rule = build_rrule(fx...; kwargs...)
+    tangents = map(zero_tangent, fx)
+    y, _ = rule(map((x, dx) -> CoDual(x, fdata(dx)), fx, tangents)...)
+    primal(y) isa IEEEFloat || throw_val_and_grad_ret_type_error(primal(y))
+    return Cache(rule, nothing, tangents)
+end
+
+"""
+    value_and_gradient!!(cache::Cache, fx::Vararg{Any, N}) where {N}
+
+WARNING: experimental functionality. Interface subject to change without warning!
+
+Like other methods of `value_and_gradient!!`, but makes use of the `cache` object in order
+to avoid having to re-allocate various tangent objects repeatedly.
+
+You must ensure that `f` and `x` are the same types and sizes as those used to construct
+`cache`.
+
+Warning: any mutable components of values returned by `value_and_gradient!!` will be mutated
+if you run this function again with different arguments. Therefore, if you need to keep the
+values returned by this function around over multiple calls to this function with the same
+`cache`, you should take a copy of them before calling again.
+"""
+function value_and_gradient!!(cache::Cache, f::F, x::Vararg{Any,N}) where {F,N}
+    coduals = tuple_map(CoDual, (f, x...), tuple_map(set_to_zero!!, cache.tangents))
+    return __value_and_gradient!!(cache.rule, coduals...)
 end

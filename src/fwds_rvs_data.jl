@@ -784,7 +784,7 @@ tangent_type(::Type{NoFData}, ::Type{R}) where {R<:IEEEFloat} = R
 tangent_type(::Type{F}, ::Type{NoRData}) where {F<:Array} = F
 
 # Tuples
-function tangent_type(::Type{F}, ::Type{R}) where {F<:Tuple,R<:Tuple}
+@generated function tangent_type(::Type{F}, ::Type{R}) where {F<:Tuple,R<:Tuple}
     return Tuple{tuple_map(tangent_type, Tuple(F.parameters), Tuple(R.parameters))...}
 end
 function tangent_type(::Type{NoFData}, ::Type{R}) where {R<:Tuple}

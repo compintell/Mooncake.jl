@@ -31,21 +31,62 @@ Equivalent to `CoDual(x, uninit_tangent(x))`.
 """
 uninit_codual(x) = CoDual(x, uninit_tangent(x))
 
+function _codual_internal(::Type{P}, f::F, extractor::E) where {P,F,E}
+    P == Union{} && return CoDual
+    P == DataType && return CoDual
+    P isa Union && return Union{f(P.a),f(P.b)}
+
+    if P <: Tuple && !all(isconcretetype, (P.parameters...,))
+        field_types = (P.parameters...,)
+        union_fields = _findall(Base.Fix2(isa, Union), 1, field_types)
+        if length(union_fields) == 1 &&
+            all(p -> p isa Union || isconcretetype(p), field_types)
+            P_split = split_union_tuple_type(field_types)
+            return Union{f(P_split.a),f(P_split.b)}
+        end
+    end
+
+    P <: UnionAll && return CoDual # P is abstract, so we don't know its tangent type.
+    return isconcretetype(P) ? CoDual{P,extractor(P)} : CoDual
+end
+
 """
     codual_type(P::Type)
 
 The type of the `CoDual` which contains instances of `P` and associated tangents.
 """
-function codual_type(::Type{P}) where {P}
-    P == DataType && return CoDual
-    P isa Union && return Union{codual_type(P.a),codual_type(P.b)}
-    P <: UnionAll && return CoDual # P is abstract, so we don't know its tangent type.
-    return isconcretetype(P) ? CoDual{P,tangent_type(P)} : CoDual
-end
+codual_type(::Type{P}) where {P} = _codual_internal(P, codual_type, tangent_type)
 
 function codual_type(p::Type{Type{P}}) where {P}
     return @isdefined(P) ? CoDual{Type{P},NoTangent} : CoDual{_typeof(p),NoTangent}
 end
+
+"""
+    fcodual_type(P::Type)
+
+The type of the `CoDual` which contains instances of `P` and its fdata.
+"""
+function fcodual_type(::Type{P}) where {P}
+    return _codual_internal(P, fcodual_type, P -> fdata_type(tangent_type(P)))
+end
+
+function fcodual_type(p::Type{Type{P}}) where {P}
+    return @isdefined(P) ? CoDual{Type{P},NoFData} : CoDual{_typeof(p),NoFData}
+end
+
+to_fwds(x::CoDual) = CoDual(primal(x), fdata(tangent(x)))
+
+to_fwds(x::CoDual{Type{P}}) where {P} = CoDual{Type{P},NoFData}(primal(x), NoFData())
+
+zero_fcodual(p) = to_fwds(zero_codual(p))
+
+"""
+    uninit_fcodual(x)
+
+Like `zero_fcodual`, but doesn't guarantee that the value of the fdata is initialised.
+See implementation for details, as this function is subject to change.
+"""
+@inline uninit_fcodual(x::P) where {P} = CoDual(x, uninit_fdata(x))
 
 struct NoPullback{R<:Tuple}
     r::R
@@ -71,33 +112,3 @@ function NoPullback(args::Vararg{CoDual,N}) where {N}
 end
 
 @inline (pb::NoPullback)(_) = tuple_map(instantiate, pb.r)
-
-to_fwds(x::CoDual) = CoDual(primal(x), fdata(tangent(x)))
-
-to_fwds(x::CoDual{Type{P}}) where {P} = CoDual{Type{P},NoFData}(primal(x), NoFData())
-
-zero_fcodual(p) = to_fwds(zero_codual(p))
-
-"""
-    uninit_fcodual(x)
-
-Like `zero_fcodual`, but doesn't guarantee that the value of the fdata is initialised.
-See implementation for details, as this function is subject to change.
-"""
-@inline uninit_fcodual(x::P) where {P} = CoDual(x, uninit_fdata(x))
-
-"""
-    fcodual_type(P::Type)
-
-The type of the `CoDual` which contains instances of `P` and its fdata.
-"""
-function fcodual_type(::Type{P}) where {P}
-    P == DataType && return CoDual
-    P isa Union && return Union{fcodual_type(P.a),fcodual_type(P.b)}
-    P <: UnionAll && return CoDual
-    return isconcretetype(P) ? CoDual{P,fdata_type(tangent_type(P))} : CoDual
-end
-
-function fcodual_type(p::Type{Type{P}}) where {P}
-    return @isdefined(P) ? CoDual{Type{P},NoFData} : CoDual{_typeof(p),NoFData}
-end

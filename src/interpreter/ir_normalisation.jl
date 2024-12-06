@@ -23,7 +23,7 @@ provides a convenient way to do this.
 function normalise!(ir::IRCode, spnames::Vector{Symbol})
     sp_map = Dict{Symbol,CC.VarState}(zip(spnames, ir.sptypes))
     ir = interpolate_boundschecks!(ir)
-    ir = CC.compact!(ir)
+    ir = fix_up_invoke_inference!(ir)
     for (n, inst) in enumerate(stmt(ir.stmts))
         inst = foreigncall_to_call(inst, sp_map)
         inst = new_to_call(inst)
@@ -67,6 +67,61 @@ function _interpolate_boundschecks!(statements::Vector{Any})
 end
 
 """
+    fix_up_invoke_inference!(ir::IRCode)
+
+# The Problem
+
+Consider the following:
+```julia
+@noinline function bar!(x)
+    x .*= 2
+end
+
+function foo!(x)
+    bar!(x)
+    return nothing
+end
+```
+In this case, the IR associated to `Tuple{typeof(foo), Vector{Float64}}` will be something
+along the lines of
+```julia
+julia> Base.code_ircode_by_type(Tuple{typeof(foo), Vector{Float64}})
+1-element Vector{Any}:
+2 1 ─     invoke Main.bar!(_2::Vector{Float64})::Any
+3 └──     return Main.nothing
+   => Nothing
+```
+Observe that the type inferred for the first line is `Any`. Inference is at liberty to do
+this without any risk of performance problems because the first line is not used anywhere
+else in the function. Had this line been used elsewhere in the function, inference would
+have inferred its type to be `Vector{Float64}`.
+
+This causes performance problems for Mooncake, because it uses the return type to do
+various things, including allocating storage for quantities required on the reverse-pass.
+Consequently, inference infering `Any` rather than `Vector{Float64}` causes type
+instabilities in the code that Mooncake generates, which can have catastrophic conseqeuences
+for performance.
+
+# The Solution
+
+`:invoke` expressions contain the `Core.MethodInstance` associated to them, which contains
+a `Core.CodeCache`, which contains the return type of the `:invoke`. This function looks
+for `:invoke` statements whose return type is inferred to be `Any` in `ir`, and modifies it
+to be the return type given by the code cache.
+"""
+function fix_up_invoke_inference!(ir::IRCode)::IRCode
+    stmts = ir.stmts
+    for n in 1:length(stmts)
+        if Meta.isexpr(stmt(stmts)[n], :invoke) && _type(stmts.type[n]) == Any
+            mi = stmt(stmts)[n].args[1]::Core.MethodInstance
+            R = isdefined(mi, :cache) ? mi.cache.rettype : CC.return_type(mi.specTypes)
+            stmts.type[n] = R
+        end
+    end
+    return ir
+end
+
+"""
     foreigncall_to_call(inst, sp_map::Dict{Symbol, CC.VarState})
 
 If `inst` is a `:foreigncall` expression translate it into an equivalent `:call` expression.
@@ -76,6 +131,9 @@ If anything else, just return `inst`. See `Mooncake._foreigncall_` for details.
 to be called in the context of an `IRCode`, in which case the values of `sp_map` are given
 by the `sptypes` field of said `IRCode`. The keys should generally be obtained from the
 `Method` from which the `IRCode` is derived. See `Mooncake.normalise!` for more details.
+
+The purpose of this transformation is to make it possible to differentiate `:foreigncall`
+expressions in the same way as a primitive `:call` expression, i.e. via an `rrule!!`.
 """
 function foreigncall_to_call(inst, sp_map::Dict{Symbol,CC.VarState})
     if Meta.isexpr(inst, :foreigncall)
@@ -147,6 +205,9 @@ end
 
 If instruction `x` is a `:new` expression, replace it with a `:call` to `Mooncake._new_`.
 Otherwise, return `x`.
+
+The purpose of this transformation is to make it possible to differentiate `:new`
+expressions in the same way as a primitive `:call` expression, i.e. via an `rrule!!`.
 """
 new_to_call(x) = Meta.isexpr(x, :new) ? Expr(:call, _new_, x.args...) : x
 
@@ -155,6 +216,9 @@ new_to_call(x) = Meta.isexpr(x, :new) ? Expr(:call, _new_, x.args...) : x
 
 If instruction `x` is a `:splatnew` expression, replace it with a `:call` to
 `Mooncake._splat_new_`. Otherwise return `x`.
+
+The purpose of this transformation is to make it possible to differentiate `:splatnew`
+expressions in the same way as a primitive `:call` expression, i.e. via an `rrule!!`.
 """
 splatnew_to_call(x) = Meta.isexpr(x, :splatnew) ? Expr(:call, _splat_new_, x.args...) : x
 
@@ -166,6 +230,10 @@ the corresponding `function` from `Mooncake.IntrinsicsWrappers`, else return `in
 
 `cglobal` is a special case -- it requires that its first argument be static in exactly the
 same way as `:foreigncall`. See `IntrinsicsWrappers.__cglobal` for more info.
+
+The purpose of this transformation is to make it possible to use dispatch to write rules for
+intrinsic calls using dispatch in a type-stable way. See [`IntrinsicsWrappers`](@ref) for
+more context.
 """
 function intrinsic_to_function(inst)
     return Meta.isexpr(inst, :call) ? Expr(:call, lift_intrinsic(inst.args...)...) : inst
