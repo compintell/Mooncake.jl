@@ -36,7 +36,8 @@ end
 
 @is_primitive MinimalCtx Tuple{typeof(sin),<:IEEEFloat}
 function frule!!(::Dual{typeof(sin)}, x::Dual{<:IEEEFloat})
-    return Dual(sin(primal(x)), cos(primal(x)) * tangent(x))
+    s, c = sincos(primal(x))
+    return Dual(s, c * tangent(x))
 end
 function rrule!!(::CoDual{typeof(sin),NoFData}, x::CoDual{P,NoFData}) where {P<:IEEEFloat}
     s, c = sincos(primal(x))
@@ -46,7 +47,8 @@ end
 
 @is_primitive MinimalCtx Tuple{typeof(cos),<:IEEEFloat}
 function frule!!(::Dual{typeof(cos)}, x::Dual{<:IEEEFloat})
-    return Dual(cos(primal(x)), -sin(primal(x)) * tangent(x))
+    s, c = sincos(primal(x))
+    return Dual(c, -s * tangent(x))
 end
 function rrule!!(::CoDual{typeof(cos),NoFData}, x::CoDual{P,NoFData}) where {P<:IEEEFloat}
     s, c = sincos(primal(x))
