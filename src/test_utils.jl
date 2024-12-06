@@ -114,6 +114,7 @@ using Mooncake:
     instantiate,
     can_produce_zero_rdata_from_type,
     increment_rdata!!,
+    dual_type,
     fcodual_type,
     verify_fdata_type,
     verify_rdata_type,
@@ -350,35 +351,32 @@ function address_maps_are_consistent(x::AddressMap, y::AddressMap)
 end
 
 # Assumes that the interface has been tested, and we can simply check for numerical issues.
-function test_frule_correctness(rng::AbstractRNG, x_ẋ...; rule, unsafe_perturb::Bool)
-    # TODO: Will can fix it
-    #=
+function test_frule_correctness(rng::AbstractRNG, x_ẋ...; frule, unsafe_perturb::Bool)
     @nospecialize rng x_ẋ
 
     x_ẋ = map(_deepcopy, x_ẋ) # defensive copy
 
     # Run original function on deep-copies of inputs.
     x = map(primal, x_ẋ)
-    # ẋ = map(tangent, x_ẋ)
+    ẋ = map(tangent, x_ẋ)
     x_primal = _deepcopy(x)
     y_primal = x_primal[1](x_primal[2:end]...)
 
-    # Use finite differences to estimate Frechet derivative.
-    ẋ = map(_x -> randn_tangent(rng, _x), x)
+    # Use finite differences to estimate Frechet derivative at ẋ.
     ε = 1e-7
     x′ = _add_to_primal(x, _scale(ε, ẋ), unsafe_perturb)
     y′ = x′[1](x′[2:end]...)
-    ẏ = _scale(1 / ε, _diff(y′, y_primal))
-    ẋ_post = map((_x′, _x_p) -> _scale(1 / ε, _diff(_x′, _x_p)), x′, x_primal)
+    ẏ_fd = _scale(1 / ε, _diff(y′, y_primal))
+    ẋ_fd = map((_x′, _x_p) -> _scale(1 / ε, _diff(_x′, _x_p)), x′, x_primal)
 
-    # Run rule on copies of `f` and `x`. We use randomly generated tangents so that we
-    # can later verify that non-zero values do not get propagated by the rule.
-    ẋ_zero = map(zero_tangent, x)
-    x_ẋ_rule = map((x, ẋ) -> dual_type(_typeof(x))(_deepcopy(x), ẋ), x, ẋ_zero)
+    # Use AD to compute Frechet derivative at ẋ.
+    x_ẋ_rule = map((x, ẋ) -> dual_type(_typeof(x))(_deepcopy(x), ẋ), x, ẋ)
     inputs_address_map = populate_address_map(
         map(primal, x_ẋ_rule), map(tangent, x_ẋ_rule)
     )
-    y_ẏ_rule = rule(x_ẋ_rule...)
+    y_ẏ_rule = frule(x_ẋ_rule...)
+    ẋ_ad = map(tangent, x_ẋ_rule)
+    ẏ_ad = tangent(y_ẏ_rule)
 
     # Verify that inputs / outputs are the same under `f` and its rrule.
     @test has_equal_data(x_primal, map(primal, x_ẋ_rule))
@@ -386,30 +384,17 @@ function test_frule_correctness(rng::AbstractRNG, x_ẋ...; rule, unsafe_perturb
 
     # Query both `x_ẋ` and `y`, because `x_ẋ` may have been mutated by `f`.
     outputs_address_map = populate_address_map(
-        (map(primal, x_x̄_rule)..., primal(y_ȳ_rule)),
-        (map(tangent, x_x̄_rule)..., tangent(y_ȳ_rule)),
+        (map(primal, x_ẋ_rule)..., primal(y_ẏ_rule)),
+        (map(tangent, x_ẋ_rule)..., tangent(y_ẏ_rule)),
     )
+
+    # Check that all aliasing structure is correct.
     @test address_maps_are_consistent(inputs_address_map, outputs_address_map)
 
-    # Run reverse-pass.
-    ȳ_delta = randn_tangent(rng, primal(y_ȳ_rule))
-    x̄_delta = map(Base.Fix1(randn_tangent, rng) ∘ primal, x_x̄_rule)
-
-    ȳ_init = set_to_zero!!(zero_tangent(primal(y_ȳ_rule), tangent(y_ȳ_rule)))
-    x̄_init = map(set_to_zero!!, x̄_zero)
-    ȳ = increment!!(ȳ_init, ȳ_delta)
-    map(increment!!, x̄_init, x̄_delta)
-    x̄_rvs_inc = pb!!(Mooncake.rdata(ȳ))
-    x̄_rvs = increment!!(map(rdata, x̄_delta), x̄_rvs_inc)
-    x̄ = map(tangent, x̄_fwds, x̄_rvs)
-
-    # Check that inputs have been returned to their original value.
-    @test all(map(has_equal_data_up_to_undefs, x, map(primal, x_x̄_rule)))
-
-    # pullbacks increment, so have to compare to the incremented quantity.
-    @test _dot(ȳ_delta, ẏ) + _dot(x̄_delta, ẋ_post) ≈ _dot(x̄, ẋ) rtol = 1e-3 atol =
-        1e-3
-    =#
+    # Any linear projection of the outputs ought to do.
+    x̄ = map(Base.Fix1(randn_tangent, rng), x′)
+    ȳ = randn_tangent(rng, y′)
+    @test _dot(ȳ, ẏ_fd) + _dot(x̄, ẋ_fd) ≈ _dot(ȳ, ẏ_ad) + _dot(x̄, ẋ_ad) rtol=1e-3 atol=1e-3
 end
 
 # Assumes that the interface has been tested, and we can simply check for numerical issues.
