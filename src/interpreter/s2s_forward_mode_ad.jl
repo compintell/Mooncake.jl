@@ -186,6 +186,7 @@ function modify_fwd_ad_stmts!(
 )
     # the return node becomes a Dual so it changes type
     # flag to re-run type inference
+    dual_ir[SSAValue(i)][:stmt] = inc_args(stmt)
     dual_ir[SSAValue(i)][:type] = Any
     dual_ir[SSAValue(i)][:flag] = CC.IR_FLAG_REFINED
     return nothing
