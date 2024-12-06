@@ -58,6 +58,16 @@ This approach is identical to the one taken by `Zygote.jl` to circumvent the sam
 lgetfield(x, ::Val{f}) where {f} = getfield(x, f)
 
 @is_primitive MinimalCtx Tuple{typeof(lgetfield),Any,Val}
+@inline function frule!!(::Dual{typeof(lgetfield)}, x::Dual, ::Dual{Val{f}}) where {f}
+    P = typeof(primal(x))
+    primal_field = getfield(primal(x), f)
+    tangent_field = if tangent_type(P) === NoTangent
+        NoTangent()
+    else
+        getfield(tangent(x).fields, f)
+    end
+    return Dual(primal_field, tangent_field)
+end
 @inline function rrule!!(
     ::CoDual{typeof(lgetfield)}, x::CoDual{P,F}, ::CoDual{Val{f}}
 ) where {P,F<:StandardFDataType,f}

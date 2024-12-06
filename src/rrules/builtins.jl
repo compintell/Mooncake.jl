@@ -89,6 +89,7 @@ using Core: Intrinsics
 using Mooncake
 import ..Mooncake:
     rrule!!,
+    frule!!,
     CoDual,
     Dual,
     primal,
@@ -146,8 +147,10 @@ macro inactive_intrinsic(name)
         function rrule!!(f::CoDual{typeof($name)}, args::Vararg{Any,N}) where {N}
             return Mooncake.zero_adjoint(f, args...)
         end
-        function frule!!(f::Dual{typeof($name)}, args::Vararg{Any,N}) where {N}
-            return Mooncake.zero_dual(f(args...))
+        function frule!!(f::Dual{typeof($name)}, args::Vararg{Dual,N}) where {N}
+            f_primal = primal(f)
+            args_primal = map(primal, args)
+            return zero_dual(f_primal(args_primal...))
         end
     end
     return esc(expr)

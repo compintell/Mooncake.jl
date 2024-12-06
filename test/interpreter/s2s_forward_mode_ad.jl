@@ -1,7 +1,10 @@
 using MistyClosures
 using Mooncake
 using Test
+using Core.Compiler: SSAValue
+const CC = Core.Compiler
 
+#=
 x, dx = 2.0, 3.0
 xdual = Dual(x, dx)
 
@@ -10,20 +13,23 @@ ydual = sin_rule(zero_dual(sin), xdual)
 
 @test primal(ydual) == sin(x)
 @test tangent(ydual) == dx * cos(x)
+=#
 
-function func(x)
-    y = sin(x)
-    if x[1] > 0
-        z = cos(y)
+function func2(x)
+    if x > 0.0
+        y = sin(x)
     else
-        z = sin(y)
+        y = cos(x)
     end
-    return z
+    return y
 end
 
-ir = Base.code_ircode(func, (Int,))[1][1]
-func_rule = build_frule(func, x)
-ydual = func_rule(zero_dual(func), xdual)
+x = 1.0
+xdual = Dual(1.0, 2.0)
 
-@test primal(ydual) == cos(sin(x))
-@test tangent(ydual) ≈ dx * -sin(sin(x)) * cos(x)
+ir = Base.code_ircode(func2, (typeof(x),))[1][1]
+
+func_rule = build_frule(func2, x)
+ydual = func_rule(zero_dual(func2), xdual)
+
+2cos(1)

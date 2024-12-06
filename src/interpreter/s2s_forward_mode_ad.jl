@@ -32,17 +32,17 @@ function build_frule(
         # If we've already derived the OpaqueClosures and info, do not re-derive, just
         # create a copy and pass in new shared data.
         oc_cache_key = ClosureCacheKey(interp.world, (sig_or_mi, debug_mode))
-        if haskey(interp.oc_cache, oc_cache_key)
-            return interp.oc_cache[oc_cache_key]
-        else
-            # Derive forward-pass IR, and shove in a `MistyClosure`.
-            dual_ir = generate_dual_ir(interp, sig_or_mi; debug_mode)
-            dual_oc = MistyClosure(dual_ir; do_compile=true)
-            raw_rule = DerivedFRule(dual_oc)
-            rule = debug_mode ? DebugFRule(raw_rule) : raw_rule
-            interp.oc_cache[oc_cache_key] = rule
-            return rule
-        end
+        # if haskey(interp.oc_cache, oc_cache_key)
+        #     return interp.oc_cache[oc_cache_key]
+        # else
+        # Derive forward-pass IR, and shove in a `MistyClosure`.
+        dual_ir = generate_dual_ir(interp, sig_or_mi; debug_mode)
+        dual_oc = MistyClosure(dual_ir; do_compile=true)
+        raw_rule = DerivedFRule(dual_oc)
+        rule = debug_mode ? DebugFRule(raw_rule) : raw_rule
+        interp.oc_cache[oc_cache_key] = rule
+        return rule
+        # end
     catch e
         rethrow(e)
     finally
@@ -72,13 +72,6 @@ function generate_dual_ir(
     _, spnames = is_vararg_and_sparam_names(sig_or_mi)
     primal_ir = normalise!(primal_ir, spnames)
 
-    # Insert statements into primal IR
-    for i in 1:length(primal_ir.stmts)
-        stmt = primal_ir[SSAValue(i)][:stmt]
-        insert_fwd_ad_stmts!(primal_ir, interp, stmt, i; debug_mode)
-    end
-    primal_ir = CC.compact!(primal_ir)
-
     # Keep a copy of the primal IR with the insertions
     dual_ir = copy(primal_ir)
 
@@ -94,39 +87,27 @@ function generate_dual_ir(
     end
     pushfirst!(dual_ir.argtypes, Any)
 
-    # Modify dual IR without insertions
-    for i in 1:length(dual_ir.stmts)
-        stmt = dual_ir[SSAValue(i)][:stmt]
-        modify_fwd_ad_stmts!(dual_ir, primal_ir, interp, stmt, i; debug_mode)
+    # Modify dual IR incrementally
+    dual_ir_comp = CC.IncrementalCompact(dual_ir)
+    for ((_, i), inst) in dual_ir_comp
+        modify_fwd_ad_stmts!(dual_ir_comp, primal_ir, interp, inst, i; debug_mode)
     end
-    dual_ir = CC.compact!(dual_ir)  # skippable but good practice
+    dual_ir_comp = CC.finish(dual_ir_comp)
+    dual_ir_comp = CC.compact!(dual_ir_comp)
 
-    CC.verify_ir(dual_ir)
+    CC.verify_ir(dual_ir_comp)
 
     # Optimize dual IR
-    opt_dual_ir = optimise_ir!(dual_ir; do_inline)
+    opt_dual_ir = optimise_ir!(dual_ir_comp; do_inline=false)  # TODO: toggle
+    # @info "Inferred dual IR"
+    # display(opt_dual_ir)  # TODO: toggle
     return opt_dual_ir
-end
-
-## Insertion (only GotoIfNot)
-
-function insert_fwd_ad_stmts!(
-    primal_ir::IRCode, ::MooncakeInterpreter, stmt, i::Integer; kwargs...
-)
-    return nothing
-end
-
-function insert_fwd_ad_stmts!(
-    primal_ir::IRCode, ::MooncakeInterpreter, stmt::GotoIfNot, i::Integer; kwargs...
-)
-    get_primal_inst = CC.NewInstruction(Expr(:call, _primal, stmt.cond), Any)
-    return CC.insert_node!(primal_ir, CC.SSAValue(i), get_primal_inst, false)
 end
 
 ## Modification
 
 function modify_fwd_ad_stmts!(
-    dual_ir::IRCode,
+    dual_ir::CC.IncrementalCompact,
     primal_ir::IRCode,
     ::MooncakeInterpreter,
     stmt::Nothing,
@@ -137,10 +118,10 @@ function modify_fwd_ad_stmts!(
 end
 
 function modify_fwd_ad_stmts!(
-    dual_ir::IRCode,
+    dual_ir::CC.IncrementalCompact,
     primal_ir::IRCode,
     ::MooncakeInterpreter,
-    stmt::Union{GotoNode,Core.GotoIfNot},
+    stmt::GotoNode,
     i::Integer;
     kwargs...,
 )
@@ -148,16 +129,28 @@ function modify_fwd_ad_stmts!(
 end
 
 function modify_fwd_ad_stmts!(
-    dual_ir::IRCode,
+    dual_ir::CC.IncrementalCompact,
     primal_ir::IRCode,
     ::MooncakeInterpreter,
-    stmt::GotoIfNot,
+    stmt::Core.GotoIfNot,
     i::Integer;
     kwargs...,
 )
-    return Mooncake.replace_call!(
-        dual_ir, CC.SSAValue(i), Core.GotoIfNot(CC.SSAValue(i - 1), stmt.dest)
+    # replace GotoIfNot with the call to primal
+    Mooncake.replace_call!(dual_ir, CC.SSAValue(i), Expr(:call, _primal, stmt.cond))
+    # reinsert the GotoIfNot right after the call to primal
+    # (incremental insertion cannot be done before "where we are")
+    new_gotoifnot_inst = CC.NewInstruction(
+        Core.GotoIfNot(CC.SSAValue(i), stmt.dest),  #
+        Any,
+        CC.NoCallInfo(),
+        Int32(1),  # meaningless
+        CC.IR_FLAG_REFINED,
     )
+    # stick the new instruction in the previous CFG block
+    reverse_affinity = true
+    CC.insert_node_here!(dual_ir, new_gotoifnot_inst, reverse_affinity)
+    return nothing
 end
 
 # TODO: wrapping in Dual must not be systematic (e.g. Argument or SSAValue)
@@ -173,17 +166,18 @@ DynamicFRule(debug_mode::Bool) = DynamicFRule(Dict{Any,Any}(), debug_mode)
 _copy(x::P) where {P<:DynamicFRule} = P(Dict{Any,Any}(), x.debug_mode)
 
 function (dynamic_rule::DynamicFRule)(args::Vararg{Any,N}) where {N}
-    sig = Tuple{map(_typeof ∘ primal, args)...}
+    args_dual = map(make_dual, args)  # TODO: don't turn everything into a Dual, be clever with Argument and SSAValue
+    sig = Tuple{map(_typeof ∘ primal, args_dual)...}
     rule = get(dynamic_rule.cache, sig, nothing)
     if rule === nothing
         rule = build_frule(get_interpreter(), sig; debug_mode=dynamic_rule.debug_mode)
         dynamic_rule.cache[sig] = rule
     end
-    return rule(args...)
+    return rule(args_dual...)
 end
 
 function modify_fwd_ad_stmts!(
-    dual_ir::IRCode,
+    dual_ir::CC.IncrementalCompact,
     primal_ir::IRCode,
     ::MooncakeInterpreter,
     stmt::ReturnNode,
@@ -198,7 +192,7 @@ function modify_fwd_ad_stmts!(
 end
 
 function modify_fwd_ad_stmts!(
-    dual_ir::IRCode,
+    dual_ir::CC.IncrementalCompact,
     primal_ir::IRCode,
     ::MooncakeInterpreter,
     stmt::PhiNode,
@@ -212,7 +206,7 @@ function modify_fwd_ad_stmts!(
 end
 
 function modify_fwd_ad_stmts!(
-    dual_ir::IRCode,
+    dual_ir::CC.IncrementalCompact,
     primal_ir::IRCode,
     interp::MooncakeInterpreter,
     stmt::Expr,
@@ -244,10 +238,13 @@ function modify_fwd_ad_stmts!(
                 @assert isexpr(stmt, :call)
                 rule = DynamicFRule(debug_mode)
             end
+            # TODO: could this insertion of a naked rule in the IR cause a memory leak?
             call_rule = Expr(:call, rule, shifted_args...)
             replace_call!(dual_ir, SSAValue(i), call_rule)
         end
-    elseif Meta.isexpr(stmt, :code_coverage_effect)
+    elseif isexpr(stmt, :boundscheck)
+        nothing
+    elseif isexpr(stmt, :code_coverage_effect)
         replace_call!(dual_ir, SSAValue(i), nothing)
     else
         throw(
