@@ -82,7 +82,7 @@ function generate_dual_ir(
         if P isa DataType
             dual_ir.argtypes[a] = dual_type(P)
         elseif P isa Core.Const
-            dual_ir.argtypes[a] = Dual  # TODO: improve
+            dual_ir.argtypes[a] = dual_type(_typeof(P.val))
         end
     end
     pushfirst!(dual_ir.argtypes, Any)
@@ -98,7 +98,7 @@ function generate_dual_ir(
     CC.verify_ir(dual_ir_comp)
 
     # Optimize dual IR
-    opt_dual_ir = optimise_ir!(dual_ir_comp; do_inline=false)  # TODO: toggle
+    opt_dual_ir = optimise_ir!(dual_ir_comp; do_inline)  # TODO: toggle
     # @info "Inferred dual IR"
     # display(opt_dual_ir)  # TODO: toggle
     return opt_dual_ir
@@ -154,7 +154,9 @@ function modify_fwd_ad_stmts!(
 end
 
 # TODO: wrapping in Dual must not be systematic (e.g. Argument or SSAValue)
-_frule!!_makedual(f, args::Vararg{Any,N}) where {N} = frule!!(make_dual.((f, args...))...)
+function _frule!!_makedual(f::F, args::Vararg{Any,N}) where {F,N}
+    return frule!!(tuple_map(make_dual, (f, args...))...)
+end
 
 struct DynamicFRule{V}
     cache::V
