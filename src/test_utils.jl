@@ -115,6 +115,7 @@ using Mooncake:
     can_produce_zero_rdata_from_type,
     increment_rdata!!,
     dual_type,
+    randn_dual,
     fcodual_type,
     verify_fdata_type,
     verify_rdata_type,
@@ -576,6 +577,8 @@ function test_rrule_interface(f_f̄, x_x̄...; rrule)
     @test all(map((a, b) -> _typeof(a) == _typeof(rdata(b)), x̄_new, x̄))
 end
 
+__forwards(frule::F, x_ẋ::Vararg{Any,N}) where {F,N} = frule(x_ẋ...)
+
 function __forwards_and_backwards(rule, x_x̄::Vararg{Any,N}) where {N}
     out, pb!! = rule(x_x̄...)
     return pb!!(Mooncake.zero_rdata(primal(out)))
@@ -584,7 +587,40 @@ end
 function test_frule_performance(
     performance_checks_flag::Symbol, rule::R, f_ḟ::F, x_ẋ::Vararg{Any,N}
 ) where {R,F,N}
-    @warn "No performance test for frule yet"
+
+    # Verify that a valid performance flag has been passed.
+    valid_flags = (:none, :stability, :allocs, :stability_and_allocs)
+    if !in(performance_checks_flag, valid_flags)
+        throw(
+            ArgumentError(
+                "performance_checks=$performance_checks_flag. Must be one of $valid_flags"
+            ),
+        )
+    end
+    performance_checks_flag == :none && return nothing
+
+    if performance_checks_flag in (:stability, :stability_and_allocs)
+
+        # Test primal stability.
+        test_opt(Shim(), primal(f_ḟ), map(_typeof ∘ primal, x_ẋ))
+
+        # Test forwards-mode stability.
+        @show (_typeof(f_ḟ), map(_typeof, x_ẋ)...), rule
+        test_opt(Shim(), rule, (_typeof(f_ḟ), map(_typeof, x_ẋ)...))
+    end
+
+    if performance_checks_flag in (:allocs, :stability_and_allocs)
+        f = primal(f_ḟ)
+        x = map(primal, x_ẋ)
+
+        # Test allocations in primal.
+        f(x...)
+        @test (@allocations f(x...)) == 0
+
+        # Test allocations in forwards-mode.
+        __forwards(rule, f_ḟ, x_ẋ...)
+        @test (@allocations __forwards(rule, f_ḟ, x_ẋ...)) == 0
+    end
 end
 
 function test_rrule_performance(
@@ -725,7 +761,7 @@ function test_rule(
     end
 
     # Generate random tangents for anything that is not already a CoDual.
-    x_ẋ = map(x -> x isa Dual ? x : zero_dual(x), x)
+    x_ẋ = map(x -> x isa Dual ? x : randn_dual(rng, x), x)
 
     x_x̄ = map(x -> if x isa CoDual
         x
@@ -751,7 +787,7 @@ function test_rule(
 
     # Test the performance of the rule.
     if forward
-        test_rrule_performance(perf_flag, rrule, x_ẋ...)
+        test_frule_performance(perf_flag, frule, x_ẋ...)
     else
         test_rrule_performance(perf_flag, rrule, x_x̄...)
     end
