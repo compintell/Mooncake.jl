@@ -18,7 +18,7 @@ function parse_signature_expr(sig::Expr)
     return arg_type_symbols, where_params
 end
 
-function construct_def(arg_names, arg_types, where_params, body)
+function construct_rrule_def(arg_names, arg_types, where_params, body)
     name = :(Mooncake.rrule!!)
     arg_exprs = map((n, t) -> :($n::$t), arg_names, arg_types)
     def = Dict(:head => :function, :name => name, :args => arg_exprs, :body => body)
@@ -216,7 +216,7 @@ macro zero_adjoint(ctx, sig)
     # Return code to create a method of is_primitive and a rule.
     ex = quote
         Mooncake.is_primitive(::Type{$ctx}, ::Type{<:$sig}) = true
-        $(construct_def(arg_names, arg_types, where_params, body))
+        $(construct_rrule_def(arg_names, arg_types, where_params, body))
     end
     return esc(ex)
 end
@@ -330,7 +330,7 @@ end
 
 function construct_rrule_wrapper_def(arg_names, arg_types, where_params)
     body = Expr(:call, rrule_wrapper, arg_names...)
-    return construct_def(arg_names, arg_types, where_params, body)
+    return construct_rrule_def(arg_names, arg_types, where_params, body)
 end
 
 @doc """

@@ -89,7 +89,9 @@ using Core: Intrinsics
 using Mooncake
 import ..Mooncake:
     rrule!!,
+    frule!!,
     CoDual,
+    Dual,
     primal,
     tangent,
     zero_tangent,
@@ -107,7 +109,8 @@ import ..Mooncake:
     NoRData,
     rdata,
     increment_rdata!!,
-    zero_fcodual
+    zero_fcodual,
+    zero_dual
 
 using Core.Intrinsics: atomic_pointerref
 
@@ -144,6 +147,11 @@ macro inactive_intrinsic(name)
         function rrule!!(f::CoDual{typeof($name)}, args::Vararg{Any,N}) where {N}
             return Mooncake.zero_adjoint(f, args...)
         end
+        function frule!!(f::Dual{typeof($name)}, args::Vararg{Dual,N}) where {N}
+            f_primal = primal(f)
+            args_primal = map(primal, args)
+            return zero_dual(f_primal(args_primal...))
+        end
     end
     return esc(expr)
 end
@@ -156,6 +164,11 @@ function rrule!!(::CoDual{typeof(abs_float)}, x)
 end
 
 @intrinsic add_float
+function frule!!(::Dual{typeof(add_float)}, a, b)
+    c = add_float(primal(a), primal(b))
+    d = add_float(tangent(a), tangent(b))
+    return Dual(c, d)
+end
 function rrule!!(::CoDual{typeof(add_float)}, a, b)
     add_float_pb!!(c̄) = NoRData(), c̄, c̄
     c = add_float(primal(a), primal(b))
@@ -342,6 +355,11 @@ end
 @inactive_intrinsic lt_float_fast
 
 @intrinsic mul_float
+function frule!!(::Dual{typeof(mul_float)}, a, b)
+    p = mul_float(primal(a), primal(b))
+    dp = add_float(mul_float(primal(a), tangent(b)), mul_float(primal(b), tangent(a)))
+    return Dual(p, dp)
+end
 function rrule!!(::CoDual{typeof(mul_float)}, a, b)
     _a = primal(a)
     _b = primal(b)
