@@ -891,6 +891,7 @@ inc_args(x::Expr) = Expr(x.head, map(__inc, x.args)...)
 inc_args(x::ReturnNode) = isdefined(x, :val) ? ReturnNode(__inc(x.val)) : x
 inc_args(x::GotoIfNot) = GotoIfNot(__inc(x.cond), x.dest)
 inc_args(x::IDGotoIfNot) = IDGotoIfNot(__inc(x.cond), x.dest)
+inc_args(x::IDGotoNode) = x
 inc_args(x::PiNode) = PiNode(__inc(x.val), x.typ)
 function inc_args(x::PhiNode)
     new_values = Vector{Any}(undef, length(x.values))
