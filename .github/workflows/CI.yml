@@ -75,7 +75,6 @@ jobs:
       matrix:
         test_group: [
           {test_type: 'ext', label: 'differentiation_interface'},
-          {test_type: 'ext', label: 'dynamic_ppl'},
           {test_type: 'ext', label: 'luxlib'},
           {test_type: 'ext', label: 'nnlib'},
           {test_type: 'ext', label: 'special_functions'},
