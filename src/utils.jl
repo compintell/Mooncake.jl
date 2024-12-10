@@ -235,3 +235,10 @@ end
 Equivalent to `vec(collect(Iterators.product(xs...)))`.
 """
 flat_product(xs...) = vec(collect(Iterators.product(xs...)))
+
+"""
+    map_prod(f, xs...)
+
+Equivalent to `map(f, flat_product(xs...))`.
+"""
+map_prod(f, xs...) = map(f, flat_product(xs...))
