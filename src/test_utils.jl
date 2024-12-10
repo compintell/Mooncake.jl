@@ -372,8 +372,8 @@ function test_rule_correctness(rng::AbstractRNG, x_x̄...; rule, unsafe_perturb:
         x′_r = _add_to_primal(x, _scale(-ε, ẋ), unsafe_perturb)
         y′_r = x′_r[1](x′_r[2:end]...)
         return (
-            ẏ = _scale(1 / 2ε, _diff(y′_l, y′_r)),
-            ẋ_post = map((_x′, _x_p) -> _scale(1 / 2ε, _diff(_x′, _x_p)), x′_l, x′_r),
+            ẏ=_scale(1 / 2ε, _diff(y′_l, y′_r)),
+            ẋ_post=map((_x′, _x_p) -> _scale(1 / 2ε, _diff(_x′, _x_p)), x′_l, x′_r),
         )
     end
 
@@ -419,7 +419,10 @@ function test_rule_correctness(rng::AbstractRNG, x_x̄...; rule, unsafe_perturb:
     isapprox_results = map(fd_results) do result
         ẏ, ẋ_post = result
         return isapprox(
-            _dot(ȳ_delta, ẏ) + _dot(x̄_delta, ẋ_post), _dot(x̄, ẋ); rtol=1e-3, atol=1e-3
+            _dot(ȳ_delta, ẏ) + _dot(x̄_delta, ẋ_post),
+            _dot(x̄, ẋ);
+            rtol=1e-3,
+            atol=1e-3,
         )
     end
     @test any(isapprox_results)
