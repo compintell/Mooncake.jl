@@ -510,7 +510,7 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
     test_cases = vcat(
 
         # getrf!
-        map(flat_product(bools, Ps)) do (check, P)
+        map_prod(bools, Ps) do (check, P)
             As = blas_matrices(rng, P, 5, 5)
             return map(As) do A
                 (false, :none, nothing, getrf_wrapper!, A, check)
@@ -518,30 +518,30 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
         end...,
 
         # trtrs
-        map(
-            flat_product(['U', 'L'], ['N', 'T', 'C'], ['N', 'U'], [1, 3], [1, 2], Ps)
+        map_prod(
+            ['U', 'L'], ['N', 'T', 'C'], ['N', 'U'], [1, 3], [1, 2], Ps
         ) do (ul, tA, diag, N, Nrhs, P)
             As = blas_matrices(rng, P, N, N)
             Bs = blas_matrices(rng, P, N, Nrhs)
-            return map(flat_product(As, Bs)) do (A, B)
+            return map_prod(As, Bs) do (A, B)
                 (false, :none, nothing, trtrs!, ul, tA, diag, A, B)
             end
         end...,
 
         # getrs
-        map(flat_product(['N', 'T'], [1, 9], [1, 2], Ps)) do (trans, N, Nrhs, P)
+        map_prod(['N', 'T'], [1, 9], [1, 2], Ps) do (trans, N, Nrhs, P)
             As = map(blas_matrices(rng, P, N, N)) do A
                 A[diagind(A)] .+= 5
                 return getrf!(A)
             end
             Bs = blas_matrices(rng, P, N, Nrhs)
-            return map(flat_product(As, Bs)) do ((A, ipiv), B)
+            return map_prod(As, Bs) do ((A, ipiv), B)
                 (false, :none, nothing, getrs!, trans, A, ipiv, B)
             end
         end...,
 
         # getri
-        map(flat_product([1, 9], Ps)) do (N, P)
+        map_prod([1, 9], Ps) do (N, P)
             As = map(blas_matrices(rng, P, N, N)) do A
                 A[diagind(A)] .+= 5
                 return getrf!(A)
@@ -552,22 +552,22 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
         end...,
 
         # potrf
-        map(flat_product([1, 3, 9], Ps)) do (N, P)
+        map_prod([1, 3, 9], Ps) do (N, P)
             As = map(blas_matrices(rng, P, N, N)) do A
                 A .= A * A' + I
                 return A
             end
-            return map(flat_product(['L', 'U'], As)) do (uplo, A)
+            return map_prod(['L', 'U'], As) do (uplo, A)
                 return (false, :none, nothing, potrf!, uplo, A)
             end
         end...,
 
         # potrs
-        map(flat_product([1, 3, 9], [1, 2], Ps)) do (N, Nrhs, P)
+        map_prod([1, 3, 9], [1, 2], Ps) do (N, Nrhs, P)
             X = randn(rng, P, N, N)
             A = X * X' + I
             Bs = blas_matrices(rng, P, N, Nrhs)
-            return map(flat_product(['L', 'U'], Bs)) do (uplo, B)
+            return map_prod(['L', 'U'], Bs) do (uplo, B)
                 (false, :none, nothing, potrs!, uplo, potrf!(uplo, copy(A))[1], copy(B))
             end
         end...,
