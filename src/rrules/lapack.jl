@@ -1,6 +1,6 @@
-@is_primitive(MinimalCtx, Tuple{typeof(LAPACK.getrf!), AbstractMatrix{<:BlasRealFloat}})
+@is_primitive(MinimalCtx, Tuple{typeof(LAPACK.getrf!),AbstractMatrix{<:BlasRealFloat}})
 function rrule!!(
-    ::CoDual{typeof(LAPACK.getrf!)}, _A::CoDual{<:AbstractMatrix{P}},
+    ::CoDual{typeof(LAPACK.getrf!)}, _A::CoDual{<:AbstractMatrix{P}}
 ) where {P<:BlasRealFloat}
     A, dA = viewify(_A)
     A_copy = copy(A)
@@ -22,10 +22,7 @@ end
 @is_primitive(
     MinimalCtx,
     Tuple{
-        typeof(Core.kwcall),
-        NamedTuple,
-        typeof(LAPACK.getrf!),
-        AbstractMatrix{<:BlasRealFloat},
+        typeof(Core.kwcall),NamedTuple,typeof(LAPACK.getrf!),AbstractMatrix{<:BlasRealFloat}
     },
 )
 function rrule!!(
@@ -77,7 +74,7 @@ end
 @is_primitive(
     MinimalCtx,
     Tuple{
-        typeof(trtrs!), Char, Char, Char, AbstractMatrix{P}, AbstractVecOrMat{P}
+        typeof(trtrs!),Char,Char,Char,AbstractMatrix{P},AbstractVecOrMat{P}
     } where {P<:BlasRealFloat},
 )
 function rrule!!(
@@ -120,7 +117,7 @@ end
 @is_primitive(
     MinimalCtx,
     Tuple{
-        typeof(getrs!), Char, AbstractMatrix{P}, AbstractVector{Int}, AbstractVecOrMat{P}
+        typeof(getrs!),Char,AbstractMatrix{P},AbstractVector{Int},AbstractVecOrMat{P}
     } where {P<:BlasRealFloat}
 )
 function rrule!!(
@@ -166,7 +163,6 @@ function rrule!!(
     end
 
     function trtrs_pb!!(::NoRData)
-
         if trans == 'N'
 
             # Run pullback for inv(U) * B.
@@ -198,12 +194,11 @@ function rrule!!(
         B .= B0
         return tuple_fill(NoRData(), Val(5))
     end
-    _B, trtrs_pb!!
+    return _B, trtrs_pb!!
 end
 
 @is_primitive(
-    MinimalCtx,
-    Tuple{typeof(getri!), AbstractMatrix{<:BlasRealFloat}, AbstractVector{Int}},
+    MinimalCtx, Tuple{typeof(getri!),AbstractMatrix{<:BlasRealFloat},AbstractVector{Int}},
 )
 function rrule!!(
     ::CoDual{typeof(getri!)},
@@ -238,7 +233,7 @@ end
 
 __sym(X) = (X + X') / 2
 
-@is_primitive(MinimalCtx, Tuple{typeof(potrf!), Char, AbstractMatrix{<:BlasRealFloat}})
+@is_primitive(MinimalCtx, Tuple{typeof(potrf!),Char,AbstractMatrix{<:BlasRealFloat}})
 function rrule!!(
     ::CoDual{typeof(potrf!)},
     _uplo::CoDual{Char},
@@ -253,7 +248,6 @@ function rrule!!(
     _, info = potrf!(uplo, A)
 
     function potrf_pb!!(::NoRData)
-
         dA2 = dA
 
         # Compute cotangents.
@@ -281,7 +275,7 @@ end
 @is_primitive(
     MinimalCtx,
     Tuple{
-        typeof(potrs!), Char, AbstractMatrix{P}, AbstractVecOrMat{P}
+        typeof(potrs!),Char,AbstractMatrix{P},AbstractVecOrMat{P}
     } where {P<:BlasRealFloat},
 )
 function rrule!!(
@@ -392,21 +386,19 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
         end...,
     )
     memory = Any[]
-    return test_cases, memory 
+    return test_cases, memory
 end
 
 function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
     rng = rng_ctor(123)
     getrf_wrapper!(x, check) = getrf!(x; check)
-    test_cases = vcat(
-        map_prod([false, true], [Float64, Float32]) do (check, P)
-            As = blas_matrices(rng, P, 5, 5)
-            # ipiv = Vector{Int}(undef, 5)
-            return map(As) do A
-                (false, :none, nothing, getrf_wrapper!, A, check)
-            end
-        end...,
-    )
+    test_cases = vcat(map_prod([false, true], [Float64, Float32]) do (check, P)
+        As = blas_matrices(rng, P, 5, 5)
+        # ipiv = Vector{Int}(undef, 5)
+        return map(As) do A
+            (false, :none, nothing, getrf_wrapper!, A, check)
+        end
+    end...)
     memory = Any[]
     return test_cases, memory
 end
