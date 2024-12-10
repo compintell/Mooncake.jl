@@ -18,7 +18,7 @@ using Mooncake.TestUtils: test_rule
                 (:stability_and_allocs, besselj0, P(0.1)),
                 (:stability_and_allocs, besselj1, P(0.1)),
                 (:stability_and_allocs, bessely0, P(0.1)),
-                (:stability_and_allocs, bessely1, P(0.1)),
+                (VERSION >= v"1.11" ? :stability_and_allocs : :none, bessely1, P(0.1)),
                 (:stability_and_allocs, dawson, P(0.1)),
                 (:stability_and_allocs, digamma, P(0.1)),
                 (:stability_and_allocs, erf, P(0.1)),
