@@ -24,29 +24,40 @@ end
 
 set_to_zero!!(x::Array) = _map_if_assigned!(set_to_zero!!, x, x)
 
-function _scale(a::Float64, t::Array{T,N}) where {T,N}
+function __scale(c::MaybeCache, a::Float64, t::Array{T,N}) where {T,N}
+    haskey(c, t) && return c[t]::Array{T,N}
     t′ = Array{T,N}(undef, size(t)...)
-    return _map_if_assigned!(Base.Fix1(_scale, a), t′, t)
+    c[t] = t′
+    return _map_if_assigned!(t -> __scale(c, a, t), t′, t)
 end
 
-function _dot(t::T, s::T) where {T<:Array}
-    isbitstype(T) && return sum(_map(_dot, t, s))
+function __dot(c::Cache, t::T, s::T) where {T<:Array}
+    key = (t, s)
+    haskey(c, key) && return c[key]::Float64
+    c[key] = 0.0
+    isbitstype(T) && return sum(_map((t, s) -> __dot(c, t, s), t, s))
     return sum(
         _map(eachindex(t)) do n
-            (isassigned(t, n) && isassigned(s, n)) ? _dot(t[n], s[n]) : 0.0
+            (isassigned(t, n) && isassigned(s, n)) ? __dot(c, t[n], s[n]) : 0.0
         end;
         init=0.0,
     )
 end
 
-function _add_to_primal(x::Array{P,N}, t::Array{<:Any,N}, unsafe::Bool) where {P,N}
+function __add_to_primal(c::MaybeCache, x::Array{P,N}, t::Array{<:Any,N}, unsafe::Bool) where {P,N}
+    key = (x, t, unsafe)
+    haskey(c, key) && return c[key]::Array{P,N}
     x′ = Array{P,N}(undef, size(x)...)
-    return _map_if_assigned!((x, t) -> _add_to_primal(x, t, unsafe), x′, x, t)
+    c[key] = x′
+    return _map_if_assigned!((x, t) -> __add_to_primal(c, x, t, unsafe), x′, x, t)
 end
 
-function _diff(p::P, q::P) where {V,N,P<:Array{V,N}}
+function __diff(c::MaybeCache, p::P, q::P) where {V,N,P<:Array{V,N}}
+    key = (p, q)
+    haskey(c, key) && return c[key]::tangent_type(P)
     t = Array{tangent_type(V),N}(undef, size(p))
-    return _map_if_assigned!(_diff, t, p, q)
+    c[key] = t
+    return _map_if_assigned!(__diff, t, p, q)
 end
 
 @zero_adjoint MinimalCtx Tuple{Type{<:Array{T,N}},typeof(undef),Vararg} where {T,N}

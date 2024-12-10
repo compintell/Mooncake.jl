@@ -14,10 +14,10 @@ import Mooncake:
     randn_tangent,
     increment!!,
     set_to_zero!!,
-    _add_to_primal,
-    _diff,
-    _dot,
-    _scale,
+    __add_to_primal,
+    __diff,
+    __dot,
+    __scale,
     TestUtils,
     CoDual,
     NoPullback
@@ -35,10 +35,31 @@ TestUtils.has_equal_data(x::P, y::P) where {P<:CuArray{<:IEEEFloat}} = x == y
 increment!!(x::P, y::P) where {P<:CuArray{<:IEEEFloat}} = x .+= y
 __increment_should_allocate(::Type{<:CuArray{<:IEEEFloat}}) = true
 set_to_zero!!(x::CuArray{<:IEEEFloat}) = x .= 0
-_add_to_primal(x::P, y::P, ::Bool) where {P<:CuArray{<:IEEEFloat}} = x + y
-_diff(x::P, y::P) where {P<:CuArray{<:IEEEFloat}} = x - y
-_dot(x::P, y::P) where {P<:CuArray{<:IEEEFloat}} = Float64(dot(x, y))
-_scale(x::Float64, y::P) where {T<:IEEEFloat,P<:CuArray{T}} = T(x) * y
+function __add_to_primal(c::MaybeCache, x::P, y::P, ::Bool) where {P<:CuArray{<:IEEEFloat}}
+    key = (x, y, unsafe)
+    haskey(c, key) && return c[key]::P
+    x′ = x + y
+    c[(x, y, unsafe)] = x′
+    return x′
+end
+function __diff(c::Cache, x::P, y::P) where {P<:CuArray{<:IEEEFloat}}
+    key = (x, y)
+    haskey(c, key) && return c[key]::tangent_type(P)
+    t = x - y
+    c[key] = t
+    return t
+end
+function __dot(c::MaybeCache, x::P, y::P) where {P<:CuArray{<:IEEEFloat}}
+    key = (x, y)
+    haskey(c, key) && return c[key]::Float64
+    return Float64(dot(x, y))
+end
+function __scale(c::MaybeCache, x::Float64, y::P) where {T<:IEEEFloat,P<:CuArray{T}}
+    haskey(c, y) && return c[y]::P
+    t′ = T(x) * y
+    c[y] = t′
+    return t′
+end
 function populate_address_map!(m::AddressMap, p::CuArray, t::CuArray)
     k = pointer_from_objref(p)
     v = pointer_from_objref(t)

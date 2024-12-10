@@ -65,41 +65,62 @@ function TestUtils.has_equal_data_internal(
     return all(equality)
 end
 
-function increment!!(x::Memory{P}, y::Memory{P}) where {P}
-    return x === y ? x : _map_if_assigned!(increment!!, x, x, y)
+function _increment!!(c::IncCache, x::Memory{P}, y::Memory{P}) where {P}
+    (x in c || x === y) && return x
+    push!(c, x)
+    return _map_if_assigned!((x, y) -> _increment!!(c, x, y), x, x, y)
 end
 
-set_to_zero!!(x::Memory) = _map_if_assigned!(set_to_zero!!, x, x)
-
-function _add_to_primal(p::Memory{P}, t::Memory, unsafe::Bool) where {P}
-    return _map_if_assigned!(
-        (p, t) -> _add_to_primal(p, t, unsafe), Memory{P}(undef, length(p)), p, t
-    )
+function _set_to_zero!!(c::IncCache, x::Memory)
+    x in c && return x
+    push!(c, x)
+    return _map_if_assigned!(_set_to_zero!!, x, x)
 end
 
-function _diff(p::Memory{P}, q::Memory{P}) where {P}
-    return _map_if_assigned!(_diff, Memory{tangent_type(P)}(undef, length(p)), p, q)
+function __add_to_primal(c::MaybeCache, p::Memory{P}, t::Memory, unsafe::Bool) where {P}
+    k = (p, t, unsafe)
+    haskey(c, k) && return c[k]::Memory{P}
+    p′ = Memory{P}(undef, length(p))
+    c[key] = p′
+    return _map_if_assigned!((p, t) -> __add_to_primal(c, p, t, unsafe), p′, p, t)
 end
 
-function _dot(t::Memory{T}, s::Memory{T}) where {T}
-    isbitstype(T) && return sum(_map(_dot, t, s))
+function __diff(c::MaybeCache, p::Memory{P}, q::Memory{P}) where {P}
+    key = (p, q)
+    haskey(c, key) && return c[key]::tangent_type(P)
+    t = Memory{tangent_type(P)}(undef, length(p))
+    c[key] = t
+    return _map_if_assigned!((p, q) -> __diff(c, p, q), t, p, q)
+end
+
+function __dot(c::MaybeCache, t::Memory{T}, s::Memory{T}) where {T}
+    key = (t, s)
+    haskey(c, key) && return c[key]::Float64
+    c[key] = 0.0
+    isbitstype(T) && return sum(_map((t, s) -> __dot(c, t, s), t, s))
     return sum(
         _map(eachindex(t)) do n
-            (isassigned(t, n) && isassigned(s, n)) ? _dot(t[n], s[n]) : 0.0
+            (isassigned(t, n) && isassigned(s, n)) ? __dot(c, t[n], s[n]) : 0.0
         end;
         init=0.0,
     )
 end
 
-function _scale(a::Float64, t::Memory{T}) where {T}
-    return _map_if_assigned!(Base.Fix1(_scale, a), Memory{T}(undef, length(t)), t)
+function __scale(c::MaybeCache, a::Float64, t::Memory{T}) where {T}
+    haskey(c, t) && return c[t]::Memory{T}
+    t′ = Memory{T}(undef, length(t))
+    c[t] = t′
+    return _map_if_assigned!(t -> __scale(c, a, t), t′, t)
 end
 
 import .TestUtils: populate_address_map!
 function populate_address_map!(m::TestUtils.AddressMap, p::Memory, t::Memory)
     k = pointer_from_objref(p)
     v = pointer_from_objref(t)
-    haskey(m, k) && (@assert m[k] == v)
+    if haskey(m, k)
+        @assert m[k] == v
+        return m
+    end
     m[k] = v
     foreach(n -> isassigned(p, n) && populate_address_map!(m, p[n], t[n]), eachindex(p))
     return m
@@ -153,34 +174,65 @@ function randn_tangent_internal(rng::AbstractRNG, x::Array, stackdict::Maybe{IdD
     return dx::T
 end
 
-function increment!!(x::T, y::T) where {T<:Array}
-    return x === y ? x : _map_if_assigned!(increment!!, x, x, y)
+function _increment!!(c::IncCache, x::T, y::T) where {T<:Array}
+    @show "doing this one"
+    display(x)
+    display(y)
+    println("end")
+    if (x in c || x === y)
+        @show "found x"
+        return x
+    else
+        @show "continuing"
+    end
+    push!(c, x)
+    display(c)
+    _map_if_assigned!((x, y) -> _increment!!(c, x, y), x, x, y)
+    println("x after is")
+    display(x)
+    return x
 end
 
-set_to_zero!!(x::Array) = _map_if_assigned!(set_to_zero!!, x, x)
+function _set_to_zero!!(c::IncCache, x::Array)
+    x in c && return x
+    push!(c, x)
+    return _map_if_assigned!(Base.Fix1(_set_to_zero!!, c), x, x)
+end
 
-function _scale(a::Float64, t::T) where {T<:Array}
+function __scale(c::MaybeCache, a::Float64, t::T) where {T<:Array}
+    haskey(c, t) && return c[t]::T
     t′ = T(undef, size(t)...)
-    return _map_if_assigned!(Base.Fix1(_scale, a), t′, t)
+    c[t] = t′
+    return _map_if_assigned!(t -> __scale(c, a, t), t′, t)
 end
 
-function _dot(t::T, s::T) where {T<:Array}
-    isbitstype(T) && return sum(_map(_dot, t, s))
+function __dot(c::MaybeCache, t::T, s::T) where {T<:Array}
+    key = (t, s)
+    haskey(c, key) && return c[key]::Float64
+    c[key] = 0.0
+    isbitstype(T) && return sum(_map((t, s) -> __dot(c, t, s), t, s))
     return sum(
         _map(eachindex(t)) do n
-            (isassigned(t, n) && isassigned(s, n)) ? _dot(t[n], s[n]) : 0.0
+            (isassigned(t, n) && isassigned(s, n)) ? __dot(c, t[n], s[n]) : 0.0
         end;
         init=0.0,
     )
 end
 
-function _add_to_primal(x::Array{P,N}, t::Array{<:Any,N}, unsafe::Bool) where {P,N}
+function __add_to_primal(c::MaybeCache, x::Array{P,N}, t::Array{<:Any,N}, unsafe::Bool) where {P,N}
+    key = (x, t, unsafe)
+    haskey(c, key) && return c[key]::Array{P,N}
     x′ = Array{P,N}(undef, size(x)...)
-    return _map_if_assigned!((x, t) -> _add_to_primal(x, t, unsafe), x′, x, t)
+    c[key] = x′
+    return _map_if_assigned!((x, t) -> __add_to_primal(c, x, t, unsafe), x′, x, t)
 end
 
-function _diff(p::P, q::P) where {P<:Array}
-    return _map_if_assigned!(_diff, tangent_type(P)(undef, size(p)), p, q)
+function __diff(c::MaybeCache, p::P, q::P) where {P<:Array}
+    key = (p, q)
+    haskey(c, key) && return c[key]::tangent_type(P)
+    t = tangent_type(P)(undef, size(p))
+    c[key] = t
+    return _map_if_assigned!((p, q) -> __diff(c, p, q), t, p, q)
 end
 
 # Rules
@@ -268,28 +320,30 @@ function TestUtils.has_equal_data_internal(
     return equal_refs && equal_data
 end
 
-increment!!(x::P, y::P) where {P<:MemoryRef} = construct_ref(x, increment!!(x.mem, y.mem))
+function _increment!!(c::IncCache, x::P, y::P) where {P<:MemoryRef}
+    return construct_ref(x, _increment!!(c, x.mem, y.mem))
+end
 
-function set_to_zero!!(x::MemoryRef)
-    set_to_zero!!(x.mem)
+function _set_to_zero!!(c::IncCache, x::MemoryRef)
+    _set_to_zero!!(c, x.mem)
     return x
 end
 
-function _add_to_primal(p::MemoryRef, t::MemoryRef, unsafe::Bool)
-    return construct_ref(p, _add_to_primal(p.mem, t.mem, unsafe))
+function __add_to_primal(c::MaybeCache, p::MemoryRef, t::MemoryRef, unsafe::Bool)
+    return construct_ref(p, __add_to_primal(c, p.mem, t.mem, unsafe))
 end
 
-function _diff(p::P, q::P) where {P<:MemoryRef}
+function __diff(c::MaybeCache, p::P, q::P) where {P<:MemoryRef}
     @assert Core.memoryrefoffset(p) == Core.memoryrefoffset(q)
-    return construct_ref(p, _diff(p.mem, q.mem))
+    return construct_ref(p, __diff(c, p.mem, q.mem))
 end
 
-function _dot(t::T, s::T) where {T<:MemoryRef}
+function __dot(c::MaybeCache, t::T, s::T) where {T<:MemoryRef}
     @assert Core.memoryrefoffset(t) == Core.memoryrefoffset(s)
-    return _dot(t.mem, s.mem)
+    return __dot(c, t.mem, s.mem)
 end
 
-_scale(a::Float64, t::MemoryRef) = construct_ref(t, _scale(a, t.mem))
+__scale(c::MaybeCache, a::Float64, t::MemoryRef) = construct_ref(t, __scale(c, a, t.mem))
 
 function populate_address_map!(m::TestUtils.AddressMap, p::MemoryRef, t::MemoryRef)
     return populate_address_map!(m, p.mem, t.mem)

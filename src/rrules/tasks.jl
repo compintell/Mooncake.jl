@@ -17,13 +17,13 @@ increment!!(t::TaskTangent, s::TaskTangent) = t
 
 set_to_zero!!(t::TaskTangent) = t
 
-_add_to_primal(p::Task, t::TaskTangent, ::Bool) = p
+__add_to_primal(::MaybeCache, p::Task, t::TaskTangent, ::Bool) = p
 
-_diff(::Task, ::Task) = TaskTangent()
+__diff(::MaybeCache, ::Task, ::Task) = TaskTangent()
 
 _dot(::TaskTangent, ::TaskTangent) = 0.0
 
-_scale(::Float64, t::TaskTangent) = t
+__scale(::MaybeCache, ::Float64, t::TaskTangent) = t
 
 TestUtils.populate_address_map!(m::TestUtils.AddressMap, ::Task, ::TaskTangent) = m
 

@@ -31,13 +31,13 @@ increment!!(t::T, s::T) where {T<:TWP} = t + s
 
 set_to_zero!!(t::TWP) = zero_tangent_internal(t, nothing)
 
-_add_to_primal(p::P, t::P, ::Bool) where {P<:TWP} = p + t
+__add_to_primal(::MaybeCache, p::P, t::P, ::Bool) where {P<:TWP} = p + t
 
-_diff(p::P, q::P) where {P<:TWP} = p - q
+__diff(::MaybeCache, p::P, q::P) where {P<:TWP} = p - q
 
-_dot(t::P, s::P) where {P<:TWP} = Float64(t) * Float64(s)
+__dot(::MaybeCache, t::P, s::P) where {P<:TWP} = Float64(t) * Float64(s)
 
-_scale(a::Float64, t::TWP) = a * t
+__scale(::MaybeCache, a::Float64, t::TWP) = a * t
 
 populate_address_map!(m::AddressMap, ::P, ::P) where {P<:TWP} = m
 

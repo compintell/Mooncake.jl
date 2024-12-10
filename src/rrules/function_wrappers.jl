@@ -109,18 +109,20 @@ function set_to_zero!!(t::FunctionWrapperTangent)
     return t
 end
 
-function _add_to_primal(p::FunctionWrapper, t::FunctionWrapperTangent, unsafe::Bool)
-    return typeof(p)(_add_to_primal(p.obj[], t.dobj_ref[], unsafe))
+function __add_to_primal(c::MaybeCache, p::FunctionWrapper, t::FunctionWrapperTangent, unsafe::Bool)
+    return typeof(p)(__add_to_primal(c, p.obj[], t.dobj_ref[], unsafe))
 end
 
-function _diff(p::P, q::P) where {R,A,P<:FunctionWrapper{R,A}}
-    return first(_function_wrapper_tangent(R, p.obj[], A, _diff(p.obj[], q.obj[])))
+function __diff(c::MaybeCache, p::P, q::P) where {R,A,P<:FunctionWrapper{R,A}}
+    return first(_function_wrapper_tangent(R, p.obj[], A, __diff(c, p.obj[], q.obj[])))
 end
 
-_dot(t::T, s::T) where {T<:FunctionWrapperTangent} = _dot(t.dobj_ref[], s.dobj_ref[])
+function __dot(c::MaybeCache, t::T, s::T) where {T<:FunctionWrapperTangent}
+    return __dot(c, t.dobj_ref[], s.dobj_ref[])
+end
 
-function _scale(a::Float64, t::T) where {T<:FunctionWrapperTangent}
-    return T(t.fwds_wrapper, Ref(_scale(a, t.dobj_ref[])))
+function __scale(c::MaybeCache, a::Float64, t::T) where {T<:FunctionWrapperTangent}
+    return T(t.fwds_wrapper, Ref(__scale(c, a, t.dobj_ref[])))
 end
 
 import .TestUtils: populate_address_map!, AddressMap

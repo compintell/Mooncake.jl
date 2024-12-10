@@ -20,22 +20,50 @@ function set_to_zero!!(t::IdDict)
     end
     return t
 end
-function _scale(a::Float64, t::IdDict{K,V}) where {K,V}
-    return IdDict{K,V}([k => _scale(a, v) for (k, v) in t])
+function __scale(c::MaybeCache, a::Float64, t::IdDict{K,V}) where {K,V}
+    haskey(c, t) && return c[t]::IdDict{K,V}
+    t′ = IdDict{K, V}()
+    c[t] = t′
+    for (k, v) in t
+        t′[k] = __scale(c, a, v)
+    end
+    return t′
 end
-_dot(p::T, q::T) where {T<:IdDict} = sum([_dot(p[k], q[k]) for k in keys(p)]; init=0.0)
-function _add_to_primal(p::IdDict{K,V}, t::IdDict{K}, unsafe::Bool) where {K,V}
+function __dot(c::MaybeCache, p::T, q::T) where {T<:IdDict}
+    key = (p, q)
+    haskey(c, key) && return c[key]::Float64
+    c[key] = 0.0
+    return sum([__dot(c, p[k], q[k]) for k in keys(p)]; init=0.0)
+end
+function __add_to_primal(c::MaybeCache, p::IdDict{K,V}, t::IdDict{K}, unsafe::Bool) where {K,V}
+    key = (p, t, unsafe)
+    haskey(c, key) && return c[key]::IdDict{K,V}
+    p′ = IdDict{K, V}()
+    c[key] = p′
     ks = intersect(keys(p), keys(t))
-    return IdDict{K,V}([k => _add_to_primal(p[k], t[k], unsafe) for k in ks])
+    for k in ks
+        p′[k] = __add_to_primal(c, p[k], t[k], unsafe)
+    end
+    return p′
 end
-function _diff(p::P, q::P) where {K,V,P<:IdDict{K,V}}
+function __diff(c::MaybeCache, p::P, q::P) where {K,V,P<:IdDict{K,V}}
     @assert union(keys(p), keys(q)) == keys(p)
-    return IdDict{K,tangent_type(V)}([k => _diff(p[k], q[k]) for k in keys(p)])
+    key = (p, q)
+    haskey(c, key) && return c[key]::tangent_type(P)
+    t = IdDict{K,tangent_type(V)}()
+    c[key] = t
+    for k in keys(p)
+        t[k] = __diff(c, p[k], q[k])
+    end
+    return t
 end
 function TestUtils.populate_address_map!(m::TestUtils.AddressMap, p::IdDict, t::IdDict)
     k = pointer_from_objref(p)
     v = pointer_from_objref(t)
-    haskey(m, k) && (@assert m[k] == v)
+    if haskey(m, k)
+        @assert m[k] == v
+        return m
+    end
     m[k] = v
     foreach(n -> TestUtils.populate_address_map!(m, p[n], t[n]), keys(p))
     return m

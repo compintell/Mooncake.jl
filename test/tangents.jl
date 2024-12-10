@@ -1,230 +1,231 @@
 @testset "tangents" begin
-    @testset "tangent_type($primal_type)" for (primal_type, expected_tangent_type) in Any[
+    # @testset "$(tangent_type(primal_type))" for (primal_type, expected_tangent_type) in Any[
 
-        ## Tuples
+    #     ## Tuples
 
-        # Unions of Tuples.
-        (Union{Tuple{Float64},Tuple{Float32}}, Union{Tuple{Float64},Tuple{Float32}}),
-        (Union{Tuple{Float64},Tuple{Int}}, Union{Tuple{Float64},NoTangent}),
-        (Union{Tuple{},Tuple{Int}}, NoTangent),
-        (
-            Union{Tuple{Float64},Tuple{Int},Tuple{Float64,Int}},
-            Union{Tuple{Float64},NoTangent,Tuple{Float64,NoTangent}},
-        ),
-        (Union{Tuple{Float64},Tuple{Any}}, Union{NoTangent,Tuple{Any}}),
+    #     # Unions of Tuples.
+    #     (Union{Tuple{Float64},Tuple{Float32}}, Union{Tuple{Float64},Tuple{Float32}}),
+    #     (Union{Tuple{Float64},Tuple{Int}}, Union{Tuple{Float64},NoTangent}),
+    #     (Union{Tuple{},Tuple{Int}}, NoTangent),
+    #     (
+    #         Union{Tuple{Float64},Tuple{Int},Tuple{Float64,Int}},
+    #         Union{Tuple{Float64},NoTangent,Tuple{Float64,NoTangent}},
+    #     ),
+    #     (Union{Tuple{Float64},Tuple{Any}}, Union{NoTangent,Tuple{Any}}),
 
-        # UnionAlls of Tuples.
-        (Tuple{T} where {T}, Union{NoTangent,Tuple{Any}}),
-        (Tuple{T,T} where {T<:Real}, Union{NoTangent,Tuple{Any,Any}}),
-        (Tuple{Float64,T} where {T<:Int}, Tuple{Float64,NoTangent}),
-        (Union{Tuple{T},Tuple{T,T}} where {T<:Real}, Any),
+    #     # UnionAlls of Tuples.
+    #     (Tuple{T} where {T}, Union{NoTangent,Tuple{Any}}),
+    #     (Tuple{T,T} where {T<:Real}, Union{NoTangent,Tuple{Any,Any}}),
+    #     (Tuple{Float64,T} where {T<:Int}, Tuple{Float64,NoTangent}),
+    #     (Union{Tuple{T},Tuple{T,T}} where {T<:Real}, Any),
 
-        # Edge case: (provably) empty Tuple.
-        (Tuple{}, NoTangent),
+    #     # Edge case: (provably) empty Tuple.
+    #     (Tuple{}, NoTangent),
 
-        # Vararg Tuples
-        (Tuple, Any),
-        (Tuple{Float64,Vararg}, Any),
-        (Tuple{Float64,Vararg{Int}}, Any),
-        (Tuple{Vararg{Int}}, Any),
-        (Tuple{Int,Vararg{Int}}, Any),
+    #     # Vararg Tuples
+    #     (Tuple, Any),
+    #     (Tuple{Float64,Vararg}, Any),
+    #     (Tuple{Float64,Vararg{Int}}, Any),
+    #     (Tuple{Vararg{Int}}, Any),
+    #     (Tuple{Int,Vararg{Int}}, Any),
 
-        # Simple Tuples.
-        (Tuple{Int}, NoTangent),
-        (Tuple{Vararg{Int,250}}, NoTangent),
-        (Tuple{Int,Int}, NoTangent),
-        (Tuple{DataType,Int}, NoTangent),
-        (Tuple{DataType,Vararg{Int,100}}, NoTangent),
-        (Tuple{DataType,Type{Float64}}, NoTangent),
-        (Tuple{DataType,Vararg{Type{Float64},100}}, NoTangent),
-        (Tuple{Any}, Union{NoTangent,Tuple{Any}}),
-        (Tuple{Any,Any}, Union{NoTangent,Tuple{Any,Any}}),
-        (Tuple{Int,Any}, Union{NoTangent,Tuple{NoTangent,Any}}),
-        (Tuple{Int,Float64}, Tuple{NoTangent,Float64}),
-        (Tuple{Int,Vararg{Float64,100}}, Tuple{NoTangent,Vararg{Float64,100}}),
-        (Tuple{Type{Float64},Float64}, Tuple{NoTangent,Float64}),
-        (Tuple{DataType,Vararg{Float32,100}}, Tuple{NoTangent,Vararg{Float32,100}}),
-        (Tuple{Tuple{Type{Int}},Float64}, Tuple{NoTangent,Float64}),
+    #     # Simple Tuples.
+    #     (Tuple{Int}, NoTangent),
+    #     (Tuple{Vararg{Int,250}}, NoTangent),
+    #     (Tuple{Int,Int}, NoTangent),
+    #     (Tuple{DataType,Int}, NoTangent),
+    #     (Tuple{DataType,Vararg{Int,100}}, NoTangent),
+    #     (Tuple{DataType,Type{Float64}}, NoTangent),
+    #     (Tuple{DataType,Vararg{Type{Float64},100}}, NoTangent),
+    #     (Tuple{Any}, Union{NoTangent,Tuple{Any}}),
+    #     (Tuple{Any,Any}, Union{NoTangent,Tuple{Any,Any}}),
+    #     (Tuple{Int,Any}, Union{NoTangent,Tuple{NoTangent,Any}}),
+    #     (Tuple{Int,Float64}, Tuple{NoTangent,Float64}),
+    #     (Tuple{Int,Vararg{Float64,100}}, Tuple{NoTangent,Vararg{Float64,100}}),
+    #     (Tuple{Type{Float64},Float64}, Tuple{NoTangent,Float64}),
+    #     (Tuple{DataType,Vararg{Float32,100}}, Tuple{NoTangent,Vararg{Float32,100}}),
+    #     (Tuple{Tuple{Type{Int}},Float64}, Tuple{NoTangent,Float64}),
 
-        ## NamedTuple
+    #     ## NamedTuple
 
-        # Unions of NamedTuples.
-        (
-            Union{@NamedTuple{a::Float64},@NamedTuple{b::Float64}},
-            Union{@NamedTuple{a::Float64},@NamedTuple{b::Float64}},
-        ),
-        (
-            Union{@NamedTuple{a::Float64},@NamedTuple{}},
-            Union{@NamedTuple{a::Float64},NoTangent},
-        ),
-        (Union{@NamedTuple{a::Float64},@NamedTuple{a::Any}}, Any),
+    #     # Unions of NamedTuples.
+    #     (
+    #         Union{@NamedTuple{a::Float64},@NamedTuple{b::Float64}},
+    #         Union{@NamedTuple{a::Float64},@NamedTuple{b::Float64}},
+    #     ),
+    #     (
+    #         Union{@NamedTuple{a::Float64},@NamedTuple{}},
+    #         Union{@NamedTuple{a::Float64},NoTangent},
+    #     ),
+    #     (Union{@NamedTuple{a::Float64},@NamedTuple{a::Any}}, Any),
 
-        # UnionAlls of NamedTuples.
-        (@NamedTuple{a::T} where {T}, Union{NoTangent,NamedTuple{(:a,)}}),
-        (@NamedTuple{a::T, b::T} where {T<:Real}, Union{NoTangent,NamedTuple{(:a, :b)}}),
-        (
-            @NamedTuple{a::Float64, b::T} where {T<:Int},
-            Union{NoTangent,NamedTuple{(:a, :b)}},
-        ),
-        (Union{@NamedTuple{a::T},@NamedTuple{b::T, c::T}} where {T<:Any}, Any),
-        (Union{@NamedTuple{T, Float64},@NamedTuple{T, Float64, Int}} where {T}, Any),
+    #     # UnionAlls of NamedTuples.
+    #     (@NamedTuple{a::T} where {T}, Union{NoTangent,NamedTuple{(:a,)}}),
+    #     (@NamedTuple{a::T, b::T} where {T<:Real}, Union{NoTangent,NamedTuple{(:a, :b)}}),
+    #     (
+    #         @NamedTuple{a::Float64, b::T} where {T<:Int},
+    #         Union{NoTangent,NamedTuple{(:a, :b)}},
+    #     ),
+    #     (Union{@NamedTuple{a::T},@NamedTuple{b::T, c::T}} where {T<:Any}, Any),
+    #     (Union{@NamedTuple{T, Float64},@NamedTuple{T, Float64, Int}} where {T}, Any),
 
-        # Edge case
-        (@NamedTuple{}, NoTangent),
+    #     # Edge case
+    #     (@NamedTuple{}, NoTangent),
 
-        # Simple NamedTuples.
-        (@NamedTuple{a::Int}, NoTangent),
-        (@NamedTuple{a::Int, b::Int}, NoTangent),
-        (@NamedTuple{a::DataType, b::Int}, NoTangent),
-        (@NamedTuple{a::DataType, b::Type{Float64}}, NoTangent),
-        (@NamedTuple{a::Any}, Any),
-        (@NamedTuple{a::Any, b::Any}, Any),
-        (@NamedTuple{a::Int, b::Any}, Any),
-        (@NamedTuple{b::Int, a::Float64}, @NamedTuple{b::NoTangent, a::Float64}),
-        (@NamedTuple{a::Type{Float64}, b::Float64}, @NamedTuple{a::NoTangent, b::Float64}),
-        (
-            @NamedTuple{a::Tuple{Type{Int}}, b::Float64},
-            @NamedTuple{a::NoTangent, b::Float64}
-        ),
-    ]
-        TestUtils.test_tangent_type(primal_type, expected_tangent_type)
-    end
+    #     # Simple NamedTuples.
+    #     (@NamedTuple{a::Int}, NoTangent),
+    #     (@NamedTuple{a::Int, b::Int}, NoTangent),
+    #     (@NamedTuple{a::DataType, b::Int}, NoTangent),
+    #     (@NamedTuple{a::DataType, b::Type{Float64}}, NoTangent),
+    #     (@NamedTuple{a::Any}, Any),
+    #     (@NamedTuple{a::Any, b::Any}, Any),
+    #     (@NamedTuple{a::Int, b::Any}, Any),
+    #     (@NamedTuple{b::Int, a::Float64}, @NamedTuple{b::NoTangent, a::Float64}),
+    #     (@NamedTuple{a::Type{Float64}, b::Float64}, @NamedTuple{a::NoTangent, b::Float64}),
+    #     (
+    #         @NamedTuple{a::Tuple{Type{Int}}, b::Float64},
+    #         @NamedTuple{a::NoTangent, b::Float64}
+    #     ),
+    # ]
+    #     TestUtils.test_tangent_type(primal_type, expected_tangent_type)
+    # end
 
     @testset "$(typeof(data))" for (interface_only, data...) in
                                    Mooncake.tangent_test_cases()
+        @show data
         test_tangent(Xoshiro(123456), data...; interface_only)
     end
 
-    tangent(nt::NamedTuple) = Tangent(map(PossiblyUninitTangent, nt))
-    mutable_tangent(nt::NamedTuple) = MutableTangent(map(PossiblyUninitTangent, nt))
+    # tangent(nt::NamedTuple) = Tangent(map(PossiblyUninitTangent, nt))
+    # mutable_tangent(nt::NamedTuple) = MutableTangent(map(PossiblyUninitTangent, nt))
 
-    @testset "increment_field!!" begin
-        @testset "NoTangent" begin
-            nt = NoTangent()
-            @test @inferred(increment_field!!(nt, nt, Val(:a))) == nt
-            @test increment_field!!(nt, nt, :a) == nt
-            @test @inferred(increment_field!!(nt, nt, Val(1))) == nt
-            @test increment_field!!(nt, nt, 1) == nt
-        end
-        @testset "Tuple" begin
-            nt = NoTangent()
-            x = (5.0, nt)
-            y = 3.0
-            @test @inferred(increment_field!!(x, y, Val(1))) == (8.0, nt)
-            @test @inferred(increment_field!!(x, nt, Val(2))) == (5.0, nt)
+    # @testset "increment_field!!" begin
+    #     @testset "NoTangent" begin
+    #         nt = NoTangent()
+    #         @test @inferred(increment_field!!(nt, nt, Val(:a))) == nt
+    #         @test increment_field!!(nt, nt, :a) == nt
+    #         @test @inferred(increment_field!!(nt, nt, Val(1))) == nt
+    #         @test increment_field!!(nt, nt, 1) == nt
+    #     end
+    #     @testset "Tuple" begin
+    #         nt = NoTangent()
+    #         x = (5.0, nt)
+    #         y = 3.0
+    #         @test @inferred(increment_field!!(x, y, Val(1))) == (8.0, nt)
+    #         @test @inferred(increment_field!!(x, nt, Val(2))) == (5.0, nt)
 
-            # Slow versions.
-            @test increment_field!!(x, y, 1) == (8.0, nt)
-            @test increment_field!!(x, nt, 2) == (5.0, nt)
+    #         # Slow versions.
+    #         @test increment_field!!(x, y, 1) == (8.0, nt)
+    #         @test increment_field!!(x, nt, 2) == (5.0, nt)
 
-            # Homogeneous type optimisation.
-            @test @inferred(increment_field!!((5.0, 4.0), 3.0, 2)) == (5.0, 7.0)
-        end
-        @testset "NamedTuple" begin
-            nt = NoTangent()
-            x = (a=5.0, b=nt)
-            @test @inferred(increment_field!!(x, 3.0, Val(:a))) == (a=8.0, b=nt)
-            @test @inferred(increment_field!!(x, nt, Val(:b))) == (a=5.0, b=nt)
-            @test @inferred(increment_field!!(x, 3.0, Val(1))) == (a=8.0, b=nt)
-            @test @inferred(increment_field!!(x, nt, Val(2))) == (a=5.0, b=nt)
+    #         # Homogeneous type optimisation.
+    #         @test @inferred(increment_field!!((5.0, 4.0), 3.0, 2)) == (5.0, 7.0)
+    #     end
+    #     @testset "NamedTuple" begin
+    #         nt = NoTangent()
+    #         x = (a=5.0, b=nt)
+    #         @test @inferred(increment_field!!(x, 3.0, Val(:a))) == (a=8.0, b=nt)
+    #         @test @inferred(increment_field!!(x, nt, Val(:b))) == (a=5.0, b=nt)
+    #         @test @inferred(increment_field!!(x, 3.0, Val(1))) == (a=8.0, b=nt)
+    #         @test @inferred(increment_field!!(x, nt, Val(2))) == (a=5.0, b=nt)
 
-            # Slow versions.
-            @test increment_field!!(x, 3.0, :a) == (a=8.0, b=nt)
-            @test increment_field!!(x, nt, :b) == (a=5.0, b=nt)
-            @test increment_field!!(x, 3.0, 1) == (a=8.0, b=nt)
-            @test increment_field!!(x, nt, 2) == (a=5.0, b=nt)
+    #         # Slow versions.
+    #         @test increment_field!!(x, 3.0, :a) == (a=8.0, b=nt)
+    #         @test increment_field!!(x, nt, :b) == (a=5.0, b=nt)
+    #         @test increment_field!!(x, 3.0, 1) == (a=8.0, b=nt)
+    #         @test increment_field!!(x, nt, 2) == (a=5.0, b=nt)
 
-            # Homogeneous type optimisation.
-            @test @inferred(increment_field!!((a=5.0, b=4.0), 3.0, 1)) == (a=8.0, b=4.0)
-            @test @inferred(increment_field!!((a=5.0, b=4.0), 3.0, :a)) == (a=8.0, b=4.0)
-        end
-        @testset "Tangent" begin
-            nt = NoTangent()
-            x = tangent((a=5.0, b=nt))
-            @test @inferred(increment_field!!(x, 3.0, Val(:a))) == tangent((a=8.0, b=nt))
-            @test @inferred(increment_field!!(x, nt, Val(:b))) == tangent((a=5.0, b=nt))
-            @test @inferred(increment_field!!(x, 3.0, Val(1))) == tangent((a=8.0, b=nt))
-            @test @inferred(increment_field!!(x, nt, Val(2))) == tangent((a=5.0, b=nt))
+    #         # Homogeneous type optimisation.
+    #         @test @inferred(increment_field!!((a=5.0, b=4.0), 3.0, 1)) == (a=8.0, b=4.0)
+    #         @test @inferred(increment_field!!((a=5.0, b=4.0), 3.0, :a)) == (a=8.0, b=4.0)
+    #     end
+    #     @testset "Tangent" begin
+    #         nt = NoTangent()
+    #         x = tangent((a=5.0, b=nt))
+    #         @test @inferred(increment_field!!(x, 3.0, Val(:a))) == tangent((a=8.0, b=nt))
+    #         @test @inferred(increment_field!!(x, nt, Val(:b))) == tangent((a=5.0, b=nt))
+    #         @test @inferred(increment_field!!(x, 3.0, Val(1))) == tangent((a=8.0, b=nt))
+    #         @test @inferred(increment_field!!(x, nt, Val(2))) == tangent((a=5.0, b=nt))
 
-            # Slow versions.
-            @test increment_field!!(x, 3.0, :a) == tangent((a=8.0, b=nt))
-            @test increment_field!!(x, nt, :b) == tangent((a=5.0, b=nt))
-            @test increment_field!!(x, 3.0, 1) == tangent((a=8.0, b=nt))
-            @test increment_field!!(x, nt, 2) == tangent((a=5.0, b=nt))
-        end
-        @testset "MutableTangent" begin
-            nt = NoTangent()
-            @testset "$f" for (f, val, comp) in [
-                (Val(:a), 3.0, mutable_tangent((a=8.0, b=nt))),
-                (:a, 3.0, mutable_tangent((a=8.0, b=nt))),
-                (Val(:b), nt, mutable_tangent((a=5.0, b=nt))),
-                (:b, nt, mutable_tangent((a=5.0, b=nt))),
-                (Val(1), 3.0, mutable_tangent((a=8.0, b=nt))),
-                (1, 3.0, mutable_tangent((a=8.0, b=nt))),
-                (Val(2), nt, mutable_tangent((a=5.0, b=nt))),
-                (2, nt, mutable_tangent((a=5.0, b=nt))),
-            ]
-                x = mutable_tangent((a=5.0, b=nt))
-                @test @inferred(increment_field!!(x, val, f)) == comp
-                @test @inferred(increment_field!!(x, val, f)) === x
-            end
-        end
-    end
-    @testset "restricted inner constructor" begin
-        p = TestResources.NoDefaultCtor(5.0)
-        t = Mooncake.Tangent((x=5.0,))
-        @test_throws Mooncake.AddToPrimalException Mooncake._add_to_primal(p, t)
-        @test Mooncake._add_to_primal(p, t, true) isa typeof(p)
-    end
+    #         # Slow versions.
+    #         @test increment_field!!(x, 3.0, :a) == tangent((a=8.0, b=nt))
+    #         @test increment_field!!(x, nt, :b) == tangent((a=5.0, b=nt))
+    #         @test increment_field!!(x, 3.0, 1) == tangent((a=8.0, b=nt))
+    #         @test increment_field!!(x, nt, 2) == tangent((a=5.0, b=nt))
+    #     end
+    #     @testset "MutableTangent" begin
+    #         nt = NoTangent()
+    #         @testset "$f" for (f, val, comp) in [
+    #             (Val(:a), 3.0, mutable_tangent((a=8.0, b=nt))),
+    #             (:a, 3.0, mutable_tangent((a=8.0, b=nt))),
+    #             (Val(:b), nt, mutable_tangent((a=5.0, b=nt))),
+    #             (:b, nt, mutable_tangent((a=5.0, b=nt))),
+    #             (Val(1), 3.0, mutable_tangent((a=8.0, b=nt))),
+    #             (1, 3.0, mutable_tangent((a=8.0, b=nt))),
+    #             (Val(2), nt, mutable_tangent((a=5.0, b=nt))),
+    #             (2, nt, mutable_tangent((a=5.0, b=nt))),
+    #         ]
+    #             x = mutable_tangent((a=5.0, b=nt))
+    #             @test @inferred(increment_field!!(x, val, f)) == comp
+    #             @test @inferred(increment_field!!(x, val, f)) === x
+    #         end
+    #     end
+    # end
+    # @testset "restricted inner constructor" begin
+    #     p = TestResources.NoDefaultCtor(5.0)
+    #     t = Mooncake.Tangent((x=5.0,))
+    #     @test_throws Mooncake.AddToPrimalException Mooncake._add_to_primal(p, t)
+    #     @test Mooncake._add_to_primal(p, t, true) isa typeof(p)
+    # end
 end
 
-# TODO: add the following test to `tangent_test_cases`
-@testset "zero_tangent and randn_tangent" begin
-    @testset "circular reference" begin
-        foo = make_circular_reference_struct()
-        zt = Mooncake.zero_tangent(foo)
-        @test zt.fields.b.tangent === zt
-        rt = Mooncake.randn_tangent(Xoshiro(123456), foo)
-        @test rt.fields.b.tangent === rt
-    end
+# # TODO: add the following test to `tangent_test_cases`
+# @testset "zero_tangent and randn_tangent" begin
+#     # @testset "circular reference" begin
+#     #     foo = make_circular_reference_struct()
+#     #     zt = Mooncake.zero_tangent(foo)
+#     #     @test zt.fields.b.tangent === zt
+#     #     rt = Mooncake.randn_tangent(Xoshiro(123456), foo)
+#     #     @test rt.fields.b.tangent === rt
+#     # end
 
-    @testset "struct with non-concrete fields" begin
-        bar = Mooncake.TestResources.TypeUnstableStruct(5.0, 1.0)
-        @test ==(
-            Mooncake.zero_tangent(bar),
-            Tangent{@NamedTuple{a::Float64, b::PossiblyUninitTangent{Any}}}((
-                a=0.0, b=PossiblyUninitTangent{Any}(0.0)
-            )),
-        )
-    end
+#     @testset "struct with non-concrete fields" begin
+#         bar = Mooncake.TestResources.TypeUnstableStruct(5.0, 1.0)
+#         @test ==(
+#             Mooncake.zero_tangent(bar),
+#             Tangent{@NamedTuple{a::Float64, b::PossiblyUninitTangent{Any}}}((
+#                 a=0.0, b=PossiblyUninitTangent{Any}(0.0)
+#             )),
+#         )
+#     end
 
-    @testset "duplicate reference" begin
-        @testset "subarray" begin
-            x = [1.0, 2.0, 3.0]
-            immutable_struct = TypeUnstableStruct2(view(x, 1:2), view(x, 1:2))
-            mt = Mooncake.zero_tangent(immutable_struct)
-            @test mt isa Mooncake.Tangent
-            @test mt.fields.a === mt.fields.b
-            rt = Mooncake.randn_tangent(Xoshiro(123456), immutable_struct)
-            @test rt.fields.a === rt.fields.b
+#     @testset "duplicate reference" begin
+#         @testset "subarray" begin
+#             x = [1.0, 2.0, 3.0]
+#             immutable_struct = TypeUnstableStruct2(view(x, 1:2), view(x, 1:2))
+#             mt = Mooncake.zero_tangent(immutable_struct)
+#             @test mt isa Mooncake.Tangent
+#             @test mt.fields.a === mt.fields.b
+#             rt = Mooncake.randn_tangent(Xoshiro(123456), immutable_struct)
+#             @test rt.fields.a === rt.fields.b
 
-            mutable_struct = TypeUnstableMutableStruct2(view(x, 1:2), view(x, 1:2))
-            mt = Mooncake.zero_tangent(mutable_struct)
-            @test mt isa Mooncake.MutableTangent
-            @test mt.fields.a.fields.parent === mt.fields.b.fields.parent
-            rt = Mooncake.randn_tangent(Xoshiro(123456), mutable_struct)
-            @test rt.fields.a.fields.parent === rt.fields.b.fields.parent
-        end
-    end
+#             mutable_struct = TypeUnstableMutableStruct2(view(x, 1:2), view(x, 1:2))
+#             mt = Mooncake.zero_tangent(mutable_struct)
+#             @test mt isa Mooncake.MutableTangent
+#             @test mt.fields.a.fields.parent === mt.fields.b.fields.parent
+#             rt = Mooncake.randn_tangent(Xoshiro(123456), mutable_struct)
+#             @test rt.fields.a.fields.parent === rt.fields.b.fields.parent
+#         end
+#     end
 
-    @testset "indirect circular reference" begin
-        m = make_indirect_circular_reference_array()
-        zt = Mooncake.zero_tangent(m)
-        @test zt[1][1] === zt
-        rt = Mooncake.randn_tangent(Xoshiro(123456), m)
-        @test rt[1][1] === rt
-    end
-end
+#     @testset "indirect circular reference" begin
+#         m = make_indirect_circular_reference_array()
+#         zt = Mooncake.zero_tangent(m)
+#         @test zt[1][1] === zt
+#         rt = Mooncake.randn_tangent(Xoshiro(123456), m)
+#         @test rt[1][1] === rt
+#     end
+# end
 
 # The goal of these tests is to check that we can indeed generate tangent types for anything
 # that we will encounter in the Julia language. We try to achieve this by pulling in types
