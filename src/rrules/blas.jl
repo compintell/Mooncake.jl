@@ -732,6 +732,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
     t_flags = ['N', 'T', 'C']
     alphas = [1.0, -0.25]
     betas = [0.0, 0.33]
+    Ps = [Float64, Float32]
     rng = rng_ctor(123456)
 
     test_cases = vcat(
@@ -740,14 +741,14 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
         vec(
             reduce(
                 vcat,
-                map(product(t_flags, [1, 3], [1, 2])) do (tA, M, N)
+                map(product(t_flags, [1, 3], [1, 2], Ps)) do (tA, M, N, P)
                     t = tA == 'N'
-                    As = blas_matrices(rng, Float64, t ? M : N, t ? N : M)
-                    xs = blas_vectors(rng, Float64, N)
-                    ys = blas_vectors(rng, Float64, M)
+                    As = blas_matrices(rng, P, t ? M : N, t ? N : M)
+                    xs = blas_vectors(rng, P, N)
+                    ys = blas_vectors(rng, P, M)
                     flags = (false, :stability, (lb=1e-3, ub=10.0))
                     return map(product(As, xs, ys)) do (A, x, y)
-                        return (flags..., BLAS.gemv!, tA, randn(), A, x, randn(), y)
+                        return (flags..., BLAS.gemv!, tA, randn(P), A, x, randn(P), y)
                     end
                 end,
             ),
@@ -757,12 +758,12 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
         vec(
             reduce(
                 vcat,
-                map(product(['L', 'U'], alphas, betas)) do (uplo, α, β)
-                    As = blas_matrices(rng, Float64, 5, 5)
-                    ys = blas_vectors(rng, Float64, 5)
-                    xs = blas_vectors(rng, Float64, 5)
+                map(product(['L', 'U'], alphas, betas, Ps)) do (uplo, α, β, P)
+                    As = blas_matrices(rng, P, 5, 5)
+                    ys = blas_vectors(rng, P, 5)
+                    xs = blas_vectors(rng, P, 5)
                     return map(product(As, xs, ys)) do (A, x, y)
-                        (false, :stability, nothing, BLAS.symv!, uplo, α, A, x, β, y)
+                        (false, :stability, nothing, BLAS.symv!, uplo, P(α), A, x, P(β), y)
                     end
                 end,
             ),
@@ -772,12 +773,12 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
         vec(
             reduce(
                 vcat,
-                map(product(t_flags, t_flags, alphas, betas)) do (tA, tB, a, b)
-                    As = blas_matrices(rng, Float64, tA == 'N' ? 3 : 4, tA == 'N' ? 4 : 3)
-                    Bs = blas_matrices(rng, Float64, tB == 'N' ? 4 : 5, tB == 'N' ? 5 : 4)
-                    Cs = blas_matrices(rng, Float64, 3, 5)
+                map(product(t_flags, t_flags, alphas, betas, Ps)) do (tA, tB, a, b, P)
+                    As = blas_matrices(rng, P, tA == 'N' ? 3 : 4, tA == 'N' ? 4 : 3)
+                    Bs = blas_matrices(rng, P, tB == 'N' ? 4 : 5, tB == 'N' ? 5 : 4)
+                    Cs = blas_matrices(rng, P, 3, 5)
                     return map(product(As, Bs, Cs)) do (A, B, C)
-                        (false, :none, nothing, BLAS.gemm!, tA, tB, a, A, B, b, C)
+                        (false, :none, nothing, BLAS.gemm!, tA, tB, P(a), A, B, P(b), C)
                     end
                 end,
             ),
@@ -787,13 +788,14 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
         vec(
             reduce(
                 vcat,
-                map(product(['L', 'R'], ['L', 'U'], alphas, betas)) do (side, uplo, α, β)
+                map(product(['L', 'R'], ['L', 'U'], alphas, betas, Ps)) do (side, uplo, α, β, P)
                     nA = side == 'L' ? 5 : 7
-                    As = blas_matrices(rng, Float64, nA, nA)
-                    Bs = blas_matrices(rng, Float64, 5, 7)
-                    Cs = blas_matrices(rng, Float64, 5, 7)
+                    As = blas_matrices(rng, P, nA, nA)
+                    Bs = blas_matrices(rng, P, 5, 7)
+                    Cs = blas_matrices(rng, P, 5, 7)
+                    flags = (false, :stability, nothing)
                     return map(product(As, Bs, Cs)) do (A, B, C)
-                        (false, :stability, nothing, BLAS.symm!, side, uplo, α, A, B, β, C)
+                        (flags..., BLAS.symm!, side, uplo, P(α), A, B, P(β), C)
                     end
                 end,
             ),
@@ -807,6 +809,9 @@ end
 function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
     t_flags = ['N', 'T', 'C']
     aliased_gemm! = (tA, tB, a, b, A, C) -> BLAS.gemm!(tA, tB, a, A, A, b, C)
+    Ps = [Float32, Float64]
+    uplos = ['L', 'U']
+    dAs = ['N', 'U']
 
     test_cases = vcat(
 
@@ -820,13 +825,18 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
         # BLAS LEVEL 1
         #
 
-        Any[
-            (false, :none, nothing, BLAS.dot, 3, randn(5), 1, randn(4), 1),
-            (false, :none, nothing, BLAS.dot, 3, randn(6), 2, randn(4), 1),
-            (false, :none, nothing, BLAS.dot, 3, randn(6), 1, randn(9), 3),
-            (false, :none, nothing, BLAS.dot, 3, randn(12), 3, randn(9), 2),
-            (false, :none, nothing, BLAS.scal!, 10, 2.4, randn(30), 2),
-        ],
+        reduce(
+            vcat,
+            map(Ps) do P
+                Any[
+                    (false, :none, nothing, BLAS.dot, 3, randn(P, 5), 1, randn(P, 4), 1),
+                    (false, :none, nothing, BLAS.dot, 3, randn(P, 6), 2, randn(P, 4), 1),
+                    (false, :none, nothing, BLAS.dot, 3, randn(P, 6), 1, randn(P, 9), 3),
+                    (false, :none, nothing, BLAS.dot, 3, randn(P, 12), 3, randn(P, 9), 2),
+                    (false, :none, nothing, BLAS.scal!, 10, P(2.4), randn(P, 30), 2),
+                ]
+            end,
+        ),
 
         #
         # BLAS LEVEL 2
@@ -836,9 +846,9 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
         vec(
             reduce(
                 vcat,
-                map(product(['L', 'U'], t_flags, ['N', 'U'], [1, 3])) do (ul, tA, dA, N)
-                    As = [randn(N, N), view(randn(15, 15), 3:(N + 2), 4:(N + 3))]
-                    bs = [randn(N), view(randn(14), 4:(N + 3))]
+                map(product(uplos, t_flags, dAs, [1, 3], Ps)) do (ul, tA, dA, N, P)
+                    As = [randn(P, N, N), view(randn(P, 15, 15), 3:(N + 2), 4:(N + 3))]
+                    bs = [randn(P, N), view(randn(P, 14), 4:(N + 3))]
                     return map(product(As, bs)) do (A, b)
                         (false, :none, nothing, BLAS.trmv!, ul, tA, dA, A, b)
                     end
@@ -852,19 +862,21 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
 
         # aliased gemm!
         vec(
-            map(product(t_flags, t_flags)) do (tA, tB)
-                A = randn(5, 5)
-                B = randn(5, 5)
-                (false, :none, nothing, aliased_gemm!, tA, tB, randn(), randn(), A, B)
+            map(product(t_flags, t_flags, Ps)) do (tA, tB, P)
+                A = randn(P, 5, 5)
+                B = randn(P, 5, 5)
+                (false, :none, nothing, aliased_gemm!, tA, tB, randn(P), randn(P), A, B)
             end,
         ),
 
         # syrk!
         vec(
-            map(product(['U', 'L'], t_flags)) do (uplo, t)
-                A = t == 'N' ? randn(3, 4) : randn(4, 3)
-                C = randn(3, 3)
-                return (false, :none, nothing, BLAS.syrk!, uplo, t, randn(), A, randn(), C)
+            map(product(uplos, t_flags, Ps)) do (uplo, t, P)
+                A = t == 'N' ? randn(P, 3, 4) : randn(P, 4, 3)
+                C = randn(P, 3, 3)
+                α = randn(P)
+                β = randn(P)
+                return (false, :none, nothing, BLAS.syrk!, uplo, t, α, A, β, C)
             end,
         ),
 
@@ -873,15 +885,15 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
             reduce(
                 vcat,
                 map(
-                    product(['L', 'R'], ['U', 'L'], t_flags, ['N', 'U'], [1, 3], [1, 2])
-                ) do (side, ul, tA, dA, M, N)
+                    product(['L', 'R'], uplos, t_flags, dAs, [1, 3], [1, 2], Ps)
+                ) do (side, ul, tA, dA, M, N, P)
                     t = tA == 'N'
                     R = side == 'L' ? M : N
-                    As = [randn(R, R), view(randn(15, 15), 3:(R + 2), 4:(R + 3))]
-                    Bs = [randn(M, N), view(randn(15, 15), 2:(M + 1), 5:(N + 4))]
+                    As = [randn(P, R, R), view(randn(P, 15, 15), 3:(R + 2), 4:(R + 3))]
+                    Bs = [randn(P, M, N), view(randn(P, 15, 15), 2:(M + 1), 5:(N + 4))]
                     flags = (false, :none, nothing)
                     return map(product(As, Bs)) do (A, B)
-                        (flags..., BLAS.trmm!, side, ul, tA, dA, randn(), A, B)
+                        (flags..., BLAS.trmm!, side, ul, tA, dA, randn(P), A, B)
                     end
                 end,
             ),
@@ -892,15 +904,15 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
             reduce(
                 vcat,
                 map(
-                    product(['L', 'R'], ['U', 'L'], t_flags, ['N', 'U'], [1, 3], [1, 2])
-                ) do (side, ul, tA, dA, M, N)
+                    product(['L', 'R'], uplos, t_flags, dAs, [1, 3], [1, 2], Ps)
+                ) do (side, ul, tA, dA, M, N, P)
                     t = tA == 'N'
                     R = side == 'L' ? M : N
-                    As = [randn(R, R) + 5I, view(randn(15, 15), 3:(R + 2), 4:(R + 3)) + 5I]
-                    Bs = [randn(M, N), view(randn(15, 15), 2:(M + 1), 5:(N + 4))]
+                    As = [randn(P, R, R) + 5I, view(randn(P, 15, 15), 3:(R + 2), 4:(R + 3)) + 5I]
+                    Bs = [randn(P, M, N), view(randn(P, 15, 15), 2:(M + 1), 5:(N + 4))]
                     flags = (false, :none, nothing)
                     return map(product(As, Bs)) do (A, B)
-                        (flags..., BLAS.trsm!, side, ul, tA, dA, randn(), A, B)
+                        (flags..., BLAS.trsm!, side, ul, tA, dA, randn(P), A, B)
                     end
                 end,
             ),
