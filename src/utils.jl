@@ -228,3 +228,10 @@ One-liner which calls the `:new` instruction with type `T` with arguments `x`.
 @inline @generated function _new_(::Type{T}, x::Vararg{Any,N}) where {T,N}
     return Expr(:new, :T, map(n -> :(x[$n]), 1:N)...)
 end
+
+"""
+    flat_product(xs...)
+
+Equivalent to `vec(collect(Iterators.product(xs...)))`.
+"""
+flat_product(xs...) = vec(collect(Iterators.product(xs...)))
