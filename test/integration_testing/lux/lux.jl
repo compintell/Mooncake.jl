@@ -15,7 +15,11 @@ sr(x) = StableRNG(x)
         (false, Chain(Dense(2, 4, relu), Dense(4, 3)), randn(sr(4), Float32, 2, 3)),
         (false, Scale(2), randn(sr(5), Float32, 2, 3)),
         (false, Conv((3, 3), 2 => 3), randn(sr(6), Float32, 3, 3, 2, 2)),
-        (false, Conv((3, 3), 2 => 3, gelu; pad=SamePad()), randn(sr(7), Float32, 3, 3, 2, 2)),
+        (
+            false,
+            Conv((3, 3), 2 => 3, gelu; pad=SamePad()),
+            randn(sr(7), Float32, 3, 3, 2, 2),
+        ),
         (
             false,
             Conv((3, 3), 2 => 3, relu; use_bias=false, pad=SamePad()),
@@ -80,11 +84,23 @@ sr(x) = StableRNG(x)
             Chain(Dense(2, 4), BatchNorm(4, gelu; track_stats=false)),
             randn(sr(26), Float32, 2, 3),
         ),
-        (true, Chain(Conv((3, 3), 2 => 6), BatchNorm(6)), randn(sr(27), Float32, 6, 6, 2, 2)),
-        (true, Chain(Conv((3, 3), 2 => 6, tanh), BatchNorm(6)), randn(sr(28), Float32, 6, 6, 2, 2)),
+        (
+            true,
+            Chain(Conv((3, 3), 2 => 6), BatchNorm(6)),
+            randn(sr(27), Float32, 6, 6, 2, 2),
+        ),
+        (
+            true,
+            Chain(Conv((3, 3), 2 => 6, tanh), BatchNorm(6)),
+            randn(sr(28), Float32, 6, 6, 2, 2),
+        ),
         (false, Chain(Dense(2, 4), GroupNorm(4, 2, gelu)), randn(sr(29), Float32, 2, 3)),
         (false, Chain(Dense(2, 4), GroupNorm(4, 2)), randn(sr(30), Float32, 2, 3)),
-        (false, Chain(Conv((3, 3), 2 => 6), GroupNorm(6, 3)), randn(sr(31), Float32, 6, 6, 2, 2)),
+        (
+            false,
+            Chain(Conv((3, 3), 2 => 6), GroupNorm(6, 3)),
+            randn(sr(31), Float32, 6, 6, 2, 2),
+        ),
         (
             false,
             Chain(Conv((3, 3), 2 => 6, tanh), GroupNorm(6, 3)),
@@ -96,7 +112,11 @@ sr(x) = StableRNG(x)
             randn(sr(33), Float32, 4, 4, 2, 2),
         ),
         (false, InstanceNorm(6), randn(sr(34), Float32, 6, 6, 2, 2)),
-        (false, Chain(Conv((3, 3), 2 => 6), InstanceNorm(6)), randn(sr(35), Float32, 6, 6, 2, 2)),
+        (
+            false,
+            Chain(Conv((3, 3), 2 => 6), InstanceNorm(6)),
+            randn(sr(35), Float32, 6, 6, 2, 2),
+        ),
         (
             false,
             Chain(Conv((3, 3), 2 => 6, tanh), InstanceNorm(6)),
