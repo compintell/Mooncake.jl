@@ -424,7 +424,7 @@ _getter() = 5.0
             (false, :allocs, fill!, randn(sr(0), 3, 2), randn(sr(9))),
             (false, :none, x -> filter(>(0), x), [0.5, -0.1, -0.4]),
             (false, :none, x -> filter(<(0), x), randn(sr(1), 2, 2)),
-            (false, :none, x -> findall(<(0), x), [0.5, 0.0, -0.3]),
+            (false, :none, x -> findall(<(0), x), [0.5, 0.1, -0.3]),
             (false, :allocs, x -> findfirst(<(0), x), [0.5, -0.1, -0.4]),
             (false, :allocs, x -> findlast(<(0), x), [0.5, -0.1, -0.4]),
             (false, :none, findmax, randn(sr(1), 2, 2)),
