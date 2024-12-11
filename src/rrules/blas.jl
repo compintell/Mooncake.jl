@@ -869,7 +869,10 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
         ) do (side, ul, tA, dA, M, N, P)
             t = tA == 'N'
             R = side == 'L' ? M : N
-            As = blas_matrices(rng, P, R, R)
+            As = map(blas_matrices(rng, P, R, R)) do A
+                A[diagind(A)] .+= 1
+                return A
+            end
             Bs = blas_matrices(rng, P, M, N)
             return map_prod(As, Bs) do (A, B)
                 (false, :none, nothing, BLAS.trsm!, side, ul, tA, dA, randn(P), A, B)
