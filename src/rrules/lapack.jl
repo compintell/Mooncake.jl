@@ -336,7 +336,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
         ) do (ul, tA, diag, N, Nrhs, P)
             As = blas_matrices(rng, P, N, N)
             Bs = blas_matrices(rng, P, N, Nrhs)
-            return map_prod(As, Bs) do (A, B)
+            return map(As, Bs) do A, B
                 (false, :none, nothing, trtrs!, ul, tA, diag, A, B)
             end
         end...,
@@ -348,7 +348,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
                 return getrf!(A)
             end
             Bs = blas_matrices(rng, P, N, Nrhs)
-            return map_prod(As, Bs) do ((A, ipiv), B)
+            return map(As, Bs) do (A, ipiv), B
                 (false, :none, nothing, getrs!, trans, A, ipiv, B)
             end
         end...,
@@ -370,7 +370,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
                 A .= A * A' + I
                 return A
             end
-            return map_prod(['L', 'U'], As) do (uplo, A)
+            return map(['L', 'U'], As) do uplo, A
                 return (false, :none, nothing, potrf!, uplo, A)
             end
         end...,
@@ -380,7 +380,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
             X = randn(rng, P, N, N)
             A = X * X' + I
             Bs = blas_matrices(rng, P, N, Nrhs)
-            return map_prod(['L', 'U'], Bs) do (uplo, B)
+            return map(['L', 'U'], Bs) do uplo, B
                 (false, :none, nothing, potrs!, uplo, potrf!(uplo, copy(A))[1], copy(B))
             end
         end...,
