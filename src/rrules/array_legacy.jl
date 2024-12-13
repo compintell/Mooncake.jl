@@ -22,7 +22,11 @@ function increment!!(x::T, y::T) where {P,N,T<:Array{P,N}}
     return x === y ? x : _map_if_assigned!(increment!!, x, x, y)
 end
 
-set_to_zero!!(x::Array) = _map_if_assigned!(set_to_zero!!, x, x)
+function _set_to_zero!!(c::IncCache, x::Array)
+    x in c && return x
+    push!(c, x)
+    return _map_if_assigned!(Base.Fix1(_set_to_zero!!, c), x, x)
+end
 
 function _scale(a::Float64, t::Array{T,N}) where {T,N}
     t′ = Array{T,N}(undef, size(t)...)
