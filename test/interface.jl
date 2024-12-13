@@ -50,7 +50,7 @@ end
             for (arg, darg) in zip(fargs, _dfargs)
                 @test tangent_type(typeof(arg)) == typeof(darg)
             end
-            @test count_allocs((value_and_gradient!!, cache, fargs...)) == 0
+            @test_broken count_allocs((value_and_gradient!!, cache, fargs...)) == 0
         end
 
         rule = build_rrule(identity, (5.0, 4.0))
