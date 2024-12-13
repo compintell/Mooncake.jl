@@ -3,13 +3,13 @@
 At any given point in time, `Mooncake.jl` supports the current Long Term Support (LTS) release of Julia, and the latest release version of Julia 1.
 Consequently, the versions of Julia which are officially supported by `Mooncake.jl` will change (almost) _immediately_ whenever a new Julia LTS version is declared, or a minor release of Julia is made.
 
-For example, the LTS is 1.10 and the latest release is 1.11 at the time of writing. When 1.12 is released, we will
+For example, the LTS is 1.10 and the latest release is 1.11, at the time of writing. When 1.12 is released, we will
 1. bump the Julia compat bounds in `Mooncake.jl` to require either 1.10 or 1.12,
 1. cease to run CI on 1.11,
 1. cease to provide bug fixes for 1.11,
 1. cease to accept 1.11-specific bug fixes, as we will not be running CI for 1.11 and therefore will not be able to test that they have worked.
 
-In short: as far as `Mooncake.jl`'s future releases, 1.11 ceases to exist the moment 1.12 is released.
+In short: as far as `Mooncake.jl`'s future releases are concerned, 1.11 ceases to exist the moment 1.12 is released.
 
 Note that these changes are not applied retrospectively to existing releases of `Mooncake.jl`.
 Suppose that `Mooncake.jl` is at `v0.4.50` when 1.12 is released.
@@ -32,7 +32,7 @@ In order to support a particular version of Julia, we must
 1. accept and proactively produce fixes for that version,
 1. maintain version-specific code in the `Mooncake.jl` codebase.
 
-This requires a surprisingly amount of overhead to the development of `Mooncake.jl`, and has the potential to substantially increase the complexity of the codebase.
+All of this adds a surprising amount of overhead to the development of `Mooncake.jl`, and tends to substantially increase the complexity of the codebase.
 All of this makes it harder to improve `Mooncake.jl`.
 Consequently, this policy represents a decision to tradeoff support for a range of minor Julia versions in exchange for easing the development burden associated to `Mooncake.jl`.
 
