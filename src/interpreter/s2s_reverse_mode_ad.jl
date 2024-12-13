@@ -1302,11 +1302,8 @@ straightforward to figure out much time is spent pushing to the block stack when
     return nothing
 end
 
-@generated function __make_tuples(::Type{T}, args::Tuple) where {T}
-    lazy_exprs = map(eachindex(T.parameters)) do n
-        return :(lazy_zero_rdata($(T.parameters[n]), primal(args[$n])))
-    end
-    return Expr(:call, tuple, lazy_exprs...)
+@inline function __make_tuples(::Type{T}, args::Tuple) where {T<:Tuple}
+    return map((T, arg) -> lazy_zero_rdata(T, primal(arg)), fieldtypes(T), args)
 end
 
 """
