@@ -1044,6 +1044,7 @@ function tangent_test_cases()
         (a=3, b=randn(10)),
         (a=randn(10), b=randn(10)),
         (Base.TOML.ErrorType(1), NoTangent()), # Enum
+        fill!(Memory{Float64}(undef, 3), 3.0),
     ]
     return vcat(
         map(x -> (false, x...), abs_test_cases),

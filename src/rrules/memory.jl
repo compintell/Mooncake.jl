@@ -72,7 +72,7 @@ end
 function _set_to_zero!!(c::IncCache, x::Memory)
     haskey(c, x) && return x
     c[x] = false
-    return _map_if_assigned!(_set_to_zero!!, x, x)
+    return _map_if_assigned!(Base.Fix1(_set_to_zero!!, c), x, x)
 end
 
 function _add_to_primal(p::Memory{P}, t::Memory, unsafe::Bool) where {P}
