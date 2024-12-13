@@ -1298,17 +1298,9 @@ straightforward to figure out much time is spent pushing to the block stack when
 @inline function __assemble_lazy_zero_rdata(
     r::Ref{T}, args::Vararg{CoDual,N}
 ) where {T<:Tuple,N}
-    # r[] = __make_tuples(T, args)
     r[] = map((T, x) -> lazy_zero_rdata(T, primal(x)), fieldtypes(T), args)
     return nothing
 end
-
-# @generated function __make_tuples(::Type{T}, args::Tuple) where {T}
-#     lazy_exprs = map(eachindex(T.parameters)) do n
-#         return :(lazy_zero_rdata($(T.parameters[n]), primal(args[$n])))
-#     end
-#     return Expr(:call, tuple, lazy_exprs...)
-# end
 
 """
     pullback_ir(ir::BBCode, Tret, ad_stmts_blocks::ADStmts, info::ADInfo, Tshared_data)
