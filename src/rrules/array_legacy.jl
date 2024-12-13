@@ -23,8 +23,8 @@ function increment!!(x::T, y::T) where {P,N,T<:Array{P,N}}
 end
 
 function _set_to_zero!!(c::IncCache, x::Array)
-    x in c && return x
-    push!(c, x)
+    haskey(c, x) && return x
+    c[x] = false
     return _map_if_assigned!(Base.Fix1(_set_to_zero!!, c), x, x)
 end
 

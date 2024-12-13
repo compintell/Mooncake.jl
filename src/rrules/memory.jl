@@ -70,8 +70,8 @@ function increment!!(x::Memory{P}, y::Memory{P}) where {P}
 end
 
 function _set_to_zero!!(c::IncCache, x::Memory)
-    x in c && return x
-    push!(c, x)
+    haskey(c, x) && return x
+    c[x] = false
     return _map_if_assigned!(_set_to_zero!!, x, x)
 end
 
@@ -162,8 +162,8 @@ function increment!!(x::T, y::T) where {T<:Array}
 end
 
 function _set_to_zero!!(c::IncCache, x::Array)
-    x in c && return x
-    push!(c, x)
+    haskey(c, x) && return x
+    c[x] = false
     return _map_if_assigned!(Base.Fix1(_set_to_zero!!, c), x, x)
 end
 

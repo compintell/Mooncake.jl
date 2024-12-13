@@ -15,8 +15,8 @@ function increment!!(p::T, q::T) where {T<:IdDict}
     return p
 end
 function _set_to_zero!!(c::IncCache, t::IdDict)
-    t in c && return t
-    push!(c, t)
+    haskey(c, t) && return t
+    c[t] = false
     foreach(keys(t)) do k
         t[k] = _set_to_zero!!(c, t[k])
     end
