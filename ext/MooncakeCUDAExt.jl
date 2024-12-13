@@ -34,7 +34,7 @@ end
 TestUtils.has_equal_data(x::P, y::P) where {P<:CuArray{<:IEEEFloat}} = x == y
 increment!!(x::P, y::P) where {P<:CuArray{<:IEEEFloat}} = x .+= y
 __increment_should_allocate(::Type{<:CuArray{<:IEEEFloat}}) = true
-_set_to_zero!!(::IncCache, x::CuArray{<:IEEEFloat}) = x .= 0
+_set_to_zero!!(::Mooncake.IncCache, x::CuArray{<:IEEEFloat}) = x .= 0
 _add_to_primal(x::P, y::P, ::Bool) where {P<:CuArray{<:IEEEFloat}} = x + y
 _diff(x::P, y::P) where {P<:CuArray{<:IEEEFloat}} = x - y
 _dot(x::P, y::P) where {P<:CuArray{<:IEEEFloat}} = Float64(dot(x, y))
