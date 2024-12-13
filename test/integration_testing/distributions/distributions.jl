@@ -207,7 +207,7 @@ sr(n::Int) = StableRNG(n)
             ),
             randn(sr(2), 2, 3),
         ),
-        (:none, MatrixBeta(5, 6.0, 7.0), rand(sr(123456), MatrixBeta(5, 6.0, 6.0))),
+        (:none, MatrixBeta(5, 9.0, 10.0), rand(sr(123456), MatrixBeta(5, 9.0, 10.0))),
         (
             :none,
             MatrixFDist(6.0, 7.0, _pdmat(randn(sr(1234), 5, 5))),

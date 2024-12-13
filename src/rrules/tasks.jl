@@ -15,7 +15,7 @@ randn_tangent(rng::AbstractRNG, p::Task) = TaskTangent()
 
 increment!!(t::TaskTangent, s::TaskTangent) = t
 
-set_to_zero!!(t::TaskTangent) = t
+_set_to_zero!!(::IncCache, t::TaskTangent) = t
 
 __add_to_primal(::MaybeCache, p::Task, t::TaskTangent, ::Bool) = p
 

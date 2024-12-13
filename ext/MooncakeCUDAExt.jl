@@ -13,7 +13,7 @@ import Mooncake:
     zero_tangent,
     randn_tangent,
     increment!!,
-    set_to_zero!!,
+    _set_to_zero!!,
     __add_to_primal,
     __diff,
     __dot,
@@ -34,7 +34,7 @@ end
 TestUtils.has_equal_data(x::P, y::P) where {P<:CuArray{<:IEEEFloat}} = x == y
 increment!!(x::P, y::P) where {P<:CuArray{<:IEEEFloat}} = x .+= y
 __increment_should_allocate(::Type{<:CuArray{<:IEEEFloat}}) = true
-set_to_zero!!(x::CuArray{<:IEEEFloat}) = x .= 0
+_set_to_zero!!(::Mooncake.IncCache, x::CuArray{<:IEEEFloat}) = x .= 0
 function __add_to_primal(c::MaybeCache, x::P, y::P, ::Bool) where {P<:CuArray{<:IEEEFloat}}
     key = (x, y, unsafe)
     haskey(c, key) && return c[key]::P

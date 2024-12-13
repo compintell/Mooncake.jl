@@ -104,8 +104,8 @@ function increment!!(t::T, s::T) where {T<:FunctionWrapperTangent}
     return t
 end
 
-function set_to_zero!!(t::FunctionWrapperTangent)
-    t.dobj_ref[] = set_to_zero!!(t.dobj_ref[])
+function _set_to_zero!!(c::IncCache, t::FunctionWrapperTangent)
+    t.dobj_ref[] = _set_to_zero!!(c, t.dobj_ref[])
     return t
 end
 

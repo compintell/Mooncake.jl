@@ -593,7 +593,7 @@ struct NoDefaultCtor{T}
 end
 
 @noinline function __inplace_function!(x::Vector{Float64})
-    x .*= 2
+    x .= cos.(x)
     return nothing
 end
 

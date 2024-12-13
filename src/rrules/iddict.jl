@@ -14,9 +14,11 @@ function increment!!(p::T, q::T) where {T<:IdDict}
     end
     return p
 end
-function set_to_zero!!(t::IdDict)
+function _set_to_zero!!(c::IncCache, t::IdDict)
+    haskey(c, t) && return t
+    c[t] = false
     foreach(keys(t)) do k
-        t[k] = set_to_zero!!(t[k])
+        t[k] = _set_to_zero!!(c, t[k])
     end
     return t
 end

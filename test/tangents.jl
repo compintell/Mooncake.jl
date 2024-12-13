@@ -181,13 +181,15 @@ end
 
 # # TODO: add the following test to `tangent_test_cases`
 # @testset "zero_tangent and randn_tangent" begin
-#     # @testset "circular reference" begin
-#     #     foo = make_circular_reference_struct()
-#     #     zt = Mooncake.zero_tangent(foo)
-#     #     @test zt.fields.b.tangent === zt
-#     #     rt = Mooncake.randn_tangent(Xoshiro(123456), foo)
-#     #     @test rt.fields.b.tangent === rt
-#     # end
+#     @testset "circular reference" begin
+#         foo = make_circular_reference_struct()
+#         zt = Mooncake.zero_tangent(foo)
+#         @test zt.fields.b.tangent === zt
+#         rt = Mooncake.randn_tangent(Xoshiro(123456), foo)
+#         @test rt.fields.b.tangent === rt
+#         Mooncake.set_to_zero!!(zt)
+#         Mooncake.set_to_zero!!(rt)
+#     end
 
 #     @testset "struct with non-concrete fields" begin
 #         bar = Mooncake.TestResources.TypeUnstableStruct(5.0, 1.0)
@@ -224,6 +226,8 @@ end
 #         @test zt[1][1] === zt
 #         rt = Mooncake.randn_tangent(Xoshiro(123456), m)
 #         @test rt[1][1] === rt
+#         Mooncake.set_to_zero!!(zt)
+#         Mooncake.set_to_zero!!(rt)
 #     end
 # end
 

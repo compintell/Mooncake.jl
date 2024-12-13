@@ -691,12 +691,19 @@ function _increment!!(c::IncCache, x::T, y::T) where {T<:MutableTangent}
     return x
 end
 
+struct NoCache end
+
+Base.haskey(::NoCache, x) = false
+Base.setindex!(::NoCache, v, x) = nothing
+
+const IncCache = Union{NoCache,IdDict{Any,Bool}}
+
 """
     set_to_zero!!(x)
 
 Set `x` to its zero element (`x` should be a tangent, so the zero must exist).
 """
-set_to_zero!!(x) = _set_to_zero!!(IdSet{Any}(), x)
+set_to_zero!!(x) = _set_to_zero!!(IdDict{Any,Bool}(), x)
 
 _set_to_zero!!(::IncCache, ::NoTangent) = NoTangent()
 _set_to_zero!!(::IncCache, x::Base.IEEEFloat) = zero(x)
@@ -708,8 +715,8 @@ function _set_to_zero!!(c::IncCache, x::T) where {T<:PossiblyUninitTangent}
 end
 _set_to_zero!!(c::IncCache, x::T) where {T<:Tangent} = T(_set_to_zero!!(c, x.fields))
 function _set_to_zero!!(c::IncCache, x::MutableTangent)
-    x in c && return x
-    push!(c, x)
+    haskey(c, x) && return x
+    setindex!(c, false, x)
     x.fields = _set_to_zero!!(c, x.fields)
     return x
 end
@@ -1183,6 +1190,7 @@ function tangent_test_cases()
         # TestResources.make_circular_reference_struct(),
         TestResources.make_indirect_circular_reference_array(),
     ]
+    VERSION >= v"1.11" && push!(rel_test_cases, fill!(Memory{Float64}(undef, 3), 3.0))
     return vcat(
         # map(x -> (false, x...), abs_test_cases),
         map(x -> (false, x), rel_test_cases),

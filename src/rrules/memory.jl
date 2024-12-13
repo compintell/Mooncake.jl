@@ -72,9 +72,9 @@ function _increment!!(c::IncCache, x::Memory{P}, y::Memory{P}) where {P}
 end
 
 function _set_to_zero!!(c::IncCache, x::Memory)
-    x in c && return x
-    push!(c, x)
-    return _map_if_assigned!(_set_to_zero!!, x, x)
+    haskey(c, x) && return x
+    c[x] = false
+    return _map_if_assigned!(Base.Fix1(_set_to_zero!!, c), x, x)
 end
 
 function __add_to_primal(c::MaybeCache, p::Memory{P}, t::Memory, unsafe::Bool) where {P}
@@ -194,8 +194,8 @@ function _increment!!(c::IncCache, x::T, y::T) where {T<:Array}
 end
 
 function _set_to_zero!!(c::IncCache, x::Array)
-    x in c && return x
-    push!(c, x)
+    haskey(c, x) && return x
+    c[x] = false
     return _map_if_assigned!(Base.Fix1(_set_to_zero!!, c), x, x)
 end
 
