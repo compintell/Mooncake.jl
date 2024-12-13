@@ -231,8 +231,8 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
 
                 if should_run_benchmark(Val(:enzyme), args...)
                     @info "Enzyme"
-                    _size(x) = x isa Real ? 1 : size(x)
-                    dup_args = map(x -> Duplicated(x, randn(_size(x))), primals[2:end])
+                    _rand_similiar(x) = x isa Real ? randn() : randn(size(x))
+                    dup_args = map(x -> Duplicated(x, _rand_similiar(x)), primals[2:end])
                     suite["enzyme"] = @be(
                         _,
                         _,
