@@ -252,7 +252,7 @@ end
 Helper for [`reverse_data_ref_stmts`](@ref). Constructs a `Ref` whose element type is the
 [`zero_like_rdata_type`](@ref) for `P`, and whose element is the zero-like rdata for `P`.
 """
-@inline function __make_ref(p::Type{P}) where {P}
+@inline @generated function __make_ref(p::Type{P}) where {P}
     _P = @isdefined(P) ? P : _typeof(p)
     R = zero_like_rdata_type(_P)
     return Ref{R}(Mooncake.zero_like_rdata_from_type(_P))
