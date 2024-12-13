@@ -651,7 +651,7 @@ function rrule!!(
     end
 end
 
-@generated is_homogeneous_and_immutable(::P) where {P<:Tuple} = allequal(P.parameters)
+is_homogeneous_and_immutable(::P) where {P<:Tuple} = allequal(fieldtypes(P))
 @inline is_homogeneous_and_immutable(p::NamedTuple) = is_homogeneous_and_immutable(Tuple(p))
 is_homogeneous_and_immutable(::Any) = false
 
