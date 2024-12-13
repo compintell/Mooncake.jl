@@ -133,7 +133,6 @@ function should_run_benchmark(
 )
     return false
 end
-should_run_benchmark(::Val{:enzyme}, x...) = false
 
 @inline g(x, a, ::Val{N}) where {N} = N > 0 ? g(x * a, a, Val(N - 1)) : x
 
@@ -236,7 +235,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
                     suite["enzyme"] = @be(
                         _,
                         _,
-                        autodiff(Reverse, $primals[1], Active, $dup_args...),
+                        autodiff(ReverseWithPrimal, $primals[1], Active, $dup_args...),
                         _,
                         evals = 1,
                     )
