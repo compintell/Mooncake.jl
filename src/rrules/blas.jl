@@ -743,7 +743,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
             ys = blas_vectors(rng, P, M)
             flags = (false, :stability, (lb=1e-3, ub=10.0))
             return map(As, xs, ys) do A, x, y
-                return (flags..., BLAS.gemv!, tA, randn(P), A, x, randn(P), y)
+                (flags..., BLAS.gemv!, tA, randn(rng, P), A, x, randn(rng, P), y)
             end
         end...,
 
@@ -804,12 +804,13 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
         #
 
         map(Ps) do P
+            flags = (false, :none, nothing)
             Any[
-                (false, :none, nothing, BLAS.dot, 3, randn(P, 5), 1, randn(P, 4), 1),
-                (false, :none, nothing, BLAS.dot, 3, randn(P, 6), 2, randn(P, 4), 1),
-                (false, :none, nothing, BLAS.dot, 3, randn(P, 6), 1, randn(P, 9), 3),
-                (false, :none, nothing, BLAS.dot, 3, randn(P, 12), 3, randn(P, 9), 2),
-                (false, :none, nothing, BLAS.scal!, 10, P(2.4), randn(P, 30), 2),
+                (flags..., BLAS.dot, 3, randn(rng, P, 5), 1, randn(rng, P, 4), 1),
+                (flags..., BLAS.dot, 3, randn(rng, P, 6), 2, randn(rng, P, 4), 1),
+                (flags..., BLAS.dot, 3, randn(rng, P, 6), 1, randn(rng, P, 9), 3),
+                (flags..., BLAS.dot, 3, randn(rng, P, 12), 3, randn(rng, P, 9), 2),
+                (flags..., BLAS.scal!, 10, P(2.4), randn(rng, P, 30), 2),
             ]
         end...,
 
@@ -834,18 +835,21 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
         map_prod(t_flags, t_flags, Ps) do (tA, tB, P)
             As = blas_matrices(rng, P, 5, 5)
             Bs = blas_matrices(rng, P, 5, 5)
+            a = randn(rng, P)
+            b = randn(rng, P)
             return map_prod(As, Bs) do (A, B)
-                (false, :none, nothing, aliased_gemm!, tA, tB, randn(P), randn(P), A, B)
+                (false, :none, nothing, aliased_gemm!, tA, tB, a, b, A, B)
             end
         end...,
 
         # syrk!
         map_prod(uplos, t_flags, Ps) do (uplo, t, P)
             As = blas_matrices(rng, P, t == 'N' ? 3 : 4, t == 'N' ? 4 : 3)
-            C = randn(P, 3, 3)
-            flags = (false, :none, nothing)
+            C = randn(rng, P, 3, 3)
+            a = randn(rng, P)
+            b = randn(rng, P)
             return map(As) do A
-                return (flags..., BLAS.syrk!, uplo, t, randn(P), A, randn(P), C)
+                (false, :none, nothing, BLAS.syrk!, uplo, t, a, A, b, C)
             end
         end...,
 
@@ -855,10 +859,11 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
         ) do (side, ul, tA, dA, M, N, P)
             t = tA == 'N'
             R = side == 'L' ? M : N
+            a = randn(rng, P)
             As = blas_matrices(rng, P, R, R)
             Bs = blas_matrices(rng, P, M, N)
             return map(As, Bs) do A, B
-                (false, :none, nothing, BLAS.trmm!, side, ul, tA, dA, randn(P), A, B)
+                (false, :none, nothing, BLAS.trmm!, side, ul, tA, dA, a, A, B)
             end
         end...,
 
@@ -868,13 +873,14 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
         ) do (side, ul, tA, dA, M, N, P)
             t = tA == 'N'
             R = side == 'L' ? M : N
+            a = randn(rng, P)
             As = map(blas_matrices(rng, P, R, R)) do A
                 A[diagind(A)] .+= 1
                 return A
             end
             Bs = blas_matrices(rng, P, M, N)
             return map(As, Bs) do A, B
-                (false, :none, nothing, BLAS.trsm!, side, ul, tA, dA, randn(P), A, B)
+                (false, :none, nothing, BLAS.trsm!, side, ul, tA, dA, a, A, B)
             end
         end...,
     )
