@@ -33,7 +33,7 @@ primal. This operation is not guaranteed to be possible for all array types, but
 possible for all array types of interest so far.
 """
 function arrayify(x::CoDual{A}) where {A<:AbstractArray{<:BlasRealFloat}}
-    return arrayify(primal(x), tangent(x))::Tuple{A, A}
+    return arrayify(primal(x), tangent(x))::Tuple{A,A}
 end
 arrayify(x::Array{P}, dx::Array{P}) where {P<:BlasRealFloat} = (x, dx)
 function arrayify(x::A, dx::FData) where {A<:SubArray{<:BlasRealFloat}}
