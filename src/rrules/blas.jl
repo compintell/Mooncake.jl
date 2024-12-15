@@ -25,11 +25,22 @@ const MatrixOrView{T} = Union{Matrix{T},SubArray{T,2,<:Array{T}}}
 const VecOrView{T} = Union{Vector{T},SubArray{T,1,<:Array{T}}}
 const BlasRealFloat = Union{Float32,Float64}
 
-viewify(A::CoDual{<:Vector}) = primal(A), tangent(A)
-viewify(A::CoDual{<:Matrix}) = view(primal(A), :, :), view(tangent(A), :, :)
-function viewify(A::CoDual{P}) where {P<:SubArray}
-    p_A = primal(A)
-    return p_A, P(tangent(A).data.parent, p_A.indices, p_A.offset1, p_A.stride1)
+"""
+    arrayify(x::CoDual{<:AbstractArray{<:BlasRealFloat}})
+
+Return the primal field of `x`, and convert its fdata into an array of the same type as the
+primal. This operation is not guaranteed to be possible for all array types, but seems to be
+possible for all array types of interest so far.
+"""
+arrayify(x::CoDual{<:AbstractArray{<:BlasRealFloat}}) = arrayify(primal(x), tangent(x))
+arrayify(x::Array{P}, dx::Array{P}) where {P<:BlasRealFloat} = (x, dx)
+function arrayify(x::A, dx::FData) where {A<:SubArray{<:BlasRealFloat}}
+    _, _dx = arrayify(x.parent, dx.data.parent)
+    return x, A(_dx, x.indices, x.offset1, x.stride1)
+end
+function arrayify(x::A, dx::FData) where {A<:Base.ReshapedArray{<:BlasRealFloat}}
+    _, _dx = arrayify(x.parent, dx.data.parent)
+    return x, A(_dx, x.dims, x.mi)
 end
 
 #
@@ -144,7 +155,7 @@ end
 @is_primitive(
     MinimalCtx,
     Tuple{
-        typeof(BLAS.gemv!),Char,P,MatrixOrView{P},VecOrView{P},P,VecOrView{P}
+        typeof(BLAS.gemv!),Char,P,AbstractMatrix{P},AbstractVector{P},P,AbstractVector{P}
     } where {P<:BlasRealFloat},
 )
 
@@ -152,19 +163,19 @@ end
     ::CoDual{typeof(BLAS.gemv!)},
     _tA::CoDual{Char},
     _alpha::CoDual{P},
-    _A::CoDual{<:MatrixOrView{P}},
-    _x::CoDual{<:VecOrView{P}},
+    _A::CoDual{<:AbstractMatrix{P}},
+    _x::CoDual{<:AbstractVector{P}},
     _beta::CoDual{P},
-    _y::CoDual{<:VecOrView{P}},
+    _y::CoDual{<:AbstractVector{P}},
 ) where {P<:BlasRealFloat}
 
     # Pull out primals and tangents (the latter only where necessary).
     trans = _tA.x
     alpha = _alpha.x
-    A, dA = viewify(_A)
-    x, dx = viewify(_x)
+    A, dA = arrayify(_A)
+    x, dx = arrayify(_x)
     beta = _beta.x
-    y, dy = viewify(_y)
+    y, dy = arrayify(_y)
 
     # Take copies before adding.
     y_copy = copy(y)
@@ -200,7 +211,7 @@ end
 @is_primitive(
     MinimalCtx,
     Tuple{
-        typeof(BLAS.symv!),Char,T,MatrixOrView{T},VecOrView{T},T,VecOrView{T}
+        typeof(BLAS.symv!),Char,T,AbstractMatrix{T},AbstractVector{T},T,AbstractVector{T}
     } where {T<:BlasRealFloat},
 )
 
@@ -208,19 +219,19 @@ function rrule!!(
     ::CoDual{typeof(BLAS.symv!)},
     uplo::CoDual{Char},
     alpha::CoDual{T},
-    A_dA::CoDual{<:MatrixOrView{T}},
-    x_dx::CoDual{<:VecOrView{T}},
+    A_dA::CoDual{<:AbstractMatrix{T}},
+    x_dx::CoDual{<:AbstractVector{T}},
     beta::CoDual{T},
-    y_dy::CoDual{<:VecOrView{T}},
+    y_dy::CoDual{<:AbstractVector{T}},
 ) where {T<:BlasRealFloat}
 
     # Extract primals.
     ul = primal(uplo)
     α = primal(alpha)
     β = primal(beta)
-    A, dA = viewify(A_dA)
-    x, dx = viewify(x_dx)
-    y, dy = viewify(y_dy)
+    A, dA = arrayify(A_dA)
+    x, dx = arrayify(x_dx)
+    y, dy = arrayify(y_dy)
 
     # In this rule we optimise carefully for the special case a == 1 && b == 0, which
     # corresponds to simply multiplying symm(A) and x together, and writing the result to y.
@@ -336,7 +347,14 @@ end
 @is_primitive(
     MinimalCtx,
     Tuple{
-        typeof(BLAS.gemm!),Char,Char,T,MatrixOrView{T},MatrixOrView{T},T,MatrixOrView{T}
+        typeof(BLAS.gemm!),
+        Char,
+        Char,
+        T,
+        AbstractMatrix{T},
+        AbstractMatrix{T},
+        T,
+        AbstractMatrix{T},
     } where {T<:BlasRealFloat},
 )
 
@@ -345,18 +363,18 @@ function rrule!!(
     transA::CoDual{Char},
     transB::CoDual{Char},
     alpha::CoDual{T},
-    A::CoDual{<:MatrixOrView{T}},
-    B::CoDual{<:MatrixOrView{T}},
+    A::CoDual{<:AbstractMatrix{T}},
+    B::CoDual{<:AbstractMatrix{T}},
     beta::CoDual{T},
-    C::CoDual{<:MatrixOrView{T}},
+    C::CoDual{<:AbstractMatrix{T}},
 ) where {T<:BlasRealFloat}
     tA = primal(transA)
     tB = primal(transB)
     a = primal(alpha)
     b = primal(beta)
-    p_A, dA = viewify(A)
-    p_B, dB = viewify(B)
-    p_C, dC = viewify(C)
+    p_A, dA = arrayify(A)
+    p_B, dB = arrayify(B)
+    p_C, dC = arrayify(C)
 
     # In this rule we optimise carefully for the special case a == 1 && b == 0, which
     # corresponds to simply multiplying A and B together, and writing the result to C.
@@ -403,7 +421,14 @@ end
 @is_primitive(
     MinimalCtx,
     Tuple{
-        typeof(BLAS.symm!),Char,Char,T,MatrixOrView{T},MatrixOrView{T},T,MatrixOrView{T}
+        typeof(BLAS.symm!),
+        Char,
+        Char,
+        T,
+        AbstractMatrix{T},
+        AbstractMatrix{T},
+        T,
+        AbstractMatrix{T},
     } where {T<:BlasRealFloat},
 )
 
@@ -412,10 +437,10 @@ function rrule!!(
     side::CoDual{Char},
     uplo::CoDual{Char},
     alpha::CoDual{T},
-    A_dA::CoDual{<:MatrixOrView{T}},
-    B_dB::CoDual{<:MatrixOrView{T}},
+    A_dA::CoDual{<:AbstractMatrix{T}},
+    B_dB::CoDual{<:AbstractMatrix{T}},
     beta::CoDual{T},
-    C_dC::CoDual{<:MatrixOrView{T}},
+    C_dC::CoDual{<:AbstractMatrix{T}},
 ) where {T<:BlasRealFloat}
 
     # Extract primals.
@@ -423,9 +448,9 @@ function rrule!!(
     ul = primal(uplo)
     α = primal(alpha)
     β = primal(beta)
-    A, dA = viewify(A_dA)
-    B, dB = viewify(B_dB)
-    C, dC = viewify(C_dC)
+    A, dA = arrayify(A_dA)
+    B, dB = arrayify(B_dB)
+    C, dC = arrayify(C_dC)
 
     # In this rule we optimise carefully for the special case a == 1 && b == 0, which
     # corresponds to simply multiplying symm(A) and B together, and writing the result to C.
@@ -710,6 +735,7 @@ function blas_matrices(rng::AbstractRNG, P::Type{<:BlasRealFloat}, p::Int, q::In
         randn(rng, P, p, q),
         view(randn(rng, P, p + 5, 2q), 3:(p + 2), 1:2:(2q)),
         view(randn(rng, P, 3p, 3, 2q), (p + 1):(2p), 2, 1:2:(2q)),
+        reshape(view(randn(rng, P, p * q + 5), 1:(p * q)), p, q),
     ]
     @assert all(X -> size(X) == (p, q), Xs)
     @assert all(Base.Fix2(isa, AbstractMatrix{P}), Xs)
@@ -721,6 +747,7 @@ function blas_vectors(rng::AbstractRNG, P::Type{<:BlasRealFloat}, p::Int)
         randn(rng, P, p),
         view(randn(rng, P, p + 5), 3:(p + 2)),
         view(randn(rng, P, 3p, 3), 1:2:(2p), 2),
+        reshape(view(randn(rng, P, 1, p + 5), 1:1, 1:p), p),
     ]
     @assert all(x -> length(x) == p, xs)
     @assert all(Base.Fix2(isa, AbstractVector{P}), xs)

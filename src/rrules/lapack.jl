@@ -2,7 +2,7 @@
 function rrule!!(
     ::CoDual{typeof(LAPACK.getrf!)}, _A::CoDual{<:AbstractMatrix{P}}
 ) where {P<:BlasRealFloat}
-    A, dA = viewify(_A)
+    A, dA = arrayify(_A)
     A_copy = copy(A)
 
     # Run the primal.
@@ -32,7 +32,7 @@ function rrule!!(
     _A::CoDual{<:AbstractMatrix{P}},
 ) where {P<:BlasRealFloat}
     check = _kwargs.x.check
-    A, dA = viewify(_A)
+    A, dA = arrayify(_A)
     A_copy = copy(A)
 
     # Run the primal.
@@ -87,8 +87,8 @@ function rrule!!(
 ) where {P<:BlasRealFloat}
     # Extract everything and make a copy of B for the reverse-pass.
     uplo, trans, diag = primal(_uplo), primal(_trans), primal(_diag)
-    A, dA = viewify(_A)
-    B, dB = viewify(_B)
+    A, dA = arrayify(_A)
+    B, dB = arrayify(_B)
     B_copy = copy(B)
 
     # Run primal.
@@ -130,9 +130,9 @@ function rrule!!(
 
     # Extract data.
     trans = _trans.x
-    A, dA = viewify(_A)
+    A, dA = arrayify(_A)
     ipiv = _ipiv.x
-    B, dB = viewify(_B)
+    B, dB = arrayify(_B)
     B0 = copy(B)
 
     # Pivot B.
@@ -206,7 +206,7 @@ function rrule!!(
     _ipiv::CoDual{<:AbstractVector{Int}},
 )
     # Extract args and copy A for reverse-pass.
-    A, dA = viewify(_A)
+    A, dA = arrayify(_A)
     ipiv = _ipiv.x
     A_copy = copy(A)
 
@@ -241,7 +241,7 @@ function rrule!!(
 )
     # Extract args and take a copy of A.
     uplo = _uplo.x
-    A, dA = viewify(_A)
+    A, dA = arrayify(_A)
     A_copy = copy(A)
 
     # Run primal.
@@ -287,8 +287,8 @@ function rrule!!(
 
     # Extract args and take a copy of B.
     uplo = _uplo.x
-    A, dA = viewify(_A)
-    B, dB = viewify(_B)
+    A, dA = arrayify(_A)
+    B, dB = arrayify(_B)
     B_copy = copy(B)
 
     # Run the primal.
