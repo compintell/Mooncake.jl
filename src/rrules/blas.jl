@@ -32,7 +32,9 @@ Return the primal field of `x`, and convert its fdata into an array of the same 
 primal. This operation is not guaranteed to be possible for all array types, but seems to be
 possible for all array types of interest so far.
 """
-arrayify(x::CoDual{<:AbstractArray{<:BlasRealFloat}}) = arrayify(primal(x), tangent(x))
+function arrayify(x::CoDual{A}) where {A<:AbstractArray{<:BlasRealFloat}}
+    return arrayify(primal(x), tangent(x))::Tuple{A, A}
+end
 arrayify(x::Array{P}, dx::Array{P}) where {P<:BlasRealFloat} = (x, dx)
 function arrayify(x::A, dx::FData) where {A<:SubArray{<:BlasRealFloat}}
     _, _dx = arrayify(x.parent, dx.data.parent)
