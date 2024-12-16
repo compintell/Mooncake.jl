@@ -426,8 +426,8 @@ end
 @generated function tangent_type(::Type{P}) where {P}
     # This method can only handle struct types. Tell user to implement tangent type
     # directly for primitive types.
-    isprimitivetype(P) &&
-        throw(error("$P is a primitive type. Implement a method of `tangent_type` for it."))
+    msg = "$P is a primitive type. Implement a method of `tangent_type` for it."
+    isprimitivetype(P) && :(throw(error(msg)))
 
     # If the type is a Union, then take the union type of its arguments.
     P isa Union && return Union{tangent_type(P.a),tangent_type(P.b)}
