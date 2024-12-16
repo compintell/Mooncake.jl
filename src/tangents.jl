@@ -116,28 +116,41 @@ end
     return set_tangent_field!(t, _sym_to_int(Tfields, Val(s)), x)
 end
 
+# This generated function is fine, because it does not make use of any functions which
+# might have additional methods added to them later on.
 @generated function _sym_to_int(::Type{Tfields}, ::Val{s}) where {Tfields,s}
     return findfirst(==(s), fieldnames(Tfields))
 end
 
-@generated function build_tangent(::Type{P}, fields::Vararg{Any,N}) where {P,N}
-    tangent_values_exprs = map(enumerate(fieldtypes(P))) do (n, field_type)
+# This function is not used in any performance-sensitive contexts, so there is really no
+# need to worry about performance anyway.
+function build_tangent(::Type{P}, fields::Vararg{Any,N}) where {P,N}
+    # tangent_values_exprs = map(enumerate(fieldtypes(P))) do (n, field_type)
+    #     if tangent_field_type(P, n) <: PossiblyUninitTangent
+    #         tt = PossiblyUninitTangent{tangent_type(field_type)}
+    #         if n <= N
+    #             return Expr(:call, tt, :(fields[$n]))
+    #         else
+    #             return Expr(:call, tt)
+    #         end
+    #     else
+    #         return :(fields[$n])
+    #     end
+    # end
+    tangent_field_values = map(enumerate(fieldtypes(P))) do (n, field_type)
         if tangent_field_type(P, n) <: PossiblyUninitTangent
             tt = PossiblyUninitTangent{tangent_type(field_type)}
-            if n <= N
-                return Expr(:call, tt, :(fields[$n]))
-            else
-                return Expr(:call, tt)
-            end
+            return n <= N ? tt(fields[n]) : tt()
         else
-            return :(fields[$n])
+            return fields[n]
         end
     end
-    return Expr(
-        :call,
-        tangent_type(P),
-        Expr(:call, NamedTuple{fieldnames(P)}, Expr(:tuple, tangent_values_exprs...)),
-    )
+    return tangent_type(P)(NamedTuple{fieldnames(P)}(tangent_field_values))
+    # return Expr(
+    #     :call,
+    #     tangent_type(P),
+    #     Expr(:call, NamedTuple{fieldnames(P)}, Expr(:tuple, tangent_values_exprs...)),
+    # )
 end
 
 function build_tangent(
