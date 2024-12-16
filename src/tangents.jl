@@ -1054,6 +1054,7 @@ function tangent_test_cases()
         (a=3, b=randn(10)),
         (a=randn(10), b=randn(10)),
         (Base.TOML.ErrorType(1), NoTangent()), # Enum
+        # Regression tests to catch type inference failures, see https://github.com/compintell/Mooncake.jl/pull/422
         (((((randn(33)...,),),),),),
         (((((((((randn(33)...,),),),),), randn(5)...),),),),
     ]
