@@ -383,14 +383,18 @@ isconcrete_or_union(p) = p isa Union || isconcretetype(p)
     # a UnionAll before running to ensure that datatype_fieldcount will run.
     isa(P, DataType) && N == 0 && return NoTangent
 
-    # Get tangent types for all fields. If they're all `NoTangent`, return `NoTangent`.
-    # i.e. if `P = Tuple{Int, Int}`, do not return `Tuple{NoTangent, NoTangent}`. Simplify
-    # and return `NoTangent`.
+    # Expression to construct `Tuple` type containing tangent type for all fields.
     tangent_type_exprs = map(n -> :(tangent_type(fieldtype(P, $n))), 1:N)
     tangent_types = Expr(:call, tuple, tangent_type_exprs...)
+
+    # Construct a Tuple type of the same length as `P`, containing all `NoTangent`s.
     T_all_notangent = Tuple{Vararg{NoTangent,N}}
 
     return quote
+
+        # Get tangent types for all fields. If they're all `NoTangent`, return `NoTangent`.
+        # i.e. if `P = Tuple{Int, Int}`, do not return `Tuple{NoTangent, NoTangent}`.
+        # Simplify and return `NoTangent`.
         tangent_types = $tangent_types
         T = Tuple{tangent_types...}
         T <: $T_all_notangent && return NoTangent
