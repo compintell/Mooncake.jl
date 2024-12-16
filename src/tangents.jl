@@ -449,8 +449,6 @@ end
     return tuple_map(Base.Fix1(tangent_field_type, P), (1:fieldcount(P)...,))
 end
 
-backing_type(P::Type{<:Tuple}) = Tuple{tangent_field_types(P)...}
-
 backing_type(P::Type) = NamedTuple{fieldnames(P),Tuple{tangent_field_types(P)...}}
 
 """
