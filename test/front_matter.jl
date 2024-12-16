@@ -81,11 +81,7 @@ using .TestResources:
     TypeUnstableStruct,
     TypeUnstableStruct2,
     TypeUnstableMutableStruct,
-    TypeUnstableMutableStruct2,
-    make_circular_reference_struct,
-    make_indirect_circular_reference_struct,
-    make_circular_reference_array,
-    make_indirect_circular_reference_array
+    TypeUnstableMutableStruct2
 
 # The integration tests take ages to run, so we split them up. CI sets up two jobs -- the
 # "basic" group runs test that, when passed, _ought_ to imply correctness of the entire
