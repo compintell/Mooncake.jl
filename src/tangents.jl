@@ -1044,6 +1044,8 @@ function tangent_test_cases()
         (a=3, b=randn(10)),
         (a=randn(10), b=randn(10)),
         (Base.TOML.ErrorType(1), NoTangent()), # Enum
+        (((((randn(33)...,),),),),),
+        (((((((((randn(33)...,),),),),),randn(5)...),),),),
     ]
     VERSION >= v"1.11" && push!(rel_test_cases, fill!(Memory{Float64}(undef, 3), 3.0))
     return vcat(
