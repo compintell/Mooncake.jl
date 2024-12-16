@@ -46,7 +46,7 @@ function arrayify(x::A, dx::FData) where {A<:Base.ReshapedArray{<:BlasRealFloat}
 end
 function arrayify(x::A, dx::DA) where {A,DA}
     msg =
-        "Encountered unexpected array type in Mooncake.arrayify. This error is likely " *
+        "Encountered unexpected array type in `Mooncake.arrayify`. This error is likely " *
         "due to a call to a BLAS or LAPACK function with an array type that " *
         "Mooncake has not been told about. A new method of `Mooncake.arrayify` is needed." *
         " Please open an issue at " *
