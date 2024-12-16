@@ -379,12 +379,10 @@ end
     # a UnionAll before running to ensure that datatype_fieldcount will run.
     isa(P, DataType) && Base.datatype_fieldcount(P) == 0 && return NoTangent
 
-    # If tangent types for all fields is NoTangent, then overall type is `NoTangent`.
-
     # Get tangent types for all fields. If they're all `NoTangent`, return `NoTangent`.
     # i.e. if `P = Tuple{Int, Int}`, do not return `Tuple{NoTangent, NoTangent}`. Simplify
     # and return `NoTangent`.
-    tangent_types = tuple_map(tangent_type, fieldtypes(P))
+    tangent_types = map(tangent_type, fieldtypes(P))
     T = Tuple{tangent_types...}
     T_all_notangent = Tuple{Vararg{NoTangent,length(tangent_types)}}
     T <: T_all_notangent && return NoTangent
