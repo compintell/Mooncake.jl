@@ -94,7 +94,6 @@ _simple_mlp(W2, W1, Y, X) = sum(abs2, Y - W2 * map(x -> x * (0 <= x), W1 * X))
 _gp_lml(x, y, s) = logpdf(GP(SEKernel())(x, s), y)
 
 should_run_benchmark(::Val{:reverse_diff}, ::typeof(_gp_lml), x...) = false
-should_run_benchmark(::Val{:enzyme}, ::typeof(_gp_lml), x...) = false
 
 function _generate_gp_inputs()
     x = collect(range(0.0; step=0.2, length=128))
@@ -231,7 +230,8 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
 
                 if should_run_benchmark(Val(:enzyme), args...)
                     @info "Enzyme"
-                    dup_args = map(x -> Duplicated(x, randn(size(x))), primals[2:end])
+                    _rand_similiar(x) = x isa Real ? randn() : randn(size(x))
+                    dup_args = map(x -> Duplicated(x, _rand_similiar(x)), primals[2:end])
                     suite["enzyme"] = @be(
                         _,
                         _,
