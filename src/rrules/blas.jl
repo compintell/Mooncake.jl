@@ -45,6 +45,19 @@ function arrayify(x::A, dx::FData) where {A<:Base.ReshapedArray{<:BlasRealFloat}
     return x, A(_dx, x.dims, x.mi)
 end
 
+# If we encounter an array type which we haven't explicitly said how to handle, throw an
+# intelligible error.
+function arrayify(x::A, dx::DA) where {A,DA}
+    msg =
+        "Encountered unexpected array type in Mooncake.arrayify. This error is likely " *
+        "due to a call to a BLAS or LAPACK function with an array type that " *
+        "Mooncake has not been told about. Please open an issue at " *
+        "https://github.com/compintell/Mooncake.jl/issues . " *
+        "It should contain this error message and the associated stack trace.\n\n" *
+        "Array type: $A\n\nFData type: $DA."
+    return error(msg)
+end
+
 #
 # Utility
 #
