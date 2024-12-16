@@ -368,8 +368,6 @@ function tangent_type(::Type{P}) where {N,P<:Tuple{Vararg{Any,N}}}
     # a UnionAll before running to ensure that datatype_fieldcount will run.
     isa(P, DataType) && Base.datatype_fieldcount(P) == 0 && return NoTangent
 
-    # If tangent types for all fields is NoTangent, then overall type is `NoTangent`.
-
     # Get tangent types for all fields. If they're all `NoTangent`, return `NoTangent`.
     # i.e. if `P = Tuple{Int, Int}`, do not return `Tuple{NoTangent, NoTangent}`. Simplify
     # and return `NoTangent`.
@@ -1033,6 +1031,10 @@ function tangent_test_cases()
         (a=3, b=randn(10)),
         (a=randn(10), b=randn(10)),
         (Base.TOML.ErrorType(1), NoTangent()), # Enum
+        (randn(50)...,),
+        (randn(150)...,),
+        ((randn(150)...,),),
+        (((((randn(150)...,),),),),),
     ]
     VERSION >= v"1.11" && push!(rel_test_cases, fill!(Memory{Float64}(undef, 3), 3.0))
     return vcat(
