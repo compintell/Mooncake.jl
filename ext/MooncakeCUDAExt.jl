@@ -10,6 +10,7 @@ import Mooncake:
     rrule!!,
     @is_primitive,
     tangent_type,
+    tangent,
     zero_tangent,
     randn_tangent,
     increment!!,
@@ -52,6 +53,8 @@ function Mooncake._verify_fdata_value(p::CuArray, f::CuArray)
     end
     return nothing
 end
+tangent_type(::Type{P}, ::Type{NoRData}) where {P<:CuArray} = P
+tangent(p::CuArray, ::NoRData) = p
 
 # Basic rules for operating on CuArrays.
 
