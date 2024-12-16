@@ -44,9 +44,6 @@ function arrayify(x::A, dx::FData) where {A<:Base.ReshapedArray{<:BlasRealFloat}
     _, _dx = arrayify(x.parent, dx.data.parent)
     return x, A(_dx, x.dims, x.mi)
 end
-
-# If we encounter an array type which we haven't explicitly said how to handle, throw an
-# intelligible error.
 function arrayify(x::A, dx::DA) where {A,DA}
     msg =
         "Encountered unexpected array type in Mooncake.arrayify. This error is likely " *
