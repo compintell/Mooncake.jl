@@ -23,44 +23,29 @@ specialise on all element types of `x` and `y`. Furthermore, errors if `x` and `
 the same length, while `map` will just produce a new tuple whose length is equal to the
 shorter of `x` and `y`.
 """
-@inline @generated function tuple_map(f::F, x::Tuple) where {F}
-    return Expr(:call, :tuple, map(n -> :(f(getfield(x, $n))), eachindex(x.parameters))...)
+@generated function tuple_map(f::F, x::Tuple) where {F}
+    return Expr(:call, :tuple, map(n -> :(f(getfield(x, $n))), 1:fieldcount(x))...)
 end
 
-@inline @generated function tuple_map(f::F, x::Tuple, y::Tuple) where {F}
+@generated function tuple_map(f::F, x::Tuple, y::Tuple) where {F}
     if length(x.parameters) != length(y.parameters)
         return :(throw(ArgumentError("length(x) != length(y)")))
-    else
-        stmts = map(n -> :(f(getfield(x, $n), getfield(y, $n))), eachindex(x.parameters))
-        return Expr(:call, :tuple, stmts...)
     end
+    stmts = map(n -> :(f(getfield(x, $n), getfield(y, $n))), 1:fieldcount(x))
+    return Expr(:call, :tuple, stmts...)
 end
 
-for N in 1:128
-    @eval @inline function tuple_map(f::F, x::Tuple{Vararg{Any,$N}}) where {F}
-        return $(Expr(:call, :tuple, map(n -> :(f(getfield(x, $n))), 1:N)...))
+@generated function tuple_map(f, x::NamedTuple{names}) where {names}
+    getfield_exprs = map(n -> :(f(getfield(x, $n))), 1:fieldcount(x))
+    return :(NamedTuple{names}($(Expr(:call, :tuple, getfield_exprs...))))
+end
+
+@generated function tuple_map(f, x::NamedTuple{names}, y::NamedTuple{names}) where {names}
+    if fieldcount(x) != fieldcount(y)
+        return :(throw(ArgumentError("length(x) != length(y)")))
     end
-    @eval @inline function tuple_map(
-        f::F, x::NamedTuple{names,<:Tuple{Vararg{Any,$N}}}
-    ) where {F,names}
-        return NamedTuple{names}(
-            $(Expr(:call, :tuple, map(n -> :(f(getfield(x, $n))), 1:N)...))
-        )
-    end
-    @eval @inline function tuple_map(f, x::Tuple{Vararg{Any,$N}}, y::Tuple{Vararg{Any,$N}})
-        return $(Expr(
-            :call, :tuple, map(n -> :(f(getfield(x, $n), getfield(y, $n))), 1:N)...
-        ))
-    end
-    @eval @inline function tuple_map(
-        f::F,
-        x::NamedTuple{names,<:Tuple{Vararg{Any,$N}}},
-        y::NamedTuple{names,<:Tuple{Vararg{Any,$N}}},
-    ) where {F,names}
-        return NamedTuple{names}(
-            $(Expr(:call, :tuple, map(n -> :(f(getfield(x, $n), getfield(y, $n))), 1:N)...))
-        )
-    end
+    getfield_exprs = map(n -> :(f(getfield(x, $n), getfield(y, $n))), 1:fieldcount(x))
+    return :(NamedTuple{names}($(Expr(:call, :tuple, getfield_exprs...))))
 end
 
 for N in 1:256
@@ -190,6 +175,18 @@ An isbits field is always defined, but is not always explicitly initialised.
 """
 function is_always_initialised(P::DataType, n::Int)::Bool
     return n <= CC.datatype_min_ninitialized(P)
+end
+
+"""
+    always_initialised(::Type{P}) where {P}
+
+Returns a tuple with number of fields equal to the number of fields in `P`. The nth field
+is set to `true` if the nth field of `P` is initialised, and `false` otherwise.
+"""
+@generated function always_initialised(::Type{P}) where {P}
+    P isa DataType || return :(error("$P is not a DataType."))
+    num_init = CC.datatype_min_ninitialized(P)
+    return (map(n -> n <= num_init, 1:fieldcount(P))...,)
 end
 
 """
