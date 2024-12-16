@@ -366,41 +366,49 @@ function split_union_tuple_type(tangent_types)
     return Union{ta,tb}
 end
 
+# Generated functions cannot emit closures, so this is defined here for use below.
+isconcrete_or_union(p) = p isa Union || isconcretetype(p)
+
 @generated function tangent_type(::Type{P}) where {N,P<:Tuple{Vararg{Any,N}}}
+
     # As with other types, tangent type of Union is Union of tangent types.
-    P isa Union && return Union{tangent_type(P.a),tangent_type(P.b)}
+    P isa Union && return :(Union{tangent_type($(P.a)),tangent_type($(P.b))})
 
     # Determine whether P isa a Tuple with a Vararg, e.g, Tuple, or Tuple{Float64, Vararg}.
     # Need to exclude `UnionAll`s from this, by checking `isa(P, DataType)`, in order to
     # ensure that `Base.datatype_fieldcount(P)` will run successfully.
-    isa(P, DataType) && Base.datatype_fieldcount(P) === nothing && return Any
+    isa(P, DataType) && !(@isdefined(N)) && return Any
 
     # Tuple{} can only have `NoTangent` as its tangent type. As before, verify we don't have
     # a UnionAll before running to ensure that datatype_fieldcount will run.
-    isa(P, DataType) && Base.datatype_fieldcount(P) == 0 && return NoTangent
+    isa(P, DataType) && N == 0 && return NoTangent
 
     # Get tangent types for all fields. If they're all `NoTangent`, return `NoTangent`.
     # i.e. if `P = Tuple{Int, Int}`, do not return `Tuple{NoTangent, NoTangent}`. Simplify
     # and return `NoTangent`.
-    tangent_types = map(tangent_type, fieldtypes(P))
-    T = Tuple{tangent_types...}
-    T_all_notangent = Tuple{Vararg{NoTangent,length(tangent_types)}}
-    T <: T_all_notangent && return NoTangent
+    tangent_type_exprs = map(n -> :(tangent_type(fieldtype(P, $n))), 1:N)
+    tangent_types = Expr(:call, tuple, tangent_type_exprs...)
+    T_all_notangent = Tuple{Vararg{NoTangent,N}}
 
-    # If exactly one of the field types is a Union, then split.
-    union_fields = _findall(Base.Fix2(isa, Union), 1, tangent_types)
-    if length(union_fields) == 1 &&
-        all(p -> p isa Union || isconcretetype(p), tangent_types)
-        return split_union_tuple_type(tangent_types)
+    return quote
+        tangent_types = $tangent_types
+        T = Tuple{tangent_types...}
+        T <: $T_all_notangent && return NoTangent
+
+        # If exactly one of the field types is a Union, then split.
+        union_fields = _findall(Base.Fix2(isa, Union), 1, tangent_types)
+        if length(union_fields) == 1 && all(tuple_map(isconcrete_or_union, tangent_types))
+            return split_union_tuple_type(tangent_types)
+        end
+
+        # If it's _possible_ for a subtype of `P` to have tangent type `NoTangent`, then we
+        # must account for that by returning the union of `NoTangent` and `T`. For example,
+        # if `P = Tuple{Any, Int}`, then `P2 = Tuple{Int, Int}` is a subtype. Since `P2` has
+        # tangent type `NoTangent`, it must be true that `NoTangent <: tangent_type(P)`. If,
+        # on the other hand, it's not possible for `NoTangent` to be the tangent type, e.g.
+        # for `Tuple{Float64, Any}`, then there's no need to take the union.
+        return $T_all_notangent <: T ? Union{T,NoTangent} : T
     end
-
-    # If it's _possible_ for a subtype of `P` to have tangent type `NoTangent`, then we must
-    # account for that by returning the union of `NoTangent` and `T`. For example, if
-    # `P = Tuple{Any, Int}`, then `P2 = Tuple{Int, Int}` is a subtype. Since `P2` has
-    # tangent type `NoTangent`, it must be true that `NoTangent <: tangent_type(P)`.
-    # If, on the other hand, it's not possible for `NoTangent` to be the tangent type, e.g.
-    # for `Tuple{Float64, Any}`, then there's no need to take the union.
-    return T_all_notangent <: T ? Union{T,NoTangent} : T
 end
 
 function tangent_type(::Type{P}) where {N,P<:NamedTuple{N}}
@@ -476,21 +484,23 @@ const StackDict = Union{Nothing,IdDict}
 
 # the `stackdict` naming following convention of Julia's `deepcopy` and `deepcopy_internal`
 # https://github.com/JuliaLang/julia/blob/48d4fd48430af58502699fdf3504b90589df3852/base/deepcopy.jl#L35
-@inline zero_tangent_internal(::Union{Int8,Int16,Int32,Int64,Int128}, ::Any) = NoTangent()
-@inline zero_tangent_internal(x::IEEEFloat, ::Any) = zero(x)
-@inline function zero_tangent_internal(
-    x::P, stackdict::Any
-) where {P<:Union{Tuple,NamedTuple}}
-    return if tangent_type(P) == NoTangent
-        NoTangent()
-    else
-        tuple_map(Base.Fix2(zero_tangent_internal, stackdict), x)
+zero_tangent_internal(::Union{Int8,Int16,Int32,Int64,Int128}, ::Any) = NoTangent()
+zero_tangent_internal(x::IEEEFloat, ::Any) = zero(x)
+@generated function zero_tangent_internal(x::Tuple, stackdict::Any)
+    zt_exprs = map(n -> :(zero_tangent_internal(x[$n], stackdict)), 1:fieldcount(x))
+    return quote
+        tangent_type($x) == NoTangent && return NoTangent()
+        return $(Expr(:call, :tuple, zt_exprs...))
     end
+end
+function zero_tangent_internal(x::NamedTuple, stackdict::Any)
+    tangent_type(typeof(x)) == NoTangent && return NoTangent()
+    return tuple_map(Base.Fix2(zero_tangent_internal, stackdict), x)
 end
 function zero_tangent_internal(x::Ptr, ::Any)
     return throw(ArgumentError("zero_tangent not available for pointers."))
 end
-@inline function zero_tangent_internal(x::SimpleVector, stackdict::IdDict)
+function zero_tangent_internal(x::SimpleVector, stackdict::IdDict)
     return map!(
         n -> zero_tangent_internal(x[n], stackdict),
         Vector{Any}(undef, length(x)),
@@ -563,14 +573,16 @@ end
 
 randn_tangent_internal(::AbstractRNG, ::NoTangent, ::Any) = NoTangent()
 randn_tangent_internal(rng::AbstractRNG, ::T, ::Any) where {T<:IEEEFloat} = randn(rng, T)
-function randn_tangent_internal(
-    rng::AbstractRNG, x::P, stackdict::Any
-) where {P<:Union{Tuple,NamedTuple}}
-    return if tangent_type(P) == NoTangent
-        NoTangent()
-    else
-        tuple_map(x -> randn_tangent_internal(rng, x, stackdict), x)
+@generated function randn_tangent_internal(rng::AbstractRNG, x::Tuple, stackdict::Any)
+    rt_exprs = map(n -> :(randn_tangent_internal(rng, x[$n], stackdict)), 1:fieldcount(x))
+    return quote
+        tangent_type($x) == NoTangent && return NoTangent()
+        return $(Expr(:call, :tuple, rt_exprs...))
     end
+end
+function randn_tangent_internal(rng::AbstractRNG, x::NamedTuple, stackdict::Any)
+    tangent_type(typeof(x)) == NoTangent && return NoTangent()
+    return tuple_map(x -> randn_tangent_internal(rng, x, stackdict), x)
 end
 function randn_tangent_internal(rng::AbstractRNG, x::SimpleVector, stackdict::IdDict)
     return map!(Vector{Any}(undef, length(x)), eachindex(x)) do n
