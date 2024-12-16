@@ -224,7 +224,7 @@ Returns the type of to the nth field of the fdata type associated to `P`. Will b
 function fdata_field_type(::Type{P}, n::Int) where {P}
     Tf = tangent_type(fieldtype(P, n))
     f = ismutabletype(P) ? Tf : fdata_type(Tf)
-    return is_always_initialised(P, n) ? f : _wrap_type(f)
+    return is_always_initialised(P, n) ? f : PossiblyUninitTangent(f)
 end
 
 """
@@ -468,7 +468,7 @@ Returns the type of to the nth field of the rdata type associated to `P`. Will b
 """
 function rdata_field_type(::Type{P}, n::Int) where {P}
     r = rdata_type(tangent_type(fieldtype(P, n)))
-    return is_always_initialised(P, n) ? r : _wrap_type(r)
+    return is_always_initialised(P, n) ? r : PossiblyUninitTangent(r)
 end
 
 """

@@ -44,8 +44,6 @@ function Base.:(==)(t::PossiblyUninitTangent{T}, s::PossiblyUninitTangent{T}) wh
     return true
 end
 
-_wrap_type(::Type{T}) where {T} = PossiblyUninitTangent{T}
-
 _wrap_field(::Type{Q}, x::T) where {Q,T} = PossiblyUninitTangent{Q}(x)
 _wrap_field(x::T) where {T} = _wrap_field(T, x)
 
@@ -423,11 +421,12 @@ function tangent_type(::Type{P}) where {N,P<:NamedTuple{N}}
     return isconcretetype(TT) ? NamedTuple{N,TT} : Any
 end
 
-@generated function tangent_type(::Type{P}) where {P}
+function tangent_type(::Type{P}) where {P}
     # This method can only handle struct types. Tell user to implement tangent type
     # directly for primitive types.
-    msg = "$P is a primitive type. Implement a method of `tangent_type` for it."
-    isprimitivetype(P) && :(throw(error(msg)))
+    if isprimitivetype(P)
+        throw(error("$P is a primitive type. Implement a method of `tangent_type` for it."))
+    end
 
     # If the type is a Union, then take the union type of its arguments.
     P isa Union && return Union{tangent_type(P.a),tangent_type(P.b)}
@@ -445,10 +444,6 @@ end
     return bt == NoTangent ? bt : (ismutabletype(P) ? MutableTangent : Tangent){bt}
 end
 
-@inline function tangent_field_types(P)
-    return tuple_map(Base.Fix1(tangent_field_type, P), (1:fieldcount(P)...,))
-end
-
 backing_type(P::Type) = NamedTuple{fieldnames(P),Tuple{tangent_field_types(P)...}}
 
 """
@@ -461,7 +456,15 @@ possible for the field to be undefined.
 """
 function tangent_field_type(::Type{P}, n::Int) where {P}
     t = tangent_type(fieldtype(P, n))
-    return is_always_initialised(P, n) ? t : _wrap_type(t)
+    return is_always_initialised(P, n) ? t : PossiblyUninitTangent{t}
+end
+
+function tangent_field_types(::Type{P}) where {P}
+    inits = always_initialised(P)
+    return tuple_map(fieldtypes(P), inits) do _P, init
+        T = tangent_type(_P)
+        return init ? T : PossiblyUninitTangent{T}
+    end
 end
 
 """
@@ -535,14 +538,30 @@ function zero_tangent_internal(x::P, stackdict) where {P}
 end
 
 @generated function zero_tangent_struct_field(x::P, stackdict) where {P}
-    tangent_field_zeros_exprs = ntuple(fieldcount(P)) do n
-        if tangent_field_type(P, n) <: PossiblyUninitTangent
-            V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
+    # tangent_field_zeros_exprs = ntuple(fieldcount(P)) do n
+    #     if tangent_field_type(P, n) <: PossiblyUninitTangent
+    #         V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
+    #         return :(
+    #             if isdefined(x, $n)
+    #                 $V(zero_tangent_internal(getfield(x, $n), stackdict))
+    #             else
+    #                 $V()
+    #             end
+    #         )
+    #     else
+    #         return :(zero_tangent_internal(getfield(x, $n), stackdict))
+    #     end
+    # end
+    # tangent_fields_expr = Expr(:call, :tuple, tangent_field_zeros_exprs...)
+    # return :($(backing_type(P))($tangent_fields_expr))
+
+    tangent_field_zeros_exprs = map(enumerate(tangent_field_types(P))) do (n, T)
+        if T <: PossiblyUninitTangent
             return :(
                 if isdefined(x, $n)
-                    $V(zero_tangent_internal(getfield(x, $n), stackdict))
+                    $T(zero_tangent_internal(getfield(x, $n), stackdict))
                 else
-                    $V()
+                    $T()
                 end
             )
         else

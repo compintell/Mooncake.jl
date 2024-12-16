@@ -182,6 +182,18 @@ function sparam_names(m::Core.Method)::Vector{Symbol}
 end
 
 """
+    always_initialised(::Type{P}) where {P}
+
+Returns a tuple with number of fields equal to the number of fields in `P`. The nth field
+is set to `true` if the nth field of `P` is initialised, and `false` otherwise.
+"""
+@generated function always_initialised(::Type{P}) where {P}
+    P isa DataType || return :(error("$P is not a DataType."))
+    num_init = CC.datatype_min_ninitialized(P)
+    return (map(n -> n <= num_init, 1:fieldcount(P))...,)
+end
+
+"""
     is_always_initialised(P::DataType, n::Int)::Bool
 
 True if the `n`th field of `P` is always initialised. If the `n`th fieldtype of `P`
