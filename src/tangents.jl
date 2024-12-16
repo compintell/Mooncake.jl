@@ -122,8 +122,6 @@ end
     return findfirst(==(s), fieldnames(Tfields))
 end
 
-# This function is not used in any performance-sensitive contexts, so there is really no
-# need to worry about performance anyway.
 function build_tangent(::Type{P}, fields::Vararg{Any,N}) where {P,N}
     tangent_field_values = map(enumerate(fieldtypes(P))) do (n, field_type)
         if tangent_field_type(P, n) <: PossiblyUninitTangent
@@ -136,22 +134,17 @@ function build_tangent(::Type{P}, fields::Vararg{Any,N}) where {P,N}
     return tangent_type(P)(NamedTuple{fieldnames(P)}(tangent_field_values))
 end
 
-function build_tangent(
-    ::Type{P}, fields::Vararg{Any,N}
-) where {P<:Union{Tuple,NamedTuple},N}
+function build_tangent(::Type{P}, fields...) where {P<:Union{Tuple,NamedTuple}}
     T = tangent_type(P)
     if T == NoTangent
         return NoTangent()
     elseif isconcretetype(P)
         return T(fields)
+    elseif P isa Tuple
+        return Tuple(fields)
     else
-        return __tangent_from_non_concrete(P, fields)
+        return NamedTuple{fieldnames(P)}(fields)
     end
-end
-
-__tangent_from_non_concrete(::Type{P}, fields) where {P<:Tuple} = Tuple(fields)
-function __tangent_from_non_concrete(::Type{P}, fields) where {names,P<:NamedTuple{names}}
-    return NamedTuple{names}(fields)
 end
 
 """
