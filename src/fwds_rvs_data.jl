@@ -645,13 +645,17 @@ with.
 
     # Fallback -- we've not been able to figure out how to produce an instance of zero rdata
     # so report that it cannot be done.
-    return throw(error("Unhandled type $P"))
+    error("Unhandled type $P")
+    return nothing
 end
 
 @generated function zero_rdata_from_type(::Type{P}) where {P<:Tuple}
-    can_produce_zero_rdata_from_type(P) || return CannotProduceZeroRDataFromType()
-    rdata_type(tangent_type(P)) == NoRData && return NoRData()
-    return tuple_map(zero_rdata_from_type, fieldtypes(P))
+    zero_exprs = map(_P -> :(zero_rdata_from_type($_P)), fieldtypes(P))
+    return quote
+        can_produce_zero_rdata_from_type($P) || return CannotProduceZeroRDataFromType()
+        rdata_type(tangent_type($P)) == NoRData && return NoRData()
+        return $(Expr(:call, :tuple, zero_exprs...))
+    end
 end
 
 function zero_rdata_from_type(::Type{P}) where {P<:NamedTuple}
@@ -798,7 +802,10 @@ tangent_type(::Type{F}, ::Type{NoRData}) where {F<:Array} = F
 
 # Tuples
 @generated function tangent_type(::Type{F}, ::Type{R}) where {F<:Tuple,R<:Tuple}
-    return Tuple{tuple_map(tangent_type, Tuple(F.parameters), Tuple(R.parameters))...}
+    tangent_type_exprs = tuple_map(
+        (f, r) -> :(tangent_type($f, $r)), Tuple(F.parameters), Tuple(R.parameters)
+    )
+    return Expr(:curly, :Tuple, tangent_type_exprs...)
 end
 function tangent_type(::Type{NoFData}, ::Type{R}) where {R<:Tuple}
     F_tuple = Tuple{tuple_fill(NoFData, Val(length(R.parameters)))...}
