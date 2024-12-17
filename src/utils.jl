@@ -82,6 +82,16 @@ end
 end
 
 """
+    stable_ntuple(f, ::Val{N}) where {N}
+
+Equivalent to `ntuple(f, N)`, but does not have a performance cliff at `N == 11`. This will
+produce results in a type-stable manner for any value of `N`.
+"""
+@generated function stable_ntuple(f, ::Val{N}) where {N}
+    return Expr(:call, :tuple, map(n -> :(f($n)), 1:N)...)
+end
+
+"""
     _map_if_assigned!(f, y::DenseArray, x::DenseArray{P}) where {P}
 
 For all `n`, if `x[n]` is assigned, then writes the value returned by `f(x[n])` to `y[n]`,
