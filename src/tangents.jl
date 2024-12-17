@@ -459,7 +459,9 @@ function tangent_field_type(::Type{P}, n::Int) where {P}
     return is_always_initialised(P, n) ? t : PossiblyUninitTangent{t}
 end
 
-function tangent_field_types(::Type{P}) where {P}
+# It is essential that this gets inlined. If it does not, then we run into performance
+# issues with the recursion to compute tangent types for nested types.
+@inline function tangent_field_types(::Type{P}) where {P}
     inits = always_initialised(P)
     return tuple_map(fieldtypes(P), inits) do _P, init
         T = tangent_type(_P)
@@ -1046,6 +1048,7 @@ function tangent_test_cases()
         # Regression tests to catch type inference failures, see https://github.com/compintell/Mooncake.jl/pull/422
         (((((randn(33)...,),),),),),
         (((((((((randn(33)...,),),),),), randn(5)...),),),),
+        Base.OneTo{Int},
     ]
     VERSION >= v"1.11" && push!(rel_test_cases, fill!(Memory{Float64}(undef, 3), 3.0))
     return vcat(
