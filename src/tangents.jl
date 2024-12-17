@@ -537,39 +537,14 @@ function zero_tangent_internal(x::P, stackdict) where {P}
     end
 end
 
-@generated function zero_tangent_struct_field(x::P, stackdict) where {P}
-    # tangent_field_zeros_exprs = ntuple(fieldcount(P)) do n
-    #     if tangent_field_type(P, n) <: PossiblyUninitTangent
-    #         V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
-    #         return :(
-    #             if isdefined(x, $n)
-    #                 $V(zero_tangent_internal(getfield(x, $n), stackdict))
-    #             else
-    #                 $V()
-    #             end
-    #         )
-    #     else
-    #         return :(zero_tangent_internal(getfield(x, $n), stackdict))
-    #     end
-    # end
-    # tangent_fields_expr = Expr(:call, :tuple, tangent_field_zeros_exprs...)
-    # return :($(backing_type(P))($tangent_fields_expr))
-
-    tangent_field_zeros_exprs = map(enumerate(tangent_field_types(P))) do (n, T)
-        if T <: PossiblyUninitTangent
-            return :(
-                if isdefined(x, $n)
-                    $T(zero_tangent_internal(getfield(x, $n), stackdict))
-                else
-                    $T()
-                end
-            )
-        else
-            return :(zero_tangent_internal(getfield(x, $n), stackdict))
-        end
+function zero_tangent_struct_field(x::P, d) where {P}
+    Tfs = tangent_field_types(P)
+    tangent_field_zeros = stable_ntuple(Val(fieldcount(P))) do n
+        T = Tfs[n]
+        T <: PossiblyUninitTangent || return zero_tangent_internal(getfield(x, n), d)
+        return isdefined(x, n) ? T(zero_tangent_internal(getfield(x, n), d)) : T()
     end
-    tangent_fields_expr = Expr(:call, :tuple, tangent_field_zeros_exprs...)
-    return :($(backing_type(P))($tangent_fields_expr))
+    return backing_type(P)(tangent_field_zeros)
 end
 
 """
@@ -634,23 +609,14 @@ function randn_tangent_internal(rng::AbstractRNG, x::P, stackdict) where {P}
     end
 end
 
-@generated function randn_tangent_struct_field(rng::AbstractRNG, x::P, stackdict) where {P}
-    tangent_field_exprs = map(1:fieldcount(P)) do n
-        if tangent_field_type(P, n) <: PossiblyUninitTangent
-            V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
-            return :(
-                if isdefined(x, $n)
-                    $V(randn_tangent_internal(rng, getfield(x, $n), stackdict))
-                else
-                    $V()
-                end
-            )
-        else
-            return :(randn_tangent_internal(rng, getfield(x, $n), stackdict))
-        end
+function randn_tangent_struct_field(rng::AbstractRNG, x::P, d) where {P}
+    Tfs = tangent_field_types(P)
+    tangent_field_zeros = stable_ntuple(Val(fieldcount(P))) do n
+        T = Tfs[n]
+        T <: PossiblyUninitTangent || return randn_tangent_internal(rng, getfield(x, n), d)
+        return isdefined(x, n) ? T(randn_tangent_internal(rng, getfield(x, n), d)) : T()
     end
-    tangent_fields_expr = Expr(:call, :tuple, tangent_field_exprs...)
-    return :($(backing_type(P))($tangent_fields_expr))
+    return backing_type(P)(tangent_field_zeros)
 end
 
 """
