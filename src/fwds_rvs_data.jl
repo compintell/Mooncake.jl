@@ -191,7 +191,7 @@ end
     fdata_type_exprs = map(n -> :(fdata_type($(Tfields[n]))), 1:length(Tfields))
     return quote
         fwds_data_field_types = $(Expr(:call, :tuple, fdata_type_exprs...))
-        all(tuple_map(==(NoFData), fwds_data_field_types)) && return NoFData
+        stable_all(tuple_map(==(NoFData), fwds_data_field_types)) && return NoFData
         return FData{NamedTuple{$field_names,Tuple{fwds_data_field_types...}}}
     end
 end
@@ -443,7 +443,7 @@ end
     rdata_type_exprs = map(n -> :(rdata_type($(Tfields[n]))), 1:length(Tfields))
     return quote
         rvs_data_field_types = $(Expr(:call, :tuple, rdata_type_exprs...))
-        all(tuple_map(==(NoRData), rvs_data_field_types)) && return NoRData
+        stable_all(tuple_map(==(NoRData), rvs_data_field_types)) && return NoRData
         return RData{NamedTuple{$field_names,Tuple{rvs_data_field_types...}}}
     end
 end
