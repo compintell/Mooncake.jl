@@ -39,7 +39,7 @@ end
         @test Mooncake.can_produce_zero_rdata_from_type(Type{Float64})
 
         @test ==(
-            Mooncake.zero_rdata_from_type(Union{Float64, Int}),
+            Mooncake.zero_rdata_from_type(Union{Float64,Int}),
             Mooncake.CannotProduceZeroRDataFromType(),
         )
 
