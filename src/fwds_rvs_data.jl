@@ -208,7 +208,7 @@ fdata_type(::Type{T}) where {T<:Ptr} = T
     return nofdata_tt <: fdata_tt ? Union{NoFData,fdata_tt} : fdata_tt
 end
 
-@generated function fdata_type(::Type{NamedTuple{names,T}}) where {names,T<:Tuple}
+function fdata_type(::Type{NamedTuple{names,T}}) where {names,T<:Tuple}
     if fdata_type(T) == NoFData
         return NoFData
     elseif isconcretetype(fdata_type(T))
