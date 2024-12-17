@@ -461,12 +461,13 @@ end
 
 # It is essential that this gets inlined. If it does not, then we run into performance
 # issues with the recursion to compute tangent types for nested types.
-@inline function tangent_field_types(::Type{P}) where {P}
+@inline @generated function tangent_field_types(::Type{P}) where {P}
     inits = always_initialised(P)
-    return tuple_map(fieldtypes(P), inits) do _P, init
-        T = tangent_type(_P)
-        return init ? T : PossiblyUninitTangent{T}
+    tangent_type_exprs = map(fieldtypes(P), inits) do _P, init
+        T_expr = Expr(:call, :tangent_type, _P)
+        return init ? T_expr : Expr(:curly, PossiblyUninitTangent, T_expr)
     end
+    return Expr(:call, :tuple, tangent_type_exprs...)
 end
 
 """
