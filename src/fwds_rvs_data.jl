@@ -617,36 +617,34 @@ constitute a correctness problem, but can be detrimental to performance, so shou
 with.
 """
 @generated function zero_rdata_from_type(::Type{P}) where {P}
-    R = rdata_type(tangent_type(P))
 
-    # If we know we can't produce a tangent, say so.
-    can_produce_zero_rdata_from_type(P) || return CannotProduceZeroRDataFromType()
-
-    # Simple case.
-    R == NoRData && return NoRData()
-
-    # If `P` is a struct type, attempt to derive the zero rdata for it. We cannot derive
-    # the zero rdata if it is not possible to derive the zero rdata for any of its fields.
-    if isstructtype(P)
-        names = fieldnames(P)
-        types = fieldtypes(P)
-        wrapped_field_zeros = tuple_map(ntuple(identity, length(names))) do n
-            fzero = :(zero_rdata_from_type($(types[n])))
-            if tangent_field_type(P, n) <: PossiblyUninitTangent
-                Q = rdata_type(tangent_type(fieldtype(P, n)))
-                return :(_wrap_field($Q, $fzero))
-            else
-                return fzero
-            end
+    # Prepare expressions for manually-unrolled loop to construct zero rdata elements.
+    names = fieldnames(P)
+    types = fieldtypes(P)
+    wrapped_field_zeros = tuple_map(ntuple(identity, length(names))) do n
+        fzero = :(zero_rdata_from_type($(types[n])))
+        if tangent_field_type(P, n) <: PossiblyUninitTangent
+            Q = rdata_type(tangent_type(fieldtype(P, n)))
+            return :(_wrap_field($Q, $fzero))
+        else
+            return fzero
         end
-        wrapped_field_zeros_tuple = Expr(:call, :tuple, wrapped_field_zeros...)
-        return :($R(NamedTuple{$names}($wrapped_field_zeros_tuple)))
     end
+    wrapped_field_zeros_tuple = Expr(:call, :tuple, wrapped_field_zeros...)
+    wrapped_expr = :(R(NamedTuple{$names}($wrapped_field_zeros_tuple)))
 
-    # Fallback -- we've not been able to figure out how to produce an instance of zero rdata
-    # so report that it cannot be done.
-    error("Unhandled type $P")
-    return nothing
+    return quote
+
+        # If we know we can't produce a tangent, say so.
+        can_produce_zero_rdata_from_type(P) || return CannotProduceZeroRDataFromType()
+
+        # Simple case.
+        R = rdata_type(tangent_type(P))
+        R == NoRData && return NoRData()
+
+        isstructtype(P) || error("Unhandled type $P")
+        return $wrapped_expr
+    end
 end
 
 @generated function zero_rdata_from_type(::Type{P}) where {P<:Tuple}
