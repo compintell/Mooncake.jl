@@ -259,9 +259,9 @@ function fdata(t::T) where {T<:PossiblyUninitTangent}
     return is_init(t) ? F(fdata(val(t))) : F()
 end
 
-@generated function fdata(t::Union{Tuple,NamedTuple})
-    fdata_type(t) == NoFData && return NoFData()
-    return :(tuple_map(fdata, t))
+function fdata(t::T) where {T<:Union{Tuple,NamedTuple}}
+    fdata_type(T) == NoFData && return NoFData()
+    return tuple_map(fdata, t)
 end
 
 uninit_fdata(p) = fdata(uninit_tangent(p))
@@ -514,9 +514,9 @@ function rdata(t::T) where {T<:PossiblyUninitTangent}
     return is_init(t) ? R(rdata(val(t))) : R()
 end
 
-@generated function rdata(t::Union{Tuple,NamedTuple})
-    rdata_type(t) == NoRData && return NoRData()
-    return :(tuple_map(rdata, t))
+function rdata(t::T) where {T<:Union{Tuple,NamedTuple}}
+    rdata_type(T) == NoRData && return NoRData()
+    return tuple_map(rdata, t)
 end
 
 function rdata_backing_type(::Type{P}) where {P}
