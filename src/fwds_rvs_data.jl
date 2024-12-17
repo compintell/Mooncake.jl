@@ -199,13 +199,16 @@ end
 fdata_type(::Type{T}) where {T<:Ptr} = T
 
 @generated function fdata_type(::Type{P}) where {P<:Tuple}
-    isa(P, Union) && return Union{fdata_type(P.a),fdata_type(P.b)}
+    isa(P, Union) && return :(Union{fdata_type($(P.a)),fdata_type($(P.b))})
     isempty(P.parameters) && return NoFData
     isa(last(P.parameters), Core.TypeofVararg) && return Any
     nofdata_tt = Tuple{Vararg{NoFData,length(P.parameters)}}
-    fdata_tt = Tuple{map(fdata_type, fieldtypes(P))...}
-    fdata_tt <: nofdata_tt && return NoFData
-    return nofdata_tt <: fdata_tt ? Union{NoFData,fdata_tt} : fdata_tt
+    fdata_type_exprs = map(_P -> Expr(:call, :fdata_type, _P), P.parameters)
+    return quote
+        fdata_tt = $(Expr(:curly, Tuple, fdata_type_exprs...))
+        fdata_tt <: $nofdata_tt && return NoFData
+        return $nofdata_tt <: fdata_tt ? Union{NoFData,fdata_tt} : fdata_tt
+    end
 end
 
 function fdata_type(::Type{NamedTuple{names,T}}) where {names,T<:Tuple}
@@ -448,13 +451,16 @@ end
 rdata_type(::Type{<:Ptr}) = NoRData
 
 @generated function rdata_type(::Type{P}) where {P<:Tuple}
-    isa(P, Union) && return Union{rdata_type(P.a),rdata_type(P.b)}
+    isa(P, Union) && return :(Union{rdata_type($(P.a)),rdata_type($(P.b))})
     isempty(P.parameters) && return NoRData
     isa(last(P.parameters), Core.TypeofVararg) && return Any
     nordata_tt = Tuple{Vararg{NoRData,length(P.parameters)}}
-    rdata_tt = Tuple{map(rdata_type, fieldtypes(P))...}
-    rdata_tt <: nordata_tt && return NoRData
-    return nordata_tt <: rdata_tt ? Union{NoRData,rdata_tt} : rdata_tt
+    rdata_type_exprs = map(_P -> Expr(:call, :rdata_type, _P), P.parameters)
+    return quote
+        rdata_tt = $(Expr(:curly, Tuple, rdata_type_exprs...))
+        rdata_tt <: $nordata_tt && return NoRData
+        return $nordata_tt <: rdata_tt ? Union{NoRData,rdata_tt} : rdata_tt
+    end
 end
 
 function rdata_type(::Type{NamedTuple{names,T}}) where {names,T<:Tuple}
