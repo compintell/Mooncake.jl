@@ -238,20 +238,20 @@ end
 
 Extract the forwards data from tangent `t`.
 """
-function fdata(t::T) where {T}
+@generated function fdata(t::T) where {T}
 
     # Ask for the forwards-data type. Useful catch-all error checking for unexpected types.
     F = fdata_type(T)
 
     # Catch-all for anything with no forwards-data.
-    F == NoFData && return NoFData()
+    F == NoFData && return :(NoFData())
 
     # Catch-all for anything where we return the whole object (mutable structs, arrays...).
-    F == T && return t
+    F == T && return :(t)
 
     # T must be a `Tangent` by now. If it's not, something has gone wrong.
-    T <: Tangent || error("Unhandled type $T")
-    return F(fdata(t.fields))
+    !(T <: Tangent) && return :(error("Unhandled type $T"))
+    return :($F(fdata(t.fields)))
 end
 
 function fdata(t::T) where {T<:PossiblyUninitTangent}
@@ -493,20 +493,20 @@ Extract the reverse data from tangent `t`.
 
 See extended help section of [fdata_type](@ref).
 """
-function rdata(t::T) where {T}
+@generated function rdata(t::T) where {T}
 
     # Ask for the reverse-data type. Useful catch-all error checking for unexpected types.
     R = rdata_type(T)
 
     # Catch-all for anything with no reverse-data.
-    R == NoRData && return NoRData()
+    R == NoRData && return :(NoRData())
 
     # Catch-all for anything where we return the whole object (Float64, isbits structs, ...)
-    R == T && return t
+    R == T && return :(t)
 
     # T must be a `Tangent` by now. If it's not, something has gone wrong.
-    T <: Tangent || error("Unhandled type $T")
-    return R(rdata(t.fields))
+    !(T <: Tangent) && return :(error("Unhandled type $T"))
+    return :($(rdata_type(T))(rdata(t.fields)))
 end
 
 function rdata(t::T) where {T<:PossiblyUninitTangent}
