@@ -166,11 +166,13 @@ end
     T == NoTangent && return NoFData
 
     # This method can only handle struct types. Tell user to implement their own method.
-    isprimitivetype(T) &&
-        throw(error("$T is a primitive type. Implement a method of `fdata_type` for it."))
+    if isprimitivetype(T)
+        msg = "$T is a primitive type. Implement a method of `fdata_type` for it."
+        return :(error($msg))
+    end
 
     # If the type is a Union, then take the union type of its arguments.
-    T isa Union && return Union{fdata_type(T.a),fdata_type(T.b)}
+    T isa Union && return :(Union{fdata_type($(T.a)),fdata_type($(T.b))})
 
     # If `P` is a mutable type, then its forwards data is its tangent.
     ismutabletype(T) && return T
@@ -179,18 +181,19 @@ end
     # The same goes for if the type has any undetermined type parameters.
     (isabstracttype(T) || !isconcretetype(T)) && return Any
 
+    # We should now have a `Tangent`. If not, we do not know what to do, so error.
+    T <: Tangent || return :(error("Unhandled type $T"))
+
     # If `P` is an immutable type, then some of its fields may not need to be propagated
     # on the forwards-pass.
-    if T <: Tangent
-        Tfields = fields_type(T)
-        fwds_data_field_types = map(1:fieldcount(Tfields)) do n
-            return fdata_type(fieldtype(Tfields, n))
-        end
-        all(==(NoFData), fwds_data_field_types) && return NoFData
-        return FData{NamedTuple{fieldnames(Tfields),Tuple{fwds_data_field_types...}}}
+    field_names = fieldnames(fields_type(T))
+    Tfields = fieldtypes(fields_type(T))
+    fdata_type_exprs = map(n -> :(fdata_type($(Tfields[n]))), 1:length(Tfields))
+    return quote
+        fwds_data_field_types = $(Expr(:call, :tuple, fdata_type_exprs...))
+        all(tuple_map(==(NoFData), fwds_data_field_types)) && return NoFData
+        return FData{NamedTuple{$field_names,Tuple{fwds_data_field_types...}}}
     end
-
-    return :(error("Unhandled type $T"))
 end
 
 fdata_type(::Type{T}) where {T<:Ptr} = T
@@ -415,11 +418,13 @@ end
     T == NoTangent && return NoRData
 
     # This method can only handle struct types. Tell user to implement their own method.
-    isprimitivetype(T) &&
-        throw(error("$T is a primitive type. Implement a method of `rdata_type` for it."))
+    if isprimitivetype(T)
+        msg = "$T is a primitive type. Implement a method of `rdata_type` for it."
+        return :(error(msg))
+    end
 
     # If the type is a Union, then take the union type of its arguments.
-    T isa Union && return Union{rdata_type(T.a),rdata_type(T.b)}
+    T isa Union && return :(Union{rdata_type($(T.a)),rdata_type($(T.b))})
 
     # If `P` is a mutable type, then all tangent info is propagated on the forwards-pass.
     ismutabletype(T) && return NoRData
@@ -428,13 +433,15 @@ end
     # The same goes for if the type has any undetermined type parameters.
     (isabstracttype(T) || !isconcretetype(T)) && return Any
 
-    # If `T` is an immutable type, then some of its fields may not have been propagated on
-    # the forwards-pass.
-    if T <: Tangent
-        Tfs = fields_type(T)
-        rvs_types = map(n -> rdata_type(fieldtype(Tfs, n)), 1:fieldcount(Tfs))
-        all(==(NoRData), rvs_types) && return NoRData
-        return RData{NamedTuple{fieldnames(Tfs),Tuple{rvs_types...}}}
+    # If `T` is an immutable type, then some of its fields may not need to be propagated
+    # on the forwards-pass.
+    field_names = fieldnames(fields_type(T))
+    Tfields = fieldtypes(fields_type(T))
+    rdata_type_exprs = map(n -> :(rdata_type($(Tfields[n]))), 1:length(Tfields))
+    return quote
+        rvs_data_field_types = $(Expr(:call, :tuple, rdata_type_exprs...))
+        all(tuple_map(==(NoRData), rvs_data_field_types)) && return NoRData
+        return RData{NamedTuple{$field_names,Tuple{rvs_data_field_types...}}}
     end
 end
 
