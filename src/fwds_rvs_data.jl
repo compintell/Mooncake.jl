@@ -619,19 +619,23 @@ with.
 @generated function zero_rdata_from_type(::Type{P}) where {P}
 
     # Prepare expressions for manually-unrolled loop to construct zero rdata elements.
-    names = fieldnames(P)
-    types = fieldtypes(P)
-    wrapped_field_zeros = tuple_map(ntuple(identity, length(names))) do n
-        fzero = :(zero_rdata_from_type($(types[n])))
-        if tangent_field_type(P, n) <: PossiblyUninitTangent
-            Q = rdata_type(tangent_type(fieldtype(P, n)))
-            return :(_wrap_field($Q, $fzero))
-        else
-            return fzero
+    if P isa DataType
+        names = fieldnames(P)
+        types = fieldtypes(P)
+        wrapped_field_zeros = tuple_map(ntuple(identity, length(names))) do n
+            fzero = :(zero_rdata_from_type($(types[n])))
+            if tangent_field_type(P, n) <: PossiblyUninitTangent
+                Q = rdata_type(tangent_type(fieldtype(P, n)))
+                return :(_wrap_field($Q, $fzero))
+            else
+                return fzero
+            end
         end
+        wrapped_field_zeros_tuple = Expr(:call, :tuple, wrapped_field_zeros...)
+        wrapped_expr = :(R(NamedTuple{$names}($wrapped_field_zeros_tuple)))
+    else
+        wrapped_expr = nothing
     end
-    wrapped_field_zeros_tuple = Expr(:call, :tuple, wrapped_field_zeros...)
-    wrapped_expr = :(R(NamedTuple{$names}($wrapped_field_zeros_tuple)))
 
     return quote
 
@@ -648,6 +652,8 @@ with.
 end
 
 @generated function zero_rdata_from_type(::Type{P}) where {P<:Tuple}
+    P isa DataType || return CannotProduceZeroRDataFromType()
+    Base.datatype_fieldcount(P) === nothing && return CannotProduceZeroRDataFromType()
     zero_exprs = map(_P -> :(zero_rdata_from_type($_P)), fieldtypes(P))
     return quote
         can_produce_zero_rdata_from_type($P) || return CannotProduceZeroRDataFromType()

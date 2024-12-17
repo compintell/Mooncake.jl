@@ -27,9 +27,21 @@ end
             Mooncake.CannotProduceZeroRDataFromType(),
         )
         @test !Mooncake.can_produce_zero_rdata_from_type(Tuple)
+        @test ==(
+            Mooncake.zero_rdata_from_type(Tuple), Mooncake.CannotProduceZeroRDataFromType()
+        )
         @test !Mooncake.can_produce_zero_rdata_from_type(Union{Tuple{Float64},Tuple{Int}})
+        @test ==(
+            Mooncake.zero_rdata_from_type(Union{Tuple{Float64},Tuple{Int}}),
+            Mooncake.CannotProduceZeroRDataFromType(),
+        )
         @test !Mooncake.can_produce_zero_rdata_from_type(Tuple{T,T} where {T<:Integer})
         @test Mooncake.can_produce_zero_rdata_from_type(Type{Float64})
+
+        @test ==(
+            Mooncake.zero_rdata_from_type(Union{Float64, Int}),
+            Mooncake.CannotProduceZeroRDataFromType(),
+        )
 
         # Edge case: Types with unbound type parameters.
         P = (Type{T} where {T}).body
