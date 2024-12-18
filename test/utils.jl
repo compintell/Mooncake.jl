@@ -29,6 +29,14 @@
         @test Mooncake.stable_ntuple(sin, Val(10)) == ntuple(sin, 10)
         @inferred Mooncake.stable_ntuple(sin, Val(150))
     end
+    @testset "stable_all" begin
+        @test Mooncake.stable_all((false, )) == false
+        @test Mooncake.stable_all((true, )) == true
+        @test Mooncake.stable_all((false, true)) == false
+        @test Mooncake.stable_all((false, false)) == false
+        @test Mooncake.stable_all((true, false)) == false
+        @test Mooncake.stable_all((true, true)) == true
+    end
     @testset "_map_if_assigned!" begin
         @testset "unary bits type" begin
             x = Vector{Float64}(undef, 10)
