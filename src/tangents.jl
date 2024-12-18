@@ -44,8 +44,6 @@ function Base.:(==)(t::PossiblyUninitTangent{T}, s::PossiblyUninitTangent{T}) wh
     return true
 end
 
-_wrap_type(::Type{T}) where {T} = PossiblyUninitTangent{T}
-
 _wrap_field(::Type{Q}, x::T) where {Q,T} = PossiblyUninitTangent{Q}(x)
 _wrap_field(x::T) where {T} = _wrap_field(T, x)
 
@@ -383,14 +381,18 @@ isconcrete_or_union(p) = p isa Union || isconcretetype(p)
     # a UnionAll before running to ensure that datatype_fieldcount will run.
     isa(P, DataType) && N == 0 && return NoTangent
 
-    # Get tangent types for all fields. If they're all `NoTangent`, return `NoTangent`.
-    # i.e. if `P = Tuple{Int, Int}`, do not return `Tuple{NoTangent, NoTangent}`. Simplify
-    # and return `NoTangent`.
+    # Expression to construct `Tuple` type containing tangent type for all fields.
     tangent_type_exprs = map(n -> :(tangent_type(fieldtype(P, $n))), 1:N)
     tangent_types = Expr(:call, tuple, tangent_type_exprs...)
+
+    # Construct a Tuple type of the same length as `P`, containing all `NoTangent`s.
     T_all_notangent = Tuple{Vararg{NoTangent,N}}
 
     return quote
+
+        # Get tangent types for all fields. If they're all `NoTangent`, return `NoTangent`.
+        # i.e. if `P = Tuple{Int, Int}`, do not return `Tuple{NoTangent, NoTangent}`.
+        # Simplify and return `NoTangent`.
         tangent_types = $tangent_types
         T = Tuple{tangent_types...}
         T <: $T_all_notangent && return NoTangent
@@ -419,11 +421,12 @@ function tangent_type(::Type{P}) where {N,P<:NamedTuple{N}}
     return isconcretetype(TT) ? NamedTuple{N,TT} : Any
 end
 
-@generated function tangent_type(::Type{P}) where {P}
+function tangent_type(::Type{P}) where {P}
     # This method can only handle struct types. Tell user to implement tangent type
     # directly for primitive types.
-    isprimitivetype(P) &&
+    if isprimitivetype(P)
         throw(error("$P is a primitive type. Implement a method of `tangent_type` for it."))
+    end
 
     # If the type is a Union, then take the union type of its arguments.
     P isa Union && return Union{tangent_type(P.a),tangent_type(P.b)}
@@ -441,12 +444,6 @@ end
     return bt == NoTangent ? bt : (ismutabletype(P) ? MutableTangent : Tangent){bt}
 end
 
-@inline function tangent_field_types(P)
-    return tuple_map(Base.Fix1(tangent_field_type, P), (1:fieldcount(P)...,))
-end
-
-backing_type(P::Type{<:Tuple}) = Tuple{tangent_field_types(P)...}
-
 backing_type(P::Type) = NamedTuple{fieldnames(P),Tuple{tangent_field_types(P)...}}
 
 """
@@ -459,7 +456,18 @@ possible for the field to be undefined.
 """
 function tangent_field_type(::Type{P}, n::Int) where {P}
     t = tangent_type(fieldtype(P, n))
-    return is_always_initialised(P, n) ? t : _wrap_type(t)
+    return is_always_initialised(P, n) ? t : PossiblyUninitTangent{t}
+end
+
+# It is essential that this gets inlined. If it does not, then we run into performance
+# issues with the recursion to compute tangent types for nested types.
+@inline @generated function tangent_field_types(::Type{P}) where {P}
+    inits = always_initialised(P)
+    tangent_type_exprs = map(fieldtypes(P), inits) do _P, init
+        T_expr = Expr(:call, :tangent_type, _P)
+        return init ? T_expr : Expr(:curly, PossiblyUninitTangent, T_expr)
+    end
+    return Expr(:call, :tuple, tangent_type_exprs...)
 end
 
 """
@@ -532,23 +540,15 @@ function zero_tangent_internal(x::P, stackdict) where {P}
     end
 end
 
-@generated function zero_tangent_struct_field(x::P, stackdict) where {P}
-    tangent_field_zeros_exprs = ntuple(fieldcount(P)) do n
-        if tangent_field_type(P, n) <: PossiblyUninitTangent
-            V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
-            return :(
-                if isdefined(x, $n)
-                    $V(zero_tangent_internal(getfield(x, $n), stackdict))
-                else
-                    $V()
-                end
-            )
-        else
-            return :(zero_tangent_internal(getfield(x, $n), stackdict))
-        end
+function zero_tangent_struct_field(x::P, d) where {P}
+    Tfs = tangent_field_types(P)
+    inits = always_initialised(P)
+    tangent_field_zeros = stable_ntuple(Val(fieldcount(P))) do n
+        T = Tfs[n]
+        inits[n] && return zero_tangent_internal(getfield(x, n), d)
+        return isdefined(x, n) ? T(zero_tangent_internal(getfield(x, n), d)) : T()
     end
-    tangent_fields_expr = Expr(:call, :tuple, tangent_field_zeros_exprs...)
-    return :($(backing_type(P))($tangent_fields_expr))
+    return backing_type(P)(tangent_field_zeros)
 end
 
 """
@@ -613,23 +613,15 @@ function randn_tangent_internal(rng::AbstractRNG, x::P, stackdict) where {P}
     end
 end
 
-@generated function randn_tangent_struct_field(rng::AbstractRNG, x::P, stackdict) where {P}
-    tangent_field_exprs = map(1:fieldcount(P)) do n
-        if tangent_field_type(P, n) <: PossiblyUninitTangent
-            V = PossiblyUninitTangent{tangent_type(fieldtype(P, n))}
-            return :(
-                if isdefined(x, $n)
-                    $V(randn_tangent_internal(rng, getfield(x, $n), stackdict))
-                else
-                    $V()
-                end
-            )
-        else
-            return :(randn_tangent_internal(rng, getfield(x, $n), stackdict))
-        end
+function randn_tangent_struct_field(rng::AbstractRNG, x::P, d) where {P}
+    Tfs = tangent_field_types(P)
+    inits = always_initialised(P)
+    tangent_field_zeros = stable_ntuple(Val(fieldcount(P))) do n
+        T = Tfs[n]
+        inits[n] && return randn_tangent_internal(rng, getfield(x, n), d)
+        return isdefined(x, n) ? T(randn_tangent_internal(rng, getfield(x, n), d)) : T()
     end
-    tangent_fields_expr = Expr(:call, :tuple, tangent_field_exprs...)
-    return :($(backing_type(P))($tangent_fields_expr))
+    return backing_type(P)(tangent_field_zeros)
 end
 
 """
@@ -1057,6 +1049,7 @@ function tangent_test_cases()
         # Regression tests to catch type inference failures, see https://github.com/compintell/Mooncake.jl/pull/422
         (((((randn(33)...,),),),),),
         (((((((((randn(33)...,),),),),), randn(5)...),),),),
+        Base.OneTo{Int},
     ]
     VERSION >= v"1.11" && push!(rel_test_cases, fill!(Memory{Float64}(undef, 3), 3.0))
     return vcat(

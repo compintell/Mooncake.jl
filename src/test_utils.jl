@@ -1135,8 +1135,10 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
     T = tangent_type(P)
     F = Mooncake.fdata_type(T)
     @test F isa Type
+    check_allocs(Shim(), Mooncake.fdata_type, T)
     R = Mooncake.rdata_type(T)
     @test R isa Type
+    check_allocs(Shim(), Mooncake.rdata_type, T)
 
     # Check that fdata and rdata produce the correct types.
     t = randn_tangent(rng, p)

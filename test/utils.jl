@@ -25,6 +25,10 @@
         @test_throws ArgumentError Mooncake.tuple_map(*, (5.0, 4.0), (4.0,))
         @test_throws ArgumentError Mooncake.tuple_map(*, (4.0,), (5.0, 4.0))
     end
+    @testset "stable_ntuple" begin
+        @test Mooncake.stable_ntuple(sin, Val(10)) == ntuple(sin, 10)
+        @inferred Mooncake.stable_ntuple(sin, Val(150))
+    end
     @testset "_map_if_assigned!" begin
         @testset "unary bits type" begin
             x = Vector{Float64}(undef, 10)
