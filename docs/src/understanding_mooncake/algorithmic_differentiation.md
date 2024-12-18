@@ -178,16 +178,20 @@ Using the usual definition of the inner product between matrices,
 ```
 we can rearrange the inner product as follows:
 ```math
-\begin{align}
-    \langle \bar{Y}, D f [X] (\dot{X}) \rangle &= \langle \bar{Y}, \dot{X}^\top X + X^\top \dot{X} \rangle \nonumber \\
-        &= \textrm{tr} (\bar{Y}^\top \dot{X}^\top X) + \textrm{tr}(\bar{Y}^\top X^\top \dot{X}) \nonumber \\
-        &= \textrm{tr} ( [\bar{Y} X^\top]^\top \dot{X}) + \textrm{tr}( [X \bar{Y}]^\top \dot{X}) \nonumber \\
-        &= \langle \bar{Y} X^\top + X \bar{Y}, \dot{X} \rangle. \nonumber
-\end{align}
+\begin{align*}
+\langle\bar{Y},Df[X](\dot{X})\rangle & =\langle\bar{Y},\dot{X}^{\top}X+X^{\top}\dot{X}\rangle\\
+ & =\textrm{tr}(\bar{Y}^{\top}\left(\dot{X}^{\top}X+X^{\top}\dot{X}\right))\\
+ & =\textrm{tr}(\dot{X}^{\top}X\bar{Y}^{\top})+\textrm{tr}(\bar{Y}^{\top}X^{\top}\dot{X})\\
+ & =\langle\dot{X},X\bar{Y}^{\top}\rangle+\langle X\bar{Y},\dot{X}\rangle\\
+ & =\langle X\bar{Y}^{\top}+X\bar{Y},\dot{X}\rangle.
+\end{align*}
 ```
-We can read off the adjoint operator from the first argument to the inner product:
+The linearity of inner products and trace, and the [cyclic property of trace](https://en.wikipedia.org/wiki/Trace_(linear_algebra)#Cyclic_property) was used in the above. We can read off the adjoint operator from the first argument to the inner product:
 ```math
-D f [X]^\ast (\bar{Y}) = \bar{Y} X^\top + X \bar{Y}.
+\begin{align*}
+Df\left[X\right]^{*}\left(\bar{Y}\right) & =X\bar{Y}^{\top}+X\bar{Y}\\
+ & =X\left(\bar{Y}^{\top}+\bar{Y}\right).
+\end{align*}
 ```
 
 #### AD of a Julia function: a trivial example
