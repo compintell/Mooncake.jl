@@ -481,7 +481,7 @@ end
     return Expr(:call, :tuple, tangent_field_types_exprs(P)...)
 end
 
-backing_type(P::Type) = NamedTuple{fieldnames(P), Tuple{tangent_field_types(P)...}}
+backing_type(P::Type) = NamedTuple{fieldnames(P),Tuple{tangent_field_types(P)...}}
 
 """
     zero_tangent(x)

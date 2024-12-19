@@ -44,7 +44,16 @@ struct MooncakeInterpreter{C} <: CC.AbstractInterpreter
         oc_cache::Dict{ClosureCacheKey,Any}=Dict{ClosureCacheKey,Any}(),
         inline_primitives::Bool=false,
     ) where {C}
-        return new{C}(meta, world, inf_params, opt_params, inf_cache, code_cache, oc_cache, inline_primitives)
+        return new{C}(
+            meta,
+            world,
+            inf_params,
+            opt_params,
+            inf_cache,
+            code_cache,
+            oc_cache,
+            inline_primitives,
+        )
     end
 end
 
@@ -200,7 +209,9 @@ const GLOBAL_INTERPRETER = Ref(MooncakeInterpreter())
 
 Globally cached interpreter which inline away AD primitives.
 """
-const GLOBAL_INLINING_INTERPRETER = Ref(MooncakeInterpreter(DefaultCtx; inline_primitives=true))
+const GLOBAL_INLINING_INTERPRETER = Ref(
+    MooncakeInterpreter(DefaultCtx; inline_primitives=true)
+)
 
 """
     get_interpreter()

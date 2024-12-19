@@ -30,8 +30,8 @@
         @inferred Mooncake.stable_ntuple(sin, Val(150))
     end
     @testset "stable_all" begin
-        @test Mooncake.stable_all((false, )) == false
-        @test Mooncake.stable_all((true, )) == true
+        @test Mooncake.stable_all((false,)) == false
+        @test Mooncake.stable_all((true,)) == true
         @test Mooncake.stable_all((false, true)) == false
         @test Mooncake.stable_all((false, false)) == false
         @test Mooncake.stable_all((true, false)) == false
