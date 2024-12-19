@@ -193,14 +193,14 @@ end
 
 Globally cached interpreter. Should only be accessed via `get_interpreter`.
 """
-const GLOBAL_INTERPRETER = Ref(bootstrap!(MooncakeInterpreter()))
+const GLOBAL_INTERPRETER = Ref(MooncakeInterpreter())
 
 """
     const GLOBAL_INLINING_INTERPRETER
 
 Globally cached interpreter which inline away AD primitives.
 """
-const GLOBAL_INLINING_INTERPRETER = Ref(bootstrap!(MooncakeInterpreter(DefaultCtx; inline_primitives=true)))
+const GLOBAL_INLINING_INTERPRETER = Ref(MooncakeInterpreter(DefaultCtx; inline_primitives=true))
 
 """
     get_interpreter()
@@ -213,13 +213,13 @@ This should be prefered over constructing a `MooncakeInterpreter` directly.
 function get_interpreter(; inline_primitives=false)
     if inline_primitives
         if GLOBAL_INLINING_INTERPRETER[].world != Base.get_world_counter()
-            interp = bootstrap!(MooncakeInterpreter(DefaultCtx; inline_primitives))
+            interp = MooncakeInterpreter(DefaultCtx; inline_primitives)
             GLOBAL_INLINING_INTERPRETER[] = interp
         end
         return GLOBAL_INLINING_INTERPRETER[]
     else
         if GLOBAL_INTERPRETER[].world != Base.get_world_counter()
-            GLOBAL_INTERPRETER[] = bootstrap!(MooncakeInterpreter())
+            GLOBAL_INTERPRETER[] = MooncakeInterpreter()
         end
         return GLOBAL_INTERPRETER[]
     end
