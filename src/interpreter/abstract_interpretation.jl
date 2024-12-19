@@ -188,47 +188,6 @@ else # 1.11 and up.
     end
 end
 
-# Copied verbatim from https://github.com/JuliaLang/julia/blob/4976d05258ec9aeed40c6c6f73a7f8bbd977d9c6/base/compiler/bootstrap.jl#L10
-function bootstrap!(interp::CC.AbstractInterpreter)
-
-    fs = Any[
-        # we first create caches for the optimizer, because they contain many loop constructions
-        # and they're better to not run in interpreter even during bootstrapping
-        #=analyze_escapes_tt,=# CC.run_passes,
-        # then we create caches for inference entries
-        CC.typeinf_ext, CC.typeinf, CC.typeinf_edge,
-    ]
-    # tfuncs can't be inferred from the inference entries above, so here we infer them manually
-    for x in CC.T_FFUNC_VAL
-        push!(fs, x[3])
-    end
-    for i = 1:length(CC.T_IFUNC)
-        if isassigned(CC.T_IFUNC, i)
-            x = CC.T_IFUNC[i]
-            push!(fs, x[3])
-        else
-            println(stderr, "WARNING: tfunc missing for ", reinterpret(IntrinsicFunction, Int32(i)))
-        end
-    end
-    for f in fs
-        if isa(f, DataType) && f.name === typename(Tuple)
-            tt = f
-        else
-            tt = Tuple{typeof(f), Vararg{Any}}
-        end
-        for m in CC._methods_by_ftype(tt, 10, CC.get_world_counter())::Vector
-            # remove any TypeVars from the intersection
-            m = m::CC.MethodMatch
-            typ = Any[m.spec_types.parameters...]
-            for i = 1:length(typ)
-                typ[i] = CC.unwraptv(typ[i])
-            end
-            CC.typeinf_type(interp, m.method, Tuple{typ...}, m.sparams)
-        end
-    end
-    return interp
-end
-
 """
     const GLOBAL_INTERPRETER
 
