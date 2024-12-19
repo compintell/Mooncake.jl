@@ -421,30 +421,46 @@ function tangent_type(::Type{P}) where {N,P<:NamedTuple{N}}
     return isconcretetype(TT) ? NamedTuple{N,TT} : Any
 end
 
-function tangent_type(::Type{P}) where {P}
-    # This method can only handle struct types. Tell user to implement tangent type
-    # directly for primitive types.
+function tangent_field_types_exprs(P::Type)
+    tangent_type_exprs = map(fieldtypes(P), always_initialised(P)) do _P, init
+        T_expr = Expr(:call, :tangent_type, _P)
+        return init ? T_expr : Expr(:curly, PossiblyUninitTangent, T_expr)
+    end
+    return tangent_type_exprs
+    # return Expr(:call, :tuple, tangent_type_exprs...)
+end
+
+@generated function tangent_type(::Type{P}) where {P}
+
+    # This method can only handle struct types. Something has gone wrong if P is primitive.
     if isprimitivetype(P)
-        throw(error("$P is a primitive type. Implement a method of `tangent_type` for it."))
+        return error("$P is a primitive type. Implement a method of `tangent_type` for it.")
     end
 
     # If the type is a Union, then take the union type of its arguments.
-    P isa Union && return Union{tangent_type(P.a),tangent_type(P.b)}
+    P isa Union && return :(Union{tangent_type($(P.a)),tangent_type($(P.b))})
 
     # If the type is itself abstract, it's tangent could be anything.
     # The same goes for if the type has any undetermined type parameters.
     (isabstracttype(P) || !isconcretetype(P)) && return Any
 
-    # If all fields are definitely NoTangents, then the overall tangent type is NoTangent.
+    tangent_fields_types_expr = Expr(
+        :call, Core.apply_type, Tuple, tangent_field_types_exprs(P)...
+    )
     T_all_notangent = Tuple{Vararg{NoTangent,fieldcount(P)}}
-    Tuple{tangent_field_types(P)...} <: T_all_notangent && return NoTangent
+    return quote
 
-    # Derive tangent type.
-    bt = backing_type(P)
-    return bt == NoTangent ? bt : (ismutabletype(P) ? MutableTangent : Tangent){bt}
+        # Construct a `Tuple{...}` whose fields are the tangent types of the fields of `P`.
+        tangent_field_types_tuple = $tangent_fields_types_expr
+
+        # If all fields are definitely `NoTangent`s, then return `NoTangent`.
+        tangent_field_types_tuple <: $T_all_notangent && return NoTangent
+
+        # Derive tangent type.
+        bt = NamedTuple{$(fieldnames(P)),tangent_field_types_tuple}
+        return $(ismutabletype(P) ? MutableTangent : Tangent){bt}
+    end
 end
-
-backing_type(P::Type) = NamedTuple{fieldnames(P),Tuple{tangent_field_types(P)...}}
 
 """
     tangent_field_type(::Type{P}, n::Int) where {P}
@@ -461,14 +477,11 @@ end
 
 # It is essential that this gets inlined. If it does not, then we run into performance
 # issues with the recursion to compute tangent types for nested types.
-@inline @generated function tangent_field_types(::Type{P}) where {P}
-    inits = always_initialised(P)
-    tangent_type_exprs = map(fieldtypes(P), inits) do _P, init
-        T_expr = Expr(:call, :tangent_type, _P)
-        return init ? T_expr : Expr(:curly, PossiblyUninitTangent, T_expr)
-    end
-    return Expr(:call, :tuple, tangent_type_exprs...)
+@generated function tangent_field_types(::Type{P}) where {P}
+    return Expr(:call, :tuple, tangent_field_types_exprs(P)...)
 end
+
+backing_type(P::Type) = NamedTuple{fieldnames(P), Tuple{tangent_field_types(P)...}}
 
 """
     zero_tangent(x)

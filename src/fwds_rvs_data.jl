@@ -640,13 +640,13 @@ with.
     return quote
 
         # If we know we can't produce a tangent, say so.
-        can_produce_zero_rdata_from_type(P) || return CannotProduceZeroRDataFromType()
+        can_produce_zero_rdata_from_type($P) || return CannotProduceZeroRDataFromType()
 
         # Simple case.
-        R = rdata_type(tangent_type(P))
+        R = rdata_type(tangent_type($P))
         R == NoRData && return NoRData()
 
-        isstructtype(P) || error("Unhandled type $P")
+        $(isstructtype(P)) || error("Unhandled type $P")
         return $wrapped_expr
     end
 end

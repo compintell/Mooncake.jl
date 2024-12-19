@@ -32,6 +32,7 @@ struct MooncakeInterpreter{C} <: CC.AbstractInterpreter
     inf_cache::Vector{CC.InferenceResult}
     code_cache::MooncakeCache
     oc_cache::Dict{ClosureCacheKey,Any}
+    inline_primitives::Bool
     function MooncakeInterpreter(
         ::Type{C};
         meta=nothing,
@@ -41,8 +42,9 @@ struct MooncakeInterpreter{C} <: CC.AbstractInterpreter
         inf_cache::Vector{CC.InferenceResult}=CC.InferenceResult[],
         code_cache::MooncakeCache=MooncakeCache(),
         oc_cache::Dict{ClosureCacheKey,Any}=Dict{ClosureCacheKey,Any}(),
+        inline_primitives::Bool=false,
     ) where {C}
-        return new{C}(meta, world, inf_params, opt_params, inf_cache, code_cache, oc_cache)
+        return new{C}(meta, world, inf_params, opt_params, inf_cache, code_cache, oc_cache, inline_primitives)
     end
 end
 
@@ -60,28 +62,6 @@ end
 MooncakeInterpreter() = MooncakeInterpreter(DefaultCtx)
 
 context_type(::MooncakeInterpreter{C}) where {C} = C
-
-"""
-    const GLOBAL_INTERPRETER
-
-Globally cached interpreter. Should only be accessed via `get_interpreter`.
-"""
-const GLOBAL_INTERPRETER = Ref(MooncakeInterpreter())
-
-"""
-    get_interpreter()
-
-Returns a `MooncakeInterpreter` appropriate for the current world age. Will use a cached
-interpreter if one already exists for the current world age, otherwise creates a new one.
-
-This should be prefered over constructing a `MooncakeInterpreter` directly.
-"""
-function get_interpreter()
-    if GLOBAL_INTERPRETER[].world != Base.get_world_counter()
-        GLOBAL_INTERPRETER[] = MooncakeInterpreter()
-    end
-    return GLOBAL_INTERPRETER[]
-end
 
 CC.InferenceParams(interp::MooncakeInterpreter) = interp.inf_params
 CC.OptimizationParams(interp::MooncakeInterpreter) = interp.opt_params
@@ -150,13 +130,20 @@ function Core.Compiler.abstract_call_gf_by_type(
         max_methods::Int,
     )
     callinfo = ret.info
-    if Mooncake.is_primitive(C, atype)
+    if !interp.inline_primitives && Mooncake.is_primitive(C, atype)
         callinfo = NoInlineCallInfo(callinfo, atype)
     end
+    rt = ret.rt
+    effects = ret.effects
+    a = arginfo.argtypes
+    if length(a) == 2 && a[1] == Core.Const(tangent_type) && a[2] isa Core.Const
+        rt = Core.Const(tangent_type(a[2].val))
+        effects = CC.EFFECTS_TOTAL
+    end
     @static if VERSION ≥ v"1.11-"
-        return CC.CallMeta(ret.rt, ret.exct, ret.effects, callinfo)
+        return CC.CallMeta(rt, ret.exct, effects, callinfo)
     else
-        return CC.CallMeta(ret.rt, ret.effects, callinfo)
+        return CC.CallMeta(rt, effects, callinfo)
     end
 end
 
@@ -198,5 +185,83 @@ else # 1.11 and up.
         return @invoke CC.inlining_policy(
             interp::CC.AbstractInterpreter, src::Any, info::CC.CallInfo, stmt_flag::UInt32
         )
+    end
+end
+
+# Copied verbatim from https://github.com/JuliaLang/julia/blob/4976d05258ec9aeed40c6c6f73a7f8bbd977d9c6/base/compiler/bootstrap.jl#L10
+function bootstrap!(interp::CC.AbstractInterpreter)
+
+    fs = Any[
+        # we first create caches for the optimizer, because they contain many loop constructions
+        # and they're better to not run in interpreter even during bootstrapping
+        #=analyze_escapes_tt,=# CC.run_passes,
+        # then we create caches for inference entries
+        CC.typeinf_ext, CC.typeinf, CC.typeinf_edge,
+    ]
+    # tfuncs can't be inferred from the inference entries above, so here we infer them manually
+    for x in CC.T_FFUNC_VAL
+        push!(fs, x[3])
+    end
+    for i = 1:length(CC.T_IFUNC)
+        if isassigned(CC.T_IFUNC, i)
+            x = CC.T_IFUNC[i]
+            push!(fs, x[3])
+        else
+            println(stderr, "WARNING: tfunc missing for ", reinterpret(IntrinsicFunction, Int32(i)))
+        end
+    end
+    for f in fs
+        if isa(f, DataType) && f.name === typename(Tuple)
+            tt = f
+        else
+            tt = Tuple{typeof(f), Vararg{Any}}
+        end
+        for m in CC._methods_by_ftype(tt, 10, CC.get_world_counter())::Vector
+            # remove any TypeVars from the intersection
+            m = m::CC.MethodMatch
+            typ = Any[m.spec_types.parameters...]
+            for i = 1:length(typ)
+                typ[i] = CC.unwraptv(typ[i])
+            end
+            CC.typeinf_type(interp, m.method, Tuple{typ...}, m.sparams)
+        end
+    end
+    return interp
+end
+
+"""
+    const GLOBAL_INTERPRETER
+
+Globally cached interpreter. Should only be accessed via `get_interpreter`.
+"""
+const GLOBAL_INTERPRETER = Ref(bootstrap!(MooncakeInterpreter()))
+
+"""
+    const GLOBAL_INLINING_INTERPRETER
+
+Globally cached interpreter which inline away AD primitives.
+"""
+const GLOBAL_INLINING_INTERPRETER = Ref(bootstrap!(MooncakeInterpreter(DefaultCtx; inline_primitives=true)))
+
+"""
+    get_interpreter()
+
+Returns a `MooncakeInterpreter` appropriate for the current world age. Will use a cached
+interpreter if one already exists for the current world age, otherwise creates a new one.
+
+This should be prefered over constructing a `MooncakeInterpreter` directly.
+"""
+function get_interpreter(; inline_primitives=false)
+    if inline_primitives
+        if GLOBAL_INLINING_INTERPRETER[].world != Base.get_world_counter()
+            interp = bootstrap!(MooncakeInterpreter(DefaultCtx; inline_primitives))
+            GLOBAL_INLINING_INTERPRETER[] = interp
+        end
+        return GLOBAL_INLINING_INTERPRETER[]
+    else
+        if GLOBAL_INTERPRETER[].world != Base.get_world_counter()
+            GLOBAL_INTERPRETER[] = bootstrap!(MooncakeInterpreter())
+        end
+        return GLOBAL_INTERPRETER[]
     end
 end
