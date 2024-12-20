@@ -84,4 +84,23 @@
         @test Mooncake.is_always_fully_initialised(TestResources.Foo)
         @test !Mooncake.is_always_fully_initialised(TestResources.StructFoo)
     end
+    @testset "opaque_closure" begin
+
+        # Get the IRCode for `sin` applied to a `Float64`.
+        ir = Base.code_ircode_by_type(Tuple{typeof(sin), Float64})[1][1]
+
+        # Check that regular OpaqueClosure construction works as expected.
+        oc = Mooncake.opaque_closure(Float64, ir)
+        @test oc isa Core.OpaqueClosure{Tuple{Float64}, Float64}
+        @test oc(5.0) == sin(5.0)
+
+        # Construct the same OpaqueClosure, but tell it what the type is.
+        oc2 = Mooncake.opaque_closure(Any, ir)
+        @test oc2 isa Core.OpaqueClosure{Tuple{Float64}, Any}
+        @test oc2(5.0) == sin(5.0)
+
+        # Check that we can get a MistyClosure also.
+        mc = Mooncake.misty_closure(Float64, ir)
+        @test mc(5.0) == sin(5.0)
+    end
 end
