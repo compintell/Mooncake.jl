@@ -128,7 +128,7 @@ end
 # https://gist.github.com/oxinabox/cdcffc1392f91a2f6d80b2524726d802#file-example-jl-L54
 function __get_toplevel_mi_from_ir(ir, _module::Module)
     mi = ccall(:jl_new_method_instance_uninit, Ref{Core.MethodInstance}, ())
-    mi.specTypes = Tuple{map(_type, ir.argtypes)...}
+    mi.specTypes = Tuple{map(CC.widenconst, ir.argtypes)...}
     mi.def = _module
     return mi
 end
