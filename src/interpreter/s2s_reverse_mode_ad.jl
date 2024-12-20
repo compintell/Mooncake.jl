@@ -855,37 +855,37 @@ const RuleMC{A,R} = MistyClosure{OpaqueClosure{A,R}}
 # between differing varargs conventions.
 #
 
-struct Pullback{Tprimal,Tpb_args,Tpb_ret,Tisva<:Val}
+struct Pullback{Tprimal,Tpb_args,Tpb_ret,isva}
     pb_oc::Base.RefValue{RuleMC{Tpb_args,Tpb_ret}}
-    isva::Tisva
 end
 
-function Pullback(
-    Tprimal, pb_oc::Tpb_oc, isva::Tisva
-) where {Tpb_args,Tpb_ret,Tpb_oc<:Ref{RuleMC{Tpb_args,Tpb_ret}},Tisva}
-    return Pullback{Tprimal,Tpb_args,Tpb_ret,Tisva}(pb_oc, isva)
+function Pullback(Tprimal, pb_oc::Tpb_oc, isva::Bool) where {A,R,Tpb_oc<:Ref{RuleMC{A,R}}}
+    return Pullback{Tprimal,A,R,isva}(pb_oc)
 end
+
+_isva(::Pullback{<:Any,<:Any,<:Any,isva}) where {isva} = isva
 
 @inline function (pb::Pullback{sig})(dy) where {sig}
-    return __flatten_varargs(pb.isva, pb.pb_oc[].oc(dy), nvargs(pb.isva, sig)())
+    return __flatten_varargs(_isva(pb), pb.pb_oc[].oc(dy), nvargs(_isva(pb), sig)())
 end
 
-struct DerivedRule{Tprimal,Tfwd_args,Tfwd_ret,Tpb_args,Tpb_ret,Tisva<:Val,Tnargs<:Val}
+struct DerivedRule{Tprimal,Tfwd_args,Tfwd_ret,Tpb_args,Tpb_ret,isva,Tnargs<:Val}
     fwds_oc::RuleMC{Tfwd_args,Tfwd_ret}
-    pb::Pullback{Tprimal,Tpb_args,Tpb_ret,Tisva}
-    isva::Tisva
+    pb::Pullback{Tprimal,Tpb_args,Tpb_ret,isva}
     nargs::Tnargs
 end
 
+_isva(::DerivedRule{A,B,C,D,E,isva}) where {A,B,C,D,E,isva} = isva
+
 function DerivedRule(
-    Tprimal, fwds_oc::RuleMC{FA,FR}, pb::Pullback{<:Any,RA,RR}, isva::V, nargs::W
-) where {FA,FR,RA,RR,V,W}
-    return DerivedRule{Tprimal,FA,FR,RA,RR,V,W}(fwds_oc, pb, isva, nargs)
+    Tprimal, fwds_oc::RuleMC{FA,FR}, pb::Pullback{<:Any,RA,RR}, isva::Bool, nargs::W
+) where {FA,FR,RA,RR,W}
+    return DerivedRule{Tprimal,FA,FR,RA,RR,isva,W}(fwds_oc, pb, nargs)
 end
 
 # Extends functionality defined for debug_mode.
 function verify_args(r::DerivedRule{sig}, x) where {sig}
-    Tx = Tuple{map(_typeof ∘ primal, __unflatten_codual_varargs(r.isva, x, r.nargs))...}
+    Tx = Tuple{map(_typeof ∘ primal, __unflatten_codual_varargs(_isva(r), x, r.nargs))...}
     Tx <: sig && return nothing
     throw(ArgumentError("Arguments with sig $Tx do not subtype rule signature, $sig"))
 end
@@ -896,8 +896,8 @@ function _copy(x::P) where {P<:DerivedRule}
     new_captures = _copy(x.fwds_oc.oc.captures)
     new_fwds_oc = replace_captures(x.fwds_oc, new_captures)
     new_pb_oc_ref = Ref(replace_captures(x.pb.pb_oc[], new_captures))
-    new_pb = typeof(x.pb)(new_pb_oc_ref, x.isva)
-    return P(new_fwds_oc, new_pb, x.isva, x.nargs)
+    new_pb = typeof(x.pb)(new_pb_oc_ref)
+    return P(new_fwds_oc, new_pb, x.nargs)
 end
 
 _copy(x::Symbol) = x
@@ -913,28 +913,28 @@ _copy(x::Type) = x
 _copy(x) = copy(x)
 
 @inline function (fwds::DerivedRule{P,Q,S})(args::Vararg{CoDual,N}) where {P,Q,S,N}
-    uf_args = __unflatten_codual_varargs(fwds.isva, args, fwds.nargs)
+    uf_args = __unflatten_codual_varargs(_isva(fwds), args, fwds.nargs)
     return fwds.fwds_oc.oc(uf_args...)::CoDual, fwds.pb
 end
 
 """
-    __flatten_varargs(::Val{isva}, args, ::Val{nvargs}) where {isva, nvargs}
+    __flatten_varargs(isva::Bool, args, ::Val{nvargs}) where {nvargs}
 
 If isva, inputs (5.0, (4.0, 3.0)) are transformed into (5.0, 4.0, 3.0).
 """
-function __flatten_varargs(::Val{isva}, args, ::Val{nvargs}) where {isva,nvargs}
+function __flatten_varargs(isva::Bool, args, ::Val{nvargs}) where {nvargs}
     isva || return args
     last_el = isa(args[end], NoRData) ? ntuple(n -> NoRData(), nvargs) : args[end]
     return (args[1:(end - 1)]..., last_el...)
 end
 
 """
-    __unflatten_codual_varargs(::Val{isva}, args, ::Val{nargs}) where {isva, nargs}
+    __unflatten_codual_varargs(isva::Bool, args, ::Val{nargs}) where {nargs}
 
 If isva and nargs=2, then inputs `(CoDual(5.0, 0.0), CoDual(4.0, 0.0), CoDual(3.0, 0.0))`
 are transformed into `(CoDual(5.0, 0.0), CoDual((5.0, 4.0), (0.0, 0.0)))`.
 """
-function __unflatten_codual_varargs(::Val{isva}, args, ::Val{nargs}) where {isva,nargs}
+function __unflatten_codual_varargs(isva::Bool, args, ::Val{nargs}) where {nargs}
     isva || return args
     group_primal = map(primal, args[nargs:end])
     if fdata_type(tangent_type(_typeof(group_primal))) == NoFData
@@ -985,13 +985,12 @@ function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where 
     nargs = Val{length(ir.argtypes)}
 
     Tderived_rule = DerivedRule{
-        sig,fwd_args_type,fwd_return_type,pb_args_type,pb_return_type,Val{isva},nargs
+        sig,fwd_args_type,fwd_return_type,pb_args_type,pb_return_type,isva,nargs
     }
     return debug_mode ? DebugRRule{Tderived_rule} : Tderived_rule
 end
 
 nvargs(isva, sig) = Val{isva ? length(sig.parameters[end].parameters) : 0}
-nvargs(::Val{isva}, sig) where {isva} = nvargs(isva, sig)
 
 struct MooncakeRuleCompilationError <: Exception
     interp::MooncakeInterpreter
@@ -1103,8 +1102,8 @@ function build_rrule(
                 }
             end
 
-            pb = Pullback(sig, Ref(rvs_oc), Val(dri.isva))
-            raw_rule = DerivedRule(sig, fwd_oc, pb, Val(dri.isva), Val(num_args(dri.info)))
+            pb = Pullback(sig, Ref(rvs_oc), dri.isva)
+            raw_rule = DerivedRule(sig, fwd_oc, pb, dri.isva, Val(num_args(dri.info)))
             rule = debug_mode ? DebugRRule(raw_rule) : raw_rule
             interp.oc_cache[oc_cache_key] = rule
             return rule
