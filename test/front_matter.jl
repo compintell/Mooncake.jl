@@ -63,8 +63,7 @@ using Mooncake:
     verify_rdata_value,
     is_primitive,
     MinimalCtx,
-    stmt,
-    _type
+    stmt
 
 using .TestUtils:
     test_rule,

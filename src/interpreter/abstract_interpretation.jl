@@ -116,12 +116,6 @@ else
     get_inference_world(interp::CC.AbstractInterpreter) = CC.get_inference_world(interp)
 end
 
-_type(x::Type) = x
-_type(x::CC.Const) = _typeof(x.val)
-_type(x::CC.PartialStruct) = x.typ
-_type(x::CC.Conditional) = Union{_type(x.thentype),_type(x.elsetype)}
-_type(::CC.PartialTypeVar) = TypeVar
-
 struct NoInlineCallInfo <: CC.CallInfo
     info::CC.CallInfo # wrapped call
     tt::Any # signature

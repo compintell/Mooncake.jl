@@ -70,8 +70,4 @@ contains_primitive_behind_call(x) = @inline contains_primitive(x)
             @test stmt(ad_ir.stmts)[invoke_line].args[2] == GlobalRef(Main, :a_primitive)
         end
     end
-    @testset "_type" begin
-        @test _type(CC.Const(5.0)) === Float64
-        @test _type(CC.PartialTypeVar(TypeVar(:a, Union{}, Any), true, true)) === TypeVar
-    end
 end
