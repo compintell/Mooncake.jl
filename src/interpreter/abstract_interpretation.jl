@@ -129,7 +129,9 @@ function Core.Compiler.abstract_call_gf_by_type(
     sv::CC.AbsIntState,
     max_methods::Int,
 ) where {C}
-    ret = @invoke CC.abstract_call_gf_by_type(
+
+    # invoke the default abstract call to get the default CC.CallMeta.
+    cm = @invoke CC.abstract_call_gf_by_type(
         interp::CC.AbstractInterpreter,
         f::Any,
         arginfo::CC.ArgInfo,
@@ -138,19 +140,29 @@ function Core.Compiler.abstract_call_gf_by_type(
         sv::CC.AbsIntState,
         max_methods::Int,
     )
-    callinfo = ret.info
+
+    # Check to see whether the call in question is a Mooncake primitive. If it is, set its
+    # call info such that in the `CC.inlining_policy` it is not inlined away.
+    callinfo = cm.info
     if !interp.inline_primitives && Mooncake.is_primitive(C, atype)
         callinfo = NoInlineCallInfo(callinfo, atype)
     end
-    rt = ret.rt
-    effects = ret.effects
+
+    # Check to see whether we have a (constant) call to `tangent_type` with a constant type
+    # argument. If we do, then assert its return type is a constant, and that it is pure +
+    # does not throw, etc. This is necessary to ensure that inference never gives up on
+    # tangent_type -- if it does, we lose all conditional performance guarantees.
+    rt = cm.rt
+    effects = cm.effects
     a = arginfo.argtypes
     if length(a) == 2 && a[1] == Core.Const(tangent_type) && a[2] isa Core.Const
         rt = Core.Const(tangent_type(a[2].val))
         effects = CC.EFFECTS_TOTAL
     end
+
+    # Construct a CallMeta correctly depending on the version of Julia.
     @static if VERSION ≥ v"1.11-"
-        return CC.CallMeta(rt, ret.exct, effects, callinfo)
+        return CC.CallMeta(rt, cm.exct, effects, callinfo)
     else
         return CC.CallMeta(rt, effects, callinfo)
     end
