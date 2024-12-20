@@ -242,3 +242,86 @@ flat_product(xs...) = vec(collect(Iterators.product(xs...)))
 Equivalent to `map(f, flat_product(xs...))`.
 """
 map_prod(f, xs...) = map(f, flat_product(xs...))
+
+"""
+    opaque_closure(
+        ret_type::Type,
+        ir::IRCode,
+        @nospecialize env...;
+        isva::Bool=false,
+        do_compile::Bool=true,
+    )::Core.OpaqueClosure{<:Tuple, ret_type}
+
+Construct a `Core.OpaqueClosure`. Almost equivalent to
+`Core.OpaqueClosure(ir, env...; isva, do_compile)`, but instead of letting
+`Core.compute_oc_rettype` figure out the return type from `ir`, impose `ret_type` as the
+return type.
+
+# Warning
+
+User beware: if the `Core.OpaqueClosure` produced by this function ever returns anything
+which is not an instance of a subtype of `ret_type`, you should expect all kinds of awful
+things to happen, such as segfaults. You have been warned!
+
+# Extended Help
+
+This is needed in Mooncake.jl because make extensive use of our ability to know the return
+type of a couple of specific `OpaqueClosure`s without actually having constructed them --
+see `LazyDerivedRule`. Without the capability to specify the return type, we have to guess
+what type `compute_ir_rettype` will return for a given `IRCode` before we have constructed
+the `IRCode` and run type inference on it. This exposes us to details of type inference,
+which are not part of the public interface of the language, and can therefore vary from
+Julia version to Julia version (including patch versions). Moreover, even for a fixed Julia
+version it can be extremely hard to predict exactly what type inference will infer to be the
+return type of a function.
+
+Failing to correctly guess the return type can happen for a number of reasons, and the kinds
+of errors that tend to be generated when this fails tell you very little about the
+underlying cause of the problem.
+
+By specifying the return type ourselves, we remove this dependence. The price we pay for
+this is the potential for segfaults etc if we fail to specify `ret_type` correctly.
+"""
+function opaque_closure(
+    ret_type::Type,
+    ir::IRCode,
+    @nospecialize env...;
+    isva::Bool=false,
+    do_compile::Bool=true,
+)
+    # This implementation is copied over directly from `Core.OpaqueClosure`.
+    ir = CC.copy(ir)
+    nargs = length(ir.argtypes) - 1
+    sig = Base.Experimental.compute_oc_signature(ir, nargs, isva)
+    src = ccall(:jl_new_code_info_uninit, Ref{CC.CodeInfo}, ())
+    src.slotnames = fill(:none, nargs + 1)
+    src.slotflags = fill(zero(UInt8), length(ir.argtypes))
+    src.slottypes = copy(ir.argtypes)
+    src.rettype = ret_type
+    src = CC.ir_to_codeinf!(src, ir)
+    return Base.Experimental.generate_opaque_closure(
+        sig, Union{}, ret_type, src, nargs, isva, env...; do_compile
+    )::Core.OpaqueClosure{sig,ret_type}
+end
+
+"""
+    misty_closure(
+        ret_type::Type,
+        ir::IRCode,
+        @nospecialize env...;
+        isva::Bool=false,
+        do_compile::Bool=true,
+    )
+
+Identical to [`Mooncake.opaque_closure`](@ref), but returns a `MistyClosure` closure rather
+than a `Core.OpaqueClosure`.
+"""
+function misty_closure(
+    ret_type::Type,
+    ir::IRCode,
+    @nospecialize env...;
+    isva::Bool=false,
+    do_compile::Bool=true,
+)
+    return MistyClosure(opaque_closure(ret_type, ir, env...; isva, do_compile), Ref(ir))
+end
