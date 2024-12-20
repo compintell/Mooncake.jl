@@ -133,6 +133,8 @@ struct ADInfo
     debug_mode::Bool
     is_used_dict::Dict{ID,Bool}
     lazy_zero_rdata_ref_id::ID
+    fwd_ret_type::Type
+    rvs_ret_type::Type
 end
 
 # The constructor that you should use for ADInfo if you don't have a BBCode lying around.
@@ -144,6 +146,8 @@ function ADInfo(
     is_used_dict::Dict{ID,Bool},
     debug_mode::Bool,
     zero_lazy_rdata_ref::Ref{<:Tuple},
+    fwd_ret_type::Type,
+    rvs_ret_type::Type,
 )
     shared_data_pairs = SharedDataPairs()
     block_stack = BlockStack()
@@ -160,12 +164,20 @@ function ADInfo(
         debug_mode,
         is_used_dict,
         add_data!(shared_data_pairs, zero_lazy_rdata_ref),
+        fwd_ret_type,
+        rvs_ret_type,
     )
 end
 
 # The constructor you should use for ADInfo if you _do_ have a BBCode lying around. See the
 # ADInfo struct for information regarding `interp` and `debug_mode`.
-function ADInfo(interp::MooncakeInterpreter, ir::BBCode, debug_mode::Bool)
+function ADInfo(
+    interp::MooncakeInterpreter,
+    ir::BBCode,
+    debug_mode::Bool,
+    fwd_ret_type::Type,
+    rvs_ret_type::Type,
+)
     arg_types = Dict{Argument,Any}(
         map(((n, t),) -> (Argument(n) => CC.widenconst(t)), enumerate(ir.argtypes))
     )
@@ -175,7 +187,8 @@ function ADInfo(interp::MooncakeInterpreter, ir::BBCode, debug_mode::Bool)
     Tlazy_rdata_ref = Tuple{map(lazy_zero_rdata_type ∘ CC.widenconst, ir.argtypes)...}
     zero_lazy_rdata_ref = Ref{Tlazy_rdata_ref}()
     return ADInfo(
-        interp, arg_types, ssa_insts, is_used_dict, debug_mode, zero_lazy_rdata_ref
+        interp,
+        arg_types, ssa_insts, is_used_dict, debug_mode, zero_lazy_rdata_ref, fwd_ret_type, rvs_ret_type
     )
 end
 
@@ -384,13 +397,15 @@ end
   associated statements on the forwards-pass or pullback. We just return the original
   statement on the forwards-pass, and `nothing` on the reverse-pass.
 2. `val isa Union{Argument, ID}`: this is an active piece of data. Consequently, we know
-  that it will be an `CoDual` already, and can just return it. Therefore `stmt`
-  is returned as the forwards-pass (with any `Argument`s incremented). On the reverse-pass
-  the associated rdata ref should be incremented with the rdata passed to the pullback,
-  which lives in argument 2.
-3. `val` is defined, but not a `Union{Argument, ID}`: in this case we're returning a
+  that it will be a `CoDual`, and can just return it. Therefore `stmt` is returned as the
+  forwards-pass (with any `Argument`s incremented). On the reverse-pass the associated rdata
+  ref should be incremented with the rdata passed to the pullback, residing in argument 2.
+3. `val` is defined, but not a `Union{Argument, ID}`: in this case we are returning a
   constant -- build a constant CoDual and return that. There is nothing to do on the
   reverse pass.
+
+For cases 2 and 3, we also insert a call to `typeassert` to ensure that `info.fwd_ret_type`
+is respected. A similar check for `info.rvs_ret_type` is handled elsewhere.
 =#
 function make_ad_stmts!(stmt::ReturnNode, line::ID, info::ADInfo)
     if !is_reachable_return_node(stmt)
@@ -399,12 +414,20 @@ function make_ad_stmts!(stmt::ReturnNode, line::ID, info::ADInfo)
     if is_active(stmt.val)
         rdata_id = get_rev_data_id(info, stmt.val)
         rvs = new_inst(Expr(:call, increment_ref!, rdata_id, Argument(2)))
-        return ad_stmt_info(line, nothing, inc_args(stmt), rvs)
+        assert_id = ID()
+        val = __inc(stmt.val)
+        fwds = [
+            (assert_id, new_inst(Expr(:call, typeassert, val, info.fwd_ret_type))),
+            (ID(), new_inst(ReturnNode(assert_id))),
+        ]
+        return ad_stmt_info(line, nothing, fwds, rvs)
     else
         const_id = ID()
+        assert_id = ID()
         fwds = [
             (const_id, new_inst(const_codual_stmt(stmt.val, info))),
-            (ID(), new_inst(ReturnNode(const_id))),
+            (assert_id, new_inst(Expr(:call, typeassert, const_id, info.fwd_ret_type))),
+            (ID(), new_inst(ReturnNode(assert_id))),
         ]
         return ad_stmt_info(line, nothing, fwds, nothing)
     end
@@ -918,6 +941,14 @@ end
 _is_primitive(C::Type, mi::Core.MethodInstance) = is_primitive(C, mi.specTypes)
 _is_primitive(C::Type, sig::Type) = is_primitive(C, sig)
 
+function forwards_ret_type(primal_ir::IRCode)
+    return fcodual_type(Base.Experimental.compute_ir_rettype(primal_ir))
+end
+
+function pullback_ret_type(primal_ir::IRCode)
+    return Tuple{map(rdata_type ∘ tangent_type ∘ CC.widenconst, primal_ir.argtypes)...}
+end
+
 const RuleMC{A,R} = MistyClosure{OpaqueClosure{A,R}}
 
 """
@@ -938,15 +969,16 @@ function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where 
 
     arg_types = map(CC.widenconst, ir.argtypes)
     sig = Tuple{arg_types...}
-    arg_fwds_types = Tuple{map(fcodual_type, arg_types)...}
-    arg_rvs_types = Tuple{map(rdata_type ∘ tangent_type, arg_types)...}
-    rvs_return_type = rdata_type(tangent_type(Treturn))
-    pb_oc_type = MistyClosure{OpaqueClosure{Tuple{rvs_return_type},arg_rvs_types}}
+    fwd_args_type = Tuple{map(fcodual_type, arg_types)...}
+    fwd_return_type = forwards_ret_type(ir)
+    pb_args_type = Tuple{rdata_type(tangent_type(Treturn))}
+    pb_return_type = pullback_ret_type(ir)
+    pb_oc_type = MistyClosure{OpaqueClosure{pb_args_type,pb_return_type}}
     pb_type = Pullback{sig,Base.RefValue{pb_oc_type},Val{isva},nvargs(isva, sig)}
     nargs = Val{length(ir.argtypes)}
 
     Tderived_rule = DerivedRule{
-        sig,RuleMC{arg_fwds_types,fcodual_type(Treturn)},pb_type,Val{isva},nargs
+        sig,RuleMC{fwd_args_type,fwd_return_type},pb_type,Val{isva},nargs
     }
     return debug_mode ? DebugRRule{Tderived_rule} : Tderived_rule
 end
@@ -1001,7 +1033,9 @@ const MOONCAKE_INFERENCE_LOCK = ReentrantLock()
 struct DerivedRuleInfo
     primal_ir::IRCode
     fwd_ir::IRCode
+    fwd_ret_type::Type
     rvs_ir::IRCode
+    rvs_ret_type::Type
     shared_data::Tuple
     info::ADInfo
     isva::Bool
@@ -1049,8 +1083,8 @@ function build_rrule(
         else
             # Derive forwards- and reverse-pass IR, and shove in `MistyClosure`s.
             dri = generate_ir(interp, sig_or_mi; debug_mode)
-            fwd_oc = MistyClosure(dri.fwd_ir, dri.shared_data...; do_compile=true)
-            rvs_oc = MistyClosure(dri.rvs_ir, dri.shared_data...; do_compile=true)
+            fwd_oc = misty_closure(dri.fwd_ret_type, dri.fwd_ir, dri.shared_data...)
+            rvs_oc = misty_closure(dri.rvs_ret_type, dri.rvs_ir, dri.shared_data...)
 
             # Compute the signature. Needs careful handling with varargs.
             sig = sig_or_mi isa Core.MethodInstance ? sig_or_mi.specTypes : sig_or_mi
@@ -1095,6 +1129,8 @@ function generate_ir(
     # Grab code associated to the primal.
     ir, _ = lookup_ir(interp, sig_or_mi)
     Treturn = Base.Experimental.compute_ir_rettype(ir)
+    fwd_ret_type = forwards_ret_type(ir)
+    rvs_ret_type = pullback_ret_type(ir)
 
     # Normalise the IR, and generated BBCode version of it.
     isva, spnames = is_vararg_and_sparam_names(sig_or_mi)
@@ -1102,7 +1138,7 @@ function generate_ir(
     primal_ir = remove_unreachable_blocks!(BBCode(ir))
 
     # Compute global info.
-    info = ADInfo(interp, primal_ir, debug_mode)
+    info = ADInfo(interp, primal_ir, debug_mode, fwd_ret_type, rvs_ret_type)
 
     # For each block in the fwds and pullback BBCode, translate all statements. Running this
     # will, in general, push items to `info.shared_data_pairs`.
@@ -1124,7 +1160,9 @@ function generate_ir(
     )
     opt_fwd_ir = optimise_ir!(IRCode(fwd_ir); do_inline)
     opt_rvs_ir = optimise_ir!(IRCode(rvs_ir); do_inline)
-    return DerivedRuleInfo(ir, opt_fwd_ir, opt_rvs_ir, shared_data, info, isva)
+    return DerivedRuleInfo(
+        ir, opt_fwd_ir, fwd_ret_type, opt_rvs_ir, rvs_ret_type, shared_data, info, isva
+    )
 end
 
 """
@@ -1430,13 +1468,18 @@ function pullback_ir(
     deref_id = ID()
     deref = new_inst(Expr(:call, tuple, final_ids...))
 
-    ret = new_inst(ReturnNode(deref_id))
+    # Assert the type of the return value subtypes info.rvs_ret_type.
+    assert_id = ID()
+    assert = new_inst(Expr(:call, typeassert, deref_id, info.rvs_ret_type))
+
+    # Construct return node and assemble final basic block.
+    ret = new_inst(ReturnNode(assert_id))
     exit_block = BBlock(
         info.entry_id,
         vcat(
             (lazy_zero_rdata_tuple_id, lazy_zero_rdata_tuple),
             rdata_extraction_stmts...,
-            [(deref_id, deref), (ID(), ret)],
+            [(deref_id, deref), (assert_id, assert), (ID(), ret)],
         ),
     )
 
@@ -1690,51 +1733,7 @@ _copy(x::P) where {P<:LazyDerivedRule} = P(x.mi, x.debug_mode)
     return isdefined(rule, :rule) ? rule.rule(args...) : _build_rule!(rule, args)
 end
 
-struct BadRuleTypeException <: Exception
-    mi::Core.MethodInstance
-    sig::Type
-    actual_rule_type::Type
-    expected_rule_type::Type
-end
-
-function Base.showerror(io::IO, err::BadRuleTypeException)
-    println(io, "BadRuleTypeException:")
-    println(io)
-    println(io, "Rule is of type:")
-    println(io, err.actual_rule_type)
-    println(io)
-    println(io, "However, expected rule to be of type:")
-    println(io, err.expected_rule_type)
-    println(io)
-    println(io, "This error occured for $(err.mi) with signature:")
-    println(io, err.sig)
-    println(io)
-    msg =
-        "Usually this error is indicative of something having gone wrong in the " *
-        "compilation of the rule in question. Look at the error message for the error " *
-        "which caused this error (below) for more details. If the error below does not " *
-        "immediately give you enough information to debug what is going on, consider " *
-        "building the rule for the signature above, and inspecting the IR."
-    return println(io, msg)
-end
-
-_rtype(::Type{<:DebugRRule}) = Tuple{CoDual,DebugPullback}
-_rtype(T::Type{<:MistyClosure}) = _rtype(fieldtype(T, :oc))
-_rtype(::Type{<:OpaqueClosure{<:Any,R}}) where {R} = R
-_rtype(T::Type{<:DerivedRule}) = Tuple{_rtype(fieldtype(T, :fwds_oc)),fieldtype(T, :pb)}
-
 @noinline function _build_rule!(rule::LazyDerivedRule{sig,Trule}, args) where {sig,Trule}
-    derived_rule = build_rrule(get_interpreter(), rule.mi; debug_mode=rule.debug_mode)
-    if derived_rule isa Trule
-        rule.rule = derived_rule
-        result = derived_rule(args...)
-    else
-        err = BadRuleTypeException(rule.mi, sig, typeof(derived_rule), Trule)
-        result = try
-            derived_rule(args...)
-        catch
-            throw(err)
-        end
-    end
-    return result::_rtype(Trule)
+    rule.rule = build_rrule(get_interpreter(), rule.mi; debug_mode=rule.debug_mode)
+    return rule.rule(args...)
 end
