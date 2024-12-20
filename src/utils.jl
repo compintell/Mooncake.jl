@@ -250,7 +250,8 @@ map_prod(f, xs...) = map(f, flat_product(xs...))
         @nospecialize env...;
         isva::Bool=false,
         do_compile::Bool=true,
-    )
+    )::Core.OpaqueClosure{<:Tuple, ret_type}
+
 Construct a `Core.OpaqueClosure`. Almost equivalent to
 `Core.OpaqueClosure(ir, env...; isva, do_compile)`, but instead of letting
 `Core.compute_oc_rettype` figure out the return type from `ir`, impose `ret_type` as the
@@ -300,7 +301,7 @@ function opaque_closure(
     src = CC.ir_to_codeinf!(src, ir)
     return Base.Experimental.generate_opaque_closure(
         sig, Union{}, ret_type, src, nargs, isva, env...; do_compile
-    )
+    )::Core.OpaqueClosure{<:Tuple,ret_type}
 end
 
 """
