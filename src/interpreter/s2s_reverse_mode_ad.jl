@@ -188,7 +188,13 @@ function ADInfo(
     zero_lazy_rdata_ref = Ref{Tlazy_rdata_ref}()
     return ADInfo(
         interp,
-        arg_types, ssa_insts, is_used_dict, debug_mode, zero_lazy_rdata_ref, fwd_ret_type, rvs_ret_type
+        arg_types,
+        ssa_insts,
+        is_used_dict,
+        debug_mode,
+        zero_lazy_rdata_ref,
+        fwd_ret_type,
+        rvs_ret_type,
     )
 end
 

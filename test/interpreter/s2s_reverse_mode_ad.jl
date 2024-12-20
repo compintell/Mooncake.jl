@@ -33,7 +33,14 @@ end
         is_used_dict = Dict{ID,Bool}(id_ssa_1 => true, id_ssa_2 => true)
         rdata_ref = Ref{Tuple{map(Mooncake.lazy_zero_rdata_type, (Float64, Int))...}}()
         info = ADInfo(
-            get_interpreter(), arg_types, ssa_insts, is_used_dict, false, rdata_ref, Any, Any
+            get_interpreter(),
+            arg_types,
+            ssa_insts,
+            is_used_dict,
+            false,
+            rdata_ref,
+            Any,
+            Any,
         )
 
         # Verify that we can access the interpreter and terminator block ID.
