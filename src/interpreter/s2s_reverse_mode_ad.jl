@@ -167,12 +167,13 @@ end
 # ADInfo struct for information regarding `interp` and `debug_mode`.
 function ADInfo(interp::MooncakeInterpreter, ir::BBCode, debug_mode::Bool)
     arg_types = Dict{Argument,Any}(
-        map(((n, t),) -> (Argument(n) => _type(t)), enumerate(ir.argtypes))
+        map(((n, t),) -> (Argument(n) => CC.widenconst(t)), enumerate(ir.argtypes))
     )
     stmts = collect_stmts(ir)
     ssa_insts = Dict{ID,NewInstruction}(stmts)
     is_used_dict = characterise_used_ids(stmts)
-    zero_lazy_rdata_ref = Ref{Tuple{map(lazy_zero_rdata_type ∘ _type, ir.argtypes)...}}()
+    Tlazy_rdata_ref = Tuple{map(lazy_zero_rdata_type ∘ CC.widenconst, ir.argtypes)...}
+    zero_lazy_rdata_ref = Ref{Tlazy_rdata_ref}()
     return ADInfo(
         interp, arg_types, ssa_insts, is_used_dict, debug_mode, zero_lazy_rdata_ref
     )
@@ -209,7 +210,7 @@ is_used(info::ADInfo, id::ID)::Bool = info.is_used_dict[id]
 Returns the static / inferred type associated to `x`.
 """
 get_primal_type(info::ADInfo, x::Argument) = info.arg_types[x]
-get_primal_type(info::ADInfo, x::ID) = _type(info.ssa_insts[x].type)
+get_primal_type(info::ADInfo, x::ID) = CC.widenconst(info.ssa_insts[x].type)
 get_primal_type(::ADInfo, x::QuoteNode) = _typeof(x.value)
 get_primal_type(::ADInfo, x) = _typeof(x)
 function get_primal_type(::ADInfo, x::GlobalRef)
@@ -238,10 +239,10 @@ Create the statements which initialise the reverse-data `Ref`s.
 function reverse_data_ref_stmts(info::ADInfo)
     return vcat(
         map(collect(info.arg_rdata_ref_ids)) do (k, id)
-            (id, new_inst(Expr(:call, __make_ref, _type(info.arg_types[k]))))
+            (id, new_inst(Expr(:call, __make_ref, CC.widenconst(info.arg_types[k]))))
         end,
         map(collect(info.ssa_rdata_ref_ids)) do (k, id)
-            (id, new_inst(Expr(:call, __make_ref, _type(info.ssa_insts[k].type))))
+            (id, new_inst(Expr(:call, __make_ref, CC.widenconst(info.ssa_insts[k].type))))
         end,
     )
 end
@@ -462,7 +463,7 @@ function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
         P = get_primal_type(info, line)
         val_rdata_ref_id = get_rev_data_id(info, stmt.val)
         output_rdata_ref_id = get_rev_data_id(info, line)
-        fwds = PiNode(__inc(stmt.val), fcodual_type(_type(stmt.typ)))
+        fwds = PiNode(__inc(stmt.val), fcodual_type(CC.widenconst(stmt.typ)))
         rvs = Expr(:call, __pi_rvs!, P, val_rdata_ref_id, output_rdata_ref_id)
     else
         # If the value of the PiNode is a constant / QuoteNode etc, then there is nothing to
@@ -470,7 +471,7 @@ function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
         const_id = ID()
         fwds = [
             (const_id, new_inst(const_codual_stmt(stmt.val, info))),
-            (line, new_inst(PiNode(const_id, fcodual_type(_type(stmt.typ))))),
+            (line, new_inst(PiNode(const_id, fcodual_type(CC.widenconst(stmt.typ))))),
         ]
         rvs = nothing
     end
@@ -935,7 +936,7 @@ function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where 
     Treturn = Base.Experimental.compute_ir_rettype(ir)
     isva, _ = is_vararg_and_sparam_names(sig_or_mi)
 
-    arg_types = map(_type, ir.argtypes)
+    arg_types = map(CC.widenconst, ir.argtypes)
     sig = Tuple{arg_types...}
     arg_fwds_types = Tuple{map(fcodual_type, arg_types)...}
     arg_rvs_types = Tuple{map(rdata_type ∘ tangent_type, arg_types)...}
@@ -1281,7 +1282,7 @@ function forwards_pass_ir(
     end
 
     # Create and return the `BBCode` for the forwards-pass.
-    arg_types = vcat(Tshared_data, map(fcodual_type ∘ _type, ir.argtypes))
+    arg_types = vcat(Tshared_data, map(fcodual_type ∘ CC.widenconst, ir.argtypes))
     ir = BBCode(vcat(entry_block, blocks), arg_types, ir.sptypes, ir.linetable, ir.meta)
     return remove_unreachable_blocks!(ir)
 end
