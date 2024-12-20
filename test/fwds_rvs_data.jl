@@ -35,8 +35,8 @@ end
         )
         @test !can_produce_zero_rdata_from_type(Tuple{T,T} where {T<:Integer})
         @test can_produce_zero_rdata_from_type(Type{Float64})
-        @test can_produce_zero_rdata_from_type(Union{Tuple{Int}, Tuple{Int, Int}})
-        @test zero_rdata_from_type(Union{Tuple{Int}, Tuple{Int, Int}}) == NoRData()
+        @test can_produce_zero_rdata_from_type(Union{Tuple{Int},Tuple{Int,Int}})
+        @test zero_rdata_from_type(Union{Tuple{Int},Tuple{Int,Int}}) == NoRData()
         @test zero_rdata_from_type(Union{Float64,Int}) == CannotProduceZeroRDataFromType()
 
         # Edge case: Types with unbound type parameters.
