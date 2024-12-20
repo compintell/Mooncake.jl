@@ -84,7 +84,7 @@
         @test Mooncake.is_always_fully_initialised(TestResources.Foo)
         @test !Mooncake.is_always_fully_initialised(TestResources.StructFoo)
     end
-    @testset "opaque_closure" begin
+    @testset "opaque_closure and misty_closure" begin
 
         # Get the IRCode for `sin` applied to a `Float64`.
         ir = Base.code_ircode_by_type(Tuple{typeof(sin), Float64})[1][1]
