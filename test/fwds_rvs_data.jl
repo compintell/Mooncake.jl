@@ -18,30 +18,26 @@ end
         TestUtils.test_fwds_rvs_data(Xoshiro(123456), p)
     end
     @testset "zero_rdata_from_type checks" begin
-        @test Mooncake.can_produce_zero_rdata_from_type(Vector) == true
-        @test Mooncake.zero_rdata_from_type(Vector) == NoRData()
-        @test !Mooncake.can_produce_zero_rdata_from_type(FwdsRvsDataTestResources.Foo)
-        @test Mooncake.can_produce_zero_rdata_from_type(Tuple{Float64,Type{Float64}})
+        @test can_produce_zero_rdata_from_type(Vector) == true
+        @test zero_rdata_from_type(Vector) == NoRData()
+        @test !can_produce_zero_rdata_from_type(FwdsRvsDataTestResources.Foo)
+        @test can_produce_zero_rdata_from_type(Tuple{Float64,Type{Float64}})
         @test ==(
-            Mooncake.zero_rdata_from_type(FwdsRvsDataTestResources.Foo),
-            Mooncake.CannotProduceZeroRDataFromType(),
+            zero_rdata_from_type(FwdsRvsDataTestResources.Foo),
+            CannotProduceZeroRDataFromType(),
         )
-        @test !Mooncake.can_produce_zero_rdata_from_type(Tuple)
+        @test !can_produce_zero_rdata_from_type(Tuple)
+        @test zero_rdata_from_type(Tuple) == CannotProduceZeroRDataFromType()
+        @test !can_produce_zero_rdata_from_type(Union{Tuple{Float64},Tuple{Int}})
         @test ==(
-            Mooncake.zero_rdata_from_type(Tuple), Mooncake.CannotProduceZeroRDataFromType()
+            zero_rdata_from_type(Union{Tuple{Float64},Tuple{Int}}),
+            CannotProduceZeroRDataFromType(),
         )
-        @test !Mooncake.can_produce_zero_rdata_from_type(Union{Tuple{Float64},Tuple{Int}})
-        @test ==(
-            Mooncake.zero_rdata_from_type(Union{Tuple{Float64},Tuple{Int}}),
-            Mooncake.CannotProduceZeroRDataFromType(),
-        )
-        @test !Mooncake.can_produce_zero_rdata_from_type(Tuple{T,T} where {T<:Integer})
-        @test Mooncake.can_produce_zero_rdata_from_type(Type{Float64})
-
-        @test ==(
-            Mooncake.zero_rdata_from_type(Union{Float64,Int}),
-            Mooncake.CannotProduceZeroRDataFromType(),
-        )
+        @test !can_produce_zero_rdata_from_type(Tuple{T,T} where {T<:Integer})
+        @test can_produce_zero_rdata_from_type(Type{Float64})
+        @test can_produce_zero_rdata_from_type(Union{Tuple{Int}, Tuple{Int, Int}})
+        @test zero_rdata_from_type(Union{Tuple{Int}, Tuple{Int, Int}}) == NoRData()
+        @test zero_rdata_from_type(Union{Float64,Int}) == CannotProduceZeroRDataFromType()
 
         # Edge case: Types with unbound type parameters.
         P = (Type{T} where {T}).body

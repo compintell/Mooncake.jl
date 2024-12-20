@@ -63,7 +63,10 @@ using Mooncake:
     verify_rdata_value,
     is_primitive,
     MinimalCtx,
-    stmt
+    stmt,
+    can_produce_zero_rdata_from_type,
+    zero_rdata_from_type,
+    CannotProduceZeroRDataFromType
 
 using .TestUtils:
     test_rule,

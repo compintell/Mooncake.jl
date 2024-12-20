@@ -652,9 +652,8 @@ with.
 end
 
 @generated function zero_rdata_from_type(::Type{P}) where {P<:Tuple}
-    P isa DataType || return CannotProduceZeroRDataFromType()
-    Base.datatype_fieldcount(P) === nothing && return CannotProduceZeroRDataFromType()
-    zero_exprs = map(_P -> :(zero_rdata_from_type($_P)), fieldtypes(P))
+    has_fields = P isa DataType && Base.datatype_fieldcount(P) !== nothing
+    zero_exprs = has_fields ? map(_P -> :(zero_rdata_from_type($_P)), fieldtypes(P)) : []
     return quote
         can_produce_zero_rdata_from_type($P) || return CannotProduceZeroRDataFromType()
         rdata_type(tangent_type($P)) == NoRData && return NoRData()
