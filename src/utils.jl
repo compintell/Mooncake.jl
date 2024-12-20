@@ -301,7 +301,7 @@ function opaque_closure(
     src = CC.ir_to_codeinf!(src, ir)
     return Base.Experimental.generate_opaque_closure(
         sig, Union{}, ret_type, src, nargs, isva, env...; do_compile
-    )::Core.OpaqueClosure{<:Tuple,ret_type}
+    )::Core.OpaqueClosure{sig,ret_type}
 end
 
 """
