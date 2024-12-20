@@ -40,6 +40,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:fastmath})
         vcat,
         map([Float64, Float32]) do P
             return Any[
+                (false, :stability_and_allocs, nothing, cosh, P(0.3)),
                 (false, :stability_and_allocs, nothing, Base.FastMath.exp10_fast, P(0.5)),
                 (false, :stability_and_allocs, nothing, Base.FastMath.exp2_fast, P(0.5)),
                 (false, :stability_and_allocs, nothing, Base.FastMath.exp_fast, P(5.0)),
