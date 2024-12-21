@@ -82,6 +82,16 @@ end
 end
 
 """
+    stable_all(x::NTuple{N, Bool}) where {N}
+
+`all(x::NTuple{N, Bool})` does not constant-fold nicely on 1.10 if the values of `x` are
+known statically. This implementation constant-folds nicely on both 1.10 and 1.11, so can
+be used in its place in situations where this is important.
+"""
+stable_all(x::NTuple{1,Bool}) = x[1]
+stable_all(x::NTuple{N,Bool}) where {N} = x[1] & stable_all(x[2:end])
+
+"""
     _map_if_assigned!(f, y::DenseArray, x::DenseArray{P}) where {P}
 
 For all `n`, if `x[n]` is assigned, then writes the value returned by `f(x[n])` to `y[n]`,
@@ -179,6 +189,18 @@ function sparam_names(m::Core.Method)::Vector{Symbol}
         Meta.isexpr(name, :(>:)) && return name.args[1]
         error("unrecognised type param $name")
     end
+end
+
+"""
+    always_initialised(::Type{P}) where {P}
+
+Returns a tuple with number of fields equal to the number of fields in `P`. The nth field
+is set to `true` if the nth field of `P` is initialised, and `false` otherwise.
+"""
+@generated function always_initialised(::Type{P}) where {P}
+    P isa DataType || return :(error("$P is not a DataType."))
+    num_init = CC.datatype_min_ninitialized(P)
+    return (map(n -> n <= num_init, 1:fieldcount(P))...,)
 end
 
 """
