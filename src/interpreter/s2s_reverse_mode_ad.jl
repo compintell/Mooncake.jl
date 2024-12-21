@@ -1340,11 +1340,12 @@ straightforward to figure out much time is spent pushing to the block stack when
 """
 @inline __push_blk_stack!(block_stack::BlockStack, id::Int32) = push!(block_stack, id)
 
-@inline function __assemble_lazy_zero_rdata(
+__lazy_zero_rdata_primal(T, x) = lazy_zero_rdata(T, primal(x))
+
+@inline @generated function __assemble_lazy_zero_rdata(
     r::Ref{T}, args::Vararg{CoDual,N}
 ) where {T<:Tuple,N}
-    r[] = map((T, x) -> lazy_zero_rdata(T, primal(x)), fieldtypes(T), args)
-    return nothing
+    return :(r[] = tuple_map(__lazy_zero_rdata_primal, $(fieldtypes(T)), args))
 end
 
 """
