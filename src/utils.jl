@@ -82,16 +82,6 @@ end
 end
 
 """
-    stable_ntuple(f, ::Val{N}) where {N}
-
-Equivalent to `ntuple(f, N)`, but does not have a performance cliff at `N == 11`. This will
-produce results in a type-stable manner for any value of `N`.
-"""
-@generated function stable_ntuple(f, ::Val{N}) where {N}
-    return Expr(:call, :tuple, map(n -> :(f($n)), 1:N)...)
-end
-
-"""
     stable_all(x::NTuple{N, Bool}) where {N}
 
 `all(x::NTuple{N, Bool})` does not constant-fold nicely on 1.10 if the values of `x` are

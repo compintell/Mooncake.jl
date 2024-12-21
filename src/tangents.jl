@@ -556,7 +556,7 @@ end
 function zero_tangent_struct_field(x::P, d) where {P}
     Tfs = tangent_field_types(P)
     inits = always_initialised(P)
-    tangent_field_zeros = stable_ntuple(Val(fieldcount(P))) do n
+    tangent_field_zeros = ntuple(Val(fieldcount(P))) do n
         T = Tfs[n]
         inits[n] && return zero_tangent_internal(getfield(x, n), d)
         return isdefined(x, n) ? T(zero_tangent_internal(getfield(x, n), d)) : T()
@@ -629,7 +629,7 @@ end
 function randn_tangent_struct_field(rng::AbstractRNG, x::P, d) where {P}
     Tfs = tangent_field_types(P)
     inits = always_initialised(P)
-    tangent_field_zeros = stable_ntuple(Val(fieldcount(P))) do n
+    tangent_field_zeros = ntuple(Val(fieldcount(P))) do n
         T = Tfs[n]
         inits[n] && return randn_tangent_internal(rng, getfield(x, n), d)
         return isdefined(x, n) ? T(randn_tangent_internal(rng, getfield(x, n), d)) : T()
