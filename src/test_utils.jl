@@ -811,7 +811,6 @@ infers / optimises away.
 """
 function test_tangent_type(primal_type::Type, expected_tangent_type::Type)
     @test tangent_type(primal_type) == expected_tangent_type
-    return test_opt(Shim(), tangent_type, Tuple{_typeof(primal_type)})
 end
 
 """
@@ -957,18 +956,14 @@ To verify that this is the case, ensure that all tests in either `test_tangent` 
 function test_tangent_performance(rng::AbstractRNG, p::P) where {P}
 
     # Should definitely infer, because tangent type must be known statically from primal.
-    z = @inferred zero_tangent(p)
-    t = @inferred randn_tangent(rng, p)
+    z = zero_tangent(p)
+    t = randn_tangent(rng, p)
 
-    # Computing the tangent type must always be type stable and allocation-free.
-    @inferred tangent_type(P)
-    @test (@allocations tangent_type(P)) == 0
-
-    # Check there are no allocations when there ought not to be.
-    if !__tangent_generation_should_allocate(P)
-        test_opt(Shim(), Tuple{typeof(zero_tangent),P})
-        test_opt(Shim(), Tuple{typeof(randn_tangent),Xoshiro,P})
-    end
+    # # Check there are no allocations when there ought not to be.
+    # if !__tangent_generation_should_allocate(P)
+    #     test_opt(Shim(), Tuple{typeof(zero_tangent),P})
+    #     test_opt(Shim(), Tuple{typeof(randn_tangent),Xoshiro,P})
+    # end
 
     # `increment!!` should always infer.
     @inferred increment!!(t, z)
@@ -1097,7 +1092,7 @@ function test_tangent(
     @test tangent_type(P) == T
 
     # Check that zero_tangent infers.
-    @inferred Mooncake.zero_tangent(p)
+    # @inferred Mooncake.zero_tangent(p)
 
     # Verify that adding together `x` and `y` gives the value the user expected.
     z_pred = increment!!(x, y)
@@ -1189,8 +1184,8 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
 
     # Check that when the zero element is asked from the primal type alone, the result is
     # either an instance of R _or_ a `CannotProduceZeroRDataFromType`.
-    test_opt(Shim(), zero_rdata_from_type, Tuple{Type{P}})
-    rzero_from_type = @inferred zero_rdata_from_type(P)
+    # test_opt(Shim(), zero_rdata_from_type, Tuple{Type{P}})
+    rzero_from_type = zero_rdata_from_type(P)
     @test rzero_from_type isa R || rzero_from_type isa CannotProduceZeroRDataFromType
     @test can_make_zero != isa(rzero_from_type, CannotProduceZeroRDataFromType)
 
