@@ -118,15 +118,24 @@ end
     return findfirst(==(s), fieldnames(Tfields))
 end
 
+function tangent_field_types_exprs(P::Type)
+    tangent_type_exprs = map(fieldtypes(P), always_initialised(P)) do _P, init
+        T_expr = Expr(:call, :tangent_type, _P)
+        return init ? T_expr : Expr(:curly, PossiblyUninitTangent, T_expr)
+    end
+    return tangent_type_exprs
+end
+
+# It is essential that this gets inlined. If it does not, then we run into performance
+# issues with the recursion to compute tangent types for nested types.
+@generated function tangent_field_types(::Type{P}) where {P}
+    return Expr(:call, :tuple, tangent_field_types_exprs(P)...)
+end
+
 @generated function build_tangent(::Type{P}, fields::Vararg{Any,N}) where {P,N}
-    tangent_values_exprs = map(enumerate(fieldtypes(P))) do (n, field_type)
-        if tangent_field_type(P, n) <: PossiblyUninitTangent
-            tt = PossiblyUninitTangent{tangent_type(field_type)}
-            if n <= N
-                return Expr(:call, tt, :(fields[$n]))
-            else
-                return Expr(:call, tt)
-            end
+    tangent_values_exprs = map(enumerate(tangent_field_types(P))) do (n, tt)
+        if tt <: PossiblyUninitTangent
+            return n <= N ? Expr(:call, tt, :(fields[$n])) : Expr(:call, tt)
         else
             return :(fields[$n])
         end
@@ -423,14 +432,6 @@ function tangent_type(::Type{P}) where {N,P<:NamedTuple{N}}
     return isconcretetype(TT) ? NamedTuple{N,TT} : Any
 end
 
-function tangent_field_types_exprs(P::Type)
-    tangent_type_exprs = map(fieldtypes(P), always_initialised(P)) do _P, init
-        T_expr = Expr(:call, :tangent_type, _P)
-        return init ? T_expr : Expr(:curly, PossiblyUninitTangent, T_expr)
-    end
-    return tangent_type_exprs
-end
-
 Base.@assume_effects :removable :consistent @generated function tangent_type(
     ::Type{P}
 ) where {P}
@@ -463,25 +464,6 @@ Base.@assume_effects :removable :consistent @generated function tangent_type(
         bt = NamedTuple{$(fieldnames(P)),tangent_field_types_tuple}
         return $(ismutabletype(P) ? MutableTangent : Tangent){bt}
     end
-end
-
-"""
-    tangent_field_type(::Type{P}, n::Int) where {P}
-
-Returns the type that lives in the nth elements of `fields` in a `Tangent` /
-`MutableTangent`. Will either be the `tangent_type` of the nth fieldtype of `P`, or the
-`tangent_type` wrapped in a `PossiblyUninitTangent`. The latter case only occurs if it is
-possible for the field to be undefined.
-"""
-function tangent_field_type(::Type{P}, n::Int) where {P}
-    t = tangent_type(fieldtype(P, n))
-    return is_always_initialised(P, n) ? t : PossiblyUninitTangent{t}
-end
-
-# It is essential that this gets inlined. If it does not, then we run into performance
-# issues with the recursion to compute tangent types for nested types.
-@generated function tangent_field_types(::Type{P}) where {P}
-    return Expr(:call, :tuple, tangent_field_types_exprs(P)...)
 end
 
 backing_type(P::Type) = NamedTuple{fieldnames(P),Tuple{tangent_field_types(P)...}}

@@ -1061,9 +1061,7 @@ end
 __tangent_generation_should_allocate(::Type{P}) where {P<:Array} = true
 
 function __increment_should_allocate(::Type{P}) where {P}
-    return any(eachindex(fieldtypes(P))) do n
-        Mooncake.tangent_field_type(P, n) <: PossiblyUninitTangent
-    end
+    return any(tt -> tt <: PossiblyUninitTangent, Mooncake.tangent_field_types(P))
 end
 __increment_should_allocate(::Type{Core.SimpleVector}) = true
 

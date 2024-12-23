@@ -622,10 +622,10 @@ with.
     if P isa DataType
         names = fieldnames(P)
         types = fieldtypes(P)
-        wrapped_field_zeros = tuple_map(ntuple(identity, length(names))) do n
+        wrapped_field_zeros = map(enumerate(tangent_field_types(P))) do (n, tt)
             fzero = :(zero_rdata_from_type($(types[n])))
-            if tangent_field_type(P, n) <: PossiblyUninitTangent
-                Q = rdata_type(tangent_type(fieldtype(P, n)))
+            if tt <: PossiblyUninitTangent
+                Q = :(rdata_type(tangent_type($(fieldtype(P, n)))))
                 return :(_wrap_field($Q, $fzero))
             else
                 return fzero
