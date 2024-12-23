@@ -144,9 +144,9 @@ function Core.Compiler.abstract_call_gf_by_type(
 
     # Construct a CallMeta correctly depending on the version of Julia.
     @static if VERSION ≥ v"1.11-"
-        return CC.CallMeta(rt, cm.exct, effects, callinfo)
+        return CC.CallMeta(cm.rt, cm.exct, cm.effects, callinfo)
     else
-        return CC.CallMeta(rt, cm.effects, cm.callinfo)
+        return CC.CallMeta(cm.rt, cm.effects, cm.callinfo)
     end
 end
 
