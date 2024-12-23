@@ -626,7 +626,7 @@ with.
             fzero = :(zero_rdata_from_type($(types[n])))
             if tt <: PossiblyUninitTangent
                 Q = :(rdata_type(tangent_type($(fieldtype(P, n)))))
-                return :(_wrap_field($Q, $fzero))
+                return :(PossiblyUninitTangent{$Q}($fzero))
             else
                 return fzero
             end

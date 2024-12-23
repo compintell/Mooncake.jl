@@ -44,9 +44,6 @@ function Base.:(==)(t::PossiblyUninitTangent{T}, s::PossiblyUninitTangent{T}) wh
     return true
 end
 
-_wrap_field(::Type{Q}, x::T) where {Q,T} = PossiblyUninitTangent{Q}(x)
-_wrap_field(x::T) where {T} = _wrap_field(T, x)
-
 struct Tangent{Tfields<:NamedTuple}
     fields::Tfields
 end
@@ -139,13 +136,6 @@ end
     end
     tuple_expr = Expr(:tuple, tangent_values_exprs...)
     return Expr(:call, tangent_type(P), Expr(:call, NamedTuple{fieldnames(P)}, tuple_expr))
-end
-
-function build_tangent(::Type{P}, fields...) where {P<:Union{Tuple,NamedTuple}}
-    T = tangent_type(P)
-    T == NoTangent && return NoTangent()
-    isconcretetype(P) && return T(fields)
-    return __tangent_from_non_concrete(P, fields)
 end
 
 __tangent_from_non_concrete(::Type{P}, fields) where {P<:Tuple} = Tuple(fields)
