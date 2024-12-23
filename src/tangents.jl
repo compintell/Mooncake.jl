@@ -134,22 +134,14 @@ end
 
 @generated function build_tangent(::Type{P}, fields::Vararg{Any,N}) where {P,N}
     tangent_values_exprs = map(enumerate(tangent_field_types(P))) do (n, tt)
-        if tt <: PossiblyUninitTangent
-            return n <= N ? Expr(:call, tt, :(fields[$n])) : Expr(:call, tt)
-        else
-            return :(fields[$n])
-        end
+        tt <: PossiblyUninitTangent && return n <= N ? :($tt(fields[$n])) : :($tt())
+        return :(fields[$n])
     end
-    return Expr(
-        :call,
-        tangent_type(P),
-        Expr(:call, NamedTuple{fieldnames(P)}, Expr(:tuple, tangent_values_exprs...)),
-    )
+    tuple_expr = Expr(:tuple, tangent_values_exprs...)
+    return Expr(:call, tangent_type(P), Expr(:call, NamedTuple{fieldnames(P)}, tuple_expr))
 end
 
-function build_tangent(
-    ::Type{P}, fields::Vararg{Any,N}
-) where {P<:Union{Tuple,NamedTuple},N}
+function build_tangent(::Type{P}, fields...) where {P<:Union{Tuple,NamedTuple}}
     T = tangent_type(P)
     if T == NoTangent
         return NoTangent()
