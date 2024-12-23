@@ -143,13 +143,9 @@ end
 
 function build_tangent(::Type{P}, fields...) where {P<:Union{Tuple,NamedTuple}}
     T = tangent_type(P)
-    if T == NoTangent
-        return NoTangent()
-    elseif isconcretetype(P)
-        return T(fields)
-    else
-        return __tangent_from_non_concrete(P, fields)
-    end
+    T == NoTangent && return NoTangent()
+    isconcretetype(P) && return T(fields)
+    return __tangent_from_non_concrete(P, fields)
 end
 
 __tangent_from_non_concrete(::Type{P}, fields) where {P<:Tuple} = Tuple(fields)
