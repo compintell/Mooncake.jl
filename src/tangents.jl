@@ -367,7 +367,7 @@ end
 # Generated functions cannot emit closures, so this is defined here for use below.
 isconcrete_or_union(p) = p isa Union || isconcretetype(p)
 
-@generated function tangent_type(::Type{P}) where {N,P<:Tuple{Vararg{Any,N}}}
+Base.@assume_effects :removable :consistent @generated function tangent_type(::Type{P}) where {N,P<:Tuple{Vararg{Any,N}}}
 
     # As with other types, tangent type of Union is Union of tangent types.
     P isa Union && return :(Union{tangent_type($(P.a)),tangent_type($(P.b))})
@@ -429,7 +429,7 @@ function tangent_field_types_exprs(P::Type)
     return tangent_type_exprs
 end
 
-@generated function tangent_type(::Type{P}) where {P}
+Base.@assume_effects :removable :consistent @generated function tangent_type(::Type{P}) where {P}
 
     # This method can only handle struct types. Something has gone wrong if P is primitive.
     if isprimitivetype(P)
