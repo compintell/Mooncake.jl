@@ -146,7 +146,7 @@ function Core.Compiler.abstract_call_gf_by_type(
     @static if VERSION ≥ v"1.11-"
         return CC.CallMeta(cm.rt, cm.exct, cm.effects, callinfo)
     else
-        return CC.CallMeta(cm.rt, cm.effects, cm.callinfo)
+        return CC.CallMeta(cm.rt, cm.effects, callinfo)
     end
 end
 
