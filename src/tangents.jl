@@ -126,6 +126,11 @@ end
 There must be a single type used to represents tangents of primals of type `P`, and it must
 be given by `tangent_type(P)`.
 
+Warning: this function assumes the effects `:removable` and `:consistent`. This is necessary
+to ensure good performance, but imposes precise constraints on your implementation. If
+adding new methods to `tangent_type`, you should consult the extended help of
+`Base.@assume_effects` to see what this imposes upon your implementation.
+
 # Extended help
 
 The tangent types which Mooncake.jl uses are quite similar in spirit to ChainRules.jl.

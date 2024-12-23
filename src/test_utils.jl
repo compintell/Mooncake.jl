@@ -123,7 +123,8 @@ using Mooncake:
     InvalidRDataException,
     uninit_codual,
     lgetfield,
-    lsetfield!
+    lsetfield!,
+    CC
 
 struct Shim end
 
@@ -807,10 +808,15 @@ end
     test_tangent_type(primal_type, expected_tangent_type)
 
 Checks that `tangent_type(primal_type)` yields `expected_tangent_type`, and that everything
-infers / optimises away.
+infers / optimises away, and that the effects are as expected.
 """
 function test_tangent_type(primal_type::Type, expected_tangent_type::Type)
     @test tangent_type(primal_type) == expected_tangent_type
+    effects = Base.infer_effects(tangent_type, (Type{expected_tangent_type}, ))
+    @test effects.consistent == CC.ALWAYS_TRUE
+    @test effects.effect_free == CC.ALWAYS_TRUE
+    @test effects.nothrow
+    @test effects.terminates
     return test_opt(Shim(), tangent_type, Tuple{_typeof(primal_type)})
 end
 
