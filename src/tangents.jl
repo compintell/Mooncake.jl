@@ -121,6 +121,15 @@ end
 end
 
 """
+    @tt_effects tangent_type(...)
+
+Effects which ought to be applied to `tangent_type`.
+"""
+macro tt_effects(expr)
+    return esc(:(Base.@assume_effects :consistent :removable $expr))
+end
+
+"""
     tangent_type(P)
 
 There must be a single type used to represents tangents of primals of type `P`, and it must
@@ -261,7 +270,7 @@ tangent_type(::Type{<:Type}) = NoTangent
 
 tangent_type(::Type{<:TypeVar}) = NoTangent
 
-tangent_type(::Type{Ptr{P}}) where {P} = Ptr{tangent_type(P)}
+@tt_effects tangent_type(::Type{Ptr{P}}) where {P} = Ptr{tangent_type(P)}
 
 tangent_type(::Type{<:Ptr}) = NoTangent
 
@@ -336,9 +345,7 @@ end
 # Generated functions cannot emit closures, so this is defined here for use below.
 isconcrete_or_union(p) = p isa Union || isconcretetype(p)
 
-Base.@assume_effects :removable :consistent @generated function tangent_type(
-    ::Type{P}
-) where {N,P<:Tuple{Vararg{Any,N}}}
+@tt_effects @generated function tangent_type(::Type{P}) where {N,P<:Tuple{Vararg{Any,N}}}
 
     # As with other types, tangent type of Union is Union of tangent types.
     P isa Union && return :(Union{tangent_type($(P.a)),tangent_type($(P.b))})
@@ -384,7 +391,7 @@ Base.@assume_effects :removable :consistent @generated function tangent_type(
     end
 end
 
-function tangent_type(::Type{P}) where {N,P<:NamedTuple{N}}
+@tt_effects function tangent_type(::Type{P}) where {N,P<:NamedTuple{N}}
     P isa Union && return Union{tangent_type(P.a),tangent_type(P.b)}
     !isconcretetype(P) && return Union{NoTangent,NamedTuple{N}}
     TT = tangent_type(Tuple{fieldtypes(P)...})
@@ -392,9 +399,7 @@ function tangent_type(::Type{P}) where {N,P<:NamedTuple{N}}
     return isconcretetype(TT) ? NamedTuple{N,TT} : Any
 end
 
-Base.@assume_effects :removable :consistent @generated function tangent_type(
-    ::Type{P}
-) where {P}
+@tt_effects @generated function tangent_type(::Type{P}) where {P}
 
     # This method can only handle struct types. Something has gone wrong if P is primitive.
     if isprimitivetype(P)
@@ -408,9 +413,7 @@ Base.@assume_effects :removable :consistent @generated function tangent_type(
     # The same goes for if the type has any undetermined type parameters.
     (isabstracttype(P) || !isconcretetype(P)) && return Any
 
-    tangent_fields_types_expr = Expr(
-        :call, Core.apply_type, Tuple, tangent_field_types_exprs(P)...
-    )
+    tangent_fields_types_expr = Expr(:curly, Tuple, tangent_field_types_exprs(P)...)
     T_all_notangent = Tuple{Vararg{NoTangent,fieldcount(P)}}
     return quote
 

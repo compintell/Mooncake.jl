@@ -812,7 +812,7 @@ infers / optimises away, and that the effects are as expected.
 """
 function test_tangent_type(primal_type::Type, expected_tangent_type::Type)
     @test tangent_type(primal_type) == expected_tangent_type
-    effects = Base.infer_effects(tangent_type, (Type{expected_tangent_type}, ))
+    effects = Base.infer_effects(tangent_type, (Type{expected_tangent_type},))
     @test effects.consistent == CC.ALWAYS_TRUE
     @test effects.effect_free == CC.ALWAYS_TRUE
     @test effects.nothrow

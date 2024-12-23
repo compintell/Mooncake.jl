@@ -14,7 +14,7 @@
 
 const Maybe{T} = Union{Nothing,T}
 
-tangent_type(::Type{<:Memory{P}}) where {P} = Memory{tangent_type(P)}
+@tt_effects tangent_type(::Type{<:Memory{P}}) where {P} = Memory{tangent_type(P)}
 
 function zero_tangent_internal(x::Memory{P}, stackdict::Maybe{IdDict}) where {P}
     T = tangent_type(typeof(x))
@@ -241,7 +241,7 @@ end
 
 # Tangent Interface Implementation
 
-tangent_type(::Type{<:MemoryRef{P}}) where {P} = MemoryRef{tangent_type(P)}
+@tt_effects tangent_type(::Type{<:MemoryRef{P}}) where {P} = MemoryRef{tangent_type(P)}
 
 #=
 Given a new chunk of memory `m`, construct a `MemoryRef` which points to the same relative
