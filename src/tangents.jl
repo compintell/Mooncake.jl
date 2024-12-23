@@ -427,7 +427,6 @@ function tangent_field_types_exprs(P::Type)
         return init ? T_expr : Expr(:curly, PossiblyUninitTangent, T_expr)
     end
     return tangent_type_exprs
-    # return Expr(:call, :tuple, tangent_type_exprs...)
 end
 
 @generated function tangent_type(::Type{P}) where {P}
