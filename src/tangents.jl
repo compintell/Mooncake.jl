@@ -28,21 +28,8 @@ _copy(x::P) where {P<:PossiblyUninitTangent} = is_init(x) ? P(_copy(x.tangent)) 
 @inline is_init(t::PossiblyUninitTangent) = isdefined(t, :tangent)
 is_init(t) = true
 
-function val(x::PossiblyUninitTangent{T}) where {T}
-    if is_init(x)
-        return x.tangent
-    else
-        throw(error("Uninitialised"))
-    end
-end
+val(x::PossiblyUninitTangent) = is_init(x) ? x.tangent : error("Uninitialised")
 val(x) = x
-
-function Base.:(==)(t::PossiblyUninitTangent{T}, s::PossiblyUninitTangent{T}) where {T}
-    is_init(t) && is_init(s) && return val(t) == val(s)
-    is_init(t) && !is_init(s) && return false
-    !is_init(t) && is_init(s) && return false
-    return true
-end
 
 struct Tangent{Tfields<:NamedTuple}
     fields::Tfields
@@ -78,10 +65,7 @@ Has the same semantics that `getfield!` would have if the data in the `fields` f
 were actually fields of `t`. This is the moral equivalent of `getfield` for
 `MutableTangent`.
 """
-@inline function get_tangent_field(t::PossiblyMutableTangent{Tfs}, i::Int) where {Tfs}
-    v = getfield(t.fields, i)
-    return fieldtype(Tfs, i) <: PossiblyUninitTangent ? val(v) : v
-end
+@inline get_tangent_field(t::PossiblyMutableTangent, i::Int) = val(getfield(t.fields, i))
 
 @inline function get_tangent_field(t::PossiblyMutableTangent{F}, s::Symbol) where {F}
     return get_tangent_field(t, _sym_to_int(F, Val(s)))
@@ -105,10 +89,8 @@ were actually fields of `t`. This is the moral equivalent of `setfield!` for
     return x
 end
 
-@inline function set_tangent_field!(
-    t::MutableTangent{Tfields}, s::Symbol, x
-) where {Tfields}
-    return set_tangent_field!(t, _sym_to_int(Tfields, Val(s)), x)
+@inline function set_tangent_field!(t::MutableTangent{T}, s::Symbol, x) where {T}
+    return set_tangent_field!(t, _sym_to_int(T, Val(s)), x)
 end
 
 @generated function _sym_to_int(::Type{Tfields}, ::Val{s}) where {Tfields,s}
@@ -136,11 +118,6 @@ end
     end
     tuple_expr = Expr(:tuple, tangent_values_exprs...)
     return Expr(:call, tangent_type(P), Expr(:call, NamedTuple{fieldnames(P)}, tuple_expr))
-end
-
-__tangent_from_non_concrete(::Type{P}, fields) where {P<:Tuple} = Tuple(fields)
-function __tangent_from_non_concrete(::Type{P}, fields) where {names,P<:NamedTuple{names}}
-    return NamedTuple{names}(fields)
 end
 
 """
@@ -460,9 +437,7 @@ Internally, `zero_tangent` calls `zero_tangent_internal`, which handles differen
 handles both circular references and aliasing correctly.
 """
 zero_tangent(x)
-function zero_tangent(x::P) where {P}
-    return zero_tangent_internal(x, isbitstype(P) ? nothing : IdDict())
-end
+zero_tangent(x::P) where {P} = zero_tangent_internal(x, isbitstype(P) ? nothing : IdDict())
 
 const StackDict = Union{Nothing,IdDict}
 
