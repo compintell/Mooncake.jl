@@ -296,7 +296,7 @@ tangent_type(::Type{P}) where {P<:Union{Int8,Int16,Int32,Int64,Int128}} = NoTang
 
 tangent_type(::Type{<:Core.Builtin}) = NoTangent
 
-tangent_type(::Type{P}) where {P<:IEEEFloat} = P
+@tt_effects tangent_type(::Type{P}) where {P<:IEEEFloat} = P
 
 tangent_type(::Type{<:Core.LLVMPtr}) = NoTangent
 
