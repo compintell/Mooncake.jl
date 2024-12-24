@@ -272,10 +272,9 @@ end
 Helper for [`reverse_data_ref_stmts`](@ref). Constructs a `Ref` whose element type is the
 [`zero_like_rdata_type`](@ref) for `P`, and whose element is the zero-like rdata for `P`.
 """
-@inline @generated function __make_ref(p::Type{P}) where {P}
+@inline function __make_ref(p::Type{P}) where {P}
     _P = @isdefined(P) ? P : _typeof(p)
-    R = zero_like_rdata_type(_P)
-    return :(Ref{$R}(Mooncake.zero_like_rdata_from_type($_P)))
+    return Ref{zero_like_rdata_type(_P)}(Mooncake.zero_like_rdata_from_type(_P))
 end
 
 # This specialised method is necessary to ensure that `__make_ref` works properly for
@@ -1341,11 +1340,12 @@ straightforward to figure out much time is spent pushing to the block stack when
 """
 @inline __push_blk_stack!(block_stack::BlockStack, id::Int32) = push!(block_stack, id)
 
-@inline function __assemble_lazy_zero_rdata(
+__lazy_zero_rdata_primal(T, x) = lazy_zero_rdata(T, primal(x))
+
+@inline @generated function __assemble_lazy_zero_rdata(
     r::Ref{T}, args::Vararg{CoDual,N}
 ) where {T<:Tuple,N}
-    r[] = map((T, x) -> lazy_zero_rdata(T, primal(x)), fieldtypes(T), args)
-    return nothing
+    return :(r[] = tuple_map(__lazy_zero_rdata_primal, $(fieldtypes(T)), args))
 end
 
 """

@@ -25,6 +25,14 @@
         @test_throws ArgumentError Mooncake.tuple_map(*, (5.0, 4.0), (4.0,))
         @test_throws ArgumentError Mooncake.tuple_map(*, (4.0,), (5.0, 4.0))
     end
+    @testset "stable_all" begin
+        @test Mooncake.stable_all((false,)) == false
+        @test Mooncake.stable_all((true,)) == true
+        @test Mooncake.stable_all((false, true)) == false
+        @test Mooncake.stable_all((false, false)) == false
+        @test Mooncake.stable_all((true, false)) == false
+        @test Mooncake.stable_all((true, true)) == true
+    end
     @testset "_map_if_assigned!" begin
         @testset "unary bits type" begin
             x = Vector{Float64}(undef, 10)

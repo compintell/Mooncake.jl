@@ -173,7 +173,7 @@ function optimise_ir!(ir::IRCode; show_ir=false, do_inline=true)
     CC.verify_ir(ir)
     ir = __strip_coverage!(ir)
     ir = CC.compact!(ir)
-    local_interp = CC.NativeInterpreter()
+    local_interp = get_interpreter(; inline_primitives=true)
     mi = __get_toplevel_mi_from_ir(ir, @__MODULE__)
     ir = __infer_ir!(ir, local_interp, mi)
     if show_ir

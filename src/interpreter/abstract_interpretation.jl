@@ -32,6 +32,7 @@ struct MooncakeInterpreter{C} <: CC.AbstractInterpreter
     inf_cache::Vector{CC.InferenceResult}
     code_cache::MooncakeCache
     oc_cache::Dict{ClosureCacheKey,Any}
+    inline_primitives::Bool
     function MooncakeInterpreter(
         ::Type{C};
         meta=nothing,
@@ -41,8 +42,18 @@ struct MooncakeInterpreter{C} <: CC.AbstractInterpreter
         inf_cache::Vector{CC.InferenceResult}=CC.InferenceResult[],
         code_cache::MooncakeCache=MooncakeCache(),
         oc_cache::Dict{ClosureCacheKey,Any}=Dict{ClosureCacheKey,Any}(),
+        inline_primitives::Bool=false,
     ) where {C}
-        return new{C}(meta, world, inf_params, opt_params, inf_cache, code_cache, oc_cache)
+        return new{C}(
+            meta,
+            world,
+            inf_params,
+            opt_params,
+            inf_cache,
+            code_cache,
+            oc_cache,
+            inline_primitives,
+        )
     end
 end
 
@@ -60,28 +71,6 @@ end
 MooncakeInterpreter() = MooncakeInterpreter(DefaultCtx)
 
 context_type(::MooncakeInterpreter{C}) where {C} = C
-
-"""
-    const GLOBAL_INTERPRETER
-
-Globally cached interpreter. Should only be accessed via `get_interpreter`.
-"""
-const GLOBAL_INTERPRETER = Ref(MooncakeInterpreter())
-
-"""
-    get_interpreter()
-
-Returns a `MooncakeInterpreter` appropriate for the current world age. Will use a cached
-interpreter if one already exists for the current world age, otherwise creates a new one.
-
-This should be prefered over constructing a `MooncakeInterpreter` directly.
-"""
-function get_interpreter()
-    if GLOBAL_INTERPRETER[].world != Base.get_world_counter()
-        GLOBAL_INTERPRETER[] = MooncakeInterpreter()
-    end
-    return GLOBAL_INTERPRETER[]
-end
 
 CC.InferenceParams(interp::MooncakeInterpreter) = interp.inf_params
 CC.OptimizationParams(interp::MooncakeInterpreter) = interp.opt_params
@@ -134,7 +123,9 @@ function Core.Compiler.abstract_call_gf_by_type(
     sv::CC.AbsIntState,
     max_methods::Int,
 ) where {C}
-    ret = @invoke CC.abstract_call_gf_by_type(
+
+    # invoke the default abstract call to get the default CC.CallMeta.
+    cm = @invoke CC.abstract_call_gf_by_type(
         interp::CC.AbstractInterpreter,
         f::Any,
         arginfo::CC.ArgInfo,
@@ -143,14 +134,19 @@ function Core.Compiler.abstract_call_gf_by_type(
         sv::CC.AbsIntState,
         max_methods::Int,
     )
-    callinfo = ret.info
-    if Mooncake.is_primitive(C, atype)
+
+    # Check to see whether the call in question is a Mooncake primitive. If it is, set its
+    # call info such that in the `CC.inlining_policy` it is not inlined away.
+    callinfo = cm.info
+    if !interp.inline_primitives && Mooncake.is_primitive(C, atype)
         callinfo = NoInlineCallInfo(callinfo, atype)
     end
+
+    # Construct a CallMeta correctly depending on the version of Julia.
     @static if VERSION ≥ v"1.11-"
-        return CC.CallMeta(ret.rt, ret.exct, ret.effects, callinfo)
+        return CC.CallMeta(cm.rt, cm.exct, cm.effects, callinfo)
     else
-        return CC.CallMeta(ret.rt, ret.effects, callinfo)
+        return CC.CallMeta(cm.rt, cm.effects, callinfo)
     end
 end
 
@@ -192,5 +188,44 @@ else # 1.11 and up.
         return @invoke CC.inlining_policy(
             interp::CC.AbstractInterpreter, src::Any, info::CC.CallInfo, stmt_flag::UInt32
         )
+    end
+end
+
+"""
+    const GLOBAL_INTERPRETER
+
+Globally cached interpreter. Should only be accessed via `get_interpreter`.
+"""
+const GLOBAL_INTERPRETER = Ref(MooncakeInterpreter())
+
+"""
+    const GLOBAL_INLINING_INTERPRETER
+
+Globally cached interpreter which inline away AD primitives.
+"""
+const GLOBAL_INLINING_INTERPRETER = Ref(
+    MooncakeInterpreter(DefaultCtx; inline_primitives=true)
+)
+
+"""
+    get_interpreter()
+
+Returns a `MooncakeInterpreter` appropriate for the current world age. Will use a cached
+interpreter if one already exists for the current world age, otherwise creates a new one.
+
+This should be prefered over constructing a `MooncakeInterpreter` directly.
+"""
+function get_interpreter(; inline_primitives=false)
+    if inline_primitives
+        if GLOBAL_INLINING_INTERPRETER[].world != Base.get_world_counter()
+            interp = MooncakeInterpreter(DefaultCtx; inline_primitives)
+            GLOBAL_INLINING_INTERPRETER[] = interp
+        end
+        return GLOBAL_INLINING_INTERPRETER[]
+    else
+        if GLOBAL_INTERPRETER[].world != Base.get_world_counter()
+            GLOBAL_INTERPRETER[] = MooncakeInterpreter()
+        end
+        return GLOBAL_INTERPRETER[]
     end
 end
