@@ -805,18 +805,14 @@ tangent_type(::Type{F}, ::Type{NoRData}) where {F<:Array} = F
 
 # Tuples
 @generated function tangent_type(::Type{F}, ::Type{R}) where {F<:Tuple,R<:Tuple}
-    tangent_type_exprs = tuple_map(
-        (f, r) -> :(tangent_type($f, $r)), Tuple(F.parameters), Tuple(R.parameters)
-    )
-    return Expr(:curly, :Tuple, tangent_type_exprs...)
+    tt_exprs = map((f, r) -> :(tangent_type($f, $r)), fieldtypes(F), fieldtypes(R))
+    return Expr(:curly, :Tuple, tt_exprs...)
 end
 function tangent_type(::Type{NoFData}, ::Type{R}) where {R<:Tuple}
-    F_tuple = Tuple{tuple_fill(NoFData, Val(length(R.parameters)))...}
-    return tangent_type(F_tuple, R)
+    return tangent_type(Tuple{tuple_fill(NoFData, Val(length(R.parameters)))...}, R)
 end
 function tangent_type(::Type{F}, ::Type{NoRData}) where {F<:Tuple}
-    R_tuple = Tuple{tuple_fill(NoRData, Val(length(F.parameters)))...}
-    return tangent_type(F, R_tuple)
+    return tangent_type(F, Tuple{tuple_fill(NoRData, Val(length(F.parameters)))...})
 end
 
 # NamedTuples
@@ -927,10 +923,7 @@ Equivalent to `tangent(fdata, rdata(zero_tangent(primal)))`.
 zero_tangent(p, ::NoFData) = zero_tangent(p)
 
 function zero_tangent(p::P, f::F) where {P,F}
-    T = tangent_type(P)
-    T == F && return f
-    r = rdata(zero_tangent(p))
-    return tangent(f, r)
+    return tangent_type(P) == F ? f : tangent(f, rdata(zero_tangent(p)))
 end
 
 zero_tangent(p::Tuple, f::Union{Tuple,NamedTuple}) = tuple_map(zero_tangent, p, f)
