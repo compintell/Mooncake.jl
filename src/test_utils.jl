@@ -821,7 +821,7 @@ function test_tangent_type(primal_type::Type, expected_tangent_type::Type)
 end
 
 """
-    test_tangent_consistency(rng::AbstractRNG, p::P; interface_only=false) where {P}
+    test_tangent_interface(rng::AbstractRNG, p::P; interface_only=false) where {P}
 
 Like `test_tangent`, but relies on `zero_tangent` and `randn_tangent` to generate test
 cases. Consequently, it is not possible to verify that `increment!!` produces the correct
@@ -835,7 +835,7 @@ fields. In such situations, it still makes sense to test the performance of tang
 generation and incrementation operations, but owing to the non-determinism it makes no sense
 to check their numerical correctness. 
 """
-function test_tangent_consistency(rng::AbstractRNG, p::P; interface_only=false) where {P}
+function test_tangent_interface(rng::AbstractRNG, p::P; interface_only=false) where {P}
     @nospecialize rng p
 
     # Test that basic interface works.
@@ -958,7 +958,7 @@ details.
 
 *Note:* this function assumes that the tangent interface is implemented correctly for `p`.
 To verify that this is the case, ensure that all tests in either `test_tangent` or
-`test_tangent_consistency` pass.
+`test_tangent_interface` pass.
 """
 function test_tangent_performance(rng::AbstractRNG, p::P) where {P}
 
@@ -1095,7 +1095,7 @@ function test_tangent(
     @nospecialize rng p x y z_target
 
     # Check the interface.
-    test_tangent_consistency(rng, p; interface_only=false)
+    test_tangent_interface(rng, p; interface_only=false)
 
     # Is the tangent_type of `P` what we expected?
     @test tangent_type(P) == T
@@ -1115,7 +1115,7 @@ function test_tangent(
 end
 
 function test_tangent(rng::AbstractRNG, p::P; interface_only=false, perf=true) where {P}
-    test_tangent_consistency(rng, p; interface_only)
+    test_tangent_interface(rng, p; interface_only)
     return perf && test_tangent_performance(rng, p)
 end
 
@@ -1218,7 +1218,7 @@ functionality that you need in order to make these custom types work with all th
 written in Mooncake itself.
 """
 function test_data(rng::AbstractRNG, p::P; interface_only=false) where {P}
-    test_tangent_consistency(rng, p; interface_only)
+    test_tangent_interface(rng, p; interface_only)
     test_fwds_rvs_data(rng, p)
     return test_rule_and_type_interactions(rng, p)
 end
