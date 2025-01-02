@@ -602,7 +602,7 @@ function inplace_invoke!(x::Vector{Float64})
     return nothing
 end
 
-highly_nested_tuple(x) = ((((x, ),), x), x)
+highly_nested_tuple(x) = ((((x,),), x), x)
 
 function generate_test_functions()
     return Any[
