@@ -602,6 +602,8 @@ function inplace_invoke!(x::Vector{Float64})
     return nothing
 end
 
+highly_nested_tuple(x) = ((((x, ),), x), x)
+
 function generate_test_functions()
     return Any[
         (false, :allocs, nothing, const_tester),
@@ -827,6 +829,7 @@ function generate_test_functions()
         (false, :none, nothing, partial_typevar_tester),
         (false, :none, nothing, typevar_tester),
         (false, :allocs, nothing, inplace_invoke!, randn(1_024)),
+        (false, :allocs, nothing, highly_nested_tuple, 5.0),
     ]
 end
 
