@@ -771,9 +771,16 @@ Check that a collection of standard functions for which we _ought_ to have a wor
 for `x` work, and produce the correct answer. For example, the `rrule!!` for `typeof` should
 work correctly on any type, we should have a working rule for `getfield` for any
 struct-type, and we should have a rule for `setfield!` for any mutable struct type.
+See implementation for details.
 
 The purpose of this test is to ensure that, for any given `x`, the full range of primitive
 functions that _ought_ to work on it, do indeed work on it.
+
+This is one part of the interface where some care _might_ be required. If, for some reason,
+it should _never_ be the case that e.g. for a particular `p`, `getfield` should be called,
+then it may make no sense at all to run these tests. In such cases, the author of the type
+is responsible for knowing what they are doing. Please open an issue to discuss for your
+type if you are at all unsure what to do.
 """
 function test_rule_and_type_interactions(rng::AbstractRNG, p::P) where {P}
     @nospecialize rng p
@@ -861,14 +868,13 @@ Verifies that the following functions are implemented correctly (as far as possi
 - [`zero_tangent`](@ref)
 - [`randn_tangent`](@ref)
 - [`TestUtils.has_equal_data`](@ref)
-- [`TestUtils.has_equal_data_up_to_undefs`](@ref)
 - [`increment!!`](@ref)
 - [`set_to_zero!!`](@ref)
 - [`_add_to_primal`](@ref)
 - [`_diff`](@ref)
 - [`_dot`](@ref)
 - [`_scale`](@ref)
-- [`populate_address_map`](@ref)
+- [`TestUtils.populate_address_map`](@ref)
 
 In conjunction with the functions tested by [`test_tangent_splitting`](@ref), these functions
 constitute a complete set of functions which must be applicable to `p` in order to ensure
@@ -1131,6 +1137,18 @@ end
     test_tangent_splitting(rng::AbstractRNG, p::P) where {P}
 
 Verify that tangent splitting functionality associated to primal `p` works correctly.
+Ensure that [`test_tangent_interface`](@ref) runs for `p` before running these tests.
+
+# Extended Help
+
+ Verifies that the following functionality work correctly for `p` / its type / tangents:
+- [`Mooncake.fdata_type`](@ref)
+- [`Mooncake.rdata_type`](@ref)
+- [`Mooncake.fdata`](@ref)
+- [`Mooncake.rdata`](@ref)
+- [`Mooncake.uninit_fdata`](@ref)
+- [`Mooncake.tangent_type`](@ref) (binary method)
+
 """
 function test_tangent_splitting(rng::AbstractRNG, p::P) where {P}
 
@@ -1219,7 +1237,8 @@ written in Mooncake itself.
 function test_data(rng::AbstractRNG, p::P; interface_only=false) where {P}
     test_tangent_interface(rng, p; interface_only)
     test_tangent_splitting(rng, p)
-    return test_rule_and_type_interactions(rng, p)
+    test_rule_and_type_interactions(rng, p)
+    return nothing
 end
 
 end
