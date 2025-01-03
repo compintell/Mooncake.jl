@@ -819,6 +819,7 @@ Like `test_tangent(rng, p)`, but also checks that `tangent_type(typeof(p)) == T`
 function test_tangent(rng::AbstractRNG, p, T; interface_only=false, perf=true)
     test_tangent_type(typeof(p), T)
     test_tangent(rng, P; interface_only, perf)
+    return nothing
 end
 
 """
