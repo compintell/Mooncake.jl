@@ -805,35 +805,76 @@ function test_rule_and_type_interactions(rng::AbstractRNG, p::P) where {P}
 end
 
 """
+    test_tangent(rng::AbstractRNG, p, T; interface_only=false, perf=true)
+
+Like `test_tangent(rng, p)`, but also checks that `tangent_type(typeof(p)) == T`.
+"""
+function test_tangent(rng::AbstractRNG, p, T; interface_only=false, perf=true)
+    test_tangent_type(typeof(p), T)
+    test_tangent(rng, P; interface_only, perf)
+end
+
+"""
+    test_tangent(rng::AbstractRNG, p; interface_only=false, perf=true)
+
+Test that standard tangent-related functionality works for `p`.
+"""
+function test_tangent(rng::AbstractRNG, p; interface_only=false, perf=true)
+    @nospecialize rng p
+    test_tangent_interface(rng, p; interface_only)
+    return perf && test_tangent_performance(rng, p)
+end
+
+"""
     test_tangent_type(primal_type, expected_tangent_type)
 
 Checks that `tangent_type(primal_type)` yields `expected_tangent_type`, and that everything
 infers / optimises away, and that the effects are as expected.
 """
 function test_tangent_type(primal_type::Type, expected_tangent_type::Type)
+
+    # Verify tangent type returns the expected type.
     @test tangent_type(primal_type) == expected_tangent_type
+
+    # Verify performance.
     effects = Base.infer_effects(tangent_type, (Type{expected_tangent_type},))
     @test effects.consistent == CC.ALWAYS_TRUE
     @test effects.effect_free == CC.ALWAYS_TRUE
     @test effects.nothrow
     @test effects.terminates
-    return test_opt(Shim(), tangent_type, Tuple{_typeof(primal_type)})
+    test_opt(Shim(), tangent_type, Tuple{_typeof(primal_type)})
+    return nothing
 end
 
 """
-    test_tangent_interface(rng::AbstractRNG, p::P; interface_only=false) where {P}
+    test_tangent_interface(rng::AbstractRNG, p; interface_only=false)
 
-Like `test_tangent`, but relies on `zero_tangent` and `randn_tangent` to generate test
-cases. Consequently, it is not possible to verify that `increment!!` produces the correct
-numbers in an absolute sense, only that all operations are self-consistent and have the
-performance one would expect of them.
+Verify that standard functionality for tangents runs, and is consistent. This function is
+the defacto formal definition of the "tangent interface" -- if this function runs without
+error for a given value of `p`, then that `p` satisfies the tangent interface.
 
-Setting `interface_only` to `true` turns off all numerical correctness checks. This is
-useful when `p` contains uninitialised isbits data, whose value is non-deterministic.
-This happens for `Array`s of isbits data, and in composite types with uninitialised isbits
-fields. In such situations, it still makes sense to test the performance of tangent
-generation and incrementation operations, but owing to the non-determinism it makes no sense
-to check their numerical correctness. 
+# Extended Help
+
+Verifies that the following functions are implemented correctly (as far as possible) for
+`p` / its type, and its tangents / their type:
+- [`tangent_type`](@ref)
+- [`zero_tangent`](@ref)
+- [`randn_tangent`](@ref)
+- [`TestUtils.has_equal_data`](@ref)
+- [`TestUtils.has_equal_data_up_to_undefs`](@ref)
+- [`increment!!`](@ref)
+- [`set_to_zero!!`](@ref)
+- [`_add_to_primal`](@ref)
+- [`_diff`](@ref)
+- [`_dot`](@ref)
+- [`_scale`](@ref)
+- [`populate_address_map`](@ref)
+
+In conjunction with the functions tested by [`test_fwds_rvs_data`](@ref), these functions
+constitute a complete set of functions which must be applicable to `p` in order to ensure
+that it operates correctly in the context of reverse-mode AD. This list should be up to date
+at any given point in time, but the best way to verify that you've implemented everything is
+simply to run this function, and see whether it errors / produces a failing test.
 """
 function test_tangent_interface(rng::AbstractRNG, p::P; interface_only=false) where {P}
     @nospecialize rng p
@@ -845,6 +886,15 @@ function test_tangent_interface(rng::AbstractRNG, p::P; interface_only=false) wh
     @test z isa T
     t = randn_tangent(rng, p)
     @test t isa T
+
+    # Check that we can compare the values of primals and tangents.
+    function test_equality_comparison(x)
+        @nospecialize x
+        @test has_equal_data(x, x) isa Bool
+        @test has_equal_data_up_to_undefs(x, x) isa Bool
+        @test has_equal_data(x, x)
+        @test has_equal_data_up_to_undefs(x, x)
+    end
     test_equality_comparison(p)
     test_equality_comparison(t)
 
@@ -922,6 +972,7 @@ function test_tangent_interface(rng::AbstractRNG, p::P; interface_only=false) wh
     @test has_equal_data(_scale(2.0, t), increment!!(deepcopy(t), t))
 end
 
+# Helper used in `test_tangent_interface`.
 function test_set_tangent_field!_correctness(t1::T, t2::T) where {T<:MutableTangent}
     Tfields = _typeof(t1.fields)
     for n in 1:fieldcount(Tfields)
@@ -941,10 +992,6 @@ function test_set_tangent_field!_correctness(t1::T, t2::T) where {T<:MutableTang
     end
 end
 
-function check_allocs(::Any, f::F, x::Vararg{Any,N}) where {F,N}
-    throw(error("Load AllocCheck.jl to use this functionality."))
-end
-
 """
     test_tangent_performance(rng::AbstractRNG, p::P) where {P}
 
@@ -957,8 +1004,7 @@ of its fields necessarily defined, etc), so the source code should be consulted 
 details.
 
 *Note:* this function assumes that the tangent interface is implemented correctly for `p`.
-To verify that this is the case, ensure that all tests in either `test_tangent` or
-`test_tangent_interface` pass.
+To verify that this is the case, ensure that all tests in `test_tangent_interface` pass.
 """
 function test_tangent_performance(rng::AbstractRNG, p::P) where {P}
 
@@ -989,6 +1035,10 @@ function test_tangent_performance(rng::AbstractRNG, p::P) where {P}
     # set_tangent_field! should never allocate.
     t isa MutableTangent && test_set_tangent_field!_performance(t, z)
     return t isa Union{MutableTangent,Tangent} && test_get_tangent_field_performance(t)
+end
+
+function check_allocs(::Any, f::F, x::Vararg{Any,N}) where {F,N}
+    throw(error("Load AllocCheck.jl to use this functionality."))
 end
 
 function test_allocations(t::T, z::T) where {T}
@@ -1075,56 +1125,6 @@ function __is_completely_stable_type(::Type{P}) where {P}
     (!isconcretetype(P) || isabstracttype(P)) && return false
     isprimitivetype(P) && return true
     return all(__is_completely_stable_type, fieldtypes(P))
-end
-
-"""
-     test_tangent(rng::AbstractRNG, p::P, x::T, y::T, z_target::T) where {P, T}
-
-Verify that primal `p` with tangents `z_target`, `x`, and `y`, satisfies the tangent
-interface. If these tests pass, then it should be possible to write rules for primals
-of type `P`, and to test them using [`test_rule`](@ref).
-
-It should be the case that `z_target` == `increment!!(x, y)`.
-
-As always, there are limits to the errors that these tests can identify -- they form
-necessary but not sufficient conditions for the correctness of your code.
-"""
-function test_tangent(
-    rng::AbstractRNG, p::P, x::T, y::T, z_target::T; interface_only, perf=true
-) where {P,T}
-    @nospecialize rng p x y z_target
-
-    # Check the interface.
-    test_tangent_interface(rng, p; interface_only=false)
-
-    # Is the tangent_type of `P` what we expected?
-    @test tangent_type(P) == T
-
-    # Check that zero_tangent infers.
-    @inferred Mooncake.zero_tangent(p)
-
-    # Verify that adding together `x` and `y` gives the value the user expected.
-    z_pred = increment!!(x, y)
-    @test has_equal_data(z_pred, z_target)
-    if ismutabletype(P)
-        @test z_pred === x
-    end
-
-    # Check performance is as expected.
-    return perf && test_tangent_performance(rng, p)
-end
-
-function test_tangent(rng::AbstractRNG, p::P; interface_only=false, perf=true) where {P}
-    test_tangent_interface(rng, p; interface_only)
-    return perf && test_tangent_performance(rng, p)
-end
-
-function test_equality_comparison(x)
-    @nospecialize x
-    @test has_equal_data(x, x) isa Bool
-    @test has_equal_data_up_to_undefs(x, x) isa Bool
-    @test has_equal_data(x, x)
-    @test has_equal_data_up_to_undefs(x, x)
 end
 
 """
