@@ -870,7 +870,7 @@ Verifies that the following functions are implemented correctly (as far as possi
 - [`_scale`](@ref)
 - [`populate_address_map`](@ref)
 
-In conjunction with the functions tested by [`test_fwds_rvs_data`](@ref), these functions
+In conjunction with the functions tested by [`test_tangent_splitting`](@ref), these functions
 constitute a complete set of functions which must be applicable to `p` in order to ensure
 that it operates correctly in the context of reverse-mode AD. This list should be up to date
 at any given point in time, but the best way to verify that you've implemented everything is
@@ -1128,12 +1128,11 @@ function __is_completely_stable_type(::Type{P}) where {P}
 end
 
 """
-    test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
+    test_tangent_splitting(rng::AbstractRNG, p::P) where {P}
 
-Verify that the forwards data and reverse data functionality associated to primal `p` works
-correctly.
+Verify that tangent splitting functionality associated to primal `p` works correctly.
 """
-function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
+function test_tangent_splitting(rng::AbstractRNG, p::P) where {P}
 
     # Check that fdata_type and rdata_type run and produce types.
     T = tangent_type(P)
@@ -1219,7 +1218,7 @@ written in Mooncake itself.
 """
 function test_data(rng::AbstractRNG, p::P; interface_only=false) where {P}
     test_tangent_interface(rng, p; interface_only)
-    test_fwds_rvs_data(rng, p)
+    test_tangent_splitting(rng, p)
     return test_rule_and_type_interactions(rng, p)
 end
 

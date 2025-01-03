@@ -5,7 +5,7 @@
         y = IdDict(true => 2.0, false => 1.0)
         z = IdDict(true => 3.0, false => 2.0)
         TestUtils.test_tangent(sr(123456), p, x, y, z; interface_only=false, perf=false)
-        TestUtils.test_fwds_rvs_data(sr(123456), p)
+        TestUtils.test_tangent_splitting(sr(123456), p)
     end
     TestUtils.run_rrule!!_test_cases(StableRNG, Val(:iddict))
 end
