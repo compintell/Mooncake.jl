@@ -5,6 +5,11 @@ Moreover, we must be able to "split" a given tangent into its _fdata_ ("forwards
 
 Additionally, there is a range of things that one must be able to do with any given tangent / fdata / rdata for Mooncake to operate correctly.
 
+## Note
+
+The tangent type, and associated functionality, assigned automatically by Mooncake is completely adequate for the vast majority of primals.
+Before diving in to add your own custom type, seriously consider whether it is worth the effort.
+
 ## Testing Functionality
 
 The functionality which must work on a given type is tested over three functions:
