@@ -1,8 +1,8 @@
-# Tools for Rules
+# Defining Rules
 
 Most of the time, Mooncake.jl can just differentiate your code, but you will need to intervene if you make use of a language feature which is unsupported.
 However, this does not always necessitate writing your own `rrule!!` from scratch.
-In this section, we detail some useful strategies which can help you avoid having to write `rrule!!`s in many situations.
+In this section, we detail some useful strategies which can help you avoid having to write `rrule!!`s in many situations, which we discuss before discussing the more involved process of actually writing rules.
 
 ## Simplfiying Code via Overlays
 
@@ -30,4 +30,16 @@ There is enough similarity between these two systems that most of the boilerplat
 
 ```@docs
 Mooncake.@from_rrule
+```
+
+## Adding Methods To `rrule!!` And `build_primitive_rrule`
+
+If the above strategies do not work for you, you should first implement a method of [`Mooncake.is_primitive`](@ref) for the signature of interest:
+```@docs
+Mooncake.is_primitive
+```
+Then implement a method of one of the following:
+```@docs
+Mooncake.rrule!!
+Mooncake.build_primitive_rrule
 ```
