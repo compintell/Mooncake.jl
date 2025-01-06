@@ -81,8 +81,8 @@ function rrule!! end
 Construct an rrule for signature `sig`. For this function to be called in `build_rrule`, you
 must also ensure that `is_primitive(context_type, sig)` is `true`. The callable returned by
 this must obey the rrule interface, but there are no restrictions on the type of callable
-itself. For example, you might return a callable `struct` type. By default, this function
-returns `rrule!!` so, most of the time, you should just implement a method of `rrule!!`.
+itself. For example, you might return a callable `struct`. By default, this function returns
+`rrule!!` so, most of the time, you should just implement a method of `rrule!!`.
 
 # Extended Help
 
