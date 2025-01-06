@@ -359,9 +359,9 @@ julia> using ChainRulesCore
 julia> foo(x::Real) = 5x;
 
 julia> function ChainRulesCore.rrule(::typeof(foo), x::Real)
-        foo_pb(Ω::Real) = ChainRulesCore.NoTangent(), 5Ω
-        return foo(x), foo_pb
-    end;
+           foo_pb(Ω::Real) = ChainRulesCore.NoTangent(), 5Ω
+           return foo(x), foo_pb
+       end;
 
 julia> @from_rrule DefaultCtx Tuple{typeof(foo), Base.IEEEFloat}
 
@@ -383,9 +383,9 @@ julia> using ChainRulesCore
 julia> foo(x::Real; cond::Bool) = cond ? 5x : 4x;
 
 julia> function ChainRulesCore.rrule(::typeof(foo), x::Real; cond::Bool)
-        foo_pb(Ω::Real) = ChainRulesCore.NoTangent(), cond ? 5Ω : 4Ω
-        return foo(x; cond), foo_pb
-    end;
+           foo_pb(Ω::Real) = ChainRulesCore.NoTangent(), cond ? 5Ω : 4Ω
+           return foo(x; cond), foo_pb
+       end;
 
 julia> @from_rrule DefaultCtx Tuple{typeof(foo), Base.IEEEFloat} true
 
