@@ -27,7 +27,7 @@ import Mooncake.TestUtils: populate_address_map!, AddressMap, __increment_should
 
 # Tell Mooncake.jl how to handle CuArrays.
 
-tangent_type(::Type{P}) where {P<:CuArray{<:IEEEFloat}} = P
+Mooncake.@tt_effects tangent_type(::Type{P}) where {P<:CuArray{<:IEEEFloat}} = P
 zero_tangent(x::CuArray{<:IEEEFloat}) = zero(x)
 function randn_tangent(rng::AbstractRNG, x::CuArray{Float32})
     return cu(randn(rng, Float32, size(x)...))

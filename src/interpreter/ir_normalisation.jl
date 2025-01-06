@@ -111,7 +111,7 @@ to be the return type given by the code cache.
 function fix_up_invoke_inference!(ir::IRCode)::IRCode
     stmts = ir.stmts
     for n in 1:length(stmts)
-        if Meta.isexpr(stmt(stmts)[n], :invoke) && _type(stmts.type[n]) == Any
+        if Meta.isexpr(stmt(stmts)[n], :invoke) && CC.widenconst(stmts.type[n]) == Any
             mi = stmt(stmts)[n].args[1]::Core.MethodInstance
             R = isdefined(mi, :cache) ? mi.cache.rettype : CC.return_type(mi.specTypes)
             stmts.type[n] = R

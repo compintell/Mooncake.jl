@@ -123,7 +123,8 @@ using Mooncake:
     InvalidRDataException,
     uninit_codual,
     lgetfield,
-    lsetfield!
+    lsetfield!,
+    CC
 
 struct Shim end
 
@@ -807,10 +808,15 @@ end
     test_tangent_type(primal_type, expected_tangent_type)
 
 Checks that `tangent_type(primal_type)` yields `expected_tangent_type`, and that everything
-infers / optimises away.
+infers / optimises away, and that the effects are as expected.
 """
 function test_tangent_type(primal_type::Type, expected_tangent_type::Type)
     @test tangent_type(primal_type) == expected_tangent_type
+    effects = Base.infer_effects(tangent_type, (Type{expected_tangent_type},))
+    @test effects.consistent == CC.ALWAYS_TRUE
+    @test effects.effect_free == CC.ALWAYS_TRUE
+    @test effects.nothrow
+    @test effects.terminates
     return test_opt(Shim(), tangent_type, Tuple{_typeof(primal_type)})
 end
 
@@ -1061,9 +1067,7 @@ end
 __tangent_generation_should_allocate(::Type{P}) where {P<:Array} = true
 
 function __increment_should_allocate(::Type{P}) where {P}
-    return any(eachindex(fieldtypes(P))) do n
-        Mooncake.tangent_field_type(P, n) <: PossiblyUninitTangent
-    end
+    return any(tt -> tt <: PossiblyUninitTangent, Mooncake.tangent_field_types(P))
 end
 __increment_should_allocate(::Type{Core.SimpleVector}) = true
 
@@ -1135,8 +1139,10 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
     T = tangent_type(P)
     F = Mooncake.fdata_type(T)
     @test F isa Type
+    check_allocs(Shim(), Mooncake.fdata_type, T)
     R = Mooncake.rdata_type(T)
     @test R isa Type
+    check_allocs(Shim(), Mooncake.rdata_type, T)
 
     # Check that fdata and rdata produce the correct types.
     t = randn_tangent(rng, p)

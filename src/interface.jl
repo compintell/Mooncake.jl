@@ -20,10 +20,8 @@ function __value_and_pullback!!(
     return v, tuple_map((f, r) -> tangent(fdata(tangent(f)), r), fx, pb!!(rdata(ȳ)))
 end
 
-function __verify_sig(
-    rule::DerivedRule{<:Any,<:MistyClosure{<:OpaqueClosure{sig}}}, fx::Tfx
-) where {sig,Tfx}
-    Pfx = typeof(__unflatten_codual_varargs(rule.isva, fx, rule.nargs))
+function __verify_sig(rule::DerivedRule{<:Any,sig}, fx::Tfx) where {sig,Tfx}
+    Pfx = typeof(__unflatten_codual_varargs(_isva(rule), fx, rule.nargs))
     if sig != Pfx
         msg = "signature of arguments, $Pfx, not equal to signature required by rule, $sig."
         throw(ArgumentError(msg))
