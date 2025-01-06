@@ -948,8 +948,8 @@ end
 # Rule derivation.
 #
 
-_is_primitive(C::Type, mi::Core.MethodInstance) = is_primitive(C, mi.specTypes)
-_is_primitive(C::Type, sig::Type) = is_primitive(C, sig)
+_get_sig(sig::Type) = sig
+_get_sig(mi::Core.MethodInstance) = mi.specTypes
 
 function forwards_ret_type(primal_ir::IRCode)
     return fcodual_type(Base.Experimental.compute_ir_rettype(primal_ir))
@@ -967,8 +967,9 @@ important for performance in dynamic dispatch, and to ensure that recursion work
 properly.
 """
 function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where {C}
-    if _is_primitive(C, sig_or_mi)
-        return debug_mode ? DebugRRule{typeof(rrule!!)} : typeof(rrule!!)
+    if is_primitive(C, _get_sig(sig_or_mi))
+        rule = build_primitive_rrule(_get_sig(sig_or_mi))
+        return debug_mode ? DebugRRule{typeof(rule)} : typeof(rule)
     end
 
     ir, _ = lookup_ir(interp, sig_or_mi)
@@ -1076,7 +1077,11 @@ function build_rrule(
     end
 
     # If we have a hand-coded rule, just use that.
-    _is_primitive(C, sig_or_mi) && return (debug_mode ? DebugRRule(rrule!!) : rrule!!)
+    sig = _get_sig(sig_or_mi)
+    if is_primitive(C, sig)
+        rule = build_primitive_rrule!!(sig)
+        return (debug_mode ? DebugRRule(rule) : rule)
+    end
 
     # We don't have a hand-coded rule, so derived one.
     lock(MOONCAKE_INFERENCE_LOCK)
@@ -1093,7 +1098,6 @@ function build_rrule(
             rvs_oc = misty_closure(dri.rvs_ret_type, dri.rvs_ir, dri.shared_data...)
 
             # Compute the signature. Needs careful handling with varargs.
-            sig = sig_or_mi isa Core.MethodInstance ? sig_or_mi.specTypes : sig_or_mi
             nargs = num_args(dri.info)
             if dri.isva
                 sig = Tuple{
