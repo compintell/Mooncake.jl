@@ -396,15 +396,15 @@ fields_type(::Type{RData{T}}) where {T<:NamedTuple} = T
     return RData(increment_field!!(x.data, new_val, Val(f)))
 end
 
-@doc """
-     rdata_type(T)
+"""
+    rdata_type(T)
 
- Returns the type of the reverse data of a tangent of type T.
+Returns the type of the reverse data of a tangent of type T.
 
- # Extended help
+# Extended help
 
- See extended help in [`fdata_type`](@ref) docstring.
- """
+See extended help in [`fdata_type`](@ref) docstring.
+"""
 rdata_type(T)
 
 rdata_type(x) = throw(error("$x is not a type. Perhaps you meant typeof(x)?"))

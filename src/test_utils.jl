@@ -565,65 +565,65 @@ end
 
 __get_primals(xs) = map(x -> x isa CoDual ? primal(x) : x, xs)
 
-@doc """
-     test_rule(
-         rng, x...;
-         interface_only=false,
-         is_primitive::Bool=true,
-         perf_flag::Symbol=:none,
-         interp::Mooncake.MooncakeInterpreter=Mooncake.get_interpreter(),
-         debug_mode::Bool=false,
-         unsafe_perturb::Bool=false,
-     )
+"""
+    test_rule(
+        rng, x...;
+        interface_only=false,
+        is_primitive::Bool=true,
+        perf_flag::Symbol=:none,
+        interp::Mooncake.MooncakeInterpreter=Mooncake.get_interpreter(),
+        debug_mode::Bool=false,
+        unsafe_perturb::Bool=false,
+    )
 
- Run standardised tests on the `rule` for `x`.
- The first element of `x` should be the primal function to test, and each other element a
- positional argument.
- In most cases, elements of `x` can just be the primal values, and `randn_tangent` can be
- relied upon to generate an appropriate tangent to test. Some notable exceptions exist
- though, in partcular `Ptr`s. In this case, the argument for which `randn_tangent` cannot be
- readily defined should be a `CoDual` containing the primal, and a _manually_ constructed
- tangent field.
+Run standardised tests on the `rule` for `x`.
+The first element of `x` should be the primal function to test, and each other element a
+positional argument.
+In most cases, elements of `x` can just be the primal values, and `randn_tangent` can be
+relied upon to generate an appropriate tangent to test. Some notable exceptions exist
+though, in partcular `Ptr`s. In this case, the argument for which `randn_tangent` cannot be
+readily defined should be a `CoDual` containing the primal, and a _manually_ constructed
+tangent field.
 
- This function uses [`Mooncake.build_rrule`](@ref) to construct a rule. This will use an
- `rrule!!` if one exists, and derive a rule otherwise.
+This function uses [`Mooncake.build_rrule`](@ref) to construct a rule. This will use an
+`rrule!!` if one exists, and derive a rule otherwise.
 
- # Arguments
- - `rng::AbstractRNG`: a random number generator
- - `x...`: the function (first element) and its arguments (the remainder)
+# Arguments
+- `rng::AbstractRNG`: a random number generator
+- `x...`: the function (first element) and its arguments (the remainder)
 
- # Keyword Arguments
- - `interface_only::Bool=false`: test only that the interface is satisfied, without testing
-     correctness. This should generally be set to `false` (the default value), and only
-     enabled if the testing infrastructure is unable to test correctness for some reason
-     e.g. the returned value of the function is a `Ptr`, and appropriate tangents cannot,
-     therefore, be generated for it automatically.
- - `is_primitive::Bool=true`: check whether the thing that you are testing has a hand-written
-     `rrule!!`. This option is helpful if you are testing a new `rrule!!`, as it enables you
-     to verify that your method of `is_primitive` has returned the correct value, and that
-     you are actually testing a method of the `rrule!!` function -- a common mistake when
-     authoring a new `rrule!!` is to implement `is_primitive` incorrectly and to accidentally
-     wind up testing a rule which Mooncake has derived, as opposed to the one that you have
-     written. If you are testing something for which you have not
-     hand-written an `rrule!!`, or which you do not care whether it has a hand-written
-     `rrule!!` or not, you should set it to `false`.
- - `perf_flag::Symbol=:none`: the value of this symbol determines what kind of performance
-     tests should be performed. By default, none are performed. If you believe that a rule
-     should be allocation-free (iff the primal is allocation free), set this to `:allocs`. If
-     you hand-write an `rrule!!` and believe that your test case should be type stable, set
-     this to `:stability` (at present we cannot verify whether a derived rule is type stable
-     for technical reasons). If you believe that a hand-written rule should be _both_
-     allocation-free and type-stable, set this to `:stability_and_allocs`.
- - `interp::Mooncake.MooncakeInterpreter=Mooncake.get_interpreter()`: the abstract
-     interpreter to be used when testing this rule. The default should generally be used.
- - `debug_mode::Bool=false`: whether or not the rule should be tested in debug mode.
-     Typically this should be left at its default `false` value, but if you are finding that
-     the tests are failing for a given rule, you may wish to temporarily set it to `true` in
-     order to get access to additional information and automated testing.
- - `unsafe_perturb::Bool=false`: value passed as the third argument to `_add_to_primal`.
-     Should usually be left `false` -- consult the docstring for `_add_to_primal` for more
-     info on when you might wish to set it to `true`.
- """
+# Keyword Arguments
+- `interface_only::Bool=false`: test only that the interface is satisfied, without testing
+    correctness. This should generally be set to `false` (the default value), and only
+    enabled if the testing infrastructure is unable to test correctness for some reason
+    e.g. the returned value of the function is a `Ptr`, and appropriate tangents cannot,
+    therefore, be generated for it automatically.
+- `is_primitive::Bool=true`: check whether the thing that you are testing has a hand-written
+    `rrule!!`. This option is helpful if you are testing a new `rrule!!`, as it enables you
+    to verify that your method of `is_primitive` has returned the correct value, and that
+    you are actually testing a method of the `rrule!!` function -- a common mistake when
+    authoring a new `rrule!!` is to implement `is_primitive` incorrectly and to accidentally
+    wind up testing a rule which Mooncake has derived, as opposed to the one that you have
+    written. If you are testing something for which you have not
+    hand-written an `rrule!!`, or which you do not care whether it has a hand-written
+    `rrule!!` or not, you should set it to `false`.
+- `perf_flag::Symbol=:none`: the value of this symbol determines what kind of performance
+    tests should be performed. By default, none are performed. If you believe that a rule
+    should be allocation-free (iff the primal is allocation free), set this to `:allocs`. If
+    you hand-write an `rrule!!` and believe that your test case should be type stable, set
+    this to `:stability` (at present we cannot verify whether a derived rule is type stable
+    for technical reasons). If you believe that a hand-written rule should be _both_
+    allocation-free and type-stable, set this to `:stability_and_allocs`.
+- `interp::Mooncake.MooncakeInterpreter=Mooncake.get_interpreter()`: the abstract
+    interpreter to be used when testing this rule. The default should generally be used.
+- `debug_mode::Bool=false`: whether or not the rule should be tested in debug mode.
+    Typically this should be left at its default `false` value, but if you are finding that
+    the tests are failing for a given rule, you may wish to temporarily set it to `true` in
+    order to get access to additional information and automated testing.
+- `unsafe_perturb::Bool=false`: value passed as the third argument to `_add_to_primal`.
+    Should usually be left `false` -- consult the docstring for `_add_to_primal` for more
+    info on when you might wish to set it to `true`.
+"""
 function test_rule(
     rng::AbstractRNG,
     x...;
@@ -1077,18 +1077,18 @@ function __is_completely_stable_type(::Type{P}) where {P}
     return all(__is_completely_stable_type, fieldtypes(P))
 end
 
-@doc """
-     test_tangent(rng::AbstractRNG, p::P, x::T, y::T, z_target::T) where {P, T}
+"""
+    test_tangent(rng::AbstractRNG, p::P, x::T, y::T, z_target::T) where {P, T}
 
- Verify that primal `p` with tangents `z_target`, `x`, and `y`, satisfies the tangent
- interface. If these tests pass, then it should be possible to write rules for primals
- of type `P`, and to test them using [`test_rule`](@ref).
+Verify that primal `p` with tangents `z_target`, `x`, and `y`, satisfies the tangent
+interface. If these tests pass, then it should be possible to write rules for primals
+of type `P`, and to test them using [`test_rule`](@ref).
 
- It should be the case that `z_target` == `increment!!(x, y)`.
+It should be the case that `z_target` == `increment!!(x, y)`.
 
- As always, there are limits to the errors that these tests can identify -- they form
- necessary but not sufficient conditions for the correctness of your code.
- """
+As always, there are limits to the errors that these tests can identify -- they form
+necessary but not sufficient conditions for the correctness of your code.
+"""
 function test_tangent(
     rng::AbstractRNG, p::P, x::T, y::T, z_target::T; interface_only, perf=true
 ) where {P,T}
