@@ -369,7 +369,7 @@ julia> rrule!!(zero_fcodual(foo), zero_fcodual(5.0))[2](1.0)
 (NoRData(), 5.0)
 
 julia> # Check that the rule works as intended.
-    TestUtils.test_rule(Xoshiro(123), foo, 5.0; is_primitive=true)
+       TestUtils.test_rule(Xoshiro(123), foo, 5.0; is_primitive=true)
 Test Passed
 ```
 
@@ -390,19 +390,19 @@ julia> function ChainRulesCore.rrule(::typeof(foo), x::Real; cond::Bool)
 julia> @from_rrule DefaultCtx Tuple{typeof(foo), Base.IEEEFloat} true
 
 julia> _, pb = rrule!!(
-        zero_fcodual(Core.kwcall),
-        zero_fcodual((cond=false, )),
-        zero_fcodual(foo),
-        zero_fcodual(5.0),
-    );
+           zero_fcodual(Core.kwcall),
+           zero_fcodual((cond=false, )),
+           zero_fcodual(foo),
+           zero_fcodual(5.0),
+       );
 
 julia> pb(3.0)
 (NoRData(), NoRData(), NoRData(), 12.0)
 
 julia> # Check that the rule works as intended.
-    TestUtils.test_rule(
-        Xoshiro(123), Core.kwcall, (cond=false, ), foo, 5.0; is_primitive=true
-    )
+       TestUtils.test_rule(
+           Xoshiro(123), Core.kwcall, (cond=false, ), foo, 5.0; is_primitive=true
+       )
 Test Passed
 ```
 Notice that, in order to access the kwarg method we must call the method of `Core.kwcall`,
