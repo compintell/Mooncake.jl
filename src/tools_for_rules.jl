@@ -254,30 +254,30 @@ function increment_and_get_rdata!(f, r, t::CRC.Thunk)
     return increment_and_get_rdata!(f, r, CRC.unthunk(t))
 end
 
-@doc """
-     rrule_wrapper(f::CoDual, args::CoDual...)
+"""
+    rrule_wrapper(f::CoDual, args::CoDual...)
 
- Used to implement `rrule!!`s via `ChainRulesCore.rrule`.
+Used to implement `rrule!!`s via `ChainRulesCore.rrule`.
 
- Given a function `foo`, argument types `arg_types`, and a method of `ChainRulesCore.rrule`
- which applies to these, you can make use of this function as follows:
- ```julia
- Mooncake.@is_primitive DefaultCtx Tuple{typeof(foo), arg_types...}
- function Mooncake.rrule!!(f::CoDual{typeof(foo)}, args::CoDual...)
-     return rrule_wrapper(f, args...)
- end
- ```
- Assumes that methods of `to_cr_tangent` and `to_mooncake_tangent` are defined such that you
- can convert between the different representations of tangents that Mooncake and
- ChainRulesCore expect.
+Given a function `foo`, argument types `arg_types`, and a method of `ChainRulesCore.rrule`
+which applies to these, you can make use of this function as follows:
+```julia
+Mooncake.@is_primitive DefaultCtx Tuple{typeof(foo), arg_types...}
+function Mooncake.rrule!!(f::CoDual{typeof(foo)}, args::CoDual...)
+    return rrule_wrapper(f, args...)
+end
+```
+Assumes that methods of `to_cr_tangent` and `to_mooncake_tangent` are defined such that you
+can convert between the different representations of tangents that Mooncake and
+ChainRulesCore expect.
 
- Furthermore, it is _essential_ that
- 1. `f(args)` does not mutate `f` or `args`, and
- 2. the result of `f(args)` does not alias any data stored in `f` or `args`.
+Furthermore, it is _essential_ that
+1. `f(args)` does not mutate `f` or `args`, and
+2. the result of `f(args)` does not alias any data stored in `f` or `args`.
 
- Subject to some constraints, you can use the [`@from_rrule`](@ref) macro to reduce the
- amount of boilerplate code that you are required to write even further.
- """
+Subject to some constraints, you can use the [`@from_rrule`](@ref) macro to reduce the
+amount of boilerplate code that you are required to write even further.
+"""
 function rrule_wrapper(fargs::Vararg{CoDual,N}) where {N}
 
     # Run forwards-pass.
@@ -333,119 +333,119 @@ function construct_rrule_wrapper_def(arg_names, arg_types, where_params)
     return construct_def(arg_names, arg_types, where_params, body)
 end
 
-@doc """
-     @from_rrule ctx sig [has_kwargs=false]
+"""
+    @from_rrule ctx sig [has_kwargs=false]
 
- Convenience functionality to assist in using `ChainRulesCore.rrule`s to write `rrule!!`s.
+Convenience functionality to assist in using `ChainRulesCore.rrule`s to write `rrule!!`s.
 
- # Arguments
+# Arguments
 
- - `ctx`: A Mooncake context type
- - `sig`: the signature which you wish to assert should be a primitive in `Mooncake.jl`, and
-     use an existing `ChainRulesCore.rrule` to implement this functionality.
- - `has_kwargs`: a `Bool` state whether or not the function has keyword arguments. This
-     feature has the same limitations as `ChainRulesCore.rrule` -- the derivative w.r.t. all
-     kwargs must be zero.
+- `ctx`: A Mooncake context type
+- `sig`: the signature which you wish to assert should be a primitive in `Mooncake.jl`, and
+    use an existing `ChainRulesCore.rrule` to implement this functionality.
+- `has_kwargs`: a `Bool` state whether or not the function has keyword arguments. This
+    feature has the same limitations as `ChainRulesCore.rrule` -- the derivative w.r.t. all
+    kwargs must be zero.
 
- # Example Usage
+# Example Usage
 
- ## A Basic Example
+## A Basic Example
 
- ```jldoctest
- julia> using Mooncake: @from_rrule, DefaultCtx, rrule!!, zero_fcodual, TestUtils
+```jldoctest
+julia> using Mooncake: @from_rrule, DefaultCtx, rrule!!, zero_fcodual, TestUtils
 
- julia> using ChainRulesCore
+julia> using ChainRulesCore
 
- julia> foo(x::Real) = 5x;
+julia> foo(x::Real) = 5x;
 
- julia> function ChainRulesCore.rrule(::typeof(foo), x::Real)
-            foo_pb(Ω::Real) = ChainRulesCore.NoTangent(), 5Ω
-            return foo(x), foo_pb
-        end;
+julia> function ChainRulesCore.rrule(::typeof(foo), x::Real)
+           foo_pb(Ω::Real) = ChainRulesCore.NoTangent(), 5Ω
+           return foo(x), foo_pb
+       end;
 
- julia> @from_rrule DefaultCtx Tuple{typeof(foo), Base.IEEEFloat}
+julia> @from_rrule DefaultCtx Tuple{typeof(foo), Base.IEEEFloat}
 
- julia> rrule!!(zero_fcodual(foo), zero_fcodual(5.0))[2](1.0)
- (NoRData(), 5.0)
+julia> rrule!!(zero_fcodual(foo), zero_fcodual(5.0))[2](1.0)
+(NoRData(), 5.0)
 
- julia> # Check that the rule works as intended.
-        TestUtils.test_rule(Xoshiro(123), foo, 5.0; is_primitive=true)
- Test Passed
- ```
+julia> # Check that the rule works as intended.
+       TestUtils.test_rule(Xoshiro(123), foo, 5.0; is_primitive=true)
+Test Passed
+```
 
- ## An Example with Keyword Arguments
+## An Example with Keyword Arguments
 
- ```jldoctest
- julia> using Mooncake: @from_rrule, DefaultCtx, rrule!!, zero_fcodual, TestUtils
+```jldoctest
+julia> using Mooncake: @from_rrule, DefaultCtx, rrule!!, zero_fcodual, TestUtils
 
- julia> using ChainRulesCore
+julia> using ChainRulesCore
 
- julia> foo(x::Real; cond::Bool) = cond ? 5x : 4x;
+julia> foo(x::Real; cond::Bool) = cond ? 5x : 4x;
 
- julia> function ChainRulesCore.rrule(::typeof(foo), x::Real; cond::Bool)
-            foo_pb(Ω::Real) = ChainRulesCore.NoTangent(), cond ? 5Ω : 4Ω
-            return foo(x; cond), foo_pb
-        end;
+julia> function ChainRulesCore.rrule(::typeof(foo), x::Real; cond::Bool)
+           foo_pb(Ω::Real) = ChainRulesCore.NoTangent(), cond ? 5Ω : 4Ω
+           return foo(x; cond), foo_pb
+       end;
 
- julia> @from_rrule DefaultCtx Tuple{typeof(foo), Base.IEEEFloat} true
+julia> @from_rrule DefaultCtx Tuple{typeof(foo), Base.IEEEFloat} true
 
- julia> _, pb = rrule!!(
-            zero_fcodual(Core.kwcall),
-            zero_fcodual((cond=false, )),
-            zero_fcodual(foo),
-            zero_fcodual(5.0),
-        );
+julia> _, pb = rrule!!(
+           zero_fcodual(Core.kwcall),
+           zero_fcodual((cond=false, )),
+           zero_fcodual(foo),
+           zero_fcodual(5.0),
+       );
 
- julia> pb(3.0)
- (NoRData(), NoRData(), NoRData(), 12.0)
+julia> pb(3.0)
+(NoRData(), NoRData(), NoRData(), 12.0)
 
- julia> # Check that the rule works as intended.
-        TestUtils.test_rule(
-            Xoshiro(123), Core.kwcall, (cond=false, ), foo, 5.0; is_primitive=true
-        )
- Test Passed
- ```
- Notice that, in order to access the kwarg method we must call the method of `Core.kwcall`,
- as Mooncake's `rrule!!` does not itself permit the use of kwargs.
+julia> # Check that the rule works as intended.
+       TestUtils.test_rule(
+           Xoshiro(123), Core.kwcall, (cond=false, ), foo, 5.0; is_primitive=true
+       )
+Test Passed
+```
+Notice that, in order to access the kwarg method we must call the method of `Core.kwcall`,
+as Mooncake's `rrule!!` does not itself permit the use of kwargs.
 
- # Limitations
+# Limitations
 
- It is your responsibility to ensure that
- 1. calls with signature `sig` do not mutate their arguments,
- 2. the output of calls with signature `sig` does not alias any of the inputs.
+It is your responsibility to ensure that
+1. calls with signature `sig` do not mutate their arguments,
+2. the output of calls with signature `sig` does not alias any of the inputs.
 
- As with all hand-written rules, you should definitely make use of
- [`TestUtils.test_rule`](@ref) to verify correctness on some test cases.
+As with all hand-written rules, you should definitely make use of
+[`TestUtils.test_rule`](@ref) to verify correctness on some test cases.
 
- # Argument Type Constraints
+# Argument Type Constraints
 
- Many methods of `ChainRuleCore.rrule` are implemented with very loose type constraints.
- For example, it would not be surprising to see a method of rrule with the signature
- ```julia
- Tuple{typeof(rrule), typeof(foo), Real, AbstractVector{<:Real}}
- ```
- There are a variety of reasons for this way of doing things, and whether it is a good idea
- to write rules for such generic objects has been debated at length.
+Many methods of `ChainRuleCore.rrule` are implemented with very loose type constraints.
+For example, it would not be surprising to see a method of rrule with the signature
+```julia
+Tuple{typeof(rrule), typeof(foo), Real, AbstractVector{<:Real}}
+```
+There are a variety of reasons for this way of doing things, and whether it is a good idea
+to write rules for such generic objects has been debated at length.
 
- Suffice it to say, you should not write rules for _this_ package which are so generically
- typed.
- Rather, you should create rules for the subset of types for which you believe that the
- `ChainRulesCore.rrule` will work correctly, and leave this package to derive rules for the
- rest.
- For example, it is quite common to be confident that a given rule will work correctly for
- any `Base.IEEEFloat` argument, i.e. `Union{Float16, Float32, Float64}`, but it is usually
- not possible to know that the rule is correct for all possible subtypes of `Real` that
- someone might define.
+Suffice it to say, you should not write rules for _this_ package which are so generically
+typed.
+Rather, you should create rules for the subset of types for which you believe that the
+`ChainRulesCore.rrule` will work correctly, and leave this package to derive rules for the
+rest.
+For example, it is quite common to be confident that a given rule will work correctly for
+any `Base.IEEEFloat` argument, i.e. `Union{Float16, Float32, Float64}`, but it is usually
+not possible to know that the rule is correct for all possible subtypes of `Real` that
+someone might define.
 
- # Conversions Between Different Tangent Type Systems
+# Conversions Between Different Tangent Type Systems
 
- Under the hood, this functionality relies on two functions: `Mooncake.to_cr_tangent`, and
- `Mooncake.increment_and_get_rdata!`. These two functions handle conversion to / from
- `Mooncake` tangent types and `ChainRulesCore` tangent types. This functionality is known to
- work well for simple types, but has not been tested to a great extent on complicated
- composite types. If `@from_rrule` does not work in your case because the required method of
- either of these functions does not exist, please open an issue.
- """
+Under the hood, this functionality relies on two functions: `Mooncake.to_cr_tangent`, and
+`Mooncake.increment_and_get_rdata!`. These two functions handle conversion to / from
+`Mooncake` tangent types and `ChainRulesCore` tangent types. This functionality is known to
+work well for simple types, but has not been tested to a great extent on complicated
+composite types. If `@from_rrule` does not work in your case because the required method of
+either of these functions does not exist, please open an issue.
+"""
 macro from_rrule(ctx, sig::Expr, has_kwargs::Bool=false)
     arg_type_syms, where_params = parse_signature_expr(sig)
     arg_names = map(n -> Symbol("x_$n"), eachindex(arg_type_syms))
