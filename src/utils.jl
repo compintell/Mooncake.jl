@@ -23,11 +23,11 @@ specialise on all element types of `x` and `y`. Furthermore, errors if `x` and `
 the same length, while `map` will just produce a new tuple whose length is equal to the
 shorter of `x` and `y`.
 """
-@generated function tuple_map(f::F, x::Tuple) where {F}
+@inline @generated function tuple_map(f::F, x::Tuple) where {F}
     return Expr(:call, :tuple, map(n -> :(f(getfield(x, $n))), 1:fieldcount(x))...)
 end
 
-@generated function tuple_map(f::F, x::Tuple, y::Tuple) where {F}
+@inline @generated function tuple_map(f::F, x::Tuple, y::Tuple) where {F}
     if length(x.parameters) != length(y.parameters)
         return :(throw(ArgumentError("length(x) != length(y)")))
     end
@@ -197,18 +197,6 @@ An isbits field is always defined, but is not always explicitly initialised.
 """
 function is_always_initialised(P::DataType, n::Int)::Bool
     return n <= CC.datatype_min_ninitialized(P)
-end
-
-"""
-    always_initialised(::Type{P}) where {P}
-
-Returns a tuple with number of fields equal to the number of fields in `P`. The nth field
-is set to `true` if the nth field of `P` is initialised, and `false` otherwise.
-"""
-@generated function always_initialised(::Type{P}) where {P}
-    P isa DataType || return :(error("$P is not a DataType."))
-    num_init = CC.datatype_min_ninitialized(P)
-    return (map(n -> n <= num_init, 1:fieldcount(P))...,)
 end
 
 """

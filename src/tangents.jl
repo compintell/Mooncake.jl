@@ -93,8 +93,6 @@ end
     return set_tangent_field!(t, _sym_to_int(T, Val(s)), x)
 end
 
-# This generated function is fine, because it does not make use of any functions which
-# might have additional methods added to them later on.
 @generated function _sym_to_int(::Type{Tfields}, ::Val{s}) where {Tfields,s}
     return findfirst(==(s), fieldnames(Tfields))
 end
