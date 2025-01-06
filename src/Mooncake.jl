@@ -75,6 +75,14 @@ pb!!(1.0)
 """
 function rrule!! end
 
+"""
+    build_primitive_rrule(sig::Type{<:Tuple})
+
+Construct an rrule for signature `sig`, where it has been declared that
+`is_primitive(context_type, sig)` is `true` for the current `context_type`.
+"""
+build_primitive_rrule(::Type{<:Tuple}) = rrule!!
+
 include("utils.jl")
 include("tangents.jl")
 include("fwds_rvs_data.jl")
