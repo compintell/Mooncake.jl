@@ -1079,7 +1079,7 @@ function build_rrule(
     # If we have a hand-coded rule, just use that.
     sig = _get_sig(sig_or_mi)
     if is_primitive(C, sig)
-        rule = build_primitive_rrule!!(sig)
+        rule = build_primitive_rrule(sig)
         return (debug_mode ? DebugRRule(rule) : rule)
     end
 
