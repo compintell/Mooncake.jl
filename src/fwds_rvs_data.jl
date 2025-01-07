@@ -560,6 +560,8 @@ function zero_rdata(p::P) where {P<:Union{Tuple,NamedTuple}}
     return rdata_type(tangent_type(P)) == NoRData ? NoRData() : tuple_map(zero_rdata, p)
 end
 
+has_definite_fieldcount(P) = P isa DataType && Base.datatype_fieldcount(P) !== nothing
+
 """
     can_produce_zero_rdata_from_type(::Type{P}) where {P}
 
@@ -567,15 +569,25 @@ Returns whether or not the zero element of the rdata type for primal type `P` ca
 obtained from `P` alone.
 """
 @generated function can_produce_zero_rdata_from_type(::Type{P}) where {P}
-    R = rdata_type(tangent_type(P))
-    R == NoRData && return true
-    isabstracttype(P) && return false
-    (isconcretetype(P) || P <: Tuple) || return false
-    (P <: Tuple && !(P isa DataType)) && return false # catch Unions and UnionAlls
-    (P <: Tuple && Base.datatype_fieldcount(P) === nothing) && return false
+    if isstructtype(P) && has_definite_fieldcount(P)
+        can_produces = map(_P -> :(can_produce_zero_rdata_from_type($_P)), fieldtypes(P))
+    else
+        can_produces = ()
+    end
+    tuple_expr = Expr(:call, :tuple, can_produces...)
 
-    # For general structs, just look at their fields.
-    return isstructtype(P) ? all(can_produce_zero_rdata_from_type, fieldtypes(P)) : false
+    return quote
+        R = rdata_type(tangent_type($P))
+        R == NoRData && return true
+        $(isabstracttype(P)) && return false
+        $(isconcretetype(P) || P <: Tuple) || return false
+        $(P <: Tuple && !(P isa DataType)) && return false # catch Unions and UnionAlls
+        $(P <: Tuple && !has_definite_fieldcount(P)) && return false
+
+        # For general structs, just look at their fields.
+        $(!isstructtype(P)) && return false
+        return stable_all($exprs)
+    end
 end
 
 can_produce_zero_rdata_from_type(::Type{<:IEEEFloat}) = true
