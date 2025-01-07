@@ -556,9 +556,8 @@ zero_rdata(p::IEEEFloat) = zero(p)
     return Expr(:call, R, backing_expr)
 end
 
-@generated function zero_rdata(p::Union{Tuple,NamedTuple})
-    rdata_type(tangent_type(p)) == NoRData && return NoRData()
-    return :(tuple_map(zero_rdata, p))
+function zero_rdata(p::P) where {P<:Union{Tuple,NamedTuple}}
+    return rdata_type(tangent_type(P)) == NoRData ? NoRData() : tuple_map(zero_rdata, p)
 end
 
 """
