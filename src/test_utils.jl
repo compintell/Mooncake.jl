@@ -768,12 +768,12 @@ end
     test_rule_and_type_interactions(rng::AbstractRNG, p)
 
 Check that a collection of standard functions for which we _ought_ to have a working rrule
-for `x` work, and produce the correct answer. For example, the `rrule!!` for `typeof` should
+for `p` work, and produce the correct answer. For example, the `rrule!!` for `typeof` should
 work correctly on any type, we should have a working rule for `getfield` for any
 struct-type, and we should have a rule for `setfield!` for any mutable struct type.
 See implementation for details.
 
-The purpose of this test is to ensure that, for any given `x`, the full range of primitive
+The purpose of this test is to ensure that, for any given `p`, the full range of primitive
 functions that _ought_ to work on it, do indeed work on it.
 
 This is one part of the interface where some care _might_ be required. If, for some reason,
