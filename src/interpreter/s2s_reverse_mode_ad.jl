@@ -253,7 +253,8 @@ get_rev_data_id(::ADInfo, ::Any) = nothing
 """
     reverse_data_ref_stmts(info::ADInfo)
 
-Create the statements which initialise the reverse-data `Ref`s.
+Create the `:new` statements which initialise the reverse-data `Ref`s. Interpolates the
+initial rdata directly into the statement, which is safe because it is always a bits type.
 """
 function reverse_data_ref_stmts(info::ADInfo)
     function make_ref_stmt(id, P)
