@@ -1,6 +1,8 @@
 module ToolsForRulesResources
 
-using ChainRulesCore, LinearAlgebra, Mooncake
+# Note: do not `using Mooncake` in this module to ensure that all of the macros work
+# correctly if `Mooncake` is not in scope.
+using ChainRulesCore, LinearAlgebra
 using Base: IEEEFloat
 using Mooncake: @mooncake_overlay, @zero_adjoint, @from_rrule, MinimalCtx, DefaultCtx
 
