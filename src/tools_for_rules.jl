@@ -96,8 +96,12 @@ julia> Mooncake.value_and_gradient!!(rule, scale, 5.0)
 """
 macro mooncake_overlay(method_expr)
     def = splitdef(method_expr)
-    def[:name] = Expr(:overlay, :(Mooncake.mooncake_method_table), esc(def[:name]))
-    return combinedef(def)
+    __mooncake_method_table = gensym("mooncake_method_table")
+    def[:name] = Expr(:overlay, __mooncake_method_table, def[:name])
+    return quote
+        $(esc(__mooncake_method_table)) = Mooncake.mooncake_method_table
+        $(esc(combinedef(def)))
+    end
 end
 
 #
