@@ -6,8 +6,9 @@ using ChainRulesCore, LinearAlgebra
 using Base: IEEEFloat
 using Mooncake: @mooncake_overlay, @zero_adjoint, @from_rrule, MinimalCtx, DefaultCtx
 
+local_function(x) = 5x
 overlay_tester(x) = 2x
-@mooncake_overlay overlay_tester(x) = 3x
+@mooncake_overlay overlay_tester(x) = local_function(x)
 
 zero_tester(x) = 0
 @zero_adjoint MinimalCtx Tuple{typeof(zero_tester),Float64}
