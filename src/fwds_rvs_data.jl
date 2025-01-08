@@ -662,14 +662,11 @@ with.
     if P isa DataType
         names = fieldnames(P)
         types = fieldtypes(P)
-        wrapped_field_zeros = map(enumerate(tangent_field_types(P))) do (n, tt)
+        wrapped_field_zeros = map(enumerate(always_initialised(P))) do (n, init)
             fzero = :(zero_rdata_from_type($(types[n])))
-            if tt <: PossiblyUninitTangent
-                Q = :(rdata_type(tangent_type($(fieldtype(P, n)))))
-                return :(PossiblyUninitTangent{$Q}($fzero))
-            else
-                return fzero
-            end
+            init && return fzero
+            Q = :(rdata_type(tangent_type($(fieldtype(P, n)))))
+            return :(PossiblyUninitTangent{$Q}($fzero))
         end
         wrapped_field_zeros_tuple = Expr(:call, :tuple, wrapped_field_zeros...)
         wrapped_expr = :(R(NamedTuple{$names}($wrapped_field_zeros_tuple)))
