@@ -6,12 +6,12 @@ function parse_signature_expr(sig::Expr)
     # Different parsing is required for `Tuple{...}` vs `Tuple{...} where ...`.
     if sig.head == :curly
         @assert sig.args[1] == :Tuple
-        arg_type_symbols = sig.args[2:end]
+        arg_type_symbols = map(esc, sig.args[2:end])
         where_params = nothing
     elseif sig.head == :where
         @assert sig.args[1].args[1] == :Tuple
-        arg_type_symbols = sig.args[1].args[2:end]
-        where_params = sig.args[2:end]
+        arg_type_symbols = map(esc, sig.args[1].args[2:end])
+        where_params = map(esc, sig.args[2:end])
     else
         throw(ArgumentError("Expected either a `Tuple{...}` or `Tuple{...} where {...}"))
     end
@@ -96,8 +96,12 @@ julia> Mooncake.value_and_gradient!!(rule, scale, 5.0)
 """
 macro mooncake_overlay(method_expr)
     def = splitdef(method_expr)
-    def[:name] = Expr(:overlay, :(Mooncake.mooncake_method_table), def[:name])
-    return esc(combinedef(def))
+    __mooncake_method_table = gensym("mooncake_method_table")
+    def[:name] = Expr(:overlay, __mooncake_method_table, def[:name])
+    return quote
+        $(esc(__mooncake_method_table)) = Mooncake.mooncake_method_table
+        $(esc(combinedef(def)))
+    end
 end
 
 #
@@ -200,7 +204,7 @@ macro zero_adjoint(ctx, sig)
     # then the last argument requires special treatment.
     arg_type_symbols, where_params = parse_signature_expr(sig)
     arg_names = map(n -> Symbol("x_$n"), eachindex(arg_type_symbols))
-    is_vararg = arg_type_symbols[end] === :Vararg
+    is_vararg = arg_type_symbols[end] == Expr(:escape, :Vararg)
     if is_vararg
         arg_types = vcat(
             map(t -> :(Mooncake.CoDual{<:$t}), arg_type_symbols[1:(end - 1)]),
@@ -215,10 +219,10 @@ macro zero_adjoint(ctx, sig)
 
     # Return code to create a method of is_primitive and a rule.
     ex = quote
-        Mooncake.is_primitive(::Type{$ctx}, ::Type{<:$sig}) = true
+        Mooncake.is_primitive(::Type{$(esc(ctx))}, ::Type{<:$(esc(sig))}) = true
         $(construct_def(arg_names, arg_types, where_params, body))
     end
-    return esc(ex)
+    return ex
 end
 
 #
@@ -469,10 +473,10 @@ macro from_rrule(ctx, sig::Expr, has_kwargs::Bool=false)
     end
 
     ex = quote
-        Mooncake.is_primitive(::Type{$ctx}, ::Type{<:$sig}) = true
+        Mooncake.is_primitive(::Type{$(esc(ctx))}, ::Type{<:($(esc(sig)))}) = true
         $rule_expr
         $kw_is_primitive
         $kwargs_rule_expr
     end
-    return esc(ex)
+    return ex
 end
