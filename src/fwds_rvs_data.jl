@@ -517,10 +517,34 @@ end
     return :(rdata_type($t) == NoRData ? NoRData() : tuple_map(rdata, t))
 end
 
-function rdata_backing_type(::Type{P}) where {P}
-    rdata_field_types = map(n -> rdata_field_type(P, n), 1:fieldcount(P))
-    all(==(NoRData), rdata_field_types) && return NoRData
-    return NamedTuple{fieldnames(P),Tuple{rdata_field_types...}}
+"""
+    rdata_field_types_exprs(::Type{P}) where {P}
+
+Tuple of expressions. The nth computes the rdata backing type of the nth field of `P`.
+"""
+function rdata_field_types_exprs(::Type{P}) where {P}
+    return map(1:fieldcount(P), always_initialised(P)) do n, init
+        Pf = fieldtype(P, n)
+        if init
+            return :(rdata_type(tangent_type($Pf)))
+        else
+            return :(PossiblyUninitTangent{rdata_type(tangent_type($Pf))})
+        end
+    end
+end
+
+"""
+    rdata_backing_type(::Type{P}) where {P}
+
+The type of the field of `RData` for `P`.
+"""
+@generated function rdata_backing_type(::Type{P}) where {P}
+    rdata_field_types_expr = Expr(:call, :tuple, rdata_field_types_exprs(P)...)
+    return quote
+        rdata_field_types = $rdata_field_types_expr
+        stable_all(tuple_map(==(NoRData()), rdata_field_types)) && return NoRData
+        return NamedTuple{$(fieldnames(P)),Tuple{rdata_field_types...}}
+    end
 end
 
 """
@@ -533,27 +557,34 @@ zero_rdata(p)
 zero_rdata(p::IEEEFloat) = zero(p)
 
 @generated function zero_rdata(p::P) where {P}
-
-    # Get types associated to primal.
-    T = tangent_type(P)
-    R = rdata_type(T)
-
-    # If there's no reverse data, return no reverse data, e.g. for mutable types.
-    R == NoRData && return :(NoRData())
-
-    # T ought to be a `Tangent`. If it's not, something has gone wrong.
-    !(T <: Tangent) && return Expr(:call, error, "Unhandled type $T")
-    rdata_field_zeros_exprs = ntuple(fieldcount(P)) do n
-        R_field = rdata_field_type(P, n)
-        if R_field <: PossiblyUninitTangent
-            return :(isdefined(p, $n) ? $R_field(zero_rdata(getfield(p, $n))) : $R_field())
-        else
+    Rs = rdata_field_types_exprs(P)
+    rdata_field_zeros_exprs = map(1:fieldcount(P), always_initialised(P), Rs) do n, init, R
+        if init
             return :(zero_rdata(getfield(p, $n)))
+        else
+            return quote
+                R_field = $R
+                isdefined(p, $n) ? R_field(zero_rdata(getfield(p, $n))) : R_field()
+            end
         end
     end
     backing_data_expr = Expr(:call, :tuple, rdata_field_zeros_exprs...)
-    backing_expr = :($(rdata_backing_type(P))($backing_data_expr))
-    return Expr(:call, R, backing_expr)
+    backing_expr = :(rdata_backing_type($P)($backing_data_expr))
+
+    return quote
+        # Get types associated to primal.
+        T = tangent_type($P)
+        R = rdata_type(T)
+
+        # If there's no reverse data, return no reverse data, e.g. for mutable types.
+        R == NoRData && return NoRData()
+
+        # T ought to be a `Tangent`. If it's not, something has gone wrong.
+        T <: Tangent || error("Unhandled type $T")
+
+        # return $backing_expr
+        return R($backing_expr)
+    end
 end
 
 function zero_rdata(p::P) where {P<:Union{Tuple,NamedTuple}}
@@ -586,7 +617,7 @@ obtained from `P` alone.
 
         # For general structs, just look at their fields.
         $(!isstructtype(P)) && return false
-        return stable_all($exprs)
+        return stable_all($tuple_expr)
     end
 end
 
