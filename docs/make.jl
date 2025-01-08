@@ -28,7 +28,7 @@ makedocs(;
             joinpath("understanding_mooncake", "rule_system.md"),
         ],
         "Utilities" => [
-            joinpath("utilities", "tools_for_rules.md"),
+            joinpath("utilities", "defining_rules.md"),
             joinpath("utilities", "debug_mode.md"),
             joinpath("utilities", "debugging_and_mwes.md"),
         ],

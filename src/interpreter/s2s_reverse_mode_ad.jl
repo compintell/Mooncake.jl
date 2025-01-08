@@ -253,37 +253,24 @@ get_rev_data_id(::ADInfo, ::Any) = nothing
 """
     reverse_data_ref_stmts(info::ADInfo)
 
-Create the statements which initialise the reverse-data `Ref`s.
+Create the `:new` statements which initialise the reverse-data `Ref`s. Interpolates the
+initial rdata directly into the statement, which is safe because it is always a bits type.
 """
 function reverse_data_ref_stmts(info::ADInfo)
+    function make_ref_stmt(id, P)
+        ref_type = Base.RefValue{P <: Type ? NoRData : zero_like_rdata_type(P)}
+        init_ref_val = P <: Type ? NoRData() : Mooncake.zero_like_rdata_from_type(P)
+        return (id, new_inst(Expr(:new, ref_type, QuoteNode(init_ref_val))))
+    end
     return vcat(
         map(collect(info.arg_rdata_ref_ids)) do (k, id)
-            (id, new_inst(Expr(:call, __make_ref, CC.widenconst(info.arg_types[k]))))
+            return make_ref_stmt(id, CC.widenconst(info.arg_types[k]))
         end,
         map(collect(info.ssa_rdata_ref_ids)) do (k, id)
-            (id, new_inst(Expr(:call, __make_ref, CC.widenconst(info.ssa_insts[k].type))))
+            return make_ref_stmt(id, CC.widenconst(info.ssa_insts[k].type))
         end,
     )
 end
-
-"""
-    __make_ref(p::Type{P}) where {P}
-
-Helper for [`reverse_data_ref_stmts`](@ref). Constructs a `Ref` whose element type is the
-[`zero_like_rdata_type`](@ref) for `P`, and whose element is the zero-like rdata for `P`.
-"""
-@inline function __make_ref(p::Type{P}) where {P}
-    _P = @isdefined(P) ? P : _typeof(p)
-    return Ref{zero_like_rdata_type(_P)}(Mooncake.zero_like_rdata_from_type(_P))
-end
-
-# This specialised method is necessary to ensure that `__make_ref` works properly for
-# `DataType`s with unbound type parameters. See `TestResources.typevar_tester` for an
-# example. The above method requires that `P` be a type in which all parameters are fully-
-# bound. Strange errors occur if this property does not hold.
-@inline __make_ref(::Type{<:Type}) = Ref{NoRData}(NoRData())
-
-@inline __make_ref(::Type{Union{}}) = nothing
 
 # Returns the number of arguments that the primal function has.
 num_args(info::ADInfo) = length(info.arg_types)
@@ -948,8 +935,8 @@ end
 # Rule derivation.
 #
 
-_is_primitive(C::Type, mi::Core.MethodInstance) = is_primitive(C, mi.specTypes)
-_is_primitive(C::Type, sig::Type) = is_primitive(C, sig)
+_get_sig(sig::Type) = sig
+_get_sig(mi::Core.MethodInstance) = mi.specTypes
 
 function forwards_ret_type(primal_ir::IRCode)
     return fcodual_type(Base.Experimental.compute_ir_rettype(primal_ir))
@@ -967,8 +954,9 @@ important for performance in dynamic dispatch, and to ensure that recursion work
 properly.
 """
 function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where {C}
-    if _is_primitive(C, sig_or_mi)
-        return debug_mode ? DebugRRule{typeof(rrule!!)} : typeof(rrule!!)
+    if is_primitive(C, _get_sig(sig_or_mi))
+        rule = build_primitive_rrule(_get_sig(sig_or_mi))
+        return debug_mode ? DebugRRule{typeof(rule)} : typeof(rule)
     end
 
     ir, _ = lookup_ir(interp, sig_or_mi)
@@ -1076,7 +1064,11 @@ function build_rrule(
     end
 
     # If we have a hand-coded rule, just use that.
-    _is_primitive(C, sig_or_mi) && return (debug_mode ? DebugRRule(rrule!!) : rrule!!)
+    sig = _get_sig(sig_or_mi)
+    if is_primitive(C, sig)
+        rule = build_primitive_rrule(sig)
+        return (debug_mode ? DebugRRule(rule) : rule)
+    end
 
     # We don't have a hand-coded rule, so derived one.
     lock(MOONCAKE_INFERENCE_LOCK)
@@ -1093,7 +1085,6 @@ function build_rrule(
             rvs_oc = misty_closure(dri.rvs_ret_type, dri.rvs_ir, dri.shared_data...)
 
             # Compute the signature. Needs careful handling with varargs.
-            sig = sig_or_mi isa Core.MethodInstance ? sig_or_mi.specTypes : sig_or_mi
             nargs = num_args(dri.info)
             if dri.isva
                 sig = Tuple{
