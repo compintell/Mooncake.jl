@@ -22,8 +22,9 @@ using NNlib: dropout
     grid[:, 1, 2, 1] .= (-1, 1)
     grid[:, 2, 2, 1] .= (1, 1)
 
-    @testset "$(typeof(fargs))" for (cuda, interface_only, perf_flag, is_primitive, fargs...) in
-                                    Any[
+    @testset "$(typeof(fargs))" for (
+        cuda, interface_only, perf_flag, is_primitive, fargs...
+    ) in Any[
 
         # batched_mul
         (false, false, :none, true, batched_mul, randn(3, 2, 3), randn(2, 5, 3)),
@@ -65,7 +66,16 @@ using NNlib: dropout
         (false, false, :stability, true, Core.kwcall, (dims=1,), softmax, randn(3, 3)),
         (false, false, :stability, true, Core.kwcall, (dims=2,), softmax, randn(3, 3)),
         (false, false, :stability, true, Core.kwcall, (dims=(1, 2),), softmax, randn(3, 3)),
-        (false, false, :stability, true, Core.kwcall, (dims=(1, 2),), softmax, randn(3, 3, 2)),
+        (
+            false,
+            false,
+            :stability,
+            true,
+            Core.kwcall,
+            (dims=(1, 2),),
+            softmax,
+            randn(3, 3, 2),
+        ),
         (false, false, :none, false, x -> softmax(5x), randn(3, 2)),
         (false, false, :none, false, x -> softmax(x; dims=1), randn(3, 2)),
         (false, false, :none, false, x -> softmax(x; dims=2), randn(3, 2)),
@@ -78,8 +88,26 @@ using NNlib: dropout
         (false, false, :stability, true, Core.kwcall, (dims=1,), logsoftmax, randn(2)),
         (false, false, :stability, true, Core.kwcall, (dims=1,), logsoftmax, randn(3, 3)),
         (false, false, :stability, true, Core.kwcall, (dims=2,), logsoftmax, randn(3, 3)),
-        (false, false, :stability, true, Core.kwcall, (dims=(1, 2),), logsoftmax, randn(3, 3)),
-        (false, false, :stability, true, Core.kwcall, (dims=(1, 2),), logsoftmax, randn(3, 3, 2)),
+        (
+            false,
+            false,
+            :stability,
+            true,
+            Core.kwcall,
+            (dims=(1, 2),),
+            logsoftmax,
+            randn(3, 3),
+        ),
+        (
+            false,
+            false,
+            :stability,
+            true,
+            Core.kwcall,
+            (dims=(1, 2),),
+            logsoftmax,
+            randn(3, 3, 2),
+        ),
 
         # logsumexp
         (false, false, :stability, true, logsumexp, randn(2)),
@@ -88,8 +116,26 @@ using NNlib: dropout
         (false, false, :stability, true, Core.kwcall, (dims=1,), logsumexp, randn(2)),
         (false, false, :stability, true, Core.kwcall, (dims=1,), logsumexp, randn(3, 3)),
         (false, false, :stability, true, Core.kwcall, (dims=2,), logsumexp, randn(3, 3)),
-        (false, false, :stability, true, Core.kwcall, (dims=(1, 2),), logsumexp, randn(3, 3)),
-        (false, false, :stability, true, Core.kwcall, (dims=(1, 2),), logsumexp, randn(3, 3, 2)),
+        (
+            false,
+            false,
+            :stability,
+            true,
+            Core.kwcall,
+            (dims=(1, 2),),
+            logsumexp,
+            randn(3, 3),
+        ),
+        (
+            false,
+            false,
+            :stability,
+            true,
+            Core.kwcall,
+            (dims=(1, 2),),
+            logsumexp,
+            randn(3, 3, 2),
+        ),
 
         # upsample_nearest
         (false, false, :stability, true, upsample_nearest, randn(3), (2,)),
@@ -115,7 +161,18 @@ using NNlib: dropout
         # ∇conv_data
         (false, false, :none, true, Core.kwcall, (;), ∇conv_data, y, w, dense_cdims),
         (false, false, :none, true, ∇conv_data, y, w, dense_cdims),
-        (false, false, :none, true, Core.kwcall, (;), ∇depthwiseconv_data, y_sep, w, sep_cdims),
+        (
+            false,
+            false,
+            :none,
+            true,
+            Core.kwcall,
+            (;),
+            ∇depthwiseconv_data,
+            y_sep,
+            w,
+            sep_cdims,
+        ),
         (false, false, :none, true, ∇depthwiseconv_data, y_sep, w, sep_cdims),
 
         # ∇conv_filter
