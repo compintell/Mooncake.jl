@@ -479,7 +479,22 @@ function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
         val_rdata_ref_id = get_rev_data_id(info, stmt.val)
         output_rdata_ref_id = get_rev_data_id(info, line)
         fwds = PiNode(__inc(stmt.val), fcodual_type(CC.widenconst(stmt.typ)))
-        rvs = Expr(:call, __pi_rvs!, P, val_rdata_ref_id, output_rdata_ref_id)
+
+        # Get value from output_rdata.
+        output_rdata_id = ID()
+        output_rdata_expr = Expr(:call, getfield, output_rdata_ref_id, QuoteNode(:x))
+        output_rdata = (output_rdata_id, new_inst(output_rdata_expr))
+
+        # Zero-out output_rdata_ref.
+        r = Mooncake.zero_like_rdata_from_type(P)
+        set_ref_id = ID()
+        set_ref_expr = Expr(:call, setfield!, output_rdata_ref_id, QuoteNode(:x), r)
+        set_ref = (set_ref_id, new_inst(set_ref_expr))
+
+        # Increment value in rdata ref.
+        inc_exprs = increment_ref_stmts(val_rdata_ref_id, output_rdata_id)
+
+        rvs = vcat(IDInstPair[output_rdata, set_ref], inc_exprs)
     else
         # If the value of the PiNode is a constant / QuoteNode etc, then there is nothing to
         # do on the reverse-pass.
