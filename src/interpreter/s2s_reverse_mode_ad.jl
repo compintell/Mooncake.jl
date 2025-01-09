@@ -723,17 +723,65 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         rvs_pass = if T_pb!! <: NoPullback
             nothing
         else
-            Expr(
-                :call,
-                __run_rvs_pass!,
-                get_primal_type(info, line),
-                sig,
-                pb,
-                get_rev_data_id(info, line),
-                map(Base.Fix1(get_rev_data_id, info), args)...,
+            # Get the rdata which we pass into the pullback from its rdata ref.
+            rdata_ref_id = get_rev_data_id(info, line)
+            rdata_output_id = ID()
+            rdata_output_expr = Expr(:call, getfield, rdata_ref_id, QuoteNode(:x))
+            rdata_output = (rdata_output_id, new_inst(rdata_output_expr))
+
+            # Zero out the value stored in this rdata ref now that we have its current
+            # value. The new value is rdata, so must be an instance of a bits type, so is
+            # safe to interpolate straight into instruction.
+            zero_val = zero_like_rdata_from_type(get_primal_type(info, line))
+            zero_rdata_expr = Expr(:call, setfield!, rdata_ref_id, QuoteNode(:x), zero_val)
+            zero_rdata_ref = (ID(), new_inst(zero_rdata_expr))
+
+            # Run the pullback. The result is a tuple comprising `length(args)` elements.
+            call_pullback_id = ID()
+            call_pullback = (call_pullback_id, new_inst(Expr(:call, pb, rdata_output_id)))
+
+            # For each element of the tuple returned by call_pullback, if the corresponding
+            # value in the primal IR is an Argument / SSA (if `get_rev_data_id` does not
+            # return nothing), increment the value in its rdata ref. This is equivalent to
+            # rdata_ref[] = increment!!(rdata_ref[], rdata_inc_resulting_from_pullback),
+            # but written out manually to ensure nothing fails to inline.
+            # If the corresponding value in the primal IR is not an Argument / SSA (e.g. it
+            # is a literal, a `QuoteNode`, or a `GlobalRef`), do nothing as we do not track
+            # gradients w.r.t. it.
+            tmp = map(enumerate(args)) do (n, arg)
+                rev_data_id = get_rev_data_id(info, arg)
+
+                # If arg is not an SSA / Argument, then no rdata ref to inc.
+                rev_data_id === nothing && return nothing
+
+                # Dereference the current rdata value.
+                rdata_id = ID()
+                rdata = (rdata_id, new_inst(Expr(:call, getfield, rev_data_id, QuoteNode(:x))))
+
+                # Extract rdata from result of calling pullback.
+                rdata_inc_id = ID()
+                rdata_inc_expr = Expr(:call, getfield, call_pullback_id, n)
+                rdata_inc = (rdata_inc_id, new_inst(rdata_inc_expr))
+
+                # Increment the rdata by the new rdata value returned by call_pullback.
+                new_rdata_id = ID()
+                new_rdata_expr = Expr(:call, increment!!, rdata_id, rdata_inc_id)
+                new_rdata = (new_rdata_id, new_inst(new_rdata_expr))
+
+                # Update the value stored in the rdata reference.
+                set_rdata_ref_expr = Expr(:call, setfield!, rev_data_id, QuoteNode(:x), new_rdata_id)
+                set_rdata_ref = (ID(), new_inst(set_rdata_ref_expr))
+
+                return [rdata, rdata_inc, new_rdata, set_rdata_ref]
+            end
+
+            # Concatenate all statements, and return them.
+            vcat(
+                IDInstPair[rdata_output, zero_rdata_ref, call_pullback],
+                reduce(vcat, filter(x -> !(x === nothing), tmp); init=IDInstPair[]),
             )
         end
-        return ad_stmt_info(line, comms_id, fwds, new_inst(rvs_pass))
+        return ad_stmt_info(line, comms_id, fwds, rvs_pass)
 
     elseif Meta.isexpr(stmt, :boundscheck)
         # For some reason the compiler cannot handle boundscheck statements when we run it
@@ -807,32 +855,11 @@ end
 __get_primal(x::CoDual) = primal(x)
 __get_primal(x) = x
 
-"""
-    __run_rvs_pass!(
-        P::Type, ::Type{sig}, pb!!, ret_rev_data_ref::Ref, arg_rev_data_refs...
-    ) where {sig}
-
-Used in `make_ad_stmts!` method for `Expr(:call, ...)` and `Expr(:invoke, ...)`.
-"""
-@inline function __run_rvs_pass!(
-    P::Type, ::Type{sig}, pb!!, ret_rev_data_ref::Ref, arg_rev_data_refs...
-) where {sig}
-    tuple_map(increment_if_ref!, arg_rev_data_refs, pb!!(ret_rev_data_ref[]))
-    set_ret_ref_to_zero!!(P, ret_rev_data_ref)
-    return nothing
-end
-
 @inline increment_if_ref!(ref::Ref, rvs_data) = increment_ref!(ref, rvs_data)
 @inline increment_if_ref!(::Ref, ::ZeroRData) = nothing
 @inline increment_if_ref!(::Nothing, ::Any) = nothing
 
 @inline increment_ref!(x::Ref, t) = setindex!(x, increment!!(x[], t))
-@inline increment_ref!(::Base.RefValue{NoRData}, t) = nothing
-
-@inline function set_ret_ref_to_zero!!(::Type{P}, r::Ref{R}) where {P,R}
-    return r[] = zero_like_rdata_from_type(P)
-end
-@inline set_ret_ref_to_zero!!(::Type{P}, r::Base.RefValue{NoRData}) where {P} = nothing
 
 const RuleMC{A,R} = MistyClosure{OpaqueClosure{A,R}}
 
