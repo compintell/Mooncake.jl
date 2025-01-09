@@ -24,43 +24,29 @@ the same length, while `map` will just produce a new tuple whose length is equal
 shorter of `x` and `y`.
 """
 @inline @generated function tuple_map(f::F, x::Tuple) where {F}
-    return Expr(:call, :tuple, map(n -> :(f(getfield(x, $n))), eachindex(x.parameters))...)
+    return Expr(:call, :tuple, map(n -> :(f(getfield(x, $n))), 1:fieldcount(x))...)
 end
 
 @inline @generated function tuple_map(f::F, x::Tuple, y::Tuple) where {F}
     if length(x.parameters) != length(y.parameters)
         return :(throw(ArgumentError("length(x) != length(y)")))
     else
-        stmts = map(n -> :(f(getfield(x, $n), getfield(y, $n))), eachindex(x.parameters))
+        stmts = map(n -> :(f(getfield(x, $n), getfield(y, $n))), 1:fieldcount(x))
         return Expr(:call, :tuple, stmts...)
     end
 end
 
-for N in 1:128
-    @eval @inline function tuple_map(f::F, x::Tuple{Vararg{Any,$N}}) where {F}
-        return $(Expr(:call, :tuple, map(n -> :(f(getfield(x, $n))), 1:N)...))
+@generated function tuple_map(f, x::NamedTuple{names}) where {names}
+    getfield_exprs = map(n -> :(f(getfield(x, $n))), 1:fieldcount(x))
+    return :(NamedTuple{names}($(Expr(:call, :tuple, getfield_exprs...))))
+end
+
+@generated function tuple_map(f, x::NamedTuple{names}, y::NamedTuple{names}) where {names}
+    if fieldcount(x) != fieldcount(y)
+        return :(throw(ArgumentError("length(x) != length(y)")))
     end
-    @eval @inline function tuple_map(
-        f::F, x::NamedTuple{names,<:Tuple{Vararg{Any,$N}}}
-    ) where {F,names}
-        return NamedTuple{names}(
-            $(Expr(:call, :tuple, map(n -> :(f(getfield(x, $n))), 1:N)...))
-        )
-    end
-    @eval @inline function tuple_map(f, x::Tuple{Vararg{Any,$N}}, y::Tuple{Vararg{Any,$N}})
-        return $(Expr(
-            :call, :tuple, map(n -> :(f(getfield(x, $n), getfield(y, $n))), 1:N)...
-        ))
-    end
-    @eval @inline function tuple_map(
-        f::F,
-        x::NamedTuple{names,<:Tuple{Vararg{Any,$N}}},
-        y::NamedTuple{names,<:Tuple{Vararg{Any,$N}}},
-    ) where {F,names}
-        return NamedTuple{names}(
-            $(Expr(:call, :tuple, map(n -> :(f(getfield(x, $n), getfield(y, $n))), 1:N)...))
-        )
-    end
+    getfield_exprs = map(n -> :(f(getfield(x, $n), getfield(y, $n))), 1:fieldcount(x))
+    return :(NamedTuple{names}($(Expr(:call, :tuple, getfield_exprs...))))
 end
 
 for N in 1:256
