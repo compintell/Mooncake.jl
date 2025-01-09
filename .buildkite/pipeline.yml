@@ -17,7 +17,7 @@ steps:
     if: build.message !~ /\[skip tests\]/
     timeout_in_minutes: 60
     env:
-      LABEL: {{matrix.label}}
+      LABEL: "{{matrix.label}}"
       TEST_TYPE: ext
     matrix:
       version:
