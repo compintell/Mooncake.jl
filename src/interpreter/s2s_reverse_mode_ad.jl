@@ -1573,6 +1573,15 @@ function __get_value(edge::ID, x::IDPhiNode)
     return isassigned(x.values, n) ? x.values[n] : nothing
 end
 
+"""
+    deref_and_zero_stmts(P, ref_id, val_id)
+
+Equivalent to something like
+```julia
+val = ref[]
+ref[] = zero_rdata_from_type(P)
+```
+"""
 function deref_and_zero_stmts(P, ref_id, val_id)
 
     # Get value from output_rdata.
