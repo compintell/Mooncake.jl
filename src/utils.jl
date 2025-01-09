@@ -24,15 +24,16 @@ the same length, while `map` will just produce a new tuple whose length is equal
 shorter of `x` and `y`.
 """
 @inline @generated function tuple_map(f::F, x::Tuple) where {F}
-    return Expr(:call, :tuple, map(n -> :(f(getfield(x, $n))), 1:fieldcount(x))...)
+    return Expr(:call, :tuple, map(n -> :(f(getfield(x, $n))), eachindex(x.parameters))...)
 end
 
 @inline @generated function tuple_map(f::F, x::Tuple, y::Tuple) where {F}
     if length(x.parameters) != length(y.parameters)
         return :(throw(ArgumentError("length(x) != length(y)")))
+    else
+        stmts = map(n -> :(f(getfield(x, $n), getfield(y, $n))), eachindex(x.parameters))
+        return Expr(:call, :tuple, stmts...)
     end
-    stmts = map(n -> :(f(getfield(x, $n), getfield(y, $n))), 1:fieldcount(x))
-    return Expr(:call, :tuple, stmts...)
 end
 
 for N in 1:128
