@@ -754,25 +754,28 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
                 # If arg is not an SSA / Argument, then no rdata ref to inc.
                 rev_data_id === nothing && return nothing
 
-                # Dereference the current rdata value.
-                rdata_id = ID()
-                rdata = (rdata_id, new_inst(Expr(:call, getfield, rev_data_id, QuoteNode(:x))))
-
                 # Extract rdata from result of calling pullback.
                 rdata_inc_id = ID()
                 rdata_inc_expr = Expr(:call, getfield, call_pullback_id, n)
                 rdata_inc = (rdata_inc_id, new_inst(rdata_inc_expr))
 
-                # Increment the rdata by the new rdata value returned by call_pullback.
-                new_rdata_id = ID()
-                new_rdata_expr = Expr(:call, increment!!, rdata_id, rdata_inc_id)
-                new_rdata = (new_rdata_id, new_inst(new_rdata_expr))
+                # Construct statments to increment ref.
+                return vcat(rdata_inc, increment_ref_stmts(rev_data_id, rdata_inc_id))
 
-                # Update the value stored in the rdata reference.
-                set_rdata_ref_expr = Expr(:call, setfield!, rev_data_id, QuoteNode(:x), new_rdata_id)
-                set_rdata_ref = (ID(), new_inst(set_rdata_ref_expr))
+                # # Dereference the current rdata value.
+                # rdata_id = ID()
+                # rdata = (rdata_id, new_inst(Expr(:call, getfield, rev_data_id, QuoteNode(:x))))
 
-                return [rdata, rdata_inc, new_rdata, set_rdata_ref]
+                # # Increment the rdata by the new rdata value returned by call_pullback.
+                # new_rdata_id = ID()
+                # new_rdata_expr = Expr(:call, increment!!, rdata_id, rdata_inc_id)
+                # new_rdata = (new_rdata_id, new_inst(new_rdata_expr))
+
+                # # Update the value stored in the rdata reference.
+                # set_rdata_ref_expr = Expr(:call, setfield!, rev_data_id, QuoteNode(:x), new_rdata_id)
+                # set_rdata_ref = (ID(), new_inst(set_rdata_ref_expr))
+
+                # return [rdata, rdata_inc, new_rdata, set_rdata_ref]
             end
 
             # Concatenate all statements, and return them.
@@ -828,6 +831,29 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         # Encountered an expression that we've not seen before.
         throw(error("Unrecognised expression $stmt"))
     end
+end
+
+"""
+    increment_ref_stmts(ref_id::ID, inc_data_id::ID)::Vector{IDInstPair}
+
+Equivalent to `ref[] = increment!!(ref[], inc_data)`, where `ref` and `inc_data` are the
+values associated to `ref_id` and `inc_data` respectively.
+"""
+function increment_ref_stmts(ref_id::ID, inc_data_id::ID)::Vector{IDInstPair}
+
+    # Get the value stored in the `Base.RefValue`.
+    ref_val_id = ID()
+    ref_val = (ref_val_id, new_inst(Expr(:call, getfield, ref_id, QuoteNode(:x))))
+
+    # Increment the value by inc_data.
+    new_val_id = ID()
+    new_val = (new_val_id, new_inst(Expr(:call, increment!!, ref_val_id, inc_data_id)))
+
+    # Update the value stored in the rdata reference.
+    set_ref_expr = Expr(:call, setfield!, ref_id, QuoteNode(:x), new_val_id)
+    set_ref = (ID(), new_inst(set_ref_expr))
+
+    return IDInstPair[ref_val, new_val, set_ref]
 end
 
 is_active(::Union{Argument,ID}) = true
@@ -1609,10 +1635,12 @@ function rvs_phi_block(
     pred_id::ID, rdata_ids::Vector{ID}, values::Vector{Any}, info::ADInfo
 )
     @assert length(rdata_ids) == length(values)
-    inc_stmts = map(rdata_ids, values) do id, val
-        stmt = Expr(:call, increment_if_ref!, get_rev_data_id(info, val), id)
-        return (ID(), new_inst(stmt))
+    tmp = map(rdata_ids, values) do id, val
+        rev_data_id = get_rev_data_id(info, val)
+        rev_data_id === nothing && return nothing
+        return increment_ref_stmts(rev_data_id, id)
     end
+    inc_stmts = reduce(vcat, filter(x -> !(x === nothing), tmp); init=IDInstPair[])
     goto_stmt = (ID(), new_inst(IDGotoNode(pred_id)))
     return BBlock(ID(), vcat(inc_stmts, goto_stmt))
 end
