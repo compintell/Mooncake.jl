@@ -480,21 +480,12 @@ function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
         output_rdata_ref_id = get_rev_data_id(info, line)
         fwds = PiNode(__inc(stmt.val), fcodual_type(CC.widenconst(stmt.typ)))
 
-        # Get value from output_rdata.
+        # Get the rdata from the output_rdata_ref, and set its new value to zero, and
+        # increment the output ref.
         output_rdata_id = ID()
-        output_rdata_expr = Expr(:call, getfield, output_rdata_ref_id, QuoteNode(:x))
-        output_rdata = (output_rdata_id, new_inst(output_rdata_expr))
-
-        # Zero-out output_rdata_ref.
-        r = Mooncake.zero_like_rdata_from_type(P)
-        set_ref_id = ID()
-        set_ref_expr = Expr(:call, setfield!, output_rdata_ref_id, QuoteNode(:x), r)
-        set_ref = (set_ref_id, new_inst(set_ref_expr))
-
-        # Increment value in rdata ref.
+        deref_stmts = deref_and_zero_stmts(P, output_rdata_ref_id, output_rdata_id)
         inc_exprs = increment_ref_stmts(val_rdata_ref_id, output_rdata_id)
-
-        rvs = vcat(IDInstPair[output_rdata, set_ref], inc_exprs)
+        rvs = vcat(deref_stmts, inc_exprs)
     else
         # If the value of the PiNode is a constant / QuoteNode etc, then there is nothing to
         # do on the reverse-pass.
@@ -1553,11 +1544,12 @@ function conclude_rvs_block(
 
     # Create statements which extract + zero the rdata refs associated to them.
     rdata_ids = map(_ -> ID(), phi_ids)
-    deref_stmts = map(phi_ids, rdata_ids) do phi_id, deref_id
+    tmp = map(phi_ids, rdata_ids) do phi_id, deref_id
         P = get_primal_type(info, phi_id)
         r = get_rev_data_id(info, phi_id)
-        return (deref_id, new_inst(Expr(:call, __deref_and_zero, P, r)))
+        return deref_and_zero_stmts(P, r, deref_id)
     end
+    deref_stmts = reduce(vcat, tmp; init=IDInstPair[])
 
     # For each predecessor, create a `BBlock` which processes its corresponding edge in
     # each of the `PhiNode`s.
@@ -1581,15 +1573,16 @@ function __get_value(edge::ID, x::IDPhiNode)
     return isassigned(x.values, n) ? x.values[n] : nothing
 end
 
-"""
-    __deref_and_zero(::Type{P}, x::Ref) where {P}
+function deref_and_zero_stmts(P, ref_id, val_id)
 
-Helper, used in conclude_rvs_block.
-"""
-@inline function __deref_and_zero(::Type{P}, x::Ref) where {P}
-    t = x[]
-    x[] = Mooncake.zero_like_rdata_from_type(P)
-    return t
+    # Get value from output_rdata.
+    val = (val_id, new_inst(Expr(:call, getfield, ref_id, QuoteNode(:x))))
+
+    # Zero-out output_rdata_ref.
+    r = Mooncake.zero_like_rdata_from_type(P)
+    set_ref = (ID(), new_inst(Expr(:call, setfield!, ref_id, QuoteNode(:x), r)))
+
+    return IDInstPair[val, set_ref]
 end
 
 """
