@@ -761,21 +761,6 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
 
                 # Construct statments to increment ref.
                 return vcat(rdata_inc, increment_ref_stmts(rev_data_id, rdata_inc_id))
-
-                # # Dereference the current rdata value.
-                # rdata_id = ID()
-                # rdata = (rdata_id, new_inst(Expr(:call, getfield, rev_data_id, QuoteNode(:x))))
-
-                # # Increment the rdata by the new rdata value returned by call_pullback.
-                # new_rdata_id = ID()
-                # new_rdata_expr = Expr(:call, increment!!, rdata_id, rdata_inc_id)
-                # new_rdata = (new_rdata_id, new_inst(new_rdata_expr))
-
-                # # Update the value stored in the rdata reference.
-                # set_rdata_ref_expr = Expr(:call, setfield!, rev_data_id, QuoteNode(:x), new_rdata_id)
-                # set_rdata_ref = (ID(), new_inst(set_rdata_ref_expr))
-
-                # return [rdata, rdata_inc, new_rdata, set_rdata_ref]
             end
 
             # Concatenate all statements, and return them.
