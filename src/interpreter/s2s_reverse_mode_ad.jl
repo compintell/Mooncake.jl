@@ -1596,10 +1596,14 @@ of some block:
 %6 = φ (#2 => _1, #3 => %5)
 %7 = φ (#2 => 5., #3 => _2)
 ```
-Let the tangent refs associated to `%6`, `%7`, and `_1`` be denoted `t%6`, `t%7`, and `t_1`
-resp., and let `pred_id` be `#2`, then this function will produce a basic block of the form
+Let the rdata refs associated to `%6`, `%7`, and `_1`` be denoted `r%6`, `r%7`, and `r_1`
+resp., and let `pred_id` be `#2`, and `increment_ref!` be the following function,
 ```julia
-increment_ref!(t_1, t%6)
+increment_ref!(ref, x) = ref[] = increment!!(ref[], x)
+```
+then this `rvs_phi_block` will produce a basic block of the form
+```julia
+increment_ref!(r_1, r%6)
 nothing
 goto #2
 ```
@@ -1611,6 +1615,12 @@ on.
 
 The same ideas apply if `pred_id` were `#3`. The block would end with `#3`, and there would
 be two `increment_ref!` calls because both `%5` and `_2` are not constants.
+
+In practice, code which is equivalent to `increment_ref!` is created directly, rather than
+inserting a call to a generic Julia function. This is because we need to be certain that
+the getfield and setfield! calls applied to any references are visible to the SROA
+optimisation pass. If we insert a call to a function like `increment_ref!`, it might not be
+inlined away, making such references opaque.
 """
 function rvs_phi_block(
     pred_id::ID, rdata_ids::Vector{ID}, values::Vector{Any}, info::ADInfo
