@@ -509,11 +509,6 @@ function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
     return ad_stmt_info(line, nothing, fwds, rvs)
 end
 
-@inline function __pi_rvs!(::Type{P}, val_rdata_ref::Ref, output_rdata_ref::Ref) where {P}
-    increment_ref!(val_rdata_ref, __deref_and_zero(P, output_rdata_ref))
-    return nothing
-end
-
 # Constant GlobalRefs are handled. See const_codual. Non-constant GlobalRefs are handled by
 # assuming that they are constant, and creating a CoDual with the value. We then check at
 # run-time that the value has not changed.
@@ -880,8 +875,6 @@ end
 
 __get_primal(x::CoDual) = primal(x)
 __get_primal(x) = x
-
-@inline increment_ref!(x::Ref, t) = setindex!(x, increment!!(x[], t))
 
 const RuleMC{A,R} = MistyClosure{OpaqueClosure{A,R}}
 
