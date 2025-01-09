@@ -1583,14 +1583,9 @@ ref[] = zero_rdata_from_type(P)
 ```
 """
 function deref_and_zero_stmts(P, ref_id, val_id)
-
-    # Get value from output_rdata.
     val = (val_id, new_inst(Expr(:call, getfield, ref_id, QuoteNode(:x))))
-
-    # Zero-out output_rdata_ref.
     r = Mooncake.zero_like_rdata_from_type(P)
     set_ref = (ID(), new_inst(Expr(:call, setfield!, ref_id, QuoteNode(:x), r)))
-
     return IDInstPair[val, set_ref]
 end
 
