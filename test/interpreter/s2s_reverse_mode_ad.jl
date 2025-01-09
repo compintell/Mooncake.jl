@@ -12,6 +12,8 @@ struct A
 end
 f(a, x) = dot(a.data, x)
 
+unstable_tester(x::Ref{Any}) = sin(x[])
+
 end
 
 @testset "s2s_reverse_mode_ad" begin
@@ -341,5 +343,10 @@ end
     @testset "Literal Types do not appear in shared data" begin
         f() = Float64
         @test length(build_rrule(Tuple{typeof(f)}).fwds_oc.oc.captures) == 2
+    end
+    @testset "all `Ref`s for rdata are eliminated in type unstable code" begin
+        ir = Mooncake.rvs_ir(Tuple{typeof(S2SGlobals.unstable_tester),Ref{Any}})
+        stmts = Mooncake.stmt(ir.stmts)
+        @test !any(x -> Meta.isexpr(x, :new) && x.args[1] <: Base.RefValue, stmts)
     end
 end
