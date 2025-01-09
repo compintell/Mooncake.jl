@@ -7,7 +7,7 @@ using Mooncake.TestUtils: test_rule
 
 # Rules in this file are only lightly tester, because they are all just @from_rrule rules.
 @testset "special_functions" begin
-    @testset for (perf_flag, f, x...) in vcat(
+    @testset "$perf_flag, $(typeof((f, x...)))" for (perf_flag, f, x...) in vcat(
         map([Float64, Float32]) do P
             return Any[
                 (:stability, airyai, P(0.1)),
@@ -51,7 +51,7 @@ using Mooncake.TestUtils: test_rule
     )
         test_rule(StableRNG(123456), f, x...; perf_flag)
     end
-    @testset for (perf_flag, f, x...) in vcat(
+    @testset "$perf_flag, $(typeof((f, x...)))" for (perf_flag, f, x...) in vcat(
         map([Float64, Float32]) do P
             return Any[
                 (:none, logerf, P(0.3), P(0.5)), # first branch

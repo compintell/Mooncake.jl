@@ -11,6 +11,8 @@ error -- please open an issue in such a situation.
 struct ZeroRData end
 
 @inline increment!!(::ZeroRData, r::R) where {R} = r
+@inline increment!!(r::R, ::ZeroRData) where {R} = r
+@inline increment!!(::ZeroRData, ::ZeroRData) = ZeroRData()
 
 """
     zero_like_rdata_type(::Type{P}) where {P}
