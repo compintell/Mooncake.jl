@@ -106,8 +106,6 @@ end
                 @test length(stmts.fwds) == 2
                 @test stmts.fwds[1][2].stmt isa Expr
                 @test stmts.fwds[2][2].stmt isa ReturnNode
-                @test Meta.isexpr(only(stmts.rvs)[2].stmt, :call)
-                @test only(stmts.rvs)[2].stmt.args[1] == Mooncake.increment_ref!
             end
             @testset "literal" begin
                 stmt_info = make_ad_stmts!(ReturnNode(5.0), line, info)

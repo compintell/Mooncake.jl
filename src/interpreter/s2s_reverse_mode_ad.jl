@@ -405,7 +405,7 @@ function make_ad_stmts!(stmt::ReturnNode, line::ID, info::ADInfo)
     end
     if is_active(stmt.val)
         rdata_id = get_rev_data_id(info, stmt.val)
-        rvs = new_inst(Expr(:call, increment_ref!, rdata_id, Argument(2)))
+        rvs = increment_ref_stmts(rdata_id, Argument(2))
         assert_id = ID()
         val = __inc(stmt.val)
         fwds = [
@@ -819,12 +819,12 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
 end
 
 """
-    increment_ref_stmts(ref_id::ID, inc_data_id::ID)::Vector{IDInstPair}
+    increment_ref_stmts(ref_id::ID, inc_data)::Vector{IDInstPair}
 
 Equivalent to `ref[] = increment!!(ref[], inc_data)`, where `ref` and `inc_data` are the
 values associated to `ref_id` and `inc_data` respectively.
 """
-function increment_ref_stmts(ref_id::ID, inc_data_id::ID)::Vector{IDInstPair}
+function increment_ref_stmts(ref_id::ID, inc_data)::Vector{IDInstPair}
 
     # Get the value stored in the `Base.RefValue`.
     ref_val_id = ID()
@@ -832,7 +832,7 @@ function increment_ref_stmts(ref_id::ID, inc_data_id::ID)::Vector{IDInstPair}
 
     # Increment the value by inc_data.
     new_val_id = ID()
-    new_val = (new_val_id, new_inst(Expr(:call, increment!!, ref_val_id, inc_data_id)))
+    new_val = (new_val_id, new_inst(Expr(:call, increment!!, ref_val_id, inc_data)))
 
     # Update the value stored in the rdata reference.
     set_ref_expr = Expr(:call, setfield!, ref_id, QuoteNode(:x), new_val_id)
