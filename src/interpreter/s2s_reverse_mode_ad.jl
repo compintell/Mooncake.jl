@@ -1437,7 +1437,7 @@ function pullback_ir(
 
         # De-reference the nth rdata.
         rdata_id = ID()
-        rdata = new_inst(Expr(:call, getindex, arg_rdata_ref_ids[n]))
+        rdata = new_inst(Expr(:call, getfield, arg_rdata_ref_ids[n], QuoteNode(:x)))
 
         # Get the nth lazy zero rdata.
         lazy_zero_rdata_id = ID()
