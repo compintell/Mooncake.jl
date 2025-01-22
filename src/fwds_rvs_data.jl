@@ -8,7 +8,7 @@ struct NoFData end
 
 Base.copy(::NoFData) = NoFData()
 
-_increment!!(::IncCache, ::NoFData, ::NoFData) = NoFData()
+increment_internal!!(::IncCache, ::NoFData, ::NoFData) = NoFData()
 
 """
     FData(data::NamedTuple)
@@ -26,8 +26,8 @@ _copy(x::P) where {P<:FData} = P(_copy(x.data))
 
 fields_type(::Type{FData{T}}) where {T<:NamedTuple} = T
 
-function _increment!!(c::IncCache, x::F, y::F) where {F<:FData}
-    return F(tuple_map(Base.Fix1(_increment!!, c), x.data, y.data))
+function increment_internal!!(c::IncCache, x::F, y::F) where {F<:FData}
+    return F(tuple_map(Base.Fix1(increment_internal!!, c), x.data, y.data))
 end
 
 """
@@ -384,7 +384,7 @@ struct NoRData end
 
 Base.copy(::NoRData) = NoRData()
 
-@inline _increment!!(::IncCache, ::NoRData, ::NoRData) = NoRData()
+@inline increment_internal!!(::IncCache, ::NoRData, ::NoRData) = NoRData()
 
 @inline increment_field!!(::NoRData, y, ::Val) = NoRData()
 
@@ -396,8 +396,8 @@ _copy(x::P) where {P<:RData} = P(_copy(x.data))
 
 fields_type(::Type{RData{T}}) where {T<:NamedTuple} = T
 
-@inline function _increment!!(c::IncCache, x::RData{T}, y::RData{T}) where {T}
-    return RData(_increment!!(c, x.data, y.data))
+@inline function increment_internal!!(c::IncCache, x::RData{T}, y::RData{T}) where {T}
+    return RData(increment_internal!!(c, x.data, y.data))
 end
 
 @inline function increment_field!!(x::RData{T}, y, ::Val{f}) where {T,f}
@@ -962,7 +962,7 @@ Increment the rdata component of tangent `t` by `r`, and return the updated tang
 Useful for implementation getfield-like rules for mutable structs, pointers, dicts, etc.
 """
 function increment_rdata!!(t::T, r) where {T}
-    return tangent(fdata(t), _increment!!(NoCache(), rdata(t), r))::T
+    return tangent(fdata(t), increment_internal!!(NoCache(), rdata(t), r))::T
 end
 
 """

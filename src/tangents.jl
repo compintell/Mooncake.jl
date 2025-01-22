@@ -610,32 +610,32 @@ Add `x` to `y`. If `ismutabletype(T)`, then `increment!!(x, y) === x` must hold.
 That is, `increment!!` will mutate `x`.
 This must apply recursively if `T` is a composite type whose fields are mutable.
 """
-increment!!(x::T, y::T) where {T} = _increment!!(IdDict{Any,Bool}(), x, y)
+increment!!(x::T, y::T) where {T} = increment_internal!!(IdDict{Any,Bool}(), x, y)
 
-_increment!!(::IncCache, ::NoTangent, ::NoTangent) = NoTangent()
-_increment!!(::IncCache, x::T, y::T) where {T<:IEEEFloat} = x + y
-function _increment!!(::IncCache, x::Ptr{T}, y::Ptr{T}) where {T}
+increment_internal!!(::IncCache, ::NoTangent, ::NoTangent) = NoTangent()
+increment_internal!!(::IncCache, x::T, y::T) where {T<:IEEEFloat} = x + y
+function increment_internal!!(::IncCache, x::Ptr{T}, y::Ptr{T}) where {T}
     return x === y ? x : throw(error("eurgh"))
 end
-function _increment!!(c::IncCache, x::T, y::T) where {T<:Tuple}
-    return tuple_map((x, y) -> _increment!!(c, x, y), x, y)::T
+function increment_internal!!(c::IncCache, x::T, y::T) where {T<:Tuple}
+    return tuple_map((x, y) -> increment_internal!!(c, x, y), x, y)::T
 end
-function _increment!!(c::IncCache, x::T, y::T) where {T<:NamedTuple}
-    return T(tuple_map((x, y) -> _increment!!(c, x, y), x, y))
+function increment_internal!!(c::IncCache, x::T, y::T) where {T<:NamedTuple}
+    return T(tuple_map((x, y) -> increment_internal!!(c, x, y), x, y))
 end
-function _increment!!(c::IncCache, x::T, y::T) where {T<:PossiblyUninitTangent}
-    is_init(x) && is_init(y) && return T(_increment!!(c, val(x), val(y)))
+function increment_internal!!(c::IncCache, x::T, y::T) where {T<:PossiblyUninitTangent}
+    is_init(x) && is_init(y) && return T(increment_internal!!(c, val(x), val(y)))
     is_init(x) && !is_init(y) && error("x is initialised, but y is not")
     !is_init(x) && is_init(y) && error("x is not initialised, but y is")
     return x
 end
-function _increment!!(c::IncCache, x::T, y::T) where {T<:Tangent}
-    return T(_increment!!(c, x.fields, y.fields))
+function increment_internal!!(c::IncCache, x::T, y::T) where {T<:Tangent}
+    return T(increment_internal!!(c, x.fields, y.fields))
 end
-function _increment!!(c::IncCache, x::T, y::T) where {T<:MutableTangent}
+function increment_internal!!(c::IncCache, x::T, y::T) where {T<:MutableTangent}
     (x === y || haskey(c, x)) && return x
     c[x] = true
-    x.fields = _increment!!(c, x.fields, y.fields)
+    x.fields = increment_internal!!(c, x.fields, y.fields)
     return x
 end
 
@@ -644,21 +644,23 @@ end
 
 Set `x` to its zero element (`x` should be a tangent, so the zero must exist).
 """
-set_to_zero!!(x) = _set_to_zero!!(IdDict{Any,Bool}(), x)
+set_to_zero!!(x) = set_to_zero_internal!!(IdDict{Any,Bool}(), x)
 
-_set_to_zero!!(::IncCache, ::NoTangent) = NoTangent()
-_set_to_zero!!(::IncCache, x::Base.IEEEFloat) = zero(x)
-function _set_to_zero!!(c::IncCache, x::Union{Tuple,NamedTuple})
-    return tuple_map(Base.Fix1(_set_to_zero!!, c), x)
+set_to_zero_internal!!(::IncCache, ::NoTangent) = NoTangent()
+set_to_zero_internal!!(::IncCache, x::Base.IEEEFloat) = zero(x)
+function set_to_zero_internal!!(c::IncCache, x::Union{Tuple,NamedTuple})
+    return tuple_map(Base.Fix1(set_to_zero_internal!!, c), x)
 end
-function _set_to_zero!!(c::IncCache, x::T) where {T<:PossiblyUninitTangent}
-    return is_init(x) ? T(_set_to_zero!!(c, val(x))) : x
+function set_to_zero_internal!!(c::IncCache, x::T) where {T<:PossiblyUninitTangent}
+    return is_init(x) ? T(set_to_zero_internal!!(c, val(x))) : x
 end
-_set_to_zero!!(c::IncCache, x::T) where {T<:Tangent} = T(_set_to_zero!!(c, x.fields))
-function _set_to_zero!!(c::IncCache, x::MutableTangent)
+function set_to_zero_internal!!(c::IncCache, x::T) where {T<:Tangent}
+    return T(set_to_zero_internal!!(c, x.fields))
+end
+function set_to_zero_internal!!(c::IncCache, x::MutableTangent)
     haskey(c, x) && return x
     setindex!(c, false, x)
-    x.fields = _set_to_zero!!(c, x.fields)
+    x.fields = set_to_zero_internal!!(c, x.fields)
     return x
 end
 
@@ -673,22 +675,22 @@ Should be defined for all standard tangent types.
 Multiply tangent `t` by scalar `a`. Always possible because any given tangent type must
 correspond to a vector field. Not using `*` in order to avoid piracy.
 """
-_scale(a::Float64, t) = __scale(IdDict{Any, Any}(), a, t)
+_scale(a::Float64, t) = _scale_internal(IdDict{Any, Any}(), a, t)
 
-__scale(::MaybeCache, ::Float64, ::NoTangent) = NoTangent()
-__scale(::MaybeCache, a::Float64, t::T) where {T<:IEEEFloat} = T(a * t)
-function __scale(c::MaybeCache, a::Float64, t::Union{Tuple,NamedTuple})
-    return map(t -> __scale(c, a, t), t)
+_scale_internal(::MaybeCache, ::Float64, ::NoTangent) = NoTangent()
+_scale_internal(::MaybeCache, a::Float64, t::T) where {T<:IEEEFloat} = T(a * t)
+function _scale_internal(c::MaybeCache, a::Float64, t::Union{Tuple,NamedTuple})
+    return map(t -> _scale_internal(c, a, t), t)
 end
-function __scale(c::MaybeCache, a::Float64, t::T) where {T<:PossiblyUninitTangent}
-    return is_init(t) ? T(__scale(c, a, val(t))) : T()
+function _scale_internal(c::MaybeCache, a::Float64, t::T) where {T<:PossiblyUninitTangent}
+    return is_init(t) ? T(_scale_internal(c, a, val(t))) : T()
 end
-__scale(c::MaybeCache, a::Float64, t::T) where {T<:Tangent} = T(__scale(c, a, t.fields))
-function __scale(c::MaybeCache, a::Float64, t::T) where {T<:MutableTangent}
+_scale_internal(c::MaybeCache, a::Float64, t::T) where {T<:Tangent} = T(_scale_internal(c, a, t.fields))
+function _scale_internal(c::MaybeCache, a::Float64, t::T) where {T<:MutableTangent}
     haskey(c, t) && return c[t]::T
     y = T()
     c[t] = y
-    y.fields = __scale(c, a, t.fields)
+    y.fields = _scale_internal(c, a, t.fields)
     return y
 end
 
@@ -703,22 +705,22 @@ Should be defined for all standard tangent types.
 Inner product between tangents `t` and `s`. Must return a `Float64`.
 Always available because all tangent types correspond to finite-dimensional vector spaces.
 """
-_dot(t::T, s::T) where {T} = __dot(IdDict{Any, Any}(), t, s)
+_dot(t::T, s::T) where {T} = _dot_internal(IdDict{Any, Any}(), t, s)
 
-__dot(::MaybeCache, ::NoTangent, ::NoTangent) = 0.0
-__dot(::MaybeCache, t::T, s::T) where {T<:IEEEFloat} = Float64(t * s)
-function __dot(c::MaybeCache, t::T, s::T) where {T<:Union{Tuple,NamedTuple}}
-    return sum(map((t, s) -> __dot(c, t, s), t, s); init=0.0)
+_dot_internal(::MaybeCache, ::NoTangent, ::NoTangent) = 0.0
+_dot_internal(::MaybeCache, t::T, s::T) where {T<:IEEEFloat} = Float64(t * s)
+function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:Union{Tuple,NamedTuple}}
+    return sum(map((t, s) -> _dot_internal(c, t, s), t, s); init=0.0)
 end
-function __dot(c::MaybeCache, t::T, s::T) where {T<:PossiblyUninitTangent}
-    is_init(t) && is_init(s) && return __dot(c, val(t), val(s))
+function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:PossiblyUninitTangent}
+    is_init(t) && is_init(s) && return _dot_internal(c, val(t), val(s))
     return 0.0
 end
-function __dot(c::MaybeCache, t::T, s::T) where {T<:Union{Tangent,MutableTangent}}
+function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:Union{Tangent,MutableTangent}}
     key = (t, s)
     haskey(c, key) && return c[key]::Float64
     c[key] = 0.0
-    return sum(_map((t, s) -> __dot(c, t, s), t.fields, s.fields); init=0.0)
+    return sum(_map((t, s) -> _dot_internal(c, t, s), t.fields, s.fields); init=0.0)
 end
 
 """
@@ -746,20 +748,20 @@ end
 Here, the value returned by `_add_to_primal` will satisfy the invariant asserted in the
 inner constructor for `Foo`.
 """
-_add_to_primal(p, t, unsafe::Bool=false) = __add_to_primal(IdDict{Any, Any}(), p, t, unsafe)
-__add_to_primal(::MaybeCache, x, ::NoTangent, ::Bool) = x
-__add_to_primal(::MaybeCache, x::T, t::T, ::Bool) where {T<:IEEEFloat} = x + t
-function __add_to_primal(c::MaybeCache, x::SimpleVector, t::Vector{Any}, unsafe::Bool)
+_add_to_primal(p, t, unsafe::Bool=false) = _add_to_primal_internal(IdDict{Any, Any}(), p, t, unsafe)
+_add_to_primal_internal(::MaybeCache, x, ::NoTangent, ::Bool) = x
+_add_to_primal_internal(::MaybeCache, x::T, t::T, ::Bool) where {T<:IEEEFloat} = x + t
+function _add_to_primal_internal(c::MaybeCache, x::SimpleVector, t::Vector{Any}, unsafe::Bool)
     haskey(c, (x, t, unsafe)) && return c[(x, t, unsafe)]::SimpleVector
-    x′ = svec(map(n -> __add_to_primal(c, x[n], t[n], unsafe), eachindex(x))...)
+    x′ = svec(map(n -> _add_to_primal_internal(c, x[n], t[n], unsafe), eachindex(x))...)
     c[(x, t, unsafe)] = x′
     return x′
 end
-function __add_to_primal(c::MaybeCache, x::Tuple, t::Tuple, unsafe::Bool)
-    return _map((x, t) -> __add_to_primal(c, x, t, unsafe), x, t)
+function _add_to_primal_internal(c::MaybeCache, x::Tuple, t::Tuple, unsafe::Bool)
+    return _map((x, t) -> _add_to_primal_internal(c, x, t, unsafe), x, t)
 end
-function __add_to_primal(c::MaybeCache, x::NamedTuple, t::NamedTuple, unsafe::Bool)
-    return _map((x, t) -> __add_to_primal(c, x, t, unsafe), x, t)
+function _add_to_primal_internal(c::MaybeCache, x::NamedTuple, t::NamedTuple, unsafe::Bool)
+    return _map((x, t) -> _add_to_primal_internal(c, x, t, unsafe), x, t)
 end
 
 struct AddToPrimalException <: Exception
@@ -804,7 +806,7 @@ function __construct_type(::Type{P}, unsafe::Bool, fields::Vararg{Any, N})::P wh
     end
 end
 
-function __add_to_primal(c::MaybeCache, p::P, t::T, unsafe::Bool) where {P,T<:Tangent}
+function _add_to_primal_internal(c::MaybeCache, p::P, t::T, unsafe::Bool) where {P,T<:Tangent}
     Tt = tangent_type(P)
     if Tt != typeof(t)
         throw(ArgumentError("p of type $P has tangent_type $Tt, but t is of type $T"))
@@ -813,14 +815,14 @@ function __add_to_primal(c::MaybeCache, p::P, t::T, unsafe::Bool) where {P,T<:Ta
         tf = getfield(t.fields, f)
         isdefined(p, f) &&
             is_init(tf) &&
-            return __add_to_primal(c, getfield(p, f), val(tf), unsafe)
+            return _add_to_primal_internal(c, getfield(p, f), val(tf), unsafe)
         !isdefined(p, f) && !is_init(tf) && return FieldUndefined()
         throw(error("unable to handle undefined-ness"))
     end
     return __construct_type(P, unsafe, fields...)
 end
 
-function __add_to_primal(c::MaybeCache, p::P, t::T, unsafe::Bool) where {P,T<:MutableTangent}
+function _add_to_primal_internal(c::MaybeCache, p::P, t::T, unsafe::Bool) where {P,T<:MutableTangent}
 
     # Do not recompute if we already have a perturbed primal.
     key = (p, t, unsafe)
@@ -839,7 +841,7 @@ function __add_to_primal(c::MaybeCache, p::P, t::T, unsafe::Bool) where {P,T<:Mu
     init_fields = map(fieldnames(P)) do f
         tf = getfield(t.fields, f)
         if isdefined(p, f) && is_init(tf) && isconst(P, f)
-            return __add_to_primal(c, getfield(p, f), val(tf), unsafe)
+            return _add_to_primal_internal(c, getfield(p, f), val(tf), unsafe)
         elseif isdefined(p, f) && is_init(tf) && !isconst(P, f)
             return getfield(p, f)
         elseif !isdefined(p, f) && !is_init(tf)
@@ -859,7 +861,7 @@ function __add_to_primal(c::MaybeCache, p::P, t::T, unsafe::Bool) where {P,T<:Mu
     map(fieldnames(P)) do f
         tf = getfield(t.fields, f)
         if isdefined(p, f) && is_init(tf) && !isconst(P, f)
-            setfield!(p′, f, __add_to_primal(c, getfield(p, f), val(tf), unsafe))
+            setfield!(p′, f, _add_to_primal_internal(c, getfield(p, f), val(tf), unsafe))
         end
     end
     return p′
@@ -873,8 +875,8 @@ Required for testing.
 Computes the difference between `p` and `q`, which _must_ be of the same type, `P`.
 Returns a tangent of type `tangent_type(P)`.
 """
-_diff(p::P, q::P) where {P} = __diff(IdDict{Any, Any}(), p, q)
-function __diff(c::MaybeCache, p::P, q::P) where {P}
+_diff(p::P, q::P) where {P} = _diff_internal(IdDict{Any, Any}(), p, q)
+function _diff_internal(c::MaybeCache, p::P, q::P) where {P}
     tangent_type(P) === NoTangent && return NoTangent()
     T = Tangent{NamedTuple{(),Tuple{}}}
     tangent_type(P) === T && return T((;))
@@ -882,17 +884,17 @@ function __diff(c::MaybeCache, p::P, q::P) where {P}
     haskey(c, key) && return c[key]::tangent_type(P)
     return _containerlike_diff(c, p, q)
 end
-__diff(::MaybeCache, p::P, q::P) where {P<:IEEEFloat} = p - q
-function __diff(c::MaybeCache, p::P, q::P) where {P<:SimpleVector}
+_diff_internal(::MaybeCache, p::P, q::P) where {P<:IEEEFloat} = p - q
+function _diff_internal(c::MaybeCache, p::P, q::P) where {P<:SimpleVector}
     key = (p, q)
     haskey(c, key) && return c[key]::tangent_type(P)
-    t = Any[__diff(c, a, b) for (a, b) in zip(p, q)]
+    t = Any[_diff_internal(c, a, b) for (a, b) in zip(p, q)]
     c[key] = t
     return t
 end
-function __diff(c::MaybeCache, p::P, q::P) where {P<:Union{Tuple,NamedTuple}}
+function _diff_internal(c::MaybeCache, p::P, q::P) where {P<:Union{Tuple,NamedTuple}}
     tangent_type(P) == NoTangent && return NoTangent()
-    return _map((p, q) -> __diff(c, p, q), p, q)
+    return _map((p, q) -> _diff_internal(c, p, q), p, q)
 end
 
 function _containerlike_diff(c::MaybeCache, p::P, q::P) where {P}
@@ -902,7 +904,7 @@ function _containerlike_diff(c::MaybeCache, p::P, q::P) where {P}
     end
     diffed_fields = map(fieldnames(P)) do f
         if isdefined(p, f) && isdefined(q, f)
-            return __diff(c, getfield(p, f), getfield(q, f))
+            return _diff_internal(c, getfield(p, f), getfield(q, f))
         elseif !isdefined(p, f) && !isdefined(q, f)
             return FieldUndefined()
         else

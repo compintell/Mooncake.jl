@@ -65,56 +65,56 @@ function TestUtils.has_equal_data_internal(
     return all(equality)
 end
 
-function _increment!!(c::IncCache, x::Memory{P}, y::Memory{P}) where {P}
+function increment_internal!!(c::IncCache, x::Memory{P}, y::Memory{P}) where {P}
     (haskey(c, x) || x === y) && return x
     c[x] = true
-    return _map_if_assigned!((x, y) -> _increment!!(c, x, y), x, x, y)
+    return _map_if_assigned!((x, y) -> increment_internal!!(c, x, y), x, x, y)
 end
 
-function _set_to_zero!!(c::IncCache, x::Memory)
+function set_to_zero_internal!!(c::IncCache, x::Memory)
     haskey(c, x) && return x
     c[x] = false
-    return _map_if_assigned!(Base.Fix1(_set_to_zero!!, c), x, x)
+    return _map_if_assigned!(Base.Fix1(set_to_zero_internal!!, c), x, x)
 end
 
-function __add_to_primal(c::MaybeCache, p::Memory{P}, t::Memory, unsafe::Bool) where {P}
+function _add_to_primal_internal(c::MaybeCache, p::Memory{P}, t::Memory, unsafe::Bool) where {P}
     k = (p, t, unsafe)
     haskey(c, k) && return c[k]::Memory{P}
     p′ = Memory{P}(undef, length(p))
     c[k] = p′
-    return _map_if_assigned!((p, t) -> __add_to_primal(c, p, t, unsafe), p′, p, t)
+    return _map_if_assigned!((p, t) -> _add_to_primal_internal(c, p, t, unsafe), p′, p, t)
 end
 
-function __diff(c::MaybeCache, p::Memory{P}, q::Memory{P}) where {P}
+function _diff_internal(c::MaybeCache, p::Memory{P}, q::Memory{P}) where {P}
     key = (p, q)
     haskey(c, key) && return c[key]::tangent_type(P)
     t = Memory{tangent_type(P)}(undef, length(p))
     c[key] = t
-    return _map_if_assigned!((p, q) -> __diff(c, p, q), t, p, q)
+    return _map_if_assigned!((p, q) -> _diff_internal(c, p, q), t, p, q)
 end
 
-function __dot(c::MaybeCache, t::Memory{T}, s::Memory{T}) where {T}
+function _dot_internal(c::MaybeCache, t::Memory{T}, s::Memory{T}) where {T}
     key = (t, s)
     haskey(c, key) && return c[key]::Float64
     c[key] = 0.0
-    isbitstype(T) && return sum(_map((t, s) -> __dot(c, t, s), t, s))
+    isbitstype(T) && return sum(_map((t, s) -> _dot_internal(c, t, s), t, s))
     return sum(
         _map(eachindex(t)) do n
-            (isassigned(t, n) && isassigned(s, n)) ? __dot(c, t[n], s[n]) : 0.0
+            (isassigned(t, n) && isassigned(s, n)) ? _dot_internal(c, t[n], s[n]) : 0.0
         end;
         init=0.0,
     )
 end
 
-function __scale(c::MaybeCache, a::Float64, t::Memory{T}) where {T}
+function _scale_internal(c::MaybeCache, a::Float64, t::Memory{T}) where {T}
     haskey(c, t) && return c[t]::Memory{T}
     t′ = Memory{T}(undef, length(t))
     c[t] = t′
-    return _map_if_assigned!(t -> __scale(c, a, t), t′, t)
+    return _map_if_assigned!(t -> _scale_internal(c, a, t), t′, t)
 end
 
-import .TestUtils: populate_address_map!
-function populate_address_map!(m::TestUtils.AddressMap, p::Memory, t::Memory)
+import .TestUtils: populate_address_map_internal
+function populate_address_map_internal(m::TestUtils.AddressMap, p::Memory, t::Memory)
     k = pointer_from_objref(p)
     v = pointer_from_objref(t)
     if haskey(m, k)
@@ -122,7 +122,7 @@ function populate_address_map!(m::TestUtils.AddressMap, p::Memory, t::Memory)
         return m
     end
     m[k] = v
-    foreach(n -> isassigned(p, n) && populate_address_map!(m, p[n], t[n]), eachindex(p))
+    foreach(n -> isassigned(p, n) && populate_address_map_internal(m, p[n], t[n]), eachindex(p))
     return m
 end
 
@@ -174,53 +174,53 @@ function randn_tangent_internal(rng::AbstractRNG, x::Array, stackdict::Maybe{IdD
     return dx::T
 end
 
-function _increment!!(c::IncCache, x::T, y::T) where {T<:Array}
+function increment_internal!!(c::IncCache, x::T, y::T) where {T<:Array}
     (haskey(c, x) || x === y) && return x
     c[x] = true
-    _map_if_assigned!((x, y) -> _increment!!(c, x, y), x, x, y)
+    _map_if_assigned!((x, y) -> increment_internal!!(c, x, y), x, x, y)
     return x
 end
 
-function _set_to_zero!!(c::IncCache, x::Array)
+function set_to_zero_internal!!(c::IncCache, x::Array)
     haskey(c, x) && return x
     c[x] = false
-    return _map_if_assigned!(Base.Fix1(_set_to_zero!!, c), x, x)
+    return _map_if_assigned!(Base.Fix1(set_to_zero_internal!!, c), x, x)
 end
 
-function __scale(c::MaybeCache, a::Float64, t::T) where {T<:Array}
+function _scale_internal(c::MaybeCache, a::Float64, t::T) where {T<:Array}
     haskey(c, t) && return c[t]::T
     t′ = T(undef, size(t)...)
     c[t] = t′
-    return _map_if_assigned!(t -> __scale(c, a, t), t′, t)
+    return _map_if_assigned!(t -> _scale_internal(c, a, t), t′, t)
 end
 
-function __dot(c::MaybeCache, t::T, s::T) where {T<:Array}
+function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:Array}
     key = (t, s)
     haskey(c, key) && return c[key]::Float64
     c[key] = 0.0
-    isbitstype(T) && return sum(_map((t, s) -> __dot(c, t, s), t, s))
+    isbitstype(T) && return sum(_map((t, s) -> _dot_internal(c, t, s), t, s))
     return sum(
         _map(eachindex(t)) do n
-            (isassigned(t, n) && isassigned(s, n)) ? __dot(c, t[n], s[n]) : 0.0
+            (isassigned(t, n) && isassigned(s, n)) ? _dot_internal(c, t[n], s[n]) : 0.0
         end;
         init=0.0,
     )
 end
 
-function __add_to_primal(c::MaybeCache, x::Array{P,N}, t::Array{<:Any,N}, unsafe::Bool) where {P,N}
+function _add_to_primal_internal(c::MaybeCache, x::Array{P,N}, t::Array{<:Any,N}, unsafe::Bool) where {P,N}
     key = (x, t, unsafe)
     haskey(c, key) && return c[key]::Array{P,N}
     x′ = Array{P,N}(undef, size(x)...)
     c[key] = x′
-    return _map_if_assigned!((x, t) -> __add_to_primal(c, x, t, unsafe), x′, x, t)
+    return _map_if_assigned!((x, t) -> _add_to_primal_internal(c, x, t, unsafe), x′, x, t)
 end
 
-function __diff(c::MaybeCache, p::P, q::P) where {P<:Array}
+function _diff_internal(c::MaybeCache, p::P, q::P) where {P<:Array}
     key = (p, q)
     haskey(c, key) && return c[key]::tangent_type(P)
     t = tangent_type(P)(undef, size(p))
     c[key] = t
-    return _map_if_assigned!((p, q) -> __diff(c, p, q), t, p, q)
+    return _map_if_assigned!((p, q) -> _diff_internal(c, p, q), t, p, q)
 end
 
 # Rules
@@ -308,33 +308,33 @@ function TestUtils.has_equal_data_internal(
     return equal_refs && equal_data
 end
 
-function _increment!!(c::IncCache, x::P, y::P) where {P<:MemoryRef}
-    return construct_ref(x, _increment!!(c, x.mem, y.mem))
+function increment_internal!!(c::IncCache, x::P, y::P) where {P<:MemoryRef}
+    return construct_ref(x, increment_internal!!(c, x.mem, y.mem))
 end
 
-function _set_to_zero!!(c::IncCache, x::MemoryRef)
-    _set_to_zero!!(c, x.mem)
+function set_to_zero_internal!!(c::IncCache, x::MemoryRef)
+    set_to_zero_internal!!(c, x.mem)
     return x
 end
 
-function __add_to_primal(c::MaybeCache, p::MemoryRef, t::MemoryRef, unsafe::Bool)
-    return construct_ref(p, __add_to_primal(c, p.mem, t.mem, unsafe))
+function _add_to_primal_internal(c::MaybeCache, p::MemoryRef, t::MemoryRef, unsafe::Bool)
+    return construct_ref(p, _add_to_primal_internal(c, p.mem, t.mem, unsafe))
 end
 
-function __diff(c::MaybeCache, p::P, q::P) where {P<:MemoryRef}
+function _diff_internal(c::MaybeCache, p::P, q::P) where {P<:MemoryRef}
     @assert Core.memoryrefoffset(p) == Core.memoryrefoffset(q)
-    return construct_ref(p, __diff(c, p.mem, q.mem))
+    return construct_ref(p, _diff_internal(c, p.mem, q.mem))
 end
 
-function __dot(c::MaybeCache, t::T, s::T) where {T<:MemoryRef}
+function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:MemoryRef}
     @assert Core.memoryrefoffset(t) == Core.memoryrefoffset(s)
-    return __dot(c, t.mem, s.mem)
+    return _dot_internal(c, t.mem, s.mem)
 end
 
-__scale(c::MaybeCache, a::Float64, t::MemoryRef) = construct_ref(t, __scale(c, a, t.mem))
+_scale_internal(c::MaybeCache, a::Float64, t::MemoryRef) = construct_ref(t, _scale_internal(c, a, t.mem))
 
-function populate_address_map!(m::TestUtils.AddressMap, p::MemoryRef, t::MemoryRef)
-    return populate_address_map!(m, p.mem, t.mem)
+function populate_address_map_internal(m::TestUtils.AddressMap, p::MemoryRef, t::MemoryRef)
+    return populate_address_map_internal(m, p.mem, t.mem)
 end
 
 # FData / RData Interface Implementation

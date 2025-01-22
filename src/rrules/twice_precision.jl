@@ -29,17 +29,17 @@ end
 
 increment!!(t::T, s::T) where {T<:TWP} = t + s
 
-_set_to_zero!!(::IncCache, t::TWP) = zero_tangent_internal(t, nothing)
+set_to_zero_internal!!(::IncCache, t::TWP) = zero_tangent_internal(t, nothing)
 
-__add_to_primal(::MaybeCache, p::P, t::P, ::Bool) where {P<:TWP} = p + t
+_add_to_primal_internal(::MaybeCache, p::P, t::P, ::Bool) where {P<:TWP} = p + t
 
-__diff(::MaybeCache, p::P, q::P) where {P<:TWP} = p - q
+_diff_internal(::MaybeCache, p::P, q::P) where {P<:TWP} = p - q
 
-__dot(::MaybeCache, t::P, s::P) where {P<:TWP} = Float64(t) * Float64(s)
+_dot_internal(::MaybeCache, t::P, s::P) where {P<:TWP} = Float64(t) * Float64(s)
 
-__scale(::MaybeCache, a::Float64, t::TWP) = a * t
+_scale_internal(::MaybeCache, a::Float64, t::TWP) = a * t
 
-populate_address_map!(m::AddressMap, ::P, ::P) where {P<:TWP} = m
+populate_address_map_internal(m::AddressMap, ::P, ::P) where {P<:TWP} = m
 
 fdata_type(::Type{<:TWP}) = NoFData
 

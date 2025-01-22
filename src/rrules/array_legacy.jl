@@ -22,46 +22,46 @@ function increment!!(x::T, y::T) where {P,N,T<:Array{P,N}}
     return x === y ? x : _map_if_assigned!(increment!!, x, x, y)
 end
 
-function _set_to_zero!!(c::IncCache, x::Array)
+function set_to_zero_internal!!(c::IncCache, x::Array)
     haskey(c, x) && return x
     c[x] = false
-    return _map_if_assigned!(Base.Fix1(_set_to_zero!!, c), x, x)
+    return _map_if_assigned!(Base.Fix1(set_to_zero_internal!!, c), x, x)
 end
 
-function __scale(c::MaybeCache, a::Float64, t::Array{T,N}) where {T,N}
+function _scale_internal(c::MaybeCache, a::Float64, t::Array{T,N}) where {T,N}
     haskey(c, t) && return c[t]::Array{T,N}
     t′ = Array{T,N}(undef, size(t)...)
     c[t] = t′
-    return _map_if_assigned!(t -> __scale(c, a, t), t′, t)
+    return _map_if_assigned!(t -> _scale_internal(c, a, t), t′, t)
 end
 
-function __dot(c::MaybeCache, t::T, s::T) where {T<:Array}
+function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:Array}
     key = (t, s)
     haskey(c, key) && return c[key]::Float64
     c[key] = 0.0
-    isbitstype(T) && return sum(_map((t, s) -> __dot(c, t, s), t, s))
+    isbitstype(T) && return sum(_map((t, s) -> _dot_internal(c, t, s), t, s))
     return sum(
         _map(eachindex(t)) do n
-            (isassigned(t, n) && isassigned(s, n)) ? __dot(c, t[n], s[n]) : 0.0
+            (isassigned(t, n) && isassigned(s, n)) ? _dot_internal(c, t[n], s[n]) : 0.0
         end;
         init=0.0,
     )
 end
 
-function __add_to_primal(c::MaybeCache, x::Array{P,N}, t::Array{<:Any,N}, unsafe::Bool) where {P,N}
+function _add_to_primal_internal(c::MaybeCache, x::Array{P,N}, t::Array{<:Any,N}, unsafe::Bool) where {P,N}
     key = (x, t, unsafe)
     haskey(c, key) && return c[key]::Array{P,N}
     x′ = Array{P,N}(undef, size(x)...)
     c[key] = x′
-    return _map_if_assigned!((x, t) -> __add_to_primal(c, x, t, unsafe), x′, x, t)
+    return _map_if_assigned!((x, t) -> _add_to_primal_internal(c, x, t, unsafe), x′, x, t)
 end
 
-function __diff(c::MaybeCache, p::P, q::P) where {V,N,P<:Array{V,N}}
+function _diff_internal(c::MaybeCache, p::P, q::P) where {V,N,P<:Array{V,N}}
     key = (p, q)
     haskey(c, key) && return c[key]::tangent_type(P)
     t = Array{tangent_type(V),N}(undef, size(p))
     c[key] = t
-    return _map_if_assigned!(__diff, t, p, q)
+    return _map_if_assigned!(_diff_internal, t, p, q)
 end
 
 @zero_adjoint MinimalCtx Tuple{Type{<:Array{T,N}},typeof(undef),Vararg} where {T,N}
