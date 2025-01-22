@@ -924,7 +924,7 @@ end
         tt <: PossiblyUninitTangent && return n <= N ? :($tt(fields[$n])) : :($tt())
         return :(fields[$n])
     end
-    nt_expr = Expr(:call, NamedTuple{fieldnames(P)}, Expr(:tuple, tangent_values_exprs...))
+    nt_expr = Expr(:call, backing_type(P), Expr(:tuple, tangent_values_exprs...))
     return Expr(:block, Expr(:call, :setfield!, :t, :(:fields), nt_expr), :(return t))
 end
 
@@ -1137,8 +1137,8 @@ function tangent_test_cases()
         (a=3, b=randn(10)),
         (a=randn(10), b=randn(10)),
         (Base.TOML.ErrorType(1), NoTangent()), # Enum
-        # circular_vector,
-        # TestResources.make_circular_reference_struct(),
+        circular_vector,
+        TestResources.make_circular_reference_struct(),
         TestResources.make_indirect_circular_reference_array(),
         # Regression tests to catch type inference failures, see https://github.com/compintell/Mooncake.jl/pull/422
         (((((randn(33)...,),),),),),

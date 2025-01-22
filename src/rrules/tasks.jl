@@ -77,7 +77,7 @@ set_tangent_field!(t::TaskTangent, f, ::NoTangent) = NoTangent()
 
 @zero_adjoint MinimalCtx Tuple{typeof(current_task)}
 
-_verify_fdata_value(::Task, ::TaskTangent) = nothing
+__verify_fdata_value(::IdDict{Any,Nothing}, ::Task, ::TaskTangent) = nothing
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:tasks})
     test_cases = Any[

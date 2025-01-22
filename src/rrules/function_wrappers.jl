@@ -139,7 +139,11 @@ rdata_type(::Type{FunctionWrapperTangent}) = NoRData
 tangent_type(F::Type{<:FunctionWrapperTangent}, ::Type{NoRData}) = F
 tangent(f::FunctionWrapperTangent, ::NoRData) = f
 
-_verify_fdata_value(p::FunctionWrapper, t::FunctionWrapperTangent) = nothing
+function __verify_fdata_value(
+    ::IdDict{Any,Nothing}, p::FunctionWrapper, t::FunctionWrapperTangent
+)
+    return nothing
+end
 
 # Will: to the best of my knowledge, no one has ever actually worked with FunctionWrappers
 # before in the ChainRules ecosystem. Consequently, it shouldn't matter what type we use

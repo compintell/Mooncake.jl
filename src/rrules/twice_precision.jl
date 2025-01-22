@@ -45,7 +45,7 @@ fdata_type(::Type{<:TWP}) = NoFData
 
 rdata_type(P::Type{<:TWP}) = P
 
-_verify_fdata_value(::P, ::P) where {P<:TWP} = nothing
+__verify_fdata_value(::IdDict{Any,Nothing}, ::P, ::P) where {P<:TWP} = nothing
 
 _verify_rdata_value(::P, ::P) where {P<:TWP} = nothing
 

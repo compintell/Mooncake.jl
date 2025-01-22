@@ -495,7 +495,7 @@ function test_rrule_interface(f_f̄, x_x̄...; rule)
 
     # Check that returned fdata type is correct.
     @test typeof(y_ȳ.dx) == fdata_type(tangent_type(typeof(y_ȳ.x)))
-    @test Mooncake._verify_fdata_value(y_ȳ.x, y_ȳ.dx) === nothing
+    @test Mooncake._verify_fdata_value(IdDict{Any,Nothing}(), y_ȳ.x, y_ȳ.dx) === nothing
 
     # Run the reverse-pass. Throw a meaningful exception if it doesn't run at all.
     ȳ = Mooncake.rdata(zero_tangent(primal(y_ȳ), tangent(y_ȳ)))

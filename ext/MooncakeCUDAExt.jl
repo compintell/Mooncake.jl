@@ -74,7 +74,7 @@ function populate_address_map!(m::AddressMap, p::CuArray, t::CuArray)
     m[k] = v
     return m
 end
-function Mooncake._verify_fdata_value(p::CuArray, f::CuArray)
+function Mooncake.__verify_fdata_value(::IdDict{Any,Nothing}, p::CuArray, f::CuArray)
     if size(p) != size(f)
         throw(InvalidFDataException("p has size $(size(p)) but f has size $(size(f))"))
     end

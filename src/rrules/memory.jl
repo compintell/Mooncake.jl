@@ -132,12 +132,12 @@ tangent_type(::Type{F}, ::Type{NoRData}) where {F<:Memory} = F
 
 tangent(f::Memory, ::NoRData) = f
 
-function _verify_fdata_value(p::Memory{P}, f::Memory{F}) where {P,F}
+function __verify_fdata_value(::IdDict{Any,Nothing}, p::Memory{P}, f::Memory{F}) where {P,F}
     if length(p) != length(f)
         msg =
             "length(p) == $(length(p)) but length(f) == $(length(f)). " *
             "p isa Memory{$P} and f isa Memory{$F}"
-        throw(error(msg))
+        throw(InvalidFDataException(msg))
     end
     return nothing
 end
@@ -347,8 +347,8 @@ tangent_type(::Type{<:MemoryRef{T}}, ::Type{NoRData}) where {T} = MemoryRef{T}
 
 tangent(f::MemoryRef, ::NoRData) = f
 
-function _verify_fdata_value(p::MemoryRef{P}, f::MemoryRef{T}) where {P,T}
-    return _verify_fdata_value(p.mem, f.mem)
+function __verify_fdata_value(c::IdDict{Any,Nothing}, p::MemoryRef{P}, f::MemoryRef{T}) where {P,T}
+    return _verify_fdata_value(c, p.mem, f.mem)
 end
 
 #

@@ -83,7 +83,7 @@ fdata(t::IdDict) = t
 rdata_type(::Type{<:IdDict}) = NoRData
 rdata(t::IdDict) = NoRData()
 
-_verify_fdata_value(p::IdDict, f::IdDict) = nothing
+__verify_fdata_value(::IdDict{Any,Nothing}, p::IdDict, f::IdDict) = nothing
 
 tangent_type(::Type{T}, ::Type{NoRData}) where {T<:IdDict} = T
 tangent(f::IdDict, ::NoRData) = f
