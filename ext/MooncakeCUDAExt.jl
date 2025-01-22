@@ -49,7 +49,7 @@ function __add_to_primal(c::MaybeCache, x::P, y::P, ::Bool) where {P<:CuArray{<:
     c[(x, y, unsafe)] = x′
     return x′
 end
-function __diff(c::Cache, x::P, y::P) where {P<:CuArray{<:IEEEFloat}}
+function __diff(c::MaybeCache, x::P, y::P) where {P<:CuArray{<:IEEEFloat}}
     key = (x, y)
     haskey(c, key) && return c[key]::tangent_type(P)
     t = x - y

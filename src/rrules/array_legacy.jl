@@ -35,7 +35,7 @@ function __scale(c::MaybeCache, a::Float64, t::Array{T,N}) where {T,N}
     return _map_if_assigned!(t -> __scale(c, a, t), t′, t)
 end
 
-function __dot(c::Cache, t::T, s::T) where {T<:Array}
+function __dot(c::MaybeCache, t::T, s::T) where {T<:Array}
     key = (t, s)
     haskey(c, key) && return c[key]::Float64
     c[key] = 0.0
