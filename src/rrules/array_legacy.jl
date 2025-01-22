@@ -61,7 +61,7 @@ function _diff_internal(c::MaybeCache, p::P, q::P) where {V,N,P<:Array{V,N}}
     haskey(c, key) && return c[key]::tangent_type(P)
     t = Array{tangent_type(V),N}(undef, size(p))
     c[key] = t
-    return _map_if_assigned!(_diff_internal, t, p, q)
+    return _map_if_assigned!(Base.Fix1(_diff_internal, c), t, p, q)
 end
 
 @zero_adjoint MinimalCtx Tuple{Type{<:Array{T,N}},typeof(undef),Vararg} where {T,N}

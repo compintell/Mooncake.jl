@@ -11,11 +11,11 @@ import Mooncake:
     @is_primitive,
     tangent_type,
     tangent,
-    zero_tangent,
-    randn_tangent,
-    increment!!,
+    zero_tangent_internal,
+    randn_tangent_internal,
+    increment_internal!!,
     set_to_zero_internal!!,
-    add_to_primal_internal,
+    _add_to_primal_internal,
     _diff_internal,
     _dot_internal,
     _scale_internal,
@@ -23,26 +23,41 @@ import Mooncake:
     CoDual,
     NoPullback,
     to_cr_tangent,
-    increment_and_get_rdata!
+    increment_and_get_rdata!,
+    MaybeCache,
+    IncCache
 
 import Mooncake.TestUtils: populate_address_map_internal, AddressMap, __increment_should_allocate
 
 # Tell Mooncake.jl how to handle CuArrays.
 
 Mooncake.@tt_effects tangent_type(::Type{P}) where {P<:CuArray{<:IEEEFloat}} = P
-zero_tangent(x::CuArray{<:IEEEFloat}) = zero(x)
-function randn_tangent(rng::AbstractRNG, x::CuArray{Float32})
-    return cu(randn(rng, Float32, size(x)...))
+function zero_tangent_internal(x::P, stackdict::Any) where {P<:CuArray{<:IEEEFloat}}
+    haskey(stackdict, x) && return stackdict[x]::tangent_type(P)
+    t = zero(x)
+    stackdict[x] = t
+    return t
+end
+function randn_tangent_internal(rng::AbstractRNG, x::P, stackdict::Any) where {P<:CuArray{<:IEEEFloat}}
+    haskey(stackdict, x) && return stackdict[x]::tangent_type(P)
+    t = cu(randn(rng, Float32, size(x)...))
+    stackdict[x] = t
+    return t
 end
 function TestUtils.has_equal_data_internal(
     x::P, y::P, equal_undefs::Bool, d::Dict{Tuple{UInt,UInt},Bool}
 ) where {P<:CuArray{<:IEEEFloat}}
     return isapprox(x, y)
 end
-increment!!(x::P, y::P) where {P<:CuArray{<:IEEEFloat}} = x .+= y
+function increment_internal!!(c::IncCache, x::P, y::P) where {P<:CuArray{<:IEEEFloat}}
+    (x === y || haskey(c, x)) && return x
+    c[x] = true
+    x .+= y
+    return x
+end
 __increment_should_allocate(::Type{<:CuArray{<:IEEEFloat}}) = true
 set_to_zero_internal!!(::Mooncake.IncCache, x::CuArray{<:IEEEFloat}) = x .= 0
-function _add_to_primal_internal(c::MaybeCache, x::P, y::P, ::Bool) where {P<:CuArray{<:IEEEFloat}}
+function _add_to_primal_internal(c::MaybeCache, x::P, y::P, unsafe::Bool) where {P<:CuArray{<:IEEEFloat}}
     key = (x, y, unsafe)
     haskey(c, key) && return c[key]::P
     x′ = x + y
