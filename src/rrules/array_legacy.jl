@@ -18,8 +18,10 @@ function randn_tangent_internal(
     return _map_if_assigned!(x -> randn_tangent_internal(rng, x, stackdict), dx, x)
 end
 
-function increment!!(x::T, y::T) where {P,N,T<:Array{P,N}}
-    return x === y ? x : _map_if_assigned!(increment!!, x, x, y)
+function increment_internal!!(c::IncCache, x::T, y::T) where {P,N,T<:Array{P,N}}
+    (haskey(c, x) || x === y) && return x
+    c[x] = true
+    return _map_if_assigned!((x, y) -> increment_internal!!(c, x, y), x, x, y)
 end
 
 function set_to_zero_internal!!(c::IncCache, x::Array)
@@ -61,7 +63,7 @@ function _diff_internal(c::MaybeCache, p::P, q::P) where {V,N,P<:Array{V,N}}
     haskey(c, key) && return c[key]::tangent_type(P)
     t = Array{tangent_type(V),N}(undef, size(p))
     c[key] = t
-    return _map_if_assigned!(Base.Fix1(_diff_internal, c), t, p, q)
+    return _map_if_assigned!((p, q) -> _diff_internal(c, p, q), t, p, q)
 end
 
 @zero_adjoint MinimalCtx Tuple{Type{<:Array{T,N}},typeof(undef),Vararg} where {T,N}
