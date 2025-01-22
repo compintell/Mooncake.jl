@@ -21,7 +21,7 @@ Here I outline the overall problem, the mistake the previous implementation made
 tangent_type(::Type{Float64}) = Float64
 tangent_type(::Type{P}) where {P<:Tuple} = Tuple{map(tangent_type, fieldtypes(P))...}
 ```
-If we run this for `Float64`, we see that everything is as expected -- the function literally just returns `Float64`:
+If we inspect the `IRCode` associated to this for `Float64`, we see that everything is as expected -- the function literally just returns `Float64`:
 ```julia
 julia> Base.code_ircode(tangent_type, (Type{Float64}, ))[1]
  1 ─     return Main.Float64
