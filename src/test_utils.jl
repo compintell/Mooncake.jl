@@ -872,80 +872,70 @@ function test_tangent_consistency(rng::AbstractRNG, p::P; interface_only=false) 
 
     # Call this, rather than `increment!!`, to ensure that a method exists for
     # `_increment!!` for `p`, not just `increment!!`.
-    fresh_inc!!(x, y) = Mooncake._increment!!(IdSet{Any}(), x, y)
+    fresh_inc!!(x, y) = Mooncake._increment!!(IdDict{Any,Bool}(), x, y)
 
     # Verify z is zero via its action on t.
     zc = deepcopy([z])[1]
     tc = deepcopy([t])[1]
-    @show "adding zeros"
     @test has_equal_data(@inferred(fresh_inc!!(zc, zc)), zc)
-    # @show "done adding zeros"
-    # display(zc)
-    # println()
-    # display(tc)
-    # println()
-    # println("hmm")
-    # display(fresh_inc!!(deepcopy(zc), deepcopy(tc)))
-    # println()
-    # println("hmm2")
     @test has_equal_data(fresh_inc!!(zc, tc), tc)
-    # @test has_equal_data(fresh_inc!!(tc, zc), tc)
+    @test has_equal_data(fresh_inc!!(tc, zc), tc)
 
-    # # increment!! preserves types.
-    # @test fresh_inc!!(zc, zc) isa T
-    # @test fresh_inc!!(zc, tc) isa T
-    # @test fresh_inc!!(tc, zc) isa T
+    # increment!! preserves types.
+    @test fresh_inc!!(zc, zc) isa T
+    @test fresh_inc!!(zc, tc) isa T
+    @test fresh_inc!!(tc, zc) isa T
 
-    # # The output of `increment!!` for a mutable type must have the property that the first
-    # # argument === the returned value.
-    # if ismutabletype(P)
-    #     @test fresh_inc!!(zc, zc) === zc
-    #     @test fresh_inc!!(tc, zc) === tc
-    #     @test fresh_inc!!(zc, tc) === zc
-    #     @test fresh_inc!!(tc, tc) === tc
-    # end
+    # The output of `increment!!` for a mutable type must have the property that the first
+    # argument === the returned value.
+    if ismutabletype(P)
+        @test fresh_inc!!(zc, zc) === zc
+        @test fresh_inc!!(tc, zc) === tc
+        @test fresh_inc!!(zc, tc) === zc
+        @test fresh_inc!!(tc, tc) === tc
+    end
 
-    # # If t isn't the zero element, then adding it to itself must change its value.
-    # if !has_equal_data(t, z) && !ismutabletype(P)
-    #     tc′ = fresh_inc!!(tc, tc)
-    #     @test tc === tc′ || !has_equal_data(tc′, tc)
-    # end
+    # If t isn't the zero element, then adding it to itself must change its value.
+    if !has_equal_data(t, z) && !ismutabletype(P)
+        tc′ = fresh_inc!!(tc, tc)
+        @test tc === tc′ || !has_equal_data(tc′, tc)
+    end
 
-    # # Setting to zero equals zero.
-    # @test has_equal_data(_set_to_zero!!(IdSet{Any}(), tc), z)
-    # @test has_equal_data(set_to_zero!!(tc), z)
-    # if ismutabletype(P)
-    #     @test set_to_zero!!(tc) === tc
-    # end
+    # Setting to zero equals zero.
+    @test has_equal_data(_set_to_zero!!(IdDict{Any,Bool}(), tc), z)
+    @test has_equal_data(set_to_zero!!(tc), z)
+    if ismutabletype(P)
+        @test set_to_zero!!(tc) === tc
+    end
 
-    # z = zero_tangent(p)
-    # r = randn_tangent(rng, p)
+    z = zero_tangent(p)
+    r = randn_tangent(rng, p)
 
-    # # Check set_tangent_field if mutable.
-    # t isa MutableTangent && test_set_tangent_field!_correctness(deepcopy(t), deepcopy(z))
+    # Check set_tangent_field if mutable.
+    t isa MutableTangent && test_set_tangent_field!_correctness(deepcopy(t), deepcopy(z))
 
-    # # Verify that operations required for finite difference testing to run, and produce the
-    # # correct output type.
-    # @test _add_to_primal(p, t, true) isa P
-    # @test _diff(p, p) isa T
-    # @test _dot(t, t) isa Float64
-    # @test _scale(11.0, t) isa T
-    # @test populate_address_map(p, t) isa AddressMap
+    # Verify that operations required for finite difference testing to run, and produce the
+    # correct output type.
+    @test _add_to_primal(p, t, true) isa P
+    @test _diff(p, p) isa T
+    @test _dot(t, t) isa Float64
+    @test _scale(11.0, t) isa T
+    @test populate_address_map(p, t) isa AddressMap
 
-    # # Run some basic numerical sanity checks on the output the functions required for finite
-    # # difference testing. These are necessary but insufficient conditions.
-    # if !interface_only
-    #     @test has_equal_data(_add_to_primal(p, z, true), p)
-    #     if !has_equal_data(z, r)
-    #         @test !has_equal_data(_add_to_primal(p, r, true), p)
-    #     end
-    #     @test has_equal_data(_diff(p, p), zero_tangent(p))
-    # end
-    # @test _dot(t, t) >= 0.0
-    # @test _dot(t, zero_tangent(p)) == 0.0
-    # @test _dot(t, increment!!(deepcopy(t), t)) ≈ 2 * _dot(t, t)
-    # @test has_equal_data(_scale(1.0, t), t)
-    # @test has_equal_data(_scale(2.0, t), increment!!(deepcopy(t), t))
+    # Run some basic numerical sanity checks on the output the functions required for finite
+    # difference testing. These are necessary but insufficient conditions.
+    if !interface_only
+        @test has_equal_data(_add_to_primal(p, z, true), p)
+        if !has_equal_data(z, r)
+            @test !has_equal_data(_add_to_primal(p, r, true), p)
+        end
+        @test has_equal_data(_diff(p, p), zero_tangent(p))
+    end
+    @test _dot(t, t) >= 0.0
+    @test _dot(t, zero_tangent(p)) == 0.0
+    @test _dot(t, increment!!(deepcopy(t), t)) ≈ 2 * _dot(t, t)
+    @test has_equal_data(_scale(1.0, t), t)
+    @test has_equal_data(_scale(2.0, t), increment!!(deepcopy(t), t))
 end
 
 function test_set_tangent_field!_correctness(t1::T, t2::T) where {T<:MutableTangent}

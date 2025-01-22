@@ -66,8 +66,8 @@ function TestUtils.has_equal_data_internal(
 end
 
 function _increment!!(c::IncCache, x::Memory{P}, y::Memory{P}) where {P}
-    (x in c || x === y) && return x
-    push!(c, x)
+    (haskey(c, x) || x === y) && return x
+    c[x] = true
     return _map_if_assigned!((x, y) -> _increment!!(c, x, y), x, x, y)
 end
 
@@ -81,7 +81,7 @@ function __add_to_primal(c::MaybeCache, p::Memory{P}, t::Memory, unsafe::Bool) w
     k = (p, t, unsafe)
     haskey(c, k) && return c[k]::Memory{P}
     p′ = Memory{P}(undef, length(p))
-    c[key] = p′
+    c[k] = p′
     return _map_if_assigned!((p, t) -> __add_to_primal(c, p, t, unsafe), p′, p, t)
 end
 
@@ -175,21 +175,9 @@ function randn_tangent_internal(rng::AbstractRNG, x::Array, stackdict::Maybe{IdD
 end
 
 function _increment!!(c::IncCache, x::T, y::T) where {T<:Array}
-    @show "doing this one"
-    display(x)
-    display(y)
-    println("end")
-    if (x in c || x === y)
-        @show "found x"
-        return x
-    else
-        @show "continuing"
-    end
-    push!(c, x)
-    display(c)
+    (haskey(c, x) || x === y) && return x
+    c[x] = true
     _map_if_assigned!((x, y) -> _increment!!(c, x, y), x, x, y)
-    println("x after is")
-    display(x)
     return x
 end
 

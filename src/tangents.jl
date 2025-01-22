@@ -444,11 +444,6 @@ end
 
 backing_type(P::Type) = NamedTuple{fieldnames(P),Tuple{tangent_field_types(P)...}}
 
-struct NoCache end
-
-Base.in(x, ::NoCache) = false
-Base.push!(::NoCache, v) = nothing
-
 """
     zero_tangent(x)
 
@@ -601,6 +596,13 @@ function randn_tangent_struct_field(rng::AbstractRNG, x::P, d) where {P}
     return backing_type(P)(tangent_field_zeros)
 end
 
+struct NoCache end
+
+Base.haskey(::NoCache, x) = false
+Base.setindex!(::NoCache, v, x) = nothing
+
+const IncCache = Union{NoCache,IdDict{Any,Bool}}
+
 """
     increment!!(x::T, y::T) where {T}
 
@@ -608,9 +610,8 @@ Add `x` to `y`. If `ismutabletype(T)`, then `increment!!(x, y) === x` must hold.
 That is, `increment!!` will mutate `x`.
 This must apply recursively if `T` is a composite type whose fields are mutable.
 """
-increment!!(x::T, y::T) where {T} = _increment!!(IdSet{Any}(), x, y)
+increment!!(x::T, y::T) where {T} = _increment!!(IdDict{Any,Bool}(), x, y)
 
-const IncCache = Union{NoCache, IdSet{Any}}
 _increment!!(::IncCache, ::NoTangent, ::NoTangent) = NoTangent()
 _increment!!(::IncCache, x::T, y::T) where {T<:IEEEFloat} = x + y
 function _increment!!(::IncCache, x::Ptr{T}, y::Ptr{T}) where {T}
@@ -632,18 +633,11 @@ function _increment!!(c::IncCache, x::T, y::T) where {T<:Tangent}
     return T(_increment!!(c, x.fields, y.fields))
 end
 function _increment!!(c::IncCache, x::T, y::T) where {T<:MutableTangent}
-    (x === y || in(x, c)) && return x
-    push!(c, x)
+    (x === y || haskey(c, x)) && return x
+    c[x] = true
     x.fields = _increment!!(c, x.fields, y.fields)
     return x
 end
-
-struct NoCache end
-
-Base.haskey(::NoCache, x) = false
-Base.setindex!(::NoCache, v, x) = nothing
-
-const IncCache = Union{NoCache,IdDict{Any,Bool}}
 
 """
     set_to_zero!!(x)
@@ -1143,8 +1137,8 @@ function tangent_test_cases()
     ]
     VERSION >= v"1.11" && push!(rel_test_cases, fill!(Memory{Float64}(undef, 3), 3.0))
     return vcat(
-        # map(x -> (false, x...), abs_test_cases),
+        map(x -> (false, x...), abs_test_cases),
         map(x -> (false, x), rel_test_cases),
-        # map(Mooncake.TestTypes.instantiate, Mooncake.TestTypes.PRIMALS),
+        map(Mooncake.TestTypes.instantiate, Mooncake.TestTypes.PRIMALS),
     )
 end

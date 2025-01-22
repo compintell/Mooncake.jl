@@ -92,7 +92,6 @@
 
     @testset "$(typeof(data))" for (interface_only, data...) in
                                    Mooncake.tangent_test_cases()
-        @show data
         test_tangent(Xoshiro(123456), data...; interface_only)
     end
 
