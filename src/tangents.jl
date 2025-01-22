@@ -918,6 +918,16 @@ function _containerlike_diff(c::MaybeCache, p::P, q::P) where {P}
     end
 end
 
+# For mutable types.
+@generated function _build_tangent(::Type{P}, t::T, fields::Vararg{Any,N}) where {P,T,N}
+    tangent_values_exprs = map(enumerate(tangent_field_types(P))) do (n, tt)
+        tt <: PossiblyUninitTangent && return n <= N ? :($tt(fields[$n])) : :($tt())
+        return :(fields[$n])
+    end
+    nt_expr = Expr(:call, NamedTuple{fieldnames(P)}, Expr(:tuple, tangent_values_exprs...))
+    return Expr(:block, Expr(:call, :setfield!, :t, :(:fields), nt_expr), :(return t))
+end
+
 """
     increment_field!!(x::T, y::V, f) where {T, V}
 
