@@ -51,5 +51,5 @@ is_primitive(::Type{MinimalCtx}, ::Type{<:Tuple{typeof(foo), Float64}}) = true
 You should implemented more complicated method of `is_primitive` in the usual way.
 """
 macro is_primitive(Tctx, sig)
-    return esc(:(Mooncake.is_primitive(::Type{$Tctx}, ::Type{<:$sig}) = true))
+    return :(Mooncake.is_primitive(::Type{$(esc(Tctx))}, ::Type{<:$(esc(sig))}) = true)
 end

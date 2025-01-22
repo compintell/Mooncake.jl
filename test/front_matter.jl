@@ -25,12 +25,10 @@ using Mooncake:
     TestUtils,
     TestResources,
     CoDual,
-    _wrap_field,
     DefaultCtx,
     rrule!!,
     lgetfield,
     lsetfield!,
-    build_tangent,
     Stack,
     _typeof,
     BBCode,
@@ -64,7 +62,9 @@ using Mooncake:
     is_primitive,
     MinimalCtx,
     stmt,
-    _type
+    can_produce_zero_rdata_from_type,
+    zero_rdata_from_type,
+    CannotProduceZeroRDataFromType
 
 using .TestUtils:
     test_rule,

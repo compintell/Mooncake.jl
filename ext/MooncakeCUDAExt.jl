@@ -10,6 +10,7 @@ import Mooncake:
     rrule!!,
     @is_primitive,
     tangent_type,
+    tangent,
     zero_tangent,
     randn_tangent,
     increment!!,
@@ -20,18 +21,24 @@ import Mooncake:
     __scale,
     TestUtils,
     CoDual,
-    NoPullback
+    NoPullback,
+    to_cr_tangent,
+    increment_and_get_rdata!
 
 import Mooncake.TestUtils: populate_address_map!, AddressMap, __increment_should_allocate
 
 # Tell Mooncake.jl how to handle CuArrays.
 
-tangent_type(::Type{P}) where {P<:CuArray{<:IEEEFloat}} = P
+Mooncake.@tt_effects tangent_type(::Type{P}) where {P<:CuArray{<:IEEEFloat}} = P
 zero_tangent(x::CuArray{<:IEEEFloat}) = zero(x)
 function randn_tangent(rng::AbstractRNG, x::CuArray{Float32})
     return cu(randn(rng, Float32, size(x)...))
 end
-TestUtils.has_equal_data(x::P, y::P) where {P<:CuArray{<:IEEEFloat}} = x == y
+function TestUtils.has_equal_data_internal(
+    x::P, y::P, equal_undefs::Bool, d::Dict{Tuple{UInt,UInt},Bool}
+) where {P<:CuArray{<:IEEEFloat}}
+    return isapprox(x, y)
+end
 increment!!(x::P, y::P) where {P<:CuArray{<:IEEEFloat}} = x .+= y
 __increment_should_allocate(::Type{<:CuArray{<:IEEEFloat}}) = true
 _set_to_zero!!(::Mooncake.IncCache, x::CuArray{<:IEEEFloat}) = x .= 0
@@ -72,6 +79,14 @@ function Mooncake._verify_fdata_value(p::CuArray, f::CuArray)
         throw(InvalidFDataException("p has size $(size(p)) but f has size $(size(f))"))
     end
     return nothing
+end
+tangent_type(::Type{P}, ::Type{NoRData}) where {P<:CuArray} = P
+tangent(p::CuArray, ::NoRData) = p
+
+to_cr_tangent(x::CuArray{<:IEEEFloat}) = x
+function increment_and_get_rdata!(f::T, ::NoRData, t::T) where {T<:CuArray{<:IEEEFloat}}
+    f .+= t
+    return NoRData()
 end
 
 # Basic rules for operating on CuArrays.
