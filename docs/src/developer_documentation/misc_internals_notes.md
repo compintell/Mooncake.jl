@@ -42,7 +42,7 @@ julia> Base.code_ircode(tangent_type, (Type{Tuple{Tuple{Float64}}}, ))[1]
   └──      return %3
    => Type{<:Tuple}
 ```
-This was one particular example, but it is really very straightforward to find others, necessitating a hunt for a more robust way of implementing tangent_type.
+This is just one specific example, but it is really very straightforward to find others, necessitating a hunt for a more robust way of implementing tangent_type.
 
 ### Bad Generated Function Implementation
 
