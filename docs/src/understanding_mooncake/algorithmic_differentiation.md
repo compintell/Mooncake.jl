@@ -5,7 +5,8 @@ Even if you have worked with AD before, we recommend reading in order to acclima
 
 # Derivatives
 
-A foundation on which all of AD is built the the derivate -- we require a fairly general definition of it, which we build up to here.
+The foundation of automatic differentiation is the directional derivative.
+Here we build up to a general definition.
 
 _**Scalar-to-Scalar Functions**_
 
@@ -14,7 +15,7 @@ Its derivative at ``x`` is usually thought of as the scalar ``\alpha \in \RR`` s
 ```math
 \text{d}f = \alpha \, \text{d}x .
 ```
-Loosely speaking, by this notation we mean that for arbitrary small changes ``\text{d} x`` in the input to ``f``, the change in the output ``\text{d} f`` is ``\alpha \, \text{d}x``.
+Loosely speaking, by this notation we mean ``f(x + \text{d} x) \approx f(x) + \text{d} f``, or in other words, that an arbitrarily small change ``\text{d} x`` to the input ``x`` results in a change ``\text{d} f = \alpha \, \text{d}x`` in the output.
 We refer readers to the first few minutes of the [first lecture mentioned before](https://ocw.mit.edu/courses/18-s096-matrix-calculus-for-machine-learning-and-beyond-january-iap-2023/resources/ocw_18s096_lecture01-part2_2023jan18_mp4/) for a more careful explanation.
 
 _**Vector-to-Vector Functions**_
@@ -26,8 +27,8 @@ The generalisation of this to Euclidean space should be familiar: if ``f : \RR^P
 
 It is possible to stop here, as all the functions we shall need to consider can in principle be written as functions on some subset ``\RR^P``.
 
-However, when we consider differentiating computer programmes, we will have to deal with complicated nested data structures, e.g. `struct`s inside `Tuple`s inside `Vector`s etc.
-While all of these data structures _can_ be mapped onto a flat vector in order to make sense of the Jacobian of a computer programme, this becomes very inconvenient very quickly.
+However, to differentiate computer programmes, we must deal with complicated nested data structures, e.g. `struct`s inside `Tuple`s inside `Vector`s etc.
+While all of these data structures _can_ be mapped onto a flat vector in order to make sense of the Jacobian, this quickly becomes very inconvenient.
 To see the problem, consider the Julia function whose input is of type `Tuple{Tuple{Float64, Vector{Float64}}, Vector{Float64}, Float64}` and whose output is of type `Tuple{Vector{Float64}, Float64}`.
 What kind of object might be use to represent the derivative of a function mapping between these two spaces?
 We certainly _can_ treat these as structured "view" into a "flat" `Vector{Float64}`s, and then define a Jacobian, but actually _finding_ this mapping is a tedious exercise, even if it quite obviously exists.
@@ -40,7 +41,7 @@ In order to do so, we now introduce a generalised notion of the derivative.
 _**Functions Between More General Spaces**_
 
 In order to avoid the difficulties described above, we consider functions ``f : \mathcal{X} \to \mathcal{Y}``, where ``\mathcal{X}`` and ``\mathcal{Y}`` are _finite_ dimensional real Hilbert spaces (read: finite-dimensional vector space with an inner product, and real-valued scalars).
-This definition includes functions to / from ``\RR``, ``\RR^D``, but also real-valued matrices, and any other "container" for collections of real numbers.
+This definition includes functions to and from ``\RR``, ``\RR^D``, real-valued matrices, and any other "container" for collections of real numbers.
 Furthermore, we shall see later how we can model all sorts of structured representations of data directly as such spaces.
 
 For such spaces, the derivative of ``f`` at ``x \in \mathcal{X}`` is the linear operator (read: linear function) ``D f [x] : \mathcal{X} \to \mathcal{Y}`` satisfying
@@ -49,7 +50,7 @@ For such spaces, the derivative of ``f`` at ``x \in \mathcal{X}`` is the linear 
 ```
 The purpose of this linear operator is to provide a linear approximation to ``f`` which is accurate for arguments which are very close to ``x``.
 
-Please note that ``D f [x]`` is a single mathematical object, despite the fact that 3 separate symbols are used to denote it -- ``D f [x] (\dot{x})`` denotes the application of the function ``D f [x]`` to argument ``\dot{x}``.
+Please note that ``D f [x]`` is a single mathematical object, despite being three separate symbols: ``D f [x] (\dot{x})`` denotes the application of the function ``D f [x]`` to argument ``\dot{x}``.
 Furthermore, the dot-notation (``\dot{x}``) does not have anything to do with time-derivatives, it is simply common notation used in the AD literature to denote the arguments of derivatives.
 
 So, instead of thinking of the derivative as a number or a matrix, we think about it as a _function_.
@@ -120,12 +121,12 @@ This is useful because we can obtain the gradient from this when ``Q = 1`` by le
 _**Adjoint Operators**_
 
 In order to generalise this algorithm to work with linear operators, we must first generalise the idea of multiplying a vector by the transpose of the Jacobian.
-The relevant concept here is that of the _adjoint_ _operator_.
+The relevant concept here is the _adjoint_ of a linear operator.
 Specifically, the adjoint ``A^\ast`` of linear operator ``A`` is the linear operator satisfying
 ```math
 \langle A^\ast \bar{y}, \dot{x} \rangle = \langle \bar{y}, A \dot{x} \rangle.
 ```
-where ``\langle \cdot, \cdot \rangle`` denotes the inner-product.
+for any ``\dot{x}, \bar{y}``, where ``\langle \cdot, \cdot \rangle`` denotes the inner-product.
 The relationship between the adjoint and matrix transpose is: if ``A (x) := J x`` for some matrix ``J``, then ``A^\ast (y) := J^\top y``.
 
 Moreover, just as ``(A B)^\top = B^\top A^\top`` when ``A`` and ``B`` are matrices, ``(A B)^\ast = B^\ast A^\ast`` when ``A`` and ``B`` are linear operators.
