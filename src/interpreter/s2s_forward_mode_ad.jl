@@ -24,7 +24,8 @@ function build_frule(
     end
 
     # If we have a hand-coded rule, just use that.
-    is_primitive(C, sig_or_mi) && return (debug_mode ? DebugFRule(frule!!) : frule!!)
+    sig = _get_sig(sig_or_mi)
+    is_primitive(C, sig) && return (debug_mode ? DebugFRule(frule!!) : frule!!)
 
     # We don't have a hand-coded rule, so derived one.
     lock(MOONCAKE_INFERENCE_LOCK)
