@@ -1,9 +1,10 @@
+# include("../front_matter.jl")
+
 #=
 Failing cases:
-- 7: need help for frule of getfield
-- 10: need help to adapt @zero_adjoint to forward mode
+- 10: need help with a PossiblyUninitTangent in the input duals
 =#
-working_cases = vcat(1:6, 8:9)
+working_cases = vcat(1:10)
 
 @testset verbose = true "s2s_forward_mode_ad" begin
     test_cases = collect(enumerate(TestResources.generate_test_functions()))[working_cases]

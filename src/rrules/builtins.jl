@@ -626,6 +626,14 @@ end
 
 const StandardFDataType = Union{Tuple,NamedTuple,FData,MutableTangent,NoFData}
 
+function frule!!(::Dual{typeof(getfield)}, x::Dual{P}, name::Dual) where {P}
+    if tangent_type(P) == NoTangent
+        y = uninit_dual(getfield(primal(x), primal(name)))
+        return y
+    else
+        error("case not handled yet")
+    end
+end
 function rrule!!(
     f::CoDual{typeof(getfield)}, x::CoDual{P,<:StandardFDataType}, name::CoDual
 ) where {P}
@@ -690,6 +698,7 @@ is_homogeneous_and_immutable(::Any) = false
 # invoke
 
 @zero_adjoint MinimalCtx Tuple{typeof(isa),Any,Any}
+@zero_derivative MinimalCtx Tuple{typeof(isa),Any,Any}
 @zero_adjoint MinimalCtx Tuple{typeof(isdefined),Vararg}
 
 # modifyfield!
