@@ -702,7 +702,7 @@ is_homogeneous_and_immutable(::Any) = false
 
 # invoke
 
-@zero_adjoint MinimalCtx Tuple{typeof(isa),Any,Any}
+# @zero_adjoint MinimalCtx Tuple{typeof(isa),Any,Any}
 @zero_derivative MinimalCtx Tuple{typeof(isa),Any,Any}
 @zero_adjoint MinimalCtx Tuple{typeof(isdefined),Vararg}
 

@@ -234,7 +234,7 @@ macro zero_adjoint(ctx, sig)
         Mooncake.is_primitive(::Type{$(esc(ctx))}, ::Type{<:$(esc(sig))}) = true
         $(construct_rrule_def(arg_names, arg_types, where_params, body))
     end
-    return esc(ex)
+    return ex
 end
 
 macro zero_derivative(ctx, sig)
@@ -250,18 +250,23 @@ macro zero_derivative(ctx, sig)
             :(Vararg{Mooncake.Dual}),
         )
         splat_symbol = Expr(Symbol("..."), arg_names[end])
-        body = Expr(
+        body_deriv = Expr(
             :call, Mooncake.zero_derivative, arg_names[1:(end - 1)]..., splat_symbol
+        )
+        body_adjoint = Expr(
+            :call, Mooncake.zero_adjoint, arg_names[1:(end - 1)]..., splat_symbol
         )
     else
         arg_types = map(t -> :(Mooncake.Dual{<:$t}), arg_type_symbols)
-        body = Expr(:call, Mooncake.zero_derivative, arg_names...)
+        body_deriv = Expr(:call, Mooncake.zero_derivative, arg_names...)
+        body_adjoint = Expr(:call, Mooncake.zero_adjoint, arg_names...)
     end
 
     # Return code to create a method of is_primitive and a rule.
     ex = quote
         Mooncake.is_primitive(::Type{$ctx}, ::Type{<:$sig}) = true
-        $(construct_frule_def(arg_names, arg_types, where_params, body))
+        $(construct_frule_def(arg_names, arg_types, where_params, body_deriv))
+        $(construct_rrule_def(arg_names, arg_types, where_params, body_adjoint))
     end
     return ex
 end
