@@ -12,6 +12,7 @@ using AbstractGPs,
     LinearAlgebra,
     Plots,
     PrettyTables,
+    Printf,
     Random,
     ReverseDiff,
     Mooncake,
@@ -330,10 +331,26 @@ function plot_ratio_histogram!(df::DataFrame)
     return histogram(df.Mooncake; xscale=:log10, xlim, bin, title="log", label="")
 end
 
+function format_time(t::Float64)
+    t < 1e-6 && return @sprintf "%.2f ns" t * 1e9
+    t < 1e-3 && return @sprintf "%.2f μs" t * 1e6
+    t < 1 && return @sprintf "%.2f ms" t * 1e3
+    return @sprintf "%.2f s" t
+end
+
+format_ratio(r::Union{Float64,Missing}) = ismissing(r) ? missing : @sprintf "%.2f" r
+
 function create_inter_ad_benchmarks()
     results = benchmark_inter_framework_rules()
     tools = [:primal_time, :Mooncake, :Zygote, :ReverseDiff, :Enzyme]
     df = DataFrame(results)[:, [:tag, tools...]]
+
+    # Format primal times.
+    df.primal_time .= format_time.(df.primal_time)
+    df.Mooncake .= format_ratio.(df.Mooncake)
+    df.Zygote .= format_ratio.(df.Zygote)
+    df.ReverseDiff .= format_ratio.(df.ReverseDiff)
+    df.Enzyme .= format_ratio.(df.Enzyme)
 
     # Plot graph of results.
     plt = plot(; yscale=:log10, legend=:topright, title="AD Time / Primal Time (Log Scale)")
