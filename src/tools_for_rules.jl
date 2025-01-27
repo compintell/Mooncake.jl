@@ -245,28 +245,30 @@ macro zero_derivative(ctx, sig)
     arg_names = map(n -> Symbol("x_$n"), eachindex(arg_type_symbols))
     is_vararg = arg_type_symbols[end] === :Vararg
     if is_vararg
-        arg_types = vcat(
+        arg_types_deriv = vcat(
             map(t -> :(Mooncake.Dual{<:$t}), arg_type_symbols[1:(end - 1)]),
             :(Vararg{Mooncake.Dual}),
         )
+        arg_types_adjoint = vcat(
+            map(t -> :(Mooncake.CoDual{<:$t}), arg_type_symbols[1:(end - 1)]),
+            :(Vararg{Mooncake.CoDual}),
+        )
         splat_symbol = Expr(Symbol("..."), arg_names[end])
-        body_deriv = Expr(
-            :call, Mooncake.zero_derivative, arg_names[1:(end - 1)]..., splat_symbol
-        )
-        body_adjoint = Expr(
-            :call, Mooncake.zero_adjoint, arg_names[1:(end - 1)]..., splat_symbol
-        )
+        tmp = arg_names[1:(end - 1)]
+        body_deriv = Expr(:call, Mooncake.zero_derivative, tmp..., splat_symbol)
+        body_adjoint = Expr(:call, Mooncake.zero_adjoint, tmp..., splat_symbol)
     else
-        arg_types = map(t -> :(Mooncake.Dual{<:$t}), arg_type_symbols)
+        arg_types_deriv = map(t -> :(Mooncake.Dual{<:$t}), arg_type_symbols)
+        arg_types_adjoint = map(t -> :(Mooncake.CoDual{<:$t}), arg_type_symbols)
         body_deriv = Expr(:call, Mooncake.zero_derivative, arg_names...)
         body_adjoint = Expr(:call, Mooncake.zero_adjoint, arg_names...)
     end
 
     # Return code to create a method of is_primitive and a rule.
     ex = quote
-        Mooncake.is_primitive(::Type{$ctx}, ::Type{<:$sig}) = true
-        $(construct_frule_def(arg_names, arg_types, where_params, body_deriv))
-        $(construct_rrule_def(arg_names, arg_types, where_params, body_adjoint))
+        Mooncake.is_primitive(::Type{$(esc(ctx))}, ::Type{<:$(esc(sig))}) = true
+        $(construct_frule_def(arg_names, arg_types_deriv, where_params, body_deriv))
+        $(construct_rrule_def(arg_names, arg_types_adjoint, where_params, body_adjoint))
     end
     return ex
 end
