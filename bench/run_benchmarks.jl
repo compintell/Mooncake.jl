@@ -338,19 +338,13 @@ function format_time(t::Float64)
     return @sprintf "%.2f s" t
 end
 
-format_ratio(r::Union{Float64,Missing}) = ismissing(r) ? missing : @sprintf "%.2f" r
-
 function create_inter_ad_benchmarks()
     results = benchmark_inter_framework_rules()
-    tools = [:primal_time, :Mooncake, :Zygote, :ReverseDiff, :Enzyme]
-    df = DataFrame(results)[:, [:tag, tools...]]
+    tools = [:Mooncake, :Zygote, :ReverseDiff, :Enzyme]
+    df = DataFrame(results)[:, [:tag, :primal_time, tools...]]
 
-    # Format primal times.
+    # Format primal times in terms of ns, ms, etc.
     df.primal_time .= format_time.(df.primal_time)
-    df.Mooncake .= format_ratio.(df.Mooncake)
-    df.Zygote .= format_ratio.(df.Zygote)
-    df.ReverseDiff .= format_ratio.(df.ReverseDiff)
-    df.Enzyme .= format_ratio.(df.Enzyme)
 
     # Plot graph of results.
     plt = plot(; yscale=:log10, legend=:topright, title="AD Time / Primal Time (Log Scale)")
@@ -361,7 +355,7 @@ function create_inter_ad_benchmarks()
 
     # Write table of results.
     formatted_cols = map(t -> t => string.(round.(df[:, t]; sigdigits=3)), tools)
-    df_formatted = DataFrame(:Label => df.tag, formatted_cols...)
+    df_formatted = DataFrame(:Label => df.tag, :Primal => df.primal_time, formatted_cols...)
     return open(
         io -> pretty_table(io, df_formatted), "bench/benchmark_results.txt"; write=true
     )
