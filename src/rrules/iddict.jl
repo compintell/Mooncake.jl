@@ -1,6 +1,6 @@
 # We're going to use `IdDict`s to represent tangents for `IdDict`s.
 
-tangent_type(::Type{<:IdDict{K,V}}) where {K,V} = IdDict{K,tangent_type(V)}
+@tt_effects tangent_type(::Type{<:IdDict{K,V}}) where {K,V} = IdDict{K,tangent_type(V)}
 function randn_tangent(rng::AbstractRNG, d::IdDict{K,V}) where {K,V}
     return IdDict{K,tangent_type(V)}([k => randn_tangent(rng, v) for (k, v) in d])
 end
@@ -14,9 +14,11 @@ function increment!!(p::T, q::T) where {T<:IdDict}
     end
     return p
 end
-function set_to_zero!!(t::IdDict)
+function _set_to_zero!!(c::IncCache, t::IdDict)
+    haskey(c, t) && return t
+    c[t] = false
     foreach(keys(t)) do k
-        t[k] = set_to_zero!!(t[k])
+        t[k] = _set_to_zero!!(c, t[k])
     end
     return t
 end

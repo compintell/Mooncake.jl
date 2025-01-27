@@ -35,4 +35,4 @@ end
 struct SingletonStack{T} end
 
 Base.push!(::SingletonStack, ::Any) = nothing
-@generated Base.pop!(::SingletonStack{T}) where {T} = T.instance
+Base.pop!(::SingletonStack{T}) where {T} = T.instance

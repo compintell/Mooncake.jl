@@ -14,7 +14,7 @@
 
 const Maybe{T} = Union{Nothing,T}
 
-tangent_type(::Type{<:Memory{P}}) where {P} = Memory{tangent_type(P)}
+@tt_effects tangent_type(::Type{<:Memory{P}}) where {P} = Memory{tangent_type(P)}
 
 function zero_tangent_internal(x::Memory{P}, stackdict::Maybe{IdDict}) where {P}
     T = tangent_type(typeof(x))
@@ -69,7 +69,11 @@ function increment!!(x::Memory{P}, y::Memory{P}) where {P}
     return x === y ? x : _map_if_assigned!(increment!!, x, x, y)
 end
 
-set_to_zero!!(x::Memory) = _map_if_assigned!(set_to_zero!!, x, x)
+function _set_to_zero!!(c::IncCache, x::Memory)
+    haskey(c, x) && return x
+    c[x] = false
+    return _map_if_assigned!(Base.Fix1(_set_to_zero!!, c), x, x)
+end
 
 function _add_to_primal(p::Memory{P}, t::Memory, unsafe::Bool) where {P}
     return _map_if_assigned!(
@@ -157,7 +161,11 @@ function increment!!(x::T, y::T) where {T<:Array}
     return x === y ? x : _map_if_assigned!(increment!!, x, x, y)
 end
 
-set_to_zero!!(x::Array) = _map_if_assigned!(set_to_zero!!, x, x)
+function _set_to_zero!!(c::IncCache, x::Array)
+    haskey(c, x) && return x
+    c[x] = false
+    return _map_if_assigned!(Base.Fix1(_set_to_zero!!, c), x, x)
+end
 
 function _scale(a::Float64, t::T) where {T<:Array}
     t′ = T(undef, size(t)...)
@@ -233,7 +241,7 @@ end
 
 # Tangent Interface Implementation
 
-tangent_type(::Type{<:MemoryRef{P}}) where {P} = MemoryRef{tangent_type(P)}
+@tt_effects tangent_type(::Type{<:MemoryRef{P}}) where {P} = MemoryRef{tangent_type(P)}
 
 #=
 Given a new chunk of memory `m`, construct a `MemoryRef` which points to the same relative
@@ -270,8 +278,8 @@ end
 
 increment!!(x::P, y::P) where {P<:MemoryRef} = construct_ref(x, increment!!(x.mem, y.mem))
 
-function set_to_zero!!(x::MemoryRef)
-    set_to_zero!!(x.mem)
+function _set_to_zero!!(c::IncCache, x::MemoryRef)
+    _set_to_zero!!(c, x.mem)
     return x
 end
 

@@ -19,9 +19,13 @@ function rrule!!(::CoDual{typeof(exp)}, X::CoDual{Matrix{P}}) where {P<:IEEEFloa
 end
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:linear_algebra})
-    test_cases = Any[
-        (false, :none, nothing, exp, randn(3, 3)), (false, :none, nothing, exp, randn(7, 7))
-    ]
+    rng = rng_ctor(123)
+    Ps = [Float64, Float32]
+    test_cases = vcat(
+        map_prod([3, 7], Ps) do (N, P)
+            return (false, :none, nothing, exp, randn(rng, P, N, N))
+        end,
+    )
     memory = Any[]
     return test_cases, memory
 end

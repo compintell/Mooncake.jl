@@ -128,7 +128,7 @@ end
 # https://gist.github.com/oxinabox/cdcffc1392f91a2f6d80b2524726d802#file-example-jl-L54
 function __get_toplevel_mi_from_ir(ir, _module::Module)
     mi = ccall(:jl_new_method_instance_uninit, Ref{Core.MethodInstance}, ())
-    mi.specTypes = Tuple{map(_type, ir.argtypes)...}
+    mi.specTypes = Tuple{map(CC.widenconst, ir.argtypes)...}
     mi.def = _module
     return mi
 end
@@ -173,7 +173,7 @@ function optimise_ir!(ir::IRCode; show_ir=false, do_inline=true)
     CC.verify_ir(ir)
     ir = __strip_coverage!(ir)
     ir = CC.compact!(ir)
-    local_interp = CC.NativeInterpreter()
+    local_interp = get_interpreter(; inline_primitives=true)
     mi = __get_toplevel_mi_from_ir(ir, @__MODULE__)
     ir = __infer_ir!(ir, local_interp, mi)
     if show_ir

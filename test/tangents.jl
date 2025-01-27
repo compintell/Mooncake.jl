@@ -186,6 +186,8 @@ end
         @test zt.fields.b.tangent === zt
         rt = Mooncake.randn_tangent(Xoshiro(123456), foo)
         @test rt.fields.b.tangent === rt
+        Mooncake.set_to_zero!!(zt)
+        Mooncake.set_to_zero!!(rt)
     end
 
     @testset "struct with non-concrete fields" begin
@@ -223,6 +225,8 @@ end
         @test zt[1][1] === zt
         rt = Mooncake.randn_tangent(Xoshiro(123456), m)
         @test rt[1][1] === rt
+        Mooncake.set_to_zero!!(zt)
+        Mooncake.set_to_zero!!(rt)
     end
 end
 

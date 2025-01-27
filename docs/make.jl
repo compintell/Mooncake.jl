@@ -28,7 +28,7 @@ makedocs(;
             joinpath("understanding_mooncake", "rule_system.md"),
         ],
         "Utilities" => [
-            joinpath("utilities", "tools_for_rules.md"),
+            joinpath("utilities", "defining_rules.md"),
             joinpath("utilities", "debug_mode.md"),
             joinpath("utilities", "debugging_and_mwes.md"),
         ],
@@ -36,6 +36,7 @@ makedocs(;
             joinpath("developer_documentation", "running_tests_locally.md"),
             joinpath("developer_documentation", "developer_tools.md"),
             joinpath("developer_documentation", "forwards_mode_design.md"),
+            joinpath("developer_documentation", "misc_internals_notes.md"),
             joinpath("developer_documentation", "internal_docstrings.md"),
         ],
         "known_limitations.md",

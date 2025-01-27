@@ -94,7 +94,6 @@ _simple_mlp(W2, W1, Y, X) = sum(abs2, Y - W2 * map(x -> x * (0 <= x), W1 * X))
 _gp_lml(x, y, s) = logpdf(GP(SEKernel())(x, s), y)
 
 should_run_benchmark(::Val{:reverse_diff}, ::typeof(_gp_lml), x...) = false
-should_run_benchmark(::Val{:enzyme}, ::typeof(_gp_lml), x...) = false
 
 function _generate_gp_inputs()
     x = collect(range(0.0; step=0.2, length=128))
@@ -133,7 +132,6 @@ function should_run_benchmark(
 )
     return false
 end
-should_run_benchmark(::Val{:enzyme}, x...) = false
 
 @inline g(x, a, ::Val{N}) where {N} = N > 0 ? g(x * a, a, Val(N - 1)) : x
 
@@ -232,11 +230,12 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
 
                 if should_run_benchmark(Val(:enzyme), args...)
                     @info "Enzyme"
-                    dup_args = map(x -> Duplicated(x, randn(size(x))), primals[2:end])
+                    _rand_similiar(x) = x isa Real ? randn() : randn(size(x))
+                    dup_args = map(x -> Duplicated(x, _rand_similiar(x)), primals[2:end])
                     suite["enzyme"] = @be(
                         _,
                         _,
-                        autodiff(Reverse, $primals[1], Active, $dup_args...),
+                        autodiff(ReverseWithPrimal, $primals[1], Active, $dup_args...),
                         _,
                         evals = 1,
                     )
@@ -331,10 +330,19 @@ function plot_ratio_histogram!(df::DataFrame)
     return histogram(df.Mooncake; xscale=:log10, xlim, bin, title="log", label="")
 end
 
+fix_sig_fig(t) = string.(round(t; sigdigits=3))
+
+function format_time(t::Float64)
+    t < 1e-6 && return fix_sig_fig(t * 1e9) * " ns"
+    t < 1e-3 && return fix_sig_fig(t * 1e6) * " μs"
+    t < 1 && return fix_sig_fig(t * 1e3) * " ms"
+    return fix_sig_fig(t) * " s"
+end
+
 function create_inter_ad_benchmarks()
     results = benchmark_inter_framework_rules()
     tools = [:Mooncake, :Zygote, :ReverseDiff, :Enzyme]
-    df = DataFrame(results)[:, [:tag, tools...]]
+    df = DataFrame(results)[:, [:tag, :primal_time, tools...]]
 
     # Plot graph of results.
     plt = plot(; yscale=:log10, legend=:topright, title="AD Time / Primal Time (Log Scale)")
@@ -344,8 +352,9 @@ function create_inter_ad_benchmarks()
     Plots.savefig(plt, "bench/benchmark_results.png")
 
     # Write table of results.
-    formatted_cols = map(t -> t => string.(round.(df[:, t]; sigdigits=3)), tools)
-    df_formatted = DataFrame(:Label => df.tag, formatted_cols...)
+    formatted_ts = format_time.(df.primal_time)
+    formatted_cols = map(t -> t => fix_sig_fig.(df[:, t]), tools)
+    df_formatted = DataFrame(:Label => df.tag, :Primal => formatted_ts, formatted_cols...)
     return open(
         io -> pretty_table(io, df_formatted), "bench/benchmark_results.txt"; write=true
     )

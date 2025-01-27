@@ -593,7 +593,7 @@ struct NoDefaultCtor{T}
 end
 
 @noinline function __inplace_function!(x::Vector{Float64})
-    x .*= 2
+    x .= cos.(x)
     return nothing
 end
 
@@ -601,6 +601,8 @@ function inplace_invoke!(x::Vector{Float64})
     __inplace_function!(x)
     return nothing
 end
+
+highly_nested_tuple(x) = ((((x,),), x), x)
 
 function generate_test_functions()
     return Any[
@@ -827,6 +829,7 @@ function generate_test_functions()
         (false, :none, nothing, partial_typevar_tester),
         (false, :none, nothing, typevar_tester),
         (false, :allocs, nothing, inplace_invoke!, randn(1_024)),
+        (false, :allocs, nothing, highly_nested_tuple, 5.0),
     ]
 end
 

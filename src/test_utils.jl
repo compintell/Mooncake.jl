@@ -125,7 +125,8 @@ using Mooncake:
     InvalidRDataException,
     uninit_codual,
     lgetfield,
-    lsetfield!
+    lsetfield!,
+    CC
 
 struct Shim end
 
@@ -168,8 +169,8 @@ function has_equal_data_internal(
     return x == y
 end
 function has_equal_data_internal(
-    x::Float64, y::Float64, equal_undefs::Bool, d::Dict{Tuple{UInt,UInt},Bool}
-)
+    x::P, y::P, equal_undefs::Bool, d::Dict{Tuple{UInt,UInt},Bool}
+) where {P<:Base.IEEEFloat}
     return (isapprox(x, y) && !isnan(x)) || (isnan(x) && isnan(y))
 end
 function has_equal_data_internal(
@@ -413,13 +414,19 @@ function test_rrule_correctness(rng::AbstractRNG, x_x̄...; rrule, unsafe_pertur
     x_primal = _deepcopy(x)
     y_primal = x_primal[1](x_primal[2:end]...)
 
-    # Use finite differences to estimate vjps
+    # Use finite differences to estimate vjps. Compute the estimate at a range of different
+    # step sizes. We'll just require that one of them ends up being close to what AD gives.
     ẋ = map(_x -> randn_tangent(rng, _x), x)
-    ε = 1e-7
-    x′ = _add_to_primal(x, _scale(ε, ẋ), unsafe_perturb)
-    y′ = x′[1](x′[2:end]...)
-    ẏ = _scale(1 / ε, _diff(y′, y_primal))
-    ẋ_post = map((_x′, _x_p) -> _scale(1 / ε, _diff(_x′, _x_p)), x′, x_primal)
+    fd_results = map([1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8]) do ε
+        x′_l = _add_to_primal(x, _scale(ε, ẋ), unsafe_perturb)
+        y′_l = x′_l[1](x′_l[2:end]...)
+        x′_r = _add_to_primal(x, _scale(-ε, ẋ), unsafe_perturb)
+        y′_r = x′_r[1](x′_r[2:end]...)
+        return (
+            ẏ=_scale(1 / 2ε, _diff(y′_l, y′_r)),
+            ẋ_post=map((_x′, _x_p) -> _scale(1 / 2ε, _diff(_x′, _x_p)), x′_l, x′_r),
+        )
+    end
 
     # Run rule on copies of `f` and `x`. We use randomly generated tangents so that we
     # can later verify that non-zero values do not get propagated by the rule.
@@ -457,9 +464,19 @@ function test_rrule_correctness(rng::AbstractRNG, x_x̄...; rrule, unsafe_pertur
     # Check that inputs have been returned to their original value.
     @test all(map(has_equal_data_up_to_undefs, x, map(primal, x_x̄_rule)))
 
-    # pullbacks increment, so have to compare to the incremented quantity.
-    @test _dot(ȳ_delta, ẏ) + _dot(x̄_delta, ẋ_post) ≈ _dot(x̄, ẋ) rtol = 1e-3 atol =
-        1e-3
+    # Pullbacks increment, so have to compare to the incremented quantity. Require only one
+    # precision to be close to the answer AD gives. i.e. prove that there exists a step size
+    # such that AD and central differences agree on the answer.
+    isapprox_results = map(fd_results) do result
+        ẏ, ẋ_post = result
+        return isapprox(
+            _dot(ȳ_delta, ẏ) + _dot(x̄_delta, ẋ_post),
+            _dot(x̄, ẋ);
+            rtol=1e-3,
+            atol=1e-3,
+        )
+    end
+    @test any(isapprox_results)
 end
 
 get_address(x) = ismutable(x) ? pointer_from_objref(x) : nothing
@@ -962,10 +979,15 @@ end
     test_tangent_type(primal_type, expected_tangent_type)
 
 Checks that `tangent_type(primal_type)` yields `expected_tangent_type`, and that everything
-infers / optimises away.
+infers / optimises away, and that the effects are as expected.
 """
 function test_tangent_type(primal_type::Type, expected_tangent_type::Type)
     @test tangent_type(primal_type) == expected_tangent_type
+    effects = Base.infer_effects(tangent_type, (Type{expected_tangent_type},))
+    @test effects.consistent == CC.ALWAYS_TRUE
+    @test effects.effect_free == CC.ALWAYS_TRUE
+    @test effects.nothrow
+    @test effects.terminates
     return test_opt(Shim(), tangent_type, Tuple{_typeof(primal_type)})
 end
 
@@ -1216,9 +1238,7 @@ end
 __tangent_generation_should_allocate(::Type{P}) where {P<:Array} = true
 
 function __increment_should_allocate(::Type{P}) where {P}
-    return any(eachindex(fieldtypes(P))) do n
-        Mooncake.tangent_field_type(P, n) <: PossiblyUninitTangent
-    end
+    return any(tt -> tt <: PossiblyUninitTangent, Mooncake.tangent_field_types(P))
 end
 __increment_should_allocate(::Type{Core.SimpleVector}) = true
 
@@ -1228,18 +1248,18 @@ function __is_completely_stable_type(::Type{P}) where {P}
     return all(__is_completely_stable_type, fieldtypes(P))
 end
 
-@doc """
-     test_tangent(rng::AbstractRNG, p::P, x::T, y::T, z_target::T) where {P, T}
+"""
+    test_tangent(rng::AbstractRNG, p::P, x::T, y::T, z_target::T) where {P, T}
 
- Verify that primal `p` with tangents `z_target`, `x`, and `y`, satisfies the tangent
- interface. If these tests pass, then it should be possible to write rules for primals
- of type `P`, and to test them using [`test_rule`](@ref).
+Verify that primal `p` with tangents `z_target`, `x`, and `y`, satisfies the tangent
+interface. If these tests pass, then it should be possible to write rules for primals
+of type `P`, and to test them using [`test_rule`](@ref).
 
- It should be the case that `z_target` == `increment!!(x, y)`.
+It should be the case that `z_target` == `increment!!(x, y)`.
 
- As always, there are limits to the errors that these tests can identify -- they form
- necessary but not sufficient conditions for the correctness of your code.
- """
+As always, there are limits to the errors that these tests can identify -- they form
+necessary but not sufficient conditions for the correctness of your code.
+"""
 function test_tangent(
     rng::AbstractRNG, p::P, x::T, y::T, z_target::T; interface_only, perf=true
 ) where {P,T}
@@ -1290,8 +1310,10 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
     T = tangent_type(P)
     F = Mooncake.fdata_type(T)
     @test F isa Type
+    check_allocs(Shim(), Mooncake.fdata_type, T)
     R = Mooncake.rdata_type(T)
     @test R isa Type
+    check_allocs(Shim(), Mooncake.rdata_type, T)
 
     # Check that fdata and rdata produce the correct types.
     t = randn_tangent(rng, p)
