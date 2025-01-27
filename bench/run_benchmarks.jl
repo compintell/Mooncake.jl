@@ -332,7 +332,7 @@ end
 
 function create_inter_ad_benchmarks()
     results = benchmark_inter_framework_rules()
-    tools = [:Mooncake, :Zygote, :ReverseDiff, :Enzyme]
+    tools = [:primal_time, :Mooncake, :Zygote, :ReverseDiff, :Enzyme]
     df = DataFrame(results)[:, [:tag, tools...]]
 
     # Plot graph of results.
