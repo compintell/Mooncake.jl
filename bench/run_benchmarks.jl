@@ -12,7 +12,6 @@ using AbstractGPs,
     LinearAlgebra,
     Plots,
     PrettyTables,
-    Printf,
     Random,
     ReverseDiff,
     Mooncake,
@@ -331,20 +330,19 @@ function plot_ratio_histogram!(df::DataFrame)
     return histogram(df.Mooncake; xscale=:log10, xlim, bin, title="log", label="")
 end
 
+fix_sig_fig(t) = string.(round(t; sigdigits=3))
+
 function format_time(t::Float64)
-    t < 1e-6 && return @sprintf "%.2f ns" t * 1e9
-    t < 1e-3 && return @sprintf "%.2f μs" t * 1e6
-    t < 1 && return @sprintf "%.2f ms" t * 1e3
-    return @sprintf "%.2f s" t
+    t < 1e-6 && return fix_sig_fig(t * 1e9) * " ns"
+    t < 1e-3 && return fix_sig_fig(t * 1e6) * " μs"
+    t < 1 && return fix_sig_fig(t * 1e3) * " ms"
+    return fix_sig_fig(t) * " s"
 end
 
 function create_inter_ad_benchmarks()
     results = benchmark_inter_framework_rules()
     tools = [:Mooncake, :Zygote, :ReverseDiff, :Enzyme]
     df = DataFrame(results)[:, [:tag, :primal_time, tools...]]
-
-    # Format primal times in terms of ns, ms, etc.
-    df.primal_time .= format_time.(df.primal_time)
 
     # Plot graph of results.
     plt = plot(; yscale=:log10, legend=:topright, title="AD Time / Primal Time (Log Scale)")
@@ -354,8 +352,9 @@ function create_inter_ad_benchmarks()
     Plots.savefig(plt, "bench/benchmark_results.png")
 
     # Write table of results.
-    formatted_cols = map(t -> t => string.(round.(df[:, t]; sigdigits=3)), tools)
-    df_formatted = DataFrame(:Label => df.tag, :Primal => df.primal_time, formatted_cols...)
+    formatted_ts = format_time.(df.primal_time)
+    formatted_cols = map(t -> t => fix_sig_fig.(df[:, t]), tools)
+    df_formatted = DataFrame(:Label => df.tag, :Primal => formatted_ts, formatted_cols...)
     return open(
         io -> pretty_table(io, df_formatted), "bench/benchmark_results.txt"; write=true
     )
