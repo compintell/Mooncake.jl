@@ -879,9 +879,9 @@ struct Pullback{Tprimal,Tpb_args,Tpb_ret,isva,nargs}
 end
 
 function Pullback(
-    Tprimal, pb_oc::Tpb_oc, isva::Bool, nargs::Int
+    sig, pb_oc::Tpb_oc, isva::Bool, nargs::Int
 ) where {A,R,Tpb_oc<:Ref{RuleMC{A,R}}}
-    return Pullback{Tprimal,A,R,isva,nargs}(pb_oc)
+    return Pullback{sig,A,R,isva,nargs}(pb_oc)
 end
 
 _isva(::Pullback{<:Any,<:Any,<:Any,isva}) where {isva} = isva
@@ -903,13 +903,9 @@ end
 _isva(::DerivedRule{A,B,C,D,E,isva}) where {A,B,C,D,E,isva} = isva
 
 function DerivedRule(
-    Tprimal,
-    fwds_oc::RuleMC{FA,FR},
-    pb_oc_ref::Base.RefValue{RuleMC{RA,RR}},
-    isva::Bool,
-    nargs::W,
+    sig, fwds_oc::RuleMC{FA,FR}, pb_oc::Base.RefValue{RuleMC{RA,RR}}, isva::Bool, nargs::W
 ) where {FA,FR,RA,RR,W}
-    return DerivedRule{Tprimal,FA,FR,RA,RR,isva,W}(fwds_oc, pb_oc_ref, nargs)
+    return DerivedRule{sig,FA,FR,RA,RR,isva,W}(fwds_oc, pb_oc, nargs)
 end
 
 # Extends functionality defined for debug_mode.
@@ -940,11 +936,9 @@ _copy(x::Type) = x
 
 _copy(x) = copy(x)
 
-@inline function (fwds::DerivedRule{sig,Q,S,AR,RR,isva})(
-    args::Vararg{CoDual,N}
-) where {sig,Q,S,AR,RR,isva,N}
+@inline function (fwds::DerivedRule{sig})(args::Vararg{CoDual,N}) where {sig,N}
     uf_args = __unflatten_codual_varargs(_isva(fwds), args, fwds.nargs)
-    pb = Pullback(sig, fwds.pb_oc_ref, isva, N)
+    pb = Pullback(sig, fwds.pb_oc_ref, _isva(fwds), N)
     return fwds.fwds_oc.oc(uf_args...)::CoDual, pb
 end
 
@@ -1135,9 +1129,7 @@ function build_rrule(
                 }
             end
 
-            raw_rule = DerivedRule(
-                sig, fwd_oc, Ref(rvs_oc), dri.isva, Val(num_args(dri.info))
-            )
+            raw_rule = DerivedRule(sig, fwd_oc, Ref(rvs_oc), dri.isva, Val(nargs))
             rule = debug_mode ? DebugRRule(raw_rule) : raw_rule
             interp.oc_cache[oc_cache_key] = rule
             return rule
