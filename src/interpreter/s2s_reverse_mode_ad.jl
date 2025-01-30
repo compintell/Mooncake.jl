@@ -878,9 +878,7 @@ struct Pullback{Tprimal,Tpb_args,Tpb_ret,isva,nargs}
     pb_oc::Base.RefValue{RuleMC{Tpb_args,Tpb_ret}}
 end
 
-function Pullback(
-    sig, pb_oc::Tpb_oc, isva::Bool, nargs::Int
-) where {A,R,Tpb_oc<:Ref{RuleMC{A,R}}}
+function Pullback(sig, pb_oc::Ref{<:RuleMC{A,R}}, isva::Bool, nargs::Int) where {A,R}
     return Pullback{sig,A,R,isva,nargs}(pb_oc)
 end
 
@@ -890,9 +888,7 @@ function nvargs(pb::Pullback{sig}) where {sig}
     return Val{_isva(pb) ? _nargs(pb) - length(sig.parameters) + 1 : 0}
 end
 
-@inline function (pb::Pullback{sig})(dy) where {sig}
-    return __flatten_varargs(_isva(pb), pb.pb_oc[].oc(dy), nvargs(pb)())
-end
+@inline (pb::Pullback)(dy) = __flatten_varargs(_isva(pb), pb.pb_oc[].oc(dy), nvargs(pb)())
 
 struct DerivedRule{Tprimal,Tfwd_args,Tfwd_ret,Tpb_args,Tpb_ret,isva,Tnargs<:Val}
     fwds_oc::RuleMC{Tfwd_args,Tfwd_ret}
