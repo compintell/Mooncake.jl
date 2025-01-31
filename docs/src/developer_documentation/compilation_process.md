@@ -47,7 +47,7 @@ Recycle the functionality from reverse mode test utils.
 
 To manipulate `IRCode`, check out the fields:
 
-- `ir.argtypes` is the signature. Some are annotated with `Core.Const` to facilitate constant propagation for instance. Other annotations are `PartialStruct`, `Conditional`, `PartialTypeVar` (see `_type`)
+- `ir.argtypes` is the signature. Some are annotated with `Core.Const` to facilitate constant propagation for instance. Other annotations are `PartialStruct`, `Conditional`, `PartialTypeVar`. `Core.Compiler.widenconst` is used to extract types from these.
 - `ir.stmts` contains 5 vectors of the same length:
   - `stmts.stmt` is a vector of expressions (or other IR node types), see [AST docs](https://docs.julialang.org/en/v1/devdocs/ast/#Lowered-form)
   - `stmts.type` is a vector of types for the left-hand side of the assignment
@@ -68,7 +68,7 @@ Inlining pass can prevent us from using high-level rules by inlining the functio
 The contexts in [`interpreter/contexts.jl`](https://github.com/compintell/Mooncake.jl/blob/src/interpreter/contexts.jl) are `MinimalCtx` (necessary for AD to work) and `DefaultCtx` (ensure that we hit all of the rules).
 Distinction between rules is not well maintained in Mooncake at the moment.
 The function `is_primitive` defines whether we should recurse into the function during AD and break it into parts, or look for a rule.
-Typically if we define a rule we should set `is_primitive` to `true` for the corresponding function.
+If we define a rule we should set `is_primitive` to `true` for the corresponding function.
 
 In [`interpreter/abstract_interpretation.jl`](https://github.com/compintell/Mooncake.jl/blob/src/interpreter/abstract_interpretation.jl) we interact with the Julia compiler.
 The most important part is preventing the compiler from inlining.
