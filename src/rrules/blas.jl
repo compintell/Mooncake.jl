@@ -299,57 +299,69 @@ function rrule!!(
     return y_dy, symv!_adjoint
 end
 
-for (trmv, elty) in ((:dtrmv_, :Float64), (:strmv_, :Float32))
-    @eval @inline function rrule!!(
-        ::CoDual{typeof(_foreigncall_)},
-        ::CoDual{Val{$(blas_name(trmv))}},
-        ::CoDual,
-        ::CoDual,
-        ::CoDual,
-        ::CoDual,
-        _uplo::CoDual{Ptr{UInt8}},
-        _trans::CoDual{Ptr{UInt8}},
-        _diag::CoDual{Ptr{UInt8}},
-        _N::CoDual{Ptr{BLAS.BlasInt}},
-        _A::CoDual{Ptr{$elty}},
-        _lda::CoDual{Ptr{BLAS.BlasInt}},
-        _x::CoDual{Ptr{$elty}},
-        _incx::CoDual{Ptr{BLAS.BlasInt}},
-        args::Vararg{Any,Nargs},
-    ) where {Nargs}
-        GC.@preserve args begin
-            # Load in data.
-            uplo, trans, diag = map(Char ∘ unsafe_load ∘ primal, (_uplo, _trans, _diag))
-            N, lda, incx = map(unsafe_load ∘ primal, (_N, _lda, _incx))
-            A = wrap_ptr_as_view(primal(_A), lda, N, N)
-            x = wrap_ptr_as_view(primal(_x), N, incx)
-            x_copy = copy(x)
+@is_primitive(
+    MinimalCtx,
+    Tuple{
+        typeof(BLAS.trmv!),Char,Char,Char,AbstractMatrix{T},AbstractVector{T}
+    } where {T<:BlasRealFloat},
+)
 
-            # Run primal computation.
-            BLAS.trmv!(uplo, trans, diag, A, x)
+function rrule!!(
+    ::CoDual{typeof(BLAS.trmv!)},
+    _uplo::CoDual{Char},
+    _trans::CoDual{Char},
+    _diag::CoDual{Char},
+    A_dA::CoDual{<:AbstractMatrix{T}},
+    x_dx::CoDual{<:AbstractVector{T}},
+) where {T<:BlasRealFloat}
 
-            _dA = tangent(_A)
-            _dx = tangent(_x)
+    # Extract primals.
+    uplo = primal(_uplo)
+    trans = primal(_trans)
+    diag = primal(_diag)
+    A, dA = arrayify(A_dA)
+    x, dx = arrayify(x_dx)
+    x_copy = copy(x)
+
+    # Run primal computation.
+    BLAS.trmv!(uplo, trans, diag, A, x)
+
+    # Set dx to zero.
+    dx .= zero(T)
+
+    function trmv_pb!!(::NoRData)
+
+        # Restore the original value of x.
+        x .= x_copy
+
+        # Increment the tangents.
+        trans == 'N' ? inc_tri!(dA, dx, x, uplo, diag) : inc_tri!(dA, x, dx, uplo, diag)
+        BLAS.trmv!(uplo, trans == 'N' ? 'T' : 'N', diag, A, dx)
+
+        return tuple_fill(NoRData(), Val(6))
+    end
+    return x_dx, trmv_pb!!
+end
+
+function inc_tri!(A, x, y, uplo, diag)
+    if uplo == 'L' && diag == 'U'
+        @inbounds for q in 1:size(A, 2), p in (q+1):size(A, 1)
+            A[p, q] = fma(x[p], y[q], A[p, q])
         end
-
-        function trmv_pb!!(::NoRData)
-            GC.@preserve args begin
-
-                # Load up the tangents.
-                dA = wrap_ptr_as_view(_dA, lda, N, N)
-                dx = wrap_ptr_as_view(_dx, N, incx)
-
-                # Restore the original value of x.
-                x .= x_copy
-
-                # Increment the tangents.
-                dA .+= tri!(trans == 'N' ? dx * x' : x * dx', uplo, diag)
-                BLAS.trmv!(uplo, trans == 'N' ? 'T' : 'N', diag, A, dx)
-            end
-
-            return tuple_fill(NoRData(), Val(14 + Nargs))
+    elseif uplo == 'L' && diag == 'N'
+        @inbounds for q in 1:size(A, 2), p in q:size(A, 1)
+            A[p, q] = fma(x[p], y[q], A[p, q])
         end
-        return zero_fcodual(Cvoid()), trmv_pb!!
+    elseif uplo == 'U' && diag == 'U'
+        @inbounds for q in 1:size(A, 2), p in 1:(q-1)
+            A[p, q] = fma(x[p], y[q], A[p, q])
+        end
+    elseif uplo == 'U' && diag == 'N'
+        @inbounds for q in 1:size(A, 2), p in 1:q
+            A[p, q] = fma(x[p], y[q], A[p, q])
+        end
+    else
+        error("Unexpected uplo $uplo or diag $diag")
     end
 end
 
@@ -771,6 +783,8 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
     t_flags = ['N', 'T', 'C']
     alphas = [1.0, -0.25]
     betas = [0.0, 0.33]
+    uplos = ['L', 'U']
+    dAs = ['N', 'U']
     Ps = [Float64, Float32]
     rng = rng_ctor(123456)
 
@@ -794,6 +808,15 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
             xs = blas_vectors(rng, P, 5)
             return map(As, xs, ys) do A, x, y
                 (false, :stability, nothing, BLAS.symv!, uplo, P(α), A, x, P(β), y)
+            end
+        end...,
+
+        # trmv!
+        map_prod(uplos, t_flags, dAs, [1, 3], Ps) do (ul, tA, dA, N, P)
+            As = blas_matrices(rng, P, N, N)
+            bs = blas_vectors(rng, P, N)
+            return map(As, bs) do A, b
+                (false, :stability, nothing, BLAS.trmv!, ul, tA, dA, A, b)
             end
         end...,
 
@@ -852,19 +875,6 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
                 (flags..., BLAS.dot, 3, randn(rng, P, 12), 3, randn(rng, P, 9), 2),
                 (flags..., BLAS.scal!, 10, P(2.4), randn(rng, P, 30), 2),
             ]
-        end...,
-
-        #
-        # BLAS LEVEL 2
-        #
-
-        # trmv!
-        map_prod(uplos, t_flags, dAs, [1, 3], Ps) do (ul, tA, dA, N, P)
-            As = blas_matrices(rng, P, N, N)
-            bs = blas_vectors(rng, P, N)
-            return map(As, bs) do A, b
-                (false, :none, nothing, BLAS.trmv!, ul, tA, dA, A, b)
-            end
         end...,
 
         #
