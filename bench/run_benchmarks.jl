@@ -27,7 +27,6 @@ using Mooncake:
 
 using Mooncake.TestUtils: _deepcopy
 
-
 BLAS.set_num_threads(1) # Make sure primal computation for `gp_lml` is consistent across runs
 
 function to_benchmark(__rrule!!::R, dx::Vararg{CoDual,N}) where {R,N}
