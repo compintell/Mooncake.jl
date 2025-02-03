@@ -27,7 +27,7 @@ _copy(x::P) where {P<:FData} = P(_copy(x.data))
 fields_type(::Type{FData{T}}) where {T<:NamedTuple} = T
 
 function increment_internal!!(c::IncCache, x::F, y::F) where {F<:FData}
-    return F(tuple_map(Base.Fix1(increment_internal!!, c), x.data, y.data))
+    return F(tuple_map((a, b) -> increment_internal!!(c, a, b), x.data, y.data))
 end
 
 """

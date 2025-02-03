@@ -1259,6 +1259,9 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
     lazy_rzero = @inferred lazy_zero_rdata(p)
     @test instantiate(lazy_rzero) isa R
 
+    # Check incrementing the fdata component of a tangnet yields the correct type.
+    @test increment!!(f, f) isa F
+
     # Check incrementing the rdata component of a tangent yields the correct type.
     @test increment_rdata!!(t, r) isa T
 end

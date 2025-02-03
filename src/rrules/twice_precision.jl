@@ -27,7 +27,7 @@ function has_equal_data_internal(
     return Float64(p) ≈ Float64(q)
 end
 
-increment!!(t::T, s::T) where {T<:TWP} = t + s
+increment_internal!!(::IncCache, t::T, s::T) where {T<:TWP} = t + s
 
 set_to_zero_internal!!(::IncCache, t::TWP) = zero_tangent_internal(t, nothing)
 
