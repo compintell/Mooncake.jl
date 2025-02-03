@@ -826,7 +826,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
             Bs = blas_matrices(rng, P, tB == 'N' ? 4 : 5, tB == 'N' ? 5 : 4)
             Cs = blas_matrices(rng, P, 3, 5)
             return map(As, Bs, Cs) do A, B, C
-                (false, :none, nothing, BLAS.gemm!, tA, tB, P(a), A, B, P(b), C)
+                (false, :stability, nothing, BLAS.gemm!, tA, tB, P(a), A, B, P(b), C)
             end
         end...,
 
