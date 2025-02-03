@@ -617,8 +617,9 @@ increment_internal!!(::IncCache, x::T, y::T) where {T<:IEEEFloat} = x + y
 function increment_internal!!(::IncCache, x::Ptr{T}, y::Ptr{T}) where {T}
     return x === y ? x : throw(error("eurgh"))
 end
-function increment_internal!!(c::IncCache, x::T, y::T) where {T<:Tuple}
-    return tuple_map((x, y) -> increment_internal!!(c, x, y), x, y)::T
+@generated function increment_internal!!(c::IncCache, x::T, y::T) where {T<:Tuple}
+    inc_exprs = map(n -> :(increment_internal!!(c, x[$n], y[$n])), 1:fieldcount(T))
+    return Expr(:(::), Expr(:call, :tuple, inc_exprs...), T)
 end
 function increment_internal!!(c::IncCache, x::T, y::T) where {T<:NamedTuple}
     return T(tuple_map((x, y) -> increment_internal!!(c, x, y), x, y))
