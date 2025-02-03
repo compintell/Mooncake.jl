@@ -109,12 +109,16 @@ function set_to_zero_internal!!(c::IncCache, t::FunctionWrapperTangent)
     return t
 end
 
-function _add_to_primal_internal(c::MaybeCache, p::FunctionWrapper, t::FunctionWrapperTangent, unsafe::Bool)
+function _add_to_primal_internal(
+    c::MaybeCache, p::FunctionWrapper, t::FunctionWrapperTangent, unsafe::Bool
+)
     return typeof(p)(_add_to_primal_internal(c, p.obj[], t.dobj_ref[], unsafe))
 end
 
 function _diff_internal(c::MaybeCache, p::P, q::P) where {R,A,P<:FunctionWrapper{R,A}}
-    return first(_function_wrapper_tangent(R, p.obj[], A, _diff_internal(c, p.obj[], q.obj[])))
+    return first(
+        _function_wrapper_tangent(R, p.obj[], A, _diff_internal(c, p.obj[], q.obj[]))
+    )
 end
 
 function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:FunctionWrapperTangent}
@@ -126,7 +130,9 @@ function _scale_internal(c::MaybeCache, a::Float64, t::T) where {T<:FunctionWrap
 end
 
 import .TestUtils: populate_address_map_internal, AddressMap
-function populate_address_map_internal(m::AddressMap, p::FunctionWrapper, t::FunctionWrapperTangent)
+function populate_address_map_internal(
+    m::AddressMap, p::FunctionWrapper, t::FunctionWrapperTangent
+)
     k = pointer_from_objref(p)
     v = pointer_from_objref(t)
     haskey(m, k) && (@assert m[k] == v)

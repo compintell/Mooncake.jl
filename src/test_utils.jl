@@ -278,7 +278,9 @@ const AddressMap = Dict{Ptr{Nothing},Ptr{Nothing}}
 
 Constructs an empty `AddressMap` and calls `populate_address_map_internal`.
 """
-populate_address_map(primal, tangent) = populate_address_map_internal(AddressMap(), primal, tangent)
+function populate_address_map(primal, tangent)
+    return populate_address_map_internal(AddressMap(), primal, tangent)
+end
 
 """
     populate_address_map_internal(m::AddressMap, primal, tangent)
@@ -317,10 +319,14 @@ end
 __get_data_field(t::Union{Tangent,MutableTangent}, n) = getfield(t.fields, n)
 __get_data_field(t::Union{Mooncake.FData,Mooncake.RData}, n) = getfield(t.data, n)
 
-function populate_address_map_internal(m::AddressMap, p::P, t) where {P<:Union{Tuple,NamedTuple}}
+function populate_address_map_internal(
+    m::AddressMap, p::P, t
+) where {P<:Union{Tuple,NamedTuple}}
     t isa NoFData && return m
     t isa NoTangent && return m
-    foreach(n -> populate_address_map_internal(m, getfield(p, n), getfield(t, n)), fieldnames(P))
+    foreach(
+        n -> populate_address_map_internal(m, getfield(p, n), getfield(t, n)), fieldnames(P)
+    )
     return m
 end
 
@@ -332,7 +338,9 @@ function populate_address_map_internal(m::AddressMap, p::Array, t::Array)
         return m
     end
     m[k] = v
-    foreach(n -> isassigned(p, n) && populate_address_map_internal(m, p[n], t[n]), eachindex(p))
+    foreach(
+        n -> isassigned(p, n) && populate_address_map_internal(m, p[n], t[n]), eachindex(p)
+    )
     return m
 end
 
@@ -348,7 +356,11 @@ function populate_address_map_internal(m::AddressMap, p::Core.SimpleVector, t::V
     return m
 end
 
-populate_address_map_internal(m::AddressMap, p::Union{Core.TypeName,Type,Symbol,String}, t) = m
+function populate_address_map_internal(
+    m::AddressMap, p::Union{Core.TypeName,Type,Symbol,String}, t
+)
+    return m
+end
 
 """
     address_maps_are_consistent(x::AddressMap, y::AddressMap)
@@ -857,10 +869,12 @@ function test_tangent_consistency(rng::AbstractRNG, p::P; interface_only=false) 
     _randn_tangent(rng, p) = Mooncake.randn_tangent_internal(rng, p, IdDict())
     _increment!!(x, y) = Mooncake.increment_internal!!(IdDict{Any,Bool}(), x, y)
     _set_to_zero!!(t) = Mooncake.set_to_zero_internal!!(IdDict{Any,Bool}(), t)
-    __add_to_primal(p, t, unsafe::Bool) = Mooncake._add_to_primal_internal(IdDict{Any,Any}(), p, t, unsafe)
-    __diff(p, t) = Mooncake._diff_internal(IdDict{Any, Any}(), p, t)
-    __dot(t, s) = Mooncake._dot_internal(IdDict{Any, Any}(), t, s)
-    __scale(a::Float64, t) = Mooncake._scale_internal(IdDict{Any, Any}(), a, t)
+    function __add_to_primal(p, t, unsafe::Bool)
+        return Mooncake._add_to_primal_internal(IdDict{Any,Any}(), p, t, unsafe)
+    end
+    __diff(p, t) = Mooncake._diff_internal(IdDict{Any,Any}(), p, t)
+    __dot(t, s) = Mooncake._dot_internal(IdDict{Any,Any}(), t, s)
+    __scale(a::Float64, t) = Mooncake._scale_internal(IdDict{Any,Any}(), a, t)
     _populate_address_map(p, t) = populate_address_map_internal(AddressMap(), p, t)
 
     # Check that tangent_type returns a `Type`.
@@ -1156,8 +1170,12 @@ function test_equality_comparison(x)
     @nospecialize x
 
     # Check that the internal methods have been implemented.
-    _has_equal_data(x, y) = has_equal_data_internal(x, y, true, Dict{Tuple{UInt,UInt},Bool}())
-    _has_equal_data_up_to_undefs(x, y) = has_equal_data_internal(x, y, false, Dict{Tuple{UInt,UInt},Bool}())
+    function _has_equal_data(x, y)
+        return has_equal_data_internal(x, y, true, Dict{Tuple{UInt,UInt},Bool}())
+    end
+    function _has_equal_data_up_to_undefs(x, y)
+        return has_equal_data_internal(x, y, false, Dict{Tuple{UInt,UInt},Bool}())
+    end
 
     @test _has_equal_data(x, x) isa Bool
     @test _has_equal_data_up_to_undefs(x, x) isa Bool

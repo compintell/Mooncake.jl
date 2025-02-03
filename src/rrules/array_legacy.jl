@@ -50,7 +50,9 @@ function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:Array}
     )
 end
 
-function _add_to_primal_internal(c::MaybeCache, x::Array{P,N}, t::Array{<:Any,N}, unsafe::Bool) where {P,N}
+function _add_to_primal_internal(
+    c::MaybeCache, x::Array{P,N}, t::Array{<:Any,N}, unsafe::Bool
+) where {P,N}
     key = (x, t, unsafe)
     haskey(c, key) && return c[key]::Array{P,N}
     x′ = Array{P,N}(undef, size(x)...)

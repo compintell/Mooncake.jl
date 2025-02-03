@@ -27,51 +27,56 @@ import Mooncake:
     MaybeCache,
     IncCache
 
-import Mooncake.TestUtils: populate_address_map_internal, AddressMap, __increment_should_allocate
+import Mooncake.TestUtils:
+    populate_address_map_internal, AddressMap, __increment_should_allocate
+
+const CuFloatArray = CuArray{<:IEEEFloat}
 
 # Tell Mooncake.jl how to handle CuArrays.
 
-Mooncake.@tt_effects tangent_type(::Type{P}) where {P<:CuArray{<:IEEEFloat}} = P
-function zero_tangent_internal(x::P, stackdict::Any) where {P<:CuArray{<:IEEEFloat}}
-    haskey(stackdict, x) && return stackdict[x]::tangent_type(P)
+Mooncake.@tt_effects tangent_type(::Type{P}) where {P<:CuFloatArray} = P
+function zero_tangent_internal(x::CuFloatArray, stackdict::Any)
+    haskey(stackdict, x) && return stackdict[x]::typeof(x)
     t = zero(x)
     stackdict[x] = t
     return t
 end
-function randn_tangent_internal(rng::AbstractRNG, x::P, stackdict::Any) where {P<:CuArray{<:IEEEFloat}}
-    haskey(stackdict, x) && return stackdict[x]::tangent_type(P)
+function randn_tangent_internal(rng::AbstractRNG, x::CuFloatArray, stackdict::Any)
+    haskey(stackdict, x) && return stackdict[x]::tangent_type(typeof(x))
     t = cu(randn(rng, Float32, size(x)...))
     stackdict[x] = t
     return t
 end
 function TestUtils.has_equal_data_internal(
     x::P, y::P, equal_undefs::Bool, d::Dict{Tuple{UInt,UInt},Bool}
-) where {P<:CuArray{<:IEEEFloat}}
+) where {P<:CuFloatArray}
     return isapprox(x, y)
 end
-function increment_internal!!(c::IncCache, x::P, y::P) where {P<:CuArray{<:IEEEFloat}}
+function increment_internal!!(c::IncCache, x::P, y::P) where {P<:CuFloatArray}
     (x === y || haskey(c, x)) && return x
     c[x] = true
     x .+= y
     return x
 end
-__increment_should_allocate(::Type{<:CuArray{<:IEEEFloat}}) = true
-set_to_zero_internal!!(::Mooncake.IncCache, x::CuArray{<:IEEEFloat}) = x .= 0
-function _add_to_primal_internal(c::MaybeCache, x::P, y::P, unsafe::Bool) where {P<:CuArray{<:IEEEFloat}}
+__increment_should_allocate(::Type{<:CuFloatArray}) = true
+set_to_zero_internal!!(::Mooncake.IncCache, x::CuFloatArray) = x .= 0
+function _add_to_primal_internal(
+    c::MaybeCache, x::P, y::P, unsafe::Bool
+) where {P<:CuFloatArray}
     key = (x, y, unsafe)
     haskey(c, key) && return c[key]::P
     x′ = x + y
     c[(x, y, unsafe)] = x′
     return x′
 end
-function _diff_internal(c::MaybeCache, x::P, y::P) where {P<:CuArray{<:IEEEFloat}}
+function _diff_internal(c::MaybeCache, x::P, y::P) where {P<:CuFloatArray}
     key = (x, y)
     haskey(c, key) && return c[key]::tangent_type(P)
     t = x - y
     c[key] = t
     return t
 end
-function _dot_internal(c::MaybeCache, x::P, y::P) where {P<:CuArray{<:IEEEFloat}}
+function _dot_internal(c::MaybeCache, x::P, y::P) where {P<:CuFloatArray}
     key = (x, y)
     haskey(c, key) && return c[key]::Float64
     return Float64(dot(x, y))
@@ -98,8 +103,8 @@ end
 tangent_type(::Type{P}, ::Type{NoRData}) where {P<:CuArray} = P
 tangent(p::CuArray, ::NoRData) = p
 
-to_cr_tangent(x::CuArray{<:IEEEFloat}) = x
-function increment_and_get_rdata!(f::T, ::NoRData, t::T) where {T<:CuArray{<:IEEEFloat}}
+to_cr_tangent(x::CuFloatArray) = x
+function increment_and_get_rdata!(f::T, ::NoRData, t::T) where {T<:CuFloatArray}
     f .+= t
     return NoRData()
 end
@@ -109,7 +114,7 @@ end
 @is_primitive(MinimalCtx, Tuple{Type{<:CuArray},UndefInitializer,Vararg{Int,N}} where {N},)
 function rrule!!(
     p::CoDual{Type{P}}, init::CoDual{UndefInitializer}, dims::CoDual{Int}...
-) where {P<:CuArray{<:Base.IEEEFloat}}
+) where {P<:CuFloatArray}
     _dims = map(primal, dims)
     return CoDual(P(undef, _dims), P(undef, _dims)), NoPullback(p, init, dims...)
 end

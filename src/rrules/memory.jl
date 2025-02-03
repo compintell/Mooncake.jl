@@ -77,7 +77,9 @@ function set_to_zero_internal!!(c::IncCache, x::Memory)
     return _map_if_assigned!(Base.Fix1(set_to_zero_internal!!, c), x, x)
 end
 
-function _add_to_primal_internal(c::MaybeCache, p::Memory{P}, t::Memory, unsafe::Bool) where {P}
+function _add_to_primal_internal(
+    c::MaybeCache, p::Memory{P}, t::Memory, unsafe::Bool
+) where {P}
     k = (p, t, unsafe)
     haskey(c, k) && return c[k]::Memory{P}
     p′ = Memory{P}(undef, length(p))
@@ -122,7 +124,9 @@ function populate_address_map_internal(m::TestUtils.AddressMap, p::Memory, t::Me
         return m
     end
     m[k] = v
-    foreach(n -> isassigned(p, n) && populate_address_map_internal(m, p[n], t[n]), eachindex(p))
+    foreach(
+        n -> isassigned(p, n) && populate_address_map_internal(m, p[n], t[n]), eachindex(p)
+    )
     return m
 end
 
@@ -207,7 +211,9 @@ function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:Array}
     )
 end
 
-function _add_to_primal_internal(c::MaybeCache, x::Array{P,N}, t::Array{<:Any,N}, unsafe::Bool) where {P,N}
+function _add_to_primal_internal(
+    c::MaybeCache, x::Array{P,N}, t::Array{<:Any,N}, unsafe::Bool
+) where {P,N}
     key = (x, t, unsafe)
     haskey(c, key) && return c[key]::Array{P,N}
     x′ = Array{P,N}(undef, size(x)...)
@@ -331,7 +337,9 @@ function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:MemoryRef}
     return _dot_internal(c, t.mem, s.mem)
 end
 
-_scale_internal(c::MaybeCache, a::Float64, t::MemoryRef) = construct_ref(t, _scale_internal(c, a, t.mem))
+function _scale_internal(c::MaybeCache, a::Float64, t::MemoryRef)
+    return construct_ref(t, _scale_internal(c, a, t.mem))
+end
 
 function populate_address_map_internal(m::TestUtils.AddressMap, p::MemoryRef, t::MemoryRef)
     return populate_address_map_internal(m, p.mem, t.mem)
@@ -347,7 +355,9 @@ tangent_type(::Type{<:MemoryRef{T}}, ::Type{NoRData}) where {T} = MemoryRef{T}
 
 tangent(f::MemoryRef, ::NoRData) = f
 
-function __verify_fdata_value(c::IdDict{Any,Nothing}, p::MemoryRef{P}, f::MemoryRef{T}) where {P,T}
+function __verify_fdata_value(
+    c::IdDict{Any,Nothing}, p::MemoryRef{P}, f::MemoryRef{T}
+) where {P,T}
     return _verify_fdata_value(c, p.mem, f.mem)
 end
 

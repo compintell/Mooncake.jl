@@ -664,7 +664,7 @@ function set_to_zero_internal!!(c::IncCache, x::MutableTangent)
     return x
 end
 
-const MaybeCache = Union{NoCache, IdDict{Any, Any}}
+const MaybeCache = Union{NoCache,IdDict{Any,Any}}
 
 """
     _scale(a::Float64, t::T) where {T}
@@ -675,7 +675,7 @@ Should be defined for all standard tangent types.
 Multiply tangent `t` by scalar `a`. Always possible because any given tangent type must
 correspond to a vector field. Not using `*` in order to avoid piracy.
 """
-_scale(a::Float64, t) = _scale_internal(IdDict{Any, Any}(), a, t)
+_scale(a::Float64, t) = _scale_internal(IdDict{Any,Any}(), a, t)
 
 _scale_internal(::MaybeCache, ::Float64, ::NoTangent) = NoTangent()
 _scale_internal(::MaybeCache, a::Float64, t::T) where {T<:IEEEFloat} = T(a * t)
@@ -685,7 +685,9 @@ end
 function _scale_internal(c::MaybeCache, a::Float64, t::T) where {T<:PossiblyUninitTangent}
     return is_init(t) ? T(_scale_internal(c, a, val(t))) : T()
 end
-_scale_internal(c::MaybeCache, a::Float64, t::T) where {T<:Tangent} = T(_scale_internal(c, a, t.fields))
+function _scale_internal(c::MaybeCache, a::Float64, t::T) where {T<:Tangent}
+    return T(_scale_internal(c, a, t.fields))
+end
 function _scale_internal(c::MaybeCache, a::Float64, t::T) where {T<:MutableTangent}
     haskey(c, t) && return c[t]::T
     y = T()
@@ -705,7 +707,7 @@ Should be defined for all standard tangent types.
 Inner product between tangents `t` and `s`. Must return a `Float64`.
 Always available because all tangent types correspond to finite-dimensional vector spaces.
 """
-_dot(t::T, s::T) where {T} = _dot_internal(IdDict{Any, Any}(), t, s)
+_dot(t::T, s::T) where {T} = _dot_internal(IdDict{Any,Any}(), t, s)
 
 _dot_internal(::MaybeCache, ::NoTangent, ::NoTangent) = 0.0
 _dot_internal(::MaybeCache, t::T, s::T) where {T<:IEEEFloat} = Float64(t * s)
@@ -748,10 +750,14 @@ end
 Here, the value returned by `_add_to_primal` will satisfy the invariant asserted in the
 inner constructor for `Foo`.
 """
-_add_to_primal(p, t, unsafe::Bool=false) = _add_to_primal_internal(IdDict{Any, Any}(), p, t, unsafe)
+function _add_to_primal(p, t, unsafe::Bool=false)
+    return _add_to_primal_internal(IdDict{Any,Any}(), p, t, unsafe)
+end
 _add_to_primal_internal(::MaybeCache, x, ::NoTangent, ::Bool) = x
 _add_to_primal_internal(::MaybeCache, x::T, t::T, ::Bool) where {T<:IEEEFloat} = x + t
-function _add_to_primal_internal(c::MaybeCache, x::SimpleVector, t::Vector{Any}, unsafe::Bool)
+function _add_to_primal_internal(
+    c::MaybeCache, x::SimpleVector, t::Vector{Any}, unsafe::Bool
+)
     haskey(c, (x, t, unsafe)) && return c[(x, t, unsafe)]::SimpleVector
     x′ = svec(map(n -> _add_to_primal_internal(c, x[n], t[n], unsafe), eachindex(x))...)
     c[(x, t, unsafe)] = x′
@@ -784,7 +790,7 @@ function Base.showerror(io::IO, err::AddToPrimalException)
     return println(io, msg)
 end
 
-function __construct_type(::Type{P}, unsafe::Bool, fields::Vararg{Any, N})::P where {P,N}
+function __construct_type(::Type{P}, unsafe::Bool, fields::Vararg{Any,N})::P where {P,N}
     i = findfirst(==(FieldUndefined()), fields)
 
     # If unsafe mode is enabled, then call `_new_` directly, and avoid the possibility that
@@ -806,7 +812,9 @@ function __construct_type(::Type{P}, unsafe::Bool, fields::Vararg{Any, N})::P wh
     end
 end
 
-function _add_to_primal_internal(c::MaybeCache, p::P, t::T, unsafe::Bool) where {P,T<:Tangent}
+function _add_to_primal_internal(
+    c::MaybeCache, p::P, t::T, unsafe::Bool
+) where {P,T<:Tangent}
     Tt = tangent_type(P)
     if Tt != typeof(t)
         throw(ArgumentError("p of type $P has tangent_type $Tt, but t is of type $T"))
@@ -822,7 +830,9 @@ function _add_to_primal_internal(c::MaybeCache, p::P, t::T, unsafe::Bool) where 
     return __construct_type(P, unsafe, fields...)
 end
 
-function _add_to_primal_internal(c::MaybeCache, p::P, t::T, unsafe::Bool) where {P,T<:MutableTangent}
+function _add_to_primal_internal(
+    c::MaybeCache, p::P, t::T, unsafe::Bool
+) where {P,T<:MutableTangent}
 
     # Do not recompute if we already have a perturbed primal.
     key = (p, t, unsafe)
@@ -875,7 +885,7 @@ Required for testing.
 Computes the difference between `p` and `q`, which _must_ be of the same type, `P`.
 Returns a tangent of type `tangent_type(P)`.
 """
-_diff(p::P, q::P) where {P} = _diff_internal(IdDict{Any, Any}(), p, q)
+_diff(p::P, q::P) where {P} = _diff_internal(IdDict{Any,Any}(), p, q)
 function _diff_internal(c::MaybeCache, p::P, q::P) where {P}
     tangent_type(P) === NoTangent && return NoTangent()
     T = Tangent{NamedTuple{(),Tuple{}}}

@@ -41,7 +41,7 @@ function set_to_zero_internal!!(c::IncCache, t::IdDict)
 end
 function _scale_internal(c::MaybeCache, a::Float64, t::IdDict{K,V}) where {K,V}
     haskey(c, t) && return c[t]::IdDict{K,V}
-    t′ = IdDict{K, V}()
+    t′ = IdDict{K,V}()
     c[t] = t′
     for (k, v) in t
         t′[k] = _scale_internal(c, a, v)
@@ -54,10 +54,12 @@ function _dot_internal(c::MaybeCache, p::T, q::T) where {T<:IdDict}
     c[key] = 0.0
     return sum([_dot_internal(c, p[k], q[k]) for k in keys(p)]; init=0.0)
 end
-function _add_to_primal_internal(c::MaybeCache, p::IdDict{K,V}, t::IdDict{K}, unsafe::Bool) where {K,V}
+function _add_to_primal_internal(
+    c::MaybeCache, p::IdDict{K,V}, t::IdDict{K}, unsafe::Bool
+) where {K,V}
     key = (p, t, unsafe)
     haskey(c, key) && return c[key]::IdDict{K,V}
-    p′ = IdDict{K, V}()
+    p′ = IdDict{K,V}()
     c[key] = p′
     ks = intersect(keys(p), keys(t))
     for k in ks
@@ -76,7 +78,9 @@ function _diff_internal(c::MaybeCache, p::P, q::P) where {K,V,P<:IdDict{K,V}}
     end
     return t
 end
-function TestUtils.populate_address_map_internal(m::TestUtils.AddressMap, p::IdDict, t::IdDict)
+function TestUtils.populate_address_map_internal(
+    m::TestUtils.AddressMap, p::IdDict, t::IdDict
+)
     k = pointer_from_objref(p)
     v = pointer_from_objref(t)
     if haskey(m, k)
