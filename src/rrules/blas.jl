@@ -345,7 +345,7 @@ end
 
 function inc_tri!(A, x, y, uplo, diag)
     if uplo == 'L' && diag == 'U'
-        @inbounds for q in 1:size(A, 2), p in (q+1):size(A, 1)
+        @inbounds for q in 1:size(A, 2), p in (q + 1):size(A, 1)
             A[p, q] = fma(x[p], y[q], A[p, q])
         end
     elseif uplo == 'L' && diag == 'N'
@@ -353,7 +353,7 @@ function inc_tri!(A, x, y, uplo, diag)
             A[p, q] = fma(x[p], y[q], A[p, q])
         end
     elseif uplo == 'U' && diag == 'U'
-        @inbounds for q in 1:size(A, 2), p in 1:(q-1)
+        @inbounds for q in 1:size(A, 2), p in 1:(q - 1)
             A[p, q] = fma(x[p], y[q], A[p, q])
         end
     elseif uplo == 'U' && diag == 'N'
