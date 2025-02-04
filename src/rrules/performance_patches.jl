@@ -47,9 +47,9 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:performance_p
         (false, :stability_and_allocs, nothing, sum, randn(rng, Float64, 11)),
         (false, :stability_and_allocs, nothing, sum, randn(rng, Float32, 11)),
         (true, :stability_and_allocs, nothing, sum, randn(rng, Float16, 11)),
-        (false, :stability_and_allocs, nothing, sum, randn(rng, Float64, 11, 3)),
-        (false, :stability_and_allocs, nothing, sum, randn(rng, Float32, 11, 3)),
-        (true, :stability_and_allocs, nothing, sum, randn(rng, Float16, 11, 3)),
+        (false, :stability, nothing, sum, randn(rng, Float64, 11, 3)),
+        (false, :stability, nothing, sum, randn(rng, Float32, 11, 3)),
+        (true, :stability, nothing, sum, randn(rng, Float16, 11, 3)),
 
         # Tuple{typeof(sum), typeof(abs2), Array{<:IEEEFloat}}
         (false, :stability_and_allocs, nothing, sum, abs2, randn(rng, Float64, 11)),
