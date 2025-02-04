@@ -536,8 +536,8 @@ function test_rrule_interface(f_f̄, x_x̄...; rule)
     @test all(map((a, b) -> _typeof(a) == _typeof(rdata(b)), x̄_new, x̄))
 end
 
-function __forwards_and_backwards(rule::R, x_x̄::Vararg{Any,N}) where {R,N}
-    out, pb!! = rule(x_x̄...)
+function __forwards_and_backwards(rule::R, f_f̄::F, x_x̄::Tuple{Vararg{Any,N}}) where {R,F,N}
+    out, pb!! = rule(f_f̄, x_x̄...)
     return pb!!(Mooncake.zero_rdata(primal(out)))
 end
 
@@ -581,8 +581,8 @@ function test_rrule_performance(
         # Test allocations in round-trip.
         f_f̄_fwds = to_fwds(f_f̄)
         x_x̄_fwds = map(to_fwds, x_x̄)
-        __forwards_and_backwards(rule, f_f̄_fwds, x_x̄_fwds...)
-        @test (@allocations __forwards_and_backwards(rule, f_f̄_fwds, x_x̄_fwds...)) == 0
+        __forwards_and_backwards(rule, f_f̄_fwds, x_x̄_fwds)
+        @test (@allocations __forwards_and_backwards(rule, f_f̄_fwds, x_x̄_fwds)) == 0
     end
 end
 
