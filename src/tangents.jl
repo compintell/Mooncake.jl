@@ -120,9 +120,7 @@ end
     return Expr(:call, tangent_type(P), Expr(:call, NamedTuple{fieldnames(P)}, tuple_expr))
 end
 
-function build_tangent(
-    ::Type{P}, fields::Vararg{Any,N}
-) where {P<:Union{Tuple,NamedTuple},N}
+function build_tangent(::Type{P}, fields...) where {P<:Union{Tuple,NamedTuple}}
     T = tangent_type(P)
     if T == NoTangent
         return NoTangent()
