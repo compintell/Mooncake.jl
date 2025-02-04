@@ -64,10 +64,14 @@ lgetfield(x, ::Val{f}) where {f} = getfield(x, f)
     tangent_field = if tangent_type(P) === NoTangent
         NoTangent()
     else
-        getfield(tangent(x).fields, f)
+        _get_field(tangent(x), f)
     end
     return Dual(primal_field, tangent_field)
 end
+
+@inline _get_field(t::Union{Tuple,NamedTuple}, f) = getfield(t, f)
+@inline _get_field(t::Union{Tangent,MutableTangent}, f) = val(getfield(t.fields, f))
+
 @inline function rrule!!(
     ::CoDual{typeof(lgetfield)}, x::CoDual{P,F}, ::CoDual{Val{f}}
 ) where {P,F<:StandardFDataType,f}

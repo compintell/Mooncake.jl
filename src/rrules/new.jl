@@ -1,5 +1,12 @@
 @is_primitive MinimalCtx Tuple{typeof(_new_),Vararg}
 
+function frule!!(f::Dual{typeof(_new_)}, p::Dual{Type{P}}, x::Vararg{Dual,N}) where {P,N}
+    y = _new_(P, tuple_map(primal, x)...)
+    T = tangent_type(P)
+    dy = T(tuple_map(tangent, x))  # TODO: check
+    return Dual(y, dy)
+end
+
 function rrule!!(
     f::CoDual{typeof(_new_)}, p::CoDual{Type{P}}, x::Vararg{CoDual,N}
 ) where {P,N}

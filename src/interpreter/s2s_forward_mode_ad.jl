@@ -122,6 +122,17 @@ function modify_fwd_ad_stmts!(
     dual_ir::CC.IncrementalCompact,
     primal_ir::IRCode,
     ::MooncakeInterpreter,
+    stmt::GlobalRef,
+    i::Integer;
+    kwargs...,
+)
+    return nothing
+end
+
+function modify_fwd_ad_stmts!(
+    dual_ir::CC.IncrementalCompact,
+    primal_ir::IRCode,
+    ::MooncakeInterpreter,
     stmt::GotoNode,
     i::Integer;
     kwargs...,

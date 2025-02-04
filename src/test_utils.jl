@@ -637,7 +637,7 @@ function test_frule_performance(
 
         # Test allocations in forwards-mode.
         __forwards(rule, f_ḟ, x_ẋ...)
-        @test (@allocations __forwards(rule, f_ḟ, x_ẋ...)) == 0
+        @test (@allocations __forwards(rule, f_ḟ, x_ẋ...)) == 0 # TODO: compile rule first?
     end
 end
 
