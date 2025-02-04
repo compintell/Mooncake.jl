@@ -536,7 +536,7 @@ function test_rrule_interface(f_f̄, x_x̄...; rule)
     @test all(map((a, b) -> _typeof(a) == _typeof(rdata(b)), x̄_new, x̄))
 end
 
-function __forwards_and_backwards(rule::R, x_x̄::Vararg{Any,N}) where {R, N}
+function __forwards_and_backwards(rule::R, x_x̄::Vararg{Any,N}) where {R,N}
     out, pb!! = rule(x_x̄...)
     return pb!!(Mooncake.zero_rdata(primal(out)))
 end

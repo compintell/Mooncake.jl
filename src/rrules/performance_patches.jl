@@ -17,7 +17,7 @@
 #   cause robustness or correctness problems.
 
 # https://github.com/compintell/Mooncake.jl/issues/156
-@is_primitive DefaultCtx Tuple{typeof(sum), Array{<:IEEEFloat}}
+@is_primitive DefaultCtx Tuple{typeof(sum),Array{<:IEEEFloat}}
 function rrule!!(::CoDual{typeof(sum)}, x::CoDual{<:Array{P}}) where {P<:IEEEFloat}
     dx = x.dx
     function sum_pb!!(dz::P)
@@ -28,7 +28,7 @@ function rrule!!(::CoDual{typeof(sum)}, x::CoDual{<:Array{P}}) where {P<:IEEEFlo
 end
 
 # https://github.com/compintell/Mooncake.jl/issues/156
-@is_primitive DefaultCtx Tuple{typeof(sum), typeof(abs2), Array{<:IEEEFloat}}
+@is_primitive DefaultCtx Tuple{typeof(sum),typeof(abs2),Array{<:IEEEFloat}}
 function rrule!!(
     ::CoDual{typeof(sum)}, ::CoDual{typeof(abs2)}, x::CoDual{<:Array{P}}
 ) where {P<:IEEEFloat}
