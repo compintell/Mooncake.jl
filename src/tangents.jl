@@ -112,7 +112,6 @@ end
 end
 
 function build_tangent(::Type{P}, fields...) where {P}
-    N = length(fields)
     fields = map(enumerate(tangent_field_types(P))) do (n, tt)
         tt <: PossiblyUninitTangent && return n <= length(fields) ? tt(fields[n]) : tt()
         return fields[n]
