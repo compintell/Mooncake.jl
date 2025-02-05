@@ -44,14 +44,30 @@ function rrule!!(
     return zero_fcodual(sum(x.x)), sum_pb!!
 end
 
-# https://github.com/compintell/Mooncake.jl/issues/156
-@is_primitive DefaultCtx Tuple{typeof(sum),typeof(abs2),Array{<:IEEEFloat}}
+# Performance issue: https://github.com/compintell/Mooncake.jl/issues/156
+# Complicated implementation involving low-level machinery needed due to
+# https://github.com/compintell/Mooncake.jl/issues/238
+@is_primitive(
+    DefaultCtx,
+    Tuple{
+        typeof(Base._mapreduce),
+        typeof(abs2),
+        typeof(Base.add_sum),
+        Base.IndexLinear,
+        Array{<:IEEEFloat},
+    },
+)
 function rrule!!(
-    ::CoDual{typeof(sum)}, ::CoDual{typeof(abs2)}, x::CoDual{<:Array{P}}
+    ::CoDual{typeof(Base._mapreduce)},
+    ::CoDual{typeof(abs2)},
+    ::CoDual{typeof(Base.add_sum)},
+    ::CoDual{Base.IndexLinear},
+    x::CoDual{<:Array{P}}
 ) where {P<:IEEEFloat}
+    dx = x.dx
     function sum_pb!!(dz::P)
         x.dx .+= 2 .* dz .* x.x
-        return NoRData(), NoRData(), NoRData()
+        return NoRData(), NoRData(), NoRData(), NoRData(), NoRData()
     end
     return zero_fcodual(sum(abs2, x.x)), sum_pb!!
 end
@@ -62,18 +78,12 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:performance_p
     precisions = [Float64, Float32, Float16]
     test_cases = vcat(
 
-        # sum:
-        map_prod(sizes, precisions) do (sz, P)
+        # sum(x), sum(abs2, x)
+        map_prod(sizes, precisions, [identity, abs2]) do (sz, P, f)
             flags = (P == Float16 ? true : false, :stability_and_allocs, nothing)
             x = randn(rng, P, sz...)
-            args = (Base._mapreduce, identity, Base.add_sum, Base.IndexLinear(), x)
+            args = (Base._mapreduce, f, Base.add_sum, Base.IndexLinear(), x)
             return (flags..., args...)
-        end,
-
-        # Tuple{typeof(sum), typeof(abs2), Array{<:IEEEFloat}}
-        map_prod(sizes, precisions) do (sz, P)
-            flags = flags = (P == Float16 ? true : false, :stability_and_allocs, nothing)
-            return (flags..., sum, abs2, randn(rng, P, sz...))
         end,
     )
     memory = Any[]
