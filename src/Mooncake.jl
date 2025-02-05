@@ -46,7 +46,6 @@ using Core.Intrinsics: pointerref, pointerset
 using LinearAlgebra.BLAS: @blasfunc, BlasInt, trsm!
 using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!, potrf!, potrs!
 using FunctionWrappers: FunctionWrapper
-using PrecompileTools: @compile_workload
 
 # Needs to be defined before various other things.
 function _foreigncall_ end
@@ -171,10 +170,5 @@ export primal,
     fdata,
     rdata,
     get_interpreter
-
-@compile_workload begin
-    rrule!!(CoDual(sum, NoFData()), CoDual(randn(10), randn(10)))[2](2.0)
-    rrule!!(CoDual(sum, NoFData()), CoDual(randn(10, 3), randn(10, 3)))[2](2.0)
-end
 
 end
