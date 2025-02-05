@@ -26,6 +26,7 @@ makedocs(;
             joinpath("understanding_mooncake", "introduction.md"),
             joinpath("understanding_mooncake", "algorithmic_differentiation.md"),
             joinpath("understanding_mooncake", "rule_system.md"),
+            joinpath("understanding_mooncake", "what_programme_are_you_differentiating.md"),
         ],
         "Utilities" => [
             joinpath("utilities", "defining_rules.md"),
@@ -41,6 +42,7 @@ makedocs(;
         ],
         "known_limitations.md",
     ],
+    doctest=false,
 )
 
 deploydocs(; repo="github.com/compintell/Mooncake.jl.git", push_preview=true)
