@@ -16,13 +16,30 @@
 #   improvement over what we currently have, and prevents the addition of flakey rules which
 #   cause robustness or correctness problems.
 
-# https://github.com/compintell/Mooncake.jl/issues/156
-@is_primitive DefaultCtx Tuple{typeof(sum),Array{<:IEEEFloat}}
-function rrule!!(::CoDual{typeof(sum)}, x::CoDual{<:Array{P}}) where {P<:IEEEFloat}
+# Performance issue: https://github.com/compintell/Mooncake.jl/issues/156
+# Complicated implementation involving low-level machinery needed due to
+# https://github.com/compintell/Mooncake.jl/issues/238
+@is_primitive(
+    DefaultCtx,
+    Tuple{
+        typeof(Base._mapreduce),
+        typeof(identity),
+        typeof(Base.add_sum),
+        Base.IndexLinear,
+        Array{<:IEEEFloat},
+    },
+)
+function rrule!!(
+    ::CoDual{typeof(Base._mapreduce)},
+    ::CoDual{typeof(identity)},
+    ::CoDual{typeof(Base.add_sum)},
+    ::CoDual{Base.IndexLinear},
+    x::CoDual{<:Array{P}}
+) where {P<:IEEEFloat}
     dx = x.dx
     function sum_pb!!(dz::P)
         dx .+= dz
-        return NoRData(), NoRData()
+        return NoRData(), NoRData(), NoRData(), NoRData(), NoRData()
     end
     return zero_fcodual(sum(x.x)), sum_pb!!
 end
@@ -41,24 +58,24 @@ end
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:performance_patches})
     rng = rng_ctor(123)
-    test_cases = Any[
+    sizes = [(11,), (11, 3)]
+    precisions = [Float64, Float32, Float16]
+    test_cases = vcat(
 
-        # Tuple{typeof(sum), Array{<:IEEEFloat}}
-        (false, :stability_and_allocs, nothing, sum, randn(rng, Float64, 11)),
-        (false, :stability_and_allocs, nothing, sum, randn(rng, Float32, 11)),
-        (true, :stability_and_allocs, nothing, sum, randn(rng, Float16, 11)),
-        (false, :stability_and_allocs, nothing, sum, randn(rng, Float64, 11, 3)),
-        (false, :stability_and_allocs, nothing, sum, randn(rng, Float32, 11, 3)),
-        (true, :stability_and_allocs, nothing, sum, randn(rng, Float16, 11, 3)),
+        # sum:
+        map_prod(sizes, precisions) do (sz, P)
+            flags = (P == Float16 ? true : false, :stability_and_allocs, nothing)
+            x = randn(rng, P, sz...)
+            args = (Base._mapreduce, identity, Base.add_sum, Base.IndexLinear(), x)
+            return (flags..., args...)
+        end,
 
         # Tuple{typeof(sum), typeof(abs2), Array{<:IEEEFloat}}
-        (false, :stability_and_allocs, nothing, sum, abs2, randn(rng, Float64, 11)),
-        (false, :stability_and_allocs, nothing, sum, abs2, randn(rng, Float32, 11)),
-        (true, :stability_and_allocs, nothing, sum, abs2, randn(rng, Float16, 11)),
-        (false, :stability_and_allocs, nothing, sum, abs2, randn(rng, Float64, 11, 3)),
-        (false, :stability_and_allocs, nothing, sum, abs2, randn(rng, Float32, 11, 3)),
-        (true, :stability_and_allocs, nothing, sum, abs2, randn(rng, Float16, 11, 3)),
-    ]
+        map_prod(sizes, precisions) do (sz, P)
+            flags = flags = (P == Float16 ? true : false, :stability_and_allocs, nothing)
+            return (flags..., sum, abs2, randn(rng, P, sz...))
+        end,
+    )
     memory = Any[]
     return test_cases, memory
 end
