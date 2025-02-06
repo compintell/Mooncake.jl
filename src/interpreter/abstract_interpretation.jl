@@ -75,8 +75,7 @@ struct MooncakeInterpreter{C} <: CC.AbstractInterpreter
             oc_cache,
             inline_primitives,
         )
-        init_interp!(interp)
-        return interp
+        return init_interp!(interp)
     end
 end
 
