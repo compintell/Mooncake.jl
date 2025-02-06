@@ -26,17 +26,17 @@ Base.Experimental.@MethodTable mooncake_method_table
 
 function init_interp!(interp::MooncakeInterpreter)
     tts = Any[
-        Tuple{typeof(sum), Tuple{Int}},
-        Tuple{typeof(sum), Tuple{Int, Int}},
-        Tuple{typeof(sum), Tuple{Int, Int, Int}},
-        Tuple{typeof(sum), Tuple{Int, Int, Int, Int}},
-        Tuple{typeof(sum), Tuple{Int, Int, Int, Int, Int}},
+        Tuple{typeof(sum),Tuple{Int}},
+        Tuple{typeof(sum),Tuple{Int,Int}},
+        Tuple{typeof(sum),Tuple{Int,Int,Int}},
+        Tuple{typeof(sum),Tuple{Int,Int,Int,Int}},
+        Tuple{typeof(sum),Tuple{Int,Int,Int,Int,Int}},
     ]
     for tt in tts
         for m in CC._methods_by_ftype(tt, 10, interp.world)::Vector
             m = m::CC.MethodMatch
             typ = Any[m.spec_types.parameters...]
-            for i = 1:length(typ)
+            for i in 1:length(typ)
                 typ[i] = CC.unwraptv(typ[i])
             end
             CC.typeinf_type(interp, m.method, Tuple{typ...}, m.sparams)
