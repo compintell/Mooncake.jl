@@ -24,6 +24,27 @@ MooncakeCache() = MooncakeCache(IdDict{Core.MethodInstance,Core.CodeInstance}())
 # The method table used by `Mooncake.@mooncake_overlay`.
 Base.Experimental.@MethodTable mooncake_method_table
 
+function init_interp!(interp::MooncakeInterpreter)
+    tts = Any[
+        Tuple{typeof(sum), Tuple{Int}},
+        Tuple{typeof(sum), Tuple{Int, Int}},
+        Tuple{typeof(sum), Tuple{Int, Int, Int}},
+        Tuple{typeof(sum), Tuple{Int, Int, Int, Int}},
+        Tuple{typeof(sum), Tuple{Int, Int, Int, Int, Int}},
+    ]
+    for tt in tts
+        for m in CC._methods_by_ftype(tt, 10, interp.world)::Vector
+            m = m::CC.MethodMatch
+            typ = Any[m.spec_types.parameters...]
+            for i = 1:length(typ)
+                typ[i] = CC.unwraptv(typ[i])
+            end
+            CC.typeinf_type(interp, m.method, Tuple{typ...}, m.sparams)
+        end
+    end
+    return interp
+end
+
 struct MooncakeInterpreter{C} <: CC.AbstractInterpreter
     meta # additional information
     world::UInt
@@ -44,7 +65,7 @@ struct MooncakeInterpreter{C} <: CC.AbstractInterpreter
         oc_cache::Dict{ClosureCacheKey,Any}=Dict{ClosureCacheKey,Any}(),
         inline_primitives::Bool=false,
     ) where {C}
-        return new{C}(
+        interp = new{C}(
             meta,
             world,
             inf_params,
@@ -54,55 +75,9 @@ struct MooncakeInterpreter{C} <: CC.AbstractInterpreter
             oc_cache,
             inline_primitives,
         )
+        init_interp!(interp)
+        return interp
     end
-end
-
-function init_interp!(interp::MooncakeInterpreter)
-    optimize_tt = Tuple{
-        typeof(CC.optimize),
-        MooncakeInterpreter,
-        CC.OptimizationState{MooncakeInterpreter},
-        CC.InferenceResult,
-    }
-    fs = Any[optimize_tt, CC.typeinf_ext, CC.typeinf, CC.typeinf_edge]
-    for x in CC.T_FFUNC_VAL
-        push!(fs, x[3])
-    end
-    for i = 1:length(CC.T_IFUNC)
-        if isassigned(CC.T_IFUNC, i)
-            x = CC.T_IFUNC[i]
-            push!(fs, x[3])
-        else
-            println(stderr, "WARNING: tfunc missing for ", reinterpret(IntrinsicFunction, Int32(i)))
-        end
-    end
-    push!(fs, Tuple{typeof(sum), Tuple{Int}})
-    push!(fs, Tuple{typeof(sum), Tuple{Int, Int}})
-    push!(fs, Tuple{typeof(sum), Tuple{Int, Int, Int}})
-    push!(fs, Tuple{typeof(sum), Tuple{Int, Int, Int, Int}})
-    push!(fs, Tuple{typeof(sum), Tuple{Int, Int, Int, Int, Int}})
-    for f in fs
-        if typeof(f) <: Tuple
-            tt = f
-        else
-            if isa(f, DataType) && f.name === CC.typename(Tuple)
-                tt = f
-            else
-                tt = Tuple{typeof(f), Vararg{Any}}
-            end
-        end
-        for m in CC._methods_by_ftype(tt, 10, CC.get_world_counter())::Vector
-            # remove any TypeVars from the intersection
-            m = m::CC.MethodMatch
-            typ = Any[m.spec_types.parameters...]
-            for i = 1:length(typ)
-                typ[i] = CC.unwraptv(typ[i])
-            end
-            @show m
-            CC.typeinf_type(interp, m.method, Tuple{typ...}, m.sparams)
-        end
-    end
-    return interp
 end
 
 # Don't print out the IRCode object, because this tends to pollute the REPL. Just make it
@@ -267,13 +242,12 @@ function get_interpreter(; inline_primitives=false)
     if inline_primitives
         if GLOBAL_INLINING_INTERPRETER[].world != Base.get_world_counter()
             interp = MooncakeInterpreter(DefaultCtx; inline_primitives)
-            init_interp!(interp)
             GLOBAL_INLINING_INTERPRETER[] = interp
         end
         return GLOBAL_INLINING_INTERPRETER[]
     else
         if GLOBAL_INTERPRETER[].world != Base.get_world_counter()
-            GLOBAL_INTERPRETER[] = init_interp!(MooncakeInterpreter())
+            GLOBAL_INTERPRETER[] = MooncakeInterpreter()
         end
         return GLOBAL_INTERPRETER[]
     end
