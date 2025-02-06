@@ -44,7 +44,7 @@ struct MooncakeInterpreter{C} <: CC.AbstractInterpreter
         oc_cache::Dict{ClosureCacheKey,Any}=Dict{ClosureCacheKey,Any}(),
         inline_primitives::Bool=false,
     ) where {C}
-        return new{C}(
+        interp = new{C}(
             meta,
             world,
             inf_params,
@@ -54,6 +54,24 @@ struct MooncakeInterpreter{C} <: CC.AbstractInterpreter
             oc_cache,
             inline_primitives,
         )
+        tts = Any[
+            Tuple{typeof(sum),Tuple{Int}},
+            Tuple{typeof(sum),Tuple{Int,Int}},
+            Tuple{typeof(sum),Tuple{Int,Int,Int}},
+            Tuple{typeof(sum),Tuple{Int,Int,Int,Int}},
+            Tuple{typeof(sum),Tuple{Int,Int,Int,Int,Int}},
+        ]
+        for tt in tts
+            for m in CC._methods_by_ftype(tt, 10, interp.world)::Vector
+                m = m::CC.MethodMatch
+                typ = Any[m.spec_types.parameters...]
+                for i in 1:length(typ)
+                    typ[i] = CC.unwraptv(typ[i])
+                end
+                CC.typeinf_type(interp, m.method, Tuple{typ...}, m.sparams)
+            end
+        end
+        return interp
     end
 end
 
