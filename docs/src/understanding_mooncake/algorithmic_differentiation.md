@@ -421,7 +421,8 @@ The _gradient_ of ``f : \mathcal{X} \to \mathbb{R}`` at ``x`` is defined to be t
 for any direction ``\dot{x}``.
 In other words, the vector ``\nabla f`` encodes all the information about the directional derivatives of ``f``, and we use the inner product to retrieve each one.
 
-An alternative characterisation is that ``\nabla f(x)`` is the vector pointing in the direction of steepest ascent on ``f`` at ``x``, with magnitude equal to the directional derivative in that steepest direction.
+An alternative characterisation is that ``\nabla f(x)`` is the vector pointing in the direction of steepest ascent whose magnitude is given by the slope in that direction.
+In other words, if ``\hat{n} \coloneqq \argmax_{\|u\|=1} D f[x](u)`` is the unit vector in the direction of steepest ascent, then ``\nabla f = \|\nabla f\| \, \hat{n}`` and ``D f[x](\hat{n}) = \|\nabla f(x)\|``.
 
 _**Aside: The choice of inner product**_
 
