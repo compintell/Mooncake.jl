@@ -88,10 +88,22 @@ function generate_dual_ir(
     end
     pushfirst!(dual_ir.argtypes, Any)
 
-    # Modify dual IR incrementally
+    # Modify dual IR incrementally (do the same over primal because otherwise they won't match due to nothing statements)
+    primal_ir_comp = CC.IncrementalCompact(primal_ir)
     dual_ir_comp = CC.IncrementalCompact(dual_ir)
-    for ((_, i), inst) in dual_ir_comp
-        modify_fwd_ad_stmts!(dual_ir_comp, primal_ir, interp, inst, i; debug_mode)
+
+    for (((_, primal_ssa), primal_stmt), ((_, dual_ssa), dual_stmt)) in
+        zip(primal_ir_comp, dual_ir_comp)
+        modify_fwd_ad_stmts!(
+            dual_stmt,
+            primal_stmt,
+            dual_ir_comp,
+            primal_ir_comp,
+            dual_ssa,
+            primal_ssa,
+            interp;
+            debug_mode,
+        )
     end
     dual_ir_comp = CC.finish(dual_ir_comp)
     dual_ir_comp = CC.compact!(dual_ir_comp)
@@ -99,119 +111,138 @@ function generate_dual_ir(
     CC.verify_ir(dual_ir_comp)
 
     # Optimize dual IR
-    opt_dual_ir = optimise_ir!(dual_ir_comp; do_inline)  # TODO: toggle
-    # @info "Inferred dual IR"
-    # display(opt_dual_ir)  # TODO: toggle
-    return opt_dual_ir
+    dual_ir_opt = optimise_ir!(dual_ir_comp; do_inline)  # TODO: toggle
+    return dual_ir_opt
 end
 
 ## Modification of IR nodes
 
-function modify_fwd_ad_stmts!(
-    dual_ir::CC.IncrementalCompact,
-    primal_ir::IRCode,
-    ::MooncakeInterpreter,
-    stmt::Nothing,
-    i::Integer;
-    kwargs...,
-)
-    return nothing
-end
+const REVERSE_AFFINITY = true  # stick the new instruction in the previous CFG block (incremental insertion cannot be done before "where we are")
 
-function modify_fwd_ad_stmts!(
-    dual_ir::CC.IncrementalCompact,
-    primal_ir::IRCode,
-    ::MooncakeInterpreter,
-    stmt::GlobalRef,
-    i::Integer;
-    kwargs...,
-)
-    return nothing
-end
-
-function modify_fwd_ad_stmts!(
-    dual_ir::CC.IncrementalCompact,
-    primal_ir::IRCode,
-    ::MooncakeInterpreter,
-    stmt::GotoNode,
-    i::Integer;
-    kwargs...,
-)
-    return nothing
-end
-
-function modify_fwd_ad_stmts!(
-    dual_ir::CC.IncrementalCompact,
-    primal_ir::IRCode,
-    ::MooncakeInterpreter,
-    stmt::Core.GotoIfNot,
-    i::Integer;
-    kwargs...,
-)
-    # replace GotoIfNot with the call to primal
-    Mooncake.replace_call!(
-        dual_ir, CC.SSAValue(i), Expr(:call, _primal, inc_args(stmt).cond)
-    )
-    # reinsert the GotoIfNot right after the call to primal
-    # (incremental insertion cannot be done before "where we are")
-    new_gotoifnot_inst = CC.NewInstruction(
-        Core.GotoIfNot(CC.SSAValue(i), stmt.dest),  #
+function MyInstruction(stmt)
+    return CC.NewInstruction(
+        stmt,
         Any,
         CC.NoCallInfo(),
         Int32(1),  # meaningless
         CC.IR_FLAG_REFINED,
     )
-    # stick the new instruction in the previous CFG block
-    reverse_affinity = true
-    CC.insert_node_here!(dual_ir, new_gotoifnot_inst, reverse_affinity)
+end
+
+function modify_fwd_ad_stmts!(
+    dual_stmt::Nothing,
+    primal_stmt::Nothing,
+    dual_ir::CC.IncrementalCompact,
+    primal_ir::CC.IncrementalCompact,
+    dual_ssa::Integer,
+    primal_ssa::Integer,
+    ::MooncakeInterpreter;
+    kwargs...,
+)
     return nothing
 end
 
 function modify_fwd_ad_stmts!(
+    dual_stmt::GotoNode,
+    primal_stmt::GotoNode,
     dual_ir::CC.IncrementalCompact,
-    primal_ir::IRCode,
-    ::MooncakeInterpreter,
-    stmt::ReturnNode,
-    i::Integer;
+    primal_ir::CC.IncrementalCompact,
+    dual_ssa::Integer,
+    primal_ssa::Integer,
+    ::MooncakeInterpreter;
+    kwargs...,
+)
+    return nothing
+end
+
+function modify_fwd_ad_stmts!(
+    dual_stmt::GotoIfNot,
+    primal_stmt::GotoIfNot,
+    dual_ir::CC.IncrementalCompact,
+    primal_ir::CC.IncrementalCompact,
+    dual_ssa::Integer,
+    primal_ssa::Integer,
+    ::MooncakeInterpreter;
+    kwargs...,
+)
+    # replace GotoIfNot with the call to primal
+    Mooncake.replace_call!(
+        dual_ir, SSAValue(dual_ssa), Expr(:call, _primal, inc_args(dual_stmt).cond)
+    )
+    # reinsert the GotoIfNot right after the call to primal
+    new_gotoifnot_inst = MyInstruction(Core.GotoIfNot(SSAValue(dual_ssa), dual_stmt.dest))
+    CC.insert_node_here!(dual_ir, new_gotoifnot_inst, REVERSE_AFFINITY)
+    return nothing
+end
+
+function modify_fwd_ad_stmts!(
+    dual_stmt::GlobalRef,
+    primal_stmt::GlobalRef,
+    dual_ir::CC.IncrementalCompact,
+    primal_ir::CC.IncrementalCompact,
+    dual_ssa::Integer,
+    primal_ssa::Integer,
+    ::MooncakeInterpreter;
+    kwargs...,
+)
+    return nothing
+end
+
+function modify_fwd_ad_stmts!(
+    dual_stmt::ReturnNode,
+    primal_stmt::ReturnNode,
+    dual_ir::CC.IncrementalCompact,
+    primal_ir::CC.IncrementalCompact,
+    dual_ssa::Integer,
+    primal_ssa::Integer,
+    ::MooncakeInterpreter;
     kwargs...,
 )
     # make sure that we always return a Dual even when it's a constant
-    Mooncake.replace_call!(dual_ir, CC.SSAValue(i), Expr(:call, _dual, inc_args(stmt).val))
+    if isdefined(primal_stmt, :val)
+        Mooncake.replace_call!(
+            dual_ir, SSAValue(dual_ssa), Expr(:call, _dual, inc_args(dual_stmt).val)
+        )
+    else
+        # a ReturnNode without a val is an unreachable
+        nothing
+    end
     # return the result from the previous Dual conversion
-    new_return_inst = CC.NewInstruction(
-        Core.ReturnNode(CC.SSAValue(i)), Any, CC.NoCallInfo(), Int32(1), CC.IR_FLAG_REFINED
-    )
-    CC.insert_node_here!(dual_ir, new_return_inst, true)
+    new_return_inst = MyInstruction(ReturnNode(SSAValue(dual_ssa)))
+    CC.insert_node_here!(dual_ir, new_return_inst, REVERSE_AFFINITY)
     return nothing
 end
 
 function modify_fwd_ad_stmts!(
+    dual_stmt::PhiNode,
+    primal_stmt::PhiNode,
     dual_ir::CC.IncrementalCompact,
-    primal_ir::IRCode,
-    ::MooncakeInterpreter,
-    stmt::PhiNode,
-    i::Integer;
+    primal_ir::CC.IncrementalCompact,
+    dual_ssa::Integer,
+    primal_ssa::Integer,
+    ::MooncakeInterpreter;
     kwargs...,
 )
-    dual_ir[SSAValue(i)][:stmt] = inc_args(stmt)  # TODO: translate constants into constant Duals
-    dual_ir[SSAValue(i)][:type] = Any
-    dual_ir[SSAValue(i)][:flag] = CC.IR_FLAG_REFINED
+    dual_ir[SSAValue(dual_ssa)][:stmt] = inc_args(dual_stmt)
+    # TODO: translate constants like GlobalRef into constant Duals
+    dual_ir[SSAValue(dual_ssa)][:type] = Any
+    dual_ir[SSAValue(dual_ssa)][:flag] = CC.IR_FLAG_REFINED
     return nothing
 end
 
 function modify_fwd_ad_stmts!(
+    dual_stmt::PiNode,
+    primal_stmt::PiNode,
     dual_ir::CC.IncrementalCompact,
-    primal_ir::IRCode,
-    ::MooncakeInterpreter,
-    stmt::PiNode,
-    i::Integer;
+    primal_ir::CC.IncrementalCompact,
+    dual_ssa::Integer,
+    primal_ssa::Integer,
+    ::MooncakeInterpreter;
     kwargs...,
 )
-    dual_ir[SSAValue(i)][:stmt] = inc_args(
-        PiNode(stmt.val, Dual{stmt.typ,tangent_type(stmt.typ)})
-    )  # TODO: improve?
-    dual_ir[SSAValue(i)][:type] = Any
-    dual_ir[SSAValue(i)][:flag] = CC.IR_FLAG_REFINED
+    dual_ir[SSAValue(dual_ssa)][:stmt] = PiNode(inc_args(dual_stmt).val, Any)  # TODO: deduce proper dual type (impossible now because PhiNodes may return undualized values with GlobalRefs)
+    dual_ir[SSAValue(dual_ssa)][:type] = Any
+    dual_ir[SSAValue(dual_ssa)][:flag] = CC.IR_FLAG_REFINED
     return nothing
 end
 
@@ -251,20 +282,25 @@ function (dynamic_rule::DynamicFRule)(args::Vararg{Any,N}) where {N}
 end
 
 function modify_fwd_ad_stmts!(
+    dual_stmt::Expr,
+    primal_stmt::Expr,
     dual_ir::CC.IncrementalCompact,
-    primal_ir::IRCode,
-    interp::MooncakeInterpreter,
-    stmt::Expr,
-    i::Integer;
+    primal_ir::CC.IncrementalCompact,
+    dual_ssa::Integer,
+    primal_ssa::Integer,
+    interp::MooncakeInterpreter;
     debug_mode,
 )
+    stmt = dual_stmt
+
     if isexpr(stmt, :invoke) || isexpr(stmt, :call)
         sig, mi = if isexpr(stmt, :invoke)
             mi = stmt.args[1]::Core.MethodInstance
             mi.specTypes, mi
         else
-            sig_types = map(stmt.args) do a
-                get_forward_primal_type(primal_ir, a)
+            sig_types = map(primal_stmt.args) do primal_arg
+                T = get_forward_primal_type(primal_ir, primal_arg)
+                return T
             end
             Tuple{sig_types...}, missing
         end
@@ -275,7 +311,7 @@ function modify_fwd_ad_stmts!(
         end
         if is_primitive(context_type(interp), sig)
             call_frule = Expr(:call, DualArguments(frule!!), shifted_args...)
-            replace_call!(dual_ir, SSAValue(i), call_frule)
+            replace_call!(dual_ir, SSAValue(dual_ssa), call_frule)
         else
             if isexpr(stmt, :invoke)
                 rule = build_frule(interp, mi; debug_mode)
@@ -285,12 +321,12 @@ function modify_fwd_ad_stmts!(
             end
             # TODO: could this insertion of a naked rule in the IR cause a memory leak?
             call_rule = Expr(:call, DualArguments(rule), shifted_args...)
-            replace_call!(dual_ir, SSAValue(i), call_rule)
+            replace_call!(dual_ir, SSAValue(dual_ssa), call_rule)
         end
-    elseif isexpr(stmt, :boundscheck)
+    elseif isexpr(stmt, :boundscheck) || isexpr(stmt, :loopinfo)
         nothing
     elseif isexpr(stmt, :code_coverage_effect)
-        replace_call!(dual_ir, SSAValue(i), nothing)
+        replace_call!(dual_ir, SSAValue(dual_ssa), nothing)
     else
         throw(
             ArgumentError(
@@ -298,16 +334,30 @@ function modify_fwd_ad_stmts!(
             ),
         )
     end
+    return nothing
 end
 
-get_forward_primal_type(ir::IRCode, a::Argument) = ir.argtypes[a.n]
-get_forward_primal_type(ir::IRCode, ssa::SSAValue) = ir[ssa][:type]
-get_forward_primal_type(::IRCode, x::QuoteNode) = _typeof(x.value)
-get_forward_primal_type(::IRCode, x) = _typeof(x)
-function get_forward_primal_type(::IRCode, x::GlobalRef)
+function get_forward_primal_type(ir::CC.IncrementalCompact, a::Argument)
+    return ir.ir.argtypes[a.n]
+end
+
+function get_forward_primal_type(ir::CC.IncrementalCompact, ssa::SSAValue)
+    return ir[ssa][:type]
+end
+
+function get_forward_primal_type(::CC.IncrementalCompact, x::QuoteNode)
+    return _typeof(x.value)
+end
+
+function get_forward_primal_type(::CC.IncrementalCompact, x)
+    return _typeof(x)
+end
+
+function get_forward_primal_type(::CC.IncrementalCompact, x::GlobalRef)
     return isconst(x) ? _typeof(getglobal(x.mod, x.name)) : x.binding.ty
 end
-function get_forward_primal_type(::IRCode, x::Expr)
+
+function get_forward_primal_type(::CC.IncrementalCompact, x::Expr)
     x.head === :boundscheck && return Bool
     return error("Unrecognised expression $x found in argument slot.")
 end

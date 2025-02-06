@@ -36,3 +36,8 @@ Check that the type of `tangent(x)` is the tangent type of the type of `primal(x
 verify_dual_type(x::Dual) = tangent_type(typeof(primal(x))) == typeof(tangent(x))
 
 @inline uninit_dual(x::P) where {P} = Dual(x, uninit_tangent(x))
+
+# Always sharpen the first thing if it's a type so static dispatch remains possible.
+function Dual(x::Type{P}, dx::NoTangent) where {P}
+    return Dual{@isdefined(P) ? Type{P} : typeof(x),NoTangent}(P, dx)
+end

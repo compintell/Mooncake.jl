@@ -3,10 +3,11 @@ include("../front_matter.jl")
 #=
 Failing cases:
 - 4: fails an allocation test on the first run only (rule compilation?)
-- 15,16,17,18: I don't understand why `DataType` doesn't dispatch on `Type{P}`
-- 23: segfault on `GlobalRef`
+- 17: rule for `new` with uninitialized tangents for some fields
+- 28: stackoverflow (probably in method recognition and rule insertion?)
+- 32: rule for `new` with namedtuple is incorrect
 =#
-working_cases = vcat(1:14, 19:22)
+working_cases = vcat(1:16, 18:27, 29:31)
 
 @testset verbose = true "s2s_forward_mode_ad" begin
     test_cases = collect(enumerate(TestResources.generate_test_functions()))[working_cases]
