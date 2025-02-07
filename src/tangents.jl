@@ -31,12 +31,24 @@ is_init(t) = true
 val(x::PossiblyUninitTangent) = is_init(x) ? x.tangent : error("Uninitialised")
 val(x) = x
 
+"""
+    Tangent{Tfields<:NamedTuple}
+
+Default type used to represent the tangent of a `struct`. See [`tangent_type`](@ref) for
+more info.
+"""
 struct Tangent{Tfields<:NamedTuple}
     fields::Tfields
 end
 
 Base.:(==)(x::Tangent, y::Tangent) = x.fields == y.fields
 
+"""
+    MutableTangent{Tfields<:NamedTuple}
+
+Default type used to represent the tangent of a `mutable struct`. See [`tangent_type`](@ref)
+for more info.
+"""
 mutable struct MutableTangent{Tfields<:NamedTuple}
     fields::Tfields
     MutableTangent{Tfields}() where {Tfields} = new{Tfields}()

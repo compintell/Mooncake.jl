@@ -124,3 +124,13 @@ Based on all of the examples that I have seen thus far, it appears to be true th
 2. the function has no side-effects, so can be removed,
 everything will always constant fold nicely.
 This can be achieved by using the `Base.@assume_effects` macro in your method definitions, with the effects `:consistent` and `:removable`.
+
+
+## How Recursion Is Handled
+
+Mooncake handles recursive function calls by delaying code generation for generic function calls until the first time that they are actually run.
+The docstring below contains a thorough explanation:
+
+```@docs
+Mooncake.LazyDerivedRule
+```

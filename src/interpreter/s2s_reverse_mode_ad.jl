@@ -981,37 +981,6 @@ function pullback_ret_type(primal_ir::IRCode)
     return Tuple{map(rdata_type ∘ tangent_type ∘ CC.widenconst, primal_ir.argtypes)...}
 end
 
-"""
-    rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where {C}
-
-Compute the concrete type of the rule that will be returned from `build_rrule`. This is
-important for performance in dynamic dispatch, and to ensure that recursion works
-properly.
-"""
-function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where {C}
-    if is_primitive(C, _get_sig(sig_or_mi))
-        rule = build_primitive_rrule(_get_sig(sig_or_mi))
-        return debug_mode ? DebugRRule{typeof(rule)} : typeof(rule)
-    end
-
-    ir, _ = lookup_ir(interp, sig_or_mi)
-    Treturn = Base.Experimental.compute_ir_rettype(ir)
-    isva, _ = is_vararg_and_sparam_names(sig_or_mi)
-
-    arg_types = map(CC.widenconst, ir.argtypes)
-    sig = Tuple{arg_types...}
-    fwd_args_type = Tuple{map(fcodual_type, arg_types)...}
-    fwd_return_type = forwards_ret_type(ir)
-    pb_args_type = Tuple{rdata_type(tangent_type(Treturn))}
-    pb_return_type = pullback_ret_type(ir)
-    nargs = Val{length(ir.argtypes)}
-
-    Tderived_rule = DerivedRule{
-        sig,fwd_args_type,fwd_return_type,pb_args_type,pb_return_type,isva,nargs
-    }
-    return debug_mode ? DebugRRule{Tderived_rule} : Tderived_rule
-end
-
 struct MooncakeRuleCompilationError <: Exception
     interp::MooncakeInterpreter
     sig
@@ -1759,6 +1728,50 @@ Note: the signature of the primal for which this is a rule is stored in the type
 reason to keep this around is for debugging -- it is very helpful to have this type visible
 in the stack trace when something goes wrong, as it allows you to trivially determine which
 bit of your code is the culprit.
+
+# Extended Help
+
+There are two main reasons why deferring the construction of a `DerivedRule` until we need
+to use it is crucial.
+
+The first is to do with recursion. Consider the following function:
+```julia
+f(x) = x > 0 ? f(x - 1) : x
+```
+If we generate the `IRCode` for this function, we will see something like the following:
+```julia
+julia> Base.code_ircode_by_type(Tuple{typeof(f), Float64})[1][1]
+1 1 ─ %1  = Base.lt_float(0.0, _2)::Bool
+  │   %2  = Base.or_int(%1, false)::Bool
+  └──       goto #6 if not %2
+  2 ─ %4  = Base.sub_float(_2, 1.0)::Float64
+  │   %5  = Base.lt_float(0.0, %4)::Bool
+  │   %6  = Base.or_int(%5, false)::Bool
+  └──       goto #4 if not %6
+  3 ─ %8  = Base.sub_float(%4, 1.0)::Float64
+  │   %9  = invoke Main.f(%8::Float64)::Float64
+  └──       goto #5
+  4 ─       goto #5
+  5 ┄ %12 = φ (#3 => %9, #4 => %4)::Float64
+  └──       return %12
+  6 ─       return _2
+```
+Suppose that we decide to construct a `DerivedRule` immediately whenever we find an
+`:invoke` statement in a rule that we're currently building a `DerivedRule` for.
+In the above example, we produce an infinite recursion when we attempt to produce a
+`DerivedRule` for %9, because it has the same signature as the call which generates this IR.
+By instead adopting a policy of constructing a `LazyDerivedRule` whenever we encounter an
+`:invoke` statement, we avoid this problem.
+
+The second reason that delaying the construction of a `DerivedRule`, is essential is that it
+ensures that we don't derive rules for method instances which aren't run. Suppose that
+function B contains code for which we can't derive a rule -- perhaps it contains an
+unsupported language feature like a `PhiCNode` or an `UpsilonNode`. Suppose that function A
+contains an `:invoke` which refers to function `B`, but that this call is on a branch which
+deals with error handling, and doesn't get run run unless something goes wrong. By deferring
+the derivation of the rule for B, we only ever attempt to derive it if we land on this
+error handling branch. Conversely, if we attempted to derive the rule for B when we derive
+the rule for A, we would be unable to complete the derivation of the rule for A.
 """
 mutable struct LazyDerivedRule{primal_sig,Trule}
     debug_mode::Bool
@@ -1784,4 +1797,35 @@ end
 @noinline function _build_rule!(rule::LazyDerivedRule{sig,Trule}, args) where {sig,Trule}
     rule.rule = build_rrule(get_interpreter(), rule.mi; debug_mode=rule.debug_mode)
     return rule.rule(args...)
+end
+
+"""
+    rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where {C}
+
+Compute the concrete type of the rule that will be returned from `build_rrule`. This is
+important for performance in dynamic dispatch, and to ensure that recursion works
+properly.
+"""
+function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where {C}
+    if is_primitive(C, _get_sig(sig_or_mi))
+        rule = build_primitive_rrule(_get_sig(sig_or_mi))
+        return debug_mode ? DebugRRule{typeof(rule)} : typeof(rule)
+    end
+
+    ir, _ = lookup_ir(interp, sig_or_mi)
+    Treturn = Base.Experimental.compute_ir_rettype(ir)
+    isva, _ = is_vararg_and_sparam_names(sig_or_mi)
+
+    arg_types = map(CC.widenconst, ir.argtypes)
+    sig = Tuple{arg_types...}
+    fwd_args_type = Tuple{map(fcodual_type, arg_types)...}
+    fwd_return_type = forwards_ret_type(ir)
+    pb_args_type = Tuple{rdata_type(tangent_type(Treturn))}
+    pb_return_type = pullback_ret_type(ir)
+    nargs = Val{length(ir.argtypes)}
+
+    Tderived_rule = DerivedRule{
+        sig,fwd_args_type,fwd_return_type,pb_args_type,pb_return_type,isva,nargs
+    }
+    return debug_mode ? DebugRRule{Tderived_rule} : Tderived_rule
 end
