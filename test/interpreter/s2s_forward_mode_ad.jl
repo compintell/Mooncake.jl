@@ -7,7 +7,7 @@ Failing cases:
 - 28: stackoverflow (probably in method recognition and rule insertion?)
 - 32: rule for `new` with namedtuple is incorrect
 =#
-working_cases = vcat(1:16, 18:27, 29:31)
+working_cases = vcat(1:27, 29:31)
 
 @testset verbose = true "s2s_forward_mode_ad" begin
     test_cases = collect(enumerate(TestResources.generate_test_functions()))[working_cases]

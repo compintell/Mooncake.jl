@@ -108,7 +108,11 @@ function generate_dual_ir(
     dual_ir_comp = CC.finish(dual_ir_comp)
     dual_ir_comp = CC.compact!(dual_ir_comp)
 
+    # display(primal_ir)
+
     CC.verify_ir(dual_ir_comp)
+
+    # return dual_ir_comp
 
     # Optimize dual IR
     dual_ir_opt = optimise_ir!(dual_ir_comp; do_inline)  # TODO: toggle
@@ -261,26 +265,6 @@ function (da::DualArguments)(f::F, args::Vararg{Any,N}) where {F,N}
     return da.frule(tuple_map(_dual, (f, args...))...)
 end
 
-struct DynamicFRule{V}
-    cache::V
-    debug_mode::Bool
-end
-
-DynamicFRule(debug_mode::Bool) = DynamicFRule(Dict{Any,Any}(), debug_mode)
-
-_copy(x::P) where {P<:DynamicFRule} = P(Dict{Any,Any}(), x.debug_mode)
-
-function (dynamic_rule::DynamicFRule)(args::Vararg{Any,N}) where {N}
-    args_dual = map(_dual, args)  # TODO: don't turn everything into a Dual, be clever with Argument and SSAValue
-    sig = Tuple{map(_typeof ∘ primal, args_dual)...}
-    rule = get(dynamic_rule.cache, sig, nothing)
-    if rule === nothing
-        rule = build_frule(get_interpreter(), sig; debug_mode=dynamic_rule.debug_mode)
-        dynamic_rule.cache[sig] = rule
-    end
-    return rule(args_dual...)
-end
-
 function modify_fwd_ad_stmts!(
     dual_stmt::Expr,
     primal_stmt::Expr,
@@ -314,9 +298,8 @@ function modify_fwd_ad_stmts!(
             replace_call!(dual_ir, SSAValue(dual_ssa), call_frule)
         else
             if isexpr(stmt, :invoke)
-                rule = build_frule(interp, mi; debug_mode)
+                rule = LazyFRule(mi, debug_mode)
             else
-                @assert isexpr(stmt, :call)
                 rule = DynamicFRule(debug_mode)
             end
             # TODO: could this insertion of a naked rule in the IR cause a memory leak?
@@ -360,4 +343,63 @@ end
 function get_forward_primal_type(::CC.IncrementalCompact, x::Expr)
     x.head === :boundscheck && return Bool
     return error("Unrecognised expression $x found in argument slot.")
+end
+
+mutable struct LazyFRule{primal_sig,Trule}
+    debug_mode::Bool
+    mi::Core.MethodInstance
+    rule::Trule
+    function LazyFRule(mi::Core.MethodInstance, debug_mode::Bool)
+        interp = get_interpreter()
+        return new{mi.specTypes,frule_type(interp, mi; debug_mode)}(debug_mode, mi)
+    end
+    function LazyFRule{Tprimal_sig,Trule}(
+        mi::Core.MethodInstance, debug_mode::Bool
+    ) where {Tprimal_sig,Trule}
+        return new{Tprimal_sig,Trule}(debug_mode, mi)
+    end
+end
+
+_copy(x::P) where {P<:LazyFRule} = P(x.mi, x.debug_mode)
+
+@inline function (rule::LazyFRule)(args::Vararg{Any,N}) where {N}
+    return isdefined(rule, :rule) ? rule.rule(args...) : _build_rule!(rule, args)
+end
+
+@noinline function _build_rule!(rule::LazyFRule{sig,Trule}, args) where {sig,Trule}
+    rule.rule = build_frule(get_interpreter(), rule.mi; debug_mode=rule.debug_mode)
+    return rule.rule(args...)
+end
+
+function frule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where {C}
+    if is_primitive(C, _get_sig(sig_or_mi))
+        return debug_mode ? DebugFRule{typeof(frule!!)} : typeof(frule!!)
+    end
+    ir, _ = lookup_ir(interp, sig_or_mi)
+    arg_types = map(CC.widenconst, ir.argtypes)
+    fwd_args_type = Tuple{map(dual_type, arg_types)...}
+    fwd_return_type = dual_type(Base.Experimental.compute_ir_rettype(ir))
+    closure_type = RuleMC{fwd_args_type,fwd_return_type}
+    Tderived_rule = DerivedFRule{closure_type}
+    return debug_mode ? DebugFRule{Tderived_rule} : Tderived_rule
+end
+
+struct DynamicFRule{V}
+    cache::V
+    debug_mode::Bool
+end
+
+DynamicFRule(debug_mode::Bool) = DynamicFRule(Dict{Any,Any}(), debug_mode)
+
+_copy(x::P) where {P<:DynamicFRule} = P(Dict{Any,Any}(), x.debug_mode)
+
+function (dynamic_rule::DynamicFRule)(args::Vararg{Any,N}) where {N}
+    args_dual = map(_dual, args)  # TODO: don't turn everything into a Dual, be clever with Argument and SSAValue
+    sig = Tuple{map(_typeof ∘ primal, args_dual)...}
+    rule = get(dynamic_rule.cache, sig, nothing)
+    if rule === nothing
+        rule = build_frule(get_interpreter(), sig; debug_mode=dynamic_rule.debug_mode)
+        dynamic_rule.cache[sig] = rule
+    end
+    return rule(args_dual...)
 end
