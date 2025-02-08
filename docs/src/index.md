@@ -19,7 +19,7 @@ Documentation for Mooncake.jl is on its way!
 # Getting Started
 
 Check that you're running a version of Julia that Mooncake.jl supports.
-See the `SUPPORT_POLICY.md` file for more info.
+See the [`SUPPORT_POLICY.md`](https://github.com/compintell/Mooncake.jl/blob/main/SUPPORT_POLICY.md) for more info.
 
 There are several ways to interact with `Mooncake.jl`.
 The way that we recommend people to interact with `Mooncake.jl` is via  [`DifferentiationInterface.jl`](https://github.com/gdalle/DifferentiationInterface.jl/).
