@@ -2,18 +2,19 @@
 
 Documentation for Mooncake.jl is on its way!
 
-Note (03/10/2024): Various bits of utility functionality are now carefully documented. This
-includes how to change the code which Mooncake sees, declare that the derivative of a
-function is zero, make use of existing `ChainRules.rrule`s to quicky create new rules in
-Mooncake, and more.
+!!! details "Documentation Updates"
+    Note (03/10/2024): Various bits of utility functionality are now carefully documented. This
+    includes how to change the code which Mooncake sees, declare that the derivative of a
+    function is zero, make use of existing `ChainRules.rrule`s to quicky create new rules in
+    Mooncake, and more.
 
-Note (02/07/2024): The first round of documentation has arrived.
-This is largely targetted at those who are interested in contributing to Mooncake.jl -- you can find this work in the "Understanding Mooncake.jl" section of the docs.
-There is more to to do, but it should be sufficient to understand how AD works in principle, and the core abstractions underlying Mooncake.jl.
+    Note (02/07/2024): The first round of documentation has arrived.
+    This is largely targetted at those who are interested in contributing to Mooncake.jl -- you can find this work in the "Understanding Mooncake.jl" section of the docs.
+    There is more to to do, but it should be sufficient to understand how AD works in principle, and the core abstractions underlying Mooncake.jl.
 
-Note (29/05/2024): I (Will) am currently actively working on the documentation.
-It will be merged in chunks over the next month or so as good first drafts of sections are completed.
-Please don't be alarmed that not all of it is here!
+    Note (29/05/2024): I (Will) am currently actively working on the documentation.
+    It will be merged in chunks over the next month or so as good first drafts of sections are completed.
+    Please don't be alarmed that not all of it is here!
 
 # Getting Started
 
@@ -67,17 +68,13 @@ This contrasts with `Zygote.jl` / `ChainRules.jl`, where the permissive (co)tang
 
 Additionally, our approach to AD naturally handles control flow which differs between multiple calls to the same function.
 This contrasts with e.g. `ReverseDiff.jl`'s compiled tape, which can give silent numerical errors if control flow ought to differ between gradient evaluations at different arguments.
-~~Additionally, we augment the tape that we construct with additional instructions which throw an error if control flow differs from when the tape was constructed.~~
-~~This contrasts with `ReverseDiff.jl`, which silently fails in this scenario.~~
 
 ### Performance
 
 Hand-written `rrule!!`s have excellent performance, provided that they have been written well (most of the hand-written rules in `Mooncake.jl` have excellent performance, but some require optimisation. Doing this just requires investing some time).
 Consequently, whether or not the overall AD system has good performance is largely a question of how much overhead is associated to the mechanism by which hand-written `rrules!!`s are algorithmically composed.
 
-~~At present (11/2023), we do _not_ do this in a performant way, but this will change.~~
-~~At present (01/2024), we do this in a _moderately_ performant way.~~
-At present (03/2024), we do this in a _moderately_ performant way (but better than the previous way!)
+At present (03/2024), we do this in a _reasonably_ performant way (but better than the previous way!)
 See [Project Status](#project-status) below for more info.
 
 Additionally, the strategy of immediately incrementing (co)tangents resolves long-standing performance issues associated with indexing arrays.
@@ -111,34 +108,34 @@ The plan is to proceed in three phases:
 You should take this with a pinch of salt, as it seems highly likely that we will have to revisit some design choices when optimising performance -- we do not, however, anticipate requiring major re-writes to the design as part of performance optimisation.
 We aim to reach the maintenance phase of the project before 01/06/2024.
 
-*Update: (07/02/2025)*
-We're largely in phase 3 now.
-We're largely working on documentation, and resolving existing issues.
-There are several ways that we _could_ improve the performance of Mooncake.jl on e.g. low-level loops, but our feeling is that the performance is generally good _enough_ to mean that it's more important to ensure that Mooncake is very stable.
+!!! details "Updates"
+    *Update: (07/02/2025)*
+    We're largely in phase 3 now.
+    We're largely working on documentation, and resolving existing issues.
+    There are several ways that we _could_ improve the performance of Mooncake.jl on e.g. low-level loops, but our feeling is that the performance is generally good _enough_ to mean that it's more important to ensure that Mooncake is very stable.
 
-*Update: (30/04/2024)*
-Phase 2 continues!
-We are now finding that `Mooncake.jl` comfortably outperforms compiled `ReverseDiff.jl` on type-stable code in all of the situations we have tested.
-Optimising to get similar performance to `Enzyme.jl` is an on-going process.
+    *Update: (30/04/2024)*
+    Phase 2 continues!
+    We are now finding that `Mooncake.jl` comfortably outperforms compiled `ReverseDiff.jl` on type-stable code in all of the situations we have tested.
+    Optimising to get similar performance to `Enzyme.jl` is an on-going process.
 
-*Update: (22/03/2024)*
-~~Phase 2 is now further along.~~
-~~`Mooncake.jl` now uses something which could reasonably be described as a source-to-source system to perform AD.~~
-~~At present the performance of this system is not as good as that of Enzyme, but often beats compiled ReverseDiff, and comfortably beats Zygote in any situations involving dynamic control flow.~~
-~~The present focus is on dealing with some remaining performance limitations that should make `Mooncake.jl`'s performance much closer to that of Enzyme, and consistently beat ReverseDiff on a range of benchmarks.~~
-~~Fortunately, dealing with these performance limitations necessitates simplifying the internals substantially.~~
+    *Update: (22/03/2024)*
+    Phase 2 is now further along.
+    `Mooncake.jl` now uses something which could reasonably be described as a source-to-source system to perform AD.
+    At present the performance of this system is not as good as that of Enzyme, but often beats compiled ReverseDiff, and comfortably beats Zygote in any situations involving dynamic control flow.
+    The present focus is on dealing with some remaining performance limitations that should make `Mooncake.jl`'s performance much closer to that of Enzyme, and consistently beat ReverseDiff on a range of benchmarks.
+    Fortunately, dealing with these performance limitations necessitates simplifying the internals substantially.
 
-*Update: (16/01/2024)*
-~~Phase 2 is now well underway. We now make use of a much faster approach to interpreting / executing Julia code, which yields performance that is comparable with ReverseDiff (when things go well). The current focus is on ironing out performance issues, and simplifying the implementation.~~
+    *Update: (16/01/2024)*
+    Phase 2 is now well underway. We now make use of a much faster approach to interpreting / executing Julia code, which yields performance that is comparable with ReverseDiff (when things go well). The current focus is on ironing out performance issues, and simplifying the implementation.
 
-*Update: (06/11/2023)*
-~~We are mostly through the first phase.~~
-~~Correctness testing is proceeding well, and we are ironing out known issues.~~
-~~Notably, our broad experience at present is that as we continue to increase the amount of Julia code on which the package is tested, things fail for known, predictable, straightforwardly-fixable reasons (largely missing rrules for `ccall`s), rather than unanticipated problems.~~
-
-~~Please note that, since we have yet to enter phase 2 of the project, we have spent _no_ time whatsoever optimising for performance.~~
-~~We strongly believe that there is nothing in principle preventing us from achieving excellent performance.~~
-~~However, currently, you should expect to experience _amazingly_ poor performance.~~
+    *Update: (06/11/2023)*
+    We are mostly through the first phase.
+    Correctness testing is proceeding well, and we are ironing out known issues.
+    Notably, our broad experience at present is that as we continue to increase the amount of Julia code on which the package is tested, things fail for known, predictable, straightforwardly-fixable reasons (largely missing rrules for `ccall`s), rather than unanticipated problems.
+    Please note that, since we have yet to enter phase 2 of the project, we have spent _no_ time whatsoever optimising for performance.
+    We strongly believe that there is nothing in principle preventing us from achieving excellent performance.
+    However, currently, you should expect to experience _amazingly_ poor performance.
 
 ### What things should work well
 
@@ -156,5 +153,5 @@ Please be aware that by "performant" we mean similar or better performance than 
 
 While `Mooncake.jl` should now work on a very large subset of the language, there remain things that you should expect not to work. A non-exhaustive list of things to bear in mind includes:
 1. It is always necessary to produce hand-written rules for `ccall`s (and, more generally, foreigncall nodes). We have rules for many `ccall`s, but not all. If you encounter a foreigncall without a hand-written rule, you should get an informative error message which tells you what is going on and how to deal with it.
-1. Builtins which require rules. The vast majority of them have rules now, but some don't. ~~Notably, `apply_iterate` does not have a rule, so `Mooncake.jl` cannot currently AD through type-unstable splatting -- someone should resolve this.~~ `Core._apply_iterate` should now work correctly.
+1. Builtins which require rules. The vast majority of them have rules now, but some don't. You should get a sensible error if you encounter a primitive without a rule.
 1. Anything involving tasks / threading -- we have no thread safety guarantees and, at the time of writing, I'm not entirely sure what error you will find if you attempt to AD through code which uses Julia's task / thread system. The same applies to distributed computing. These limitations ought to be possible to resolve.
