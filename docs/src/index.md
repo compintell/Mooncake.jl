@@ -19,7 +19,7 @@ Documentation for Mooncake.jl is on its way!
 # Getting Started
 
 Check that you're running a version of Julia that Mooncake.jl supports.
-See the `SUPPORT_POLICY.md` file for more info.
+See the [`SUPPORT_POLICY.md`](https://github.com/compintell/Mooncake.jl/blob/main/SUPPORT_POLICY.md) for more info.
 
 There are several ways to interact with `Mooncake.jl`.
 The way that we recommend people to interact with `Mooncake.jl` is via  [`DifferentiationInterface.jl`](https://github.com/gdalle/DifferentiationInterface.jl/).
@@ -75,7 +75,7 @@ Hand-written `rrule!!`s have excellent performance, provided that they have been
 Consequently, whether or not the overall AD system has good performance is largely a question of how much overhead is associated to the mechanism by which hand-written `rrules!!`s are algorithmically composed.
 
 At present (03/2024), we do this in a _reasonably_ performant way (but better than the previous way!)
-See [Project Status](#project-status) below for more info.
+See [Project Status](@ref) below for more info.
 
 Additionally, the strategy of immediately incrementing (co)tangents resolves long-standing performance issues associated with indexing arrays.
 
