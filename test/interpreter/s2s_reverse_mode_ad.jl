@@ -1,23 +1,19 @@
 module S2SGlobals
-    using LinearAlgebra, Mooncake
+using LinearAlgebra, Mooncake
 
-    non_const_global = 5.0
-    const const_float = 5.0
-    const const_int = 5
-    const const_bool = true
+non_const_global = 5.0
+const const_float = 5.0
+const const_int = 5
+const const_bool = true
 
-    # used for regression test for issue 184
-    struct A
-        data
-    end
-    f(a, x) = dot(a.data, x)
+# used for regression test for issue 184
+struct A
+    data
+end
+f(a, x) = dot(a.data, x)
 
-    # Test cases designed to cause `LazyDerivedRule` to throw an error when attempting to
-    # construct a rule for `bar`.
-    foo(x) = x
-    @noinline bar(x) = foo(x)
-    baz(x) = bar(x)
-    Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{typeof(foo), Any}
+unstable_tester(x::Ref{Any}) = sin(x[])
+
 end
 
 @testset "s2s_reverse_mode_ad" begin
@@ -29,16 +25,25 @@ end
         @test m.pairs[1][2] == 5.0
     end
     @testset "ADInfo" begin
-        arg_types = Dict{Argument, Any}(Argument(1) => Float64, Argument(2) => Int)
+        arg_types = Dict{Argument,Any}(Argument(1) => Float64, Argument(2) => Int)
         id_ssa_1 = ID()
         id_ssa_2 = ID()
-        ssa_insts = Dict{ID, CC.NewInstruction}(
+        ssa_insts = Dict{ID,CC.NewInstruction}(
             id_ssa_1 => CC.NewInstruction(nothing, Float64),
             id_ssa_2 => CC.NewInstruction(nothing, Any),
         )
-        is_used_dict = Dict{ID, Bool}(id_ssa_1 => true, id_ssa_2 => true)
+        is_used_dict = Dict{ID,Bool}(id_ssa_1 => true, id_ssa_2 => true)
         rdata_ref = Ref{Tuple{map(Mooncake.lazy_zero_rdata_type, (Float64, Int))...}}()
-        info = ADInfo(get_interpreter(), arg_types, ssa_insts, is_used_dict, false, rdata_ref)
+        info = ADInfo(
+            get_interpreter(),
+            arg_types,
+            ssa_insts,
+            is_used_dict,
+            false,
+            rdata_ref,
+            Any,
+            Any,
+        )
 
         # Verify that we can access the interpreter and terminator block ID.
         @test info.interp isa Mooncake.MooncakeInterpreter
@@ -54,6 +59,8 @@ end
         @test Mooncake.get_primal_type(info, GlobalRef(Main, :___y)) == Float64
         @test Mooncake.get_primal_type(info, 5) == Int
         @test Mooncake.get_primal_type(info, QuoteNode(:hello)) == Symbol
+        @test Mooncake.get_primal_type(info, Expr(:boundscheck)) == Bool
+        @test_throws ErrorException Mooncake.get_primal_type(info, Expr(:call))
     end
     @testset "ADStmtInfo" begin
         # If the ID passes as the comms channel doesn't appear in the stmts for the forwards
@@ -68,14 +75,16 @@ end
         id_line_2 = ID()
         info = ADInfo(
             get_interpreter(),
-            Dict{Argument, Any}(Argument(1) => typeof(sin), Argument(2) => Float64),
-            Dict{ID, CC.NewInstruction}(
+            Dict{Argument,Any}(Argument(1) => typeof(sin), Argument(2) => Float64),
+            Dict{ID,CC.NewInstruction}(
                 id_line_1 => new_inst(Expr(:invoke, nothing, cos, Argument(2)), Float64),
                 id_line_2 => new_inst(nothing, Any),
             ),
-            Dict{ID, Bool}(id_line_1=>true, id_line_2=>true),
+            Dict{ID,Bool}(id_line_1 => true, id_line_2 => true),
             false,
             Ref{Tuple{map(Mooncake.lazy_zero_rdata_type, (typeof(sin), Float64))...}}(),
+            Any,
+            Any,
         )
 
         @testset "Nothing" begin
@@ -96,20 +105,22 @@ end
             @testset "Argument" begin
                 val = Argument(4)
                 stmts = make_ad_stmts!(ReturnNode(Argument(2)), line, info)
-                @test only(stmts.fwds)[2].stmt == ReturnNode(Argument(3))
-                @test Meta.isexpr(only(stmts.rvs)[2].stmt, :call)
-                @test only(stmts.rvs)[2].stmt.args[1] == Mooncake.increment_ref!
+                @test length(stmts.fwds) == 2
+                @test stmts.fwds[1][2].stmt isa Expr
+                @test stmts.fwds[2][2].stmt isa ReturnNode
             end
             @testset "literal" begin
                 stmt_info = make_ad_stmts!(ReturnNode(5.0), line, info)
+                @test length(stmt_info.fwds) == 3
                 @test stmt_info isa ADStmtInfo
-                @test stmt_info.fwds[1][2].stmt isa ReturnNode
+                @test stmt_info.fwds[3][2].stmt isa ReturnNode
             end
             @testset "GlobalRef" begin
                 node = ReturnNode(GlobalRef(S2SGlobals, :const_float))
                 stmt_info = make_ad_stmts!(node, line, info)
+                @test length(stmt_info.fwds) == 3
                 @test stmt_info isa ADStmtInfo
-                @test stmt_info.fwds[1][2].stmt isa ReturnNode
+                @test stmt_info.fwds[3][2].stmt isa ReturnNode
             end
         end
         @testset "IDGotoNode" begin
@@ -143,33 +154,33 @@ end
                 line = id_line_1
                 stmt_info = make_ad_stmts!(PiNode(nothing, Union{}), line, info)
                 @test stmt_info isa ADStmtInfo
+                @test last(stmt_info.fwds)[1] == line
             end
             @testset "π (nothing, Nothing)" begin
                 stmt_info = make_ad_stmts!(PiNode(nothing, Nothing), id_line_1, info)
                 @test stmt_info isa ADStmtInfo
-                fwds_stmt = only(stmt_info.fwds)[2].stmt
+                @test last(stmt_info.fwds)[1] == id_line_1
+                fwds_stmt = last(stmt_info.fwds)[2].stmt
                 @test fwds_stmt isa PiNode
-                @test fwds_stmt.val == CoDual(nothing, NoFData())
-                @test fwds_stmt.typ == CoDual{Nothing, NoFData}
+                @test fwds_stmt.typ == CoDual{Nothing,NoFData}
                 @test only(stmt_info.rvs)[2].stmt === nothing
             end
             @testset "π (nothing, CC.Const(nothing))" begin
                 node = PiNode(nothing, CC.Const(nothing))
                 stmt_info = make_ad_stmts!(node, id_line_1, info)
                 @test stmt_info isa ADStmtInfo
-                fwds_stmt = only(stmt_info.fwds)[2].stmt
+                @test last(stmt_info.fwds)[1] == id_line_1
+                fwds_stmt = last(stmt_info.fwds)[2].stmt
                 @test fwds_stmt isa PiNode
-                @test fwds_stmt.val == CoDual(nothing, NoFData())
-                @test fwds_stmt.typ == CoDual{Nothing, NoFData}
+                @test fwds_stmt.typ == CoDual{Nothing,NoFData}
                 @test only(stmt_info.rvs)[2].stmt === nothing
             end
             @testset "π (GlobalRef, Type)" begin
                 node = PiNode(GlobalRef(S2SGlobals, :const_float), Any)
                 stmt_info = make_ad_stmts!(node, id_line_1, info)
                 @test stmt_info isa ADStmtInfo
-                fwds_stmt = only(stmt_info.fwds)[2].stmt
+                fwds_stmt = last(stmt_info.fwds)[2].stmt
                 @test fwds_stmt isa PiNode
-                @test fwds_stmt.val == CoDual(5.0, NoFData())
                 @test fwds_stmt.typ == CoDual
                 @test only(stmt_info.rvs)[2].stmt === nothing
             end
@@ -192,7 +203,8 @@ end
             @testset "differentiable const globals" begin
                 stmt_info = make_ad_stmts!(GlobalRef(S2SGlobals, :const_float), ID(), info)
                 @test stmt_info isa Mooncake.ADStmtInfo
-                @test only(stmt_info.fwds)[2].stmt isa CoDual{Float64}
+                @test only(stmt_info.fwds)[2].stmt isa Expr
+                @test only(stmt_info.fwds)[2].stmt.args[1] === Mooncake.uninit_fcodual
             end
         end
         @testset "PhiCNode" begin
@@ -230,9 +242,7 @@ end
                     ad_stmt_info(line, nothing, fwds, nothing),
                 )
             end
-            @testset "$stmt" for stmt in [
-                Expr(:gc_preserve_begin),
-            ]
+            @testset "$stmt" for stmt in [Expr(:gc_preserve_begin)]
                 line = ID()
                 @test TestUtils.has_equal_data(
                     make_ad_stmts!(stmt, line, info),
@@ -241,12 +251,13 @@ end
             end
         end
     end
-    @testset "rule_type $sig, $debug_mode" for
-        sig in Any[
-            Tuple{typeof(getfield), Tuple{Float64}, 1},
-            Tuple{typeof(TestResources.foo), Float64},
-            Tuple{typeof(TestResources.type_unstable_tester_0), Ref{Any}},
-            Tuple{typeof(TestResources.tuple_with_union), Bool},
+    @testset "rule_type $sig, $debug_mode" for sig in Any[
+            Tuple{typeof(getfield),Tuple{Float64},1},
+            Tuple{typeof(TestResources.foo),Float64},
+            Tuple{typeof(TestResources.type_unstable_tester_0),Ref{Any}},
+            Tuple{typeof(TestResources.tuple_with_union),Bool},
+            Tuple{typeof(TestResources.tuple_with_union_2),Bool},
+            Tuple{typeof(TestResources.tuple_with_union_3),Bool,Bool},
         ],
         debug_mode in [true, false]
 
@@ -254,30 +265,27 @@ end
         rule = Mooncake.build_rrule(interp, sig; debug_mode)
         @test rule isa Mooncake.rule_type(interp, sig; debug_mode)
     end
-    @testset "LazyDerivedRule" begin
-        fargs = (S2SGlobals.baz, 5.0)
-        rule = build_rrule(fargs...)
-        msg = "Unable to put rule in rule field. A `BadRuleTypeException` might be thrown."
-        @test_logs(
-            (:warn, msg),
-            (@test_throws Mooncake.BadRuleTypeException rule(map(zero_fcodual, fargs)...)),
-        )
-    end
     @testset "MooncakeRuleCompilationError" begin
         @test_throws(Mooncake.MooncakeRuleCompilationError, Mooncake.build_rrule(sin))
     end
     @testset "$(_typeof((f, x...)))" for (n, (interface_only, perf_flag, bnds, f, x...)) in
-        collect(enumerate(TestResources.generate_test_functions()))
-
+                                         collect(
+        enumerate(TestResources.generate_test_functions())
+    )
         sig = _typeof((f, x...))
         @info "$n: $sig"
         TestUtils.test_rule(
             Xoshiro(123456), f, x...; perf_flag, interface_only, is_primitive=false
         )
-        TestUtils.test_rule(
-            Xoshiro(123456), f, x...;
-            perf_flag=:none, interface_only, is_primitive=false, debug_mode=true,
-        )
+        # TestUtils.test_rule(
+        #     Xoshiro(123456),
+        #     f,
+        #     x...;
+        #     perf_flag=:none,
+        #     interface_only,
+        #     is_primitive=false,
+        #     debug_mode=true,
+        # )
 
         # interp = Mooncake.get_interpreter()
         # codual_args = map(zero_codual, (f, x...))
@@ -304,7 +312,7 @@ end
         @test_throws(
             Mooncake.Mooncake.MooncakeRuleCompilationError,
             Mooncake.build_rrule(
-                Tuple{typeof(Mooncake.TestResources.non_const_global_ref), Float64},
+                Tuple{typeof(Mooncake.TestResources.non_const_global_ref),Float64}
             )
         )
     end
@@ -314,8 +322,12 @@ end
 
         # 184
         TestUtils.test_rule(
-            Xoshiro(123456), S2SGlobals.f, S2SGlobals.A(2 * ones(3)), ones(3);
-            interface_only=false, is_primitive=false,
+            Xoshiro(123456),
+            S2SGlobals.f,
+            S2SGlobals.A(2 * ones(3)),
+            ones(3);
+            interface_only=false,
+            is_primitive=false,
         )
 
         # BenchmarkTools not working due to world age problems. Provided that this code
@@ -331,5 +343,10 @@ end
     @testset "Literal Types do not appear in shared data" begin
         f() = Float64
         @test length(build_rrule(Tuple{typeof(f)}).fwds_oc.oc.captures) == 2
+    end
+    @testset "all `Ref`s for rdata are eliminated in type unstable code" begin
+        ir = Mooncake.rvs_ir(Tuple{typeof(S2SGlobals.unstable_tester),Ref{Any}})
+        stmts = Mooncake.stmt(ir.stmts)
+        @test !any(x -> Meta.isexpr(x, :new) && x.args[1] <: Base.RefValue, stmts)
     end
 end

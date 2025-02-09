@@ -9,3 +9,7 @@ The purpose of this is to make it easy for developers to find docstrings straigh
 Modules = [Mooncake]
 Public = false
 ```
+
+```@docs
+Mooncake.IntrinsicsWrappers
+```

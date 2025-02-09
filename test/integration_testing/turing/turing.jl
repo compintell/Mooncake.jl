@@ -6,7 +6,7 @@ using Distributions, DynamicPPL, Mooncake, StableRNGs, Test
 using Mooncake.TestUtils: test_rule
 
 @model function simple_model()
-    y ~ Normal()
+    return y ~ Normal()
 end
 
 @model function demo()
@@ -14,16 +14,16 @@ end
     σ2 ~ LogNormal() # tweaked from InverseGamma due to control flow issues.
     σ = sqrt(σ2 + 1e-3)
     μ ~ Normal(0.0, σ)
-  
+
     # Observations
     x ~ Normal(μ, σ)
-    y ~ Normal(μ, σ)
+    return y ~ Normal(μ, σ)
 end
 
 @model broadcast_demo(x) = begin
     μ ~ truncated(Normal(1, 2), 0.1, 10)
     σ ~ truncated(Normal(1, 2), 0.1, 10)
-    x .~ LogNormal(μ, σ)   
+    x .~ LogNormal(μ, σ)
 end
 
 # LDA example -- copied over from
@@ -31,7 +31,7 @@ end
 function _make_data(D, K, V, N, α, η)
     β = Matrix{Float64}(undef, V, K)
     for k in 1:K
-        β[:,k] .= rand(Dirichlet(η))
+        β[:, k] .= rand(Dirichlet(η))
     end
 
     θ = Matrix{Float64}(undef, K, D)
@@ -40,7 +40,7 @@ function _make_data(D, K, V, N, α, η)
     doc = Vector{Int}(undef, D * N)
     i = 0
     for d in 1:D
-        θ[:,d] .= rand(Dirichlet(α))
+        θ[:, d] .= rand(Dirichlet(α))
         for n in 1:N
             i += 1
             z[i] = rand(Categorical(θ[:, d]))
@@ -56,9 +56,7 @@ data = let D = 2, K = 2, V = 160, N = 290
 end
 
 # LDA with vectorization and manual log-density accumulation
-@model function LatentDirichletAllocationVectorizedCollapsedMannual(
-    D, K, V, α, η, w, doc
-)
+@model function LatentDirichletAllocationVectorizedCollapsedMannual(D, K, V, α, η, w, doc)
     β ~ filldist(Dirichlet(η), K)
     θ ~ filldist(Dirichlet(α), D)
 
@@ -72,9 +70,9 @@ end
 
 function make_large_model()
     num_tildes = 50
-    expr = :(function $(Symbol(:demo, num_tildes))() end) |> Base.remove_linenums!
+    expr = Base.remove_linenums!(:(function $(Symbol(:demo, num_tildes))() end))
     mainbody = last(expr.args)
-    append!(mainbody.args, [:($(Symbol("x", j)) ~ Normal()) for j = 1:num_tildes])
+    append!(mainbody.args, [:($(Symbol("x", j)) ~ Normal()) for j in 1:num_tildes])
     f = @eval $(DynamicPPL.model(:Main, LineNumberNode(1), expr, false))
     return invokelatest(f)
 end
@@ -114,7 +112,7 @@ end
         ],
         Any[
             (false, "demo_$n", m, DynamicPPL.TestUtils.rand_prior_true(m)) for
-                (n, m) in enumerate(DynamicPPL.TestUtils.DEMO_MODELS)
+            (n, m) in enumerate(DynamicPPL.TestUtils.DEMO_MODELS)
         ],
     )
         @info name

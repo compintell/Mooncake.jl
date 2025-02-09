@@ -32,7 +32,7 @@ Observe that this information means that whether or not something is a primitive
 particular context depends only on static information, not any run-time information that
 might live in a particular instance of `Ctx`.
 """
-is_primitive(::Type{MinimalCtx}, ::Any) = false
+is_primitive(::Type{MinimalCtx}, sig::Type{<:Tuple}) = false
 is_primitive(::Type{DefaultCtx}, sig) = is_primitive(MinimalCtx, sig)
 
 """
@@ -51,5 +51,5 @@ is_primitive(::Type{MinimalCtx}, ::Type{<:Tuple{typeof(foo), Float64}}) = true
 You should implemented more complicated method of `is_primitive` in the usual way.
 """
 macro is_primitive(Tctx, sig)
-    return esc(:(Mooncake.is_primitive(::Type{$Tctx}, ::Type{<:$sig}) = true))
+    return :(Mooncake.is_primitive(::Type{$(esc(Tctx))}, ::Type{<:$(esc(sig))}) = true)
 end

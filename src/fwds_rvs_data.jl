@@ -8,7 +8,7 @@ struct NoFData end
 
 Base.copy(::NoFData) = NoFData()
 
-increment!!(::NoFData, ::NoFData) = NoFData()
+increment_internal!!(::IncCache, ::NoFData, ::NoFData) = NoFData()
 
 """
     FData(data::NamedTuple)
@@ -26,7 +26,9 @@ _copy(x::P) where {P<:FData} = P(_copy(x.data))
 
 fields_type(::Type{FData{T}}) where {T<:NamedTuple} = T
 
-increment!!(x::F, y::F) where {F<:FData} = F(tuple_map(increment!!, x.data, y.data))
+function increment_internal!!(c::IncCache, x::F, y::F) where {F<:FData}
+    return F(tuple_map((a, b) -> increment_internal!!(c, a, b), x.data, y.data))
+end
 
 """
     fdata_type(T)
@@ -166,12 +168,13 @@ end
     T == NoTangent && return NoFData
 
     # This method can only handle struct types. Tell user to implement their own method.
-    isprimitivetype(T) && throw(error(
-        "$T is a primitive type. Implement a method of `fdata_type` for it."
-    ))
+    if isprimitivetype(T)
+        msg = "$T is a primitive type. Implement a method of `fdata_type` for it."
+        return :(error($msg))
+    end
 
     # If the type is a Union, then take the union type of its arguments.
-    T isa Union && return Union{fdata_type(T.a), fdata_type(T.b)}
+    T isa Union && return :(Union{fdata_type($(T.a)),fdata_type($(T.b))})
 
     # If `P` is a mutable type, then its forwards data is its tangent.
     ismutabletype(T) && return T
@@ -180,37 +183,41 @@ end
     # The same goes for if the type has any undetermined type parameters.
     (isabstracttype(T) || !isconcretetype(T)) && return Any
 
+    # We should now have a `Tangent`. If not, we do not know what to do, so error.
+    T <: Tangent || return :(error("Unhandled type $T"))
+
     # If `P` is an immutable type, then some of its fields may not need to be propagated
     # on the forwards-pass.
-    if T <: Tangent
-        Tfields = fields_type(T)
-        fwds_data_field_types = map(1:fieldcount(Tfields)) do n
-            return fdata_type(fieldtype(Tfields, n))
-        end
-        all(==(NoFData), fwds_data_field_types) && return NoFData
-        return FData{NamedTuple{fieldnames(Tfields), Tuple{fwds_data_field_types...}}}
+    field_names = fieldnames(fields_type(T))
+    Tfields = fieldtypes(fields_type(T))
+    fdata_type_exprs = map(n -> :(fdata_type($(Tfields[n]))), 1:length(Tfields))
+    return quote
+        fwds_data_field_types = $(Expr(:call, :tuple, fdata_type_exprs...))
+        stable_all(tuple_map(==(NoFData), fwds_data_field_types)) && return NoFData
+        return FData{NamedTuple{$field_names,Tuple{fwds_data_field_types...}}}
     end
-
-    return :(error("Unhandled type $T"))
 end
 
 fdata_type(::Type{T}) where {T<:Ptr} = T
 
 @generated function fdata_type(::Type{P}) where {P<:Tuple}
-    isa(P, Union) && return Union{fdata_type(P.a), fdata_type(P.b)}
+    isa(P, Union) && return :(Union{fdata_type($(P.a)),fdata_type($(P.b))})
     isempty(P.parameters) && return NoFData
     isa(last(P.parameters), Core.TypeofVararg) && return Any
-    nofdata_tt = Tuple{Vararg{NoFData, length(P.parameters)}}
-    fdata_tt = Tuple{map(fdata_type, fieldtypes(P))...}
-    fdata_tt <: nofdata_tt && return NoFData
-    return nofdata_tt <: fdata_tt ? Union{NoFData, fdata_tt} : fdata_tt
+    nofdata_tt = Tuple{Vararg{NoFData,length(P.parameters)}}
+    fdata_type_exprs = map(_P -> Expr(:call, :fdata_type, _P), P.parameters)
+    return quote
+        fdata_tt = $(Expr(:curly, Tuple, fdata_type_exprs...))
+        fdata_tt <: $nofdata_tt && return NoFData
+        return $nofdata_tt <: fdata_tt ? Union{NoFData,fdata_tt} : fdata_tt
+    end
 end
 
-@generated function fdata_type(::Type{NamedTuple{names, T}}) where {names, T<:Tuple}
+function fdata_type(::Type{NamedTuple{names,T}}) where {names,T<:Tuple}
     if fdata_type(T) == NoFData
         return NoFData
     elseif isconcretetype(fdata_type(T))
-        return NamedTuple{names, fdata_type(T)}
+        return NamedTuple{names,fdata_type(T)}
     else
         return Any
     end
@@ -225,7 +232,7 @@ Returns the type of to the nth field of the fdata type associated to `P`. Will b
 function fdata_field_type(::Type{P}, n::Int) where {P}
     Tf = tangent_type(fieldtype(P, n))
     f = ismutabletype(P) ? Tf : fdata_type(Tf)
-    return is_always_initialised(P, n) ? f : _wrap_type(f)
+    return is_always_initialised(P, n) ? f : PossiblyUninitTangent{f}
 end
 
 """
@@ -233,20 +240,20 @@ end
 
 Extract the forwards data from tangent `t`.
 """
-@generated function fdata(t::T) where {T}
+function fdata(t::T) where {T}
 
     # Ask for the forwards-data type. Useful catch-all error checking for unexpected types.
     F = fdata_type(T)
 
     # Catch-all for anything with no forwards-data.
-    F == NoFData && return :(NoFData())
+    F == NoFData && return NoFData()
 
     # Catch-all for anything where we return the whole object (mutable structs, arrays...).
-    F == T && return :(t)
+    F == T && return t
 
     # T must be a `Tangent` by now. If it's not, something has gone wrong.
-    !(T <: Tangent) && return :(error("Unhandled type $T"))
-    return :($F(fdata(t.fields)))
+    T <: Tangent || error("Unhandled type $T")
+    return F(fdata(t.fields))
 end
 
 function fdata(t::T) where {T<:PossiblyUninitTangent}
@@ -254,9 +261,8 @@ function fdata(t::T) where {T<:PossiblyUninitTangent}
     return is_init(t) ? F(fdata(val(t))) : F()
 end
 
-@generated function fdata(t::Union{Tuple, NamedTuple})
-    fdata_type(t) == NoFData && return NoFData()
-    return :(tuple_map(fdata, t))
+function fdata(t::T) where {T<:Union{Tuple,NamedTuple}}
+    return fdata_type(T) == NoFData ? NoFData() : tuple_map(fdata, t)
 end
 
 uninit_fdata(p) = fdata(uninit_tangent(p))
@@ -297,16 +303,18 @@ condition, just that they rule out a variety of common problems.
 Put differently, we cannot prove that `f` is valid fdata, only that it is not obviously
 invalid.
 """
-function verify_fdata_value(p, f)::Nothing
+verify_fdata_value(p, f)::Nothing = _verify_fdata_value(IdDict{Any,Nothing}(), p, f)
+
+function _verify_fdata_value(c::IdDict{Any,Nothing}, p, f)::Nothing
     verify_fdata_type(_typeof(p), typeof(f))
-    _verify_fdata_value(p, f)
+    return __verify_fdata_value(c, p, f)
 end
 
-_verify_fdata_value(::IEEEFloat, ::NoFData) = nothing
+__verify_fdata_value(::IdDict{Any,Nothing}, ::IEEEFloat, ::NoFData) = nothing
 
-_verify_fdata_value(::Ptr, ::Ptr) = nothing
+__verify_fdata_value(::IdDict{Any,Nothing}, ::Ptr, ::Ptr) = nothing
 
-function _verify_fdata_value(p::Array, f::Array)
+function __verify_fdata_value(c::IdDict{Any,Nothing}, p::Array, f::Array)
     if size(p) != size(f)
         throw(InvalidFDataException("p has size $(size(p)) but f has size $(size(f))"))
     end
@@ -319,8 +327,11 @@ function _verify_fdata_value(p::Array, f::Array)
     # correct separately.
     for n in eachindex(p)
         if isassigned(p, n)
+            _p = p[n]
+            ismutable(_p) && haskey(c, _p) && continue
+            ismutable(_p) && !haskey(c, _p) && setindex!(c, nothing, _p)
             t = f[n]
-            verify_fdata_value(p[n], fdata(t))
+            _verify_fdata_value(c, p[n], fdata(t))
             verify_rdata_value(p[n], rdata(t))
         end
     end
@@ -334,7 +345,7 @@ _get_fdata_field(f::Tuple, name) = getfield(f, name)
 _get_fdata_field(f::FData, name) = val(getfield(f.data, name))
 _get_fdata_field(f::MutableTangent, name) = fdata(val(getfield(f.fields, name)))
 
-function _verify_fdata_value(p, f)
+function __verify_fdata_value(c::IdDict{Any,Nothing}, p, f)
 
     # If f is a NoFData then there are no checks needed, because we have already verified
     # that NoFData is the correct type for fdata for p, and NoFData is a singleton type.
@@ -351,8 +362,10 @@ function _verify_fdata_value(p, f)
     for name in fieldnames(P)
         if isdefined(p, name)
             _p = getfield(p, name)
+            ismutable(_p) && haskey(c, _p) && continue
+            ismutable(_p) && !haskey(c, _p) && setindex!(c, nothing, _p)
             t = _get_fdata_field(f, name)
-            verify_fdata_value(_p, t)
+            _verify_fdata_value(c, _p, t)
             if f isa MutableTangent
                 verify_rdata_value(_p, rdata(val(getfield(f.fields, name))))
             end
@@ -371,7 +384,7 @@ struct NoRData end
 
 Base.copy(::NoRData) = NoRData()
 
-@inline increment!!(::NoRData, ::NoRData) = NoRData()
+@inline increment_internal!!(::IncCache, ::NoRData, ::NoRData) = NoRData()
 
 @inline increment_field!!(::NoRData, y, ::Val) = NoRData()
 
@@ -383,15 +396,17 @@ _copy(x::P) where {P<:RData} = P(_copy(x.data))
 
 fields_type(::Type{RData{T}}) where {T<:NamedTuple} = T
 
-@inline increment!!(x::RData{T}, y::RData{T}) where {T} = RData(increment!!(x.data, y.data))
+@inline function increment_internal!!(c::IncCache, x::RData{T}, y::RData{T}) where {T}
+    return RData(increment_internal!!(c, x.data, y.data))
+end
 
-@inline function increment_field!!(x::RData{T}, y, ::Val{f}) where {T, f}
+@inline function increment_field!!(x::RData{T}, y, ::Val{f}) where {T,f}
     y isa NoRData && return x
     new_val = fieldtype(T, f) <: PossiblyUninitTangent ? fieldtype(T, f)(y) : y
     return RData(increment_field!!(x.data, new_val, Val(f)))
 end
 
-@doc"""
+"""
     rdata_type(T)
 
 Returns the type of the reverse data of a tangent of type T.
@@ -416,12 +431,13 @@ end
     T == NoTangent && return NoRData
 
     # This method can only handle struct types. Tell user to implement their own method.
-    isprimitivetype(T) && throw(error(
-        "$T is a primitive type. Implement a method of `rdata_type` for it."
-    ))
+    if isprimitivetype(T)
+        msg = "$T is a primitive type. Implement a method of `rdata_type` for it."
+        return :(error(msg))
+    end
 
     # If the type is a Union, then take the union type of its arguments.
-    T isa Union && return Union{rdata_type(T.a), rdata_type(T.b)}
+    T isa Union && return :(Union{rdata_type($(T.a)),rdata_type($(T.b))})
 
     # If `P` is a mutable type, then all tangent info is propagated on the forwards-pass.
     ismutabletype(T) && return NoRData
@@ -430,33 +446,38 @@ end
     # The same goes for if the type has any undetermined type parameters.
     (isabstracttype(T) || !isconcretetype(T)) && return Any
 
-    # If `T` is an immutable type, then some of its fields may not have been propagated on
-    # the forwards-pass.
-    if T <: Tangent
-        Tfs = fields_type(T)
-        rvs_types = map(n -> rdata_type(fieldtype(Tfs, n)), 1:fieldcount(Tfs))
-        all(==(NoRData), rvs_types) && return NoRData
-        return RData{NamedTuple{fieldnames(Tfs), Tuple{rvs_types...}}}
+    # If `T` is an immutable type, then some of its fields may not need to be propagated
+    # on the forwards-pass.
+    field_names = fieldnames(fields_type(T))
+    Tfields = fieldtypes(fields_type(T))
+    rdata_type_exprs = map(n -> :(rdata_type($(Tfields[n]))), 1:length(Tfields))
+    return quote
+        rvs_data_field_types = $(Expr(:call, :tuple, rdata_type_exprs...))
+        stable_all(tuple_map(==(NoRData), rvs_data_field_types)) && return NoRData
+        return RData{NamedTuple{$field_names,Tuple{rvs_data_field_types...}}}
     end
 end
 
 rdata_type(::Type{<:Ptr}) = NoRData
 
 @generated function rdata_type(::Type{P}) where {P<:Tuple}
-    isa(P, Union) && return Union{rdata_type(P.a), rdata_type(P.b)}
+    isa(P, Union) && return :(Union{rdata_type($(P.a)),rdata_type($(P.b))})
     isempty(P.parameters) && return NoRData
     isa(last(P.parameters), Core.TypeofVararg) && return Any
-    nordata_tt = Tuple{Vararg{NoRData, length(P.parameters)}}
-    rdata_tt = Tuple{map(rdata_type, fieldtypes(P))...}
-    rdata_tt <: nordata_tt && return NoRData
-    return nordata_tt <: rdata_tt ? Union{NoRData, rdata_tt} : rdata_tt
+    nordata_tt = Tuple{Vararg{NoRData,length(P.parameters)}}
+    rdata_type_exprs = map(_P -> Expr(:call, :rdata_type, _P), P.parameters)
+    return quote
+        rdata_tt = $(Expr(:curly, Tuple, rdata_type_exprs...))
+        rdata_tt <: $nordata_tt && return NoRData
+        return $nordata_tt <: rdata_tt ? Union{NoRData,rdata_tt} : rdata_tt
+    end
 end
 
-function rdata_type(::Type{NamedTuple{names, T}}) where {names, T<:Tuple}
+function rdata_type(::Type{NamedTuple{names,T}}) where {names,T<:Tuple}
     if rdata_type(T) == NoRData
         return NoRData
     elseif isconcretetype(rdata_type(T))
-        return NamedTuple{names, rdata_type(T)}
+        return NamedTuple{names,rdata_type(T)}
     else
         return Any
     end
@@ -470,7 +491,7 @@ Returns the type of to the nth field of the rdata type associated to `P`. Will b
 """
 function rdata_field_type(::Type{P}, n::Int) where {P}
     r = rdata_type(tangent_type(fieldtype(P, n)))
-    return is_always_initialised(P, n) ? r : _wrap_type(r)
+    return is_always_initialised(P, n) ? r : PossiblyUninitTangent{r}
 end
 
 """
@@ -482,20 +503,20 @@ Extract the reverse data from tangent `t`.
 
 See extended help section of [fdata_type](@ref).
 """
-@generated function rdata(t::T) where {T}
+function rdata(t::T) where {T}
 
     # Ask for the reverse-data type. Useful catch-all error checking for unexpected types.
     R = rdata_type(T)
 
     # Catch-all for anything with no reverse-data.
-    R == NoRData && return :(NoRData())
+    R == NoRData && return NoRData()
 
     # Catch-all for anything where we return the whole object (Float64, isbits structs, ...)
-    R == T && return :(t)
+    R == T && return t
 
     # T must be a `Tangent` by now. If it's not, something has gone wrong.
-    !(T <: Tangent) && return :(error("Unhandled type $T"))
-    return :($(rdata_type(T))(rdata(t.fields)))
+    T <: Tangent || error("Unhandled type $T")
+    return R(rdata(t.fields))
 end
 
 function rdata(t::T) where {T<:PossiblyUninitTangent}
@@ -503,15 +524,38 @@ function rdata(t::T) where {T<:PossiblyUninitTangent}
     return is_init(t) ? R(rdata(val(t))) : R()
 end
 
-@generated function rdata(t::Union{Tuple, NamedTuple})
-    rdata_type(t) == NoRData && return NoRData()
-    return :(tuple_map(rdata, t))
+@generated function rdata(t::Union{Tuple,NamedTuple})
+    return :(rdata_type($t) == NoRData ? NoRData() : tuple_map(rdata, t))
 end
 
-function rdata_backing_type(::Type{P}) where {P}
-    rdata_field_types = map(n -> rdata_field_type(P, n), 1:fieldcount(P))
-    all(==(NoRData), rdata_field_types) && return NoRData
-    return NamedTuple{fieldnames(P), Tuple{rdata_field_types...}}
+"""
+    rdata_field_types_exprs(::Type{P}) where {P}
+
+Tuple of expressions. The nth computes the rdata backing type of the nth field of `P`.
+"""
+function rdata_field_types_exprs(::Type{P}) where {P}
+    return map(1:fieldcount(P), always_initialised(P)) do n, init
+        Pf = fieldtype(P, n)
+        if init
+            return :(rdata_type(tangent_type($Pf)))
+        else
+            return :(PossiblyUninitTangent{rdata_type(tangent_type($Pf))})
+        end
+    end
+end
+
+"""
+    rdata_backing_type(::Type{P}) where {P}
+
+The type of the field of `RData` for `P`.
+"""
+@generated function rdata_backing_type(::Type{P}) where {P}
+    rdata_field_types_expr = Expr(:call, :tuple, rdata_field_types_exprs(P)...)
+    return quote
+        rdata_field_types = $rdata_field_types_expr
+        stable_all(tuple_map(==(NoRData()), rdata_field_types)) && return NoRData
+        return NamedTuple{$(fieldnames(P)),Tuple{rdata_field_types...}}
+    end
 end
 
 """
@@ -524,33 +568,41 @@ zero_rdata(p)
 zero_rdata(p::IEEEFloat) = zero(p)
 
 @generated function zero_rdata(p::P) where {P}
-
-    # Get types associated to primal.
-    T = tangent_type(P)
-    R = rdata_type(T)
-
-    # If there's no reverse data, return no reverse data, e.g. for mutable types.
-    R == NoRData && return :(NoRData())
-
-    # T ought to be a `Tangent`. If it's not, something has gone wrong.
-    !(T <: Tangent) && return Expr(:call, error, "Unhandled type $T")
-    rdata_field_zeros_exprs = ntuple(fieldcount(P)) do n
-        R_field = rdata_field_type(P, n)
-        if R_field <: PossiblyUninitTangent
-            return :(isdefined(p, $n) ? $R_field(zero_rdata(getfield(p, $n))) : $R_field())
-        else
+    Rs = rdata_field_types_exprs(P)
+    rdata_field_zeros_exprs = map(1:fieldcount(P), always_initialised(P), Rs) do n, init, R
+        if init
             return :(zero_rdata(getfield(p, $n)))
+        else
+            return quote
+                R_field = $R
+                isdefined(p, $n) ? R_field(zero_rdata(getfield(p, $n))) : R_field()
+            end
         end
     end
     backing_data_expr = Expr(:call, :tuple, rdata_field_zeros_exprs...)
-    backing_expr = :($(rdata_backing_type(P))($backing_data_expr))
-    return Expr(:call, R, backing_expr)
+    backing_expr = :(rdata_backing_type($P)($backing_data_expr))
+
+    return quote
+        # Get types associated to primal.
+        T = tangent_type($P)
+        R = rdata_type(T)
+
+        # If there's no reverse data, return no reverse data, e.g. for mutable types.
+        R == NoRData && return NoRData()
+
+        # T ought to be a `Tangent`. If it's not, something has gone wrong.
+        T <: Tangent || error("Unhandled type $T")
+
+        # return $backing_expr
+        return R($backing_expr)
+    end
 end
 
-@generated function zero_rdata(p::Union{Tuple, NamedTuple})
-    rdata_type(tangent_type(p)) == NoRData && return NoRData()
-    return :(tuple_map(zero_rdata, p))
+function zero_rdata(p::P) where {P<:Union{Tuple,NamedTuple}}
+    return rdata_type(tangent_type(P)) == NoRData ? NoRData() : tuple_map(zero_rdata, p)
 end
+
+has_definite_fieldcount(P) = P isa DataType && Base.datatype_fieldcount(P) !== nothing
 
 """
     can_produce_zero_rdata_from_type(::Type{P}) where {P}
@@ -559,15 +611,25 @@ Returns whether or not the zero element of the rdata type for primal type `P` ca
 obtained from `P` alone.
 """
 @generated function can_produce_zero_rdata_from_type(::Type{P}) where {P}
-    R = rdata_type(tangent_type(P))
-    R == NoRData && return true
-    isabstracttype(P) && return false
-    (isconcretetype(P) || P <: Tuple) || return false
-    (P <: Tuple && !(P isa DataType)) && return false # catch Unions and UnionAlls
-    (P <: Tuple && Base.datatype_fieldcount(P) === nothing) && return false
+    if isstructtype(P) && has_definite_fieldcount(P)
+        can_produces = map(_P -> :(can_produce_zero_rdata_from_type($_P)), fieldtypes(P))
+    else
+        can_produces = ()
+    end
+    tuple_expr = Expr(:call, :tuple, can_produces...)
 
-    # For general structs, just look at their fields.
-    return isstructtype(P) ? all(can_produce_zero_rdata_from_type, fieldtypes(P)) : false
+    return quote
+        R = rdata_type(tangent_type($P))
+        R == NoRData && return true
+        $(isabstracttype(P)) && return false
+        $(isconcretetype(P) || P <: Tuple) || return false
+        $(P <: Tuple && !(P isa DataType)) && return false # catch Unions and UnionAlls
+        $(P <: Tuple && !has_definite_fieldcount(P)) && return false
+
+        # For general structs, just look at their fields.
+        $(!isstructtype(P)) && return false
+        return stable_all($tuple_expr)
+    end
 end
 
 can_produce_zero_rdata_from_type(::Type{<:IEEEFloat}) = true
@@ -606,41 +668,45 @@ constitute a correctness problem, but can be detrimental to performance, so shou
 with.
 """
 @generated function zero_rdata_from_type(::Type{P}) where {P}
-    R = rdata_type(tangent_type(P))
 
-    # If we know we can't produce a tangent, say so.
-    can_produce_zero_rdata_from_type(P) || return CannotProduceZeroRDataFromType()
-
-    # Simple case.
-    R == NoRData && return NoRData()
-
-    # If `P` is a struct type, attempt to derive the zero rdata for it. We cannot derive
-    # the zero rdata if it is not possible to derive the zero rdata for any of its fields.
-    if isstructtype(P)
+    # Prepare expressions for manually-unrolled loop to construct zero rdata elements.
+    if P isa DataType
         names = fieldnames(P)
         types = fieldtypes(P)
-        wrapped_field_zeros = tuple_map(ntuple(identity, length(names))) do n
+        wrapped_field_zeros = map(enumerate(always_initialised(P))) do (n, init)
             fzero = :(zero_rdata_from_type($(types[n])))
-            if tangent_field_type(P, n) <: PossiblyUninitTangent
-                Q = rdata_type(tangent_type(fieldtype(P, n)))
-                return :(_wrap_field($Q, $fzero))
-            else
-                return fzero
-            end
+            init && return fzero
+            Q = :(rdata_type(tangent_type($(fieldtype(P, n)))))
+            return :(PossiblyUninitTangent{$Q}($fzero))
         end
         wrapped_field_zeros_tuple = Expr(:call, :tuple, wrapped_field_zeros...)
-        return :($R(NamedTuple{$names}($wrapped_field_zeros_tuple)))
+        wrapped_expr = :(R(NamedTuple{$names}($wrapped_field_zeros_tuple)))
+    else
+        wrapped_expr = nothing
     end
 
-    # Fallback -- we've not been able to figure out how to produce an instance of zero rdata
-    # so report that it cannot be done.
-    return throw(error("Unhandled type $P"))
+    return quote
+
+        # If we know we can't produce a tangent, say so.
+        can_produce_zero_rdata_from_type($P) || return CannotProduceZeroRDataFromType()
+
+        # Simple case.
+        R = rdata_type(tangent_type($P))
+        R == NoRData && return NoRData()
+
+        $(isstructtype(P)) || error("Unhandled type $P")
+        return $wrapped_expr
+    end
 end
 
 @generated function zero_rdata_from_type(::Type{P}) where {P<:Tuple}
-    can_produce_zero_rdata_from_type(P) || return CannotProduceZeroRDataFromType()
-    rdata_type(tangent_type(P)) == NoRData && return NoRData()
-    return tuple_map(zero_rdata_from_type, fieldtypes(P))
+    has_fields = P isa DataType && Base.datatype_fieldcount(P) !== nothing
+    zero_exprs = has_fields ? map(_P -> :(zero_rdata_from_type($_P)), fieldtypes(P)) : []
+    return quote
+        can_produce_zero_rdata_from_type($P) || return CannotProduceZeroRDataFromType()
+        rdata_type(tangent_type($P)) == NoRData && return NoRData()
+        return $(Expr(:call, :tuple, zero_exprs...))
+    end
 end
 
 function zero_rdata_from_type(::Type{P}) where {P<:NamedTuple}
@@ -694,7 +760,7 @@ invalid.
 function verify_rdata_value(p, r)::Nothing
     r isa ZeroRData && return nothing
     verify_rdata_type(_typeof(p), typeof(r))
-    _verify_rdata_value(p, r)
+    return _verify_rdata_value(p, r)
 end
 
 _verify_rdata_value(::P, ::P) where {P<:IEEEFloat} = nothing
@@ -729,7 +795,6 @@ function _verify_rdata_value(p, r)
     return nothing
 end
 
-
 """
     LazyZeroRData{P, Tdata}()
 
@@ -743,7 +808,7 @@ be stored. For example, `Float64`s do not need any data, so `LazyZeroRData(0.0)`
 an instance of a singleton type, meaning that various important optimisations can be
 performed in AD.
 """
-struct LazyZeroRData{P, Tdata}
+struct LazyZeroRData{P,Tdata}
     data::Tdata
 end
 
@@ -752,14 +817,14 @@ _copy(x::P) where {P<:LazyZeroRData} = P(_copy(x.data))
 # Returns the type which must be output by LazyZeroRData whenever it is passed a `P`.
 @inline function lazy_zero_rdata_type(::Type{P}) where {P}
     Tdata = can_produce_zero_rdata_from_type(P) ? Nothing : rdata_type(tangent_type(P))
-    return LazyZeroRData{P, Tdata}
+    return LazyZeroRData{P,Tdata}
 end
 
 # Be lazy if we can compute the zero element given only the type, otherwise just store the
 # zero element and use it later. L is the precise type of `LazyZeroRData` that you wish to
 # construct -- very occassionally you need complete control over this, but don't want to
 # figure out for yourself whether or not construction can be performed lazily.
-@inline function lazy_zero_rdata(::Type{L}, p::P) where {S, L<:LazyZeroRData{S}, P}
+@inline function lazy_zero_rdata(::Type{L}, p::P) where {S,L<:LazyZeroRData{S},P}
     return L(can_produce_zero_rdata_from_type(S) ? nothing : zero_rdata(p))
 end
 
@@ -769,10 +834,10 @@ end
 # Ensure proper specialisation on types.
 @inline function lazy_zero_rdata(p::Type{P}) where {P}
     Rtype = @isdefined(P) ? Type{P} : _typeof(p)
-    return LazyZeroRData{Rtype, Nothing}(nothing)
+    return LazyZeroRData{Rtype,Nothing}(nothing)
 end
 
-@inline instantiate(::LazyZeroRData{P, Nothing}) where {P} = zero_rdata_from_type(P)
+@inline instantiate(::LazyZeroRData{P,Nothing}) where {P} = zero_rdata_from_type(P)
 @inline instantiate(r::LazyZeroRData) = r.data
 @inline instantiate(::NoRData) = NoRData()
 
@@ -787,35 +852,34 @@ tangent_type(::Type{NoFData}, ::Type{R}) where {R<:IEEEFloat} = R
 tangent_type(::Type{F}, ::Type{NoRData}) where {F<:Array} = F
 
 # Tuples
-function tangent_type(::Type{F}, ::Type{R}) where {F<:Tuple, R<:Tuple}
-    return Tuple{tuple_map(tangent_type, Tuple(F.parameters), Tuple(R.parameters))...}
+@generated function tangent_type(::Type{F}, ::Type{R}) where {F<:Tuple,R<:Tuple}
+    tt_exprs = map((f, r) -> :(tangent_type($f, $r)), fieldtypes(F), fieldtypes(R))
+    return Expr(:curly, :Tuple, tt_exprs...)
 end
 function tangent_type(::Type{NoFData}, ::Type{R}) where {R<:Tuple}
-    F_tuple = Tuple{tuple_fill(NoFData, Val(length(R.parameters)))...}
-    return tangent_type(F_tuple, R)
+    return tangent_type(Tuple{tuple_fill(NoFData, Val(length(R.parameters)))...}, R)
 end
 function tangent_type(::Type{F}, ::Type{NoRData}) where {F<:Tuple}
-    R_tuple = Tuple{tuple_fill(NoRData, Val(length(F.parameters)))...}
-    return tangent_type(F, R_tuple)
+    return tangent_type(F, Tuple{tuple_fill(NoRData, Val(length(F.parameters)))...})
 end
 
 # NamedTuples
-function tangent_type(::Type{F}, ::Type{R}) where {ns, F<:NamedTuple{ns}, R<:NamedTuple{ns}}
-    return NamedTuple{ns, tangent_type(tuple_type(F), tuple_type(R))}
+function tangent_type(::Type{F}, ::Type{R}) where {ns,F<:NamedTuple{ns},R<:NamedTuple{ns}}
+    return NamedTuple{ns,tangent_type(tuple_type(F), tuple_type(R))}
 end
-function tangent_type(::Type{NoFData}, ::Type{R}) where {ns, R<:NamedTuple{ns}}
-    return NamedTuple{ns, tangent_type(NoFData, tuple_type(R))}
+function tangent_type(::Type{NoFData}, ::Type{R}) where {ns,R<:NamedTuple{ns}}
+    return NamedTuple{ns,tangent_type(NoFData, tuple_type(R))}
 end
-function tangent_type(::Type{F}, ::Type{NoRData}) where {ns, F<:NamedTuple{ns}}
-    return NamedTuple{ns, tangent_type(tuple_type(F), NoRData)}
+function tangent_type(::Type{F}, ::Type{NoRData}) where {ns,F<:NamedTuple{ns}}
+    return NamedTuple{ns,tangent_type(tuple_type(F), NoRData)}
 end
-tuple_type(::Type{<:NamedTuple{<:Any, T}}) where {T<:Tuple} = T
+tuple_type(::Type{<:NamedTuple{<:Any,T}}) where {T<:Tuple} = T
 
 # mutable structs
 tangent_type(::Type{F}, ::Type{NoRData}) where {F<:MutableTangent} = F
 
 # structs
-function tangent_type(::Type{F}, ::Type{R}) where {F<:FData, R<:RData}
+function tangent_type(::Type{F}, ::Type{R}) where {F<:FData,R<:RData}
     return Tangent{tangent_type(fields_type(F), fields_type(R))}
 end
 function tangent_type(::Type{NoFData}, ::Type{R}) where {R<:RData}
@@ -827,13 +891,12 @@ end
 
 function tangent_type(
     ::Type{PossiblyUninitTangent{F}}, ::Type{PossiblyUninitTangent{R}}
-) where {F, R}
+) where {F,R}
     return PossiblyUninitTangent{tangent_type(F, R)}
 end
 
 # Abstract types.
 tangent_type(::Type{Any}, ::Type{Any}) = Any
-
 
 """
     tangent(f, r)
@@ -864,7 +927,7 @@ end
 tangent(f::MutableTangent, r::NoRData) = f
 
 # structs
-function tangent(f::F, r::R) where {F<:FData, R<:RData}
+function tangent(f::F, r::R) where {F<:FData,R<:RData}
     return tangent_type(F, R)(tangent(f.data, r.data))
 end
 function tangent(::NoFData, r::R) where {R<:RData}
@@ -874,7 +937,7 @@ function tangent(f::F, ::NoRData) where {F<:FData}
     return tangent_type(F, NoRData)(tangent(f.data, NoRData()))
 end
 
-function tangent(f::PossiblyUninitTangent{F}, r::PossiblyUninitTangent{R}) where {F, R}
+function tangent(f::PossiblyUninitTangent{F}, r::PossiblyUninitTangent{R}) where {F,R}
     T = PossiblyUninitTangent{tangent_type(F, R)}
     is_init(f) && is_init(r) && return T(tangent(val(f), val(r)))
     !is_init(f) && !is_init(r) && return T()
@@ -898,7 +961,9 @@ end
 Increment the rdata component of tangent `t` by `r`, and return the updated tangent.
 Useful for implementation getfield-like rules for mutable structs, pointers, dicts, etc.
 """
-increment_rdata!!(t::T, r) where {T} = tangent(fdata(t), increment!!(rdata(t), r))::T
+function increment_rdata!!(t::T, r) where {T}
+    return tangent(fdata(t), increment_internal!!(NoCache(), rdata(t), r))::T
+end
 
 """
     zero_tangent(primal, fdata)
@@ -907,11 +972,8 @@ Equivalent to `tangent(fdata, rdata(zero_tangent(primal)))`.
 """
 zero_tangent(p, ::NoFData) = zero_tangent(p)
 
-function zero_tangent(p::P, f::F) where {P, F}
-    T = tangent_type(P)
-    T == F && return f
-    r = rdata(zero_tangent(p))
-    return tangent(f, r)
+function zero_tangent(p::P, f::F) where {P,F}
+    return tangent_type(P) == F ? f : tangent(f, rdata(zero_tangent(p)))
 end
 
-zero_tangent(p::Tuple, f::Union{Tuple, NamedTuple}) = tuple_map(zero_tangent, p, f)
+zero_tangent(p::Tuple, f::Union{Tuple,NamedTuple}) = tuple_map(zero_tangent, p, f)

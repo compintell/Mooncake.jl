@@ -5,7 +5,7 @@ Central definition of typeof, which is specific to the use-required in this pack
 """
 _typeof(x) = Base._stable_typeof(x)
 _typeof(x::Tuple) = Tuple{tuple_map(_typeof, x)...}
-_typeof(x::NamedTuple{names}) where {names} = NamedTuple{names, _typeof(Tuple(x))}
+_typeof(x::NamedTuple{names}) where {names} = NamedTuple{names,_typeof(Tuple(x))}
 
 """
     tuple_map(f::F, x::Tuple) where {F}
@@ -24,41 +24,33 @@ the same length, while `map` will just produce a new tuple whose length is equal
 shorter of `x` and `y`.
 """
 @inline @generated function tuple_map(f::F, x::Tuple) where {F}
-    return Expr(:call, :tuple, map(n -> :(f(getfield(x, $n))), eachindex(x.parameters))...)
+    return Expr(:call, :tuple, map(n -> :(f(getfield(x, $n))), 1:fieldcount(x))...)
 end
 
 @inline @generated function tuple_map(f::F, x::Tuple, y::Tuple) where {F}
     if length(x.parameters) != length(y.parameters)
         return :(throw(ArgumentError("length(x) != length(y)")))
     else
-        stmts = map(n -> :(f(getfield(x, $n), getfield(y, $n))), eachindex(x.parameters))
+        stmts = map(n -> :(f(getfield(x, $n), getfield(y, $n))), 1:fieldcount(x))
         return Expr(:call, :tuple, stmts...)
     end
 end
 
-for N in 1:128
-    @eval @inline function tuple_map(f::F, x::Tuple{Vararg{Any, $N}}) where {F}
-        return $(Expr(:call, :tuple, map(n -> :(f(getfield(x, $n))), 1:N)...))
+@generated function tuple_map(f, x::NamedTuple{names}) where {names}
+    getfield_exprs = map(n -> :(f(getfield(x, $n))), 1:fieldcount(x))
+    return :(NamedTuple{names}($(Expr(:call, :tuple, getfield_exprs...))))
+end
+
+@generated function tuple_map(f, x::NamedTuple{names}, y::NamedTuple{names}) where {names}
+    if fieldcount(x) != fieldcount(y)
+        return :(throw(ArgumentError("length(x) != length(y)")))
     end
-    @eval @inline function tuple_map(f::F, x::NamedTuple{names, <:Tuple{Vararg{Any, $N}}}) where {F, names}
-        return NamedTuple{names}($(Expr(:call, :tuple, map(n -> :(f(getfield(x, $n))), 1:N)...)))
-    end
-    @eval @inline function tuple_map(
-        f, x::Tuple{Vararg{Any, $N}}, y::Tuple{Vararg{Any, $N}}
-    )
-        return $(Expr(:call, :tuple, map(n -> :(f(getfield(x, $n), getfield(y, $n))), 1:N)...))
-    end
-    @eval @inline function tuple_map(
-        f::F,
-        x::NamedTuple{names, <:Tuple{Vararg{Any, $N}}},
-        y::NamedTuple{names, <:Tuple{Vararg{Any, $N}}},
-    ) where {F, names}
-        return NamedTuple{names}($(Expr(:call, :tuple, map(n -> :(f(getfield(x, $n), getfield(y, $n))), 1:N)...)))
-    end
+    getfield_exprs = map(n -> :(f(getfield(x, $n), getfield(y, $n))), 1:fieldcount(x))
+    return :(NamedTuple{names}($(Expr(:call, :tuple, getfield_exprs...))))
 end
 
 for N in 1:256
-    @eval @inline function tuple_splat(f, x::Tuple{Vararg{Any, $N}})
+    @eval @inline function tuple_splat(f, x::Tuple{Vararg{Any,$N}})
         return $(Expr(:call, :f, map(n -> :(getfield(x, $n)), 1:N)...))
     end
 end
@@ -71,10 +63,19 @@ end
     return Expr(:call, :f, :v, map(n -> :(x[$n]), 1:length(x.parameters))...)
 end
 
-@inline @generated function tuple_fill(val ,::Val{N}) where {N}
+@inline @generated function tuple_fill(val, ::Val{N}) where {N}
     return Expr(:call, :tuple, map(_ -> :val, 1:N)...)
 end
 
+"""
+    stable_all(x::NTuple{N, Bool}) where {N}
+
+`all(x::NTuple{N, Bool})` does not constant-fold nicely on 1.10 if the values of `x` are
+known statically. This implementation constant-folds nicely on both 1.10 and 1.11, so can
+be used in its place in situations where this is important.
+"""
+stable_all(x::NTuple{1,Bool}) = x[1]
+stable_all(x::NTuple{N,Bool}) where {N} = x[1] & stable_all(x[2:end])
 
 """
     _map_if_assigned!(f, y::DenseArray, x::DenseArray{P}) where {P}
@@ -86,7 +87,7 @@ Equivalent to `map!(f, y, x)` if `P` is a bits type as element will always be as
 
 Requires that `y` and `x` have the same size.
 """
-function _map_if_assigned!(f::F, y::DenseArray, x::DenseArray{P}) where {F, P}
+function _map_if_assigned!(f::F, y::DenseArray, x::DenseArray{P}) where {F,P}
     @assert size(y) == size(x)
     @inbounds for n in eachindex(y)
         if isbitstype(P) || isassigned(x, n)
@@ -104,7 +105,9 @@ writes `f(x1[n], x2[n])` to `y[n]`, otherwise leaves `y[n]` unchanged.
 
 Requires that `y`, `x1`, and `x2` have the same size.
 """
-function _map_if_assigned!(f::F, y::DenseArray, x1::DenseArray{P}, x2::DenseArray) where {F, P}
+function _map_if_assigned!(
+    f::F, y::DenseArray, x1::DenseArray{P}, x2::DenseArray
+) where {F,P}
     @assert size(y) == size(x1)
     @assert size(y) == size(x2)
     @inbounds for n in eachindex(y)
@@ -121,7 +124,7 @@ end
 Same as `map` but requires all elements of `x` to have equal length.
 The usual function `map` doesn't enforce this for `Array`s.
 """
-@inline function _map(f::F, x::Vararg{Any, N}) where {F, N}
+@inline function _map(f::F, x::Vararg{Any,N}) where {F,N}
     @assert allequal(map(length, x))
     return map(f, x...)
 end
@@ -139,11 +142,13 @@ is_vararg_and_sparam_names(m::Method) = m.isva, sparam_names(m)
 
 Finds the method associated to `sig`, and calls `is_vararg_and_sparam_names` on it.
 """
-function is_vararg_and_sparam_names(sig)::Tuple{Bool, Vector{Symbol}}
+function is_vararg_and_sparam_names(sig)::Tuple{Bool,Vector{Symbol}}
     world = Base.get_world_counter()
     min = Base.RefValue{UInt}(typemin(UInt))
     max = Base.RefValue{UInt}(typemax(UInt))
-    ms = Base._methods_by_ftype(sig, nothing, -1, world, true, min, max, Ptr{Int32}(C_NULL))::Vector
+    ms = Base._methods_by_ftype(
+        sig, nothing, -1, world, true, min, max, Ptr{Int32}(C_NULL)
+    )::Vector
     return is_vararg_and_sparam_names(only(ms).method)
 end
 
@@ -152,7 +157,7 @@ end
 
 Calls `is_vararg_and_sparam_names` on `mi.def::Method`.
 """
-function is_vararg_and_sparam_names(mi::Core.MethodInstance)::Tuple{Bool, Vector{Symbol}}
+function is_vararg_and_sparam_names(mi::Core.MethodInstance)::Tuple{Bool,Vector{Symbol}}
     return is_vararg_and_sparam_names(mi.def)
 end
 
@@ -170,6 +175,18 @@ function sparam_names(m::Core.Method)::Vector{Symbol}
         Meta.isexpr(name, :(>:)) && return name.args[1]
         error("unrecognised type param $name")
     end
+end
+
+"""
+    always_initialised(::Type{P}) where {P}
+
+Returns a tuple with number of fields equal to the number of fields in `P`. The nth field
+is set to `true` if the nth field of `P` is initialised, and `false` otherwise.
+"""
+@generated function always_initialised(::Type{P}) where {P}
+    P isa DataType || return :(error("$P is not a DataType."))
+    num_init = CC.datatype_min_ninitialized(P)
+    return (map(n -> n <= num_init, 1:fieldcount(P))...,)
 end
 
 """
@@ -198,7 +215,7 @@ end
 
 Like `getfield`, but with the field and access order encoded as types.
 """
-lgetfield(x, ::Val{f}, ::Val{order}) where {f, order} = getfield(x, f, order)
+lgetfield(x, ::Val{f}, ::Val{order}) where {f,order} = getfield(x, f, order)
 
 """
     lsetfield!(value, name::Val, x, [order::Val])
@@ -216,6 +233,103 @@ lsetfield!(value, ::Val{name}, x) where {name} = setfield!(value, name, x)
 
 One-liner which calls the `:new` instruction with type `T` with arguments `x`.
 """
-@inline @generated function _new_(::Type{T}, x::Vararg{Any, N}) where {T, N}
+@inline @generated function _new_(::Type{T}, x::Vararg{Any,N}) where {T,N}
     return Expr(:new, :T, map(n -> :(x[$n]), 1:N)...)
+end
+
+"""
+    flat_product(xs...)
+
+Equivalent to `vec(collect(Iterators.product(xs...)))`.
+"""
+flat_product(xs...) = vec(collect(Iterators.product(xs...)))
+
+"""
+    map_prod(f, xs...)
+
+Equivalent to `map(f, flat_product(xs...))`.
+"""
+map_prod(f, xs...) = map(f, flat_product(xs...))
+
+"""
+    opaque_closure(
+        ret_type::Type,
+        ir::IRCode,
+        @nospecialize env...;
+        isva::Bool=false,
+        do_compile::Bool=true,
+    )::Core.OpaqueClosure{<:Tuple, ret_type}
+
+Construct a `Core.OpaqueClosure`. Almost equivalent to
+`Core.OpaqueClosure(ir, env...; isva, do_compile)`, but instead of letting
+`Core.compute_oc_rettype` figure out the return type from `ir`, impose `ret_type` as the
+return type.
+
+# Warning
+
+User beware: if the `Core.OpaqueClosure` produced by this function ever returns anything
+which is not an instance of a subtype of `ret_type`, you should expect all kinds of awful
+things to happen, such as segfaults. You have been warned!
+
+# Extended Help
+
+This is needed in Mooncake.jl because make extensive use of our ability to know the return
+type of a couple of specific `OpaqueClosure`s without actually having constructed them --
+see `LazyDerivedRule`. Without the capability to specify the return type, we have to guess
+what type `compute_ir_rettype` will return for a given `IRCode` before we have constructed
+the `IRCode` and run type inference on it. This exposes us to details of type inference,
+which are not part of the public interface of the language, and can therefore vary from
+Julia version to Julia version (including patch versions). Moreover, even for a fixed Julia
+version it can be extremely hard to predict exactly what type inference will infer to be the
+return type of a function.
+
+Failing to correctly guess the return type can happen for a number of reasons, and the kinds
+of errors that tend to be generated when this fails tell you very little about the
+underlying cause of the problem.
+
+By specifying the return type ourselves, we remove this dependence. The price we pay for
+this is the potential for segfaults etc if we fail to specify `ret_type` correctly.
+"""
+function opaque_closure(
+    ret_type::Type,
+    ir::IRCode,
+    @nospecialize env...;
+    isva::Bool=false,
+    do_compile::Bool=true,
+)
+    # This implementation is copied over directly from `Core.OpaqueClosure`.
+    ir = CC.copy(ir)
+    nargs = length(ir.argtypes) - 1
+    sig = Base.Experimental.compute_oc_signature(ir, nargs, isva)
+    src = ccall(:jl_new_code_info_uninit, Ref{CC.CodeInfo}, ())
+    src.slotnames = fill(:none, nargs + 1)
+    src.slotflags = fill(zero(UInt8), length(ir.argtypes))
+    src.slottypes = copy(ir.argtypes)
+    src.rettype = ret_type
+    src = CC.ir_to_codeinf!(src, ir)
+    return Base.Experimental.generate_opaque_closure(
+        sig, Union{}, ret_type, src, nargs, isva, env...; do_compile
+    )::Core.OpaqueClosure{sig,ret_type}
+end
+
+"""
+    misty_closure(
+        ret_type::Type,
+        ir::IRCode,
+        @nospecialize env...;
+        isva::Bool=false,
+        do_compile::Bool=true,
+    )
+
+Identical to [`Mooncake.opaque_closure`](@ref), but returns a `MistyClosure` closure rather
+than a `Core.OpaqueClosure`.
+"""
+function misty_closure(
+    ret_type::Type,
+    ir::IRCode,
+    @nospecialize env...;
+    isva::Bool=false,
+    do_compile::Bool=true,
+)
+    return MistyClosure(opaque_closure(ret_type, ir, env...; isva, do_compile), Ref(ir))
 end

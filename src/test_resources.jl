@@ -10,11 +10,17 @@ module TestResources
 
 using ..Mooncake
 using ..Mooncake:
-    CoDual, Tangent, MutableTangent, NoTangent, PossiblyUninitTangent, ircode,
-    @is_primitive, MinimalCtx, val
+    CoDual,
+    Tangent,
+    MutableTangent,
+    NoTangent,
+    PossiblyUninitTangent,
+    ircode,
+    @is_primitive,
+    MinimalCtx,
+    val
 
 using DiffTests, LinearAlgebra, Random, Setfield
-
 
 #
 # Types used for testing purposes
@@ -177,7 +183,7 @@ function bar(x, y)
 end
 
 function unused_expression(x, n)
-    y = getfield((Float64, ), n)
+    y = getfield((Float64,), n)
     return x
 end
 
@@ -207,7 +213,7 @@ new_tester_2(x) = StableFoo(x, :symbol)
 
 @eval function new_tester_3(x::Ref{Any})
     y = x[]
-    $(Expr(:new, :y, 5.0))
+    return $(Expr(:new, :y, 5.0))
 end
 
 @eval splatnew_tester(x::Ref{Tuple}) = $(Expr(:splatnew, StableFoo, :(x[])))
@@ -291,7 +297,7 @@ end
 simple_foreigncall_tester(s::String) = ccall(:jl_string_ptr, Ptr{UInt8}, (Any,), s)
 
 function simple_foreigncall_tester_2(a::TypeVar, b::Type)
-    ccall(:jl_type_unionall, Any, (Any, Any), a, b)
+    return ccall(:jl_type_unionall, Any, (Any, Any), a, b)
 end
 
 function no_primitive_inlining_tester(x)
@@ -302,13 +308,13 @@ function no_primitive_inlining_tester(x)
     return X
 end
 
-@noinline varargs_tester(x::Vararg{Any, N}) where {N} = x
+@noinline varargs_tester(x::Vararg{Any,N}) where {N} = x
 
 varargs_tester_2(x) = varargs_tester(x)
 varargs_tester_2(x, y) = varargs_tester(x, y)
 varargs_tester_2(x, y, z) = varargs_tester(x, y, z)
 
-@noinline varargs_tester_3(x, y::Vararg{Any, N}) where {N} = sin(x), y
+@noinline varargs_tester_3(x, y::Vararg{Any,N}) where {N} = sin(x), y
 
 varargs_tester_4(x) = varargs_tester_3(x...)
 varargs_tester_4(x, y) = varargs_tester_3(x...)
@@ -478,11 +484,11 @@ function test_union_of_arrays(x::Vector{Float64}, b::Bool)
     return 2z
 end
 
-function test_union_of_types(x::Ref{Union{Type{Float64}, Type{Int}}})
+function test_union_of_types(x::Ref{Union{Type{Float64},Type{Int}}})
     return x[]
 end
 
-function test_small_union(x::Ref{Union{Float64, Vector{Float64}}})
+function test_small_union(x::Ref{Union{Float64,Vector{Float64}}})
     v = x[]
     return v isa Float64 ? v : v[1]
 end
@@ -494,7 +500,7 @@ end
 @noinline edge_case_tester(x::Float32) = 6.0
 @noinline edge_case_tester(x::Int) = 10
 @noinline edge_case_tester(x::String) = "hi"
-@is_primitive MinimalCtx Tuple{typeof(edge_case_tester), Float64}
+@is_primitive MinimalCtx Tuple{typeof(edge_case_tester),Float64}
 function Mooncake.rrule!!(::CoDual{typeof(edge_case_tester)}, x::CoDual{Float64})
     edge_case_tester_pb!!(dy) = Mooncake.NoRData(), 5 * dy
     return Mooncake.zero_fcodual(5 * primal(x)), edge_case_tester_pb!!
@@ -552,12 +558,12 @@ test_for_invoke(x) = 5x
 
 inlinable_invoke_call(x::Float64) = invoke(test_for_invoke, Tuple{Float64}, x)
 
-vararg_test_for_invoke(n::Tuple{Int, Int}, x...) = sum(x) + n[1]
+vararg_test_for_invoke(n::Tuple{Int,Int}, x...) = sum(x) + n[1]
 
 function inlinable_vararg_invoke_call(
     rows::Tuple{Vararg{Int}}, n1::N, ns::Vararg{N}
 ) where {N}
-    return invoke(vararg_test_for_invoke, Tuple{typeof(rows), Vararg{N}}, rows, n1, ns...)
+    return invoke(vararg_test_for_invoke, Tuple{typeof(rows),Vararg{N}}, rows, n1, ns...)
 end
 
 # build_rrule should error for this function, because it references a non-const global ref.
@@ -578,11 +584,28 @@ function typevar_tester()
 end
 
 tuple_with_union(x::Bool) = (x ? 5.0 : 5, nothing)
+tuple_with_union_2(x::Bool) = (x ? 5.0 : 5, x ? 5 : 5.0)
+tuple_with_union_3(x::Bool, y::Bool) = (x ? 5.0 : (y ? 5 : nothing), nothing)
 
 struct NoDefaultCtor{T}
     x::T
     NoDefaultCtor(x::T) where {T} = new{T}(x)
 end
+
+@noinline function __inplace_function!(x::Vector{Float64})
+    x .= cos.(x)
+    return nothing
+end
+
+function inplace_invoke!(x::Vector{Float64})
+    __inplace_function!(x)
+    return nothing
+end
+
+highly_nested_tuple(x) = ((((x,),), x), x)
+
+# Regression test: https://github.com/compintell/Mooncake.jl/issues/450
+sig_argcount_mismatch(x) = vcat(x[1], x[2:2], x[3:3], x[4:4])
 
 function generate_test_functions()
     return Any[
@@ -595,8 +618,12 @@ function generate_test_functions()
         (false, :allocs, nothing, unused_expression, 5.0, 1),
         (false, :none, nothing, type_unstable_argument_eval, sin, 5.0),
         (
-            false, :none, nothing,
-            abstractly_typed_unused_container, StructFoo(5.0, [4.0]), 5.0,
+            false,
+            :none,
+            nothing,
+            abstractly_typed_unused_container,
+            StructFoo(5.0, [4.0]),
+            5.0,
         ),
         (false, :none, (lb=1, ub=1_000), pi_node_tester, Ref{Any}(5.0)),
         (false, :none, (lb=1, ub=1_000), pi_node_tester, Ref{Any}(5)),
@@ -641,8 +668,12 @@ function generate_test_functions()
         (false, :allocs, nothing, avoid_throwing_path_tester, 5.0),
         (true, :allocs, nothing, simple_foreigncall_tester, "hello"),
         (
-            false, :none, nothing,
-            simple_foreigncall_tester_2, TypeVar(:T, Union{}, Any), Vector{T} where {T}
+            false,
+            :none,
+            nothing,
+            simple_foreigncall_tester_2,
+            TypeVar(:T, Union{}, Any),
+            Vector{T} where {T},
         ),
         (false, :none, nothing, no_primitive_inlining_tester, 5.0),
         (false, :allocs, nothing, varargs_tester, 5.0),
@@ -668,14 +699,19 @@ function generate_test_functions()
         (false, :none, (lb=1, ub=1_000), datatype_slot_tester, 2),
         (false, :none, (lb=1, ub=100_000_000), test_union_of_arrays, randn(5), true),
         (
-            false, :none, nothing,
-            test_union_of_types, Ref{Union{Type{Float64}, Type{Int}}}(Float64),
+            false,
+            :none,
+            nothing,
+            test_union_of_types,
+            Ref{Union{Type{Float64},Type{Int}}}(Float64),
         ),
         (false, :allocs, nothing, test_self_reference, 1.1, 1.5),
         (false, :allocs, nothing, test_self_reference, 1.5, 1.1),
         (false, :none, nothing, test_recursive_sum, randn(2)),
         (
-            false, :none, nothing,
+            false,
+            :none,
+            nothing,
             LinearAlgebra._modify!,
             LinearAlgebra.MulAddMul(5.0, 4.0),
             5.0,
@@ -685,12 +721,20 @@ function generate_test_functions()
         (false, :allocs, nothing, getfield_tester, (5.0, 5)),
         (false, :allocs, nothing, getfield_tester_2, (5.0, 5)),
         (
-            false, :allocs, nothing,
-            setfield_tester_left!, FullyInitMutableStruct(5.0, randn(3)), 4.0,
+            false,
+            :allocs,
+            nothing,
+            setfield_tester_left!,
+            FullyInitMutableStruct(5.0, randn(3)),
+            4.0,
         ),
         (
-            false, :none, nothing,
-            setfield_tester_right!, FullyInitMutableStruct(5.0, randn(3)), randn(5),
+            false,
+            :none,
+            nothing,
+            setfield_tester_right!,
+            FullyInitMutableStruct(5.0, randn(3)),
+            randn(5),
         ),
         (false, :none, nothing, mul!, randn(3, 5)', randn(5, 5), randn(5, 3), 4.0, 3.0),
         (false, :none, nothing, Random.SHA.digest!, Random.SHA.SHA2_256_CTX()),
@@ -719,29 +763,47 @@ function generate_test_functions()
         (false, :none, nothing, test_struct_partial_init, 3.5),
         (false, :none, nothing, test_mutable_partial_init, 3.3),
         (
-            false, :allocs, nothing,
-            test_naive_mat_mul!, randn(100, 50), randn(100, 30), randn(30, 50),
+            false,
+            :allocs,
+            nothing,
+            test_naive_mat_mul!,
+            randn(100, 50),
+            randn(100, 30),
+            randn(30, 50),
         ),
         (
-            false, :allocs, nothing,
-            (A, C) -> test_naive_mat_mul!(C, A, A), randn(25, 25), randn(25, 25),
+            false,
+            :allocs,
+            nothing,
+            (A, C) -> test_naive_mat_mul!(C, A, A),
+            randn(25, 25),
+            randn(25, 25),
         ),
         (false, :allocs, nothing, sum, randn(32)),
         (false, :none, nothing, test_diagonal_to_matrix, Diagonal(randn(30))),
         (
-            false, :allocs, nothing,
-            ldiv!, randn(20, 20), Diagonal(rand(20) .+ 1), randn(20, 20),
+            false,
+            :allocs,
+            nothing,
+            ldiv!,
+            randn(20, 20),
+            Diagonal(rand(20) .+ 1),
+            randn(20, 20),
         ),
         (
-            false, :allocs, nothing,
-            LinearAlgebra._kron!, randn(25, 25), randn(5, 5), randn(5, 5),
+            false,
+            :allocs,
+            nothing,
+            LinearAlgebra._kron!,
+            randn(25, 25),
+            randn(5, 5),
+            randn(5, 5),
         ),
+        (false, :allocs, nothing, kron!, randn(25, 25), Diagonal(randn(5)), randn(5, 5)),
         (
-            false, :allocs, nothing,
-            kron!, randn(25, 25), Diagonal(randn(5)), randn(5, 5),
-        ),
-        (
-            false, :none, nothing,
+            false,
+            :none,
+            nothing,
             test_mlp,
             randn(sr(1), 50, 20),
             randn(sr(2), 70, 50),
@@ -756,13 +818,22 @@ function generate_test_functions()
         (false, :none, nothing, _broadcast_sin_cos_exp, randn(10, 10)),
         (false, :none, nothing, _map_sin_cos_exp, randn(10, 10)),
         (false, :none, nothing, ArgumentError, "hi"),
-        (false, :none, nothing, test_small_union, Ref{Union{Float64, Vector{Float64}}}(5.0)),
-        (false, :none, nothing, test_small_union, Ref{Union{Float64, Vector{Float64}}}([1.0])),
+        (false, :none, nothing, test_small_union, Ref{Union{Float64,Vector{Float64}}}(5.0)),
+        (
+            false,
+            :none,
+            nothing,
+            test_small_union,
+            Ref{Union{Float64,Vector{Float64}}}([1.0]),
+        ),
         (false, :allocs, nothing, inlinable_invoke_call, 5.0),
         (false, :none, nothing, inlinable_vararg_invoke_call, (2, 2), 5.0, 4.0, 3.0, 2.0),
         (false, :none, nothing, hvcat, (2, 2), 3.0, 2.0, 0.0, 1.0),
         (false, :none, nothing, partial_typevar_tester),
         (false, :none, nothing, typevar_tester),
+        (false, :allocs, nothing, inplace_invoke!, randn(1_024)),
+        (false, :allocs, nothing, highly_nested_tuple, 5.0),
+        (false, :none, nothing, sig_argcount_mismatch, ones(4)),
     ]
 end
 

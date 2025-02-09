@@ -1,40 +1,43 @@
 module MooncakeNNlibExt
 
-using NNlib, Random, Mooncake
+using GPUArraysCore, NNlib, Random, Mooncake
 using Base: IEEEFloat
 using NNlib: dropout
 
 using NNlib: conv, depthwiseconv
 import Mooncake: @from_rrule, DefaultCtx, MinimalCtx
 
+# Array types which we test rules against, so are confident work.
+const SupportedArray{P,N} = Union{Array{P,N},AbstractGPUArray{P,N}}
+
 @from_rrule(
     MinimalCtx,
-    Tuple{typeof(batched_mul), Array{P, 3}, Array{P, 3}} where {P<:IEEEFloat},
+    Tuple{typeof(batched_mul),SupportedArray{P,3},SupportedArray{P,3}} where {P<:IEEEFloat},
 )
 @from_rrule(
     MinimalCtx,
-    Tuple{typeof(dropout), AbstractRNG, Array{P}, P} where {P<:IEEEFloat},
+    Tuple{typeof(dropout),AbstractRNG,SupportedArray{P},P} where {P<:IEEEFloat},
     true,
 )
-@from_rrule(MinimalCtx, Tuple{typeof(softmax), Array{<:IEEEFloat}}, true)
-@from_rrule(MinimalCtx, Tuple{typeof(logsoftmax), Array{<:IEEEFloat}}, true)
-@from_rrule(MinimalCtx, Tuple{typeof(logsumexp), Array{<:IEEEFloat}}, true)
+@from_rrule(MinimalCtx, Tuple{typeof(softmax),SupportedArray{<:IEEEFloat}}, true)
+@from_rrule(MinimalCtx, Tuple{typeof(logsoftmax),SupportedArray{<:IEEEFloat}}, true)
+@from_rrule(MinimalCtx, Tuple{typeof(logsumexp),SupportedArray{<:IEEEFloat}}, true)
 @from_rrule(
     MinimalCtx,
-    Tuple{typeof(upsample_nearest), Array{<:IEEEFloat}, NTuple{N, Int} where {N}},
+    Tuple{typeof(upsample_nearest),SupportedArray{<:IEEEFloat},NTuple{N,Int} where {N}},
 )
 @from_rrule(
     MinimalCtx,
     Tuple{
-        typeof(NNlib.fold), Array{<:IEEEFloat}, NTuple{N, Int} where {N}, DenseConvDims,
+        typeof(NNlib.fold),SupportedArray{<:IEEEFloat},NTuple{N,Int} where {N},DenseConvDims
     },
 )
 @from_rrule(
-    MinimalCtx, Tuple{typeof(NNlib.unfold), Array{<:IEEEFloat}, DenseConvDims}
+    MinimalCtx, Tuple{typeof(NNlib.unfold),SupportedArray{<:IEEEFloat},DenseConvDims}
 )
 @from_rrule(
     MinimalCtx,
-    Tuple{typeof(NNlib.scatter), Any, Array, Array{<:Union{Integer, Tuple}}},
+    Tuple{typeof(NNlib.scatter),Any,SupportedArray,SupportedArray{<:Union{Integer,Tuple}}},
     true,
 )
 for conv in [:conv, :depthwiseconv]
@@ -42,25 +45,31 @@ for conv in [:conv, :depthwiseconv]
 
     @eval @from_rrule(
         MinimalCtx,
-        Tuple{typeof($conv), Array{P}, Array{P}, ConvDims} where {P<:IEEEFloat},
+        Tuple{
+            typeof($conv),SupportedArray{P},SupportedArray{P},ConvDims
+        } where {P<:IEEEFloat},
         true,
     )
     @eval @from_rrule(
         MinimalCtx,
-        Tuple{typeof($∇conv_data), Array{P}, Array{P}, ConvDims} where {P<:IEEEFloat},
+        Tuple{
+            typeof($∇conv_data),SupportedArray{P},SupportedArray{P},ConvDims
+        } where {P<:IEEEFloat},
         true,
     )
 end
 @from_rrule(
     MinimalCtx,
-    Tuple{typeof(∇conv_filter), Array{P}, Array{P}, ConvDims} where {P<:IEEEFloat},
+    Tuple{
+        typeof(∇conv_filter),SupportedArray{P},SupportedArray{P},ConvDims
+    } where {P<:IEEEFloat},
     true,
 )
 for pool in [:maxpool, :meanpool]
     @eval @from_rrule(
-        MinimalCtx, Tuple{typeof($pool), Array{<:IEEEFloat}, PoolDims}, true
+        MinimalCtx, Tuple{typeof($pool),SupportedArray{<:IEEEFloat},PoolDims}, true
     )
 end
-@from_rrule(MinimalCtx, Tuple{typeof(pad_constant), Array, Any, Any}, true)
+@from_rrule(MinimalCtx, Tuple{typeof(pad_constant),SupportedArray,Any,Any}, true)
 
 end

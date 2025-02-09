@@ -1,3 +1,9 @@
+function count_allocs(fargs::P) where {P<:Tuple}
+    f, args... = fargs
+    f(args...) # warmup
+    return @allocations f(args...)
+end
+
 @testset "interface" begin
     @testset "$(typeof((f, x...)))" for (ȳ, f, x...) in Any[
         (1.0, (x, y) -> x * y + sin(x) * cos(y), 5.0, 4.0),
@@ -28,6 +34,7 @@
             ((x, y) -> x + sin(y), randn(Float64), randn(Float64)),
             ((x, y) -> x + sin(y), randn(Float32), randn(Float32)),
             ((x...) -> x[1] + x[2], randn(Float64), randn(Float64)),
+            (sum, randn(10)),
         ]
             rule = build_rrule(fargs...)
             f, args... = fargs
@@ -36,6 +43,19 @@
             for (arg, darg) in zip(fargs, dfargs)
                 @test tangent_type(typeof(arg)) == typeof(darg)
             end
+
+            cache = Mooncake.prepare_gradient_cache(fargs...)
+            _v, _dfargs = value_and_gradient!!(cache, fargs...)
+            @test _v == v
+            for (arg, darg) in zip(fargs, _dfargs)
+                @test tangent_type(typeof(arg)) == typeof(darg)
+            end
+            alloc_count = count_allocs((value_and_gradient!!, cache, fargs...))
+            if alloc_count > 0
+                @test_broken alloc_count == 0
+            else
+                @test alloc_count == 0
+            end
         end
 
         rule = build_rrule(identity, (5.0, 4.0))
@@ -43,5 +63,37 @@
             Mooncake.ValueAndGradientReturnTypeError,
             value_and_gradient!!(rule, identity, (5.0, 4.0)),
         )
+        @test_throws(
+            Mooncake.ValueAndGradientReturnTypeError,
+            Mooncake.prepare_gradient_cache(identity, (5.0, 4.0)),
+        )
+    end
+    @testset "value_and_pullback!!" begin
+        @testset "($(typeof(fargs))" for (ȳ, fargs...) in Any[
+            (randn(10), identity, randn(10)),
+            (randn(), sin, randn(Float64)),
+            (randn(), sum, randn(Float64)),
+        ]
+            rule = build_rrule(fargs...)
+            f, args... = fargs
+            v, dfargs = value_and_pullback!!(rule, ȳ, fargs...)
+            @test v == f(args...)
+            for (arg, darg) in zip(fargs, dfargs)
+                @test tangent_type(typeof(arg)) == typeof(darg)
+            end
+
+            cache = Mooncake.prepare_pullback_cache(fargs...)
+            _v, _dfargs = value_and_pullback!!(cache, ȳ, fargs...)
+            @test _v == v
+            for (arg, darg) in zip(fargs, _dfargs)
+                @test tangent_type(typeof(arg)) == typeof(darg)
+            end
+            alloc_count = count_allocs((value_and_pullback!!, cache, ȳ, fargs...))
+            if alloc_count > 0
+                @test_broken alloc_count == 0
+            else
+                @test alloc_count == 0
+            end
+        end
     end
 end

@@ -9,23 +9,39 @@ mutable struct TaskTangent end
 
 tangent_type(::Type{Task}) = TaskTangent
 
-zero_tangent(p::Task) = TaskTangent()
+function zero_tangent_internal(p::Task, stackdict::Any)
+    if haskey(stackdict, p)
+        return stackdict[p]::TaskTangent
+    else
+        t = TaskTangent()
+        stackdict[p] = t
+        return t
+    end
+end
 
-randn_tangent(rng::AbstractRNG, p::Task) = TaskTangent()
+function randn_tangent_internal(rng::AbstractRNG, p::Task, stackdict::Any)
+    if haskey(stackdict, p)
+        return stackdict[p]::TaskTangent
+    else
+        t = TaskTangent()
+        stackdict[p] = t
+        return t
+    end
+end
 
-increment!!(t::TaskTangent, s::TaskTangent) = t
+increment_internal!!(::IncCache, t::TaskTangent, s::TaskTangent) = t
 
-set_to_zero!!(t::TaskTangent) = t
+set_to_zero_internal!!(::IncCache, t::TaskTangent) = t
 
-_add_to_primal(p::Task, t::TaskTangent, ::Bool) = p
+_add_to_primal_internal(::MaybeCache, p::Task, t::TaskTangent, ::Bool) = p
 
-_diff(::Task, ::Task) = TaskTangent()
+_diff_internal(::MaybeCache, ::Task, ::Task) = TaskTangent()
 
-_dot(::TaskTangent, ::TaskTangent) = 0.0
+_dot_internal(::MaybeCache, ::TaskTangent, ::TaskTangent) = 0.0
 
-_scale(::Float64, t::TaskTangent) = t
+_scale_internal(::MaybeCache, ::Float64, t::TaskTangent) = t
 
-TestUtils.populate_address_map!(m::TestUtils.AddressMap, ::Task, ::TaskTangent) = m
+TestUtils.populate_address_map_internal(m::TestUtils.AddressMap, ::Task, ::TaskTangent) = m
 
 fdata_type(::Type{TaskTangent}) = TaskTangent
 
@@ -53,7 +69,7 @@ function get_tangent_field(t::TaskTangent, f)
     throw(error("Unhandled field $f"))
 end
 
-const TaskCoDual = CoDual{Task, TaskTangent}
+const TaskCoDual = CoDual{Task,TaskTangent}
 
 function rrule!!(::CoDual{typeof(lgetfield)}, x::TaskCoDual, ::CoDual{Val{f}}) where {f}
     dx = x.dx
@@ -77,26 +93,35 @@ set_tangent_field!(t::TaskTangent, f, ::NoTangent) = NoTangent()
 
 @zero_adjoint MinimalCtx Tuple{typeof(current_task)}
 
-_verify_fdata_value(::Task, ::TaskTangent) = nothing
+__verify_fdata_value(::IdDict{Any,Nothing}, ::Task, ::TaskTangent) = nothing
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:tasks})
     test_cases = Any[
         (false, :none, nothing, lgetfield, Task(() -> nothing), Val(:rngState1)),
         (false, :none, nothing, getfield, Task(() -> nothing), :rngState1),
-        (false, :none, nothing, lsetfield!, Task(() -> nothing), Val(:rngState1), UInt64(5)),
-        (false, :stability_and_allocs, nothing, current_task),
+        (
+            false,
+            :none,
+            nothing,
+            lsetfield!,
+            Task(() -> nothing),
+            Val(:rngState1),
+            UInt64(5),
+        ),
+        (false, :stability, nothing, current_task),
     ]
     memory = Any[]
     return test_cases, memory
 end
 
 function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:tasks})
-    test_cases = Any[
-        (
-            false, :none, nothing,
-            (rng) -> (Random.seed!(rng, 0); rand(rng)), Random.default_rng(),
-        ),
-    ]
+    test_cases = Any[(
+        false,
+        :none,
+        nothing,
+        (rng) -> (Random.seed!(rng, 0); rand(rng)),
+        Random.default_rng(),
+    ),]
     memory = Any[]
     return test_cases, memory
 end

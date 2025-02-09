@@ -9,7 +9,7 @@ post-conditions to `pb`. Let `dx = pb.pb(dy)`, for some rdata `dy`, then this fu
 
 Reverse pass counterpart to [`DebugRRule`](@ref)
 """
-struct DebugPullback{Tpb, Ty, Tx}
+struct DebugPullback{Tpb,Ty,Tx}
     pb::Tpb
     y::Ty
     x::Tx
@@ -84,14 +84,14 @@ _copy(x::P) where {P<:DebugRRule} = P(_copy(x.rule))
 Apply type checking to enforce pre- and post-conditions on `rule.rule`. See the docstring
 for `DebugRRule` for details.
 """
-@noinline function (rule::DebugRRule)(x::Vararg{CoDual, N}) where {N}
+@noinline function (rule::DebugRRule)(x::Vararg{CoDual,N}) where {N}
     verify_fwds_inputs(rule.rule, x)
     y, pb = rule.rule(x...)
     verify_fwds_output(x, y)
     return y::CoDual, DebugPullback(pb, primal(y), map(primal, x))
 end
 
-# DerivedRRule adds a method to this function.
+# DerivedRule adds a method to this function.
 verify_args(_, x) = nothing
 
 @noinline function verify_fwds_inputs(rule, @nospecialize(x::Tuple))

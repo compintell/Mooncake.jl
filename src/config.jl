@@ -4,6 +4,6 @@
 Configuration struct for use with ADTypes.AutoMooncake.
 """
 @kwdef struct Config
-    debug_mode::Bool=false
-    silence_debug_messages::Bool=false
+    debug_mode::Bool = false
+    silence_debug_messages::Bool = false
 end

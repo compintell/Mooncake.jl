@@ -1,57 +1,80 @@
-@inline function zero_tangent_internal(x::Array{P, N}, stackdict::IdDict) where {P, N}
+@inline function zero_tangent_internal(x::Array{P,N}, stackdict::IdDict) where {P,N}
     haskey(stackdict, x) && return stackdict[x]::tangent_type(typeof(x))
 
-    zt = Array{tangent_type(P), N}(undef, size(x)...)
+    zt = Array{tangent_type(P),N}(undef, size(x)...)
     stackdict[x] = zt
-    return _map_if_assigned!(Base.Fix2(zero_tangent_internal, stackdict), zt, x)::Array{tangent_type(P), N}
+    return _map_if_assigned!(
+        Base.Fix2(zero_tangent_internal, stackdict), zt, x
+    )::Array{tangent_type(P),N}
 end
 
-function randn_tangent_internal(rng::AbstractRNG, x::Array{T, N}, stackdict::IdDict) where {T, N}
+function randn_tangent_internal(
+    rng::AbstractRNG, x::Array{T,N}, stackdict::IdDict
+) where {T,N}
     haskey(stackdict, x) && return stackdict[x]::tangent_type(typeof(x))
 
-    dx = Array{tangent_type(T), N}(undef, size(x)...)
+    dx = Array{tangent_type(T),N}(undef, size(x)...)
     stackdict[x] = dx
     return _map_if_assigned!(x -> randn_tangent_internal(rng, x, stackdict), dx, x)
 end
 
-function increment!!(x::T, y::T) where {P, N, T<:Array{P, N}}
-    return x === y ? x : _map_if_assigned!(increment!!, x, x, y)
+function increment_internal!!(c::IncCache, x::T, y::T) where {P,N,T<:Array{P,N}}
+    (haskey(c, x) || x === y) && return x
+    c[x] = true
+    return _map_if_assigned!((x, y) -> increment_internal!!(c, x, y), x, x, y)
 end
 
-set_to_zero!!(x::Array) = _map_if_assigned!(set_to_zero!!, x, x)
-
-function _scale(a::Float64, t::Array{T, N}) where {T, N}
-    t′ = Array{T, N}(undef, size(t)...)
-    return _map_if_assigned!(Base.Fix1(_scale, a), t′, t)
+function set_to_zero_internal!!(c::IncCache, x::Array)
+    haskey(c, x) && return x
+    c[x] = false
+    return _map_if_assigned!(Base.Fix1(set_to_zero_internal!!, c), x, x)
 end
 
-function _dot(t::T, s::T) where {T<:Array}
-    isbitstype(T) && return sum(_map(_dot, t, s))
+function _scale_internal(c::MaybeCache, a::Float64, t::Array{T,N}) where {T,N}
+    haskey(c, t) && return c[t]::Array{T,N}
+    t′ = Array{T,N}(undef, size(t)...)
+    c[t] = t′
+    return _map_if_assigned!(t -> _scale_internal(c, a, t), t′, t)
+end
+
+function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:Array}
+    key = (t, s)
+    haskey(c, key) && return c[key]::Float64
+    c[key] = 0.0
+    isbitstype(T) && return sum(_map((t, s) -> _dot_internal(c, t, s), t, s))
     return sum(
         _map(eachindex(t)) do n
-            (isassigned(t, n) && isassigned(s, n)) ? _dot(t[n], s[n]) : 0.0
+            (isassigned(t, n) && isassigned(s, n)) ? _dot_internal(c, t[n], s[n]) : 0.0
         end;
         init=0.0,
     )
 end
 
-function _add_to_primal(x::Array{P, N}, t::Array{<:Any, N}, unsafe::Bool) where {P, N}
-    x′ = Array{P, N}(undef, size(x)...)
-    return _map_if_assigned!((x, t) -> _add_to_primal(x, t, unsafe), x′, x, t)
+function _add_to_primal_internal(
+    c::MaybeCache, x::Array{P,N}, t::Array{<:Any,N}, unsafe::Bool
+) where {P,N}
+    key = (x, t, unsafe)
+    haskey(c, key) && return c[key]::Array{P,N}
+    x′ = Array{P,N}(undef, size(x)...)
+    c[key] = x′
+    return _map_if_assigned!((x, t) -> _add_to_primal_internal(c, x, t, unsafe), x′, x, t)
 end
 
-function _diff(p::P, q::P) where {V, N, P<:Array{V, N}}
-    t = Array{tangent_type(V), N}(undef, size(p))
-    return _map_if_assigned!(_diff, t, p, q)
+function _diff_internal(c::MaybeCache, p::P, q::P) where {V,N,P<:Array{V,N}}
+    key = (p, q)
+    haskey(c, key) && return c[key]::tangent_type(P)
+    t = Array{tangent_type(V),N}(undef, size(p))
+    c[key] = t
+    return _map_if_assigned!((p, q) -> _diff_internal(c, p, q), t, p, q)
 end
 
-@zero_adjoint MinimalCtx Tuple{Type{<:Array{T, N}}, typeof(undef), Vararg} where {T, N}
-@zero_adjoint MinimalCtx Tuple{Type{<:Array{T, N}}, typeof(undef), Tuple{}} where {T, N}
-@zero_adjoint MinimalCtx Tuple{Type{<:Array{T, N}}, typeof(undef), NTuple{N}} where {T, N}
+@zero_adjoint MinimalCtx Tuple{Type{<:Array{T,N}},typeof(undef),Vararg} where {T,N}
+@zero_adjoint MinimalCtx Tuple{Type{<:Array{T,N}},typeof(undef),Tuple{}} where {T,N}
+@zero_adjoint MinimalCtx Tuple{Type{<:Array{T,N}},typeof(undef),NTuple{N}} where {T,N}
 
-@is_primitive MinimalCtx Tuple{typeof(Base._deletebeg!), Vector, Integer}
+@is_primitive MinimalCtx Tuple{typeof(Base._deletebeg!),Vector,Integer}
 function rrule!!(
-    ::CoDual{typeof(Base._deletebeg!)}, _a::CoDual{<:Vector}, _delta::CoDual{<:Integer},
+    ::CoDual{typeof(Base._deletebeg!)}, _a::CoDual{<:Vector}, _delta::CoDual{<:Integer}
 )
     delta = primal(_delta)
     a = primal(_a)
@@ -71,7 +94,7 @@ function rrule!!(
     return zero_fcodual(nothing), _deletebeg!_pb!!
 end
 
-@is_primitive MinimalCtx Tuple{typeof(Base._deleteend!), Vector, Integer}
+@is_primitive MinimalCtx Tuple{typeof(Base._deleteend!),Vector,Integer}
 function rrule!!(
     ::CoDual{typeof(Base._deleteend!)}, _a::CoDual{<:Vector}, _delta::CoDual{<:Integer}
 )
@@ -81,27 +104,26 @@ function rrule!!(
     delta = primal(_delta)
 
     # Store the section to be cut for later.
-    primal_tail = a[end-delta+1:end]
-    tangent_tail = da[end-delta+1:end]
+    primal_tail = a[(end - delta + 1):end]
+    tangent_tail = da[(end - delta + 1):end]
 
     # Cut the end off the primal and tangent.
     Base._deleteend!(a, delta)
     Base._deleteend!(da, delta)
 
     function _deleteend!_pb!!(::NoRData)
-
         Base._growend!(a, delta)
-        a[end-delta+1:end] .= primal_tail
+        a[(end - delta + 1):end] .= primal_tail
 
         Base._growend!(da, delta)
-        da[end-delta+1:end] .= tangent_tail
+        da[(end - delta + 1):end] .= tangent_tail
 
         return NoRData(), NoRData(), NoRData()
     end
     return zero_fcodual(nothing), _deleteend!_pb!!
 end
 
-@is_primitive MinimalCtx Tuple{typeof(Base._deleteat!), Vector, Integer, Integer}
+@is_primitive MinimalCtx Tuple{typeof(Base._deleteat!),Vector,Integer,Integer}
 function rrule!!(
     ::CoDual{typeof(Base._deleteat!)},
     _a::CoDual{<:Vector},
@@ -113,25 +135,25 @@ function rrule!!(
     da = tangent(_a)
 
     # Store the cut section for later.
-    primal_mem = a[i:i+delta-1]
-    tangent_mem = da[i:i+delta-1]
+    primal_mem = a[i:(i + delta - 1)]
+    tangent_mem = da[i:(i + delta - 1)]
 
     # Run the primal.
     Base._deleteat!(a, i, delta)
     Base._deleteat!(da, i, delta)
 
     function _deleteat!_pb!!(::NoRData)
-        splice!(a, i:i-1, primal_mem)
-        splice!(da, i:i-1, tangent_mem)
+        splice!(a, i:(i - 1), primal_mem)
+        splice!(da, i:(i - 1), tangent_mem)
         return NoRData(), NoRData(), NoRData(), NoRData()
     end
 
     return zero_fcodual(nothing), _deleteat!_pb!!
 end
 
-@is_primitive MinimalCtx Tuple{typeof(Base._growbeg!), Vector, Integer}
+@is_primitive MinimalCtx Tuple{typeof(Base._growbeg!),Vector,Integer}
 function rrule!!(
-    ::CoDual{typeof(Base._growbeg!)}, _a::CoDual{<:Vector{T}}, _delta::CoDual{<:Integer},
+    ::CoDual{typeof(Base._growbeg!)}, _a::CoDual{<:Vector{T}}, _delta::CoDual{<:Integer}
 ) where {T}
     d = primal(_delta)
     a = primal(_a)
@@ -146,9 +168,9 @@ function rrule!!(
     return zero_fcodual(nothing), _growbeg!_pb!!
 end
 
-@is_primitive MinimalCtx Tuple{typeof(Base._growend!), Vector, Integer}
+@is_primitive MinimalCtx Tuple{typeof(Base._growend!),Vector,Integer}
 function rrule!!(
-    ::CoDual{typeof(Base._growend!)}, _a::CoDual{<:Vector}, _delta::CoDual{<:Integer},
+    ::CoDual{typeof(Base._growend!)}, _a::CoDual{<:Vector}, _delta::CoDual{<:Integer}
 )
     d = primal(_delta)
     a = primal(_a)
@@ -163,7 +185,7 @@ function rrule!!(
     return zero_fcodual(nothing), _growend!_pullback!!
 end
 
-@is_primitive MinimalCtx Tuple{typeof(Base._growat!), Vector, Integer, Integer}
+@is_primitive MinimalCtx Tuple{typeof(Base._growat!),Vector,Integer,Integer}
 function rrule!!(
     ::CoDual{typeof(Base._growat!)},
     _a::CoDual{<:Vector},
@@ -179,14 +201,14 @@ function rrule!!(
     Base._growat!(da, i, delta)
 
     function _growat!_pb!!(::NoRData)
-        deleteat!(a, i:i+delta-1)
-        deleteat!(da, i:i+delta-1)
+        deleteat!(a, i:(i + delta - 1))
+        deleteat!(da, i:(i + delta - 1))
         return NoRData(), NoRData(), NoRData(), NoRData()
     end
     return zero_fcodual(nothing), _growat!_pb!!
 end
 
-@is_primitive MinimalCtx Tuple{typeof(sizehint!), Vector, Integer}
+@is_primitive MinimalCtx Tuple{typeof(sizehint!),Vector,Integer}
 function rrule!!(f::CoDual{typeof(sizehint!)}, x::CoDual{<:Vector}, sz::CoDual{<:Integer})
     sizehint!(primal(x), primal(sz))
     sizehint!(tangent(x), primal(sz))
@@ -200,16 +222,18 @@ function rrule!!(
     ::CoDual{Tuple{Val{Any}}},
     ::CoDual, # nreq
     ::CoDual, # calling convention
-    a::CoDual{<:Array{T}, <:Array{V}},
-) where {T, V}
+    a::CoDual{<:Array{T},<:Array{V}},
+) where {T,V}
     y = CoDual(
-        ccall(:jl_array_ptr, Ptr{T}, (Any, ), primal(a)),
-        ccall(:jl_array_ptr, Ptr{V}, (Any, ), tangent(a)),
+        ccall(:jl_array_ptr, Ptr{T}, (Any,), primal(a)),
+        ccall(:jl_array_ptr, Ptr{V}, (Any,), tangent(a)),
     )
     return y, NoPullback(ntuple(_ -> NoRData(), 7))
 end
 
-@is_primitive MinimalCtx Tuple{typeof(unsafe_copyto!), Array{T}, Any, Array{T}, Any, Any} where {T}
+@is_primitive MinimalCtx Tuple{
+    typeof(unsafe_copyto!),Array{T},Any,Array{T},Any,Any
+} where {T}
 function rrule!!(
     ::CoDual{typeof(unsafe_copyto!)},
     dest::CoDual{<:Array{T}},
@@ -222,7 +246,7 @@ function rrule!!(
 
     # Record values that will be overwritten.
     _doffs = primal(doffs)
-    dest_idx = _doffs:_doffs + _n - 1
+    dest_idx = _doffs:(_doffs + _n - 1)
     _soffs = primal(soffs)
     pdest = primal(dest)
     ddest = tangent(dest)
@@ -237,7 +261,7 @@ function rrule!!(
     function unsafe_copyto_pb!!(::NoRData)
 
         # Increment dsrc.
-        src_idx = _soffs:_soffs + _n - 1
+        src_idx = _soffs:(_soffs + _n - 1)
         dsrc[src_idx] .= increment!!.(view(dsrc, src_idx), view(ddest, dest_idx))
 
         # Restore initial state.
@@ -257,7 +281,7 @@ Base.@propagate_inbounds function rrule!!(
     ::CoDual{typeof(Core.arrayref)},
     checkbounds::CoDual{Bool},
     x::CoDual{<:Array},
-    inds::Vararg{CoDual{Int}, N},
+    inds::Vararg{CoDual{Int},N},
 ) where {N}
 
     # Convert to linear indices to reduce amount of data required on the reverse-pass, to
@@ -279,10 +303,10 @@ end
 function rrule!!(
     ::CoDual{typeof(Core.arrayset)},
     inbounds::CoDual{Bool},
-    A::CoDual{<:Array{P}, TdA},
+    A::CoDual{<:Array{P},TdA},
     v::CoDual,
     inds::CoDual{Int}...,
-) where {P, V, TdA <: Array{V}}
+) where {P,V,TdA<:Array{V}}
     _inbounds = primal(inbounds)
     _inds = map(primal, inds)
 
@@ -291,7 +315,7 @@ function rrule!!(
     end
 
     to_save = isassigned(primal(A), _inds...)
-    old_A = Ref{Tuple{P, V}}()
+    old_A = Ref{Tuple{P,V}}()
     if to_save
         old_A[] = (
             arrayref(_inbounds, primal(A), _inds...),
@@ -314,8 +338,8 @@ function rrule!!(
 end
 
 function isbits_arrayset_rrule(
-    boundscheck, _inds, A::CoDual{<:Array{P}, TdA}, v::CoDual{P}
-) where {P, V, TdA <: Array{V}}
+    boundscheck, _inds, A::CoDual{<:Array{P},TdA}, v::CoDual{P}
+) where {P,V,TdA<:Array{V}}
 
     # Convert to linear indices
     lin_inds = LinearIndices(size(primal(A)))[_inds...]
@@ -339,8 +363,8 @@ end
 function rrule!!(f::CoDual{typeof(Core.arraysize)}, X, dim)
     return zero_fcodual(Core.arraysize(primal(X), primal(dim))), NoPullback(f, X, dim)
 end
-    
-@is_primitive MinimalCtx Tuple{typeof(copy), Array}
+
+@is_primitive MinimalCtx Tuple{typeof(copy),Array}
 function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Array})
     dx = tangent(a)
     dy = copy(dx)
@@ -352,10 +376,10 @@ function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Array})
     return y, copy_pullback!!
 end
 
-@is_primitive MinimalCtx Tuple{typeof(fill!), Array{<:Union{UInt8, Int8}}, Integer}
+@is_primitive MinimalCtx Tuple{typeof(fill!),Array{<:Union{UInt8,Int8}},Integer}
 function rrule!!(
     ::CoDual{typeof(fill!)}, a::CoDual{T}, x::CoDual{<:Integer}
-) where {V<:Union{UInt8, Int8}, T<:Array{V}}
+) where {V<:Union{UInt8,Int8},T<:Array{V}}
     pa = primal(a)
     old_value = copy(pa)
     fill!(pa, primal(x))
@@ -376,15 +400,15 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:array_legacy}
     test_cases = Any[
 
         # Old foreigncall wrappers.
-        (true, :stability, nothing, Array{Float64, 0}, undef),
-        (true, :stability, nothing, Array{Float64, 1}, undef, 5),
-        (true, :stability, nothing, Array{Float64, 2}, undef, 5, 4),
-        (true, :stability, nothing, Array{Float64, 3}, undef, 5, 4, 3),
-        (true, :stability, nothing, Array{Float64, 4}, undef, 5, 4, 3, 2),
-        (true, :stability, nothing, Array{Float64, 5}, undef, 5, 4, 3, 2, 1),
-        (true, :stability, nothing, Array{Float64, 0}, undef, ()),
-        (true, :stability, nothing, Array{Float64, 4}, undef, (2, 3, 4, 5)),
-        (true, :stability, nothing, Array{Float64, 5}, undef, (2, 3, 4, 5, 6)),
+        (true, :stability, nothing, Array{Float64,0}, undef),
+        (true, :stability, nothing, Array{Float64,1}, undef, 5),
+        (true, :stability, nothing, Array{Float64,2}, undef, 5, 4),
+        (true, :stability, nothing, Array{Float64,3}, undef, 5, 4, 3),
+        (true, :stability, nothing, Array{Float64,4}, undef, 5, 4, 3, 2),
+        (true, :stability, nothing, Array{Float64,5}, undef, 5, 4, 3, 2, 1),
+        (true, :stability, nothing, Array{Float64,0}, undef, ()),
+        (true, :stability, nothing, Array{Float64,4}, undef, (2, 3, 4, 5)),
+        (true, :stability, nothing, Array{Float64,5}, undef, (2, 3, 4, 5, 6)),
         (false, :stability, nothing, copy, randn(5, 4)),
         (false, :stability, nothing, Base._deletebeg!, randn(5), 0),
         (false, :stability, nothing, Base._deletebeg!, randn(5), 2),
@@ -403,19 +427,35 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:array_legacy}
         (false, :stability, nothing, sizehint!, randn(5), 10),
         (false, :stability, nothing, unsafe_copyto!, randn(4), 2, randn(3), 1, 2),
         (
-            false, :stability, nothing,
-            unsafe_copyto!, [rand(3) for _ in 1:5], 2, [rand(4) for _ in 1:4], 1, 3,
+            false,
+            :stability,
+            nothing,
+            unsafe_copyto!,
+            [rand(3) for _ in 1:5],
+            2,
+            [rand(4) for _ in 1:4],
+            1,
+            3,
         ),
         (
-            false, :none, nothing,
-            unsafe_copyto!, Vector{Any}(undef, 5), 2, Any[rand() for _ in 1:4], 1, 3,
+            false,
+            :none,
+            nothing,
+            unsafe_copyto!,
+            Vector{Any}(undef, 5),
+            2,
+            Any[rand() for _ in 1:4],
+            1,
+            3,
         ),
         (
-            true, :none, nothing,
+            true,
+            :none,
+            nothing,
             _foreigncall_,
             Val(:jl_array_ptr),
             Val(Ptr{Float64}),
-            (Val(Any), ),
+            (Val(Any),),
             Val(0), # nreq
             Val(:ccall), # calling convention
             randn(5),
@@ -436,9 +476,27 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:array_legacy}
         (false, :stability, nothing, Base.arrayset, false, randn(5, 4), 3.0, 1, 3),
         (false, :stability, nothing, Base.arrayset, true, randn(5), 4.0, 3),
         (false, :stability, nothing, Base.arrayset, true, randn(5, 4), 3.0, 1, 3),
-        (false, :stability, nothing, Base.arrayset, false, [randn(3) for _ in 1:5], randn(4), 1),
+        (
+            false,
+            :stability,
+            nothing,
+            Base.arrayset,
+            false,
+            [randn(3) for _ in 1:5],
+            randn(4),
+            1,
+        ),
         (false, :stability, nothing, Base.arrayset, false, _a, randn(4), 1),
-        (false, :stability, nothing, Base.arrayset, true, [(5.0, rand(1))], (4.0, rand(1)), 1),
+        (
+            false,
+            :stability,
+            nothing,
+            Base.arrayset,
+            true,
+            [(5.0, rand(1))],
+            (4.0, rand(1)),
+            1,
+        ),
         (
             false,
             :stability,
@@ -467,16 +525,16 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:array_legacy}
 end
 
 function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:array_legacy})
-    test_cases = Any[
-        (
-            false, :none, nothing,
-            Base._unsafe_copyto!,
-            fill!(Matrix{Real}(undef, 5, 4), 1.0),
-            3,
-            randn(10),
-            2,
-            4,
-        ),
-    ]
+    test_cases = Any[(
+        false,
+        :none,
+        nothing,
+        Base._unsafe_copyto!,
+        fill!(Matrix{Real}(undef, 5, 4), 1.0),
+        3,
+        randn(10),
+        2,
+        4,
+    ),]
     return test_cases, Any[]
 end

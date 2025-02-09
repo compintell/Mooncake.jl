@@ -1,8 +1,7 @@
 using Pkg
-Pkg.develop(path=joinpath(@__DIR__, ".."))
+Pkg.develop(; path=joinpath(@__DIR__, ".."))
 
-using
-    AbstractGPs,
+using AbstractGPs,
     Chairmarks,
     CSV,
     DataFrames,
@@ -28,13 +27,13 @@ using Mooncake:
 
 using Mooncake.TestUtils: _deepcopy
 
-function to_benchmark(__rrule!!::R, dx::Vararg{CoDual, N}) where {R, N}
+function to_benchmark(__rrule!!::R, dx::Vararg{CoDual,N}) where {R,N}
     dx_f = Mooncake.tuple_map(x -> CoDual(primal(x), Mooncake.fdata(tangent(x))), dx)
     out, pb!! = __rrule!!(dx_f...)
     return pb!!(Mooncake.zero_rdata(primal(out)))
 end
 
-function zygote_to_benchmark(ctx, x::Vararg{Any, N}) where {N}
+function zygote_to_benchmark(ctx, x::Vararg{Any,N}) where {N}
     out, pb = Zygote._pullback(ctx, x...)
     return pb(out)
 end
@@ -95,7 +94,6 @@ _simple_mlp(W2, W1, Y, X) = sum(abs2, Y - W2 * map(x -> x * (0 <= x), W1 * X))
 _gp_lml(x, y, s) = logpdf(GP(SEKernel())(x, s), y)
 
 should_run_benchmark(::Val{:reverse_diff}, ::typeof(_gp_lml), x...) = false
-should_run_benchmark(::Val{:enzyme}, ::typeof(_gp_lml), x...) = false
 
 function _generate_gp_inputs()
     x = collect(range(0.0; step=0.2, length=128))
@@ -107,7 +105,7 @@ end
 @model broadcast_demo(x) = begin
     μ ~ truncated(Normal(1, 2), 0.1, 10)
     σ ~ truncated(Normal(1, 2), 0.1, 10)
-    x .~ LogNormal(μ, σ)   
+    x .~ LogNormal(μ, σ)
 end
 
 function build_turing_problem()
@@ -122,17 +120,20 @@ function build_turing_problem()
     return test_function, randn(rng, d)
 end
 
-run_turing_problem(f::F, x::X) where {F, X} = f(x)
+run_turing_problem(f::F, x::X) where {F,X} = f(x)
 
-should_run_benchmark(
+function should_run_benchmark(
     ::Val{:zygote}, ::Base.Fix1{<:typeof(DynamicPPL.LogDensityProblems.logdensity)}, x...
-) = false
-should_run_benchmark(
+)
+    return false
+end
+function should_run_benchmark(
     ::Val{:enzyme}, ::Base.Fix1{<:typeof(DynamicPPL.LogDensityProblems.logdensity)}, x...
-) = false
-should_run_benchmark(::Val{:enzyme}, x...) = false
+)
+    return false
+end
 
-@inline g(x, a, ::Val{N}) where {N} = N > 0 ? g(x * a, a, Val(N-1)) : x
+@inline g(x, a, ::Val{N}) where {N} = N > 0 ? g(x * a, a, Val(N - 1)) : x
 
 large_single_block(x::AbstractVector{<:Real}) = g(x[1], x[2], Val(400))
 
@@ -168,14 +169,12 @@ function generate_inter_framework_tests()
 end
 
 function benchmark_rules!!(test_case_data, default_ratios, include_other_frameworks::Bool)
-
     test_cases = reduce(vcat, map(first, test_case_data))
     memory = map(x -> x[2], test_case_data)
     ranges = reduce(vcat, map(x -> x[3], test_case_data))
     tags = reduce(vcat, map(x -> x[4], test_case_data))
     GC.@preserve memory begin
         return map(enumerate(test_cases)) do (n, args)
-
             @info "$n / $(length(test_cases))", _typeof(args)
             suite = Dict()
 
@@ -186,7 +185,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
                 () -> primals,
                 primals -> (primals[1], _deepcopy(primals[2:end])),
                 (a -> a[1]((a[2]...))),
-                _ -> true,
+                _ -> true;
                 evals=1,
             )
 
@@ -199,17 +198,19 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
                 () -> (rule, coduals),
                 identity,
                 a -> to_benchmark(a[1], a[2]...),
-                _ -> true,
+                _ -> true;
                 evals=1,
             )
 
             if include_other_frameworks
-
                 if should_run_benchmark(Val(:zygote), args...)
                     @info "Zygote"
                     suite["zygote"] = @be(
-                        _, _, zygote_to_benchmark($(Zygote.Context()), $primals...), _,
-                        evals=1,
+                        _,
+                        _,
+                        zygote_to_benchmark($(Zygote.Context()), $primals...),
+                        _,
+                        evals = 1,
                     )
                 end
 
@@ -219,21 +220,28 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
                     compiled_tape = ReverseDiff.compile(tape)
                     result = map(x -> randn(size(x)), primals[2:end])
                     suite["rd"] = @be(
-                        _, _, rd_to_benchmark!($result, $compiled_tape, $primals[2:end]), _,
-                        evals=1,
+                        _,
+                        _,
+                        rd_to_benchmark!($result, $compiled_tape, $primals[2:end]),
+                        _,
+                        evals = 1,
                     )
                 end
 
                 if should_run_benchmark(Val(:enzyme), args...)
                     @info "Enzyme"
-                    dup_args = map(x -> Duplicated(x, randn(size(x))), primals[2:end])
+                    _rand_similiar(x) = x isa Real ? randn() : randn(size(x))
+                    dup_args = map(x -> Duplicated(x, _rand_similiar(x)), primals[2:end])
                     suite["enzyme"] = @be(
-                        _, _, autodiff(Reverse, $primals[1], Active, $dup_args...), _,
-                        evals=1,
+                        _,
+                        _,
+                        autodiff(ReverseWithPrimal, $primals[1], Active, $dup_args...),
+                        _,
+                        evals = 1,
                     )
                 end
             end
-            
+
             return combine_results((args, suite), tags[n], ranges[n], default_ratios)
         end
     end
@@ -319,25 +327,37 @@ well-suited to the numbers typically found in this field.
 function plot_ratio_histogram!(df::DataFrame)
     bin = 10.0 .^ (-1.0:0.05:4.0)
     xlim = extrema(bin)
-    histogram(df.Mooncake; xscale=:log10, xlim, bin, title="log", label="")
+    return histogram(df.Mooncake; xscale=:log10, xlim, bin, title="log", label="")
+end
+
+fix_sig_fig(t) = string.(round(t; sigdigits=3))
+
+function format_time(t::Float64)
+    t < 1e-6 && return fix_sig_fig(t * 1e9) * " ns"
+    t < 1e-3 && return fix_sig_fig(t * 1e6) * " μs"
+    t < 1 && return fix_sig_fig(t * 1e3) * " ms"
+    return fix_sig_fig(t) * " s"
 end
 
 function create_inter_ad_benchmarks()
     results = benchmark_inter_framework_rules()
     tools = [:Mooncake, :Zygote, :ReverseDiff, :Enzyme]
-    df = DataFrame(results)[:, [:tag, tools...]]
+    df = DataFrame(results)[:, [:tag, :primal_time, tools...]]
 
     # Plot graph of results.
-    plt = plot(yscale=:log10, legend=:topright, title="AD Time / Primal Time (Log Scale)")
+    plt = plot(; yscale=:log10, legend=:topright, title="AD Time / Primal Time (Log Scale)")
     for label in string.(tools)
         plot!(plt, df.tag, df[:, label]; label, marker=:circle, xrotation=45)
     end
     Plots.savefig(plt, "bench/benchmark_results.png")
 
     # Write table of results.
-    formatted_cols = map(t -> t => string.(round.(df[:, t]; sigdigits=3)), tools)
-    df_formatted = DataFrame(:Label => df.tag, formatted_cols...)
-    open(io -> pretty_table(io, df_formatted), "bench/benchmark_results.txt"; write=true)
+    formatted_ts = format_time.(df.primal_time)
+    formatted_cols = map(t -> t => fix_sig_fig.(df[:, t]), tools)
+    df_formatted = DataFrame(:Label => df.tag, :Primal => formatted_ts, formatted_cols...)
+    return open(
+        io -> pretty_table(io, df_formatted), "bench/benchmark_results.txt"; write=true
+    )
 end
 
 function main()

@@ -3,7 +3,7 @@ function blas_name(name::Symbol)
 end
 
 function wrap_ptr_as_view(ptr::Ptr{T}, N::Int, inc::Int) where {T}
-    return view(unsafe_wrap(Vector{T}, ptr, N * inc), 1:inc:N*inc)
+    return view(unsafe_wrap(Vector{T}, ptr, N * inc), 1:inc:(N * inc))
 end
 
 function wrap_ptr_as_view(ptr::Ptr{T}, buffer_nrows::Int, nrows::Int, ncols::Int) where {T}
@@ -21,7 +21,40 @@ function tri!(A, u::Char, d::Char)
     return u == 'L' ? tril!(A, d == 'U' ? -1 : 0) : triu!(A, d == 'U' ? 1 : 0)
 end
 
-const MatrixOrView{T} = Union{Matrix{T}, SubArray{T, 2, Matrix{T}}}
+const MatrixOrView{T} = Union{Matrix{T},SubArray{T,2,<:Array{T}}}
+const VecOrView{T} = Union{Vector{T},SubArray{T,1,<:Array{T}}}
+const BlasRealFloat = Union{Float32,Float64}
+
+"""
+    arrayify(x::CoDual{<:AbstractArray{<:BlasRealFloat}})
+
+Return the primal field of `x`, and convert its fdata into an array of the same type as the
+primal. This operation is not guaranteed to be possible for all array types, but seems to be
+possible for all array types of interest so far.
+"""
+function arrayify(x::CoDual{A}) where {A<:AbstractArray{<:BlasRealFloat}}
+    return arrayify(primal(x), tangent(x))::Tuple{A,A}
+end
+arrayify(x::Array{P}, dx::Array{P}) where {P<:BlasRealFloat} = (x, dx)
+function arrayify(x::A, dx::FData) where {A<:SubArray{<:BlasRealFloat}}
+    _, _dx = arrayify(x.parent, dx.data.parent)
+    return x, A(_dx, x.indices, x.offset1, x.stride1)
+end
+function arrayify(x::A, dx::FData) where {A<:Base.ReshapedArray{<:BlasRealFloat}}
+    _, _dx = arrayify(x.parent, dx.data.parent)
+    return x, A(_dx, x.dims, x.mi)
+end
+function arrayify(x::A, dx::DA) where {A,DA}
+    msg =
+        "Encountered unexpected array type in `Mooncake.arrayify`. This error is likely " *
+        "due to a call to a BLAS or LAPACK function with an array type that " *
+        "Mooncake has not been told about. A new method of `Mooncake.arrayify` is needed." *
+        " Please open an issue at " *
+        "https://github.com/compintell/Mooncake.jl/issues . " *
+        "It should contain this error message and the associated stack trace.\n\n" *
+        "Array type: $A\n\nFData type: $DA."
+    return error(msg)
+end
 
 #
 # Utility
@@ -29,8 +62,8 @@ const MatrixOrView{T} = Union{Matrix{T}, SubArray{T, 2, Matrix{T}}}
 
 @zero_adjoint MinimalCtx Tuple{typeof(BLAS.get_num_threads)}
 @zero_adjoint MinimalCtx Tuple{typeof(BLAS.lbt_get_num_threads)}
-@zero_adjoint MinimalCtx Tuple{typeof(BLAS.set_num_threads), Union{Integer, Nothing}}
-@zero_adjoint MinimalCtx Tuple{typeof(BLAS.lbt_set_num_threads), Any}
+@zero_adjoint MinimalCtx Tuple{typeof(BLAS.set_num_threads),Union{Integer,Nothing}}
+@zero_adjoint MinimalCtx Tuple{typeof(BLAS.lbt_set_num_threads),Any}
 
 #
 # LEVEL 1
@@ -49,13 +82,13 @@ for (fname, elty) in ((:cblas_ddot, :Float64), (:cblas_sdot, :Float32))
         _incx::CoDual{BLAS.BlasInt},
         _DY::CoDual{Ptr{$elty}},
         _incy::CoDual{BLAS.BlasInt},
-        args::Vararg{Any, N},
+        args::Vararg{Any,N},
     ) where {N}
         GC.@preserve args begin
             # Load in values from pointers.
             n, incx, incy = map(primal, (_n, _incx, _incy))
-            xinds = 1:incx:incx * n
-            yinds = 1:incy:incy * n
+            xinds = 1:incx:(incx * n)
+            yinds = 1:incy:(incy * n)
             DX = view(unsafe_wrap(Vector{$elty}, primal(_DX), n * incx), xinds)
             DY = view(unsafe_wrap(Vector{$elty}, primal(_DY), n * incy), yinds)
 
@@ -90,9 +123,8 @@ for (fname, elty) in ((:dscal_, :Float64), (:sscal_, :Float32))
         DA::CoDual{Ptr{$elty}},
         DX::CoDual{Ptr{$elty}},
         incx::CoDual{Ptr{BLAS.BlasInt}},
-        args::Vararg{Any, N},
+        args::Vararg{Any,N},
     ) where {N}
-
         GC.@preserve args begin
 
             # Load in values from pointers, and turn pointers to memory buffers into Vectors.
@@ -111,7 +143,6 @@ for (fname, elty) in ((:dscal_, :Float64), (:sscal_, :Float32))
         end
 
         function dscal_pullback!!(::NoRData)
-
             GC.@preserve args begin
 
                 # Set primal to previous state.
@@ -130,115 +161,90 @@ for (fname, elty) in ((:dscal_, :Float64), (:sscal_, :Float32))
     end
 end
 
-
-
 #
 # LEVEL 2
 #
 
-for (gemv, elty) in ((:dgemv_, :Float64), (:sgemv_, :Float32))
-    @eval @inline function rrule!!(
-        ::CoDual{typeof(_foreigncall_)},
-        ::CoDual{Val{$(blas_name(gemv))}},
-        ::CoDual,
-        ::CoDual,
-        ::CoDual,
-        ::CoDual,
-        _tA::CoDual{Ptr{UInt8}},
-        _M::CoDual{Ptr{BLAS.BlasInt}},
-        _N::CoDual{Ptr{BLAS.BlasInt}},
-        _alpha::CoDual{Ptr{$elty}},
-        _A::CoDual{Ptr{$elty}},
-        _lda::CoDual{Ptr{BLAS.BlasInt}},
-        _x::CoDual{Ptr{$elty}},
-        _incx::CoDual{Ptr{BLAS.BlasInt}},
-        _beta::CoDual{Ptr{$elty}},
-        _y::CoDual{Ptr{$elty}},
-        _incy::CoDual{Ptr{BLAS.BlasInt}},
-        args::Vararg{Any, Nargs}
-    ) where {Nargs}
+@is_primitive(
+    MinimalCtx,
+    Tuple{
+        typeof(BLAS.gemv!),Char,P,AbstractMatrix{P},AbstractVector{P},P,AbstractVector{P}
+    } where {P<:BlasRealFloat},
+)
 
-        GC.@preserve args begin
+@inline function rrule!!(
+    ::CoDual{typeof(BLAS.gemv!)},
+    _tA::CoDual{Char},
+    _alpha::CoDual{P},
+    _A::CoDual{<:AbstractMatrix{P}},
+    _x::CoDual{<:AbstractVector{P}},
+    _beta::CoDual{P},
+    _y::CoDual{<:AbstractVector{P}},
+) where {P<:BlasRealFloat}
 
-            # Load in data.
-            tA = Char(unsafe_load(primal(_tA)))
-            M, N, lda, incx, incy = map(unsafe_load ∘ primal, (_M, _N, _lda, _incx, _incy))
-            alpha = unsafe_load(primal(_alpha))
-            beta = unsafe_load(primal(_beta))
+    # Pull out primals and tangents (the latter only where necessary).
+    trans = _tA.x
+    alpha = _alpha.x
+    A, dA = arrayify(_A)
+    x, dx = arrayify(_x)
+    beta = _beta.x
+    y, dy = arrayify(_y)
 
-            # Run primal.
-            A = wrap_ptr_as_view(primal(_A), lda, M, N)
-            Nx = tA == 'N' ? N : M
-            Ny = tA == 'N' ? M : N
-            x = view(unsafe_wrap(Vector{$elty}, primal(_x), incx * Nx), 1:incx:incx * Nx)
-            y = view(unsafe_wrap(Vector{$elty}, primal(_y), incy * Ny), 1:incy:incy * Ny)
-            y_copy = copy(y)
+    # Take copies before adding.
+    y_copy = copy(y)
 
-            BLAS.gemv!(tA, alpha, A, x, beta, y)
+    # Run primal.
+    BLAS.gemv!(trans, alpha, A, x, beta, y)
 
-            dalpha = tangent(_alpha)
-            dbeta = tangent(_beta)
-            _dA = tangent(_A)
-            _dx = tangent(_x)
-            _dy = tangent(_y)
+    function gemv!_pb!!(::NoRData)
+
+        # Increment fdata.
+        if trans == 'N'
+            dalpha = dot(dy, A, x)
+            dA .+= alpha .* dy .* x'
+            BLAS.gemv!('T', alpha, A, dy, one(eltype(A)), dx)
+        else
+            dalpha = dot(dy, A', x)
+            dA .+= alpha .* x .* dy'
+            BLAS.gemv!('N', alpha, A, dy, one(eltype(A)), dx)
         end
+        dbeta = dot(y_copy, dy)
+        dy .*= beta
 
-        function gemv_pb!!(::NoRData)
+        # Restore primal.
+        copyto!(y, y_copy)
 
-            GC.@preserve args begin
-
-                # Load up the tangents.
-                dA = wrap_ptr_as_view(_dA, lda, M, N)
-                dx = view(unsafe_wrap(Vector{$elty}, _dx, incx * Nx), 1:incx:incx * Nx)
-                dy = view(unsafe_wrap(Vector{$elty}, _dy, incy * Ny), 1:incy:incy * Ny)
-
-                # Increment the tangents.
-                unsafe_store!(dalpha, unsafe_load(dalpha) + dot(dy, _trans(tA, A), x))
-                dA .+= _trans(tA, alpha * dy * x')
-                dx .+= alpha * _trans(tA, A)'dy
-                unsafe_store!(dbeta, unsafe_load(dbeta) + dot(y_copy, dy))
-                dy .*= beta
-
-                # Restore the original value of `y`.
-                y .= y_copy
-            end
-
-            return tuple_fill(NoRData(), Val(17 + Nargs))
-        end
-        return zero_fcodual(Cvoid()), gemv_pb!!
+        # Return rdata.
+        return NoRData(), NoRData(), dalpha, NoRData(), NoRData(), dbeta, NoRData()
     end
+
+    return _y, gemv!_pb!!
 end
 
 @is_primitive(
     MinimalCtx,
     Tuple{
-        typeof(BLAS.symv!),
-        Char,
-        T,
-        MatrixOrView{T},
-        Vector{T},
-        T,
-        Vector{T},
-    } where {T<:Union{Float32, Float64}},
+        typeof(BLAS.symv!),Char,T,AbstractMatrix{T},AbstractVector{T},T,AbstractVector{T}
+    } where {T<:BlasRealFloat},
 )
 
 function rrule!!(
     ::CoDual{typeof(BLAS.symv!)},
     uplo::CoDual{Char},
     alpha::CoDual{T},
-    A_dA::CoDual{<:MatrixOrView{T}},
-    x_dx::CoDual{Vector{T}},
+    A_dA::CoDual{<:AbstractMatrix{T}},
+    x_dx::CoDual{<:AbstractVector{T}},
     beta::CoDual{T},
-    y_dy::CoDual{Vector{T}},
-) where {T<:Union{Float32, Float64}}
+    y_dy::CoDual{<:AbstractVector{T}},
+) where {T<:BlasRealFloat}
 
     # Extract primals.
     ul = primal(uplo)
     α = primal(alpha)
     β = primal(beta)
-    A, dA = viewify(A_dA)
-    x, dx = viewify(x_dx)
-    y, dy = viewify(y_dy)
+    A, dA = arrayify(A_dA)
+    x, dx = arrayify(x_dx)
+    y, dy = arrayify(y_dy)
 
     # In this rule we optimise carefully for the special case a == 1 && b == 0, which
     # corresponds to simply multiplying symm(A) and x together, and writing the result to y.
@@ -254,7 +260,6 @@ function rrule!!(
     end
 
     function symv!_adjoint(::NoRData)
-
         if (α == 1 && β == 0)
             dα = dot(dy, y)
             BLAS.copyto!(y, y_copy)
@@ -294,63 +299,71 @@ function rrule!!(
     return y_dy, symv!_adjoint
 end
 
-for (trmv, elty) in ((:dtrmv_, :Float64), (:strmv_, :Float32))
-    @eval @inline function rrule!!(
-        ::CoDual{typeof(_foreigncall_)},
-        ::CoDual{Val{$(blas_name(trmv))}},
-        ::CoDual,
-        ::CoDual,
-        ::CoDual,
-        ::CoDual,
-        _uplo::CoDual{Ptr{UInt8}},
-        _trans::CoDual{Ptr{UInt8}},
-        _diag::CoDual{Ptr{UInt8}},
-        _N::CoDual{Ptr{BLAS.BlasInt}},
-        _A::CoDual{Ptr{$elty}},
-        _lda::CoDual{Ptr{BLAS.BlasInt}},
-        _x::CoDual{Ptr{$elty}},
-        _incx::CoDual{Ptr{BLAS.BlasInt}},
-        args::Vararg{Any, Nargs},
-    ) where {Nargs}
+@is_primitive(
+    MinimalCtx,
+    Tuple{
+        typeof(BLAS.trmv!),Char,Char,Char,AbstractMatrix{T},AbstractVector{T}
+    } where {T<:BlasRealFloat},
+)
 
-        GC.@preserve args begin
-            # Load in data.
-            uplo, trans, diag = map(Char ∘ unsafe_load ∘ primal, (_uplo, _trans, _diag))
-            N, lda, incx = map(unsafe_load ∘ primal, (_N, _lda, _incx))
-            A = wrap_ptr_as_view(primal(_A), lda, N, N)
-            x = wrap_ptr_as_view(primal(_x), N, incx)
-            x_copy = copy(x)
+function rrule!!(
+    ::CoDual{typeof(BLAS.trmv!)},
+    _uplo::CoDual{Char},
+    _trans::CoDual{Char},
+    _diag::CoDual{Char},
+    A_dA::CoDual{<:AbstractMatrix{T}},
+    x_dx::CoDual{<:AbstractVector{T}},
+) where {T<:BlasRealFloat}
 
-            # Run primal computation.
-            BLAS.trmv!(uplo, trans, diag, A, x)
+    # Extract primals.
+    uplo = primal(_uplo)
+    trans = primal(_trans)
+    diag = primal(_diag)
+    A, dA = arrayify(A_dA)
+    x, dx = arrayify(x_dx)
+    x_copy = copy(x)
 
-            _dA = tangent(_A)
-            _dx = tangent(_x)
-        end
+    # Run primal computation.
+    BLAS.trmv!(uplo, trans, diag, A, x)
 
-        function trmv_pb!!(::NoRData)
+    # Set dx to zero.
+    dx .= zero(T)
 
-            GC.@preserve args begin
+    function trmv_pb!!(::NoRData)
 
-                # Load up the tangents.
-                dA = wrap_ptr_as_view(_dA, lda, N, N)
-                dx = wrap_ptr_as_view(_dx, N, incx)
+        # Restore the original value of x.
+        x .= x_copy
 
-                # Restore the original value of x.
-                x .= x_copy
+        # Increment the tangents.
+        trans == 'N' ? inc_tri!(dA, dx, x, uplo, diag) : inc_tri!(dA, x, dx, uplo, diag)
+        BLAS.trmv!(uplo, trans == 'N' ? 'T' : 'N', diag, A, dx)
 
-                # Increment the tangents.
-                dA .+= tri!(trans == 'N' ? dx * x' : x * dx', uplo, diag)
-                BLAS.trmv!(uplo, trans == 'N' ? 'T' : 'N', diag, A, dx)
-            end
-
-            return tuple_fill(NoRData(), Val(14 + Nargs))
-        end
-        return zero_fcodual(Cvoid()), trmv_pb!!
+        return tuple_fill(NoRData(), Val(6))
     end
+    return x_dx, trmv_pb!!
 end
 
-
+function inc_tri!(A, x, y, uplo, diag)
+    if uplo == 'L' && diag == 'U'
+        @inbounds for q in 1:size(A, 2), p in (q + 1):size(A, 1)
+            A[p, q] = fma(x[p], y[q], A[p, q])
+        end
+    elseif uplo == 'L' && diag == 'N'
+        @inbounds for q in 1:size(A, 2), p in q:size(A, 1)
+            A[p, q] = fma(x[p], y[q], A[p, q])
+        end
+    elseif uplo == 'U' && diag == 'U'
+        @inbounds for q in 1:size(A, 2), p in 1:(q - 1)
+            A[p, q] = fma(x[p], y[q], A[p, q])
+        end
+    elseif uplo == 'U' && diag == 'N'
+        @inbounds for q in 1:size(A, 2), p in 1:q
+            A[p, q] = fma(x[p], y[q], A[p, q])
+        end
+    else
+        error("Unexpected uplo $uplo or diag $diag")
+    end
+end
 
 #
 # LEVEL 3
@@ -363,11 +376,11 @@ end
         Char,
         Char,
         T,
-        MatrixOrView{T},
-        MatrixOrView{T},
+        AbstractMatrix{T},
+        AbstractMatrix{T},
         T,
-        Matrix{T},
-    } where {T<:Union{Float32, Float64}},
+        AbstractMatrix{T},
+    } where {T<:BlasRealFloat},
 )
 
 function rrule!!(
@@ -375,18 +388,18 @@ function rrule!!(
     transA::CoDual{Char},
     transB::CoDual{Char},
     alpha::CoDual{T},
-    A::CoDual{<:MatrixOrView{T}},
-    B::CoDual{<:MatrixOrView{T}},
+    A::CoDual{<:AbstractMatrix{T}},
+    B::CoDual{<:AbstractMatrix{T}},
     beta::CoDual{T},
-    C::CoDual{Matrix{T}},
-) where {T<:Union{Float32, Float64}}
+    C::CoDual{<:AbstractMatrix{T}},
+) where {T<:BlasRealFloat}
     tA = primal(transA)
     tB = primal(transB)
     a = primal(alpha)
     b = primal(beta)
-    p_A, dA = viewify(A)
-    p_B, dB = viewify(B)
-    p_C, dC = viewify(C)
+    p_A, dA = arrayify(A)
+    p_B, dB = arrayify(B)
+    p_C, dC = arrayify(C)
 
     # In this rule we optimise carefully for the special case a == 1 && b == 0, which
     # corresponds to simply multiplying A and B together, and writing the result to C.
@@ -398,7 +411,7 @@ function rrule!!(
     else
         tmp = BLAS.gemm(tA, tB, one(T), p_A, p_B)
         tmp_ref[] = tmp
-        BLAS.axpby!(a, tmp, b, p_C)
+        p_C .= a .* tmp .+ b .* p_C
     end
 
     function gemm!_pb!!(::NoRData)
@@ -410,7 +423,7 @@ function rrule!!(
         BLAS.copyto!(p_C, p_C_copy)
 
         # Compute pullback w.r.t. beta.
-        db = BLAS.dot(dC, p_C)
+        db = dot(dC, p_C)
 
         # Increment cotangents.
         if tA == 'N'
@@ -423,97 +436,11 @@ function rrule!!(
         else
             BLAS.gemm!('T', tA == 'N' ? 'N' : 'T', a, dC, p_A, one(T), dB)
         end
-        BLAS.scal!(b, dC)
+        dC .*= b
 
         return NoRData(), NoRData(), NoRData(), da, NoRData(), NoRData(), db, NoRData()
     end
     return C, gemm!_pb!!
-end
-
-viewify(A::CoDual{<:Vector}) = primal(A), tangent(A)
-viewify(A::CoDual{<:Matrix}) = view(primal(A), :, :), view(tangent(A), :, :)
-function viewify(A::CoDual{P}) where {P<:SubArray}
-    p_A = primal(A)
-    return p_A, P(tangent(A).data.parent, p_A.indices, p_A.offset1, p_A.stride1)
-end
-
-for (gemm, elty) in ((:dgemm_, :Float64), (:sgemm_, :Float32))
-    @eval function rrule!!(
-        ::CoDual{typeof(_foreigncall_)},
-        ::CoDual{Val{$(blas_name(gemm))}},
-        ::CoDual{Val{Cvoid}},
-        ::CoDual, # arg types
-        ::CoDual, # nreq
-        ::CoDual, # calling convention
-        tA::CoDual{Ptr{UInt8}},
-        tB::CoDual{Ptr{UInt8}},
-        m::CoDual{Ptr{BLAS.BlasInt}},
-        n::CoDual{Ptr{BLAS.BlasInt}},
-        ka::CoDual{Ptr{BLAS.BlasInt}},
-        alpha::CoDual{Ptr{$elty}},
-        A::CoDual{Ptr{$elty}},
-        LDA::CoDual{Ptr{BLAS.BlasInt}},
-        B::CoDual{Ptr{$elty}},
-        LDB::CoDual{Ptr{BLAS.BlasInt}},
-        beta::CoDual{Ptr{$elty}},
-        C::CoDual{Ptr{$elty}},
-        LDC::CoDual{Ptr{BLAS.BlasInt}},
-        args::Vararg{Any, Nargs},
-    ) where {Nargs}
-
-        GC.@preserve args begin
-            _tA = Char(unsafe_load(primal(tA)))
-            _tB = Char(unsafe_load(primal(tB)))
-            _m = unsafe_load(primal(m))
-            _n = unsafe_load(primal(n))
-            _ka = unsafe_load(primal(ka))
-            _alpha = unsafe_load(primal(alpha))
-            _A = primal(A)
-            _LDA = unsafe_load(primal(LDA))
-            _B = primal(B)
-            _LDB = unsafe_load(primal(LDB))
-            _beta = unsafe_load(primal(beta))
-            _C = primal(C)
-            _LDC = unsafe_load(primal(LDC))
-
-            A_mat = wrap_ptr_as_view(primal(A), _LDA, (_tA == 'N' ? (_m, _ka) : (_ka, _m))...)
-            B_mat = wrap_ptr_as_view(primal(B), _LDB, (_tB == 'N' ? (_ka, _n) : (_n, _ka))...)
-            C_mat = wrap_ptr_as_view(primal(C), _LDC, _m, _n)
-            C_copy = collect(C_mat)
-
-            BLAS.gemm!(_tA, _tB, _alpha, A_mat, B_mat, _beta, C_mat)
-
-            dalpha = tangent(alpha)
-            dA = tangent(A)
-            dB = tangent(B)
-            dbeta = tangent(beta)
-            dC = tangent(C)
-        end
-
-        function gemm!_pullback!!(::NoRData)
-
-            GC.@preserve args begin
-                # Restore previous state.
-                C_mat .= C_copy
-
-                # Convert pointers to views.
-                dA_mat = wrap_ptr_as_view(dA, _LDA, (_tA == 'N' ? (_m, _ka) : (_ka, _m))...)
-                dB_mat = wrap_ptr_as_view(dB, _LDB, (_tB == 'N' ? (_ka, _n) : (_n, _ka))...)
-                dC_mat = wrap_ptr_as_view(dC, _LDC, _m, _n)
-
-                # Increment cotangents.
-                unsafe_store!(dbeta, unsafe_load(dbeta) + tr(dC_mat' * C_mat))
-                dalpha_inc = tr(dC_mat' * _trans(_tA, A_mat) * _trans(_tB, B_mat))
-                unsafe_store!(dalpha, unsafe_load(dalpha) + dalpha_inc)
-                dA_mat .+= _alpha * transpose(_trans(_tA, _trans(_tB, B_mat) * transpose(dC_mat)))
-                dB_mat .+= _alpha * transpose(_trans(_tB, transpose(dC_mat) * _trans(_tA, A_mat)))
-                dC_mat .*= _beta
-            end
-
-            return tuple_fill(NoRData(), Val(19 + Nargs))
-        end
-        return zero_fcodual(Cvoid()), gemm!_pullback!!
-    end
 end
 
 @is_primitive(
@@ -523,11 +450,11 @@ end
         Char,
         Char,
         T,
-        MatrixOrView{T},
-        MatrixOrView{T},
+        AbstractMatrix{T},
+        AbstractMatrix{T},
         T,
-        Matrix{T},
-    } where {T<:Union{Float32, Float64}},
+        AbstractMatrix{T},
+    } where {T<:BlasRealFloat},
 )
 
 function rrule!!(
@@ -535,20 +462,20 @@ function rrule!!(
     side::CoDual{Char},
     uplo::CoDual{Char},
     alpha::CoDual{T},
-    A_dA::CoDual{<:MatrixOrView{T}},
-    B_dB::CoDual{<:MatrixOrView{T}},
+    A_dA::CoDual{<:AbstractMatrix{T}},
+    B_dB::CoDual{<:AbstractMatrix{T}},
     beta::CoDual{T},
-    C_dC::CoDual{Matrix{T}},
-) where {T<:Union{Float32, Float64}}
+    C_dC::CoDual{<:AbstractMatrix{T}},
+) where {T<:BlasRealFloat}
 
     # Extract primals.
     s = primal(side)
     ul = primal(uplo)
     α = primal(alpha)
     β = primal(beta)
-    A, dA = viewify(A_dA)
-    B, dB = viewify(B_dB)
-    C, dC = viewify(C_dC)
+    A, dA = arrayify(A_dA)
+    B, dB = arrayify(B_dB)
+    C, dC = arrayify(C_dC)
 
     # In this rule we optimise carefully for the special case a == 1 && b == 0, which
     # corresponds to simply multiplying symm(A) and B together, and writing the result to C.
@@ -560,11 +487,10 @@ function rrule!!(
     else
         tmp = BLAS.symm(s, ul, one(T), A, B)
         tmp_ref[] = tmp
-        BLAS.axpby!(α, tmp, β, C)
+        C .= α .* tmp .+ β .* C
     end
 
     function symm!_adjoint(::NoRData)
-
         if (α == 1 && β == 0)
             dα = dot(dC, C)
             BLAS.copyto!(C, C_copy)
@@ -597,7 +523,7 @@ function rrule!!(
         dβ = dot(dC, C)
 
         # gradient w.r.t. C.
-        BLAS.scal!(β, dC)
+        dC .*= β
 
         return NoRData(), NoRData(), NoRData(), dα, NoRData(), NoRData(), dβ, NoRData()
     end
@@ -622,7 +548,7 @@ for (syrk, elty) in ((:dsyrk_, :Float64), (:ssyrk_, :Float32))
         beta::CoDual{Ptr{$elty}},
         C::CoDual{Ptr{$elty}},
         LDC::CoDual{Ptr{BLAS.BlasInt}},
-        args::Vararg{Any, Nargs},
+        args::Vararg{Any,Nargs},
     ) where {Nargs}
         GC.@preserve args begin
             _uplo = Char(unsafe_load(primal(uplo)))
@@ -649,7 +575,6 @@ for (syrk, elty) in ((:dsyrk_, :Float64), (:ssyrk_, :Float32))
         end
 
         function syrk!_pullback!!(::NoRData)
-
             GC.@preserve args begin
                 # Restore previous state.
                 C_mat .= C_copy
@@ -664,7 +589,8 @@ for (syrk, elty) in ((:dsyrk_, :Float64), (:ssyrk_, :Float32))
                 dalpha_inc = tr(B' * _trans(_t, A_mat) * _trans(_t, A_mat)')
                 unsafe_store!(dalpha, unsafe_load(dalpha) + dalpha_inc)
                 dA_mat .+= _alpha * (_t == 'N' ? (B + B') * A_mat : A_mat * (B + B'))
-                dC_mat .= (_uplo == 'U' ? tril!(dC_mat, -1) : triu!(dC_mat, 1)) .+ _beta .* B
+                dC_mat .=
+                    (_uplo == 'U' ? tril!(dC_mat, -1) : triu!(dC_mat, 1)) .+ _beta .* B
             end
 
             return tuple_fill(NoRData(), Val(16 + Nargs))
@@ -692,13 +618,14 @@ for (trmm, elty) in ((:dtrmm_, :Float64), (:strmm_, :Float32))
         _lda::CoDual{Ptr{BLAS.BlasInt}},
         _B::CoDual{Ptr{$elty}},
         _ldb::CoDual{Ptr{BLAS.BlasInt}},
-        args::Vararg{Any, Nargs},
+        args::Vararg{Any,Nargs},
     ) where {Nargs}
-
         GC.@preserve args begin
 
             # Load in data and store B for the reverse-pass.
-            side, ul, tA, diag = map(Char ∘ unsafe_load ∘ primal, (_side, _uplo, _trans, _diag))
+            side, ul, tA, diag = map(
+                Char ∘ unsafe_load ∘ primal, (_side, _uplo, _trans, _diag)
+            )
             M, N, lda, ldb = map(unsafe_load ∘ primal, (_M, _N, _lda, _ldb))
             alpha = unsafe_load(primal(_alpha))
             R = side == 'L' ? M : N
@@ -715,7 +642,6 @@ for (trmm, elty) in ((:dtrmm_, :Float64), (:strmm_, :Float32))
         end
 
         function trmm!_pullback!!(::NoRData)
-
             GC.@preserve args begin
                 # Convert pointers to views.
                 dA = wrap_ptr_as_view(_dA, lda, R, R)
@@ -764,9 +690,8 @@ for (trsm, elty) in ((:dtrsm_, :Float64), (:strsm_, :Float32))
         _lda::CoDual{Ptr{BLAS.BlasInt}},
         _B::CoDual{Ptr{$elty}},
         _ldb::CoDual{Ptr{BLAS.BlasInt}},
-        args::Vararg{Any, Nargs},
+        args::Vararg{Any,Nargs},
     ) where {Nargs}
-
         GC.@preserve args begin
             side = Char(unsafe_load(primal(_side)))
             uplo = Char(unsafe_load(primal(_uplo)))
@@ -790,7 +715,6 @@ for (trsm, elty) in ((:dtrsm_, :Float64), (:strsm_, :Float32))
         end
 
         function trsm_pb!!(::NoRData)
-
             GC.@preserve args begin
                 # Convert pointers to views.
                 dA = wrap_ptr_as_view(_dA, lda, R, R)
@@ -831,67 +755,91 @@ for (trsm, elty) in ((:dtrsm_, :Float64), (:strsm_, :Float32))
     end
 end
 
+function blas_matrices(rng::AbstractRNG, P::Type{<:BlasRealFloat}, p::Int, q::Int)
+    Xs = Any[
+        randn(rng, P, p, q),
+        view(randn(rng, P, p + 5, 2q), 3:(p + 2), 1:2:(2q)),
+        view(randn(rng, P, 3p, 3, 2q), (p + 1):(2p), 2, 1:2:(2q)),
+        reshape(view(randn(rng, P, p * q + 5), 1:(p * q)), p, q),
+    ]
+    @assert all(X -> size(X) == (p, q), Xs)
+    @assert all(Base.Fix2(isa, AbstractMatrix{P}), Xs)
+    return Xs
+end
+
+function blas_vectors(rng::AbstractRNG, P::Type{<:BlasRealFloat}, p::Int)
+    xs = Any[
+        randn(rng, P, p),
+        view(randn(rng, P, p + 5), 3:(p + 2)),
+        view(randn(rng, P, 3p, 3), 1:2:(2p), 2),
+        reshape(view(randn(rng, P, 1, p + 5), 1:1, 1:p), p),
+    ]
+    @assert all(x -> length(x) == p, xs)
+    @assert all(Base.Fix2(isa, AbstractVector{P}), xs)
+    return xs
+end
+
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
     t_flags = ['N', 'T', 'C']
     alphas = [1.0, -0.25]
     betas = [0.0, 0.33]
+    uplos = ['L', 'U']
+    dAs = ['N', 'U']
+    Ps = [Float64, Float32]
+    rng = rng_ctor(123456)
 
     test_cases = vcat(
 
+        # gemv!
+        map_prod(t_flags, [1, 3], [1, 2], Ps) do (tA, M, N, P)
+            As = blas_matrices(rng, P, tA == 'N' ? M : N, tA == 'N' ? N : M)
+            xs = blas_vectors(rng, P, N)
+            ys = blas_vectors(rng, P, M)
+            flags = (false, :stability, (lb=1e-3, ub=10.0))
+            return map(As, xs, ys) do A, x, y
+                (flags..., BLAS.gemv!, tA, randn(rng, P), A, x, randn(rng, P), y)
+            end
+        end...,
+
         # symv!
-        vec(reduce(
-            vcat,
-            vec(map(product(['L', 'U'], alphas, betas)) do (uplo, α, β)
-                A = randn(5, 5)
-                vA = view(randn(15, 15), 1:5, 1:5)
-                x = randn(5)
-                y = randn(5)
-                return Any[
-                    (false, :stability, nothing, BLAS.symv!, uplo, α, A, x, β, y),
-                    (false, :stability, nothing, BLAS.symv!, uplo, α, vA, x, β, y),
-                ]
-            end)
-        )),
+        map_prod(['L', 'U'], alphas, betas, Ps) do (uplo, α, β, P)
+            As = blas_matrices(rng, P, 5, 5)
+            ys = blas_vectors(rng, P, 5)
+            xs = blas_vectors(rng, P, 5)
+            return map(As, xs, ys) do A, x, y
+                (false, :stability, nothing, BLAS.symv!, uplo, P(α), A, x, P(β), y)
+            end
+        end...,
+
+        # trmv!
+        map_prod(uplos, t_flags, dAs, [1, 3], Ps) do (ul, tA, dA, N, P)
+            As = blas_matrices(rng, P, N, N)
+            bs = blas_vectors(rng, P, N)
+            return map(As, bs) do A, b
+                (false, :stability, nothing, BLAS.trmv!, ul, tA, dA, A, b)
+            end
+        end...,
 
         # gemm!
-        vec(reduce(
-            vcat,
-            vec(map(product(t_flags, t_flags, alphas, betas)) do (tA, tB, a, b)
-                A = tA == 'N' ? randn(3, 4) : randn(4, 3)
-                B = tB == 'N' ? randn(4, 5) : randn(5, 4)
-                As = if tA == 'N'
-                    [randn(3, 4), view(randn(15, 15), 2:4, 3:6)]
-                else
-                    [randn(4, 3), view(randn(15, 15), 2:5, 3:5)]
-                end
-                Bs = if tB == 'N'
-                    [randn(4, 5), view(randn(15, 15), 1:4, 2:6)]
-                else
-                    [randn(5, 4), view(randn(15, 15), 1:5, 3:6)]
-                end
-                C = randn(3, 5)
-                return map(product(As, Bs)) do (A, B)
-                    (false, :stability, nothing, BLAS.gemm!, tA, tB, a, A, B, b, C)
-                end
-            end),
-        )),
+        map_prod(t_flags, t_flags, alphas, betas, Ps) do (tA, tB, a, b, P)
+            As = blas_matrices(rng, P, tA == 'N' ? 3 : 4, tA == 'N' ? 4 : 3)
+            Bs = blas_matrices(rng, P, tB == 'N' ? 4 : 5, tB == 'N' ? 5 : 4)
+            Cs = blas_matrices(rng, P, 3, 5)
+            return map(As, Bs, Cs) do A, B, C
+                (false, :stability, nothing, BLAS.gemm!, tA, tB, P(a), A, B, P(b), C)
+            end
+        end...,
 
         # symm!
-        vec(reduce(
-            vcat,
-            vec(map(product(['L', 'R'], ['L', 'U'], alphas, betas)) do (side, uplo, α, β)
-                nA = side == 'L' ? 5 : 7
-                A = randn(nA, nA)
-                vA = view(randn(15, 15), 1:nA, 1:nA)
-                B = randn(5, 7)
-                vB = view(randn(15, 15), 1:5, 1:7)
-                C = randn(5, 7)
-                return Any[
-                    (false, :stability, nothing, BLAS.symm!, side, uplo, α, A, B, β, C),
-                    (false, :stability, nothing, BLAS.symm!, side, uplo, α, vA, vB, β, C),
-                ]
-            end)
-        )),
+        map_prod(['L', 'R'], ['L', 'U'], alphas, betas, Ps) do (side, ul, α, β, P)
+            nA = side == 'L' ? 5 : 7
+            As = blas_matrices(rng, P, nA, nA)
+            Bs = blas_matrices(rng, P, 5, 7)
+            Cs = blas_matrices(rng, P, 5, 7)
+            return map(As, Bs, Cs) do A, B, C
+                (false, :stability, nothing, BLAS.symm!, side, ul, P(α), A, B, P(β), C)
+            end
+        end...,
     )
 
     memory = Any[]
@@ -901,6 +849,10 @@ end
 function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
     t_flags = ['N', 'T', 'C']
     aliased_gemm! = (tA, tB, a, b, A, C) -> BLAS.gemm!(tA, tB, a, A, A, b, C)
+    Ps = [Float32, Float64]
+    uplos = ['L', 'U']
+    dAs = ['N', 'U']
+    rng = rng_ctor(123)
 
     test_cases = vcat(
 
@@ -914,98 +866,73 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
         # BLAS LEVEL 1
         #
 
-        Any[
-            (false, :none, nothing, BLAS.dot, 3, randn(5), 1, randn(4), 1),
-            (false, :none, nothing, BLAS.dot, 3, randn(6), 2, randn(4), 1),
-            (false, :none, nothing, BLAS.dot, 3, randn(6), 1, randn(9), 3),
-            (false, :none, nothing, BLAS.dot, 3, randn(12), 3, randn(9), 2),
-            (false, :none, nothing, BLAS.scal!, 10, 2.4, randn(30), 2),
-        ],
-
-        #
-        # BLAS LEVEL 2
-        #
-
-        # gemv!
-        vec(reduce(
-            vcat,
-            map(product(t_flags, [1, 3], [1, 2])) do (tA, M, N)
-                t = tA == 'N'
-                As = [
-                    t ? randn(M, N) : randn(N, M),
-                    view(randn(15, 15), t ? (3:M+2) : (2:N+1), t ? (2:N+1) : (3:M+2)),
-                ]
-                xs = [randn(N), view(randn(15), 3:N+2), view(randn(30), 1:2:2N)]
-                ys = [randn(M), view(randn(15), 2:M+1), view(randn(30), 2:2:2M)]
-                return map(Iterators.product(As, xs, ys)) do (A, x, y)
-                    (false, :none, nothing, BLAS.gemv!, tA, randn(), A, x, randn(), y)
-                end
-            end,
-        )),
-
-        # trmv!
-        vec(reduce(
-            vcat,
-            map(product(['L', 'U'], t_flags, ['N', 'U'], [1, 3])) do (ul, tA, dA, N)
-                As = [randn(N, N), view(randn(15, 15), 3:N+2, 4:N+3)]
-                bs = [randn(N), view(randn(14), 4:N+3)]
-                return map(product(As, bs)) do (A, b)
-                    (false, :none, nothing, BLAS.trmv!, ul, tA, dA, A, b)
-                end
-            end,
-        )),
+        map(Ps) do P
+            flags = (false, :none, nothing)
+            Any[
+                (flags..., BLAS.dot, 3, randn(rng, P, 5), 1, randn(rng, P, 4), 1),
+                (flags..., BLAS.dot, 3, randn(rng, P, 6), 2, randn(rng, P, 4), 1),
+                (flags..., BLAS.dot, 3, randn(rng, P, 6), 1, randn(rng, P, 9), 3),
+                (flags..., BLAS.dot, 3, randn(rng, P, 12), 3, randn(rng, P, 9), 2),
+                (flags..., BLAS.scal!, 10, P(2.4), randn(rng, P, 30), 2),
+            ]
+        end...,
 
         #
         # BLAS LEVEL 3
         #
 
         # aliased gemm!
-        vec(map(product(t_flags, t_flags)) do (tA, tB)
-            A = randn(5, 5)
-            B = randn(5, 5)
-            (false, :none, nothing, aliased_gemm!, tA, tB, randn(), randn(), A, B)
-        end),
+        map_prod(t_flags, t_flags, Ps) do (tA, tB, P)
+            As = blas_matrices(rng, P, 5, 5)
+            Bs = blas_matrices(rng, P, 5, 5)
+            a = randn(rng, P)
+            b = randn(rng, P)
+            return map_prod(As, Bs) do (A, B)
+                (false, :none, nothing, aliased_gemm!, tA, tB, a, b, A, B)
+            end
+        end...,
 
         # syrk!
-        vec(map(product(['U', 'L'], t_flags)) do (uplo, t)
-            A = t == 'N' ? randn(3, 4) : randn(4, 3)
-            C = randn(3, 3)
-            Any[false, :none, nothing, BLAS.syrk!, uplo, t, randn(), A, randn(), C]
-        end),
+        map_prod(uplos, t_flags, Ps) do (uplo, t, P)
+            As = blas_matrices(rng, P, t == 'N' ? 3 : 4, t == 'N' ? 4 : 3)
+            C = randn(rng, P, 3, 3)
+            a = randn(rng, P)
+            b = randn(rng, P)
+            return map(As) do A
+                (false, :none, nothing, BLAS.syrk!, uplo, t, a, A, b, C)
+            end
+        end...,
 
         # trmm!
-        vec(reduce(
-            vcat,
-            map(
-                product(['L', 'R'], ['U', 'L'], t_flags, ['N', 'U'], [1, 3], [1, 2]),
-            ) do (side, ul, tA, dA, M, N)
-                t = tA == 'N'
-                R = side == 'L' ? M : N
-                As = [randn(R, R), view(randn(15, 15), 3:R+2, 4:R+3)]
-                Bs = [randn(M, N), view(randn(15, 15), 2:M+1, 5:N+4)]
-                return map(product(As, Bs)) do (A, B)
-                    alpha = randn()
-                    Any[false, :none, nothing, BLAS.trmm!, side, ul, tA, dA, alpha, A, B]
-                end
-            end,
-        )),
+        map_prod(
+            ['L', 'R'], uplos, t_flags, dAs, [1, 3], [1, 2], Ps
+        ) do (side, ul, tA, dA, M, N, P)
+            t = tA == 'N'
+            R = side == 'L' ? M : N
+            a = randn(rng, P)
+            As = blas_matrices(rng, P, R, R)
+            Bs = blas_matrices(rng, P, M, N)
+            return map(As, Bs) do A, B
+                (false, :none, nothing, BLAS.trmm!, side, ul, tA, dA, a, A, B)
+            end
+        end...,
 
         # trsm!
-        vec(reduce(
-            vcat,
-            map(
-                product(['L', 'R'], ['U', 'L'], t_flags, ['N', 'U'], [1, 3], [1, 2]),
-            ) do (side, ul, tA, dA, M, N)
-                t = tA == 'N'
-                R = side == 'L' ? M : N
-                As = [randn(R, R) + 5I, view(randn(15, 15), 3:R+2, 4:R+3) + 5I]
-                Bs = [randn(M, N), view(randn(15, 15), 2:M+1, 5:N+4)]
-                return map(product(As, Bs)) do (A, B)
-                    alpha = randn()
-                    Any[false, :none, nothing, BLAS.trsm!, side, ul, tA, dA, alpha, A, B]
-                end
-            end,
-        )),
+        map_prod(
+            ['L', 'R'], uplos, t_flags, dAs, [1, 3], [1, 2], Ps
+        ) do (side, ul, tA, dA, M, N, P)
+            t = tA == 'N'
+            R = side == 'L' ? M : N
+            a = randn(rng, P)
+            As = map(blas_matrices(rng, P, R, R)) do A
+                A[diagind(A)] .+= 1
+                return A
+            end
+            Bs = blas_matrices(rng, P, M, N)
+            return map(As, Bs) do A, B
+                (false, :none, nothing, BLAS.trsm!, side, ul, tA, dA, a, A, B)
+            end
+        end...,
     )
     memory = Any[]
     return test_cases, memory

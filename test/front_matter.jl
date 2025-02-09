@@ -1,16 +1,16 @@
-using
-    AllocCheck,
+using AllocCheck,
     Aqua,
     BenchmarkTools,
     DiffRules,
     JET,
+    JuliaFormatter,
     LinearAlgebra,
     Random,
     StableRNGs,
     Mooncake,
     Test
 
-import ChainRulesCore
+using ChainRulesCore: ChainRulesCore
 
 using Base: unsafe_load, pointer_from_objref, IEEEFloat, TwicePrecision
 using Base.Iterators: product
@@ -25,12 +25,10 @@ using Mooncake:
     TestUtils,
     TestResources,
     CoDual,
-    _wrap_field,
     DefaultCtx,
     rrule!!,
     lgetfield,
     lsetfield!,
-    build_tangent,
     Stack,
     _typeof,
     BBCode,
@@ -64,13 +62,15 @@ using Mooncake:
     is_primitive,
     MinimalCtx,
     stmt,
-    _type
+    can_produce_zero_rdata_from_type,
+    zero_rdata_from_type,
+    CannotProduceZeroRDataFromType
 
 using .TestUtils:
     test_rule,
     has_equal_data,
     AddressMap,
-    populate_address_map!,
+    populate_address_map_internal,
     populate_address_map,
     test_tangent
 

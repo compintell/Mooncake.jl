@@ -5,7 +5,7 @@
     @testset "argument checking" begin
         f = x -> 5x
         rule = build_rrule(f, 5.0; debug_mode=true)
-        @test_throws ErrorException rule(zero_fcodual(f), CoDual(0f0, 1f0))
+        @test_throws ErrorException rule(zero_fcodual(f), CoDual(0.0f0, 1.0f0))
     end
 
     # Forwards-pass tests.
@@ -13,7 +13,7 @@
     @test_throws(ErrorException, Mooncake.DebugRRule(rrule!!)(x...))
     x = (CoDual(sin, NoFData()), CoDual(5.0, NoFData()))
     @test_throws(
-        ErrorException, Mooncake.DebugRRule((x..., ) -> (CoDual(1.0, 0.0), nothing))(x...)
+        ErrorException, Mooncake.DebugRRule((x...,) -> (CoDual(1.0, 0.0), nothing))(x...)
     )
 
     # Basic type checking.
@@ -24,7 +24,7 @@
     # just by looking at the array.
     x = (
         CoDual(size, NoFData()),
-        CoDual(Any[rand() for _ in 1:10], Any[rand(Float16) for _ in 1:10])
+        CoDual(Any[rand() for _ in 1:10], Any[rand(Float16) for _ in 1:10]),
     )
     @test_throws ErrorException Mooncake.DebugRRule(rrule!!)(x...)
 
@@ -33,7 +33,7 @@
     @test_throws(InvalidRDataException, pb!!(5))
 
     # Test that bad rdata is caught as a post-condition.
-    rule_with_bad_pb(x::CoDual{Float64}) = x, dy -> (5, ) # returns the wrong type
+    rule_with_bad_pb(x::CoDual{Float64}) = x, dy -> (5,) # returns the wrong type
     y, pb!! = Mooncake.DebugRRule(rule_with_bad_pb)(zero_fcodual(5.0))
     @test_throws InvalidRDataException pb!!(1.0)
 
