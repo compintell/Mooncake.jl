@@ -122,7 +122,7 @@ end
     value_and_gradient!!(rule, f, x...)
 
 Equivalent to `value_and_pullback!!(rule, 1.0, f, x...)`, and assumes `f` returns a
-`Float64`.
+`Union{Float16,Float32,Float64}`.
 
 *Note:* There are lots of subtle ways to mis-use `value_and_pullback!!`, so we generally
 recommend using `Mooncake.value_and_gradient!!` (this function) where possible. The
@@ -202,16 +202,16 @@ end
 
 WARNING: experimental functionality. Interface subject to change without warning!
 
-Like other methods of `value_and_pullback!!`, but makes use of the `cache` object in order
-to avoid having to re-allocate various tangent objects repeatedly.
+Like other methods of `value_and_pullback!!`, but makes use of the `cache` object returned
+by [`prepare_pullback_cache`](@ref) in order to avoid having to re-allocate various tangent
+objects repeatedly. You must ensure that `f` and `x` are the same types and sizes as those
+used to construct `cache`.
 
-You must ensure that `f` and `x` are the same types and sizes as those used to construct
-`cache`.
-
-Warning: any mutable components of values returned by `value_and_gradient!!` will be mutated
-if you run this function again with different arguments. Therefore, if you need to keep the
-values returned by this function around over multiple calls to this function with the same
-`cache`, you should take a copy of them before calling again.
+Warning: `cache` owns any mutable state returned by this function, meaning that mutable
+components of values returned by it will be mutated if you run this function again with
+different arguments. Therefore, if you need to keep the values returned by this function
+around over multiple calls to this function with the same `cache`, you should take a copy
+of them before calling again.
 """
 function value_and_pullback!!(cache::Cache, ȳ, f::F, x::Vararg{Any,N}) where {F,N}
     tangents = tuple_map(set_to_zero!!, cache.tangents)
@@ -240,16 +240,16 @@ end
 
 WARNING: experimental functionality. Interface subject to change without warning!
 
-Like other methods of `value_and_gradient!!`, but makes use of the `cache` object in order
-to avoid having to re-allocate various tangent objects repeatedly.
+Like other methods of `value_and_gradient!!`, but makes use of the `cache` object returned
+by [`prepare_gradient_cache`](@ref) in order to avoid having to re-allocate various tangent
+objects repeatedly. You must ensure that `f` and `x` are the same types and sizes as those
+used to construct `cache`.
 
-You must ensure that `f` and `x` are the same types and sizes as those used to construct
-`cache`.
-
-Warning: any mutable components of values returned by `value_and_gradient!!` will be mutated
-if you run this function again with different arguments. Therefore, if you need to keep the
-values returned by this function around over multiple calls to this function with the same
-`cache`, you should take a copy of them before calling again.
+Warning: `cache` owns any mutable state returned by this function, meaning that mutable
+components of values returned by it will be mutated if you run this function again with
+different arguments. Therefore, if you need to keep the values returned by this function
+around over multiple calls to this function with the same `cache`, you should take a copy
+of them before calling again.
 """
 function value_and_gradient!!(cache::Cache, f::F, x::Vararg{Any,N}) where {F,N}
     coduals = tuple_map(CoDual, (f, x...), tuple_map(set_to_zero!!, cache.tangents))
