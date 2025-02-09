@@ -141,9 +141,8 @@ Mooncake.LazyDerivedRule
 
 Last checked: 09/02/2025, Julia v1.10.8 / v1.11.3, Mooncake 0.4.83.
 
-This brief introductory note was largely written by Guillaume Dalle while learning how Mooncake's internals operate for reverse-mode, in order to be able to add forwards-mode AD.
+This brief informal note was largely written by Guillaume Dalle while learning how Mooncake's internals operate for reverse-mode, in order to be able to add forwards-mode AD.
 It should help readers orient themsleves when first trying to understand Mooncake's internals.
-They are a series of brief notes, rather than a formal introduction.
 
 Rule building is done statically, based on types. Some methods accept values, e.g.
 ```julia
