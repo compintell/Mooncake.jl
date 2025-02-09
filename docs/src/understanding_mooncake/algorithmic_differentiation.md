@@ -439,17 +439,20 @@ But we endeavour to keep the discussion general in order to make the role of the
 #### Computing the gradient from forwards-mode
 
 To compute the gradient in forwards-mode, we need to evaluate the forwards pass ``\dim \mathcal{X}`` times.
-We also need to refer to a basis ``\{\mathbf{e}_i\}`` of ``\mathcal{X}`` and its reciprocal basis ``\{\mathbf{e}^i\}`` defined by ``\langle \mathbf{e}_i, \mathbf{e}^j \rangle = \delta_i^j``.
-(For any basis there exists such a reciprocal basis, and they are the same if the basis is orthonormal.)
-
+We also need to refer to a basis ``\{\mathbf{e}_i\}`` of ``\mathcal{X}`` and its reciprocal basis[^reciprocal_bases] ``\{\mathbf{e}^i\}``.
 Equipped with such a pair of bases, we can always decompose a vector ``x = \sum_i x^i \mathbf{e}_i`` into its components ``x^i = \langle x, \mathbf{e}^i \rangle``.
-Therefore, the gradient is given by
+Hence, the gradient is given by
 ```math
 \nabla f(x)
 	= \sum_i \langle \nabla f(x), \mathbf{e}^i \rangle \mathbf{e}_i
 	= \sum_i D f[x](\mathbf{e}^i) \, \mathbf{e}_i
 ```
 where the second equality follows from the gradient's implicit definition.
+
+[^reciprocal_bases]:
+	For any basis ``\{\mathbf{e}_i\}`` there exists a reciprocal reciprocal basis ``\{\mathbf{e}^i\}`` such that ``\langle \mathbf{e}_i, \mathbf{e}^j \rangle = \delta_i^j``.
+	If the basis is orthonormal with respect to the inner product, then the original basis and its reciprocal are equal and ``\mathbf{e}_i = \mathbf{e}^i``.
+	We will always implicitly use orthonormal bases in Mooncake, so the position of indices can usually be ignored safely.
 
 If the inner product is Euclidean, then ``\mathbf{e}^i = \mathbf{e}_i`` and we can interpret the ``i``th component of ``\nabla f`` as the directional derivative when moving in the ``i``th direction.
 
@@ -497,7 +500,7 @@ The adjoint derivative of ``f(x, y) = x + y_1 y_2`` (see [above](#AD-of-a-Julia-
 \nabla f(x, y) = D f[x, y]^\ast (1) = (1, (y_2, y_1)) .
 ```
 
-_**Aside: Adjoint Derivatives as Gradients**_
+_**Aside: Adjoints of Derivatives as Gradients**_
 
 It is interesting to note that value of ``D f[x]^\ast (\bar{y})`` returned by performing reverse-mode on a function ``f : \mathcal{X} \to \mathcal{Y}`` can always be viewed as the gradient of another function ``F : \mathcal{X} \to \mathbb{R}``.
 
