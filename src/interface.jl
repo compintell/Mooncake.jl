@@ -211,7 +211,7 @@ Warning: `cache` owns any mutable state returned by this function, meaning that 
 components of values returned by it will be mutated if you run this function again with
 different arguments. Therefore, if you need to keep the values returned by this function
 around over multiple calls to this function with the same `cache`, you should take a copy
-of them before calling again.
+(using `copy` or `deepcopy`) of them before calling again.
 """
 function value_and_pullback!!(cache::Cache, ȳ, f::F, x::Vararg{Any,N}) where {F,N}
     tangents = tuple_map(set_to_zero!!, cache.tangents)
@@ -249,7 +249,7 @@ Warning: `cache` owns any mutable state returned by this function, meaning that 
 components of values returned by it will be mutated if you run this function again with
 different arguments. Therefore, if you need to keep the values returned by this function
 around over multiple calls to this function with the same `cache`, you should take a copy
-of them before calling again.
+(using `copy` or `deepcopy`) of them before calling again.
 """
 function value_and_gradient!!(cache::Cache, f::F, x::Vararg{Any,N}) where {F,N}
     coduals = tuple_map(CoDual, (f, x...), tuple_map(set_to_zero!!, cache.tangents))
