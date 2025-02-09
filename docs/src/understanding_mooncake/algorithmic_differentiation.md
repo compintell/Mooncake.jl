@@ -419,10 +419,11 @@ The _gradient_ of ``f : \mathcal{X} \to \mathbb{R}`` at ``x`` is defined to be t
 \langle \nabla f (x), \dot{x} \rangle = D f[x](\dot{x})
 ```
 for any direction ``\dot{x}``.
-In other words, the vector ``\nabla f`` encodes all the information about the directional derivatives of ``f``, and we use the inner product to retrieve each one.
+In other words, the vector ``\nabla f`` encodes all the information about the directional derivatives of ``f``, and we use the inner product to retrieve that information.
 
 An alternative characterisation is that ``\nabla f(x)`` is the vector pointing in the direction of steepest ascent whose magnitude is given by the slope in that direction.
 In other words, if ``\hat{n} \coloneqq \argmax_{\|u\|=1} D f[x](u)`` is the unit vector in the direction of steepest ascent, then ``\nabla f = \|\nabla f\| \, \hat{n}`` and ``D f[x](\hat{n}) = \|\nabla f(x)\|``.
+(That this follows from the implicit definition above is a good exercise.)
 
 _**Aside: The choice of inner product**_
 
@@ -431,8 +432,7 @@ Indeed, different choices of inner product result in different values of ``\nabl
 Adjoints such as ``D f[x]^*`` are also inner product dependent.
 However, the actual derivative ``D f[x]`` is of course invariant -- it makes no reference to the inner product.
 
-In practice, Mooncake uses the Euclidean inner product, extended in the "obvious way" to other composite data types (that is, as if everything is flattened and embedded in ``\mathbb{R}^N``).
-But we endeavour to keep the discussion general in order to make the role of the inner product explicit.
+In practice, Mooncake uses the Euclidean inner product, extended in the "obvious way" to other composite data types (that is, as if everything is flattened and embedded in ``\mathbb{R}^N``), but we endeavour to keep the discussion general in order to make the role of the inner product explicit.
 
 
 
@@ -447,7 +447,7 @@ Hence, the gradient is given by
 	= \sum_i \langle \nabla f(x), \mathbf{e}^i \rangle \mathbf{e}_i
 	= \sum_i D f[x](\mathbf{e}^i) \, \mathbf{e}_i
 ```
-where the second equality follows from the gradient's implicit definition.
+where the second equality follows from the gradient's definition.
 
 [^reciprocal_bases]:
 	For any basis ``\{\mathbf{e}_i\}`` there exists a reciprocal reciprocal basis ``\{\mathbf{e}^i\}`` such that ``\langle \mathbf{e}_i, \mathbf{e}^j \rangle = \delta_i^j``.
@@ -478,7 +478,7 @@ so the gradient is
 	&= (1, (y_2, y_1))
 \end{align*}
 ```
-referring [above](#AD-of-a-Julia-function:-a-slightly-less-trivial-example) for the form of ``D f[x, y]``.
+referring back to [Step 2 above](#AD-of-a-Julia-function:-a-slightly-less-trivial-example) for the values of ``D f[x, y](\dot{x}, \dot{y})``.
 
 #### Computing the gradient from reverse-mode
 If we perform a single reverse-pass on a function ``f : \mathcal{X} \to \RR`` to obtain ``D f[x]^\ast``, then the gradient is simply
@@ -495,7 +495,7 @@ which implies ``\nabla f (x) = D f[x]^\ast (1)`` since ``\dot{x}`` is arbitrary.
 
 _**Example**_
 
-The adjoint derivative of ``f(x, y) = x + y_1 y_2`` (see [above](#AD-of-a-Julia-function:-a-slightly-less-trivial-example)) immediately gives
+The adjoint of the derivative of ``f(x, y) = x + y_1 y_2`` (see [above](#AD-of-a-Julia-function:-a-slightly-less-trivial-example)) immediately gives
 ```math
 \nabla f(x, y) = D f[x, y]^\ast (1) = (1, (y_2, y_1)) .
 ```
