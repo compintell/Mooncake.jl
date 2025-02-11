@@ -953,7 +953,7 @@ end
 
 # Optimal for homogeneously-typed Tuples with dynamic field choice.
 function increment_field!!(x::Tuple, y, i::Int)
-    return ntuple(n -> n == i ? increment!!(x[n], y) : x[n], length(x))
+    return ntuple(n -> n == i ? increment!!(x[n], y) : x[n], Val(length(x)))
 end
 
 @inline @generated function increment_field!!(x::T, y, ::Val{f}) where {T<:NamedTuple,f}
