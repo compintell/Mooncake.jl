@@ -150,6 +150,7 @@ include("public.jl")
 @public zero_adjoint
 @public is_primitive, build_primitive_rrule
 export @mooncake_overlay, @zero_adjoint, @from_rrule  # how to make macros public with the @public workaround??
+@public Config
 
 # Public, exported
 
@@ -160,7 +161,7 @@ export tangent_type, tangent, zero_tangent
 export NoFData, fdata_type, fdata
 export NoRData, rdata_type, rdata
 export rrule!!, build_rrule
-export value_and_pullback!!
-export value_and_gradient!!
+export value_and_pullback!!, prepare_pullback_cache
+export value_and_gradient!!, prepare_gradient_cache
 
 end
