@@ -608,7 +608,7 @@ highly_nested_tuple(x) = ((((x,),), x), x)
 sig_argcount_mismatch(x) = vcat(x[1], x[2:2], x[3:3], x[4:4])
 
 # Regression test: https://github.com/compintell/Mooncake.jl/issues/473
-large_tuple_inference(x::NTuple{1_000, Float64}) = sum(cos, x)
+large_tuple_inference(x::NTuple{1_000,Float64}) = sum(cos, x)
 
 function generate_test_functions()
     return Any[
