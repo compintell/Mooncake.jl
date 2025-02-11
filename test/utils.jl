@@ -27,8 +27,7 @@
     end
     @testset "_findall" begin
         # regression test for https://github.com/compintell/Mooncake.jl/issues/473
-        x = tuple(zeros(1000)...)
-        @test Mooncake._findall(Base.Fix2(isa, Union), x) == ()
+        @test Mooncake._findall(Base.Fix2(isa, Union), Tuple(zeros(1000))) == ()
     end
     @testset "stable_all" begin
         @test Mooncake.stable_all((false,)) == false
@@ -39,8 +38,8 @@
         @test Mooncake.stable_all((true, true)) == true
 
         # regression test for https://github.com/compintell/Mooncake.jl/issues/473
-        @test Mooncake.stable_all(tuple(fill(false, 1000)...)) == false
-        @test Mooncake.stable_all(tuple(fill(true, 1000)...)) == true
+        @test Mooncake.stable_all(Tuple(fill(false, 1000))) == false
+        @test Mooncake.stable_all(Tuple(fill(true, 1000))) == true
     end
     @testset "_map_if_assigned!" begin
         @testset "unary bits type" begin
