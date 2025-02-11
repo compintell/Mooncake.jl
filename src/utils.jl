@@ -73,7 +73,28 @@ end
 Type-stable version of `findall` for `Tuple`s. Should constant-fold if `cond` can be
 determined from the type of `x`.
 """
-@generated function _findall(cond, x::Tuple)
+@inline function _findall(cond, x::Tuple)
+    N = length(x)
+
+    # Use generated function for large Tuples. Downside is long compile times.
+    N > 5 && return _findall_generated(cond, x)
+
+    # For small N, don't use a generated function.
+    y = ()
+    N == 0 && return y
+    y = cond(x[1]) ? (1, y...) : y
+    N == 1 && return y
+    y = cond(x[2]) ? (2, y...) : y
+    N == 2 && return y
+    y = cond(x[3]) ? (3, y...) : y
+    N == 3 && return y
+    y = cond(x[4]) ? (4, y...) : y
+    N == 4 && return y
+    y = cond(x[5]) ? (5, y...) : y
+    return y
+end
+
+@generated function _findall_generated(cond, x::Tuple)
 
     # Initially we have found nothing.
     y = :(y = ())
