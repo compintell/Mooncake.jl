@@ -141,33 +141,27 @@ include("interface.jl")
 include("config.jl")
 include("developer_tools.jl")
 
-export primal,
-    tangent,
-    randn_tangent,
-    increment!!,
-    NoTangent,
-    Tangent,
-    MutableTangent,
-    PossiblyUninitTangent,
-    set_to_zero!!,
-    tangent_type,
-    zero_tangent,
-    _scale,
-    _add_to_primal,
-    _diff,
-    _dot,
-    zero_codual,
-    codual_type,
-    rrule!!,
-    build_rrule,
-    value_and_gradient!!,
-    value_and_pullback!!,
-    NoFData,
-    NoRData,
-    fdata_type,
-    rdata_type,
-    fdata,
-    rdata,
-    get_interpreter
+# Public, not exported
+
+include("public.jl")
+
+@public set_to_zero!!, increment!!
+@public get_interpreter
+@public mooncake_overlay
+@public zero_adjoint
+@public from_rrule
+@public is_primitive, build_primitive_rrule
+
+# Public, exported
+
+export CoDual, codual_type, zero_codual
+export primal
+export Tangent, MutableTangent, PossiblyUninitTangent, NoTangent
+export tangent_type, tangent, zero_tangent
+export NoFData, fdata_type, fdata
+export NoRData,rdata_type, rdata
+export rrule!!, build_rrule
+export value_and_pullback!!
+export value_and_gradient!!
 
 end

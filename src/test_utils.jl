@@ -13,6 +13,10 @@ using Core: svec
 using ExprTools: combinedef
 using ..Mooncake: NoTangent, tangent_type, _typeof
 
+include("public.jl")
+
+@public test_rule
+
 const PRIMALS = Tuple{Bool,Any,Tuple}[]
 
 # Generate all of the composite types against which we might wish to test.
