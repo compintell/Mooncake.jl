@@ -837,7 +837,7 @@ function generate_test_functions()
         (false, :allocs, nothing, inplace_invoke!, randn(1_024)),
         (false, :allocs, nothing, highly_nested_tuple, 5.0),
         (false, :none, nothing, sig_argcount_mismatch, ones(4)),
-        (false, :none, nothing, large_tuple_inference, Tuple(zeros(1_000))),
+        (false, :none, (lb=2, ub=1500), large_tuple_inference, Tuple(zeros(1_000))),
     ]
 end
 
