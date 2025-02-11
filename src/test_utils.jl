@@ -12,6 +12,15 @@ using Base.Iterators: product
 using Core: svec
 using ExprTools: combinedef
 using ..Mooncake: NoTangent, tangent_type, _typeof
+using ..Mooncake:
+    set_to_zero!!,
+    increment!!,
+    is_primitive,
+    randn_tangent,
+    _scale,
+    _add_to_primal,
+    _diff,
+    _dot
 
 include("public.jl")
 
