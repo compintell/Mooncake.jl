@@ -11,8 +11,10 @@ module TestTypes
 using Base.Iterators: product
 using Core: svec
 using ExprTools: combinedef
-using ..Mooncake: NoTangent, tangent_type, _typeof
 using ..Mooncake:
+    NoTangent,
+    tangent_type,
+    _typeof,
     set_to_zero!!,
     increment!!,
     is_primitive,
@@ -21,10 +23,6 @@ using ..Mooncake:
     _add_to_primal,
     _diff,
     _dot
-
-include("public.jl")
-
-@public test_rule
 
 const PRIMALS = Tuple{Bool,Any,Tuple}[]
 
@@ -139,7 +137,15 @@ using Mooncake:
     lsetfield!,
     increment_internal!!,
     set_to_zero_internal!!,
-    CC
+    CC,
+    set_to_zero!!,
+    increment!!,
+    is_primitive,
+    randn_tangent,
+    _scale,
+    _add_to_primal,
+    _diff,
+    _dot
 
 struct Shim end
 
