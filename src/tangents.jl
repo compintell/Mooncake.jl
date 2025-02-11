@@ -335,13 +335,6 @@ tangent_type(::Type{Method}) = NoTangent
 
 tangent_type(::Type{<:Enum}) = NoTangent
 
-# Inferable version of `findall` for `Tuple`s.
-_findall(::Any, ::Int, ::Tuple{}) = ()
-function _findall(cond, ind::Int, x::Tuple)
-    tail = _findall(cond, ind + 1, x[2:end])
-    return cond(x[1]) ? (ind, tail...) : tail
-end
-
 function split_union_tuple_type(tangent_types)
 
     # Create first split.
@@ -393,7 +386,7 @@ isconcrete_or_union(p) = p isa Union || isconcretetype(p)
         T <: $T_all_notangent && return NoTangent
 
         # If exactly one of the field types is a Union, then split.
-        union_fields = _findall(Base.Fix2(isa, Union), 1, tangent_types)
+        union_fields = _findall(Base.Fix2(isa, Union), tangent_types)
         if length(union_fields) == 1 && all(tuple_map(isconcrete_or_union, tangent_types))
             return split_union_tuple_type(tangent_types)
         end
