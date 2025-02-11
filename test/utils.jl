@@ -26,7 +26,7 @@
         @test_throws ArgumentError Mooncake.tuple_map(*, (4.0,), (5.0, 4.0))
     end
     @testset "_findall" begin
-        @test @inferred Mooncake._findall(identity, (false, true, false)) == (2, )
+        @test @inferred Mooncake._findall(identity, (false, true, false)) == (2,)
         @test @inferred Mooncake._findall(identity, (true, false, true)) == (3, 1)
         # regression test for https://github.com/compintell/Mooncake.jl/issues/473
         @test @inferred Mooncake._findall(Base.Fix2(isa, Union), Tuple(zeros(1000))) == ()
