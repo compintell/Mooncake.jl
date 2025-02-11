@@ -158,7 +158,7 @@ export primal
 export Tangent, MutableTangent, PossiblyUninitTangent, NoTangent
 export tangent_type, tangent, zero_tangent
 export NoFData, fdata_type, fdata
-export NoRData,rdata_type, rdata
+export NoRData, rdata_type, rdata
 export rrule!!, build_rrule
 export value_and_pullback!!
 export value_and_gradient!!
