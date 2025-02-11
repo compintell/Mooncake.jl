@@ -79,7 +79,7 @@ determined from the type of `x`.
     y = :(y = ())
 
     # For each element in `x`, if it satisfies `cond`, insert its index into `y`.
-    exprs = map(n -> :(cond(x[$n]) ? ($n, y...) : y), 1:fieldcount(x))
+    exprs = map(n -> :(y = cond(x[$n]) ? ($n, y...) : y), 1:fieldcount(x))
 
     # Combine all expressions into a single block and return.
     return Expr(:block, y, exprs...)
