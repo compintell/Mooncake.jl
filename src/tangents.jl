@@ -951,9 +951,14 @@ end
     return Expr(:tuple, exprs...)
 end
 
-# Optimal for homogeneously-typed Tuples with dynamic field choice.
+# Optimal for homogeneously-typed Tuples with dynamic field choice. Implementation using
+# `ifelse` chosen to ensure that the entire function comprises a single basic block. If
+# instead one wrote `n -> n == i ? v : x[n]` we would get one basic block per element of
+# `x`. This is fine for small-medium `x`, but causes a great deal of trouble for large `x`
+# (certainly for length > 1_000, but probably also for smaller sizes than that).
 function increment_field!!(x::Tuple, y, i::Int)
-    return ntuple(n -> n == i ? increment!!(x[n], y) : x[n], Val(length(x)))
+    v = increment!!(x[i], y)
+    return ntuple(n -> ifelse(n == i, v, x[n]), Val(length(x)))
 end
 
 @inline @generated function increment_field!!(x::T, y, ::Val{f}) where {T<:NamedTuple,f}
