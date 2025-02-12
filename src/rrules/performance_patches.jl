@@ -17,14 +17,16 @@
 #   cause robustness or correctness problems.
 
 # Performance issue: https://github.com/compintell/Mooncake.jl/issues/156
-@is_primitive(DefaultCtx, Tuple{typeof(sum),Array{<:IEEEFloat}})
-function rrule!!(::CoDual{typeof(sum)}, x::CoDual{<:Array{P}}) where {P<:IEEEFloat}
+@is_primitive(DefaultCtx, Tuple{typeof(sum),typeof(identity),Array{<:IEEEFloat}})
+function rrule!!(
+    ::CoDual{typeof(sum)}, ::CoDual{typeof(identity)}, x::CoDual{<:Array{P}}
+) where {P<:IEEEFloat}
     dx = x.dx
     function sum_pb!!(dz::P)
         dx .+= dz
-        return NoRData(), NoRData()
+        return NoRData(), NoRData(), NoRData()
     end
-    return zero_fcodual(sum(x.x)), sum_pb!!
+    return zero_fcodual(sum(identity, x.x)), sum_pb!!
 end
 
 # Performance issue: https://github.com/compintell/Mooncake.jl/issues/156
@@ -44,22 +46,11 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:performance_p
     sizes = [(11,), (11, 3)]
     precisions = [Float64, Float32, Float16]
     test_cases = vcat(
-        (false, :stability_and_allocs, nothing, sum, randn(Float32, 10)),
-        (false, :stability_and_allocs, nothing, sum, randn(Float64, 10)),
-        (false, :stability_and_allocs, nothing, sum, randn(Float32, 10, 10)),
-        (false, :stability_and_allocs, nothing, sum, randn(Float64, 10, 10)),
-        (false, :stability_and_allocs, nothing, sum, abs2, randn(Float32, 10)),
-        (false, :stability_and_allocs, nothing, sum, abs2, randn(Float64, 10)),
-        (false, :stability_and_allocs, nothing, sum, abs2, randn(Float32, 10, 10)),
-        (false, :stability_and_allocs, nothing, sum, abs2, randn(Float64, 10, 10)),
-
-        # # sum(x), sum(abs2, x)
-        # map_prod(sizes, precisions, [identity, abs2]) do (sz, P, f)
-        #     flags = (P == Float16 ? true : false, :stability_and_allocs, nothing)
-        #     x = randn(rng, P, sz...)
-        #     args = (Base._mapreduce, f, Base.add_sum, Base.IndexLinear(), x)
-        #     return (flags..., args...)
-        # end,
+        # sum(identity, x), sum(abs2, x)
+        map_prod(sizes, precisions, [identity, abs2]) do (sz, P, f)
+            flags = (P == Float16 ? true : false, :stability_and_allocs, nothing)
+            return (flags..., sum, f, randn(rng, P, sz...))
+        end,
     )
     memory = Any[]
     return test_cases, memory
