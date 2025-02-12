@@ -32,7 +32,6 @@ struct MooncakeInterpreter{C} <: CC.AbstractInterpreter
     inf_cache::Vector{CC.InferenceResult}
     code_cache::MooncakeCache
     oc_cache::Dict{ClosureCacheKey,Any}
-    inline_primitives::Bool
     function MooncakeInterpreter(
         ::Type{C};
         meta=nothing,
@@ -42,18 +41,8 @@ struct MooncakeInterpreter{C} <: CC.AbstractInterpreter
         inf_cache::Vector{CC.InferenceResult}=CC.InferenceResult[],
         code_cache::MooncakeCache=MooncakeCache(),
         oc_cache::Dict{ClosureCacheKey,Any}=Dict{ClosureCacheKey,Any}(),
-        inline_primitives::Bool=false,
     ) where {C}
-        interp = new{C}(
-            meta,
-            world,
-            inf_params,
-            opt_params,
-            inf_cache,
-            code_cache,
-            oc_cache,
-            inline_primitives,
-        )
+        ip = new{C}(meta, world, inf_params, opt_params, inf_cache, code_cache, oc_cache)
         tts = Any[
             Tuple{typeof(sum),Tuple{Int}},
             Tuple{typeof(sum),Tuple{Int,Int}},
@@ -62,16 +51,16 @@ struct MooncakeInterpreter{C} <: CC.AbstractInterpreter
             Tuple{typeof(sum),Tuple{Int,Int,Int,Int,Int}},
         ]
         for tt in tts
-            for m in CC._methods_by_ftype(tt, 10, interp.world)::Vector
+            for m in CC._methods_by_ftype(tt, 10, ip.world)::Vector
                 m = m::CC.MethodMatch
                 typ = Any[m.spec_types.parameters...]
                 for i in 1:length(typ)
                     typ[i] = CC.unwraptv(typ[i])
                 end
-                CC.typeinf_type(interp, m.method, Tuple{typ...}, m.sparams)
+                CC.typeinf_type(ip, m.method, Tuple{typ...}, m.sparams)
             end
         end
-        return interp
+        return ip
     end
 end
 
@@ -155,10 +144,7 @@ function Core.Compiler.abstract_call_gf_by_type(
 
     # Check to see whether the call in question is a Mooncake primitive. If it is, set its
     # call info such that in the `CC.inlining_policy` it is not inlined away.
-    callinfo = cm.info
-    if !interp.inline_primitives && Mooncake.is_primitive(C, atype)
-        callinfo = NoInlineCallInfo(callinfo, atype)
-    end
+    callinfo = is_primitive(C, atype) ? NoInlineCallInfo(cm.info, atype) : cm.info
 
     # Construct a CallMeta correctly depending on the version of Julia.
     @static if VERSION ≥ v"1.11-"
@@ -217,15 +203,6 @@ Globally cached interpreter. Should only be accessed via `get_interpreter`.
 const GLOBAL_INTERPRETER = Ref(MooncakeInterpreter())
 
 """
-    const GLOBAL_INLINING_INTERPRETER
-
-Globally cached interpreter which inline away AD primitives.
-"""
-const GLOBAL_INLINING_INTERPRETER = Ref(
-    MooncakeInterpreter(DefaultCtx; inline_primitives=true)
-)
-
-"""
     get_interpreter()
 
 Returns a `MooncakeInterpreter` appropriate for the current world age. Will use a cached
@@ -233,17 +210,9 @@ interpreter if one already exists for the current world age, otherwise creates a
 
 This should be prefered over constructing a `MooncakeInterpreter` directly.
 """
-function get_interpreter(; inline_primitives=false)
-    if inline_primitives
-        if GLOBAL_INLINING_INTERPRETER[].world != Base.get_world_counter()
-            interp = MooncakeInterpreter(DefaultCtx; inline_primitives)
-            GLOBAL_INLINING_INTERPRETER[] = interp
-        end
-        return GLOBAL_INLINING_INTERPRETER[]
-    else
-        if GLOBAL_INTERPRETER[].world != Base.get_world_counter()
-            GLOBAL_INTERPRETER[] = MooncakeInterpreter()
-        end
-        return GLOBAL_INTERPRETER[]
+function get_interpreter()
+    if GLOBAL_INTERPRETER[].world != Base.get_world_counter()
+        GLOBAL_INTERPRETER[] = MooncakeInterpreter()
     end
+    return GLOBAL_INTERPRETER[]
 end

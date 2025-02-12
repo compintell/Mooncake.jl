@@ -38,6 +38,7 @@ jobs:
           'rrules/new',
           'rrules/tasks',
           'rrules/twice_precision',
+          'rrules/performance_patches',
         ]
         version:
           - 'lts'

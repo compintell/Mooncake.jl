@@ -538,7 +538,7 @@ function test_rrule_interface(f_f̄, x_x̄...; rule)
     @test all(map((a, b) -> _typeof(a) == _typeof(rdata(b)), x̄_new, x̄))
 end
 
-function __forwards_and_backwards(rule, x_x̄::Vararg{Any,N}) where {N}
+@noinline function __forwards_and_backwards(rule::R, x_x̄::Vararg{Any,N}) where {R,N}
     out, pb!! = rule(x_x̄...)
     return pb!!(Mooncake.zero_rdata(primal(out)))
 end
@@ -584,7 +584,8 @@ function test_rrule_performance(
         f_f̄_fwds = to_fwds(f_f̄)
         x_x̄_fwds = map(to_fwds, x_x̄)
         __forwards_and_backwards(rule, f_f̄_fwds, x_x̄_fwds...)
-        @test (@allocations __forwards_and_backwards(rule, f_f̄_fwds, x_x̄_fwds...)) == 0
+        count_allocs(__forwards_and_backwards, rule, f_f̄_fwds, x_x̄_fwds...)
+        @test count_allocs(__forwards_and_backwards, rule, f_f̄_fwds, x_x̄_fwds...) == 0
     end
 end
 
@@ -659,8 +660,6 @@ function test_rule(
     debug_mode::Bool=false,
     unsafe_perturb::Bool=false,
 )
-    @nospecialize rng x
-
     # Construct the rule.
     sig = _typeof(__get_primals(x))
     rule = Mooncake.build_rrule(interp, sig; debug_mode)
