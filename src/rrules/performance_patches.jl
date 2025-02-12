@@ -17,33 +17,6 @@
 #   cause robustness or correctness problems.
 
 # Performance issue: https://github.com/compintell/Mooncake.jl/issues/156
-# Complicated implementation involving low-level machinery needed due to
-# https://github.com/compintell/Mooncake.jl/issues/238
-# @is_primitive(
-#     DefaultCtx,
-#     Tuple{
-#         typeof(Base._mapreduce),
-#         typeof(identity),
-#         typeof(Base.add_sum),
-#         Base.IndexLinear,
-#         Array{<:IEEEFloat},
-#     },
-# )
-# function rrule!!(
-#     ::CoDual{typeof(Base._mapreduce)},
-#     ::CoDual{typeof(identity)},
-#     ::CoDual{typeof(Base.add_sum)},
-#     ::CoDual{Base.IndexLinear},
-#     x::CoDual{<:Array{P}}
-# ) where {P<:IEEEFloat}
-#     dx = x.dx
-#     function sum_pb!!(dz::P)
-#         dx .+= dz
-#         return NoRData(), NoRData(), NoRData(), NoRData(), NoRData()
-#     end
-#     return zero_fcodual(sum(x.x)), sum_pb!!
-# end
-
 @is_primitive(DefaultCtx, Tuple{typeof(sum),Array{<:IEEEFloat}})
 function rrule!!(::CoDual{typeof(sum)}, x::CoDual{<:Array{P}}) where {P<:IEEEFloat}
     dx = x.dx
@@ -54,6 +27,7 @@ function rrule!!(::CoDual{typeof(sum)}, x::CoDual{<:Array{P}}) where {P<:IEEEFlo
     return zero_fcodual(sum(x.x)), sum_pb!!
 end
 
+# Performance issue: https://github.com/compintell/Mooncake.jl/issues/156
 @is_primitive(DefaultCtx, Tuple{typeof(sum),typeof(abs2),Array{<:IEEEFloat}})
 function rrule!!(
     ::CoDual{typeof(sum)}, ::CoDual{typeof(abs2)}, x::CoDual{<:Array{P}}
@@ -64,34 +38,6 @@ function rrule!!(
     end
     return zero_fcodual(sum(abs2, x.x)), sum_abs2_pb!!
 end
-
-# # Performance issue: https://github.com/compintell/Mooncake.jl/issues/156
-# # Complicated implementation involving low-level machinery needed due to
-# # https://github.com/compintell/Mooncake.jl/issues/238
-# @is_primitive(
-#     DefaultCtx,
-#     Tuple{
-#         typeof(Base._mapreduce),
-#         typeof(abs2),
-#         typeof(Base.add_sum),
-#         Base.IndexLinear,
-#         Array{<:IEEEFloat},
-#     },
-# )
-# function rrule!!(
-#     ::CoDual{typeof(Base._mapreduce)},
-#     ::CoDual{typeof(abs2)},
-#     ::CoDual{typeof(Base.add_sum)},
-#     ::CoDual{Base.IndexLinear},
-#     x::CoDual{<:Array{P}}
-# ) where {P<:IEEEFloat}
-#     dx = x.dx
-#     function sum_pb!!(dz::P)
-#         x.dx .+= 2 .* dz .* x.x
-#         return NoRData(), NoRData(), NoRData(), NoRData(), NoRData()
-#     end
-#     return zero_fcodual(sum(abs2, x.x)), sum_pb!!
-# end
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:performance_patches})
     rng = rng_ctor(123)
