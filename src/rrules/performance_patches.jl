@@ -17,14 +17,12 @@
 #   cause robustness or correctness problems.
 
 # Performance issue: https://github.com/compintell/Mooncake.jl/issues/156
-@is_primitive(DefaultCtx, Tuple{typeof(sum),typeof(identity),Array{<:IEEEFloat}})
-function rrule!!(
-    ::CoDual{typeof(sum)}, ::CoDual{typeof(identity)}, x::CoDual{<:Array{P}}
-) where {P<:IEEEFloat}
+@is_primitive(DefaultCtx, Tuple{typeof(sum),Array{<:IEEEFloat}})
+function rrule!!(::CoDual{typeof(sum)}, x::CoDual{<:Array{P}}) where {P<:IEEEFloat}
     dx = x.dx
     function sum_pb!!(dz::P)
         dx .+= dz
-        return NoRData(), NoRData(), NoRData()
+        return NoRData(), NoRData()
     end
     return zero_fcodual(sum(identity, x.x)), sum_pb!!
 end
@@ -46,10 +44,17 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:performance_p
     sizes = [(11,), (11, 3)]
     precisions = [Float64, Float32, Float16]
     test_cases = vcat(
-        # sum(identity, x), sum(abs2, x)
-        map_prod(sizes, precisions, [identity, abs2]) do (sz, P, f)
+
+        # sum(x)
+        map_prod(sizes, precisions) do (sz, P)
             flags = (P == Float16 ? true : false, :stability_and_allocs, nothing)
-            return (flags..., sum, f, randn(rng, P, sz...))
+            return (flags..., sum, randn(rng, P, sz...))
+        end,
+
+        # sum(abs2, x)
+        map_prod(sizes, precisions) do (sz, P)
+            flags = (P == Float16 ? true : false, :stability_and_allocs, nothing)
+            return (flags..., sum, abs2, randn(rng, P, sz...))
         end,
     )
     memory = Any[]
