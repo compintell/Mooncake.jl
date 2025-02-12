@@ -148,6 +148,7 @@ include(joinpath("rrules", "twice_precision.jl"))
 else
     include(joinpath("rrules", "array_legacy.jl"))
 end
+include(joinpath("rrules", "performance_patches.jl"))
 
 include("interface.jl")
 include("config.jl")

@@ -99,32 +99,40 @@ function randn_tangent_internal(
     return t
 end
 
-function increment!!(t::T, s::T) where {T<:FunctionWrapperTangent}
-    t.dobj_ref[] = increment!!(t.dobj_ref[], s.dobj_ref[])
+function increment_internal!!(c::IncCache, t::T, s::T) where {T<:FunctionWrapperTangent}
+    t.dobj_ref[] = increment_internal!!(c, t.dobj_ref[], s.dobj_ref[])
     return t
 end
 
-function _set_to_zero!!(c::IncCache, t::FunctionWrapperTangent)
-    t.dobj_ref[] = _set_to_zero!!(c, t.dobj_ref[])
+function set_to_zero_internal!!(c::IncCache, t::FunctionWrapperTangent)
+    t.dobj_ref[] = set_to_zero_internal!!(c, t.dobj_ref[])
     return t
 end
 
-function _add_to_primal(p::FunctionWrapper, t::FunctionWrapperTangent, unsafe::Bool)
-    return typeof(p)(_add_to_primal(p.obj[], t.dobj_ref[], unsafe))
+function _add_to_primal_internal(
+    c::MaybeCache, p::FunctionWrapper, t::FunctionWrapperTangent, unsafe::Bool
+)
+    return typeof(p)(_add_to_primal_internal(c, p.obj[], t.dobj_ref[], unsafe))
 end
 
-function _diff(p::P, q::P) where {R,A,P<:FunctionWrapper{R,A}}
-    return first(_function_wrapper_tangent(R, p.obj[], A, _diff(p.obj[], q.obj[])))
+function _diff_internal(c::MaybeCache, p::P, q::P) where {R,A,P<:FunctionWrapper{R,A}}
+    return first(
+        _function_wrapper_tangent(R, p.obj[], A, _diff_internal(c, p.obj[], q.obj[]))
+    )
 end
 
-_dot(t::T, s::T) where {T<:FunctionWrapperTangent} = _dot(t.dobj_ref[], s.dobj_ref[])
-
-function _scale(a::Float64, t::T) where {T<:FunctionWrapperTangent}
-    return T(t.fwds_wrapper, Ref(_scale(a, t.dobj_ref[])))
+function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:FunctionWrapperTangent}
+    return _dot_internal(c, t.dobj_ref[], s.dobj_ref[])
 end
 
-import .TestUtils: populate_address_map!, AddressMap
-function populate_address_map!(m::AddressMap, p::FunctionWrapper, t::FunctionWrapperTangent)
+function _scale_internal(c::MaybeCache, a::Float64, t::T) where {T<:FunctionWrapperTangent}
+    return T(t.fwds_wrapper, Ref(_scale_internal(c, a, t.dobj_ref[])))
+end
+
+import .TestUtils: populate_address_map_internal, AddressMap
+function populate_address_map_internal(
+    m::AddressMap, p::FunctionWrapper, t::FunctionWrapperTangent
+)
     k = pointer_from_objref(p)
     v = pointer_from_objref(t)
     haskey(m, k) && (@assert m[k] == v)
@@ -137,7 +145,11 @@ rdata_type(::Type{FunctionWrapperTangent}) = NoRData
 tangent_type(F::Type{<:FunctionWrapperTangent}, ::Type{NoRData}) = F
 tangent(f::FunctionWrapperTangent, ::NoRData) = f
 
-_verify_fdata_value(p::FunctionWrapper, t::FunctionWrapperTangent) = nothing
+function __verify_fdata_value(
+    ::IdDict{Any,Nothing}, p::FunctionWrapper, t::FunctionWrapperTangent
+)
+    return nothing
+end
 
 # Will: to the best of my knowledge, no one has ever actually worked with FunctionWrappers
 # before in the ChainRules ecosystem. Consequently, it shouldn't matter what type we use

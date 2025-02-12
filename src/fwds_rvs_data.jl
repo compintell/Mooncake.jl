@@ -8,7 +8,7 @@ struct NoFData end
 
 Base.copy(::NoFData) = NoFData()
 
-increment!!(::NoFData, ::NoFData) = NoFData()
+increment_internal!!(::IncCache, ::NoFData, ::NoFData) = NoFData()
 
 """
     FData(data::NamedTuple)
@@ -26,7 +26,9 @@ _copy(x::P) where {P<:FData} = P(_copy(x.data))
 
 fields_type(::Type{FData{T}}) where {T<:NamedTuple} = T
 
-increment!!(x::F, y::F) where {F<:FData} = F(tuple_map(increment!!, x.data, y.data))
+function increment_internal!!(c::IncCache, x::F, y::F) where {F<:FData}
+    return F(tuple_map((a, b) -> increment_internal!!(c, a, b), x.data, y.data))
+end
 
 """
     fdata_type(T)
@@ -301,16 +303,18 @@ condition, just that they rule out a variety of common problems.
 Put differently, we cannot prove that `f` is valid fdata, only that it is not obviously
 invalid.
 """
-function verify_fdata_value(p, f)::Nothing
+verify_fdata_value(p, f)::Nothing = _verify_fdata_value(IdDict{Any,Nothing}(), p, f)
+
+function _verify_fdata_value(c::IdDict{Any,Nothing}, p, f)::Nothing
     verify_fdata_type(_typeof(p), typeof(f))
-    return _verify_fdata_value(p, f)
+    return __verify_fdata_value(c, p, f)
 end
 
-_verify_fdata_value(::IEEEFloat, ::NoFData) = nothing
+__verify_fdata_value(::IdDict{Any,Nothing}, ::IEEEFloat, ::NoFData) = nothing
 
-_verify_fdata_value(::Ptr, ::Ptr) = nothing
+__verify_fdata_value(::IdDict{Any,Nothing}, ::Ptr, ::Ptr) = nothing
 
-function _verify_fdata_value(p::Array, f::Array)
+function __verify_fdata_value(c::IdDict{Any,Nothing}, p::Array, f::Array)
     if size(p) != size(f)
         throw(InvalidFDataException("p has size $(size(p)) but f has size $(size(f))"))
     end
@@ -323,8 +327,11 @@ function _verify_fdata_value(p::Array, f::Array)
     # correct separately.
     for n in eachindex(p)
         if isassigned(p, n)
+            _p = p[n]
+            ismutable(_p) && haskey(c, _p) && continue
+            ismutable(_p) && !haskey(c, _p) && setindex!(c, nothing, _p)
             t = f[n]
-            verify_fdata_value(p[n], fdata(t))
+            _verify_fdata_value(c, p[n], fdata(t))
             verify_rdata_value(p[n], rdata(t))
         end
     end
@@ -338,7 +345,7 @@ _get_fdata_field(f::Tuple, name) = getfield(f, name)
 _get_fdata_field(f::FData, name) = val(getfield(f.data, name))
 _get_fdata_field(f::MutableTangent, name) = fdata(val(getfield(f.fields, name)))
 
-function _verify_fdata_value(p, f)
+function __verify_fdata_value(c::IdDict{Any,Nothing}, p, f)
 
     # If f is a NoFData then there are no checks needed, because we have already verified
     # that NoFData is the correct type for fdata for p, and NoFData is a singleton type.
@@ -355,8 +362,10 @@ function _verify_fdata_value(p, f)
     for name in fieldnames(P)
         if isdefined(p, name)
             _p = getfield(p, name)
+            ismutable(_p) && haskey(c, _p) && continue
+            ismutable(_p) && !haskey(c, _p) && setindex!(c, nothing, _p)
             t = _get_fdata_field(f, name)
-            verify_fdata_value(_p, t)
+            _verify_fdata_value(c, _p, t)
             if f isa MutableTangent
                 verify_rdata_value(_p, rdata(val(getfield(f.fields, name))))
             end
@@ -375,7 +384,7 @@ struct NoRData end
 
 Base.copy(::NoRData) = NoRData()
 
-@inline increment!!(::NoRData, ::NoRData) = NoRData()
+@inline increment_internal!!(::IncCache, ::NoRData, ::NoRData) = NoRData()
 
 @inline increment_field!!(::NoRData, y, ::Val) = NoRData()
 
@@ -387,7 +396,9 @@ _copy(x::P) where {P<:RData} = P(_copy(x.data))
 
 fields_type(::Type{RData{T}}) where {T<:NamedTuple} = T
 
-@inline increment!!(x::RData{T}, y::RData{T}) where {T} = RData(increment!!(x.data, y.data))
+@inline function increment_internal!!(c::IncCache, x::RData{T}, y::RData{T}) where {T}
+    return RData(increment_internal!!(c, x.data, y.data))
+end
 
 @inline function increment_field!!(x::RData{T}, y, ::Val{f}) where {T,f}
     y isa NoRData && return x
@@ -950,7 +961,9 @@ end
 Increment the rdata component of tangent `t` by `r`, and return the updated tangent.
 Useful for implementation getfield-like rules for mutable structs, pointers, dicts, etc.
 """
-increment_rdata!!(t::T, r) where {T} = tangent(fdata(t), increment!!(rdata(t), r))::T
+function increment_rdata!!(t::T, r) where {T}
+    return tangent(fdata(t), increment_internal!!(NoCache(), rdata(t), r))::T
+end
 
 """
     zero_tangent(primal, fdata)

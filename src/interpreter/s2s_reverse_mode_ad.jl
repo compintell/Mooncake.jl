@@ -874,32 +874,34 @@ const RuleMC{A,R} = MistyClosure{OpaqueClosure{A,R}}
 # between differing varargs conventions.
 #
 
-struct Pullback{Tprimal,Tpb_args,Tpb_ret,isva}
+struct Pullback{Tprimal,Tpb_args,Tpb_ret,isva,nargs}
     pb_oc::Base.RefValue{RuleMC{Tpb_args,Tpb_ret}}
 end
 
-function Pullback(Tprimal, pb_oc::Tpb_oc, isva::Bool) where {A,R,Tpb_oc<:Ref{RuleMC{A,R}}}
-    return Pullback{Tprimal,A,R,isva}(pb_oc)
+function Pullback(sig, pb_oc::Ref{<:RuleMC{A,R}}, isva::Bool, nargs::Int) where {A,R}
+    return Pullback{sig,A,R,isva,nargs}(pb_oc)
 end
 
 _isva(::Pullback{<:Any,<:Any,<:Any,isva}) where {isva} = isva
-
-@inline function (pb::Pullback{sig})(dy) where {sig}
-    return __flatten_varargs(_isva(pb), pb.pb_oc[].oc(dy), nvargs(_isva(pb), sig)())
+_nargs(::Pullback{<:Any,<:Any,<:Any,<:Any,nargs}) where {nargs} = nargs
+function nvargs(pb::Pullback{sig}) where {sig}
+    return Val{_isva(pb) ? _nargs(pb) - length(sig.parameters) + 1 : 0}
 end
+
+@inline (pb::Pullback)(dy) = __flatten_varargs(_isva(pb), pb.pb_oc[].oc(dy), nvargs(pb)())
 
 struct DerivedRule{Tprimal,Tfwd_args,Tfwd_ret,Tpb_args,Tpb_ret,isva,Tnargs<:Val}
     fwds_oc::RuleMC{Tfwd_args,Tfwd_ret}
-    pb::Pullback{Tprimal,Tpb_args,Tpb_ret,isva}
+    pb_oc_ref::Base.RefValue{RuleMC{Tpb_args,Tpb_ret}}
     nargs::Tnargs
 end
 
 _isva(::DerivedRule{A,B,C,D,E,isva}) where {A,B,C,D,E,isva} = isva
 
 function DerivedRule(
-    Tprimal, fwds_oc::RuleMC{FA,FR}, pb::Pullback{<:Any,RA,RR}, isva::Bool, nargs::W
+    sig, fwds_oc::RuleMC{FA,FR}, pb_oc::Base.RefValue{RuleMC{RA,RR}}, isva::Bool, nargs::W
 ) where {FA,FR,RA,RR,W}
-    return DerivedRule{Tprimal,FA,FR,RA,RR,isva,W}(fwds_oc, pb, nargs)
+    return DerivedRule{sig,FA,FR,RA,RR,isva,W}(fwds_oc, pb_oc, nargs)
 end
 
 # Extends functionality defined for debug_mode.
@@ -914,9 +916,8 @@ _copy(::Nothing) = nothing
 function _copy(x::P) where {P<:DerivedRule}
     new_captures = _copy(x.fwds_oc.oc.captures)
     new_fwds_oc = replace_captures(x.fwds_oc, new_captures)
-    new_pb_oc_ref = Ref(replace_captures(x.pb.pb_oc[], new_captures))
-    new_pb = typeof(x.pb)(new_pb_oc_ref)
-    return P(new_fwds_oc, new_pb, x.nargs)
+    new_pb_oc_ref = Ref(replace_captures(x.pb_oc_ref[], new_captures))
+    return P(new_fwds_oc, new_pb_oc_ref, x.nargs)
 end
 
 _copy(x::Symbol) = x
@@ -931,9 +932,10 @@ _copy(x::Type) = x
 
 _copy(x) = copy(x)
 
-@inline function (fwds::DerivedRule{P,Q,S})(args::Vararg{CoDual,N}) where {P,Q,S,N}
+@inline function (fwds::DerivedRule{sig})(args::Vararg{CoDual,N}) where {sig,N}
     uf_args = __unflatten_codual_varargs(_isva(fwds), args, fwds.nargs)
-    return fwds.fwds_oc.oc(uf_args...)::CoDual, fwds.pb
+    pb = Pullback(sig, fwds.pb_oc_ref, _isva(fwds), N)
+    return fwds.fwds_oc.oc(uf_args...)::CoDual, pb
 end
 
 """
@@ -978,39 +980,6 @@ end
 function pullback_ret_type(primal_ir::IRCode)
     return Tuple{map(rdata_type ∘ tangent_type ∘ CC.widenconst, primal_ir.argtypes)...}
 end
-
-"""
-    rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where {C}
-
-Compute the concrete type of the rule that will be returned from `build_rrule`. This is
-important for performance in dynamic dispatch, and to ensure that recursion works
-properly.
-"""
-function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where {C}
-    if is_primitive(C, _get_sig(sig_or_mi))
-        rule = build_primitive_rrule(_get_sig(sig_or_mi))
-        return debug_mode ? DebugRRule{typeof(rule)} : typeof(rule)
-    end
-
-    ir, _ = lookup_ir(interp, sig_or_mi)
-    Treturn = Base.Experimental.compute_ir_rettype(ir)
-    isva, _ = is_vararg_and_sparam_names(sig_or_mi)
-
-    arg_types = map(CC.widenconst, ir.argtypes)
-    sig = Tuple{arg_types...}
-    fwd_args_type = Tuple{map(fcodual_type, arg_types)...}
-    fwd_return_type = forwards_ret_type(ir)
-    pb_args_type = Tuple{rdata_type(tangent_type(Treturn))}
-    pb_return_type = pullback_ret_type(ir)
-    nargs = Val{length(ir.argtypes)}
-
-    Tderived_rule = DerivedRule{
-        sig,fwd_args_type,fwd_return_type,pb_args_type,pb_return_type,isva,nargs
-    }
-    return debug_mode ? DebugRRule{Tderived_rule} : Tderived_rule
-end
-
-nvargs(isva, sig) = Val{isva ? length(sig.parameters[end].parameters) : 0}
 
 struct MooncakeRuleCompilationError <: Exception
     interp::MooncakeInterpreter
@@ -1125,8 +1094,7 @@ function build_rrule(
                 }
             end
 
-            pb = Pullback(sig, Ref(rvs_oc), dri.isva)
-            raw_rule = DerivedRule(sig, fwd_oc, pb, dri.isva, Val(num_args(dri.info)))
+            raw_rule = DerivedRule(sig, fwd_oc, Ref(rvs_oc), dri.isva, Val(nargs))
             rule = debug_mode ? DebugRRule(raw_rule) : raw_rule
             interp.oc_cache[oc_cache_key] = rule
             return rule
@@ -1760,6 +1728,50 @@ Note: the signature of the primal for which this is a rule is stored in the type
 reason to keep this around is for debugging -- it is very helpful to have this type visible
 in the stack trace when something goes wrong, as it allows you to trivially determine which
 bit of your code is the culprit.
+
+# Extended Help
+
+There are two main reasons why deferring the construction of a `DerivedRule` until we need
+to use it is crucial.
+
+The first is to do with recursion. Consider the following function:
+```julia
+f(x) = x > 0 ? f(x - 1) : x
+```
+If we generate the `IRCode` for this function, we will see something like the following:
+```julia
+julia> Base.code_ircode_by_type(Tuple{typeof(f), Float64})[1][1]
+1 1 ─ %1  = Base.lt_float(0.0, _2)::Bool
+  │   %2  = Base.or_int(%1, false)::Bool
+  └──       goto #6 if not %2
+  2 ─ %4  = Base.sub_float(_2, 1.0)::Float64
+  │   %5  = Base.lt_float(0.0, %4)::Bool
+  │   %6  = Base.or_int(%5, false)::Bool
+  └──       goto #4 if not %6
+  3 ─ %8  = Base.sub_float(%4, 1.0)::Float64
+  │   %9  = invoke Main.f(%8::Float64)::Float64
+  └──       goto #5
+  4 ─       goto #5
+  5 ┄ %12 = φ (#3 => %9, #4 => %4)::Float64
+  └──       return %12
+  6 ─       return _2
+```
+Suppose that we decide to construct a `DerivedRule` immediately whenever we find an
+`:invoke` statement in a rule that we're currently building a `DerivedRule` for.
+In the above example, we produce an infinite recursion when we attempt to produce a
+`DerivedRule` for %9, because it has the same signature as the call which generates this IR.
+By instead adopting a policy of constructing a `LazyDerivedRule` whenever we encounter an
+`:invoke` statement, we avoid this problem.
+
+The second reason that delaying the construction of a `DerivedRule`, is essential is that it
+ensures that we don't derive rules for method instances which aren't run. Suppose that
+function B contains code for which we can't derive a rule -- perhaps it contains an
+unsupported language feature like a `PhiCNode` or an `UpsilonNode`. Suppose that function A
+contains an `:invoke` which refers to function `B`, but that this call is on a branch which
+deals with error handling, and doesn't get run run unless something goes wrong. By deferring
+the derivation of the rule for B, we only ever attempt to derive it if we land on this
+error handling branch. Conversely, if we attempted to derive the rule for B when we derive
+the rule for A, we would be unable to complete the derivation of the rule for A.
 """
 mutable struct LazyDerivedRule{primal_sig,Trule}
     debug_mode::Bool
@@ -1785,4 +1797,35 @@ end
 @noinline function _build_rule!(rule::LazyDerivedRule{sig,Trule}, args) where {sig,Trule}
     rule.rule = build_rrule(get_interpreter(), rule.mi; debug_mode=rule.debug_mode)
     return rule.rule(args...)
+end
+
+"""
+    rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where {C}
+
+Compute the concrete type of the rule that will be returned from `build_rrule`. This is
+important for performance in dynamic dispatch, and to ensure that recursion works
+properly.
+"""
+function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where {C}
+    if is_primitive(C, _get_sig(sig_or_mi))
+        rule = build_primitive_rrule(_get_sig(sig_or_mi))
+        return debug_mode ? DebugRRule{typeof(rule)} : typeof(rule)
+    end
+
+    ir, _ = lookup_ir(interp, sig_or_mi)
+    Treturn = Base.Experimental.compute_ir_rettype(ir)
+    isva, _ = is_vararg_and_sparam_names(sig_or_mi)
+
+    arg_types = map(CC.widenconst, ir.argtypes)
+    sig = Tuple{arg_types...}
+    fwd_args_type = Tuple{map(fcodual_type, arg_types)...}
+    fwd_return_type = forwards_ret_type(ir)
+    pb_args_type = Tuple{rdata_type(tangent_type(Treturn))}
+    pb_return_type = pullback_ret_type(ir)
+    nargs = Val{length(ir.argtypes)}
+
+    Tderived_rule = DerivedRule{
+        sig,fwd_args_type,fwd_return_type,pb_args_type,pb_return_type,isva,nargs
+    }
+    return debug_mode ? DebugRRule{Tderived_rule} : Tderived_rule
 end

@@ -604,6 +604,12 @@ end
 
 highly_nested_tuple(x) = ((((x,),), x), x)
 
+# Regression test: https://github.com/compintell/Mooncake.jl/issues/450
+sig_argcount_mismatch(x) = vcat(x[1], x[2:2], x[3:3], x[4:4])
+
+# Regression test: https://github.com/compintell/Mooncake.jl/issues/473
+large_tuple_inference(x::NTuple{1_000,Float64}) = sum(cos, x)
+
 function generate_test_functions()
     return Any[
         (false, :allocs, nothing, const_tester),
@@ -830,6 +836,8 @@ function generate_test_functions()
         (false, :none, nothing, typevar_tester),
         (false, :allocs, nothing, inplace_invoke!, randn(1_024)),
         (false, :allocs, nothing, highly_nested_tuple, 5.0),
+        (false, :none, nothing, sig_argcount_mismatch, ones(4)),
+        (false, :allocs, (lb=2, ub=1500), large_tuple_inference, Tuple(zeros(1_000))),
     ]
 end
 

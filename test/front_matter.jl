@@ -70,7 +70,7 @@ using .TestUtils:
     test_rule,
     has_equal_data,
     AddressMap,
-    populate_address_map!,
+    populate_address_map_internal,
     populate_address_map,
     test_tangent
 
