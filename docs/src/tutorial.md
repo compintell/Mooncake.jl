@@ -106,7 +106,7 @@ prep = DI.prepare_gradient(g_tup, backend, (typical_x, typical_a, typical_b))
 DI.value_and_gradient(g_tup, prep, backend, (x, a, b))
 ```
 
-Another, perhaps more natural alternative, is to use the native API of Mooncake.jl.
+You can also use the native API of Mooncake.jl, discussed below.
 
 ### Beyond gradients
 

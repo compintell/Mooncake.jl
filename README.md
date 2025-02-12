@@ -4,7 +4,7 @@
 [![codecov](https://codecov.io/github/compintell/Mooncake.jl/graph/badge.svg?token=NUPWTB4IAP)](https://codecov.io/github/compintell/Mooncake.jl)
 [![Code Style: Blue](https://img.shields.io/badge/code%20style-blue-4495d1.svg)](https://github.com/JuliaDiff/BlueStyle)
 [![ColPrac: Contributor's Guide on Collaborative Practices for Community Packages](https://img.shields.io/badge/ColPrac-Contributor's%20Guide-blueviolet)](https://github.com/SciML/ColPrac)
-[![Dev docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://compintell.github.io/Mooncake.jl/dev)
+[![Stable docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://compintell.github.io/Mooncake.jl/stable)
 [![Aqua QA](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 
 The goal of the `Mooncake.jl` project is to produce a reverse-mode AD package which is written entirely in Julia, which improves over both `ReverseDiff.jl` and `Zygote.jl` in several ways, and is competitive with `Enzyme.jl`.
