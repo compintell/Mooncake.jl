@@ -34,7 +34,13 @@ function normalise!(ir::IRCode, spnames::Vector{Symbol})
         inst = lift_gc_preservation(inst)
         stmt(ir.stmts)[n] = inst
     end
+    ir = const_prop_gotoifnots!(ir)
+
+    # Dynamic error checks. Removing these would be like removing things from the test
+    # suite. i.e. do not remove unless you're quite sure that they're redundant.
     CC.verify_ir(ir)
+    verify_no_constant_gotoifnots(ir)
+
     return ir
 end
 
@@ -397,4 +403,76 @@ function lift_gc_preservation(inst)
     Meta.isexpr(inst, :gc_preserve_begin) && return Expr(:call, gc_preserve, inst.args...)
     Meta.isexpr(inst, :gc_preserve_end) && return nothing
     return inst
+end
+
+"""
+    const_prop_gotoifnots(ir::IRCode)
+
+Replace all occurences in `ir` of `goto %n if not true` in block `b` with a `goto b + 1`,
+and all occurences of `goto %n if not false` with `goto n`, and make the adjustments to
+`ir.cfg` that this necessitates.
+"""
+function const_prop_gotoifnots!(ir::IRCode)
+    stmts = stmt(ir.stmts)
+    cfg = ir.cfg
+    for (n, stmt) in enumerate(stmts)
+        if stmt isa GotoIfNot
+            if stmt.cond === true
+                stmts[n] = nothing
+
+                # Find the basic block associated to the current statement.
+                _block_ind = findfirst(i -> i > n, cfg.index)
+                block_ind = _block_ind === nothing ? length(cfg.blocks) : _block_ind
+
+                # Remove `stmt.dest` from this basic block's succesor list.
+                succs = cfg.blocks[block_ind].succs
+                deleteat!(succs, findfirst(n -> n == stmt.dest, succs))
+
+                # Remove this basic block from the predecessor list of `stmt.dest`.
+                preds = cfg.blocks[stmt.dest].preds
+                deleteat!(preds, findfirst(n -> n == block_ind, preds))
+            elseif stmt.cond === false
+                stmts[n] = GotoNode(stmt.dest)
+
+                # Find the basic block associated to the current statement.
+                _block_ind = findfirst(i -> i > n, cfg.index)
+                block_ind = _block_ind === nothing ? length(cfg.blocks) : _block_ind
+
+                # Remove next block from this basic block's succesor list.
+                succs = cfg.blocks[block_ind].succs
+                deleteat!(succs, findfirst(n -> n == block_ind + 1, succs))
+
+                # Remove this basic block from the predecessor list of next block.
+                preds = cfg.blocks[block_ind + 1].preds
+                deleteat!(preds, findfirst(n -> n == block_ind, preds))
+            end
+        end
+    end
+    return ir
+end
+
+"""
+    verify_no_constant_gotoifnots(ir::IRCode)
+
+Verify that we have successfully removed all instances of `goto %n if not true` and
+`goto %n if not false`, as these can be reduced to simpler nodes (namely, `GotoNode`s).
+Moreover, removing them tends to yield performance improvements by reducing the amount of
+information Mooncake must keep in its block stacks.
+
+This is essentially just testing functionality for `const_prop_constant_gotoifnots`. This is
+usually run each time a rule is compiled, as it is cheap, and because it is hard to
+construct a convincing set of test cases which, if passed at test-time, would indicate we
+were done.
+"""
+function verify_no_constant_gotoifnots(ir::IRCode)
+    for (n, stmt) in enumerate(stmt(ir.stmts))
+        if stmt isa GotoIfNot
+            if stmt.cond isa Bool
+                println("Constant GotoIfNot found at SSA $n in the following IRCode:")
+                dislay(ir)
+                println()
+                throw(error("Bad IR, see above."))
+            end
+        end
+    end
 end
