@@ -34,6 +34,7 @@ function normalise!(ir::IRCode, spnames::Vector{Symbol})
         inst = lift_gc_preservation(inst)
         stmt(ir.stmts)[n] = inst
     end
+    CC.verify_ir(ir)
     return ir
 end
 
