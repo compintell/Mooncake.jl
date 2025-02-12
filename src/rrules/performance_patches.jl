@@ -1,7 +1,6 @@
 # All of the code here purely exists to work around current performance limitations of
 # Mooncake.jl. In order to prevent this from getting out of hand, there are several
 # conventions to which we adhere when writing these rules:
-#
 # 1. for each rule, a comment is added containing a link to the issue or issues that are
 #   believed to describe the deficiencies of Mooncake.jl which cause the rule to be needed.
 # 2. the number of concrete types for which the signature is valid is finite, and all are
@@ -12,9 +11,9 @@
 #   `Diagonal{<:IEEEFloat}` is not, on the other hand, permissible. This is because we do
 #   not know what the type of its `diag` field is, and it _could_ be any `AbstractVector`.
 #   Something more precise like `Diagonal{P, Vector{P}} where {P<:IEEEFloat}` is fine.
-#   This convention ensures that we are confident the rules here confident a strict
-#   improvement over what we currently have, and prevents the addition of flakey rules which
-#   cause robustness or correctness problems.
+#   This convention ensures that we are confident the rules here provide a strict
+#   improvement over what we currently have, and helps to prevent the addition of flakey
+#   rules which cause robustness or correctness problems.
 
 # Performance issue: https://github.com/compintell/Mooncake.jl/issues/156
 @is_primitive(DefaultCtx, Tuple{typeof(sum),Array{<:IEEEFloat}})
