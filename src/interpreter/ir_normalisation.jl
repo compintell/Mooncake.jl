@@ -417,38 +417,54 @@ function const_prop_gotoifnots!(ir::IRCode)
     cfg = ir.cfg
     for (n, stmt) in enumerate(stmts)
         if stmt isa GotoIfNot
+            _block_ind = findfirst(i -> i > n, cfg.index)
+            block_ind = _block_ind === nothing ? length(cfg.blocks) : _block_ind
             if stmt.cond === true
                 stmts[n] = nothing
-
-                # Find the basic block associated to the current statement.
-                _block_ind = findfirst(i -> i > n, cfg.index)
-                block_ind = _block_ind === nothing ? length(cfg.blocks) : _block_ind
-
-                # Remove `stmt.dest` from this basic block's succesor list.
-                succs = cfg.blocks[block_ind].succs
-                deleteat!(succs, findfirst(n -> n == stmt.dest, succs))
-
-                # Remove this basic block from the predecessor list of `stmt.dest`.
-                preds = cfg.blocks[stmt.dest].preds
-                deleteat!(preds, findfirst(n -> n == block_ind, preds))
+                kill_edge!(ir, block_ind, stmt.dest)
             elseif stmt.cond === false
                 stmts[n] = GotoNode(stmt.dest)
-
-                # Find the basic block associated to the current statement.
-                _block_ind = findfirst(i -> i > n, cfg.index)
-                block_ind = _block_ind === nothing ? length(cfg.blocks) : _block_ind
-
-                # Remove next block from this basic block's succesor list.
-                succs = cfg.blocks[block_ind].succs
-                deleteat!(succs, findfirst(n -> n == block_ind + 1, succs))
-
-                # Remove this basic block from the predecessor list of next block.
-                preds = cfg.blocks[block_ind + 1].preds
-                deleteat!(preds, findfirst(n -> n == block_ind, preds))
+                kill_edge!(ir, block_ind, block_ind + 1)
             end
         end
     end
     return ir
+end
+
+"""
+    kill_edge!(ir::IRCode, from::Int, to::Int)
+
+Removes an edge in `ir` from `from` to `to`. See implementation for what this entails.
+
+Note: this is slightly different from `Core.Compiler.kill_edge!`, in that it also updates
+`PhiNode`s in the `to` block. Moreover, the available methods of `kill_edge!` differ
+between 1.10 and 1.11, so we need something which is stable across both.
+"""
+function kill_edge!(ir::IRCode, from::Int, to::Int)
+
+    # Remove the `to` block from the `from` blocks successor list.
+    succs = ir.cfg.blocks[from].succs
+    deleteat!(succs, findfirst(n -> n == to, succs))
+
+    # Remove this basic block from the predecessor list of next block.
+    to_blk = ir.cfg.blocks[to]
+    preds = to_blk.preds
+    deleteat!(preds, findfirst(n -> n == from, preds))
+
+    # Remove the `from` edge from any `PhiNode`s at the start of next blk.
+    stmts = stmt(ir.stmts)
+    for n in to_blk.stmts
+        stmt = stmts[n]
+        if stmt isa PhiNode
+            edge_index = findfirst(i::Int32 -> i == from, stmt.edges)
+            edge_index === nothing && continue
+            deleteat!(stmt.edges, edge_index)
+            deleteat!(stmt.values, edge_index)
+        else
+            break
+        end
+    end
+    return nothing
 end
 
 """
