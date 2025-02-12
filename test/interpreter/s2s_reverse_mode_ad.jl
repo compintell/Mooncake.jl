@@ -349,4 +349,16 @@ end
         stmts = Mooncake.stmt(ir.stmts)
         @test !any(x -> Meta.isexpr(x, :new) && x.args[1] <: Base.RefValue, stmts)
     end
+    @testset "build_rrule methods all accept kwargs" begin
+        args = (sin, 5.0)
+        sig = typeof(args)
+        rule_sig = build_rrule(sig; debug_mode=false, silence_debug_messages=true)
+        @test rule_sig == rrule!!
+        rule_args = build_rrule(args...; debug_mode=false, silence_debug_messages=true)
+        @test rule_args == rrule!!
+        rule_debug_sig = build_rrule(sig; debug_mode=true, silence_debug_messages=true)
+        @test rule_debug_sig isa Mooncake.DebugRRule
+        rule_debug_args = build_rrule(args...; debug_mode=true, silence_debug_messages=true)
+        @test rule_debug_args == rule_debug_sig
+    end
 end

@@ -1008,21 +1008,22 @@ function Base.showerror(io::IO, err::MooncakeRuleCompilationError)
 end
 
 """
-    build_rrule(args...; debug_mode=false)
+    build_rrule(args...; kwargs...)
 
-Helper method. Only uses static information from `args`.
+Helper method: equivalent to extracting the signature from `args` and calling
+`build_rrule(sig; kwargs...)`.
 """
-function build_rrule(args...; debug_mode=false)
+function build_rrule(args...; kwargs...)
     interp = get_interpreter()
-    return build_rrule(interp, _typeof(TestUtils.__get_primals(args)); debug_mode)
+    return build_rrule(interp, _typeof(TestUtils.__get_primals(args)); kwargs...)
 end
 
 """
-    build_rrule(sig::Type{<:Tuple})
+    build_rrule(sig::Type{<:Tuple}; kwargs...)
 
-Equivalent to `build_rrule(Mooncake.get_interpreter(), sig)`.
+Helper method: Equivalent to `build_rrule(Mooncake.get_interpreter(), sig; kwargs...)`.
 """
-build_rrule(sig::Type{<:Tuple}) = build_rrule(get_interpreter(), sig)
+build_rrule(sig::Type{<:Tuple}; kwargs...) = build_rrule(get_interpreter(), sig; kwargs...)
 
 const MOONCAKE_INFERENCE_LOCK = ReentrantLock()
 
