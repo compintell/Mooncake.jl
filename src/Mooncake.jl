@@ -147,9 +147,9 @@ include("public.jl")
 
 @public set_to_zero!!, increment!!
 @public get_interpreter
-@public zero_adjoint
+@public zero_adjoint, var"@zero_adjoint"
 @public is_primitive, build_primitive_rrule
-export @mooncake_overlay, @zero_adjoint, @from_rrule  # how to make macros public with the @public workaround??
+@public var"@mooncake_overlay", var"@from_rrule"
 @public Config
 
 # Public, exported

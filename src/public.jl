@@ -1,5 +1,5 @@
 macro public(ex)
-    if VERSION >= v"1.11.0-DEV.469"
+    @static if isdefined(Base, :ispublic)
         args = if ex isa Symbol
             (ex,)
         elseif Base.isexpr(ex, :tuple)
