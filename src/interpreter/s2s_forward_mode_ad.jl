@@ -112,8 +112,6 @@ function generate_dual_ir(
 
     CC.verify_ir(dual_ir_comp)
 
-    # return dual_ir_comp
-
     # Optimize dual IR
     dual_ir_opt = optimise_ir!(dual_ir_comp; do_inline)  # TODO: toggle
     return dual_ir_opt
