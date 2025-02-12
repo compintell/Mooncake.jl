@@ -218,6 +218,25 @@ end
 # atomic_pointerswap
 
 @intrinsic bitcast
+function frule!!(f::Dual{typeof(bitcast)}, t::Dual{Type{T}}, x) where {T}
+    if T <: IEEEFloat
+        msg =
+            "It is not permissible to bitcast to a differentiable type during AD, as " *
+            "this risks dropping tangents, and therefore risks silently giving the wrong " *
+            "answer. If this call to bitcast appears as part of the implementation of a " *
+            "differentiable function, you should write a rule for this function, or modify " *
+            "its implementation to avoid the bitcast."
+        throw(ArgumentError(msg))
+    end
+    _x = primal(x)
+    v = bitcast(T, _x)
+    if T <: Ptr && _x isa Ptr
+        dv = bitcast(Ptr{tangent_type(eltype(T))}, tangent(x))
+    else
+        dv = NoTangent()
+    end
+    return Dual(v, dv)
+end
 function rrule!!(f::CoDual{typeof(bitcast)}, t::CoDual{Type{T}}, x) where {T}
     if T <: IEEEFloat
         msg =

@@ -205,13 +205,13 @@ function modify_fwd_ad_stmts!(
         Mooncake.replace_call!(
             dual_ir, SSAValue(dual_ssa), Expr(:call, _dual, inc_args(dual_stmt).val)
         )
+        # return the result from the previous Dual conversion
+        new_return_inst = MyInstruction(ReturnNode(SSAValue(dual_ssa)))
+        CC.insert_node_here!(dual_ir, new_return_inst, REVERSE_AFFINITY)
     else
         # a ReturnNode without a val is an unreachable
         nothing
     end
-    # return the result from the previous Dual conversion
-    new_return_inst = MyInstruction(ReturnNode(SSAValue(dual_ssa)))
-    CC.insert_node_here!(dual_ir, new_return_inst, REVERSE_AFFINITY)
     return nothing
 end
 
@@ -308,6 +308,14 @@ function modify_fwd_ad_stmts!(
         nothing
     elseif isexpr(stmt, :code_coverage_effect)
         replace_call!(dual_ir, SSAValue(dual_ssa), nothing)
+    elseif isexpr(stmt, :throw_undef_if_not)
+        # args[1] is a Symbol, args[2] is the condition which must be primalized
+        primal_cond = Expr(:call, _primal, inc_args(stmt).args[2])
+        replace_call!(dual_ir, SSAValue(dual_ssa), primal_cond)
+        new_undef_inst = MyInstruction(
+            Expr(:throw_undef_if_not, stmt.args[1], SSAValue(dual_ssa))
+        )
+        CC.insert_node_here!(dual_ir, new_undef_inst, REVERSE_AFFINITY)
     else
         throw(
             ArgumentError(

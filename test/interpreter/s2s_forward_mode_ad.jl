@@ -2,10 +2,9 @@ include("../front_matter.jl")
 
 #=
 Failing cases:
-- 28: non-zero allocations
-- 33: terminator is not the last statement in the block
+- 28: excess allocations
 =#
-working_cases = vcat(1:32)
+working_cases = vcat(1:27, 29:38);
 
 @testset verbose = true "s2s_forward_mode_ad" begin
     test_cases = collect(enumerate(TestResources.generate_test_functions()))[working_cases]
