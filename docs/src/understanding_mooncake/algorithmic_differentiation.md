@@ -89,10 +89,10 @@ Formally, we say that a function ``f : \mathcal{X} \to \mathcal{Y}`` is differen
 \lim_{\text{d} h \to 0} \frac{\| f(x + \text{d} h) - f(x) + D f [x] (\text{d} h)  \|_\mathcal{Y}}{\| \text{d}h \|_\mathcal{X}} = 0,
 ```
 where ``\| \cdot \|_\mathcal{X}`` and ``\| \cdot \|_\mathcal{Y}`` are the norms associated to Hilbert spaces ``\mathcal{X}`` and ``\mathcal{Y}`` respectively.
+(The Frechet derivative does not depend on the choice of norms. All norms are _equivalent_ in finite dimensions, meaning they define the same topology and notion of convergence: if this equation is satisfied for one norm, it holds for all.)
+
 It is a good idea to consider what this looks like when ``\mathcal{X} = \mathcal{Y} = \RR`` and when ``\mathcal{X} = \mathcal{Y} = \RR^D``.
 It is sometimes helpful to refer to this definition to e.g. verify the correctness of the derivative of a function -- as with single-variable calculus, however, this is rare.
-
-
 
 _**Another aside: what does Forwards-Mode AD compute?**_
 
@@ -430,7 +430,7 @@ _**Aside: The choice of inner product**_
 Notice that the value of the gradient depends on how the inner product on ``\mathcal{X}`` is defined.
 Indeed, different choices of inner product result in different values of ``\nabla f``.
 Adjoints such as ``D f[x]^*`` are also inner product dependent.
-However, the actual derivative ``D f[x]`` is of course invariant -- it makes no reference to the inner product.
+However, the actual derivative ``D f[x]`` is of course invariant -- it does not depend on the inner product or norm.
 
 In practice, Mooncake uses the Euclidean inner product, extended in the "obvious way" to other composite data types (that is, as if everything is flattened and embedded in ``\mathbb{R}^N``), but we endeavour to keep the discussion general in order to make the role of the inner product explicit.
 
