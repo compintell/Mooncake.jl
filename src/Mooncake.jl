@@ -144,9 +144,9 @@ include("developer_tools.jl")
 
 # Public, not exported
 include("public.jl")
-@public value_and_pullback!!, prepare_pullback_cache
+@public Config, value_and_pullback!!, prepare_pullback_cache
 
 # Public, exported
-export Config, value_and_gradient!!, prepare_gradient_cache
+export value_and_gradient!!, prepare_gradient_cache
 
 end
