@@ -10,6 +10,7 @@ import Mooncake:
     rrule!!,
     @is_primitive,
     tangent_type,
+    primal,
     tangent,
     zero_tangent_internal,
     randn_tangent_internal,
@@ -25,7 +26,8 @@ import Mooncake:
     to_cr_tangent,
     increment_and_get_rdata!,
     MaybeCache,
-    IncCache
+    IncCache,
+    NoRData
 
 import Mooncake.TestUtils:
     populate_address_map_internal, AddressMap, __increment_should_allocate
