@@ -161,7 +161,6 @@ using Mooncake:
     rdata_type,
     rdata
 
-
 struct Shim end
 
 function test_opt(::Any, args...)
