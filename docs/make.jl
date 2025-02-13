@@ -34,6 +34,7 @@ makedocs(;
     pages=[
         "Mooncake.jl" => "index.md",
         "Tutorial" => "tutorial.md",
+        "Interface" => "interface.md",
         "Understanding Mooncake.jl" => [
             joinpath("understanding_mooncake", "introduction.md"),
             joinpath("understanding_mooncake", "algorithmic_differentiation.md"),
