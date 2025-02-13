@@ -410,21 +410,20 @@ end
 
 Replace all occurences in `ir` of `goto %n if not true` in block `b` with a `goto b + 1`,
 and all occurences of `goto %n if not false` with `goto n`, and make the adjustments to
-`ir.cfg` that this necessitates.
+`ir` that this necessitates.
 """
 function const_prop_gotoifnots!(ir::IRCode)
     stmts = stmt(ir.stmts)
-    cfg = ir.cfg
     for (n, stmt) in enumerate(stmts)
         if stmt isa GotoIfNot
-            _block_ind = findfirst(i -> i > n, cfg.index)
-            block_ind = _block_ind === nothing ? length(cfg.blocks) : _block_ind
+            _current_blk = findfirst(i -> i > n, ir.cfg.index)
+            current_blk = _current_blk === nothing ? length(ir.cfg.blocks) : _current_blk
             if stmt.cond === true
                 stmts[n] = nothing
-                remove_edge!(ir, block_ind, stmt.dest)
+                remove_edge!(ir, current_blk, stmt.dest)
             elseif stmt.cond === false
                 stmts[n] = GotoNode(stmt.dest)
-                remove_edge!(ir, block_ind, block_ind + 1)
+                remove_edge!(ir, current_blk, current_blk + 1)
             end
         end
     end
@@ -471,9 +470,9 @@ end
     verify_no_constant_gotoifnots(ir::IRCode)
 
 Verify that we have successfully removed all instances of `goto %n if not true` and
-`goto %n if not false`, as these can be reduced to simpler nodes (namely, `GotoNode`s).
-Moreover, removing them tends to yield performance improvements by reducing the amount of
-information Mooncake must keep in its block stacks.
+`goto %n if not false`, as these can be reduced to simpler nodes (namely, `GotoNode`s or
+"fallthrough"s). Moreover, removing them tends to yield performance improvements by reducing
+the amount of information Mooncake must keep in its block stacks.
 
 This is essentially just testing functionality for `const_prop_constant_gotoifnots`. This is
 usually run each time a rule is compiled, as it is cheap, and because it is hard to
