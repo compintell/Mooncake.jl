@@ -421,10 +421,10 @@ function const_prop_gotoifnots!(ir::IRCode)
             block_ind = _block_ind === nothing ? length(cfg.blocks) : _block_ind
             if stmt.cond === true
                 stmts[n] = nothing
-                kill_edge!(ir, block_ind, stmt.dest)
+                remove_edge!(ir, block_ind, stmt.dest)
             elseif stmt.cond === false
                 stmts[n] = GotoNode(stmt.dest)
-                kill_edge!(ir, block_ind, block_ind + 1)
+                remove_edge!(ir, block_ind, block_ind + 1)
             end
         end
     end
@@ -432,15 +432,15 @@ function const_prop_gotoifnots!(ir::IRCode)
 end
 
 """
-    kill_edge!(ir::IRCode, from::Int, to::Int)
+    remove_edge!(ir::IRCode, from::Int, to::Int)
 
 Removes an edge in `ir` from `from` to `to`. See implementation for what this entails.
 
 Note: this is slightly different from `Core.Compiler.kill_edge!`, in that it also updates
-`PhiNode`s in the `to` block. Moreover, the available methods of `kill_edge!` differ
+`PhiNode`s in the `to` block. Moreover, the available methods of `remove_edge!` differ
 between 1.10 and 1.11, so we need something which is stable across both.
 """
-function kill_edge!(ir::IRCode, from::Int, to::Int)
+function remove_edge!(ir::IRCode, from::Int, to::Int)
 
     # Remove the `to` block from the `from` blocks successor list.
     succs = ir.cfg.blocks[from].succs
