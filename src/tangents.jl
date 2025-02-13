@@ -335,13 +335,6 @@ tangent_type(::Type{Method}) = NoTangent
 
 tangent_type(::Type{<:Enum}) = NoTangent
 
-# Inferable version of `findall` for `Tuple`s.
-_findall(::Any, ::Int, ::Tuple{}) = ()
-function _findall(cond, ind::Int, x::Tuple)
-    tail = _findall(cond, ind + 1, x[2:end])
-    return cond(x[1]) ? (ind, tail...) : tail
-end
-
 function split_union_tuple_type(tangent_types)
 
     # Create first split.
@@ -393,7 +386,7 @@ isconcrete_or_union(p) = p isa Union || isconcretetype(p)
         T <: $T_all_notangent && return NoTangent
 
         # If exactly one of the field types is a Union, then split.
-        union_fields = _findall(Base.Fix2(isa, Union), 1, tangent_types)
+        union_fields = _findall(Base.Fix2(isa, Union), tangent_types)
         if length(union_fields) == 1 && all(tuple_map(isconcrete_or_union, tangent_types))
             return split_union_tuple_type(tangent_types)
         end
@@ -958,9 +951,14 @@ end
     return Expr(:tuple, exprs...)
 end
 
-# Optimal for homogeneously-typed Tuples with dynamic field choice.
+# Optimal for homogeneously-typed Tuples with dynamic field choice. Implementation using
+# `ifelse` chosen to ensure that the entire function comprises a single basic block. If
+# instead one wrote `n -> n == i ? v : x[n]` we would get one basic block per element of
+# `x`. This is fine for small-medium `x`, but causes a great deal of trouble for large `x`
+# (certainly for length > 1_000, but probably also for smaller sizes than that).
 function increment_field!!(x::Tuple, y, i::Int)
-    return ntuple(n -> n == i ? increment!!(x[n], y) : x[n], length(x))
+    v = increment!!(x[i], y)
+    return ntuple(n -> ifelse(n == i, v, x[n]), Val(length(x)))
 end
 
 @inline @generated function increment_field!!(x::T, y, ::Val{f}) where {T<:NamedTuple,f}

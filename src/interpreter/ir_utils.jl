@@ -173,7 +173,7 @@ function optimise_ir!(ir::IRCode; show_ir=false, do_inline=true)
     CC.verify_ir(ir)
     ir = __strip_coverage!(ir)
     ir = CC.compact!(ir)
-    local_interp = get_interpreter(; inline_primitives=true)
+    local_interp = CC.NativeInterpreter()
     mi = __get_toplevel_mi_from_ir(ir, @__MODULE__)
     ir = __infer_ir!(ir, local_interp, mi)
     if show_ir
@@ -332,7 +332,7 @@ function replace_uses_with!(stmt, def::Union{Argument,SSAValue}, val)
     elseif stmt isa GotoIfNot
         if stmt.cond == def
             @assert val isa Bool
-            return val === true ? nothing : GotoNode(stmt.dest)
+            return GotoIfNot(val, stmt.dest)
         else
             return stmt
         end
