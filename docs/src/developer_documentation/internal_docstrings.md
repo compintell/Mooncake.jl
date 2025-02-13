@@ -13,3 +13,8 @@ Public = false
 ```@docs
 Mooncake.IntrinsicsWrappers
 ```
+
+```@autodocs; canonical=false
+Modules = [Mooncake]
+Public = true
+```

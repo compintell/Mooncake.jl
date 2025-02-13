@@ -15,7 +15,7 @@ import Mooncake
 ## DifferentiationInterface.jl API
 
 DifferentiationInterface.jl (or DI for short) provides a common entry point for every automatic differentiation package in Julia.
-To specify that you want to use Mooncake.jl, just create the right "backend" object (with an optional [`Mooncake.Config`](@ref)):
+To specify that you want to use Mooncake.jl, just create the right "backend" object (with an optional [`Config`](@ref)):
 
 ```@example tuto
 backend = DI.AutoMooncake(; config=nothing)
