@@ -5,6 +5,10 @@ DocMeta.setdocmeta!(
     :DocTestSetup,
     quote
         using Random, Mooncake
+        using Mooncake: tangent_type, fdata_type, rdata_type
+        using Mooncake: zero_tangent
+        using Mooncake: NoTangent, NoFData, NoRData, MutableTangent, Tangent
+        using Mooncake: build_rrule, Config
     end;
     recursive=true,
 )

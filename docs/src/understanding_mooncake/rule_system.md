@@ -327,7 +327,7 @@ Now that you've seen what data structures are used to represent gradients, we ca
 ```@meta
 DocTestSetup = quote
     using Mooncake
-    using Mooncake: CoDual
+    using Mooncake: CoDual, NoFData, NoRData
     import Mooncake: rrule!!
 end
 ```
