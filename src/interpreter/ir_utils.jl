@@ -332,7 +332,7 @@ function replace_uses_with!(stmt, def::Union{Argument,SSAValue}, val)
     elseif stmt isa GotoIfNot
         if stmt.cond == def
             @assert val isa Bool
-            return val === true ? nothing : GotoNode(stmt.dest)
+            return GotoIfNot(val, stmt.dest)
         else
             return stmt
         end
