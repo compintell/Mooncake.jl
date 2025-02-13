@@ -10,11 +10,6 @@ Modules = [Mooncake]
 Public = false
 ```
 
-```@docs
+```@docs; canonical=false
 Mooncake.IntrinsicsWrappers
-```
-
-```@autodocs; canonical=false
-Modules = [Mooncake]
-Public = true
 ```

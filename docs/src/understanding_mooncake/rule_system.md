@@ -279,7 +279,7 @@ _**Representing Gradients**_
 This package assigns to each type in Julia a unique `tangent_type`, the purpose of which is to contain the gradients computed during reverse mode AD.
 The extended docstring for [`tangent_type`](@ref) provides the best introduction to the types which are used to represent tangents / gradients.
 
-```@docs
+```@docs; canonical=false
 Mooncake.tangent_type(P)
 ```
 
@@ -295,7 +295,7 @@ Conversely, the gradient w.r.t. a value type resides in another value type.
 
 The following docstring provides the best in-depth explanation.
 
-```@docs
+```@docs; canonical=false
 Mooncake.fdata_type(T)
 ```
 
