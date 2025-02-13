@@ -1,4 +1,4 @@
-using Documenter, DocumenterCitations, Mooncake
+using Documenter, DocumenterCitations, DocumenterInterLinks, Mooncake
 
 DocMeta.setdocmeta!(
     Mooncake,
@@ -7,6 +7,11 @@ DocMeta.setdocmeta!(
         using Random, Mooncake
     end;
     recursive=true,
+)
+
+links = InterLinks(
+    "ADTypes" => "https://sciml.github.io/ADTypes.jl/stable/",
+    "DifferentiationInterface" => "https://juliadiff.org/DifferentiationInterface.jl/DifferentiationInterface/stable/",
 )
 
 makedocs(;
@@ -19,9 +24,12 @@ makedocs(;
     ),
     modules=[Mooncake],
     checkdocs=:none,
-    plugins=[CitationBibliography(joinpath(@__DIR__, "src", "refs.bib"); style=:numeric)],
+    plugins=[
+        CitationBibliography(joinpath(@__DIR__, "src", "refs.bib"); style=:numeric), links
+    ],
     pages=[
         "Mooncake.jl" => "index.md",
+        "Tutorial" => "tutorial.md",
         "Understanding Mooncake.jl" => [
             joinpath("understanding_mooncake", "introduction.md"),
             joinpath("understanding_mooncake", "algorithmic_differentiation.md"),

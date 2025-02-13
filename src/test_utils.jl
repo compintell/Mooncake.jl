@@ -390,12 +390,14 @@ function test_rule_correctness(rng::AbstractRNG, x_x̄...; rule, unsafe_perturb:
     # Use finite differences to estimate vjps. Compute the estimate at a range of different
     # step sizes. We'll just require that one of them ends up being close to what AD gives.
     ẋ = map(_x -> randn_tangent(rng, _x), x)
-    fd_results = map([1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8]) do ε
+    ε_list = [1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8]
+    fd_results = Vector{Any}(undef, length(ε_list))
+    for (n, ε) in enumerate(ε_list)
         x′_l = _add_to_primal(x, _scale(ε, ẋ), unsafe_perturb)
         y′_l = x′_l[1](x′_l[2:end]...)
         x′_r = _add_to_primal(x, _scale(-ε, ẋ), unsafe_perturb)
         y′_r = x′_r[1](x′_r[2:end]...)
-        return (
+        fd_results[n] = (
             ẏ=_scale(1 / 2ε, _diff(y′_l, y′_r)),
             ẋ_post=map((_x′, _x_p) -> _scale(1 / 2ε, _diff(_x′, _x_p)), x′_l, x′_r),
         )
@@ -536,7 +538,7 @@ function test_rrule_interface(f_f̄, x_x̄...; rule)
     @test all(map((a, b) -> _typeof(a) == _typeof(rdata(b)), x̄_new, x̄))
 end
 
-function __forwards_and_backwards(rule, x_x̄::Vararg{Any,N}) where {N}
+@noinline function __forwards_and_backwards(rule::R, x_x̄::Vararg{Any,N}) where {R,N}
     out, pb!! = rule(x_x̄...)
     return pb!!(Mooncake.zero_rdata(primal(out)))
 end
@@ -582,7 +584,8 @@ function test_rrule_performance(
         f_f̄_fwds = to_fwds(f_f̄)
         x_x̄_fwds = map(to_fwds, x_x̄)
         __forwards_and_backwards(rule, f_f̄_fwds, x_x̄_fwds...)
-        @test (@allocations __forwards_and_backwards(rule, f_f̄_fwds, x_x̄_fwds...)) == 0
+        count_allocs(__forwards_and_backwards, rule, f_f̄_fwds, x_x̄_fwds...)
+        @test count_allocs(__forwards_and_backwards, rule, f_f̄_fwds, x_x̄_fwds...) == 0
     end
 end
 
@@ -657,8 +660,6 @@ function test_rule(
     debug_mode::Bool=false,
     unsafe_perturb::Bool=false,
 )
-    @nospecialize rng x
-
     # Construct the rule.
     sig = _typeof(__get_primals(x))
     rule = Mooncake.build_rrule(interp, sig; debug_mode)

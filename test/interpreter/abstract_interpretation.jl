@@ -69,5 +69,12 @@ contains_primitive_behind_call(x) = @inline contains_primitive(x)
             invoke_line = findfirst(x -> Meta.isexpr(x, :invoke), stmt(ad_ir.stmts))
             @test stmt(ad_ir.stmts)[invoke_line].args[2] == GlobalRef(Main, :a_primitive)
         end
+
+        # Regression test for https://github.com/compintell/Mooncake.jl/issues/238
+        @testset "238" begin
+            f = Base.Fix1(view, [5.0, 4.0])
+            fargs = (Base._mapreduce_dim, f, vcat, Float64[], [1:1, 2:2], :)
+            @test Base.code_typed_by_type(typeof(fargs))[1][2] == Vector{Float64}
+        end
     end
 end
