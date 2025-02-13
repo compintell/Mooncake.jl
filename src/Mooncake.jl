@@ -144,23 +144,11 @@ include("developer_tools.jl")
 # Public, not exported
 
 include("public.jl")
-
-@public set_to_zero!!, increment!!
-@public get_interpreter
-@public zero_adjoint, var"@zero_adjoint"
-@public is_primitive, build_primitive_rrule
-@public var"@mooncake_overlay", var"@from_rrule"
-@public Config
+@public CoDual
 
 # Public, exported
 
-export CoDual, codual_type, zero_codual
-export primal
-export Tangent, MutableTangent, PossiblyUninitTangent, NoTangent
-export tangent_type, tangent, zero_tangent
-export NoFData, fdata_type, fdata
-export NoRData, rdata_type, rdata
-export rrule!!, build_rrule
+export Config
 export value_and_pullback!!, prepare_pullback_cache
 export value_and_gradient!!, prepare_gradient_cache
 

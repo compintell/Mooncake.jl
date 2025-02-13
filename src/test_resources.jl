@@ -18,7 +18,9 @@ using ..Mooncake:
     ircode,
     @is_primitive,
     MinimalCtx,
-    val
+    val,
+    primal,
+    tangent
 
 using DiffTests, LinearAlgebra, Random, Setfield
 

@@ -102,7 +102,15 @@ using Random, Mooncake, Test, InteractiveUtils
 using Mooncake:
     CoDual,
     NoTangent,
+    PossiblyUninitTangent,
+    Tangent,
+    MutableTangent,
     rrule!!,
+    build_rrule,
+    tangent_type,
+    zero_tangent,
+    primal,
+    tangent,
     is_init,
     zero_codual,
     DefaultCtx,
@@ -145,7 +153,14 @@ using Mooncake:
     _scale,
     _add_to_primal,
     _diff,
-    _dot
+    _dot,
+    NoFData,
+    fdata_type,
+    fdata,
+    NoRData,
+    rdata_type,
+    rdata
+
 
 struct Shim end
 
