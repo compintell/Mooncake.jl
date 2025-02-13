@@ -442,11 +442,11 @@ between 1.10 and 1.11, so we need something which is stable across both.
 """
 function remove_edge!(ir::IRCode, from::Int, to::Int)
 
-    # Remove the `to` block from the `from` blocks successor list.
+    # Remove the `to` block from the `from` block's successor list.
     succs = ir.cfg.blocks[from].succs
     deleteat!(succs, findfirst(n -> n == to, succs))
 
-    # Remove this basic block from the predecessor list of next block.
+    # Remove the `from` block from the `to` block's predecessor list.
     to_blk = ir.cfg.blocks[to]
     preds = to_blk.preds
     deleteat!(preds, findfirst(n -> n == from, preds))
