@@ -89,6 +89,10 @@
     ]
         TestUtils.test_tangent_type(primal_type, expected_tangent_type)
     end
+    @testset "type-only tests" begin
+        TestUtils.test_tangent_type(Cstring, NoTangent)
+        TestUtils.test_tangent_type(Cwstring, NoTangent)
+    end
 
     @testset "$(typeof(data))" for (interface_only, data...) in
                                    Mooncake.tangent_test_cases()

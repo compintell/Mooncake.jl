@@ -297,6 +297,10 @@ tangent_type(::Type{Char}) = NoTangent
 
 tangent_type(::Type{Symbol}) = NoTangent
 
+tangent_type(::Type{Cstring}) = NoTangent
+
+tangent_type(::Type{Cwstring}) = NoTangent
+
 tangent_type(::Type{Module}) = NoTangent
 
 tangent_type(::Type{Nothing}) = NoTangent
