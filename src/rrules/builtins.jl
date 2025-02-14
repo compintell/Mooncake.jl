@@ -746,6 +746,15 @@ end
 
 @inline tuple_pullback(dy::NoRData) = NoRData()
 
+function frule!!(f::Dual{typeof(tuple)}, args::Vararg{Any,N}) where {N}
+    primal_output = tuple(map(primal, args)...)
+    if tangent_type(_typeof(primal_output)) == NoTangent
+        return zero_dual(primal_output)
+    else
+        return Dual(primal_output, tuple(map(tangent, args)...))
+    end
+end
+
 function rrule!!(f::CoDual{typeof(tuple)}, args::Vararg{Any,N}) where {N}
     primal_output = tuple(map(primal, args)...)
     if tangent_type(_typeof(primal_output)) == NoTangent
