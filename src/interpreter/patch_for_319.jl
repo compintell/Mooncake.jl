@@ -63,6 +63,8 @@ function core_iterate(f, iterator)
     end
 end
 
+@static if VERSION >= v"1.11"
+
 # Apply fix from Jules Merck.
 function patched_populate_def_use_map!(tpdum::CC.TwoPhaseDefUseMap, scanner::CC.BBScanner)
     CC.scan!(scanner, false) do inst::CC.Instruction, lstmt::Int, bb::Int
@@ -415,3 +417,5 @@ end
 #     stmt_inconsistent && push!(inconsistent, inst.idx)
 #     return stmt_inconsistent
 # end
+
+end
