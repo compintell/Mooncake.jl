@@ -65,7 +65,7 @@ end
 
 @static if VERSION >= v"1.11"
 
-    # Apply fix from Jules Merck.
+    # Original contains bugs. Apply patch from Jules Merck.
     function patched_populate_def_use_map!(
         tpdum::CC.TwoPhaseDefUseMap, scanner::CC.BBScanner
     )
@@ -247,6 +247,7 @@ end
         sv::CC.PostOptAnalysisState
     end
 
+    # Original contains bugs.
     function ((; sv)::ScanStmtPatch)(inst::CC.Instruction, lstmt::Int, bb::Int)
         stmt = inst[:stmt]
 
@@ -258,7 +259,7 @@ end
 
         CC.scan_non_dataflow_flags!(inst, sv)
 
-        stmt_inconsistent = CC.scan_inconsistency!(inst, sv)
+        stmt_inconsistent = patched_scan_inconsistency!(inst, sv)
 
         if stmt_inconsistent
             if !CC.has_flag(inst[:flag], CC.IR_FLAG_NOTHROW)
@@ -312,6 +313,68 @@ end
         # end
 
         return true
+    end
+
+    # Original contains bug.
+    function patched_scan_inconsistency!(inst::CC.Instruction, sv::CC.PostOptAnalysisState)
+        flag = inst[:flag]
+        stmt_inconsistent = !CC.has_flag(flag, CC.IR_FLAG_CONSISTENT)
+        stmt = inst[:stmt]
+        # Special case: For `getfield` and memory operations, we allow inconsistency of the :boundscheck argument
+        (; inconsistent, tpdum) = sv
+        if CC.iscall_with_boundscheck(stmt, sv)
+            for i = 1:length(stmt.args) # explore all args -- don't assume boundscheck is not an SSA
+                val = stmt.args[i]
+                if isa(val, SSAValue)
+                    stmt_inconsistent |= CC.in(val.id, inconsistent)
+                    CC.count!(tpdum, val)
+                end
+            end
+        else
+            core_iterate(CC.userefs(stmt)) do ur
+                val = CC.getindex(ur)
+                if isa(val, SSAValue)
+                    stmt_inconsistent |= CC.in(val.id, inconsistent)
+                    CC.count!(tpdum, val)
+                end
+            end
+        end
+        stmt_inconsistent && CC.push!(inconsistent, inst.idx)
+        return stmt_inconsistent
+    end
+
+    # Calls check_inconsistentcy! -- see below.
+    function CC.ipo_dataflow_analysis!(
+        interp::BugPatchInterpreter, ir::CC.IRCode, result::CC.InferenceResult
+    )
+        if !CC.is_ipo_dataflow_analysis_profitable(result.ipo_effects)
+            return false
+        end
+
+        @assert CC.isempty(ir.new_nodes) "IRCode should be compacted before post-opt analysis"
+
+        sv = CC.PostOptAnalysisState(result, ir)
+        scanner = CC.BBScanner(ir)
+
+        completed_scan = CC.scan!(ScanStmtPatch(sv), scanner, true)
+
+        if !completed_scan
+            if sv.all_retpaths_consistent
+                patched_check_inconsistentcy!(sv, scanner)
+            else
+                # No longer any dataflow concerns, just scan the flags
+                CC.scan!(scanner, false) do inst::CC.Instruction, lstmt::Int, bb::Int
+                    CC.scan_non_dataflow_flags!(inst, sv)
+                    # bail out early if there are no possibilities to refine the effects
+                    if !CC.any_refinable(sv)
+                        return nothing
+                    end
+                    return true
+                end
+            end
+        end
+
+        return CC.refine_effects!(interp, sv)
     end
 
     # Calls populate_def_use_map! -- see above.
@@ -368,68 +431,4 @@ end
             CC.append!(stmt_ip, tpdum[idx])
         end
     end
-
-    # Calls check_inconsistentcy! -- see above.
-    function CC.ipo_dataflow_analysis!(
-        interp::BugPatchInterpreter, ir::CC.IRCode, result::CC.InferenceResult
-    )
-        if !CC.is_ipo_dataflow_analysis_profitable(result.ipo_effects)
-            return false
-        end
-
-        @assert CC.isempty(ir.new_nodes) "IRCode should be compacted before post-opt analysis"
-
-        sv = CC.PostOptAnalysisState(result, ir)
-        scanner = CC.BBScanner(ir)
-
-        completed_scan = CC.scan!(ScanStmtPatch(sv), scanner, true)
-
-        if !completed_scan
-            if sv.all_retpaths_consistent
-                patched_check_inconsistentcy!(sv, scanner)
-            else
-                # No longer any dataflow concerns, just scan the flags
-                CC.scan!(scanner, false) do inst::CC.Instruction, lstmt::Int, bb::Int
-                    CC.scan_non_dataflow_flags!(inst, sv)
-                    # bail out early if there are no possibilities to refine the effects
-                    if !CC.any_refinable(sv)
-                        return nothing
-                    end
-                    return true
-                end
-            end
-        end
-
-        return CC.refine_effects!(interp, sv)
-    end
-
-    # # Other Fixes.
-    # @eval CC function scan_inconsistency!(inst::Instruction, sv::PostOptAnalysisState)
-    #     flag = inst[:flag]
-    #     stmt_inconsistent = !has_flag(flag, IR_FLAG_CONSISTENT)
-    #     stmt = inst[:stmt]
-    #     # Special case: For `getfield` and memory operations, we allow inconsistency of the :boundscheck argument
-    #     (; inconsistent, tpdum) = sv
-    #     # Main.@show stmt
-    #     if iscall_with_boundscheck(stmt, sv)
-    #         for i = 1:length(stmt.args) # explore all args -- don't assume boundscheck is not an SSA
-    #             val = stmt.args[i]
-    #             if isa(val, SSAValue)
-    #                 stmt_inconsistent |= val.id in inconsistent
-    #                 count!(tpdum, val)
-    #             end
-    #         end
-    #     else
-    #         for ur in userefs(stmt)
-    #             val = ur[]
-    #             if isa(val, SSAValue)
-    #                 stmt_inconsistent |= val.id in inconsistent
-    #                 count!(tpdum, val)
-    #             end
-    #         end
-    #     end
-    #     stmt_inconsistent && push!(inconsistent, inst.idx)
-    #     return stmt_inconsistent
-    # end
-
 end
