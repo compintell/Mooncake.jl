@@ -321,69 +321,69 @@ function CC.ipo_dataflow_analysis!(
     return CC.refine_effects!(interp, sv)
 end
 
-# Other Fixes.
+# # Other Fixes.
 
-@eval CC function ((; sv)::ScanStmt)(inst::Instruction, lstmt::Int, bb::Int)
+# @eval CC function ((; sv)::ScanStmt)(inst::Instruction, lstmt::Int, bb::Int)
 
-    stmt = inst[:stmt]
+#     stmt = inst[:stmt]
 
-    if isa(stmt, EnterNode)
-        # try/catch not yet modeled
-        give_up_refinements!(sv)
-        return true # don't bail out early -- replaces `nothing` with `true` 
-    end
+#     if isa(stmt, EnterNode)
+#         # try/catch not yet modeled
+#         give_up_refinements!(sv)
+#         return true # don't bail out early -- replaces `nothing` with `true` 
+#     end
 
-    scan_non_dataflow_flags!(inst, sv)
+#     scan_non_dataflow_flags!(inst, sv)
 
-    stmt_inconsistent = scan_inconsistency!(inst, sv)
+#     stmt_inconsistent = scan_inconsistency!(inst, sv)
 
-    if stmt_inconsistent
-        if !has_flag(inst[:flag], IR_FLAG_NOTHROW)
-            # Taint :consistent if this statement may raise since :consistent requires
-            # consistent termination. TODO: Separate :consistent_return and :consistent_termination from :consistent.
-            sv.all_retpaths_consistent = false
-        end
-        if inst.idx == lstmt
-            if isa(stmt, ReturnNode) && isdefined(stmt, :val)
-                sv.all_retpaths_consistent = false
-            elseif isa(stmt, GotoIfNot)
-                # Conditional Branch with inconsistent condition.
-                # If we do not know this function terminates, taint consistency, now,
-                # :consistent requires consistent termination. TODO: Just look at the
-                # inconsistent region.
-                if !sv.result.ipo_effects.terminates
-                    sv.all_retpaths_consistent = false
-                elseif visit_conditional_successors(sv.lazypostdomtree, sv.ir, bb) do succ::Int
-                        return any_stmt_may_throw(sv.ir, succ)
-                    end
-                    # check if this `GotoIfNot` leads to conditional throws, which taints consistency
-                    sv.all_retpaths_consistent = false
-                else
-                    (; cfg, domtree) = get!(sv.lazyagdomtree)
-                    for succ in iterated_dominance_frontier(cfg, BlockLiveness(sv.ir.cfg.blocks[bb].succs, nothing), domtree)
-                        if succ == length(cfg.blocks)
-                            # Phi node in the virtual exit -> We have a conditional
-                            # return. TODO: Check if all the retvals are egal.
-                            sv.all_retpaths_consistent = false
-                        else
-                            visit_bb_phis!(sv.ir, succ) do phiidx::Int
-                                push!(sv.inconsistent, phiidx)
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
+#     if stmt_inconsistent
+#         if !has_flag(inst[:flag], IR_FLAG_NOTHROW)
+#             # Taint :consistent if this statement may raise since :consistent requires
+#             # consistent termination. TODO: Separate :consistent_return and :consistent_termination from :consistent.
+#             sv.all_retpaths_consistent = false
+#         end
+#         if inst.idx == lstmt
+#             if isa(stmt, ReturnNode) && isdefined(stmt, :val)
+#                 sv.all_retpaths_consistent = false
+#             elseif isa(stmt, GotoIfNot)
+#                 # Conditional Branch with inconsistent condition.
+#                 # If we do not know this function terminates, taint consistency, now,
+#                 # :consistent requires consistent termination. TODO: Just look at the
+#                 # inconsistent region.
+#                 if !sv.result.ipo_effects.terminates
+#                     sv.all_retpaths_consistent = false
+#                 elseif visit_conditional_successors(sv.lazypostdomtree, sv.ir, bb) do succ::Int
+#                         return any_stmt_may_throw(sv.ir, succ)
+#                     end
+#                     # check if this `GotoIfNot` leads to conditional throws, which taints consistency
+#                     sv.all_retpaths_consistent = false
+#                 else
+#                     (; cfg, domtree) = get!(sv.lazyagdomtree)
+#                     for succ in iterated_dominance_frontier(cfg, BlockLiveness(sv.ir.cfg.blocks[bb].succs, nothing), domtree)
+#                         if succ == length(cfg.blocks)
+#                             # Phi node in the virtual exit -> We have a conditional
+#                             # return. TODO: Check if all the retvals are egal.
+#                             sv.all_retpaths_consistent = false
+#                         else
+#                             visit_bb_phis!(sv.ir, succ) do phiidx::Int
+#                                 push!(sv.inconsistent, phiidx)
+#                             end
+#                         end
+#                     end
+#                 end
+#             end
+#         end
+#     end
 
-    # Do not bail out early, as this can cause tpdum counts to be off.
-    # # bail out early if there are no possibilities to refine the effects
-    # if !any_refinable(sv)
-    #     return nothing
-    # end
+#     # Do not bail out early, as this can cause tpdum counts to be off.
+#     # # bail out early if there are no possibilities to refine the effects
+#     # if !any_refinable(sv)
+#     #     return nothing
+#     # end
 
-    return true
-end
+#     return true
+# end
 
 # @eval CC function scan_inconsistency!(inst::Instruction, sv::PostOptAnalysisState)
 #     flag = CC.getindex(inst, :flag)
