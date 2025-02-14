@@ -36,7 +36,8 @@ end
             ((x...) -> x[1] + x[2], randn(Float64), randn(Float64)),
             (sum, randn(10)),
         ]
-            rule = build_rrule(fargs...)
+            kwargs = (debug_mode=false, silence_debug_messages=true)
+            rule = build_rrule(fargs...; kwargs...)
             f, args... = fargs
             v, dfargs = value_and_gradient!!(rule, fargs...)
             @test v == f(args...)
@@ -44,7 +45,7 @@ end
                 @test tangent_type(typeof(arg)) == typeof(darg)
             end
 
-            cache = Mooncake.prepare_gradient_cache(fargs...)
+            cache = Mooncake.prepare_gradient_cache(fargs...; kwargs...)
             _v, _dfargs = value_and_gradient!!(cache, fargs...)
             @test _v == v
             for (arg, darg) in zip(fargs, _dfargs)
@@ -74,7 +75,8 @@ end
             (randn(), sin, randn(Float64)),
             (randn(), sum, randn(Float64)),
         ]
-            rule = build_rrule(fargs...)
+            kwargs = (debug_mode=false, silence_debug_messages=true)
+            rule = build_rrule(fargs...; kwargs...)
             f, args... = fargs
             v, dfargs = value_and_pullback!!(rule, ȳ, fargs...)
             @test v == f(args...)
@@ -82,7 +84,7 @@ end
                 @test tangent_type(typeof(arg)) == typeof(darg)
             end
 
-            cache = Mooncake.prepare_pullback_cache(fargs...)
+            cache = Mooncake.prepare_pullback_cache(fargs...; kwargs...)
             _v, _dfargs = value_and_pullback!!(cache, ȳ, fargs...)
             @test _v == v
             for (arg, darg) in zip(fargs, _dfargs)
