@@ -313,9 +313,9 @@ function patched_check_inconsistentcy!(sv::CC.PostOptAnalysisState, scanner::CC.
     patched_populate_def_use_map!(tpdum, scanner)
 
     stmt_ip = CC.BitSetBoundedMinPrioritySet(length(ir.stmts))
-    for def in inconsistent
-        for use in tpdum[def]
-            if !(use in inconsistent)
+    core_iterate(inconsistent) do def
+        core_iterate(CC.getindex(tpdum, def)) do use
+            if !CC.in(use, inconsistent)
                 CC.push!(inconsistent, use)
                 CC.append!(stmt_ip, tpdum[use])
             end
