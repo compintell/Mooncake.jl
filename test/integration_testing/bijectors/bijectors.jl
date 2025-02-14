@@ -93,9 +93,6 @@ end
             end,
             randn(StableRNG(23), 7);
             name="PlanarLayer7",
-            # TODO(mhauru) Broken on v1.11 due to
-            # https://github.com/compintell/Mooncake.jl/issues/319
-            broken=(VERSION >= v"1.11"),
         ),
         TestCase(
             function (x)
