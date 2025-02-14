@@ -323,7 +323,7 @@ end
         # Special case: For `getfield` and memory operations, we allow inconsistency of the :boundscheck argument
         (; inconsistent, tpdum) = sv
         if CC.iscall_with_boundscheck(stmt, sv)
-            for i = 1:length(stmt.args) # explore all args -- don't assume boundscheck is not an SSA
+            for i in 1:length(stmt.args) # explore all args -- don't assume boundscheck is not an SSA
                 val = stmt.args[i]
                 if isa(val, SSAValue)
                     stmt_inconsistent |= CC.in(val.id, inconsistent)
