@@ -828,15 +828,14 @@ function test_rule_and_type_interactions(rng::AbstractRNG, p::P) where {P}
     end
 end
 
-function is_foldable(effects::CC.Effects)
+function is_foldable(f, types)
+    effects = Base.infer_effects(f, types)
     tmp = VERSION > v"1.11" ? effects.noub == CC.ALWAYS_TRUE && effects.nortcall : true
     return effects.consistent == CC.ALWAYS_TRUE &&
            effects.effect_free == CC.ALWAYS_TRUE &&
            effects.terminates &&
            tmp
 end
-
-is_foldable(f, types) = is_foldable(Base.infer_effects(f, types))
 
 """
     test_tangent_type(primal_type, expected_tangent_type)
