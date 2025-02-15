@@ -464,7 +464,9 @@ Internally, `zero_tangent` calls `zero_tangent_internal`, which handles differen
 handles both circular references and aliasing correctly.
 """
 zero_tangent(x)
-zero_tangent(x::P) where {P} = zero_tangent_internal(x, isbitstype(P) ? NoCache() : IdDict())
+function zero_tangent(x::P) where {P}
+    return zero_tangent_internal(x, isbitstype(P) ? NoCache() : IdDict())
+end
 
 const StackDict = Union{NoCache,IdDict}
 
