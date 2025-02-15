@@ -49,7 +49,7 @@ __verify_fdata_value(::IdDict{Any,Nothing}, ::P, ::P) where {P<:TWP} = nothing
 
 _verify_rdata_value(::P, ::P) where {P<:TWP} = nothing
 
-tangent_type(::Type{NoFData}, T::Type{<:TWP}) = T
+@foldable tangent_type(::Type{NoFData}, T::Type{<:TWP}) = T
 
 tangent(::NoFData, t::TWP) = t
 

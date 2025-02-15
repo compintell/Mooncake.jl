@@ -22,7 +22,7 @@ function _construct_types(R, A)
     return fwd_oc_type, rvs_oc_type, fwd_sig, rvs_sig
 end
 
-function tangent_type(::Type{FunctionWrapper{R,A}}) where {R,A<:Tuple}
+@foldable function tangent_type(::Type{FunctionWrapper{R,A}}) where {R,A<:Tuple}
     return FunctionWrapperTangent{_construct_types(R, A)[1]}
 end
 
@@ -142,7 +142,7 @@ end
 
 fdata_type(T::Type{<:FunctionWrapperTangent}) = T
 rdata_type(::Type{FunctionWrapperTangent}) = NoRData
-tangent_type(F::Type{<:FunctionWrapperTangent}, ::Type{NoRData}) = F
+@foldable tangent_type(F::Type{<:FunctionWrapperTangent}, ::Type{NoRData}) = F
 tangent(f::FunctionWrapperTangent, ::NoRData) = f
 
 function __verify_fdata_value(

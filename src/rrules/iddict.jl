@@ -106,7 +106,7 @@ rdata(t::IdDict) = NoRData()
 
 __verify_fdata_value(::IdDict{Any,Nothing}, p::IdDict, f::IdDict) = nothing
 
-tangent_type(::Type{T}, ::Type{NoRData}) where {T<:IdDict} = T
+@foldable tangent_type(::Type{T}, ::Type{NoRData}) where {T<:IdDict} = T
 tangent(f::IdDict, ::NoRData) = f
 
 # All of the rules in here are provided in order to avoid nasty `:ccall`s, and to support

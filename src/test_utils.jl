@@ -1236,6 +1236,7 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
 
     # Compute the tangent type associated to `F` and `R`, and check it is equal to `T`.
     @test tangent_type(F, R) == T
+    @test is_foldable(tangent_type, (Type{F}, Type{R}))
 
     # Check that combining f and r yields a tangent of the correct type and value.
     t_combined = Mooncake.tangent(f, r)

@@ -132,7 +132,7 @@ end
 
 # FData / RData Interface Implementation
 
-tangent_type(::Type{F}, ::Type{NoRData}) where {F<:Memory} = F
+@foldable tangent_type(::Type{F}, ::Type{NoRData}) where {F<:Memory} = F
 
 tangent(f::Memory, ::NoRData) = f
 
@@ -351,7 +351,7 @@ fdata_type(::Type{<:MemoryRef{T}}) where {T} = MemoryRef{T}
 
 rdata_type(::Type{<:MemoryRef}) = NoRData
 
-tangent_type(::Type{<:MemoryRef{T}}, ::Type{NoRData}) where {T} = MemoryRef{T}
+@foldable tangent_type(::Type{<:MemoryRef{T}}, ::Type{NoRData}) where {T} = MemoryRef{T}
 
 tangent(f::MemoryRef, ::NoRData) = f
 
