@@ -25,7 +25,8 @@ import Mooncake:
     to_cr_tangent,
     increment_and_get_rdata!,
     MaybeCache,
-    IncCache
+    IncCache,
+    StackDict
 
 import Mooncake.TestUtils:
     populate_address_map_internal, AddressMap, __increment_should_allocate
@@ -35,7 +36,7 @@ const CuFloatArray = CuArray{<:IEEEFloat}
 # Tell Mooncake.jl how to handle CuArrays.
 
 Mooncake.@foldable tangent_type(::Type{P}) where {P<:CuFloatArray} = P
-function zero_tangent_internal(x::CuFloatArray, stackdict::Any)
+function zero_tangent_internal(x::CuFloatArray, stackdict::StackDict)
     haskey(stackdict, x) && return stackdict[x]::tangent_type(typeof(x))
     t = zero(x)
     stackdict[x] = t
