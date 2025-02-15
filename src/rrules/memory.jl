@@ -351,7 +351,7 @@ fdata_type(::Type{<:MemoryRef{T}}) where {T} = MemoryRef{T}
 
 rdata_type(::Type{<:MemoryRef}) = NoRData
 
-tangent_type(::Type{<:MemoryRef{T}}, ::Type{NoRData}) where {T} = MemoryRef{T}
+@foldable tangent_type(::Type{<:MemoryRef{T}}, ::Type{NoRData}) where {T} = MemoryRef{T}
 
 tangent(f::MemoryRef, ::NoRData) = f
 
