@@ -27,7 +27,7 @@ end
     end
     @testset "zero_rdata_from_type checks" begin
         @test can_produce_zero_rdata_from_type(Vector) == true
-        check_allocs(Mooncake.TestUtils.Shim(), can_produce_zero_rdata_from_type, Vector)
+        check_allocs(can_produce_zero_rdata_from_type, Vector)
         @test zero_rdata_from_type(Vector) == NoRData()
         @test !can_produce_zero_rdata_from_type(FwdsRvsDataTestResources.Foo)
         @test can_produce_zero_rdata_from_type(Tuple{Float64,Type{Float64}})
