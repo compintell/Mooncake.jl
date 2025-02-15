@@ -393,7 +393,7 @@ end
             core_iterate(CC.getindex(tpdum, def)) do use
                 if !CC.in(use, inconsistent)
                     CC.push!(inconsistent, use)
-                    CC.append!(stmt_ip, tpdum[use])
+                    CC.append!(stmt_ip, CC.getindex(tpdum, use))
                 end
             end
         end
