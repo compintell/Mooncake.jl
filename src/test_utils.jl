@@ -836,6 +836,8 @@ function is_foldable(effects::CC.Effects)
            tmp
 end
 
+is_foldable(f, types) = is_foldable(Base.infer_effects(f, types))
+
 """
     test_tangent_type(primal_type, expected_tangent_type)
 
@@ -844,7 +846,7 @@ infers / optimises away, and that the effects are as expected.
 """
 function test_tangent_type(primal_type::Type, expected_tangent_type::Type)
     @test tangent_type(primal_type) == expected_tangent_type
-    @test is_foldable(Base.infer_effects(tangent_type, (Type{expected_tangent_type},)))
+    @test is_foldable(tangent_type, (Type{expected_tangent_type},))
     return test_opt(Shim(), tangent_type, Tuple{_typeof(primal_type)})
 end
 

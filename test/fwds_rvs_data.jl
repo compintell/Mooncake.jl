@@ -66,8 +66,7 @@ end
                 FwdsRvsDataTestResources.SV{Tuple{1},Float64,1},Float64,Float64
             },
         ]
-            effects = Base.infer_effects(can_produce_zero_rdata_from_type, Tuple{Type{P}})
-            @test TestUtils.is_foldable(effects)
+            @test TestUtils.is_foldable(can_produce_zero_rdata_from_type, Tuple{Type{P}})
         end
     end
     @testset "lazy construction checks" begin
