@@ -1,5 +1,4 @@
-using AllocCheck,
-    Aqua,
+using Aqua,
     BenchmarkTools,
     DiffRules,
     JET,
@@ -9,6 +8,8 @@ using AllocCheck,
     StableRNGs,
     Mooncake,
     Test
+
+import AllocCheck # load to enable testing functionality
 
 using ChainRulesCore: ChainRulesCore
 
@@ -72,7 +73,8 @@ using .TestUtils:
     AddressMap,
     populate_address_map_internal,
     populate_address_map,
-    test_tangent
+    test_tangent,
+    check_allocs
 
 using .TestResources:
     TypeStableMutableStruct,

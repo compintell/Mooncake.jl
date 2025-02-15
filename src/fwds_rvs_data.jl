@@ -610,7 +610,7 @@ has_definite_fieldcount(P) = P isa DataType && Base.datatype_fieldcount(P) !== n
 Returns whether or not the zero element of the rdata type for primal type `P` can be
 obtained from `P` alone.
 """
-@generated function can_produce_zero_rdata_from_type(::Type{P}) where {P}
+@foldable @generated function can_produce_zero_rdata_from_type(::Type{P}) where {P}
     if isstructtype(P) && has_definite_fieldcount(P)
         can_produces = map(_P -> :(can_produce_zero_rdata_from_type($_P)), fieldtypes(P))
     else
@@ -632,11 +632,11 @@ obtained from `P` alone.
     end
 end
 
-can_produce_zero_rdata_from_type(::Type{<:IEEEFloat}) = true
+@foldable can_produce_zero_rdata_from_type(::Type{<:IEEEFloat}) = true
 
-can_produce_zero_rdata_from_type(::Type{<:Type}) = true
+@foldable can_produce_zero_rdata_from_type(::Type{<:Type}) = true
 
-can_produce_zero_rdata_from_type(::Type{Union{}}) = true
+@foldable can_produce_zero_rdata_from_type(::Type{Union{}}) = true
 
 """
     CannotProduceZeroRDataFromType()

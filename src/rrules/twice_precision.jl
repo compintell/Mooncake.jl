@@ -12,7 +12,7 @@
 const TwicePrecisionFloat{P<:IEEEFloat} = TwicePrecision{P}
 const TWP{P} = TwicePrecisionFloat{P}
 
-@tt_effects tangent_type(P::Type{<:TWP}) = P
+@foldable tangent_type(P::Type{<:TWP}) = P
 
 zero_tangent_internal(::TWP{F}, ::StackDict) where {F} = TWP{F}(zero(F), zero(F))
 

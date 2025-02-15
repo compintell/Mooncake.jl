@@ -138,12 +138,12 @@ function build_tangent(::Type{P}, fields...) where {P<:Union{Tuple,NamedTuple}}
 end
 
 """
-    @tt_effects tangent_type(...)
+    macro foldable def
 
-Effects which ought to be applied to `tangent_type`.
+Shorthand for `Base.@assume_effects :foldable function f(x)...`.
 """
-macro tt_effects(expr)
-    return esc(:(Base.@assume_effects :consistent :removable $expr))
+macro foldable(expr)
+    return esc(:(Base.@assume_effects :foldable $expr))
 end
 
 """
@@ -287,7 +287,7 @@ tangent_type(::Type{<:Type}) = NoTangent
 
 tangent_type(::Type{<:TypeVar}) = NoTangent
 
-@tt_effects tangent_type(::Type{Ptr{P}}) where {P} = Ptr{tangent_type(P)}
+@foldable tangent_type(::Type{Ptr{P}}) where {P} = Ptr{tangent_type(P)}
 
 tangent_type(::Type{<:Ptr}) = NoTangent
 
@@ -317,13 +317,13 @@ tangent_type(::Type{P}) where {P<:Union{Int8,Int16,Int32,Int64,Int128}} = NoTang
 
 tangent_type(::Type{<:Core.Builtin}) = NoTangent
 
-@tt_effects tangent_type(::Type{P}) where {P<:IEEEFloat} = P
+@foldable tangent_type(::Type{P}) where {P<:IEEEFloat} = P
 
 tangent_type(::Type{<:Core.LLVMPtr}) = NoTangent
 
 tangent_type(::Type{String}) = NoTangent
 
-@tt_effects tangent_type(::Type{<:Array{P,N}}) where {P,N} = Array{tangent_type(P),N}
+@foldable tangent_type(::Type{<:Array{P,N}}) where {P,N} = Array{tangent_type(P),N}
 
 tangent_type(::Type{<:Array{P,N} where {P}}) where {N} = Array
 
@@ -359,7 +359,7 @@ end
 # Generated functions cannot emit closures, so this is defined here for use below.
 isconcrete_or_union(p) = p isa Union || isconcretetype(p)
 
-@tt_effects @generated function tangent_type(::Type{P}) where {N,P<:Tuple{Vararg{Any,N}}}
+@foldable @generated function tangent_type(::Type{P}) where {N,P<:Tuple{Vararg{Any,N}}}
 
     # As with other types, tangent type of Union is Union of tangent types.
     P isa Union && return :(Union{tangent_type($(P.a)),tangent_type($(P.b))})
@@ -405,7 +405,7 @@ isconcrete_or_union(p) = p isa Union || isconcretetype(p)
     end
 end
 
-@tt_effects function tangent_type(::Type{P}) where {N,P<:NamedTuple{N}}
+@foldable function tangent_type(::Type{P}) where {N,P<:NamedTuple{N}}
     P isa Union && return Union{tangent_type(P.a),tangent_type(P.b)}
     !isconcretetype(P) && return Union{NoTangent,NamedTuple{N}}
     TT = tangent_type(Tuple{fieldtypes(P)...})
@@ -413,7 +413,7 @@ end
     return isconcretetype(TT) ? NamedTuple{N,TT} : Any
 end
 
-@tt_effects @generated function tangent_type(::Type{P}) where {P}
+@foldable @generated function tangent_type(::Type{P}) where {P}
 
     # This method can only handle struct types. Something has gone wrong if P is primitive.
     if isprimitivetype(P)

@@ -828,6 +828,14 @@ function test_rule_and_type_interactions(rng::AbstractRNG, p::P) where {P}
     end
 end
 
+function is_foldable(effects::CC.Effects)
+    return effects.consistent == CC.ALWAYS_TRUE &&
+        effects.effect_free == CC.ALWAYS_TRUE &&
+        effects.terminates &&
+        effects.noub == CC.ALWAYS_TRUE &&
+        effects.nortcall
+end
+
 """
     test_tangent_type(primal_type, expected_tangent_type)
 
@@ -836,11 +844,7 @@ infers / optimises away, and that the effects are as expected.
 """
 function test_tangent_type(primal_type::Type, expected_tangent_type::Type)
     @test tangent_type(primal_type) == expected_tangent_type
-    effects = Base.infer_effects(tangent_type, (Type{expected_tangent_type},))
-    @test effects.consistent == CC.ALWAYS_TRUE
-    @test effects.effect_free == CC.ALWAYS_TRUE
-    @test effects.nothrow
-    @test effects.terminates
+    @test is_foldable(Base.infer_effects(tangent_type, (Type{expected_tangent_type},)))
     return test_opt(Shim(), tangent_type, Tuple{_typeof(primal_type)})
 end
 

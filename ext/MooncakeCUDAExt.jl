@@ -34,7 +34,7 @@ const CuFloatArray = CuArray{<:IEEEFloat}
 
 # Tell Mooncake.jl how to handle CuArrays.
 
-Mooncake.@tt_effects tangent_type(::Type{P}) where {P<:CuFloatArray} = P
+Mooncake.@foldable tangent_type(::Type{P}) where {P<:CuFloatArray} = P
 function zero_tangent_internal(x::CuFloatArray, stackdict::Any)
     haskey(stackdict, x) && return stackdict[x]::tangent_type(typeof(x))
     t = zero(x)

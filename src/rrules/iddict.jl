@@ -1,6 +1,6 @@
 # We're going to use `IdDict`s to represent tangents for `IdDict`s.
 
-@tt_effects tangent_type(::Type{<:IdDict{K,V}}) where {K,V} = IdDict{K,tangent_type(V)}
+@foldable tangent_type(::Type{<:IdDict{K,V}}) where {K,V} = IdDict{K,tangent_type(V)}
 
 function zero_tangent_internal(d::P, stackdict::Any) where {P<:IdDict}
     T = tangent_type(P)
