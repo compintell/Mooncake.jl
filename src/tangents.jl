@@ -445,6 +445,11 @@ end
 
 backing_type(P::Type) = NamedTuple{fieldnames(P),Tuple{tangent_field_types(P)...}}
 
+struct NoCache end
+
+Base.haskey(::NoCache, x) = false
+Base.setindex!(::NoCache, v, x) = nothing
+
 """
     zero_tangent(x)
 
@@ -459,69 +464,81 @@ Internally, `zero_tangent` calls `zero_tangent_internal`, which handles differen
 handles both circular references and aliasing correctly.
 """
 zero_tangent(x)
-zero_tangent(x::P) where {P} = zero_tangent_internal(x, isbitstype(P) ? nothing : IdDict())
+zero_tangent(x::P) where {P} = zero_tangent_internal(x, isbitstype(P) ? NoCache() : IdDict())
 
-const StackDict = Union{Nothing,IdDict}
+const StackDict = Union{NoCache,IdDict}
 
 # the `stackdict` naming following convention of Julia's `deepcopy` and `deepcopy_internal`
 # https://github.com/JuliaLang/julia/blob/48d4fd48430af58502699fdf3504b90589df3852/base/deepcopy.jl#L35
-zero_tangent_internal(::Union{Int8,Int16,Int32,Int64,Int128}, ::Any) = NoTangent()
-zero_tangent_internal(x::IEEEFloat, ::Any) = zero(x)
-@generated function zero_tangent_internal(x::Tuple, stackdict::Any)
+zero_tangent_internal(::Union{Int8,Int16,Int32,Int64,Int128}, ::StackDict) = NoTangent()
+zero_tangent_internal(x::IEEEFloat, ::StackDict) = zero(x)
+@generated function zero_tangent_internal(x::Tuple, stackdict::StackDict)
     zt_exprs = map(n -> :(zero_tangent_internal(x[$n], stackdict)), 1:fieldcount(x))
     return quote
         tangent_type($x) == NoTangent && return NoTangent()
         return $(Expr(:call, :tuple, zt_exprs...))
     end
 end
-function zero_tangent_internal(x::NamedTuple, stackdict::Any)
+function zero_tangent_internal(x::NamedTuple, stackdict::StackDict)
     tangent_type(typeof(x)) == NoTangent && return NoTangent()
     return tuple_map(Base.Fix2(zero_tangent_internal, stackdict), x)
 end
-function zero_tangent_internal(x::Ptr, ::Any)
+function zero_tangent_internal(x::Ptr, ::StackDict)
     return throw(ArgumentError("zero_tangent not available for pointers."))
 end
-function zero_tangent_internal(x::SimpleVector, stackdict::IdDict)
+function zero_tangent_internal(x::SimpleVector, stackdict::StackDict)
     return map!(
         n -> zero_tangent_internal(x[n], stackdict),
         Vector{Any}(undef, length(x)),
         eachindex(x),
     )
 end
-function zero_tangent_internal(x::P, stackdict) where {P}
-    tangent_type(P) == NoTangent && return NoTangent()
+@inline @generated function zero_tangent_internal(x::P, d::StackDict) where {P}
 
-    if tangent_type(P) <: MutableTangent
-        if !(stackdict isa IdDict)
-            throw(
-                ArgumentError(
-                    "Internal error: stackdict must be an IdDict for mutable structs, not $(typeof(stackdict)). Please report this issue.",
-                ),
-            )
-        end
-        if haskey(stackdict, x)
-            return stackdict[x]::tangent_type(P)
-        end
-        stackdict[x] = tangent_type(P)() # create a uninitialised MutableTangent
-        # if circular reference exists, then the recursive call will first look up the stackdict
-        # and return the uninitialised MutableTangent
-        # after the recursive call returns, the stackdict will be initialised
-        stackdict[x].fields = zero_tangent_struct_field(x, stackdict)
-        return stackdict[x]::tangent_type(P)
-    else
-        return tangent_type(P)(zero_tangent_struct_field(x, stackdict))
-    end
-end
-
-function zero_tangent_struct_field(x::P, d) where {P}
-    Tfs = tangent_field_types(P)
+    # Loop over fields, constructing expressions to construct zeros depending on the
+    # field type and initialisation status.
     inits = always_initialised(P)
-    tangent_field_zeros = ntuple(Val(fieldcount(P))) do n
-        T = Tfs[n]
-        inits[n] && return zero_tangent_internal(getfield(x, n), d)
-        return isdefined(x, n) ? T(zero_tangent_internal(getfield(x, n), d)) : T()
+    tangent_field_exprs = map(1:fieldcount(P)) do n
+        if inits[n]
+            return :(zero_tangent_internal(getfield(x, $n), d))
+        else
+            P_field = fieldtype(P, n)
+            T_field_expr = :(PossiblyUninitTangent{tangent_type($P_field)})
+            return quote
+                if isdefined(x, $n)
+                    $T_field_expr(zero_tangent_internal(getfield(x, $n), d))
+                else
+                    $T_field_expr()
+                end
+            end
+        end
     end
-    return backing_type(P)(tangent_field_zeros)
+    tangent_fields_tuple_expr = Expr(:call, :tuple, tangent_field_exprs...)
+
+    return quote
+        tangent_type(P) == NoTangent && return NoTangent()
+
+        # If dealing with a mutable type, ensure that we have an entry in `d`.
+        if tangent_type(P) <: MutableTangent
+            haskey(d, x) && return d[x]::tangent_type(P)
+            d[x] = tangent_type(P)() # create a uninitialised MutableTangent
+        end
+
+        # For each field in `x`, construct its zero tangent. This is where the generated
+        # expression above it used. Everything else is regular code.
+        fields = backing_type(P)($tangent_fields_tuple_expr)
+
+        if tangent_type(P) <: MutableTangent
+            # if circular reference exists, then the recursive call will first look up d
+            # and return the uninitialised MutableTangent
+            # after the recursive call returns, d will be initialised
+            d[x].fields = fields
+            return d[x]::tangent_type(P)
+        else
+            return tangent_type(P)(fields)
+        end
+        return t
+    end
 end
 
 """
@@ -596,11 +613,6 @@ function randn_tangent_struct_field(rng::AbstractRNG, x::P, d) where {P}
     end
     return backing_type(P)(tangent_field_zeros)
 end
-
-struct NoCache end
-
-Base.haskey(::NoCache, x) = false
-Base.setindex!(::NoCache, v, x) = nothing
 
 const IncCache = Union{NoCache,IdDict{Any,Bool}}
 
