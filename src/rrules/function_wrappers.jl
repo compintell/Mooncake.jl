@@ -142,7 +142,7 @@ end
 
 fdata_type(T::Type{<:FunctionWrapperTangent}) = T
 rdata_type(::Type{FunctionWrapperTangent}) = NoRData
-tangent_type(F::Type{<:FunctionWrapperTangent}, ::Type{NoRData}) = F
+@foldable tangent_type(F::Type{<:FunctionWrapperTangent}, ::Type{NoRData}) = F
 tangent(f::FunctionWrapperTangent, ::NoRData) = f
 
 function __verify_fdata_value(
