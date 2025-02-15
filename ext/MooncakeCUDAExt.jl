@@ -100,7 +100,7 @@ function Mooncake.__verify_fdata_value(::IdDict{Any,Nothing}, p::CuArray, f::CuA
     end
     return nothing
 end
-tangent_type(::Type{P}, ::Type{NoRData}) where {P<:CuArray} = P
+Mooncake.@foldable tangent_type(::Type{P}, ::Type{NoRData}) where {P<:CuArray} = P
 tangent(p::CuArray, ::NoRData) = p
 
 to_cr_tangent(x::CuFloatArray) = x
