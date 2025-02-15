@@ -27,7 +27,7 @@ end
     end
     @testset "zero_rdata_from_type checks" begin
         @test can_produce_zero_rdata_from_type(Vector) == true
-        check_allocs(Mooncake.TestUtils.Shim(), can_produce_zero_rdata_from_type, Vector)
+        check_allocs(can_produce_zero_rdata_from_type, Vector)
         @test zero_rdata_from_type(Vector) == NoRData()
         @test !can_produce_zero_rdata_from_type(FwdsRvsDataTestResources.Foo)
         @test can_produce_zero_rdata_from_type(Tuple{Float64,Type{Float64}})
@@ -66,8 +66,7 @@ end
                 FwdsRvsDataTestResources.SV{Tuple{1},Float64,1},Float64,Float64
             },
         ]
-            effects = Base.infer_effects(can_produce_zero_rdata_from_type, Tuple{Type{P}})
-            @test TestUtils.is_foldable(effects)
+            @test TestUtils.is_foldable(can_produce_zero_rdata_from_type, Tuple{Type{P}})
         end
     end
     @testset "lazy construction checks" begin
