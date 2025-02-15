@@ -22,7 +22,7 @@ function _construct_types(R, A)
     return fwd_oc_type, rvs_oc_type, fwd_sig, rvs_sig
 end
 
-function tangent_type(::Type{FunctionWrapper{R,A}}) where {R,A<:Tuple}
+@foldable function tangent_type(::Type{FunctionWrapper{R,A}}) where {R,A<:Tuple}
     return FunctionWrapperTangent{_construct_types(R, A)[1]}
 end
 
