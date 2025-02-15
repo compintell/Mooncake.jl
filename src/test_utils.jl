@@ -829,11 +829,11 @@ function test_rule_and_type_interactions(rng::AbstractRNG, p::P) where {P}
 end
 
 function is_foldable(effects::CC.Effects)
+    tmp = VERSION > v"1.11" ? effects.noub == CC.ALWAYS_TRUE && effects.nortcall : true
     return effects.consistent == CC.ALWAYS_TRUE &&
            effects.effect_free == CC.ALWAYS_TRUE &&
            effects.terminates &&
-           effects.noub == CC.ALWAYS_TRUE &&
-           effects.nortcall
+           tmp
 end
 
 """
