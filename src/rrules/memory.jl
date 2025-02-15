@@ -16,7 +16,7 @@ const Maybe{T} = Union{Nothing,T}
 
 @foldable tangent_type(::Type{<:Memory{P}}) where {P} = Memory{tangent_type(P)}
 
-function zero_tangent_internal(x::Memory{P}, stackdict::Maybe{IdDict}) where {P}
+function zero_tangent_internal(x::Memory{P}, stackdict::StackDict) where {P}
     T = tangent_type(typeof(x))
 
     # If no stackdict is provided, then the caller promises that there is no need for it.
@@ -150,7 +150,7 @@ end
 # Array -- tangent interface implementation
 #
 
-@inline function zero_tangent_internal(x::Array, stackdict::Maybe{IdDict})
+@inline function zero_tangent_internal(x::Array, stackdict::StackDict)
     T = tangent_type(typeof(x))
 
     # If we already have a tangent for this, just return that.
@@ -298,7 +298,7 @@ function construct_ref(x::MemoryRef, m::Memory)
     return isempty(m) ? memoryref(m) : memoryref(m, Core.memoryrefoffset(x))
 end
 
-function zero_tangent_internal(x::MemoryRef, stackdict::Maybe{IdDict})
+function zero_tangent_internal(x::MemoryRef, stackdict::StackDict)
     return construct_ref(x, zero_tangent_internal(x.mem, stackdict))
 end
 
@@ -529,7 +529,7 @@ function rrule!!(
     ::CoDual{Type{Memory{P}}}, ::CoDual{UndefInitializer}, n::CoDual{Int}
 ) where {P}
     x = Memory{P}(undef, primal(n))
-    dx = zero_tangent_internal(x, nothing)
+    dx = zero_tangent_internal(x, NoCache())
     return CoDual(x, dx), NoPullback((NoRData(), NoRData(), NoRData()))
 end
 

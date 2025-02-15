@@ -2,7 +2,7 @@
 
 @foldable tangent_type(::Type{<:IdDict{K,V}}) where {K,V} = IdDict{K,tangent_type(V)}
 
-function zero_tangent_internal(d::P, stackdict::Any) where {P<:IdDict}
+function zero_tangent_internal(d::P, stackdict::StackDict) where {P<:IdDict}
     T = tangent_type(P)
     if haskey(stackdict, d)
         return stackdict[d]::T

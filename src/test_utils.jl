@@ -1033,7 +1033,9 @@ function test_tangent_performance(rng::AbstractRNG, p::P) where {P}
     # Check there are no allocations when there ought not to be.
     if !__tangent_generation_should_allocate(P)
         test_opt(Tuple{typeof(zero_tangent),P})
+        check_allocs(Mooncake.zero_tangent, p)
         test_opt(Tuple{typeof(randn_tangent),Xoshiro,P})
+        check_allocs(Mooncake.randn_tangent, rng, p)
     end
 
     # `increment!!` should always infer.

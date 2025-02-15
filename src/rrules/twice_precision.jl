@@ -16,7 +16,9 @@ const TWP{P} = TwicePrecisionFloat{P}
 
 zero_tangent_internal(::TWP{F}, ::StackDict) where {F} = TWP{F}(zero(F), zero(F))
 
-function randn_tangent_internal(rng::AbstractRNG, p::TWP{F}, ::StackDict) where {F}
+function randn_tangent_internal(
+    rng::AbstractRNG, p::TWP{F}, ::Union{Nothing,IdDict}
+) where {F}
     return TWP{F}(randn(rng, F), randn(rng, F))
 end
 
@@ -29,7 +31,7 @@ end
 
 increment_internal!!(::IncCache, t::T, s::T) where {T<:TWP} = t + s
 
-set_to_zero_internal!!(::IncCache, t::TWP) = zero_tangent_internal(t, nothing)
+set_to_zero_internal!!(::IncCache, t::TWP) = zero_tangent_internal(t, NoCache())
 
 _add_to_primal_internal(::MaybeCache, p::P, t::P, ::Bool) where {P<:TWP} = p + t
 

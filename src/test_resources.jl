@@ -123,6 +123,40 @@ struct StructNoRvs
     x::Vector{Float64}
 end
 
+struct FiveFields{A,B,C,D,E}
+    a::A
+    b::B
+    c::C
+    d::D
+    e::E
+end
+
+struct FourFields{A,B,C,D}
+    a::A
+    b::B
+    c::C
+    d::D
+end
+
+struct OneField{A}
+    a::A
+end
+
+function build_big_isbits_struct()
+    return FourFields(
+        FiveFields(
+            FourFields(OneField(5.0), OneField(5.0), OneField(3), OneField(nothing)),
+            OneField(4),
+            OneField(3.0),
+            OneField(nothing),
+            OneField(false),
+        ),
+        OneField(5.0),
+        OneField(nothing),
+        OneField(4),
+    )
+end
+
 #
 # generate test cases for circular references
 #
