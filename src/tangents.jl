@@ -581,39 +581,52 @@ function randn_tangent_internal(rng::AbstractRNG, x::SimpleVector, stackdict::Id
         return randn_tangent_internal(rng, x[n], stackdict)
     end
 end
-function randn_tangent_internal(rng::AbstractRNG, x::P, stackdict) where {P}
-    tangent_type(P) == NoTangent && return NoTangent()
-    if isprimitivetype(P)
-        return throw(ArgumentError("$P is a primitive type. Defined randn_tangent for it."))
-    end
-    if tangent_type(P) <: MutableTangent
-        if !(stackdict isa IdDict)
-            throw(
-                ArgumentError(
-                    "Internal error: stackdict must be an IdDict for mutable structs, not $(typeof(stackdict)). Please report this issue.",
-                ),
-            )
-        end
-        if haskey(stackdict, x)
-            return stackdict[x]::tangent_type(P)
-        end
-        stackdict[x] = tangent_type(P)()
-        stackdict[x].fields = randn_tangent_struct_field(rng, x, stackdict)
-        return stackdict[x]::tangent_type(P)
-    else
-        return tangent_type(P)(randn_tangent_struct_field(rng, x, stackdict))
-    end
-end
+@inline @generated function randn_tangent_internal(rng::AbstractRNG, x::P, d) where {P}
 
-function randn_tangent_struct_field(rng::AbstractRNG, x::P, d) where {P}
-    Tfs = tangent_field_types(P)
+    # Loop over fields, constructing expressions to construct randn tangents depending on
+    # the field type and initialisation status.
     inits = always_initialised(P)
-    tangent_field_zeros = ntuple(Val(fieldcount(P))) do n
-        T = Tfs[n]
-        inits[n] && return randn_tangent_internal(rng, getfield(x, n), d)
-        return isdefined(x, n) ? T(randn_tangent_internal(rng, getfield(x, n), d)) : T()
+    tangent_field_exprs = map(1:fieldcount(P)) do n
+        if inits[n]
+            return :(randn_tangent_internal(rng, getfield(x, $n), d))
+        else
+            P_field = fieldtype(P, n)
+            T_field_expr = :(PossiblyUninitTangent{tangent_type($P_field)})
+            return quote
+                if isdefined(x, $n)
+                    $T_field_expr(randn_tangent_internal(rng, getfield(x, $n), d))
+                else
+                    $T_field_expr()
+                end
+            end
+        end
     end
-    return backing_type(P)(tangent_field_zeros)
+    tangent_fields_tuple_expr = Expr(:call, :tuple, tangent_field_exprs...)
+
+    return quote
+        tangent_type(P) == NoTangent && return NoTangent()
+
+        # If dealing with a mutable type, ensure that we have an entry in `d`.
+        if tangent_type(P) <: MutableTangent
+            haskey(d, x) && return d[x]::tangent_type(P)
+            d[x] = tangent_type(P)() # create a uninitialised MutableTangent
+        end
+
+        # For each field in `x`, construct its randn tangent. This is where the generated
+        # expression above it used. Everything else is regular code.
+        fields = backing_type(P)($tangent_fields_tuple_expr)
+
+        if tangent_type(P) <: MutableTangent
+            # if circular reference exists, then the recursive call will first look up d
+            # and return the uninitialised MutableTangent
+            # after the recursive call returns, d will be initialised
+            d[x].fields = fields
+            return d[x]::tangent_type(P)
+        else
+            return tangent_type(P)(fields)
+        end
+        return t
+    end
 end
 
 const IncCache = Union{NoCache,IdDict{Any,Bool}}
@@ -1180,6 +1193,7 @@ function tangent_test_cases()
         (((((randn(33)...,),),),),),
         (((((((((randn(33)...,),),),),), randn(5)...),),),),
         Base.OneTo{Int},
+        TestResources.build_big_isbits_struct(),
     ]
     VERSION >= v"1.11" && push!(rel_test_cases, fill!(Memory{Float64}(undef, 3), 3.0))
     return vcat(
