@@ -828,7 +828,16 @@ function test_rule_and_type_interactions(rng::AbstractRNG, p::P) where {P}
     end
 end
 
-function is_foldable(f, types)
+"""
+    is_foldable(f, types)::Bool
+
+`true` if the effects inferred for the application of `f` to arguments of type `types`
+indicate that the compiler believes such a call can be constant-folded.
+
+See the docstrings for `Base.@infer_effects` and `Base.infer_effects` for more information
+on the effects system in Julia.
+"""
+function is_foldable(f, types)::Bool
     effects = Base.infer_effects(f, types)
     tmp = VERSION > v"1.11" ? effects.noub == CC.ALWAYS_TRUE && effects.nortcall : true
     return effects.consistent == CC.ALWAYS_TRUE &&
