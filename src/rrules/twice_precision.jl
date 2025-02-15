@@ -16,7 +16,9 @@ const TWP{P} = TwicePrecisionFloat{P}
 
 zero_tangent_internal(::TWP{F}, ::StackDict) where {F} = TWP{F}(zero(F), zero(F))
 
-function randn_tangent_internal(rng::AbstractRNG, p::TWP{F}, ::Union{Nothing, IdDict}) where {F}
+function randn_tangent_internal(
+    rng::AbstractRNG, p::TWP{F}, ::Union{Nothing,IdDict}
+) where {F}
     return TWP{F}(randn(rng, F), randn(rng, F))
 end
 

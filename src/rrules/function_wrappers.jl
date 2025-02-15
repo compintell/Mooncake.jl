@@ -71,9 +71,7 @@ function _function_wrapper_tangent(R, obj::Tobj, A, obj_tangent) where {Tobj}
     return t, obj_tangent_ref
 end
 
-function zero_tangent_internal(
-    p::FunctionWrapper{R,A}, stackdict::StackDict
-) where {R,A}
+function zero_tangent_internal(p::FunctionWrapper{R,A}, stackdict::StackDict) where {R,A}
 
     # If we've seen this primal before, then we must return that tangent.
     haskey(stackdict, p) && return stackdict[p]::tangent_type(typeof(p))
