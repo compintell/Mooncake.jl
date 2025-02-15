@@ -864,7 +864,9 @@ end
 end
 
 # NamedTuples
-@foldable function tangent_type(::Type{F}, ::Type{R}) where {ns,F<:NamedTuple{ns},R<:NamedTuple{ns}}
+@foldable function tangent_type(
+    ::Type{F}, ::Type{R}
+) where {ns,F<:NamedTuple{ns},R<:NamedTuple{ns}}
     return NamedTuple{ns,tangent_type(tuple_type(F), tuple_type(R))}
 end
 @foldable function tangent_type(::Type{NoFData}, ::Type{R}) where {ns,R<:NamedTuple{ns}}
