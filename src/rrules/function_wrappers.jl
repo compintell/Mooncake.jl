@@ -72,7 +72,7 @@ function _function_wrapper_tangent(R, obj::Tobj, A, obj_tangent) where {Tobj}
 end
 
 function zero_tangent_internal(
-    p::FunctionWrapper{R,A}, stackdict::Union{Nothing,IdDict}
+    p::FunctionWrapper{R,A}, stackdict::StackDict
 ) where {R,A}
 
     # If we've seen this primal before, then we must return that tangent.
