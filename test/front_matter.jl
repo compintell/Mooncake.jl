@@ -9,7 +9,7 @@ using Aqua,
     Mooncake,
     Test
 
-import AllocCheck # load to enable testing functionality
+using AllocCheck: AllocCheck # load to enable testing functionality
 
 using ChainRulesCore: ChainRulesCore
 

@@ -830,10 +830,10 @@ end
 
 function is_foldable(effects::CC.Effects)
     return effects.consistent == CC.ALWAYS_TRUE &&
-        effects.effect_free == CC.ALWAYS_TRUE &&
-        effects.terminates &&
-        effects.noub == CC.ALWAYS_TRUE &&
-        effects.nortcall
+           effects.effect_free == CC.ALWAYS_TRUE &&
+           effects.terminates &&
+           effects.noub == CC.ALWAYS_TRUE &&
+           effects.nortcall
 end
 
 """

@@ -5,7 +5,7 @@ struct Bar{A,B,C}
     b::B
     c::C
 end
-struct SV{S<:Tuple, T, L}
+struct SV{S<:Tuple,T,L}
     data::NTuple{L,T}
 end
 end
@@ -60,7 +60,7 @@ end
         # Performance.
         @testset "$P" for P in Any[
             Vector{Vector{Vector{Vector{Float64}}}},
-            Vector{Vector{Vector{NTuple{11, Float64}}}},
+            Vector{Vector{Vector{NTuple{11,Float64}}}},
             FwdsRvsDataTestResources.Bar{Float64,Float64,Float64},
             FwdsRvsDataTestResources.Bar{
                 FwdsRvsDataTestResources.SV{Tuple{1},Float64,1},Float64,Float64
