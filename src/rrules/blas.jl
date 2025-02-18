@@ -302,6 +302,51 @@ end
 @is_primitive(
     MinimalCtx,
     Tuple{
+        typeof(BLAS.nrm2),
+        Int,
+        X,
+        Int,
+    } where {T<:Union{Float64, Float32, ComplexF64, ComplexF32}, X<:Union{Ptr{T},AbstractArray{T}}},
+)
+function rrule!!(
+    ::CoDual{typeof(BLAS.nrm2)},
+    n::CoDual{<:Integer},
+    X_dX::CoDual{<:Union{Ptr{T},AbstractArray{T}} where {T<:Union{Float64, Float32, ComplexF64, ComplexF32}}},
+    incx::CoDual{<:Integer},
+)
+    X, dX = arrayify(X_dX)
+    y = BLAS.nrm2(n.x, X, incx.x)
+    function nrm2_pb!!(dy)
+        view(dX, 1:incx.x:incx.x*n.x) .+= dy .* view(X, 1:incx.x:incx.x*n.x) ./ y   # TODO: verify for complex numbers
+        return NoRData(), NoRData(), NoRData(), NoRData()
+    end
+    return CoDual(y, NoFData()), nrm2_pb!!
+end
+
+@is_primitive(
+    MinimalCtx,
+    Tuple{
+        typeof(BLAS.nrm2),
+        X,
+    } where {T<:Union{Float64, Float32, ComplexF64, ComplexF32}, X<:Union{Ptr{T},AbstractArray{T}}},
+)
+function rrule!!(
+    ::CoDual{typeof(BLAS.nrm2)},
+    X_dX::CoDual{<:Union{Ptr{T},AbstractArray{T}} where {T<:Union{Float64, Float32, ComplexF64, ComplexF32}}},
+)
+    X, dX = arrayify(X_dX)
+    y = BLAS.nrm2(X)
+    function nrm2_pb!!(dy)
+        dX .+= dy .* X ./ y   # TODO: verify for complex numbers
+        return NoRData(), NoRData()
+    end
+    return CoDual(y, NoFData()), nrm2_pb!!
+end
+
+
+@is_primitive(
+    MinimalCtx,
+    Tuple{
         typeof(BLAS.trmv!),Char,Char,Char,AbstractMatrix{T},AbstractVector{T}
     } where {T<:BlasRealFloat},
 )
