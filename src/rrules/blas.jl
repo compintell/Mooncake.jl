@@ -24,6 +24,8 @@ end
 const MatrixOrView{T} = Union{Matrix{T},SubArray{T,2,<:Array{T}}}
 const VecOrView{T} = Union{Vector{T},SubArray{T,1,<:Array{T}}}
 const BlasRealFloat = Union{Float32,Float64}
+const BlasComplexFloat = Union{ComplexF32,ComplexF64}
+const BlasRealOrComplexFloat = Union{BlasRealFloat,BlasComplexFloat}
 
 """
     arrayify(x::CoDual{<:AbstractArray{<:BlasRealFloat}})
@@ -36,6 +38,11 @@ function arrayify(x::CoDual{A}) where {A<:AbstractArray{<:BlasRealFloat}}
     return arrayify(primal(x), tangent(x))::Tuple{A,A}
 end
 arrayify(x::Array{P}, dx::Array{P}) where {P<:BlasRealFloat} = (x, dx)
+
+function arrayify(x::CoDual{A}) where {A<:AbstractArray{<:Union{ComplexF32, ComplexF64}}}
+    return arrayify(primal(x), tangent(x))
+end
+arrayify(x::Array{P}, dx::Array{<:Tangent}) where P<:Union{ComplexF32, ComplexF64} = x, reinterpret(P, dx)
 function arrayify(x::A, dx::FData) where {A<:SubArray{<:BlasRealFloat}}
     _, _dx = arrayify(x.parent, dx.data.parent)
     return x, A(_dx, x.indices, x.offset1, x.stride1)
@@ -317,7 +324,7 @@ function rrule!!(
     X, dX = arrayify(X_dX)
     y = BLAS.nrm2(n.x, X, incx.x)
     function nrm2_pb!!(dy)
-        view(dX, 1:incx.x:incx.x*n.x) .+= dy .* view(X, 1:incx.x:incx.x*n.x) ./ y   # TODO: verify for complex numbers
+        view(dX, 1:incx.x:incx.x*n.x) .+= view(X, 1:incx.x:incx.x*n.x) .* (dy / y)
         return NoRData(), NoRData(), NoRData(), NoRData()
     end
     return CoDual(y, NoFData()), nrm2_pb!!
@@ -337,7 +344,7 @@ function rrule!!(
     X, dX = arrayify(X_dX)
     y = BLAS.nrm2(X)
     function nrm2_pb!!(dy)
-        dX .+= dy .* X ./ y   # TODO: verify for complex numbers
+        dX .+= X .* (dy / y)   # TODO: verify for complex numbers
         return NoRData(), NoRData()
     end
     return CoDual(y, NoFData()), nrm2_pb!!
@@ -800,7 +807,7 @@ for (trsm, elty) in ((:dtrsm_, :Float64), (:strsm_, :Float32))
     end
 end
 
-function blas_matrices(rng::AbstractRNG, P::Type{<:BlasRealFloat}, p::Int, q::Int)
+function blas_matrices(rng::AbstractRNG, P::Type{<:BlasRealOrComplexFloat}, p::Int, q::Int)
     Xs = Any[
         randn(rng, P, p, q),
         view(randn(rng, P, p + 5, 2q), 3:(p + 2), 1:2:(2q)),
@@ -812,7 +819,7 @@ function blas_matrices(rng::AbstractRNG, P::Type{<:BlasRealFloat}, p::Int, q::In
     return Xs
 end
 
-function blas_vectors(rng::AbstractRNG, P::Type{<:BlasRealFloat}, p::Int)
+function blas_vectors(rng::AbstractRNG, P::Type{<:BlasRealOrComplexFloat}, p::Int)
     xs = Any[
         randn(rng, P, p),
         view(randn(rng, P, p + 5), 3:(p + 2)),
@@ -834,6 +841,19 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
     rng = rng_ctor(123456)
 
     test_cases = vcat(
+        # nrm2(x)
+        map_prod([Ps..., ComplexF64, ComplexF32]) do (P,)
+            return map([randn(rng, P, 105)]) do x
+                (false, :none, nothing, BLAS.nrm2, x)
+            end
+        end...,
+
+        # nrm2(n, x, incx)
+        map_prod([Ps..., ComplexF64, ComplexF32], [5, 3], [1, 2]) do (P, n, incx)
+            return map([randn(rng, P, 105)]) do x
+                (false, :none, nothing, BLAS.nrm2, n, x, incx)
+            end
+        end...,
 
         # gemv!
         map_prod(t_flags, [1, 3], [1, 2], Ps) do (tA, M, N, P)
