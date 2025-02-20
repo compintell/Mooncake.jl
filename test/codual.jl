@@ -61,8 +61,8 @@
         # General Abstract Tuples
         (Tuple{Any}, CoDual, CoDual),
     ]
-        @test TestUtils.check_allocs(TestUtils.Shim(), codual_type, P) == D
-        @test TestUtils.check_allocs(TestUtils.Shim(), Mooncake.fcodual_type, P) == F
+        @test TestUtils.check_allocs(codual_type, P) == D
+        @test TestUtils.check_allocs(Mooncake.fcodual_type, P) == F
     end
 
     @testset "NoPullback" begin

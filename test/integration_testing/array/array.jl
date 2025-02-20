@@ -33,7 +33,14 @@ _getter() = 5.0
             ),
             (false, :none, *, adjoint(randn(sr(22), 2, 2)), randn(sr(21), 2)),
             (false, :none, *, Diagonal(randn(sr(23), 2)), randn(sr(24), 2)),
-            # (false, :none, , *, randn(sr(27), 2)', Diagonal(randn(sr(26), 2)), randn(sr(25), 2)), https://github.com/compintell/Mooncake.jl/issues/319
+            (
+                false,
+                :none,
+                *,
+                randn(sr(27), 2)',
+                Diagonal(randn(sr(26), 2)),
+                randn(sr(25), 2),
+            ),
             (false, :none, *, randn(sr(28), 2, 3)', randn(sr(29), 2)),
             (false, :none, *, 4.0 * I, randn(sr(30), 2)),
             (false, :none, *, 3.5 * I, randn(sr(31), 2, 3)),
