@@ -27,7 +27,7 @@ const BlasRealFloat = Union{Float32,Float64}
 const BlasComplexFloat = Union{ComplexF32,ComplexF64}
 
 """
-    arrayify(x::CoDual{<:AbstractArray{<:BlasRealFloat}})
+    arrayify(x::CoDual{<:AbstractArray{<:BlasFloat}})
 
 Return the primal field of `x`, and convert its fdata into an array of the same type as the
 primal. This operation is not guaranteed to be possible for all array types, but seems to be
