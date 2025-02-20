@@ -25,7 +25,6 @@ const MatrixOrView{T} = Union{Matrix{T},SubArray{T,2,<:Array{T}}}
 const VecOrView{T} = Union{Vector{T},SubArray{T,1,<:Array{T}}}
 const BlasRealFloat = Union{Float32,Float64}
 const BlasComplexFloat = Union{ComplexF32,ComplexF64}
-const BlasRealOrComplexFloat = Union{BlasRealFloat,BlasComplexFloat}
 
 """
     arrayify(x::CoDual{<:AbstractArray{<:BlasRealFloat}})
@@ -34,15 +33,13 @@ Return the primal field of `x`, and convert its fdata into an array of the same 
 primal. This operation is not guaranteed to be possible for all array types, but seems to be
 possible for all array types of interest so far.
 """
-function arrayify(x::CoDual{A}) where {A<:AbstractArray{<:BlasRealFloat}}
-    return arrayify(primal(x), tangent(x))::Tuple{A,A}
+function arrayify(x::CoDual{A}) where {A<:AbstractArray{<:BlasFloat}}
+    return arrayify(primal(x), tangent(x))  # NOTE: for complex number, the tangent is a reinterpreted version of the primal
 end
 arrayify(x::Array{P}, dx::Array{P}) where {P<:BlasRealFloat} = (x, dx)
-
-function arrayify(x::CoDual{A}) where {A<:AbstractArray{<:Union{ComplexF32, ComplexF64}}}
-    return arrayify(primal(x), tangent(x))
+function arrayify(x::Array{P}, dx::Array{<:Tangent}) where {P<:BlasComplexFloat}
+    return x, reinterpret(P, dx)
 end
-arrayify(x::Array{P}, dx::Array{<:Tangent}) where P<:Union{ComplexF32, ComplexF64} = x, reinterpret(P, dx)
 function arrayify(x::A, dx::FData) where {A<:SubArray{<:BlasRealFloat}}
     _, _dx = arrayify(x.parent, dx.data.parent)
     return x, A(_dx, x.indices, x.offset1, x.stride1)
@@ -309,22 +306,20 @@ end
 @is_primitive(
     MinimalCtx,
     Tuple{
-        typeof(BLAS.nrm2),
-        Int,
-        X,
-        Int,
-    } where {T<:Union{Float64, Float32, ComplexF64, ComplexF32}, X<:Union{Ptr{T},AbstractArray{T}}},
+        typeof(BLAS.nrm2),Int,X,Int
+    } where {T<:BlasFloat,X<:Union{Ptr{T},AbstractArray{T}}},
 )
 function rrule!!(
     ::CoDual{typeof(BLAS.nrm2)},
     n::CoDual{<:Integer},
-    X_dX::CoDual{<:Union{Ptr{T},AbstractArray{T}} where {T<:Union{Float64, Float32, ComplexF64, ComplexF32}}},
+    X_dX::CoDual{<:Union{Ptr{T},AbstractArray{T}} where {T<:BlasFloat}},
     incx::CoDual{<:Integer},
 )
     X, dX = arrayify(X_dX)
     y = BLAS.nrm2(n.x, X, incx.x)
     function nrm2_pb!!(dy)
-        view(dX, 1:incx.x:incx.x*n.x) .+= view(X, 1:incx.x:incx.x*n.x) .* (dy / y)
+        view(dX, 1:(incx.x):(incx.x * n.x)) .+=
+            view(X, 1:(incx.x):(incx.x * n.x)) .* (dy / y)
         return NoRData(), NoRData(), NoRData(), NoRData()
     end
     return CoDual(y, NoFData()), nrm2_pb!!
@@ -332,14 +327,11 @@ end
 
 @is_primitive(
     MinimalCtx,
-    Tuple{
-        typeof(BLAS.nrm2),
-        X,
-    } where {T<:Union{Float64, Float32, ComplexF64, ComplexF32}, X<:Union{Ptr{T},AbstractArray{T}}},
+    Tuple{typeof(BLAS.nrm2),X} where {T<:BlasFloat,X<:Union{Ptr{T},AbstractArray{T}}},
 )
 function rrule!!(
     ::CoDual{typeof(BLAS.nrm2)},
-    X_dX::CoDual{<:Union{Ptr{T},AbstractArray{T}} where {T<:Union{Float64, Float32, ComplexF64, ComplexF32}}},
+    X_dX::CoDual{<:Union{Ptr{T},AbstractArray{T}} where {T<:BlasFloat}},
 )
     X, dX = arrayify(X_dX)
     y = BLAS.nrm2(X)
@@ -349,7 +341,6 @@ function rrule!!(
     end
     return CoDual(y, NoFData()), nrm2_pb!!
 end
-
 
 @is_primitive(
     MinimalCtx,
@@ -807,7 +798,7 @@ for (trsm, elty) in ((:dtrsm_, :Float64), (:strsm_, :Float32))
     end
 end
 
-function blas_matrices(rng::AbstractRNG, P::Type{<:BlasRealOrComplexFloat}, p::Int, q::Int)
+function blas_matrices(rng::AbstractRNG, P::Type{<:BlasFloat}, p::Int, q::Int)
     Xs = Any[
         randn(rng, P, p, q),
         view(randn(rng, P, p + 5, 2q), 3:(p + 2), 1:2:(2q)),
@@ -819,7 +810,7 @@ function blas_matrices(rng::AbstractRNG, P::Type{<:BlasRealOrComplexFloat}, p::I
     return Xs
 end
 
-function blas_vectors(rng::AbstractRNG, P::Type{<:BlasRealOrComplexFloat}, p::Int)
+function blas_vectors(rng::AbstractRNG, P::Type{<:BlasFloat}, p::Int)
     xs = Any[
         randn(rng, P, p),
         view(randn(rng, P, p + 5), 3:(p + 2)),
