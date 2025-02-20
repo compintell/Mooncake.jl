@@ -24,18 +24,22 @@ end
 const MatrixOrView{T} = Union{Matrix{T},SubArray{T,2,<:Array{T}}}
 const VecOrView{T} = Union{Vector{T},SubArray{T,1,<:Array{T}}}
 const BlasRealFloat = Union{Float32,Float64}
+const BlasComplexFloat = Union{ComplexF32,ComplexF64}
 
 """
-    arrayify(x::CoDual{<:AbstractArray{<:BlasRealFloat}})
+    arrayify(x::CoDual{<:AbstractArray{<:BlasFloat}})
 
 Return the primal field of `x`, and convert its fdata into an array of the same type as the
 primal. This operation is not guaranteed to be possible for all array types, but seems to be
 possible for all array types of interest so far.
 """
-function arrayify(x::CoDual{A}) where {A<:AbstractArray{<:BlasRealFloat}}
-    return arrayify(primal(x), tangent(x))::Tuple{A,A}
+function arrayify(x::CoDual{A}) where {A<:AbstractArray{<:BlasFloat}}
+    return arrayify(primal(x), tangent(x))  # NOTE: for complex number, the tangent is a reinterpreted version of the primal
 end
 arrayify(x::Array{P}, dx::Array{P}) where {P<:BlasRealFloat} = (x, dx)
+function arrayify(x::Array{P}, dx::Array{<:Tangent}) where {P<:BlasComplexFloat}
+    return x, reinterpret(P, dx)
+end
 function arrayify(x::A, dx::FData) where {A<:SubArray{<:BlasRealFloat}}
     _, _dx = arrayify(x.parent, dx.data.parent)
     return x, A(_dx, x.indices, x.offset1, x.stride1)
@@ -297,6 +301,45 @@ function rrule!!(
         return NoRData(), NoRData(), dα, NoRData(), NoRData(), dβ, NoRData()
     end
     return y_dy, symv!_adjoint
+end
+
+@is_primitive(
+    MinimalCtx,
+    Tuple{
+        typeof(BLAS.nrm2),Int,X,Int
+    } where {T<:BlasFloat,X<:Union{Ptr{T},AbstractArray{T}}},
+)
+function rrule!!(
+    ::CoDual{typeof(BLAS.nrm2)},
+    n::CoDual{<:Integer},
+    X_dX::CoDual{<:Union{Ptr{T},AbstractArray{T}} where {T<:BlasFloat}},
+    incx::CoDual{<:Integer},
+)
+    X, dX = arrayify(X_dX)
+    y = BLAS.nrm2(n.x, X, incx.x)
+    function nrm2_pb!!(dy)
+        view(dX, 1:(incx.x):(incx.x * n.x)) .+=
+            view(X, 1:(incx.x):(incx.x * n.x)) .* (dy / y)
+        return NoRData(), NoRData(), NoRData(), NoRData()
+    end
+    return CoDual(y, NoFData()), nrm2_pb!!
+end
+
+@is_primitive(
+    MinimalCtx,
+    Tuple{typeof(BLAS.nrm2),X} where {T<:BlasFloat,X<:Union{Ptr{T},AbstractArray{T}}},
+)
+function rrule!!(
+    ::CoDual{typeof(BLAS.nrm2)},
+    X_dX::CoDual{<:Union{Ptr{T},AbstractArray{T}} where {T<:BlasFloat}},
+)
+    X, dX = arrayify(X_dX)
+    y = BLAS.nrm2(X)
+    function nrm2_pb!!(dy)
+        dX .+= X .* (dy / y)   # TODO: verify for complex numbers
+        return NoRData(), NoRData()
+    end
+    return CoDual(y, NoFData()), nrm2_pb!!
 end
 
 @is_primitive(
@@ -755,7 +798,7 @@ for (trsm, elty) in ((:dtrsm_, :Float64), (:strsm_, :Float32))
     end
 end
 
-function blas_matrices(rng::AbstractRNG, P::Type{<:BlasRealFloat}, p::Int, q::Int)
+function blas_matrices(rng::AbstractRNG, P::Type{<:BlasFloat}, p::Int, q::Int)
     Xs = Any[
         randn(rng, P, p, q),
         view(randn(rng, P, p + 5, 2q), 3:(p + 2), 1:2:(2q)),
@@ -767,7 +810,7 @@ function blas_matrices(rng::AbstractRNG, P::Type{<:BlasRealFloat}, p::Int, q::In
     return Xs
 end
 
-function blas_vectors(rng::AbstractRNG, P::Type{<:BlasRealFloat}, p::Int)
+function blas_vectors(rng::AbstractRNG, P::Type{<:BlasFloat}, p::Int)
     xs = Any[
         randn(rng, P, p),
         view(randn(rng, P, p + 5), 3:(p + 2)),
@@ -789,6 +832,19 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
     rng = rng_ctor(123456)
 
     test_cases = vcat(
+        # nrm2(x)
+        map_prod([Ps..., ComplexF64, ComplexF32]) do (P,)
+            return map([randn(rng, P, 105)]) do x
+                (false, :none, nothing, BLAS.nrm2, x)
+            end
+        end...,
+
+        # nrm2(n, x, incx)
+        map_prod([Ps..., ComplexF64, ComplexF32], [5, 3], [1, 2]) do (P, n, incx)
+            return map([randn(rng, P, 105)]) do x
+                (false, :none, nothing, BLAS.nrm2, n, x, incx)
+            end
+        end...,
 
         # gemv!
         map_prod(t_flags, [1, 3], [1, 2], Ps) do (tA, M, N, P)
