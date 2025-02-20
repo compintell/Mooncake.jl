@@ -115,6 +115,45 @@ for (fname, elty) in ((:cblas_ddot, :Float64), (:cblas_sdot, :Float32))
     end
 end
 
+@is_primitive(
+    MinimalCtx,
+    Tuple{
+        typeof(BLAS.nrm2),Int,X,Int
+    } where {T<:BlasFloat,X<:Union{Ptr{T},AbstractArray{T}}},
+)
+function rrule!!(
+    ::CoDual{typeof(BLAS.nrm2)},
+    n::CoDual{<:Integer},
+    X_dX::CoDual{<:Union{Ptr{T},AbstractArray{T}} where {T<:BlasFloat}},
+    incx::CoDual{<:Integer},
+)
+    X, dX = arrayify(X_dX)
+    y = BLAS.nrm2(n.x, X, incx.x)
+    function nrm2_pb!!(dy)
+        view(dX, 1:(incx.x):(incx.x * n.x)) .+=
+            view(X, 1:(incx.x):(incx.x * n.x)) .* (dy / y)
+        return NoRData(), NoRData(), NoRData(), NoRData()
+    end
+    return CoDual(y, NoFData()), nrm2_pb!!
+end
+
+@is_primitive(
+    MinimalCtx,
+    Tuple{typeof(BLAS.nrm2),X} where {T<:BlasFloat,X<:Union{Ptr{T},AbstractArray{T}}},
+)
+function rrule!!(
+    ::CoDual{typeof(BLAS.nrm2)},
+    X_dX::CoDual{<:Union{Ptr{T},AbstractArray{T}} where {T<:BlasFloat}},
+)
+    X, dX = arrayify(X_dX)
+    y = BLAS.nrm2(X)
+    function nrm2_pb!!(dy)
+        dX .+= X .* (dy / y)
+        return NoRData(), NoRData()
+    end
+    return CoDual(y, NoFData()), nrm2_pb!!
+end
+
 for (fname, elty) in ((:dscal_, :Float64), (:sscal_, :Float32))
     @eval @inline function Mooncake.rrule!!(
         ::CoDual{typeof(_foreigncall_)},
@@ -301,45 +340,6 @@ function rrule!!(
         return NoRData(), NoRData(), dα, NoRData(), NoRData(), dβ, NoRData()
     end
     return y_dy, symv!_adjoint
-end
-
-@is_primitive(
-    MinimalCtx,
-    Tuple{
-        typeof(BLAS.nrm2),Int,X,Int
-    } where {T<:BlasFloat,X<:Union{Ptr{T},AbstractArray{T}}},
-)
-function rrule!!(
-    ::CoDual{typeof(BLAS.nrm2)},
-    n::CoDual{<:Integer},
-    X_dX::CoDual{<:Union{Ptr{T},AbstractArray{T}} where {T<:BlasFloat}},
-    incx::CoDual{<:Integer},
-)
-    X, dX = arrayify(X_dX)
-    y = BLAS.nrm2(n.x, X, incx.x)
-    function nrm2_pb!!(dy)
-        view(dX, 1:(incx.x):(incx.x * n.x)) .+=
-            view(X, 1:(incx.x):(incx.x * n.x)) .* (dy / y)
-        return NoRData(), NoRData(), NoRData(), NoRData()
-    end
-    return CoDual(y, NoFData()), nrm2_pb!!
-end
-
-@is_primitive(
-    MinimalCtx,
-    Tuple{typeof(BLAS.nrm2),X} where {T<:BlasFloat,X<:Union{Ptr{T},AbstractArray{T}}},
-)
-function rrule!!(
-    ::CoDual{typeof(BLAS.nrm2)},
-    X_dX::CoDual{<:Union{Ptr{T},AbstractArray{T}} where {T<:BlasFloat}},
-)
-    X, dX = arrayify(X_dX)
-    y = BLAS.nrm2(X)
-    function nrm2_pb!!(dy)
-        dX .+= X .* (dy / y)   # TODO: verify for complex numbers
-        return NoRData(), NoRData()
-    end
-    return CoDual(y, NoFData()), nrm2_pb!!
 end
 
 @is_primitive(
