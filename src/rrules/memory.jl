@@ -378,6 +378,18 @@ using Core: memoryref_isassigned, memoryrefget, memoryrefset!, memoryrefnew, mem
 end
 
 @is_primitive MinimalCtx Tuple{typeof(lmemoryrefget),MemoryRef,Val,Val}
+@inline function frule!!(
+    ::Dual{typeof(lmemoryrefget)},
+    x::Dual{<:MemoryRef},
+    _ordering::Dual{<:Val},
+    _boundscheck::Dual{<:Val},
+)
+    ordering = primal(_ordering)
+    bc = primal(_boundscheck)
+    y = memoryrefget(primal(x), _val(ordering), _val(bc))
+    dy = memoryrefget(tangent(x), _val(ordering), _val(bc))  # TODO: check
+    return Dual(y, dy)
+end
 @inline function rrule!!(
     ::CoDual{typeof(lmemoryrefget)},
     x::CoDual{<:MemoryRef},
@@ -415,16 +427,32 @@ end
 
 # Core.memoryrefmodify!
 
+@inline function frule!!(::Dual{typeof(memoryrefnew)}, x::Dual{<:Memory})
+    return Dual(memoryrefnew(primal(x)), memoryrefnew(tangent(x)))
+end
 @inline function rrule!!(f::CoDual{typeof(memoryrefnew)}, x::CoDual{<:Memory})
     return CoDual(memoryrefnew(x.x), memoryrefnew(x.dx)), NoPullback(f, x)
 end
 
+@inline function frule!!(::Dual{typeof(memoryrefnew)}, x::Dual{<:MemoryRef}, ii::Dual{Int})
+    return CoDual(memoryrefnew(primal(x), primal(ii)), memoryrefnew(tangent(x), primal(ii)))
+end
 @inline function rrule!!(
     f::CoDual{typeof(memoryrefnew)}, x::CoDual{<:MemoryRef}, ii::CoDual{Int}
 )
     return CoDual(memoryrefnew(x.x, ii.x), memoryrefnew(x.dx, ii.x)), NoPullback(f, x, ii)
 end
 
+@inline function frule!!(
+    ::Dual{typeof(memoryrefnew)},
+    x::Dual{<:MemoryRef},
+    ii::Dual{Int},
+    boundscheck::Dual{Bool},
+)
+    y = memoryrefnew(primal(x), primal(ii), primal(boundscheck))
+    dy = memoryrefnew(tangent(x), primal(ii), primal(boundscheck))
+    return Dual(y, dy)
+end
 @inline function rrule!!(
     f::CoDual{typeof(memoryrefnew)},
     x::CoDual{<:MemoryRef},

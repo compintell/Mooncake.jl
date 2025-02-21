@@ -889,8 +889,19 @@ Increment by `1` the `n` field of any `Argument`s present in `stmt`.
 """
 inc_args(x::Expr) = Expr(x.head, map(__inc, x.args)...)
 inc_args(x::ReturnNode) = isdefined(x, :val) ? ReturnNode(__inc(x.val)) : x
+inc_args(x::GotoIfNot) = GotoIfNot(__inc(x.cond), x.dest)
 inc_args(x::IDGotoIfNot) = IDGotoIfNot(__inc(x.cond), x.dest)
 inc_args(x::IDGotoNode) = x
+inc_args(x::PiNode) = PiNode(__inc(x.val), x.typ)
+function inc_args(x::PhiNode)
+    new_values = Vector{Any}(undef, length(x.values))
+    for n in eachindex(x.values)
+        if isassigned(x.values, n)
+            new_values[n] = __inc(x.values[n])
+        end
+    end
+    return PhiNode(x.edges, new_values)
+end
 function inc_args(x::IDPhiNode)
     new_values = Vector{Any}(undef, length(x.values))
     for n in eachindex(x.values)

@@ -18,8 +18,16 @@ function parse_signature_expr(sig::Expr)
     return arg_type_symbols, where_params
 end
 
-function construct_def(arg_names, arg_types, where_params, body)
+function construct_rrule_def(arg_names, arg_types, where_params, body)
     name = :(Mooncake.rrule!!)
+    arg_exprs = map((n, t) -> :($n::$t), arg_names, arg_types)
+    def = Dict(:head => :function, :name => name, :args => arg_exprs, :body => body)
+    where_params !== nothing && setindex!(def, where_params, :whereparams)
+    return ExprTools.combinedef(def)
+end
+
+function construct_frule_def(arg_names, arg_types, where_params, body)
+    name = :(Mooncake.frule!!)
     arg_exprs = map((n, t) -> :($n::$t), arg_names, arg_types)
     def = Dict(:head => :function, :name => name, :args => arg_exprs, :body => body)
     where_params !== nothing && setindex!(def, where_params, :whereparams)
@@ -142,6 +150,10 @@ may be required if it is not.
     return zero_fcodual(primal(f)(map(primal, x)...)), NoPullback(f, x...)
 end
 
+@inline function zero_derivative(f::Dual, x::Vararg{Dual,N}) where {N}
+    return zero_dual(primal(f)(map(primal, x)...))
+end
+
 """
     @zero_adjoint ctx sig
 
@@ -220,7 +232,43 @@ macro zero_adjoint(ctx, sig)
     # Return code to create a method of is_primitive and a rule.
     ex = quote
         Mooncake.is_primitive(::Type{$(esc(ctx))}, ::Type{<:$(esc(sig))}) = true
-        $(construct_def(arg_names, arg_types, where_params, body))
+        $(construct_rrule_def(arg_names, arg_types, where_params, body))
+    end
+    return ex
+end
+
+macro zero_derivative(ctx, sig)
+
+    # Parse the signature, and construct the rule definition. If it is a vararg definition,
+    # then the last argument requires special treatment.
+    arg_type_symbols, where_params = parse_signature_expr(sig)
+    arg_names = map(n -> Symbol("x_$n"), eachindex(arg_type_symbols))
+    is_vararg = arg_type_symbols[end] === :Vararg
+    if is_vararg
+        arg_types_deriv = vcat(
+            map(t -> :(Mooncake.Dual{<:$t}), arg_type_symbols[1:(end - 1)]),
+            :(Vararg{Mooncake.Dual}),
+        )
+        arg_types_adjoint = vcat(
+            map(t -> :(Mooncake.CoDual{<:$t}), arg_type_symbols[1:(end - 1)]),
+            :(Vararg{Mooncake.CoDual}),
+        )
+        splat_symbol = Expr(Symbol("..."), arg_names[end])
+        tmp = arg_names[1:(end - 1)]
+        body_deriv = Expr(:call, Mooncake.zero_derivative, tmp..., splat_symbol)
+        body_adjoint = Expr(:call, Mooncake.zero_adjoint, tmp..., splat_symbol)
+    else
+        arg_types_deriv = map(t -> :(Mooncake.Dual{<:$t}), arg_type_symbols)
+        arg_types_adjoint = map(t -> :(Mooncake.CoDual{<:$t}), arg_type_symbols)
+        body_deriv = Expr(:call, Mooncake.zero_derivative, arg_names...)
+        body_adjoint = Expr(:call, Mooncake.zero_adjoint, arg_names...)
+    end
+
+    # Return code to create a method of is_primitive and a rule.
+    ex = quote
+        Mooncake.is_primitive(::Type{$(esc(ctx))}, ::Type{<:$(esc(sig))}) = true
+        $(construct_frule_def(arg_names, arg_types_deriv, where_params, body_deriv))
+        $(construct_rrule_def(arg_names, arg_types_adjoint, where_params, body_adjoint))
     end
     return ex
 end
@@ -334,7 +382,7 @@ end
 
 function construct_rrule_wrapper_def(arg_names, arg_types, where_params)
     body = Expr(:call, rrule_wrapper, arg_names...)
-    return construct_def(arg_names, arg_types, where_params, body)
+    return construct_rrule_def(arg_names, arg_types, where_params, body)
 end
 
 """
