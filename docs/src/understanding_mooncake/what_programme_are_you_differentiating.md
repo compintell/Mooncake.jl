@@ -143,7 +143,70 @@ You should convince yourself that this does indeed return a 2-tuple satisfying t
 
 
 
-## Part 2: Computational Graphs of Pure Functions
+## Part 2: Functions of Pure Functions
+
+The previous example demonstrated how we might treat a composition of pure unary `function`s.
+Here, we extend this to pure `function`s of multiple arguments.
+To see an example of this, consider the following computation graph:
+![linear_regression](../assets/computation_graph.png)
+
+It describes the loss function associated to linear regression, and might be written as Julia code in the following way:
+```julia
+l2_norm_sq(x) = sum(abs2, x)
+function linear_regression_loss(W, X, Y)
+    Y_hat = X * W
+    eps = Y - Y_hat
+    return l2_norm_sq(eps)
+end
+```
+As before, in order to produce a precise mathematical model for this Julia `function`, we reduce it to the composition of elementary functions.
+However, in order to do so, we will have to be a little more creative in how we choose these functions.
+
+We model this `function` as a function $$f$$ defined as follows:
+```math
+\begin{align}
+    f :=&\, r \circ f_3 \circ f_2 \circ f_1 \textrm{ where } \nonumber \\
+    f_1(W, X, Y) :=&\, (W, X, Y, XW) \nonumber \\
+    f_2(W, X, Y, \hat{Y}) :=&\, (W, X, Y, \hat{Y}, Y - \hat{Y}) \nonumber \\
+    f_3(W, X, Y, \hat{Y}, \varepsilon) :=&\, (W, X, Y, \hat{Y}, \varepsilon, \|\varepsilon\|_2^2) \nonumber \\
+    r(W, X, Y, \hat{Y}, \varepsilon, l) :=&\, (W, X, Y, l) \nonumber
+\end{align}
+```
+In words, our mathematical model for `linear_regression_loss` is the composition of fou differentiable functions. The first three map from a tuple containing all variables seen so far, to a tuple containing the same variables _and_ the value returned by the function, and the fourth simple reads off the elements of the final tuple which were passed in as arguments, and the return value.
+Observe that $$f$$ has exactly the same structure as $$f_1$$, $$f_2$$, and $$f_3$$ -- it maps from a tuple to the a tuple which also contains the return value.
+
+In general, we model each Julia `function` as a function $$f$$ mapping from a tuple of $$D$$ elements to a tuple of $$D + 1$$ elements, of the form
+```math
+f(x) := (x_1, \dots, x_D, \varphi (x))
+```
+for some differentiable function $$\varphi$$.
+Functions of this form have derivative
+```math
+D f [x] (\dot{x}) = (\dot{x}_1, \dots, \dot{x}_D, D \varphi [x] (\dot{x}))
+```
+and therefore adjoint
+```math
+D f [x]^\ast (\bar{y}) = (\bar{y}_1 + D \varphi [x]^\ast(\bar{y}_{D+1})_1, \dots, )
+```
+
+TODO: rework this to use an "argument selector" function so that each $$f$$ is of the form
+```math
+f(x) := (x_1, \dots, x_D, \varphi(a(x)))
+```
+where $$a$$ "selects the arguments", so is something like
+```math
+a(x_1, \dots, x_D) = (x_3, x_1)
+```
+if $$x_1$$ and $$x_3$$ are the variables passed in to the function in question.
+We can use this to separate what "AD" does, and what a rule must do, in a very clean way.
+
+
+
+
+
+
+
+
 
 ## Part 3: Computational Graphs of Mutating Functions
 
