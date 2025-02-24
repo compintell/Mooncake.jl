@@ -60,7 +60,7 @@ For example, consider:
 `h(x::Matrix{Float64}) = sum(x)`.
 
 #### Composition
-Let `f` be the composition of `f_1`, ..., `f_N`, a collection of `N` Julia `function`s which are pure and unary.
+Let `f` be the composition of `f_1, ..., f_N`, a collection of `N` Julia `function`s which are pure and unary.
 This might be implemented as `f(x) := f_N ∘ ... ∘ f_1`, or perhaps
 ```julia
 function f(x)
@@ -98,7 +98,11 @@ D f [x]^\ast = D f_1 [x_1]^\ast \circ \dots \circ D f_N [x_N]^\ast.
 ### Rules
 
 For this simple class of functions, a simple rule system will do.
-Recall that you should be satisfied with the rules below if you believe that the adjoint `function`s that they return faithfully implement the adjoints of the corresponding differentiable functions derived above.[^implementing_mathematics_on_a_computer]
+We require that a rule for a `function` with mathematical model $$f$$ accepts the same argument as the original `function`, and returns a 2-tuple containing
+1. the result of applying the `function` to its input, and
+2. another function which implements[^implementing_mathematics_on_a_computer] the adjoint, i.e. $$D f [x]^\ast$$.
+
+Given a rule for a `function` of interest, we simply run the rule, and can then apply the adjoint to any gradient vector of interest.
 
 #### `g`:
 ```julia
@@ -117,6 +121,8 @@ end
 ```
 
 #### Composition:
+
+One possible implementation for a rule for the composition of `f_1, ..., f_N` is
 ```julia
 function rrule(::typeof(f), x)
     x_1 = x
@@ -133,6 +139,8 @@ function rrule(::typeof(f), x)
     return y, f_adjoint
 end
 ```
+You should convince yourself that this does indeed return a 2-tuple satisfying the specification above.
+
 
 
 ## Part 2: Computational Graphs of Pure Functions
