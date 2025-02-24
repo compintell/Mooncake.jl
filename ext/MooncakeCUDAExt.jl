@@ -10,6 +10,7 @@ import Mooncake:
     rrule!!,
     @is_primitive,
     tangent_type,
+    primal,
     tangent,
     zero_tangent_internal,
     randn_tangent_internal,
@@ -26,6 +27,7 @@ import Mooncake:
     increment_and_get_rdata!,
     MaybeCache,
     IncCache,
+    NoRData,
     StackDict
 
 import Mooncake.TestUtils:

@@ -11,7 +11,18 @@ module TestTypes
 using Base.Iterators: product
 using Core: svec
 using ExprTools: combinedef
-using ..Mooncake: NoTangent, tangent_type, _typeof
+using ..Mooncake:
+    NoTangent,
+    tangent_type,
+    _typeof,
+    set_to_zero!!,
+    increment!!,
+    is_primitive,
+    randn_tangent,
+    _scale,
+    _add_to_primal,
+    _diff,
+    _dot
 
 const PRIMALS = Tuple{Bool,Any,Tuple}[]
 
@@ -91,7 +102,15 @@ using Random, Mooncake, Test, InteractiveUtils
 using Mooncake:
     CoDual,
     NoTangent,
+    PossiblyUninitTangent,
+    Tangent,
+    MutableTangent,
     rrule!!,
+    build_rrule,
+    tangent_type,
+    zero_tangent,
+    primal,
+    tangent,
     is_init,
     zero_codual,
     DefaultCtx,
@@ -126,7 +145,21 @@ using Mooncake:
     lsetfield!,
     increment_internal!!,
     set_to_zero_internal!!,
-    CC
+    CC,
+    set_to_zero!!,
+    increment!!,
+    is_primitive,
+    randn_tangent,
+    _scale,
+    _add_to_primal,
+    _diff,
+    _dot,
+    NoFData,
+    fdata_type,
+    fdata,
+    NoRData,
+    rdata_type,
+    rdata
 
 struct Shim end
 

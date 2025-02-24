@@ -23,7 +23,10 @@ using Mooncake:
     generate_hand_written_rrule!!_test_cases,
     generate_derived_rrule!!_test_cases,
     TestUtils,
-    _typeof
+    _typeof,
+    primal,
+    tangent,
+    zero_codual
 
 using Mooncake.TestUtils: _deepcopy
 

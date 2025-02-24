@@ -6,7 +6,7 @@ In this section, we detail some useful strategies which can help you avoid havin
 
 ## Simplfiying Code via Overlays
 
-```@docs
+```@docs; canonical=false
 Mooncake.@mooncake_overlay
 ```
 
@@ -15,7 +15,7 @@ Mooncake.@mooncake_overlay
 If the above strategy does not work, but you find yourself in the surprisingly common
 situation that the adjoint of the derivative of your function is always zero, you can very
 straightforwardly write a rule by making use of the following:
-```@docs
+```@docs; canonical=false
 Mooncake.@zero_adjoint
 Mooncake.zero_adjoint
 ```
@@ -28,18 +28,18 @@ There are some instances where it is most convenient to implement a `Mooncake.rr
 
 There is enough similarity between these two systems that most of the boilerplate code can be avoided.
 
-```@docs
+```@docs; canonical=false
 Mooncake.@from_rrule
 ```
 
 ## Adding Methods To `rrule!!` And `build_primitive_rrule`
 
 If the above strategies do not work for you, you should first implement a method of [`Mooncake.is_primitive`](@ref) for the signature of interest:
-```@docs
+```@docs; canonical=false
 Mooncake.is_primitive
 ```
 Then implement a method of one of the following:
-```@docs
+```@docs; canonical=false
 Mooncake.rrule!!
 Mooncake.build_primitive_rrule
 ```

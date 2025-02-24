@@ -143,33 +143,11 @@ include("interface.jl")
 include("config.jl")
 include("developer_tools.jl")
 
-export primal,
-    tangent,
-    randn_tangent,
-    increment!!,
-    NoTangent,
-    Tangent,
-    MutableTangent,
-    PossiblyUninitTangent,
-    set_to_zero!!,
-    tangent_type,
-    zero_tangent,
-    _scale,
-    _add_to_primal,
-    _diff,
-    _dot,
-    zero_codual,
-    codual_type,
-    rrule!!,
-    build_rrule,
-    value_and_gradient!!,
-    value_and_pullback!!,
-    NoFData,
-    NoRData,
-    fdata_type,
-    rdata_type,
-    fdata,
-    rdata,
-    get_interpreter
+# Public, not exported
+include("public.jl")
+@public Config, value_and_pullback!!, prepare_pullback_cache
+
+# Public, exported
+export value_and_gradient!!, prepare_gradient_cache
 
 end
