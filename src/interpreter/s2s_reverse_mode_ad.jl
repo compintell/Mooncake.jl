@@ -78,7 +78,7 @@ one block stack per derived rule.
 By using Int32, we assume that there aren't more than `typemax(Int32)` unique basic blocks
 in a given function, which ought to be reasonable.
 """
-const BlockStack = PtrStack{Int32}
+const BlockStack = PtrStack2{Int32}
 
 """
     ADInfo
@@ -1233,12 +1233,11 @@ function create_comms_insts!(ad_stmts_blocks::ADStmts, info::ADInfo)
         TT = Tuple{map(x -> x[2].type, comms_channels)...}
         stack = if Base.issingletontype(TT)
             SingletonStack{TT}()
-        # elseif isconcretetype(TT)
-            # PtrStack{TT}()
+        elseif Base.isbitstype(TT)
+            PtrStack{TT}()
         else
             Stack{TT}()
         end
-        # stack = Base.issingletontype(TT) ? SingletonStack{TT}() : PtrStack{TT}()
         comms_stack_id = add_data_if_not_singleton!(info, stack)
 
         # Create instructions for forwards-pass to create tuple + push onto comms stack.

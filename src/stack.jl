@@ -55,11 +55,8 @@ end
 
 _copy(::PtrStack{T}) where {T} = PtrStack{T}()
 
-position_int(x::PtrStack{T}) where {T} = Int(div(x.position - pointer(x, 1), sizeof(T)) + 1)
-
 @inline function Base.push!(x::PtrStack{T}, val::T) where {T}
-    position = x.position + sizeof(T)
-    # @show x.position > pointer(x.memory, length(x.memory))
+    position = x.position + Base.elsize(typeof(x.memory))
     if position <= x.finish # if we're not at the end of the vector yet
         unsafe_store!(position, val)
         x.position = position
@@ -81,10 +78,7 @@ end
 
 @inline function Base.pop!(x::PtrStack{T}) where {T}
     position = x.position
-    # @show position > pointer(x.memory, length(x.memory))
-    # @show position < pointer(x.memory, 1)
-    # @show pointer(x.memory, length(x.memory)) == x.finish
     val = unsafe_load(position)
-    x.position = position - sizeof(T)
+    x.position = position - Base.elsize(typeof(x.memory))
     return val
 end
