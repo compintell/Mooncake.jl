@@ -1229,9 +1229,16 @@ function create_comms_insts!(ad_stmts_blocks::ADStmts, info::ADInfo)
         # Optimise for the case that `TT` is a singleton type -- the result of this
         # optimisation is to directly insert the stack into the code if `TT` is a singleton
         # type, and avoid adding anything to shared data. One notable case in which this
-        # will hold is when comms_ids is empty.
+        # will hold is when comms_ids is e2mpty.
         TT = Tuple{map(x -> x[2].type, comms_channels)...}
-        stack = Base.issingletontype(TT) ? SingletonStack{TT}() : PtrStack{TT}()
+        stack = if Base.issingletontype(TT)
+            SingletonStack{TT}()
+        # elseif isconcretetype(TT)
+            # PtrStack{TT}()
+        else
+            Stack{TT}()
+        end
+        # stack = Base.issingletontype(TT) ? SingletonStack{TT}() : PtrStack{TT}()
         comms_stack_id = add_data_if_not_singleton!(info, stack)
 
         # Create instructions for forwards-pass to create tuple + push onto comms stack.
