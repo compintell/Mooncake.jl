@@ -41,12 +41,15 @@ Base.pop!(::SingletonStack{T}) where {T} = T.instance
 """
     PtrStack{T}()
 
+A stack in which point arithmetic is used to achieve better performance than a regular
+`Stack`. This type should only be used when `T` is a bits type.
 """
 mutable struct PtrStack{T}
     const memory::Vector{T}
     position::Ptr{T}
     finish::Ptr{T}
     function PtrStack{T}() where {T}
+        @assert isbitstype(T)
         memory = Vector{T}(undef, 0)
         position = pointer(memory, 0)
         return new{T}(memory, position, position)
