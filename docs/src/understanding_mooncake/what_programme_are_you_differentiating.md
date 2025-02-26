@@ -22,13 +22,13 @@ function r(f, x, y)
     function adj_f(db)
         _, da, dx, dy = adj_h(db)
         _, dx2 = adj_g(da)
-        dx = dx + dx2
+        dx = Mooncake.increment!!(dx, dx2)
         return NoRData(), dx, dy
     end
     return b, adj_f
 end
 ```
-This is important because the above rule essentially does the following:
+Observe that the above rule essentially does the following:
 1. fowards-pass: replace calls to rules.
 2. reverse-pass: run adjoints in reverse order, adding together rdata when a variable is used multiple times.
 
@@ -51,7 +51,7 @@ We ask for patience, and promise that the modelling task will become more intere
 
 ### `function` Class
 
-To start with, let us consider only `function`s which are, pure (free of externally-visible side effects), unary, and don't contain any data themselves (e.g. no closures or callable `struct`s).
+To start with, let us consider only `function`s which are pure (free of externally-visible side effects, such as the modification of their arguments of global variables), unary (single-argument), and don't contain any data themselves (e.g. no closures or callable `struct`s).
 For example, consider:
 #### `g`:
 `g(x::Vector{Float64}) = 2x` TODO: pick a non-linear example!!!!
@@ -172,33 +172,67 @@ We model this `function` as a function $$f$$ defined as follows:
     r(W, X, Y, \hat{Y}, \varepsilon, l) :=&\, (W, X, Y, l) \nonumber
 \end{align}
 ```
-In words, our mathematical model for `linear_regression_loss` is the composition of fou differentiable functions. The first three map from a tuple containing all variables seen so far, to a tuple containing the same variables _and_ the value returned by the function, and the fourth simple reads off the elements of the final tuple which were passed in as arguments, and the return value.
+In words, our mathematical model for `linear_regression_loss` is the composition of four differentiable functions. The first three map from a tuple containing all variables seen so far, to a tuple containing the same variables _and_ the value returned by the function, and the fourth simple reads off the elements of the final tuple which were passed in as arguments, and the return value.
 Observe that $$f$$ has exactly the same structure as $$f_1$$, $$f_2$$, and $$f_3$$ -- it maps from a tuple to the a tuple which also contains the return value.
 
 In general, we model each Julia `function` as a function $$f$$ mapping from a tuple of $$D$$ elements to a tuple of $$D + 1$$ elements, of the form
 ```math
-f(x) := (x_1, \dots, x_D, \varphi (x))
+f(x) := (x_1, \dots, x_D, \varphi (a(x)))
 ```
-for some differentiable function $$\varphi$$.
-Functions of this form have derivative
+for some differentiable function $$\varphi$$, and "argument selector" function $$a$$.
+For example
 ```math
-D f [x] (\dot{x}) = (\dot{x}_1, \dots, \dot{x}_D, D \varphi [x] (\dot{x}))
+\begin{align}
+    &f_1:\quad a_1(x) := (x_2, x_1)  &\text{ and   } \quad &\varphi_1(A,B) := AB \nonumber \\
+    &f_2:\quad a_2(x) := (x_3, x_4)  &\text{ and   } \quad &\varphi_2(A,B) := A - B \nonumber \\
+    &f_3:\quad a_3(x) := x_5         &\text{ and   } \quad &\varphi_3(A) := \|A\|_2^2 \nonumber
+\end{align}
 ```
-and therefore adjoint
+Note that the argument to $a_1$ is a 3-tuple, to $a_2$ a 4-tuple, and to $a_3$ a 5-tuple.
+Functions such as $$f$$ have derivative
 ```math
-D f [x]^\ast (\bar{y}) = (\bar{y}_1 + D \varphi [x]^\ast(\bar{y}_{D+1})_1, \dots, )
+D f [x] (\dot{x}) = (\dot{x}_1, \dots, \dot{x}_D, D [\varphi \circ a, x] (\dot{x})).
+```
+Letting $$\bar{y} := (\bar{y}_1, \dots \bar{y}_{D+1})$$, we can perform the usual manipulations to find the adjoint of $$D[f, x]$$:
+```math
+\begin{align}
+    \langle \bar{y}, D[f, x](\dot{x}) \rangle &= \langle (\bar{y}_1, \dots, \bar{y}_{D+1}), (\dot{x}_1, \dots, \dot{x}_D, D[\varphi \circ a, x](\dot{x})) \rangle \nonumber \\
+        &= \sum_{d=1}^D \langle \bar{y}_d, \dot{x}_d \rangle + \langle D[\varphi \circ a, x]^\ast (\bar{y}_{D+1}), \dot{x} \rangle \nonumber \\
+        &= \langle (\bar{y}_1, \dots, \bar{y}_D), \dot{x} \rangle + \langle D[\varphi \circ a, x]^\ast (\bar{y}_{D+1}), \dot{x} \rangle \nonumber \\
+        &= \langle (\bar{y}_1, \dots, \bar{y}_D) + D[\varphi \circ a, x]^\ast (\bar{y}_{D+1}), \dot{x} \rangle. \nonumber
+\end{align}
+```
+So, what is $D[\varphi \circ a, x]^\ast (\bar{y}_{D+1})$?.
+First let $$z := a(x)$$ and observe that $$D[a, x] = a$$ since $$a$$ is linear.
+It follows that
+```math
+D[\varphi \circ a, x]^\ast = (D[\varphi, z] \circ D[a, x])^\ast = (D[\varphi, z] \circ a)^\ast = a^\ast \circ D[\varphi, z]^\ast .
 ```
 
-TODO: rework this to use an "argument selector" function so that each $$f$$ is of the form
+It is the case that $D[\varphi, z]^\ast$ is necessarily specific to $\varphi$, so will have to be provided on a case-by-case basis, or algorithmically derived.
+An expression for $$a^\ast$$, on the other hand, can be obtained.
+We do not provide a general derivation for $a^\ast$ -- instead we consider a specific instance, and describe how to generalise.
+Let $$\bar{z}$$ be a tuple with as many elements as $$z$$, each of which is a valid tangent for the corresponding element of $$z$$.
+Suppose that $$a(x) = (x_3, x_1)$$ and $$x$$ is a 5-tuple, then
 ```math
-f(x) := (x_1, \dots, x_D, \varphi(a(x)))
+\begin{align}
+    \langle \bar{z}, a(x) \rangle &= \langle (\bar{z}_1, \bar{z}_2), (x_3, x_1) \rangle \nonumber \\
+        &= \langle (\bar{z}_2, 0, \bar{z}_1, 0, 0), (x_1, x_2, x_3, x_4, x_5) \rangle \nonumber \\
+        &= \langle (\bar{z}_2, 0, \bar{z}_1, 0, 0), x) \rangle. \nonumber
+\end{align}
 ```
-where $$a$$ "selects the arguments", so is something like
+That is, $a^\ast$ is returns tuple with as many elements as its argument, in which an element is zero if $a$ does not return it, and the appropriate element of the input to $a^\ast$ otherwise.
+From this we conclude that the $d$th element of
 ```math
-a(x_1, \dots, x_D) = (x_3, x_1)
+(\bar{y}_1, \dots, \bar{y}_D) + D[\varphi \circ a, x]^\ast (\bar{y}_{D+1})
 ```
-if $$x_1$$ and $$x_3$$ are the variables passed in to the function in question.
-We can use this to separate what "AD" does, and what a rule must do, in a very clean way.
+is $\bar{y}_d$ if $a$ does not return its $d$th element, and $\bar{y}_d$ plus the ... TODO: FIGURE OUT HOW TO PHRASE THIS.
+
+In general, this simply says that...
+
+Therefore, a rule for a composition $f_N \circ \dots \circ f_1$ must do...
+
+In this framework, we define a rule...
 
 
 
