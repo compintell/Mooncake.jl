@@ -1,8 +1,8 @@
 # Towards AD in Julia: Composition of Rules
 
 In [Mooncake.jl's Rule System](@ref) we provide a mathematical model for a _single_ Julia `function`, and state what a rule to differentiate it in reverse-mode must do.
-However, we do not explain how to algorithmically derive rules for compositions of Julia `function`s, each of which already has a rule.
-The purpose of this section is to move towards this.
+Our goal, however, is to implement an algorithm which produces rules for functions which we do not already have rules for.
+This section explains the mathematical model required to know how to do this.
 
 ## A Motivating Example
 
