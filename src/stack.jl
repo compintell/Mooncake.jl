@@ -27,7 +27,7 @@ end
 
 @inline function Base.pop!(x::Stack)
     position = x.position
-    val = x.memory[position]
+    val = @inbounds x.memory[position]
     x.position = position - 1
     return val
 end
