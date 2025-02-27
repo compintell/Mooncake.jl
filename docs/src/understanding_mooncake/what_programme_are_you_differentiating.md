@@ -1,6 +1,8 @@
 # Towards AD in Julia: Composition of Rules
 
-In [Mooncake.jl's Rule System](@ref) we provide a mathematical model for a _single_ Julia `function`, and state what a rule to differentiate it in reverse-mode must do.
+Prerequisites: [Algorithmic Differentiation](@ref).
+
+In [Mooncake.jl's Rule System](@ref) we discuss a generic mathematical model for a Julia `function`, and state what a rule to differentiate it in reverse-mode must do.
 Our goal, however, is to implement an algorithm which produces rules for functions which we do not already have rules for.
 This section explains the mathematical model required to know how to do this.
 
@@ -165,74 +167,105 @@ However, in order to do so, we will have to be a little more creative in how we 
 We model this `function` as a function $$f$$ defined as follows:
 ```math
 \begin{align}
-    f :=&\, r \circ f_3 \circ f_2 \circ f_1 \textrm{ where } \nonumber \\
-    f_1(W, X, Y) :=&\, (W, X, Y, XW) \nonumber \\
-    f_2(W, X, Y, \hat{Y}) :=&\, (W, X, Y, \hat{Y}, Y - \hat{Y}) \nonumber \\
-    f_3(W, X, Y, \hat{Y}, \varepsilon) :=&\, (W, X, Y, \hat{Y}, \varepsilon, \|\varepsilon\|_2^2) \nonumber \\
+    f :=&\, r \circ \varphi_3 \circ \varphi_2 \circ \varphi_1 \textrm{ where } \nonumber \\
+    \varphi_1(W, X, Y) :=&\, (W, X, Y, XW) \nonumber \\
+    \varphi_2(W, X, Y, \hat{Y}) :=&\, (W, X, Y, \hat{Y}, Y - \hat{Y}) \nonumber \\
+    \varphi_3(W, X, Y, \hat{Y}, \varepsilon) :=&\, (W, X, Y, \hat{Y}, \varepsilon, \|\varepsilon\|_2^2) \nonumber \\
     r(W, X, Y, \hat{Y}, \varepsilon, l) :=&\, (W, X, Y, l) \nonumber
 \end{align}
 ```
 In words, our mathematical model for `linear_regression_loss` is the composition of four differentiable functions. The first three map from a tuple containing all variables seen so far, to a tuple containing the same variables _and_ the value returned by the function, and the fourth simple reads off the elements of the final tuple which were passed in as arguments, and the return value.
-Observe that $$f$$ has exactly the same structure as $$f_1$$, $$f_2$$, and $$f_3$$ -- it maps from a tuple to the a tuple which also contains the return value.
 
-In general, we model each Julia `function` as a function $$f$$ mapping from a tuple of $$D$$ elements to a tuple of $$D + 1$$ elements, of the form
+In general, we model the $n$th Julia `function` _call_ with a function $$\varphi_n$$ mapping from a tuple of $$D$$ elements to a tuple of $$D + 1$$ elements, of the form
 ```math
-f(x) := (x_1, \dots, x_D, \varphi (a(x)))
+\varphi_n(x) := (x_1, \dots, x_D, g_n (a_n(x)))
 ```
-for some differentiable function $$\varphi$$, and "argument selector" function $$a$$.
-For example
+for some differentiable function $$g_n$$, and "argument selector" function $$a_n$$.
+In words: each function call involves
+1. preparing the arguments to be passed to the function call, ($a_n$)
+2. calling the function ($g_n$), and
+3. adding a new variable to the list of in-scope variables (new tuple is of length $D + 1$).
+
+For example, in the case of our example above,
 ```math
 \begin{align}
-    &f_1:\quad a_1(x) := (x_2, x_1)  &\text{ and   } \quad &\varphi_1(A,B) := AB \nonumber \\
-    &f_2:\quad a_2(x) := (x_3, x_4)  &\text{ and   } \quad &\varphi_2(A,B) := A - B \nonumber \\
-    &f_3:\quad a_3(x) := x_5         &\text{ and   } \quad &\varphi_3(A) := \|A\|_2^2 \nonumber
+    &\varphi_1:\quad a_1(x) := (x_2, x_1)  &\text{ and   } \quad &g_1(A,B) := AB \nonumber \\
+    &\varphi_2:\quad a_2(x) := (x_3, x_4)  &\text{ and   } \quad &g_2(A,B) := A - B \nonumber \\
+    &\varphi_3:\quad a_3(x) := x_5         &\text{ and   } \quad &g_3(A) := \|A\|_2^2 \nonumber
 \end{align}
 ```
 Note that the argument to $a_1$ is a 3-tuple, to $a_2$ a 4-tuple, and to $a_3$ a 5-tuple.
-Functions such as $$f$$ have derivative
+Crucially, observe that $$f$$ has exactly the same structure as $$g_1$$, $$g_2$$, and $$g_3$$ -- it maps from the tuple containing its arguments to a tuple comprising its arguments and the value that it returns.
+
+Dropping the subscript $n$, functions such as $$\varphi$$ have derivative
 ```math
-D f [x] (\dot{x}) = (\dot{x}_1, \dots, \dot{x}_D, D [\varphi \circ a, x] (\dot{x})).
+D [\varphi, x] (\dot{x}) = (\dot{x}_1, \dots, \dot{x}_D, D [g \circ a, x] (\dot{x})).
 ```
-Letting $$\bar{y} := (\bar{y}_1, \dots \bar{y}_{D+1})$$, we can perform the usual manipulations to find the adjoint of $$D[f, x]$$:
+Letting $$\bar{y} := (\bar{y}_1, \dots \bar{y}_{D+1})$$, we can perform the usual manipulations to find the adjoint of $$D[\varphi, x]$$:
 ```math
 \begin{align}
-    \langle \bar{y}, D[f, x](\dot{x}) \rangle &= \langle (\bar{y}_1, \dots, \bar{y}_{D+1}), (\dot{x}_1, \dots, \dot{x}_D, D[\varphi \circ a, x](\dot{x})) \rangle \nonumber \\
-        &= \sum_{d=1}^D \langle \bar{y}_d, \dot{x}_d \rangle + \langle D[\varphi \circ a, x]^\ast (\bar{y}_{D+1}), \dot{x} \rangle \nonumber \\
-        &= \langle (\bar{y}_1, \dots, \bar{y}_D), \dot{x} \rangle + \langle D[\varphi \circ a, x]^\ast (\bar{y}_{D+1}), \dot{x} \rangle \nonumber \\
-        &= \langle (\bar{y}_1, \dots, \bar{y}_D) + D[\varphi \circ a, x]^\ast (\bar{y}_{D+1}), \dot{x} \rangle. \nonumber
+    \langle \bar{y}, D[\varphi, x](\dot{x}) \rangle &= \langle (\bar{y}_1, \dots, \bar{y}_{D+1}), (\dot{x}_1, \dots, \dot{x}_D, D[g \circ a, x](\dot{x})) \rangle \nonumber \\
+        &= \sum_{d=1}^D \langle \bar{y}_d, \dot{x}_d \rangle + \langle D[g \circ a, x]^\ast (\bar{y}_{D+1}), \dot{x} \rangle \nonumber \\
+        &= \langle (\bar{y}_1, \dots, \bar{y}_D), \dot{x} \rangle + \langle D[g \circ a, x]^\ast (\bar{y}_{D+1}), \dot{x} \rangle \nonumber \\
+        &= \langle (\bar{y}_1, \dots, \bar{y}_D) + D[g \circ a, x]^\ast (\bar{y}_{D+1}), \dot{x} \rangle. \nonumber
 \end{align}
 ```
-So, what is $D[\varphi \circ a, x]^\ast (\bar{y}_{D+1})$?.
+So, what is $D[g \circ a, x]^\ast (\bar{y}_{D+1})$?.
 First let $$z := a(x)$$ and observe that $$D[a, x] = a$$ since $$a$$ is linear.
 It follows that
 ```math
-D[\varphi \circ a, x]^\ast = (D[\varphi, z] \circ D[a, x])^\ast = (D[\varphi, z] \circ a)^\ast = a^\ast \circ D[\varphi, z]^\ast .
+D[g \circ a, x]^\ast = (D[g, z] \circ D[a, x])^\ast = (D[g, z] \circ a)^\ast = a^\ast \circ D[g, z]^\ast .
 ```
 
-It is the case that $D[\varphi, z]^\ast$ is necessarily specific to $\varphi$, so will have to be provided on a case-by-case basis, or algorithmically derived.
-An expression for $$a^\ast$$, on the other hand, can be obtained.
-We do not provide a general derivation for $a^\ast$ -- instead we consider a specific instance, and describe how to generalise.
-Let $$\bar{z}$$ be a tuple with as many elements as $$z$$, each of which is a valid tangent for the corresponding element of $$z$$.
-Suppose that $$a(x) = (x_3, x_1)$$ and $$x$$ is a 5-tuple, then
+Since $g$ has the same form as $f$, assume that we know $D[g, z]^\ast$ by induction.
+An expression for $$a^\ast$$, on the other hand, we obtain from its definition directly.
+
+As discussed $a$ maps from a tuple containing all variables passed in to $f$, to the tuple which is to be passed to $g$.
+For example, suppose variables `x_1, x_2, x_3` are in-scope, then a call of the form
+1. `g(x_2, x_1)` has argument selector $a(x) := (x_2, x_1)$, and
+2. `g(x_3, x_3)` has argument selector $a(x) := (x_3, x_3)$,
+where $x$ is a 3-tuple in both examples.
+The general form of an argument selector $a$ mapping from a $D$-tuple to an $N$-tuple is
+```math
+a(x) = (x_{i_1}, \dots, x_{i_N})
+```
+for some set of integers $i_1, \dots, i_N \in \{1, \dots, D\}$.
+Let $z = (z_1, \dots, z_N)$, and $c_n(z)$ the $D$-tuple which is equal to $z_n$ at element $i_n$, and zero everywhere else. Then adjoint of $a$ is obtained in the usual manner:
 ```math
 \begin{align}
-    \langle \bar{z}, a(x) \rangle &= \langle (\bar{z}_1, \bar{z}_2), (x_3, x_1) \rangle \nonumber \\
-        &= \langle (\bar{z}_2, 0, \bar{z}_1, 0, 0), (x_1, x_2, x_3, x_4, x_5) \rangle \nonumber \\
-        &= \langle (\bar{z}_2, 0, \bar{z}_1, 0, 0), x) \rangle. \nonumber
+\langle z, a^\ast (x) \rangle &= \langle (z_1, \dots, z_N), (x_{i_1}, \dots, x_{i_N}) \rangle = \sum_{n=1}^N \langle z_n, x_{i_n} \rangle = \sum_{n=1}^N \langle c_n(z), x \rangle = \langle \sum_{n=1}^N c_n(z), x \rangle, \nonumber
 \end{align}
 ```
-That is, $a^\ast$ is returns tuple with as many elements as its argument, in which an element is zero if $a$ does not return it, and the appropriate element of the input to $a^\ast$ otherwise.
-From this we conclude that the $d$th element of
+from which we conclude
 ```math
-(\bar{y}_1, \dots, \bar{y}_D) + D[\varphi \circ a, x]^\ast (\bar{y}_{D+1})
+a^\ast(z) = \sum_{n=1}^N c_n(z). \nonumber
 ```
-is $\bar{y}_d$ if $a$ does not return its $d$th element, and $\bar{y}_d$ plus the ... TODO: FIGURE OUT HOW TO PHRASE THIS.
+Applying this result to our previous examples, we see that
+1. when $a(x) := (x_2, x_1)$, $a^\ast (z) := (z_2, z_1, 0)$, and that
+2. when $a(x) := (x_3, x_3)$, $a^\ast (z) := (0, 0, z_1 + z_2)$.
 
-In general, this simply says that...
+Combining this result with the adjoint of the derivative of $\varphi$ yields
+```math
+D[\varphi, x]^\ast (\bar{y}) = (\bar{y}_1, \dots, \bar{y}_D) + \sum_{n=1}^N c_n(D [g, z]^\ast (\bar{y})).
+```
 
-Therefore, a rule for a composition $f_N \circ \dots \circ f_1$ must do...
-
-In this framework, we define a rule...
+Finally, we to find the derivative of the adjoint of $r$.
+It is linear, so it is its own derivative.
+Assume $f$ is of the form
+```math
+f = r \circ \varphi_P \circ \dots \circ \varphi_1
+```
+and that its arguments are $N$-tuples.
+Then $r$ maps from $N + P$-tuples to an $N+1$-tuple, and its adjoint is a tuple of length $N + P$ given by
+```math
+r^\ast(\bar{y}) = (\bar{y}_1, \dots, \bar{y}_N, 0, \dots, 0, \bar{y}_{N+1}).
+```
+The adjoint the derivative of $f$ is
+```math
+D [f,x]^\ast = D[\varphi_1, x_1]^\ast \circ \dots \circ D [\varphi_P, x_P]^\ast \circ r^\ast
+```
+where $x_p := \varphi_{p-1}(x_{p-1})$ and $x_1 := x$.
+Since we now have expressions for all of the terms in this, it remains to figure out how to implement this adjoint in practice.
 
 
 
