@@ -55,7 +55,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
-          include-all-prereleases: false
+          include-all-prereleases: true
       - uses: julia-actions/cache@v2
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
@@ -102,7 +102,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
-          include-all-prereleases: false
+          include-all-prereleases: true
       - uses: julia-actions/cache@v2
       - uses: julia-actions/julia-buildpkg@v1
       - run: |
@@ -135,7 +135,7 @@ jobs:
         with:
           version: '1'
           arch: x64
-          include-all-prereleases: false
+          include-all-prereleases: true
       - uses: julia-actions/cache@v2
       - uses: julia-actions/julia-buildpkg@v1
       - run: julia --project=bench --eval 'include("bench/run_benchmarks.jl"); main()'
@@ -154,7 +154,7 @@ jobs:
         with:
           version: '1'
           arch: x64
-          include-all-prereleases: false
+          include-all-prereleases: true
       - uses: julia-actions/cache@v2
       - uses: julia-actions/julia-buildpkg@v1
       - run: mkdir bench_results
