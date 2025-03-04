@@ -184,6 +184,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
             # Benchmark primal.
             @info "Primal"
             primals = map(x -> x isa CoDual ? primal(x) : x, args)
+            GC.gc(true)
             suite["primal"] = Chairmarks.benchmark(
                 () -> primals,
                 primals -> (primals[1], _deepcopy(primals[2:end])),
@@ -197,6 +198,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
             rule = Mooncake.build_rrule(args...)
             coduals = map(x -> x isa CoDual ? x : zero_codual(x), args)
             to_benchmark(rule, coduals...)
+            GC.gc(true)
             suite["mooncake"] = Chairmarks.benchmark(
                 () -> (rule, coduals),
                 identity,
@@ -208,6 +210,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
             if include_other_frameworks
                 if should_run_benchmark(Val(:zygote), args...)
                     @info "Zygote"
+                    GC.gc(true)
                     suite["zygote"] = @be(
                         _,
                         _,
@@ -219,6 +222,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
 
                 if should_run_benchmark(Val(:reverse_diff), args...)
                     @info "ReverseDiff"
+                    GC.gc(true)
                     tape = ReverseDiff.GradientTape(primals[1], primals[2:end])
                     compiled_tape = ReverseDiff.compile(tape)
                     result = map(x -> randn(size(x)), primals[2:end])
@@ -233,6 +237,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
 
                 if should_run_benchmark(Val(:enzyme), args...)
                     @info "Enzyme"
+                    GC.gc(true)
                     _rand_similiar(x) = x isa Real ? randn() : randn(size(x))
                     dup_args = map(x -> Duplicated(x, _rand_similiar(x)), primals[2:end])
                     suite["enzyme"] = @be(
