@@ -130,6 +130,7 @@ include(joinpath("rrules", "linear_algebra.jl"))
 include(joinpath("rrules", "low_level_maths.jl"))
 include(joinpath("rrules", "misc.jl"))
 include(joinpath("rrules", "new.jl"))
+include(joinpath("rrules", "random.jl"))
 include(joinpath("rrules", "tasks.jl"))
 include(joinpath("rrules", "twice_precision.jl"))
 @static if VERSION >= v"1.11-rc4"

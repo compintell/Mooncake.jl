@@ -49,6 +49,8 @@ include("front_matter.jl")
         include(joinpath("rrules", "misc.jl"))
     elseif test_group == "rrules/new"
         include(joinpath("rrules", "new.jl"))
+    elseif test_group == "rrules/random"
+        include(joinpath("rrules", "random.jl"))
     elseif test_group == "rrules/tasks"
         include(joinpath("rrules", "tasks.jl"))
     elseif test_group == "rrules/twice_precision"
