@@ -1,6 +1,46 @@
-# See the docstring for `BBCode` for some context on this file.
+"""
+    module BBCode
+
+See the docstring for the `BBCode` `struct` for info on this file.
+"""
+module BBCodes
+
+using Graphs
+
+using Core.Compiler: ReturnNode, PhiNode, GotoIfNot, GotoNode, NewInstruction, IRCode,
+    SSAValue, PiNode, Argument
+const CC = Core.Compiler
+
+export ID, seed_id!, IDPhiNode, IDGotoNode, IDGotoIfNot, Switch, BBlock, phi_nodes,
+    terminator, insert_before_terminator!, collect_stmts, compute_all_predecessors, BBCode,
+    inc_args, remove_unreachable_blocks!, characterise_used_ids,
+    characterise_unique_predecessor_blocks, sort_blocks!, InstVector, IDInstPair,
+    __line_numbers_to_block_numbers!, is_reachable_return_node, __inc, new_inst
 
 const _id_count::Dict{Int,Int32} = Dict{Int,Int32}()
+
+"""
+    new_inst(stmt, type=Any, flag=CC.IR_FLAG_REFINED)::NewInstruction
+
+Create a `NewInstruction` with fields:
+- `stmt` = `stmt`
+- `type` = `type`
+- `info` = `CC.NoCallInfo()`
+- `line` = `Int32(1)`
+- `flag` = `flag`
+"""
+function new_inst(@nospecialize(stmt), @nospecialize(type)=Any, flag=CC.IR_FLAG_REFINED)
+    return NewInstruction(stmt, type, CC.NoCallInfo(), Int32(1), flag)
+end
+
+"""
+    const InstVector = Vector{NewInstruction}
+
+Note: the `CC.NewInstruction` type is used to represent instructions because it has the
+correct fields. While it is only used to represent new instrucdtions in `Core.Compiler`, it
+is used to represent all instructions in `BBCode`.
+"""
+const InstVector = Vector{NewInstruction}
 
 """
     ID()
@@ -394,6 +434,48 @@ function _control_flow_graph(blks::Vector{BBlock})::Core.Compiler.CFG
     return Core.Compiler.CFG(basic_blocks, index[2:(end - 1)])
 end
 
+
+"""
+    _instructions_to_blocks(insts::InstVector, cfg::CC.CFG)::InstVector
+
+Pulls out the instructions from `insts`, and calls `__line_numbers_to_block_numbers!`.
+"""
+function _lines_to_blocks(insts::InstVector, cfg::CC.CFG)::InstVector
+    stmts = __line_numbers_to_block_numbers!(Any[x.stmt for x in insts], cfg)
+    return map((inst, stmt) -> NewInstruction(inst; stmt), insts, stmts)
+end
+
+"""
+    __line_numbers_to_block_numbers!(insts::Vector{Any}, cfg::CC.CFG)
+
+Converts any edges in `GotoNode`s, `GotoIfNot`s, `PhiNode`s, and `:enter` expressions which
+refer to line numbers into references to block numbers. The `cfg` provides the information
+required to perform this conversion.
+
+For context, `CodeInfo` objects have references to line numbers, while `IRCode` uses
+block numbers.
+
+This code is copied over directly from the body of `Core.Compiler.inflate_ir!`.
+"""
+function __line_numbers_to_block_numbers!(insts::Vector{Any}, cfg::CC.CFG)
+    for i in eachindex(insts)
+        stmt = insts[i]
+        if isa(stmt, GotoNode)
+            insts[i] = GotoNode(CC.block_for_inst(cfg, stmt.label))
+        elseif isa(stmt, GotoIfNot)
+            insts[i] = GotoIfNot(stmt.cond, CC.block_for_inst(cfg, stmt.dest))
+        elseif isa(stmt, PhiNode)
+            insts[i] = PhiNode(
+                Int32[CC.block_for_inst(cfg, Int(edge)) for edge in stmt.edges], stmt.values
+            )
+        elseif Meta.isexpr(stmt, :enter)
+            stmt.args[1] = CC.block_for_inst(cfg, stmt.args[1]::Int)
+            insts[i] = stmt
+        end
+    end
+    return insts
+end
+
 #
 # Converting from IRCode to BBCode
 #
@@ -425,13 +507,16 @@ function BBCode(ir::IRCode)
     return BBCode(ir, blocks)
 end
 
+
+
 """
     new_inst_vec(x::CC.InstructionStream)
 
 Convert an `Compiler.InstructionStream` into a list of `Compiler.NewInstruction`s.
 """
 function new_inst_vec(x::CC.InstructionStream)
-    return map((v...,) -> NewInstruction(v...), stmt(x), x.type, x.info, x.line, x.flag)
+    stmt = @static VERSION < v"1.11.0-rc4" ? x.inst : x.stmt
+    return map((v...,) -> NewInstruction(v...), stmt, x.type, x.info, x.line, x.flag)
 end
 
 # Maps from positional names (SSAValues for nodes, Integers for basic blocks) to IDs.
@@ -673,7 +758,7 @@ function _distance_to_entry(blks::Vector{BBlock})::Vector{Int}
 end
 
 """
-    _sort_blocks!(ir::BBCode)::BBCode
+    sort_blocks!(ir::BBCode)::BBCode
 
 Ensure that blocks appear in order of distance-from-entry-point, where distance the
 distance from block b to the entry point is defined to be the minimum number of basic
@@ -687,7 +772,7 @@ WARNING: use with care. Only use if you are confident that arbitrary re-ordering
 blocks in `ir` is valid. Notably, this does not hold if you have any `IDGotoIfNot` nodes in
 `ir`.
 """
-function _sort_blocks!(ir::BBCode)::BBCode
+function sort_blocks!(ir::BBCode)::BBCode
     I = sortperm(_distance_to_entry(ir.blocks))
     ir.blocks .= ir.blocks[I]
     return ir
@@ -764,6 +849,15 @@ function characterise_unique_predecessor_blocks(
 
     return is_unique_pred, pred_is_unique_pred
 end
+
+"""
+    is_reachable_return_node(x::ReturnNode)
+
+Determine whether `x` is a `ReturnNode`, and if it is, if it is also reachable. This is
+purely a function of whether or not its `val` field is defined or not.
+"""
+is_reachable_return_node(x::ReturnNode) = isdefined(x, :val)
+is_reachable_return_node(x) = false
 
 """
     characterise_used_ids(stmts::Vector{IDInstPair})::Dict{ID, Bool}
@@ -905,3 +999,5 @@ inc_args(x::GlobalRef) = x
 
 __inc(x::Argument) = Argument(x.n + 1)
 __inc(x) = x
+
+end

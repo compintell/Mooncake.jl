@@ -6,7 +6,6 @@ using ADTypes,
     ChainRules,
     DiffRules,
     ExprTools,
-    Graphs,
     InteractiveUtils,
     LinearAlgebra,
     MistyClosures,
@@ -105,11 +104,13 @@ include("codual.jl")
 include("debug_mode.jl")
 include("stack.jl")
 
+include(joinpath("interpreter", "bbcode.jl"))
+using .BBCodes
+
 include(joinpath("interpreter", "contexts.jl"))
 include(joinpath("interpreter", "abstract_interpretation.jl"))
 include(joinpath("interpreter", "patch_for_319.jl"))
 include(joinpath("interpreter", "ir_utils.jl"))
-include(joinpath("interpreter", "bbcode.jl"))
 include(joinpath("interpreter", "ir_normalisation.jl"))
 include(joinpath("interpreter", "zero_like_rdata.jl"))
 include(joinpath("interpreter", "s2s_reverse_mode_ad.jl"))

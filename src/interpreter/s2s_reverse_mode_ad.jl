@@ -1489,7 +1489,7 @@ function pullback_ir(
     # avoid annoying the Julia compiler.
     blks = vcat(entry_block, main_blocks, exit_block)
     pb_ir = BBCode(blks, arg_types, ir.sptypes, ir.linetable, ir.meta)
-    return remove_unreachable_blocks!(_sort_blocks!(pb_ir))
+    return remove_unreachable_blocks!(sort_blocks!(pb_ir))
 end
 
 """
