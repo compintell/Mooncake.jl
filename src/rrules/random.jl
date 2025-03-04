@@ -40,25 +40,21 @@ function rrule!!(
     return x, randexp!_adjoint
 end
 
-_rngs() = [MersenneTwister(123), RandomDevice(), TaskLocalRNG(), Xoshiro(123)]
-__rngs() = [MersenneTwister(123), TaskLocalRNG(), Xoshiro(123)]
-
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:random})
+    rngs = [MersenneTwister(123), TaskLocalRNG(), Xoshiro(123)]
+    all_rngs = vcat(rngs, RandomDevice())
     test_cases = vcat(
-        map_prod([randn, randexp], _rngs()) do (f, rng)
+        map_prod([randn, randexp], all_rngs) do (f, rng)
             (true, :stability_and_allocs, nothing, f, rng)
         end...,
-        map_prod([Float64, Float32], [randn, randexp], _rngs()) do (P, f, rng)
+        map_prod([Float64, Float32], [randn, randexp], all_rngs) do (P, f, rng)
             (true, :stability_and_allocs, nothing, f, rng, P)
         end...,
-        map_prod([randn!, randexp!], __rngs()) do (f, rng)
+        map_prod([randn!, randexp!], rngs) do (f, rng)
             (true, :stability, nothing, f, rng, randn(5))
         end...,
     )
-    memory = Any[]
-    return test_cases, memory
+    return test_cases, Any[]
 end
 
-function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:random})
-    return Any[], Any[]
-end
+generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:random}) = Any[], Any[]
