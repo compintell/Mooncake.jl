@@ -40,28 +40,21 @@ function rrule!!(
     return x, randexp!_adjoint
 end
 
-_rngs() = [MersenneTwister(123), RandomDevice(), TaskLocalRNG(123), Xoshiro(123)]
-__rngs() = [MersenneTwister(123), TaskLocalRNG(123), Xoshiro(123)]
+_rngs() = [MersenneTwister(123), RandomDevice(), TaskLocalRNG(), Xoshiro(123)]
+__rngs() = [MersenneTwister(123), TaskLocalRNG(), Xoshiro(123)]
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:random})
-    rng = rng_ctor(123)
-    Ps = [Float64, Float32]
-    test_cases = Any[
-        (true, :stability_and_allocs, nothing, randn, Xoshiro(123)),
-        (true, :stability_and_allocs, nothing, randn, Xoshiro(123), Float32),
-        (true, :stability_and_allocs, nothing, randn, Xoshiro(123), Float64),
-
-        (true, :stability_and_allocs, nothing, randexp, Xoshiro(123)),
-        (true, :stability_and_allocs, nothing, randexp, Xoshiro(123), Float32),
-        (true, :stability_and_allocs, nothing, randexp, Xoshiro(123), Float64),
-
-        (true, :stability, nothing, randn!, MersenneTwister(123), randn(5)),
-        (true, :stability, nothing, randexp!, MersenneTwister(123), randn(5)),
-        (true, :stability, nothing, randn!, TaskLocalRNG(), randn(5)),
-        (true, :stability, nothing, randexp!, TaskLocalRNG(), randn(5)),
-        (true, :stability, nothing, randn!, Xoshiro(123), randn(5)),
-        (true, :stability, nothing, randexp!, Xoshiro(123), randn(5)),
-    ]
+    test_cases = vcat(
+        map_prod([randn, randexp], _rngs()) do (f, rng)
+            (true, :stability_and_allocs, nothing, f, rng)
+        end...,
+        map_prod([Float64, Float32], [randn, randexp], _rngs()) do (P, f, rng)
+            (true, :stability_and_allocs, nothing, f, rng, P)
+        end...,
+        map_prod([randn!, randexp!], __rngs()) do (f, rng)
+            (true, :stability, nothing, f, rng, randn(5))
+        end...,
+    )
     memory = Any[]
     return test_cases, memory
 end
