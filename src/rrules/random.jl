@@ -1,15 +1,44 @@
 const KnownRNGs = Union{MersenneTwister, RandomDevice, TaskLocalRNG, Xoshiro}
+const SpecialisedRNGs = Union{MersenneTwister, TaskLocalRNG, Xoshiro}
 
 @zero_adjoint MinimalCtx Tuple{typeof(randn), KnownRNGs}
 @zero_adjoint MinimalCtx Tuple{typeof(randexp), KnownRNGs}
 @zero_adjoint MinimalCtx Tuple{typeof(randn), KnownRNGs, Type{<:IEEEFloat}}
 @zero_adjoint MinimalCtx Tuple{typeof(randexp), KnownRNGs, Type{<:IEEEFloat}}
 
-# These cannot be zero -- we need to write proper rules for this.
-@zero_adjoint MinimalCtx Tuple{typeof(randn!), MersenneTwister, Array{Float64}}
-@zero_adjoint MinimalCtx Tuple{typeof(randexp!), MersenneTwister, Array{Float64}}
-@zero_adjoint MinimalCtx Tuple{typeof(randn!), Union{Xoshiro, TaskLocalRNG}, Array{Float64}}
-@zero_adjoint MinimalCtx Tuple{typeof(randexp!), Union{Xoshiro, TaskLocalRNG}, Array{Float64}}
+# Needed to match specialised method in Random.jl.
+@is_primitive MinimalCtx Tuple{typeof(randn!), SpecialisedRNGs, Array{Float64}}
+function rrule!!(
+    ::CoDual{typeof(randn!)}, rng::CoDual{<:SpecialisedRNGs}, x::CoDual{<:Array{Float64}}
+)
+    current_x = copy(x.x)
+    current_dx = copy(x.dx)
+    randn!(rng.x, x.x)
+    x.dx .= 0.0
+    function randn!_adjoint(::NoRData)
+        x.x .= current_x
+        x.dx .= current_dx
+        return NoRData(), NoRData(), NoRData()
+    end
+    return x, randn!_adjoint
+end
+
+# Needed to match specialised method in Random.jl.
+@is_primitive MinimalCtx Tuple{typeof(randexp!), SpecialisedRNGs, Array{Float64}}
+function rrule!!(
+    ::CoDual{typeof(randexp!)}, rng::CoDual{<:SpecialisedRNGs}, x::CoDual{<:Array{Float64}}
+)
+    current_x = copy(x.x)
+    current_dx = copy(x.dx)
+    randexp!(rng.x, x.x)
+    x.dx .= 0.0
+    function randexp!_adjoint(::NoRData)
+        x.x .= current_x
+        x.dx .= current_dx
+        return NoRData(), NoRData(), NoRData()
+    end
+    return x, randexp!_adjoint
+end
 
 _rngs() = [MersenneTwister(123), RandomDevice(), TaskLocalRNG(123), Xoshiro(123)]
 __rngs() = [MersenneTwister(123), TaskLocalRNG(123), Xoshiro(123)]
@@ -26,12 +55,12 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:random})
         (true, :stability_and_allocs, nothing, randexp, Xoshiro(123), Float32),
         (true, :stability_and_allocs, nothing, randexp, Xoshiro(123), Float64),
 
-        (true, :stability_and_allocs, nothing, randn!, MersenneTwister(123), randn(5)),
-        (true, :stability_and_allocs, nothing, randexp!, MersenneTwister(123), randn(5)),
-        (true, :stability_and_allocs, nothing, randn!, TaskLocalRNG(), randn(5)),
-        (true, :stability_and_allocs, nothing, randexp!, TaskLocalRNG(), randn(5)),
-        (true, :stability_and_allocs, nothing, randn!, Xoshiro(123), randn(5)),
-        (true, :stability_and_allocs, nothing, randexp!, Xoshiro(123), randn(5)),
+        (true, :stability, nothing, randn!, MersenneTwister(123), randn(5)),
+        (true, :stability, nothing, randexp!, MersenneTwister(123), randn(5)),
+        (true, :stability, nothing, randn!, TaskLocalRNG(), randn(5)),
+        (true, :stability, nothing, randexp!, TaskLocalRNG(), randn(5)),
+        (true, :stability, nothing, randn!, Xoshiro(123), randn(5)),
+        (true, :stability, nothing, randexp!, Xoshiro(123), randn(5)),
     ]
     memory = Any[]
     return test_cases, memory
