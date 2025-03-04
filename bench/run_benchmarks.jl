@@ -222,10 +222,10 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
 
                 if should_run_benchmark(Val(:reverse_diff), args...)
                     @info "ReverseDiff"
-                    GC.gc(true)
                     tape = ReverseDiff.GradientTape(primals[1], primals[2:end])
                     compiled_tape = ReverseDiff.compile(tape)
                     result = map(x -> randn(size(x)), primals[2:end])
+                    GC.gc(true)
                     suite["rd"] = @be(
                         _,
                         _,
@@ -237,9 +237,9 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
 
                 if should_run_benchmark(Val(:enzyme), args...)
                     @info "Enzyme"
-                    GC.gc(true)
                     _rand_similiar(x) = x isa Real ? randn() : randn(size(x))
                     dup_args = map(x -> Duplicated(x, _rand_similiar(x)), primals[2:end])
+                    GC.gc(true)
                     suite["enzyme"] = @be(
                         _,
                         _,
