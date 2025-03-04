@@ -265,7 +265,9 @@ function rrule!!(
         # Increment gradients.
         @inbounds for i in 1:n
             src_ref = memoryref(src.dx, i)
-            src_ref[] = increment!!(src_ref[], memoryref(tmp, i)[])
+            if isassigned(src_ref)
+                src_ref[] = increment!!(src_ref[], memoryref(tmp, i)[])
+            end
         end
 
         return ntuple(_ -> NoRData(), 4)
@@ -799,6 +801,15 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:memory})
             unsafe_copyto!,
             [randn(rng, 10), randn(rng, 5)].ref,
             [randn(rng, 10), randn(rng, 3)].ref,
+            2,
+        ),
+        (
+            false,
+            :none,
+            nothing,
+            unsafe_copyto!,
+            memoryref(fill!(Memory{Any}(undef, 3), 4.0), 1),
+            memoryref(Memory{Any}(undef, 2)),
             2,
         ),
 
