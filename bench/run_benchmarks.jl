@@ -184,7 +184,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
             # Benchmark primal.
             @info "Primal"
             primals = map(x -> x isa CoDual ? primal(x) : x, args)
-            GC.gc(true)
+            include_other_frameworks && GC.gc(true)
             suite["primal"] = Chairmarks.benchmark(
                 () -> primals,
                 primals -> (primals[1], _deepcopy(primals[2:end])),
@@ -198,7 +198,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
             rule = Mooncake.build_rrule(args...)
             coduals = map(x -> x isa CoDual ? x : zero_codual(x), args)
             to_benchmark(rule, coduals...)
-            GC.gc(true)
+            include_other_frameworks && GC.gc(true)
             suite["mooncake"] = Chairmarks.benchmark(
                 () -> (rule, coduals),
                 identity,
