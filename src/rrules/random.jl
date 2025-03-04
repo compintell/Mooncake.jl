@@ -1,13 +1,13 @@
-const KnownRNGs = Union{MersenneTwister, RandomDevice, TaskLocalRNG, Xoshiro}
-const SpecialisedRNGs = Union{MersenneTwister, TaskLocalRNG, Xoshiro}
+const KnownRNGs = Union{MersenneTwister,RandomDevice,TaskLocalRNG,Xoshiro}
+const SpecialisedRNGs = Union{MersenneTwister,TaskLocalRNG,Xoshiro}
 
-@zero_adjoint MinimalCtx Tuple{typeof(randn), KnownRNGs}
-@zero_adjoint MinimalCtx Tuple{typeof(randexp), KnownRNGs}
-@zero_adjoint MinimalCtx Tuple{typeof(randn), KnownRNGs, Type{<:IEEEFloat}}
-@zero_adjoint MinimalCtx Tuple{typeof(randexp), KnownRNGs, Type{<:IEEEFloat}}
+@zero_adjoint MinimalCtx Tuple{typeof(randn),KnownRNGs}
+@zero_adjoint MinimalCtx Tuple{typeof(randexp),KnownRNGs}
+@zero_adjoint MinimalCtx Tuple{typeof(randn),KnownRNGs,Type{<:IEEEFloat}}
+@zero_adjoint MinimalCtx Tuple{typeof(randexp),KnownRNGs,Type{<:IEEEFloat}}
 
 # Needed to match specialised method in Random.jl.
-@is_primitive MinimalCtx Tuple{typeof(randn!), SpecialisedRNGs, Array{Float64}}
+@is_primitive MinimalCtx Tuple{typeof(randn!),SpecialisedRNGs,Array{Float64}}
 function rrule!!(
     ::CoDual{typeof(randn!)}, rng::CoDual{<:SpecialisedRNGs}, x::CoDual{<:Array{Float64}}
 )
@@ -24,7 +24,7 @@ function rrule!!(
 end
 
 # Needed to match specialised method in Random.jl.
-@is_primitive MinimalCtx Tuple{typeof(randexp!), SpecialisedRNGs, Array{Float64}}
+@is_primitive MinimalCtx Tuple{typeof(randexp!),SpecialisedRNGs,Array{Float64}}
 function rrule!!(
     ::CoDual{typeof(randexp!)}, rng::CoDual{<:SpecialisedRNGs}, x::CoDual{<:Array{Float64}}
 )
