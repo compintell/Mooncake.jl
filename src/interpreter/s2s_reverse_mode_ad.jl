@@ -354,6 +354,31 @@ function comms_channel(info::ADStmtInfo)
 end
 
 """
+    inc_args(stmt)
+
+Increment by `1` the `n` field of any `Argument`s present in `stmt`.
+Used in `make_ad_stmts!`.
+"""
+inc_args(x::Expr) = Expr(x.head, map(__inc, x.args)...)
+inc_args(x::ReturnNode) = isdefined(x, :val) ? ReturnNode(__inc(x.val)) : x
+inc_args(x::IDGotoIfNot) = IDGotoIfNot(__inc(x.cond), x.dest)
+inc_args(x::IDGotoNode) = x
+function inc_args(x::IDPhiNode)
+    new_values = Vector{Any}(undef, length(x.values))
+    for n in eachindex(x.values)
+        if isassigned(x.values, n)
+            new_values[n] = __inc(x.values[n])
+        end
+    end
+    return IDPhiNode(x.edges, new_values)
+end
+inc_args(::Nothing) = nothing
+inc_args(x::GlobalRef) = x
+
+__inc(x::Argument) = Argument(x.n + 1)
+__inc(x) = x
+
+"""
     make_ad_stmts!(inst::NewInstruction, line::ID, info::ADInfo)::ADStmtInfo
 
 Every line in the primal code is associated to one or more lines in the forwards-pass of AD,

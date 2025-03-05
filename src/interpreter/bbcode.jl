@@ -32,7 +32,6 @@ export ID,
     collect_stmts,
     compute_all_predecessors,
     BBCode,
-    inc_args,
     remove_unreachable_blocks!,
     characterise_used_ids,
     characterise_unique_predecessor_blocks,
@@ -41,7 +40,6 @@ export ID,
     IDInstPair,
     __line_numbers_to_block_numbers!,
     is_reachable_return_node,
-    __inc,
     new_inst
 
 const _id_count::Dict{Int,Int32} = Dict{Int,Int32}()
@@ -999,29 +997,5 @@ function _remove_unreachable_blocks!(blks::Vector{BBlock})
 
     return remaining_blks
 end
-
-"""
-    inc_args(stmt)
-
-Increment by `1` the `n` field of any `Argument`s present in `stmt`.
-"""
-inc_args(x::Expr) = Expr(x.head, map(__inc, x.args)...)
-inc_args(x::ReturnNode) = isdefined(x, :val) ? ReturnNode(__inc(x.val)) : x
-inc_args(x::IDGotoIfNot) = IDGotoIfNot(__inc(x.cond), x.dest)
-inc_args(x::IDGotoNode) = x
-function inc_args(x::IDPhiNode)
-    new_values = Vector{Any}(undef, length(x.values))
-    for n in eachindex(x.values)
-        if isassigned(x.values, n)
-            new_values[n] = __inc(x.values[n])
-        end
-    end
-    return IDPhiNode(x.edges, new_values)
-end
-inc_args(::Nothing) = nothing
-inc_args(x::GlobalRef) = x
-
-__inc(x::Argument) = Argument(x.n + 1)
-__inc(x) = x
 
 end
