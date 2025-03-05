@@ -3,19 +3,46 @@
 
 See the docstring for the `BBCode` `struct` for info on this file.
 """
-module BBCodes
+module BasicBlockCode
 
 using Graphs
 
-using Core.Compiler: ReturnNode, PhiNode, GotoIfNot, GotoNode, NewInstruction, IRCode,
-    SSAValue, PiNode, Argument
+using Core.Compiler:
+    ReturnNode,
+    PhiNode,
+    GotoIfNot,
+    GotoNode,
+    NewInstruction,
+    IRCode,
+    SSAValue,
+    PiNode,
+    Argument
 const CC = Core.Compiler
 
-export ID, seed_id!, IDPhiNode, IDGotoNode, IDGotoIfNot, Switch, BBlock, phi_nodes,
-    terminator, insert_before_terminator!, collect_stmts, compute_all_predecessors, BBCode,
-    inc_args, remove_unreachable_blocks!, characterise_used_ids,
-    characterise_unique_predecessor_blocks, sort_blocks!, InstVector, IDInstPair,
-    __line_numbers_to_block_numbers!, is_reachable_return_node, __inc, new_inst
+export ID,
+    seed_id!,
+    IDPhiNode,
+    IDGotoNode,
+    IDGotoIfNot,
+    Switch,
+    BBlock,
+    phi_nodes,
+    terminator,
+    insert_before_terminator!,
+    collect_stmts,
+    compute_all_predecessors,
+    BBCode,
+    inc_args,
+    remove_unreachable_blocks!,
+    characterise_used_ids,
+    characterise_unique_predecessor_blocks,
+    sort_blocks!,
+    InstVector,
+    IDInstPair,
+    __line_numbers_to_block_numbers!,
+    is_reachable_return_node,
+    __inc,
+    new_inst
 
 const _id_count::Dict{Int,Int32} = Dict{Int,Int32}()
 
@@ -434,7 +461,6 @@ function _control_flow_graph(blks::Vector{BBlock})::Core.Compiler.CFG
     return Core.Compiler.CFG(basic_blocks, index[2:(end - 1)])
 end
 
-
 """
     _instructions_to_blocks(insts::InstVector, cfg::CC.CFG)::InstVector
 
@@ -506,8 +532,6 @@ function BBCode(ir::IRCode)
     end
     return BBCode(ir, blocks)
 end
-
-
 
 """
     new_inst_vec(x::CC.InstructionStream)

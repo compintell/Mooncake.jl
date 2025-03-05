@@ -105,7 +105,7 @@ include("debug_mode.jl")
 include("stack.jl")
 
 include(joinpath("interpreter", "bbcode.jl"))
-using .BBCodes
+using .BasicBlockCode
 
 include(joinpath("interpreter", "contexts.jl"))
 include(joinpath("interpreter", "abstract_interpretation.jl"))
