@@ -1,5 +1,5 @@
 """
-    module BBCode
+    module BasicBlockCode
 
 See the docstring for the `BBCode` `struct` for info on this file.
 """
