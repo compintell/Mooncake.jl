@@ -450,52 +450,63 @@ struct NoCache end
 Base.haskey(::NoCache, x) = false
 Base.setindex!(::NoCache, v, x) = nothing
 
+const MaybeCache = Union{NoCache,IdDict{Any,Any}}
+
 """
     zero_tangent(x)
 
 Returns the unique zero element of the tangent space of `x`.
 It is an error for the zero element of the tangent space of `x` to be represented by
 anything other than that which this function returns.
-
-Internally, `zero_tangent` calls `zero_tangent_internal`, which handles different types of inputs differently.
-`zero_tangent_internal` has two variants:
-1. For `isbitstype` types, `zero_tangent_internal` takes one argument. 
-2. Otherwise, `zero_tangent_internal` takes another argument which is an `IdDict`, which
-handles both circular references and aliasing correctly.
 """
 zero_tangent(x)
 function zero_tangent(x::P) where {P}
     return zero_tangent_internal(x, isbitstype(P) ? NoCache() : IdDict())
 end
 
-const StackDict = Union{NoCache,IdDict}
+"""
+    zero_tangent_internal(x, d::MaybeCache)
 
-# the `stackdict` naming following convention of Julia's `deepcopy` and `deepcopy_internal`
-# https://github.com/JuliaLang/julia/blob/48d4fd48430af58502699fdf3504b90589df3852/base/deepcopy.jl#L35
-zero_tangent_internal(::Union{Int8,Int16,Int32,Int64,Int128}, ::StackDict) = NoTangent()
-zero_tangent_internal(x::IEEEFloat, ::StackDict) = zero(x)
-@generated function zero_tangent_internal(x::Tuple, stackdict::StackDict)
-    zt_exprs = map(n -> :(zero_tangent_internal(x[$n], stackdict)), 1:fieldcount(x))
+Implementation of [`zero_tangent`](@ref). Makes use of `d` in the same way that
+`Base.deepcopy_internal` makes use of an `IdDict` (see the docstring for `Base.deepcopy` for
+information).
+
+In particular, it should be used to ensure that aliasing relationships are respected,
+meaning that if in the tuple `x = (a, b)`, `a === b`, then in
+`(da, db) = zero_tangent((a, b))` it must hold that should have that `da === db`.
+You may want to consult the method of `zero_tangent_internal` for `struct` and
+`mutable struct` types for inspiration if implementing this for your own type.
+
+Similarly, if `x` contains a one or more circular, its tangent will probably need to contain
+similar circular references (unless it is something trivial like `NoTangent`). Again,
+consult existing implementations for inspiration.
+
+If `d` is a `NoCache` assume that `x` contains neither aliasing nor circular references.
+"""
+zero_tangent_internal(::Union{Int8,Int16,Int32,Int64,Int128}, ::MaybeCache) = NoTangent()
+zero_tangent_internal(x::IEEEFloat, ::MaybeCache) = zero(x)
+@generated function zero_tangent_internal(x::Tuple, dict::MaybeCache)
+    zt_exprs = map(n -> :(zero_tangent_internal(x[$n], dict)), 1:fieldcount(x))
     return quote
         tangent_type($x) == NoTangent && return NoTangent()
         return $(Expr(:call, :tuple, zt_exprs...))
     end
 end
-function zero_tangent_internal(x::NamedTuple, stackdict::StackDict)
+function zero_tangent_internal(x::NamedTuple, dict::MaybeCache)
     tangent_type(typeof(x)) == NoTangent && return NoTangent()
-    return tuple_map(Base.Fix2(zero_tangent_internal, stackdict), x)
+    return tuple_map(Base.Fix2(zero_tangent_internal, dict), x)
 end
-function zero_tangent_internal(x::Ptr, ::StackDict)
+function zero_tangent_internal(x::Ptr, ::MaybeCache)
     return throw(ArgumentError("zero_tangent not available for pointers."))
 end
-function zero_tangent_internal(x::SimpleVector, stackdict::StackDict)
+function zero_tangent_internal(x::SimpleVector, dict::MaybeCache)
     return map!(
-        n -> zero_tangent_internal(x[n], stackdict),
+        n -> zero_tangent_internal(x[n], dict),
         Vector{Any}(undef, length(x)),
         eachindex(x),
     )
 end
-@inline @generated function zero_tangent_internal(x::P, d::StackDict) where {P}
+@inline @generated function zero_tangent_internal(x::P, d::MaybeCache) where {P}
 
     # Loop over fields, constructing expressions to construct zeros depending on the
     # field type and initialisation status.
@@ -553,35 +564,43 @@ details -- this docstring is intentionally non-specific in order to avoid becomi
 @inline uninit_tangent(x::Ptr{P}) where {P} = bitcast(Ptr{tangent_type(P)}, x)
 
 """
-    randn_tangent(rng::AbstractRNG, x::T) where {T}
+    randn_tangent(rng::AbstractRNG, x::P) where {P}
 
-Required for testing.
-Generate a randomly-chosen tangent to `x`.
-The design is closely modelled after `zero_tangent`.
+Required for testing. Generate a randomly-chosen tangent to `x`. Very similar to
+[`Mooncake.zero_tangent`](@ref), except that the elements are randomly chosen, rather than
+being equal to zero.
 """
-function randn_tangent(rng::AbstractRNG, x::T) where {T}
-    return randn_tangent_internal(rng, x, isbitstype(T) ? nothing : IdDict())
+function randn_tangent(rng::AbstractRNG, x::P) where {P}
+    return randn_tangent_internal(rng, x, isbitstype(P) ? NoCache() : IdDict())
 end
 
-randn_tangent_internal(::AbstractRNG, ::NoTangent, ::Any) = NoTangent()
-randn_tangent_internal(rng::AbstractRNG, ::T, ::Any) where {T<:IEEEFloat} = randn(rng, T)
-@generated function randn_tangent_internal(rng::AbstractRNG, x::Tuple, stackdict::Any)
-    rt_exprs = map(n -> :(randn_tangent_internal(rng, x[$n], stackdict)), 1:fieldcount(x))
+"""
+    randn_tangent_internal(rng::AbstractRNG, x, dict::MaybeCache)
+
+Implementation for [`Mooncake.randn_tangent`](@ref). Please consult the docstring for
+[`zero_tangent_internal`](@ref) for more information on how this implementation works, As
+the same implementation strategy is adopted for both this function and that one.
+"""
+function randn_tangent_internal(rng::AbstractRNG, ::P, ::MaybeCache) where {P<:IEEEFloat}
+    return randn(rng, P)
+end
+@generated function randn_tangent_internal(rng::AbstractRNG, x::Tuple, dict::MaybeCache)
+    rt_exprs = map(n -> :(randn_tangent_internal(rng, x[$n], dict)), 1:fieldcount(x))
     return quote
         tangent_type($x) == NoTangent && return NoTangent()
         return $(Expr(:call, :tuple, rt_exprs...))
     end
 end
-function randn_tangent_internal(rng::AbstractRNG, x::NamedTuple, stackdict::Any)
+function randn_tangent_internal(rng::AbstractRNG, x::NamedTuple, dict::MaybeCache)
     tangent_type(typeof(x)) == NoTangent && return NoTangent()
-    return tuple_map(x -> randn_tangent_internal(rng, x, stackdict), x)
+    return tuple_map(x -> randn_tangent_internal(rng, x, dict), x)
 end
-function randn_tangent_internal(rng::AbstractRNG, x::SimpleVector, stackdict::IdDict)
+function randn_tangent_internal(rng::AbstractRNG, x::SimpleVector, dict::MaybeCache)
     return map!(Vector{Any}(undef, length(x)), eachindex(x)) do n
-        return randn_tangent_internal(rng, x[n], stackdict)
+        return randn_tangent_internal(rng, x[n], dict)
     end
 end
-@inline @generated function randn_tangent_internal(rng::AbstractRNG, x::P, d) where {P}
+@generated function randn_tangent_internal(rng::AbstractRNG, x::P, d::MaybeCache) where {P}
 
     # Loop over fields, constructing expressions to construct randn tangents depending on
     # the field type and initialisation status.
@@ -642,6 +661,12 @@ function increment!!(x::T, y::T) where {T}
     return increment_internal!!(isbitstype(T) ? NoCache() : IdDict{Any,Bool}(), x, y)
 end
 
+"""
+    increment_internal!!(c::IncCache, x::T, y::T) where {T}
+
+Implementation of [`Mooncake.increment!!`](@ref). Make use the cache `c` to avoid "double
+counting". If `c` is a `NoCache`, assume no aliasing or circular referencing.
+"""
 increment_internal!!(::IncCache, ::NoTangent, ::NoTangent) = NoTangent()
 increment_internal!!(::IncCache, x::T, y::T) where {T<:IEEEFloat} = x + y
 function increment_internal!!(::IncCache, x::Ptr{T}, y::Ptr{T}) where {T}
@@ -678,6 +703,12 @@ Set `x` to its zero element (`x` should be a tangent, so the zero must exist).
 """
 set_to_zero!!(x) = set_to_zero_internal!!(IdDict{Any,Bool}(), x)
 
+"""
+    set_to_zero_internal!!(c::IncCache, x)
+
+Implementation for [`Mooncake.set_to_zero!!`](@ref). Use `c` to ensure that circular
+references are correctly handled. If `c` is a `NoCache`, assume no circular references.
+"""
 set_to_zero_internal!!(::IncCache, ::NoTangent) = NoTangent()
 set_to_zero_internal!!(::IncCache, x::Base.IEEEFloat) = zero(x)
 function set_to_zero_internal!!(c::IncCache, x::Union{Tuple,NamedTuple})
@@ -696,8 +727,6 @@ function set_to_zero_internal!!(c::IncCache, x::MutableTangent)
     return x
 end
 
-const MaybeCache = Union{NoCache,IdDict{Any,Any}}
-
 """
     _scale(a::Float64, t::T) where {T}
 
@@ -709,6 +738,12 @@ correspond to a vector field. Not using `*` in order to avoid piracy.
 """
 _scale(a::Float64, t) = _scale_internal(IdDict{Any,Any}(), a, t)
 
+"""
+    _scale_internal(c::MaybeCache, a::Float64, t)
+
+Implementation for [`_scale`](@ref). Use `c` to handle circular references and aliasing in
+`t`. If `c` is a `NoCache` assume no circular references or aliasing in `c`.
+"""
 _scale_internal(::MaybeCache, ::Float64, ::NoTangent) = NoTangent()
 _scale_internal(::MaybeCache, a::Float64, t::T) where {T<:IEEEFloat} = T(a * t)
 function _scale_internal(c::MaybeCache, a::Float64, t::Union{Tuple,NamedTuple})
@@ -741,6 +776,13 @@ Always available because all tangent types correspond to finite-dimensional vect
 """
 _dot(t::T, s::T) where {T} = _dot_internal(IdDict{Any,Any}(), t, s)
 
+"""
+    _dot_internal(c::MaybeCache, t::T, s::T) where {T}
+
+Implementation for [`_dot`](@ref). Use `c` to handle circular references and aliasing.
+If `c` is a `NoCache`, assume that neither `t` nor `s` contain either circular references
+or aliasing.
+"""
 _dot_internal(::MaybeCache, ::NoTangent, ::NoTangent) = 0.0
 _dot_internal(::MaybeCache, t::T, s::T) where {T<:IEEEFloat} = Float64(t * s)
 function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:Union{Tuple,NamedTuple}}
@@ -785,6 +827,14 @@ inner constructor for `Foo`.
 function _add_to_primal(p, t, unsafe::Bool=false)
     return _add_to_primal_internal(IdDict{Any,Any}(), p, t, unsafe)
 end
+
+"""
+    _add_to_primal_internal(c::MaybeCache, x, t, ::Bool)
+
+Implementation for [`_add_to_primal`](@ref). Use `c` to handle circular referencing and
+aliasing correctly. If `c` is a `NoCache`, assume there is no circular references or
+aliasing in either `x` or `t`.
+"""
 _add_to_primal_internal(::MaybeCache, x, ::NoTangent, ::Bool) = x
 _add_to_primal_internal(::MaybeCache, x::T, t::T, ::Bool) where {T<:IEEEFloat} = x + t
 function _add_to_primal_internal(
@@ -918,6 +968,14 @@ Computes the difference between `p` and `q`, which _must_ be of the same type, `
 Returns a tangent of type `tangent_type(P)`.
 """
 _diff(p::P, q::P) where {P} = _diff_internal(IdDict{Any,Any}(), p, q)
+
+"""
+    _diff_internal(c::MaybeCache, p::P, q::P) where {P}
+
+Implmentation for [`_diff`](@ref). Use `c` to correctly handle circular references and
+aliasing. If `c` is a `NoCache` then assume no circular references or aliasing in either
+`p` or `q`.
+"""
 function _diff_internal(c::MaybeCache, p::P, q::P) where {P}
     tangent_type(P) === NoTangent && return NoTangent()
     T = Tangent{NamedTuple{(),Tuple{}}}
