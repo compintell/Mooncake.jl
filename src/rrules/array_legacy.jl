@@ -1,21 +1,21 @@
-@inline function zero_tangent_internal(x::Array{P,N}, stackdict::IdDict) where {P,N}
-    haskey(stackdict, x) && return stackdict[x]::tangent_type(typeof(x))
+@inline function zero_tangent_internal(x::Array{P,N}, dict::MaybeCache) where {P,N}
+    haskey(dict, x) && return dict[x]::tangent_type(typeof(x))
 
     zt = Array{tangent_type(P),N}(undef, size(x)...)
-    stackdict[x] = zt
+    dict[x] = zt
     return _map_if_assigned!(
-        Base.Fix2(zero_tangent_internal, stackdict), zt, x
+        Base.Fix2(zero_tangent_internal, dict), zt, x
     )::Array{tangent_type(P),N}
 end
 
 function randn_tangent_internal(
-    rng::AbstractRNG, x::Array{T,N}, stackdict::IdDict
+    rng::AbstractRNG, x::Array{T,N}, dict::MaybeCache
 ) where {T,N}
-    haskey(stackdict, x) && return stackdict[x]::tangent_type(typeof(x))
+    haskey(dict, x) && return dict[x]::tangent_type(typeof(x))
 
     dx = Array{tangent_type(T),N}(undef, size(x)...)
-    stackdict[x] = dx
-    return _map_if_assigned!(x -> randn_tangent_internal(rng, x, stackdict), dx, x)
+    dict[x] = dx
+    return _map_if_assigned!(x -> randn_tangent_internal(rng, x, dict), dx, x)
 end
 
 function increment_internal!!(c::IncCache, x::T, y::T) where {P,N,T<:Array{P,N}}
