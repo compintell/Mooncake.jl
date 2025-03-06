@@ -36,6 +36,7 @@ jobs:
           'rrules/memory',
           'rrules/misc',
           'rrules/new',
+          'rrules/random',
           'rrules/tasks',
           'rrules/twice_precision',
           'rrules/performance_patches',

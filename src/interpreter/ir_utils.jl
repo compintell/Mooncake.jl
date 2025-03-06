@@ -1,13 +1,4 @@
 """
-    const InstVector = Vector{NewInstruction}
-
-Note: the `CC.NewInstruction` type is used to represent instructions because it has the
-correct fields. While it is only used to represent new instrucdtions in `Core.Compiler`, it
-is used to represent all instructions in `BBCode`.
-"""
-const InstVector = Vector{NewInstruction}
-
-"""
     stmt(ir::CC.InstructionStream)
 
 Get the field containing the instructions in `ir`. This changed name in 1.11 from `inst` to
@@ -42,47 +33,6 @@ function ircode(
     linetable = [CC.LineInfoNode(Mooncake, :ircode, :ir_utils, Int32(1), Int32(0))]
     meta = Expr[]
     return CC.IRCode(stmts, cfg, linetable, argtypes, meta, CC.VarState[])
-end
-
-"""
-    __line_numbers_to_block_numbers!(insts::Vector{Any}, cfg::CC.CFG)
-
-Converts any edges in `GotoNode`s, `GotoIfNot`s, `PhiNode`s, and `:enter` expressions which
-refer to line numbers into references to block numbers. The `cfg` provides the information
-required to perform this conversion.
-
-For context, `CodeInfo` objects have references to line numbers, while `IRCode` uses
-block numbers.
-
-This code is copied over directly from the body of `Core.Compiler.inflate_ir!`.
-"""
-function __line_numbers_to_block_numbers!(insts::Vector{Any}, cfg::CC.CFG)
-    for i in eachindex(insts)
-        stmt = insts[i]
-        if isa(stmt, GotoNode)
-            insts[i] = GotoNode(CC.block_for_inst(cfg, stmt.label))
-        elseif isa(stmt, GotoIfNot)
-            insts[i] = GotoIfNot(stmt.cond, CC.block_for_inst(cfg, stmt.dest))
-        elseif isa(stmt, PhiNode)
-            insts[i] = PhiNode(
-                Int32[CC.block_for_inst(cfg, Int(edge)) for edge in stmt.edges], stmt.values
-            )
-        elseif Meta.isexpr(stmt, :enter)
-            stmt.args[1] = CC.block_for_inst(cfg, stmt.args[1]::Int)
-            insts[i] = stmt
-        end
-    end
-    return insts
-end
-
-"""
-    _instructions_to_blocks(insts::InstVector, cfg::CC.CFG)::InstVector
-
-Pulls out the instructions from `insts`, and calls `__line_numbers_to_block_numbers!`.
-"""
-function _lines_to_blocks(insts::InstVector, cfg::CC.CFG)::InstVector
-    stmts = __line_numbers_to_block_numbers!(Any[x.stmt for x in insts], cfg)
-    return map((inst, stmt) -> NewInstruction(inst; stmt), insts, stmts)
 end
 
 """
@@ -271,15 +221,6 @@ function lookup_ir(
 end
 
 """
-    is_reachable_return_node(x::ReturnNode)
-
-Determine whether `x` is a `ReturnNode`, and if it is, if it is also reachable. This is
-purely a function of whether or not its `val` field is defined or not.
-"""
-is_reachable_return_node(x::ReturnNode) = isdefined(x, :val)
-is_reachable_return_node(x) = false
-
-"""
     is_unreachable_return_node(x::ReturnNode)
 
 Determine whehter `x` is a `ReturnNode`, and if it is, if it is also unreachable. This is
@@ -304,20 +245,6 @@ end
 Throw an `UnhandledLanguageFeatureException` with message `msg`.
 """
 unhandled_feature(msg::String) = throw(UnhandledLanguageFeatureException(msg))
-
-"""
-    new_inst(stmt, type=Any, flag=CC.IR_FLAG_REFINED)::NewInstruction
-
-Create a `NewInstruction` with fields:
-- `stmt` = `stmt`
-- `type` = `type`
-- `info` = `CC.NoCallInfo()`
-- `line` = `Int32(1)`
-- `flag` = `flag`
-"""
-function new_inst(@nospecialize(stmt), @nospecialize(type)=Any, flag=CC.IR_FLAG_REFINED)
-    return NewInstruction(stmt, type, CC.NoCallInfo(), Int32(1), flag)
-end
 
 """
     replace_uses_with!(stmt, def::Union{Argument, SSAValue}, val)
