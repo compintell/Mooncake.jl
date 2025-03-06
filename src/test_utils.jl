@@ -11,7 +11,18 @@ module TestTypes
 using Base.Iterators: product
 using Core: svec
 using ExprTools: combinedef
-using ..Mooncake: NoTangent, tangent_type, _typeof
+using ..Mooncake:
+    NoTangent,
+    tangent_type,
+    _typeof,
+    set_to_zero!!,
+    increment!!,
+    is_primitive,
+    randn_tangent,
+    _scale,
+    _add_to_primal,
+    _diff,
+    _dot
 
 const PRIMALS = Tuple{Bool,Any,Tuple}[]
 
@@ -91,7 +102,15 @@ using Random, Mooncake, Test, InteractiveUtils
 using Mooncake:
     CoDual,
     NoTangent,
+    PossiblyUninitTangent,
+    Tangent,
+    MutableTangent,
     rrule!!,
+    build_rrule,
+    tangent_type,
+    zero_tangent,
+    primal,
+    tangent,
     is_init,
     zero_codual,
     DefaultCtx,
@@ -124,17 +143,31 @@ using Mooncake:
     uninit_codual,
     lgetfield,
     lsetfield!,
-    CC
+    increment_internal!!,
+    set_to_zero_internal!!,
+    CC,
+    set_to_zero!!,
+    increment!!,
+    is_primitive,
+    randn_tangent,
+    _scale,
+    _add_to_primal,
+    _diff,
+    _dot,
+    NoFData,
+    fdata_type,
+    fdata,
+    NoRData,
+    rdata_type,
+    rdata
 
 struct Shim end
 
-function test_opt(::Any, args...)
-    throw(error("Load JET to use this function."))
-end
+test_opt(x...) = test_opt_internal(Shim(), x...)
+test_opt_internal(::Any, x...) = throw(error("Load JET to use this function."))
 
-function report_opt(::Any, tt)
-    throw(error("Load JET to use this function."))
-end
+report_opt(tt) = report_opt_internal(Shim(), tt)
+report_opt_internal(::Any, tt) = throw(error("Load JET to use this function."))
 
 """
     has_equal_data(x, y; equal_undefs=true)
@@ -274,18 +307,20 @@ const AddressMap = Dict{Ptr{Nothing},Ptr{Nothing}}
 """
     populate_address_map(primal, tangent)
 
-Constructs an empty `AddressMap` and calls `populate_address_map!`.
+Constructs an empty `AddressMap` and calls `populate_address_map_internal`.
 """
-populate_address_map(primal, tangent) = populate_address_map!(AddressMap(), primal, tangent)
+function populate_address_map(primal, tangent)
+    return populate_address_map_internal(AddressMap(), primal, tangent)
+end
 
 """
-    populate_address_map!(m::AddressMap, primal, tangent)
+    populate_address_map_internal(m::AddressMap, primal, tangent)
 
 Fills `m` with pairs mapping from memory addresses in `primal` to corresponding memory
 addresses in `tangent`. If the same memory address appears multiple times in `primal`,
 throws an `AssertionError` if the same address is not mapped to in `tangent` each time.
 """
-function populate_address_map!(m::AddressMap, primal::P, tangent::T) where {P,T}
+function populate_address_map_internal(m::AddressMap, primal::P, tangent::T) where {P,T}
     isprimitivetype(P) && return m
     T === NoTangent && return m
     T === NoFData && return m
@@ -293,13 +328,16 @@ function populate_address_map!(m::AddressMap, primal::P, tangent::T) where {P,T}
         @assert T <: MutableTangent
         k = pointer_from_objref(primal)
         v = pointer_from_objref(tangent)
-        haskey(m, k) && (@assert (m[k] == v))
+        if haskey(m, k)
+            @assert m[k] == v
+            return m
+        end
         m[k] = v
     end
     foreach(fieldnames(P)) do n
         t_field = __get_data_field(tangent, n)
         if isdefined(primal, n) && is_init(t_field)
-            populate_address_map!(m, getfield(primal, n), val(t_field))
+            populate_address_map_internal(m, getfield(primal, n), val(t_field))
         elseif isdefined(primal, n) && !is_init(t_field)
             throw(error("unhandled defined-ness"))
         elseif !isdefined(primal, n) && is_init(t_field)
@@ -312,32 +350,48 @@ end
 __get_data_field(t::Union{Tangent,MutableTangent}, n) = getfield(t.fields, n)
 __get_data_field(t::Union{Mooncake.FData,Mooncake.RData}, n) = getfield(t.data, n)
 
-function populate_address_map!(m::AddressMap, p::P, t) where {P<:Union{Tuple,NamedTuple}}
+function populate_address_map_internal(
+    m::AddressMap, p::P, t
+) where {P<:Union{Tuple,NamedTuple}}
     t isa NoFData && return m
     t isa NoTangent && return m
-    foreach(n -> populate_address_map!(m, getfield(p, n), getfield(t, n)), fieldnames(P))
+    foreach(
+        n -> populate_address_map_internal(m, getfield(p, n), getfield(t, n)), fieldnames(P)
+    )
     return m
 end
 
-function populate_address_map!(m::AddressMap, p::Array, t::Array)
+function populate_address_map_internal(m::AddressMap, p::Array, t::Array)
     k = pointer_from_objref(p)
     v = pointer_from_objref(t)
-    haskey(m, k) && (@assert m[k] == v)
+    if haskey(m, k)
+        @assert m[k] == v
+        return m
+    end
     m[k] = v
-    foreach(n -> isassigned(p, n) && populate_address_map!(m, p[n], t[n]), eachindex(p))
+    foreach(
+        n -> isassigned(p, n) && populate_address_map_internal(m, p[n], t[n]), eachindex(p)
+    )
     return m
 end
 
-function populate_address_map!(m::AddressMap, p::Core.SimpleVector, t::Vector{Any})
+function populate_address_map_internal(m::AddressMap, p::Core.SimpleVector, t::Vector{Any})
     k = pointer_from_objref(p)
     v = pointer_from_objref(t)
-    haskey(m, k) && (@assert m[k] == v)
+    if haskey(m, k)
+        @assert m[k] == v
+        return m
+    end
     m[k] = v
-    foreach(n -> populate_address_map!(m, p[n], t[n]), eachindex(p))
+    foreach(n -> populate_address_map_internal(m, p[n], t[n]), eachindex(p))
     return m
 end
 
-populate_address_map!(m::AddressMap, p::Union{Core.TypeName,Type,Symbol,String}, t) = m
+function populate_address_map_internal(
+    m::AddressMap, p::Union{Core.TypeName,Type,Symbol,String}, t
+)
+    return m
+end
 
 """
     address_maps_are_consistent(x::AddressMap, y::AddressMap)
@@ -367,12 +421,14 @@ function test_rule_correctness(rng::AbstractRNG, x_x̄...; rule, unsafe_perturb:
     # Use finite differences to estimate vjps. Compute the estimate at a range of different
     # step sizes. We'll just require that one of them ends up being close to what AD gives.
     ẋ = map(_x -> randn_tangent(rng, _x), x)
-    fd_results = map([1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8]) do ε
+    ε_list = [1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8]
+    fd_results = Vector{Any}(undef, length(ε_list))
+    for (n, ε) in enumerate(ε_list)
         x′_l = _add_to_primal(x, _scale(ε, ẋ), unsafe_perturb)
         y′_l = x′_l[1](x′_l[2:end]...)
         x′_r = _add_to_primal(x, _scale(-ε, ẋ), unsafe_perturb)
         y′_r = x′_r[1](x′_r[2:end]...)
-        return (
+        fd_results[n] = (
             ẏ=_scale(1 / 2ε, _diff(y′_l, y′_r)),
             ẋ_post=map((_x′, _x_p) -> _scale(1 / 2ε, _diff(_x′, _x_p)), x′_l, x′_r),
         )
@@ -484,7 +540,7 @@ function test_rrule_interface(f_f̄, x_x̄...; rule)
 
     # Check that returned fdata type is correct.
     @test typeof(y_ȳ.dx) == fdata_type(tangent_type(typeof(y_ȳ.x)))
-    @test Mooncake._verify_fdata_value(y_ȳ.x, y_ȳ.dx) === nothing
+    @test Mooncake._verify_fdata_value(IdDict{Any,Nothing}(), y_ȳ.x, y_ȳ.dx) === nothing
 
     # Run the reverse-pass. Throw a meaningful exception if it doesn't run at all.
     ȳ = Mooncake.rdata(zero_tangent(primal(y_ȳ), tangent(y_ȳ)))
@@ -513,7 +569,7 @@ function test_rrule_interface(f_f̄, x_x̄...; rule)
     @test all(map((a, b) -> _typeof(a) == _typeof(rdata(b)), x̄_new, x̄))
 end
 
-function __forwards_and_backwards(rule, x_x̄::Vararg{Any,N}) where {N}
+@noinline function __forwards_and_backwards(rule::R, x_x̄::Vararg{Any,N}) where {R,N}
     out, pb!! = rule(x_x̄...)
     return pb!!(Mooncake.zero_rdata(primal(out)))
 end
@@ -536,15 +592,15 @@ function test_rrule_performance(
     if performance_checks_flag in (:stability, :stability_and_allocs)
 
         # Test primal stability.
-        test_opt(Shim(), primal(f_f̄), map(_typeof ∘ primal, x_x̄))
+        test_opt(primal(f_f̄), map(_typeof ∘ primal, x_x̄))
 
         # Test forwards-pass stability.
-        test_opt(Shim(), rule, (_typeof(to_fwds(f_f̄)), map(_typeof ∘ to_fwds, x_x̄)...))
+        test_opt(rule, (_typeof(to_fwds(f_f̄)), map(_typeof ∘ to_fwds, x_x̄)...))
 
         # Test reverse-pass stability.
         y_ȳ, pb!! = rule(to_fwds(f_f̄), map(to_fwds, _deepcopy(x_x̄))...)
         rvs_data = Mooncake.rdata(zero_tangent(primal(y_ȳ), tangent(y_ȳ)))
-        test_opt(Shim(), pb!!, (_typeof(rvs_data),))
+        test_opt(pb!!, (_typeof(rvs_data),))
     end
 
     if performance_checks_flag in (:allocs, :stability_and_allocs)
@@ -559,7 +615,8 @@ function test_rrule_performance(
         f_f̄_fwds = to_fwds(f_f̄)
         x_x̄_fwds = map(to_fwds, x_x̄)
         __forwards_and_backwards(rule, f_f̄_fwds, x_x̄_fwds...)
-        @test (@allocations __forwards_and_backwards(rule, f_f̄_fwds, x_x̄_fwds...)) == 0
+        count_allocs(__forwards_and_backwards, rule, f_f̄_fwds, x_x̄_fwds...)
+        @test count_allocs(__forwards_and_backwards, rule, f_f̄_fwds, x_x̄_fwds...) == 0
     end
 end
 
@@ -634,8 +691,6 @@ function test_rule(
     debug_mode::Bool=false,
     unsafe_perturb::Bool=false,
 )
-    @nospecialize rng x
-
     # Construct the rule.
     sig = _typeof(__get_primals(x))
     rule = Mooncake.build_rrule(interp, sig; debug_mode)
@@ -834,6 +889,24 @@ function test_tangent(rng::AbstractRNG, p; interface_only=false, perf=true)
 end
 
 """
+    is_foldable(f, types)::Bool
+
+`true` if the effects inferred for the application of `f` to arguments of type `types`
+indicate that the compiler believes such a call can be constant-folded.
+
+See the docstrings for `Base.@infer_effects` and `Base.infer_effects` for more information
+on the effects system in Julia.
+"""
+function is_foldable(f, types)::Bool
+    effects = Base.infer_effects(f, types)
+    tmp = VERSION > v"1.11" ? effects.noub == CC.ALWAYS_TRUE && effects.nortcall : true
+    return effects.consistent == CC.ALWAYS_TRUE &&
+           effects.effect_free == CC.ALWAYS_TRUE &&
+           effects.terminates &&
+           tmp
+end
+
+"""
     test_tangent_type(primal_type, expected_tangent_type)
 
 Checks that `tangent_type(primal_type)` yields `expected_tangent_type`, and that everything
@@ -843,14 +916,8 @@ function test_tangent_type(primal_type::Type, expected_tangent_type::Type)
 
     # Verify tangent type returns the expected type.
     @test tangent_type(primal_type) == expected_tangent_type
-
-    # Verify performance.
-    effects = Base.infer_effects(tangent_type, (Type{expected_tangent_type},))
-    @test effects.consistent == CC.ALWAYS_TRUE
-    @test effects.effect_free == CC.ALWAYS_TRUE
-    @test effects.nothrow
-    @test effects.terminates
-    test_opt(Shim(), tangent_type, Tuple{_typeof(primal_type)})
+    @test is_foldable(tangent_type, (Type{expected_tangent_type},))
+    test_opt(tangent_type, Tuple{_typeof(primal_type)})
     return nothing
 end
 
@@ -886,12 +953,32 @@ simply to run this function, and see whether it errors / produces a failing test
 function test_tangent_interface(rng::AbstractRNG, p::P; interface_only=false) where {P}
     @nospecialize rng p
 
-    # Test that basic interface works.
+    # Define helpers which call internal methods directly. Doing this ensures that we know
+    # that methods of the internal function have been implemented for the type we're
+    # testing, rather than the user-facing versions. e.g. that a method of
+    # `zero_tangent_internal` exists for `p`, rather than just `zero_tangent`.
+    _zero_tangent(p) = Mooncake.zero_tangent_internal(p, IdDict())
+    _randn_tangent(rng, p) = Mooncake.randn_tangent_internal(rng, p, IdDict())
+    _increment!!(x, y) = Mooncake.increment_internal!!(IdDict{Any,Bool}(), x, y)
+    _set_to_zero!!(t) = Mooncake.set_to_zero_internal!!(IdDict{Any,Bool}(), t)
+    function __add_to_primal(p, t, unsafe::Bool)
+        return Mooncake._add_to_primal_internal(IdDict{Any,Any}(), p, t, unsafe)
+    end
+    __diff(p, t) = Mooncake._diff_internal(IdDict{Any,Any}(), p, t)
+    __dot(t, s) = Mooncake._dot_internal(IdDict{Any,Any}(), t, s)
+    __scale(a::Float64, t) = Mooncake._scale_internal(IdDict{Any,Any}(), a, t)
+    _populate_address_map(p, t) = populate_address_map_internal(AddressMap(), p, t)
+
+    # Check that tangent_type returns a `Type`.
     T = tangent_type(P)
     @test T isa Type
-    z = zero_tangent(p)
+
+    # Check that `zero_tangent_internal` runs and produces something of the correct type.
+    z = _zero_tangent(p)
     @test z isa T
-    t = randn_tangent(rng, p)
+
+    # Check that `randn_tangent_internal` runs and produces something of the correct type.
+    t = _randn_tangent(rng, p)
     @test t isa T
 
     # Check that we can compare the values of primals and tangents.
@@ -909,74 +996,75 @@ function test_tangent_interface(rng::AbstractRNG, p::P; interface_only=false) wh
     test_tangent_type(P, T)
 
     # Check that zero_tangent isn't obviously non-deterministic.
-    @test has_equal_data(z, Mooncake.zero_tangent(p))
+    @test has_equal_data(z, _zero_tangent(p))
 
-    # Check that ismutabletype(P) => ismutabletype(T)
+    # Check that ismutabletype(P) => ismutabletype(T).
     if ismutabletype(P) && !(T == NoTangent)
         @test ismutabletype(T)
     end
 
     # Verify z is zero via its action on t.
-    zc = deepcopy(z)
-    tc = deepcopy(t)
-    @test has_equal_data(@inferred(increment!!(zc, zc)), zc)
-    @test has_equal_data(increment!!(zc, tc), tc)
-    @test has_equal_data(increment!!(tc, zc), tc)
+    zc = deepcopy([z])[1]
+    tc = deepcopy([t])[1]
+    @test has_equal_data(@inferred(_increment!!(zc, zc)), zc)
+    @test has_equal_data(_increment!!(zc, tc), tc)
+    @test has_equal_data(_increment!!(tc, zc), tc)
 
     # increment!! preserves types.
-    @test increment!!(zc, zc) isa T
-    @test increment!!(zc, tc) isa T
-    @test increment!!(tc, zc) isa T
+    @test _increment!!(zc, zc) isa T
+    @test _increment!!(zc, tc) isa T
+    @test _increment!!(tc, zc) isa T
 
     # The output of `increment!!` for a mutable type must have the property that the first
     # argument === the returned value.
     if ismutabletype(P)
-        @test increment!!(zc, zc) === zc
-        @test increment!!(tc, zc) === tc
-        @test increment!!(zc, tc) === zc
-        @test increment!!(tc, tc) === tc
+        @test _increment!!(zc, zc) === zc
+        @test _increment!!(tc, zc) === tc
+        @test _increment!!(zc, tc) === zc
+        @test _increment!!(tc, tc) === tc
     end
 
     # If t isn't the zero element, then adding it to itself must change its value.
     if !has_equal_data(t, z) && !ismutabletype(P)
-        tc′ = increment!!(tc, tc)
+        tc′ = _increment!!(tc, tc)
         @test tc === tc′ || !has_equal_data(tc′, tc)
     end
 
     # Setting to zero equals zero.
-    @test has_equal_data(set_to_zero!!(tc), z)
+    @test has_equal_data(_set_to_zero!!(tc), z)
+    @test has_equal_data(_set_to_zero!!(tc), z)
     if ismutabletype(P)
-        @test set_to_zero!!(tc) === tc
+        @test _set_to_zero!!(tc) === tc
     end
 
-    z = zero_tangent(p)
-    r = randn_tangent(rng, p)
+    z = _zero_tangent(p)
+    r = _randn_tangent(rng, p)
 
     # Check set_tangent_field if mutable.
-    t isa MutableTangent && test_set_tangent_field!_correctness(t, z)
+    t isa MutableTangent && test_set_tangent_field!_correctness(deepcopy(t), deepcopy(z))
 
     # Verify that operations required for finite difference testing to run, and produce the
     # correct output type.
-    @test _add_to_primal(p, t, true) isa P
-    @test _diff(p, p) isa T
-    @test _dot(t, t) isa Float64
-    @test _scale(11.0, t) isa T
-    @test populate_address_map(p, t) isa AddressMap
+    @test __add_to_primal(p, t, true) isa P
+    @test __diff(p, p) isa T
+    @test __dot(t, t) isa Float64
+    @test __scale(11.0, t) isa T
+    @test _populate_address_map(p, t) isa AddressMap
 
     # Run some basic numerical sanity checks on the output the functions required for finite
     # difference testing. These are necessary but insufficient conditions.
     if !interface_only
-        @test has_equal_data(_add_to_primal(p, z, true), p)
+        @test has_equal_data(__add_to_primal(p, z, true), p)
         if !has_equal_data(z, r)
-            @test !has_equal_data(_add_to_primal(p, r, true), p)
+            @test !has_equal_data(__add_to_primal(p, r, true), p)
         end
-        @test has_equal_data(_diff(p, p), zero_tangent(p))
+        @test has_equal_data(__diff(p, p), _zero_tangent(p))
     end
-    @test _dot(t, t) >= 0.0
-    @test _dot(t, zero_tangent(p)) == 0.0
-    @test _dot(t, increment!!(deepcopy(t), t)) ≈ 2 * _dot(t, t)
-    @test has_equal_data(_scale(1.0, t), t)
-    @test has_equal_data(_scale(2.0, t), increment!!(deepcopy(t), t))
+    @test __dot(t, t) >= 0.0
+    @test __dot(t, _zero_tangent(p)) == 0.0
+    @test __dot(t, _increment!!(deepcopy(t), t)) ≈ 2 * __dot(t, t)
+    @test has_equal_data(__scale(1.0, t), t)
+    @test has_equal_data(__scale(2.0, t), _increment!!(deepcopy(t), t))
 end
 
 # Helper used in `test_tangent_interface`.
@@ -997,6 +1085,11 @@ function test_set_tangent_field!_correctness(t1::T, t2::T) where {T<:MutableTang
         @test g === v
         @test Mooncake.get_tangent_field(t1, n) === v
     end
+end
+
+check_allocs(f, x...) = check_allocs_internal(Shim(), f, x...)
+function check_allocs_internal(::Any, f::F, x::Vararg{Any,N}) where {F,N}
+    throw(error("Load AllocCheck.jl to use this functionality."))
 end
 
 """
@@ -1025,8 +1118,10 @@ function test_tangent_performance(rng::AbstractRNG, p::P) where {P}
 
     # Check there are no allocations when there ought not to be.
     if !__tangent_generation_should_allocate(P)
-        test_opt(Shim(), Tuple{typeof(zero_tangent),P})
-        test_opt(Shim(), Tuple{typeof(randn_tangent),Xoshiro,P})
+        test_opt(Tuple{typeof(zero_tangent),P})
+        check_allocs(Mooncake.zero_tangent, p)
+        test_opt(Tuple{typeof(randn_tangent),Xoshiro,P})
+        check_allocs(Mooncake.randn_tangent, rng, p)
     end
 
     # `increment!!` should always infer.
@@ -1044,15 +1139,12 @@ function test_tangent_performance(rng::AbstractRNG, p::P) where {P}
     return t isa Union{MutableTangent,Tangent} && test_get_tangent_field_performance(t)
 end
 
-function check_allocs(::Any, f::F, x::Vararg{Any,N}) where {F,N}
-    throw(error("Load AllocCheck.jl to use this functionality."))
-end
-
 function test_allocations(t::T, z::T) where {T}
-    check_allocs(Shim(), increment!!, t, t)
-    check_allocs(Shim(), increment!!, t, z)
-    check_allocs(Shim(), increment!!, z, t)
-    return check_allocs(Shim(), increment!!, z, z)
+    check_allocs(increment_internal!!, Mooncake.NoCache(), t, t)
+    check_allocs(increment_internal!!, Mooncake.NoCache(), t, z)
+    check_allocs(increment_internal!!, Mooncake.NoCache(), z, t)
+    check_allocs(increment_internal!!, Mooncake.NoCache(), z, z)
+    return nothing
 end
 
 _set_tangent_field!(x, ::Val{i}, v) where {i} = set_tangent_field!(x, i, v)
@@ -1065,7 +1157,7 @@ function test_set_tangent_field!_performance(t1::T, t2::T) where {V,T<:MutableTa
 
         # Int mode.
         _set_tangent_field!(t1, Val(n), v)
-        report_opt(Shim(), Tuple{typeof(_set_tangent_field!),typeof(t1),Val{n},typeof(v)})
+        report_opt(Tuple{typeof(_set_tangent_field!),typeof(t1),Val{n},typeof(v)})
 
         if all(n -> !(fieldtype(V, n) <: Mooncake.PossiblyUninitTangent), 1:fieldcount(V))
             i = Val(n)
@@ -1076,9 +1168,7 @@ function test_set_tangent_field!_performance(t1::T, t2::T) where {V,T<:MutableTa
         # Symbol mode.
         s = Val(fieldname(V, n))
         @inferred _set_tangent_field!(t1, s, v)
-        report_opt(
-            Shim(), Tuple{typeof(_set_tangent_field!),typeof(t1),typeof(s),typeof(v)}
-        )
+        report_opt(Tuple{typeof(_set_tangent_field!),typeof(t1),typeof(s),typeof(v)})
 
         if all(n -> !(fieldtype(V, n) <: Mooncake.PossiblyUninitTangent), 1:fieldcount(V))
             _set_tangent_field!(t1, s, v)
@@ -1096,13 +1186,13 @@ function test_get_tangent_field_performance(t::Union{MutableTangent,Tangent})
 
         # Int mode.
         i = Val(n)
-        report_opt(Shim(), Tuple{typeof(_get_tangent_field),typeof(t),typeof(i)})
+        report_opt(Tuple{typeof(_get_tangent_field),typeof(t),typeof(i)})
         @inferred _get_tangent_field(t, i)
         @test count_allocs(_get_tangent_field, t, i) == 0
 
         # Symbol mode.
         s = Val(fieldname(V, n))
-        report_opt(Shim(), Tuple{typeof(_get_tangent_field),typeof(t),typeof(s)})
+        report_opt(Tuple{typeof(_get_tangent_field),typeof(t),typeof(s)})
         @inferred _get_tangent_field(t, s)
         @test count_allocs(_get_tangent_field, t, s) == 0
     end
@@ -1127,11 +1217,66 @@ function __increment_should_allocate(::Type{P}) where {P}
     return any(tt -> tt <: PossiblyUninitTangent, Mooncake.tangent_field_types(P))
 end
 __increment_should_allocate(::Type{Core.SimpleVector}) = true
+__increment_should_allocate(::Type{<:Array{Any}}) = true
 
 function __is_completely_stable_type(::Type{P}) where {P}
     (!isconcretetype(P) || isabstracttype(P)) && return false
     isprimitivetype(P) && return true
     return all(__is_completely_stable_type, fieldtypes(P))
+end
+
+"""
+    test_tangent(rng::AbstractRNG, p::P, x::T, y::T, z_target::T) where {P, T}
+
+Verify that primal `p` with tangents `z_target`, `x`, and `y`, satisfies the tangent
+interface. If these tests pass, then it should be possible to write rules for primals
+of type `P`, and to test them using [`test_rule`](@ref).
+
+It should be the case that `z_target` == `increment!!(x, y)`.
+
+As always, there are limits to the errors that these tests can identify -- they form
+necessary but not sufficient conditions for the correctness of your code.
+"""
+function test_tangent(
+    rng::AbstractRNG, p::P, x::T, y::T, z_target::T; interface_only, perf=true
+) where {P,T}
+    @nospecialize rng p x y z_target
+
+    # Check the interface.
+    test_tangent_consistency(rng, p; interface_only=false)
+
+    # Is the tangent_type of `P` what we expected?
+    @test tangent_type(P) == T
+
+    # Check that zero_tangent infers.
+    @inferred Mooncake.zero_tangent(p)
+
+    # Verify that adding together `x` and `y` gives the value the user expected.
+    z_pred = increment!!(x, y)
+    @test has_equal_data(z_pred, z_target)
+    if ismutabletype(P)
+        @test z_pred === x
+    end
+
+    # Check performance is as expected.
+    return perf && test_tangent_performance(rng, p)
+end
+
+function test_equality_comparison(x)
+    @nospecialize x
+
+    # Check that the internal methods have been implemented.
+    function _has_equal_data(x, y)
+        return has_equal_data_internal(x, y, true, Dict{Tuple{UInt,UInt},Bool}())
+    end
+    function _has_equal_data_up_to_undefs(x, y)
+        return has_equal_data_internal(x, y, false, Dict{Tuple{UInt,UInt},Bool}())
+    end
+
+    @test _has_equal_data(x, x) isa Bool
+    @test _has_equal_data_up_to_undefs(x, x) isa Bool
+    @test _has_equal_data(x, x)
+    @test _has_equal_data_up_to_undefs(x, x)
 end
 
 """
@@ -1149,7 +1294,6 @@ Ensure that [`test_tangent_interface`](@ref) runs for `p` before running these t
 - [`Mooncake.rdata`](@ref)
 - [`Mooncake.uninit_fdata`](@ref)
 - [`Mooncake.tangent_type`](@ref) (binary method)
-
 """
 function test_tangent_splitting(rng::AbstractRNG, p::P) where {P}
 
@@ -1157,10 +1301,10 @@ function test_tangent_splitting(rng::AbstractRNG, p::P) where {P}
     T = tangent_type(P)
     F = Mooncake.fdata_type(T)
     @test F isa Type
-    check_allocs(Shim(), Mooncake.fdata_type, T)
+    check_allocs(Mooncake.fdata_type, T)
     R = Mooncake.rdata_type(T)
     @test R isa Type
-    check_allocs(Shim(), Mooncake.rdata_type, T)
+    check_allocs(Mooncake.rdata_type, T)
 
     # Check that fdata and rdata produce the correct types.
     t = randn_tangent(rng, p)
@@ -1185,6 +1329,7 @@ function test_tangent_splitting(rng::AbstractRNG, p::P) where {P}
 
     # Compute the tangent type associated to `F` and `R`, and check it is equal to `T`.
     @test tangent_type(F, R) == T
+    @test is_foldable(tangent_type, (Type{F}, Type{R}))
 
     # Check that combining f and r yields a tangent of the correct type and value.
     t_combined = Mooncake.tangent(f, r)
@@ -1211,15 +1356,18 @@ function test_tangent_splitting(rng::AbstractRNG, p::P) where {P}
 
     # Check that when the zero element is asked from the primal type alone, the result is
     # either an instance of R _or_ a `CannotProduceZeroRDataFromType`.
-    test_opt(Shim(), zero_rdata_from_type, Tuple{Type{P}})
+    test_opt(zero_rdata_from_type, Tuple{Type{P}})
     rzero_from_type = @inferred zero_rdata_from_type(P)
     @test rzero_from_type isa R || rzero_from_type isa CannotProduceZeroRDataFromType
     @test can_make_zero != isa(rzero_from_type, CannotProduceZeroRDataFromType)
 
     # Check that we can produce a lazy zero rdata, and that it has the correct type.
-    test_opt(Shim(), lazy_zero_rdata, Tuple{P})
+    test_opt(lazy_zero_rdata, Tuple{P})
     lazy_rzero = @inferred lazy_zero_rdata(p)
     @test instantiate(lazy_rzero) isa R
+
+    # Check incrementing the fdata component of a tangnet yields the correct type.
+    @test increment!!(f, f) isa F
 
     # Check incrementing the rdata component of a tangent yields the correct type.
     @test increment_rdata!!(t, r) isa T

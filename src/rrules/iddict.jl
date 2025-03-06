@@ -1,45 +1,94 @@
 # We're going to use `IdDict`s to represent tangents for `IdDict`s.
 
-@tt_effects tangent_type(::Type{<:IdDict{K,V}}) where {K,V} = IdDict{K,tangent_type(V)}
-function randn_tangent(rng::AbstractRNG, d::IdDict{K,V}) where {K,V}
-    return IdDict{K,tangent_type(V)}([k => randn_tangent(rng, v) for (k, v) in d])
-end
-function zero_tangent(d::IdDict{K,V}) where {K,V}
-    return IdDict{K,tangent_type(V)}([k => zero_tangent(v) for (k, v) in d])
+@foldable tangent_type(::Type{<:IdDict{K,V}}) where {K,V} = IdDict{K,tangent_type(V)}
+
+function zero_tangent_internal(d::P, stackdict::StackDict) where {P<:IdDict}
+    T = tangent_type(P)
+    if haskey(stackdict, d)
+        return stackdict[d]::T
+    else
+        t = T([k => zero_tangent_internal(v, stackdict) for (k, v) in d])
+        stackdict[d] = t
+        return t
+    end
 end
 
-function increment!!(p::T, q::T) where {T<:IdDict}
+function randn_tangent_internal(rng::AbstractRNG, d::P, stackdict::Any) where {P<:IdDict}
+    T = tangent_type(P)
+    if haskey(stackdict, d)
+        return stackdict[d]::T
+    else
+        t = T([k => randn_tangent_internal(rng, v, stackdict) for (k, v) in d])
+        stackdict[d] = t
+        return t
+    end
+end
+
+function increment_internal!!(c::IncCache, p::T, q::T) where {T<:IdDict}
+    haskey(c, p) && return p
     for k in keys(p)
-        p[k] = increment!!(p[k], q[k])
+        p[k] = increment_internal!!(c, p[k], q[k])
     end
     return p
 end
-function _set_to_zero!!(c::IncCache, t::IdDict)
+function set_to_zero_internal!!(c::IncCache, t::IdDict)
     haskey(c, t) && return t
     c[t] = false
     foreach(keys(t)) do k
-        t[k] = _set_to_zero!!(c, t[k])
+        t[k] = set_to_zero_internal!!(c, t[k])
     end
     return t
 end
-function _scale(a::Float64, t::IdDict{K,V}) where {K,V}
-    return IdDict{K,V}([k => _scale(a, v) for (k, v) in t])
+function _scale_internal(c::MaybeCache, a::Float64, t::IdDict{K,V}) where {K,V}
+    haskey(c, t) && return c[t]::IdDict{K,V}
+    t′ = IdDict{K,V}()
+    c[t] = t′
+    for (k, v) in t
+        t′[k] = _scale_internal(c, a, v)
+    end
+    return t′
 end
-_dot(p::T, q::T) where {T<:IdDict} = sum([_dot(p[k], q[k]) for k in keys(p)]; init=0.0)
-function _add_to_primal(p::IdDict{K,V}, t::IdDict{K}, unsafe::Bool) where {K,V}
+function _dot_internal(c::MaybeCache, p::T, q::T) where {T<:IdDict}
+    key = (p, q)
+    haskey(c, key) && return c[key]::Float64
+    c[key] = 0.0
+    return sum([_dot_internal(c, p[k], q[k]) for k in keys(p)]; init=0.0)
+end
+function _add_to_primal_internal(
+    c::MaybeCache, p::IdDict{K,V}, t::IdDict{K}, unsafe::Bool
+) where {K,V}
+    key = (p, t, unsafe)
+    haskey(c, key) && return c[key]::IdDict{K,V}
+    p′ = IdDict{K,V}()
+    c[key] = p′
     ks = intersect(keys(p), keys(t))
-    return IdDict{K,V}([k => _add_to_primal(p[k], t[k], unsafe) for k in ks])
+    for k in ks
+        p′[k] = _add_to_primal_internal(c, p[k], t[k], unsafe)
+    end
+    return p′
 end
-function _diff(p::P, q::P) where {K,V,P<:IdDict{K,V}}
+function _diff_internal(c::MaybeCache, p::P, q::P) where {K,V,P<:IdDict{K,V}}
     @assert union(keys(p), keys(q)) == keys(p)
-    return IdDict{K,tangent_type(V)}([k => _diff(p[k], q[k]) for k in keys(p)])
+    key = (p, q)
+    haskey(c, key) && return c[key]::tangent_type(P)
+    t = IdDict{K,tangent_type(V)}()
+    c[key] = t
+    for k in keys(p)
+        t[k] = _diff_internal(c, p[k], q[k])
+    end
+    return t
 end
-function TestUtils.populate_address_map!(m::TestUtils.AddressMap, p::IdDict, t::IdDict)
+function TestUtils.populate_address_map_internal(
+    m::TestUtils.AddressMap, p::IdDict, t::IdDict
+)
     k = pointer_from_objref(p)
     v = pointer_from_objref(t)
-    haskey(m, k) && (@assert m[k] == v)
+    if haskey(m, k)
+        @assert m[k] == v
+        return m
+    end
     m[k] = v
-    foreach(n -> TestUtils.populate_address_map!(m, p[n], t[n]), keys(p))
+    foreach(n -> TestUtils.populate_address_map_internal(m, p[n], t[n]), keys(p))
     return m
 end
 function TestUtils.has_equal_data_internal(
@@ -55,9 +104,9 @@ fdata(t::IdDict) = t
 rdata_type(::Type{<:IdDict}) = NoRData
 rdata(t::IdDict) = NoRData()
 
-_verify_fdata_value(p::IdDict, f::IdDict) = nothing
+__verify_fdata_value(::IdDict{Any,Nothing}, p::IdDict, f::IdDict) = nothing
 
-tangent_type(::Type{T}, ::Type{NoRData}) where {T<:IdDict} = T
+@foldable tangent_type(::Type{T}, ::Type{NoRData}) where {T<:IdDict} = T
 tangent(f::IdDict, ::NoRData) = f
 
 # All of the rules in here are provided in order to avoid nasty `:ccall`s, and to support

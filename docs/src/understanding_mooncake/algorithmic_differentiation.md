@@ -5,7 +5,8 @@ Even if you have worked with AD before, we recommend reading in order to acclima
 
 # Derivatives
 
-A foundation on which all of AD is built the the derivate -- we require a fairly general definition of it, which we build up to here.
+The foundation of automatic differentiation is the directional derivative.
+Here we build up to a general definition.
 
 _**Scalar-to-Scalar Functions**_
 
@@ -14,7 +15,7 @@ Its derivative at ``x`` is usually thought of as the scalar ``\alpha \in \RR`` s
 ```math
 \text{d}f = \alpha \, \text{d}x .
 ```
-Loosely speaking, by this notation we mean that for arbitrary small changes ``\text{d} x`` in the input to ``f``, the change in the output ``\text{d} f`` is ``\alpha \, \text{d}x``.
+Loosely speaking, by this notation we mean ``f(x + \text{d} x) \approx f(x) + \text{d} f``, or in other words, that an arbitrarily small change ``\text{d} x`` to the input ``x`` results in a change ``\text{d} f = \alpha \, \text{d}x`` in the output.
 We refer readers to the first few minutes of the [first lecture mentioned before](https://ocw.mit.edu/courses/18-s096-matrix-calculus-for-machine-learning-and-beyond-january-iap-2023/resources/ocw_18s096_lecture01-part2_2023jan18_mp4/) for a more careful explanation.
 
 _**Vector-to-Vector Functions**_
@@ -26,8 +27,8 @@ The generalisation of this to Euclidean space should be familiar: if ``f : \RR^P
 
 It is possible to stop here, as all the functions we shall need to consider can in principle be written as functions on some subset ``\RR^P``.
 
-However, when we consider differentiating computer programmes, we will have to deal with complicated nested data structures, e.g. `struct`s inside `Tuple`s inside `Vector`s etc.
-While all of these data structures _can_ be mapped onto a flat vector in order to make sense of the Jacobian of a computer programme, this becomes very inconvenient very quickly.
+However, to differentiate computer programmes, we must deal with complicated nested data structures, e.g. `struct`s inside `Tuple`s inside `Vector`s etc.
+While all of these data structures _can_ be mapped onto a flat vector in order to make sense of the Jacobian, this quickly becomes very inconvenient.
 To see the problem, consider the Julia function whose input is of type `Tuple{Tuple{Float64, Vector{Float64}}, Vector{Float64}, Float64}` and whose output is of type `Tuple{Vector{Float64}, Float64}`.
 What kind of object might be use to represent the derivative of a function mapping between these two spaces?
 We certainly _can_ treat these as structured "view" into a "flat" `Vector{Float64}`s, and then define a Jacobian, but actually _finding_ this mapping is a tedious exercise, even if it quite obviously exists.
@@ -40,7 +41,7 @@ In order to do so, we now introduce a generalised notion of the derivative.
 _**Functions Between More General Spaces**_
 
 In order to avoid the difficulties described above, we consider functions ``f : \mathcal{X} \to \mathcal{Y}``, where ``\mathcal{X}`` and ``\mathcal{Y}`` are _finite_ dimensional real Hilbert spaces (read: finite-dimensional vector space with an inner product, and real-valued scalars).
-This definition includes functions to / from ``\RR``, ``\RR^D``, but also real-valued matrices, and any other "container" for collections of real numbers.
+This definition includes functions to and from ``\RR``, ``\RR^D``, real-valued matrices, and any other "container" for collections of real numbers.
 Furthermore, we shall see later how we can model all sorts of structured representations of data directly as such spaces.
 
 For such spaces, the derivative of ``f`` at ``x \in \mathcal{X}`` is the linear operator (read: linear function) ``D f [x] : \mathcal{X} \to \mathcal{Y}`` satisfying
@@ -49,7 +50,7 @@ For such spaces, the derivative of ``f`` at ``x \in \mathcal{X}`` is the linear 
 ```
 The purpose of this linear operator is to provide a linear approximation to ``f`` which is accurate for arguments which are very close to ``x``.
 
-Please note that ``D f [x]`` is a single mathematical object, despite the fact that 3 separate symbols are used to denote it -- ``D f [x] (\dot{x})`` denotes the application of the function ``D f [x]`` to argument ``\dot{x}``.
+Please note that ``D f [x]`` is a single mathematical object, despite being three separate symbols: ``D f [x] (\dot{x})`` denotes the application of the function ``D f [x]`` to argument ``\dot{x}``.
 Furthermore, the dot-notation (``\dot{x}``) does not have anything to do with time-derivatives, it is simply common notation used in the AD literature to denote the arguments of derivatives.
 
 So, instead of thinking of the derivative as a number or a matrix, we think about it as a _function_.
@@ -88,10 +89,10 @@ Formally, we say that a function ``f : \mathcal{X} \to \mathcal{Y}`` is differen
 \lim_{\text{d} h \to 0} \frac{\| f(x + \text{d} h) - f(x) + D f [x] (\text{d} h)  \|_\mathcal{Y}}{\| \text{d}h \|_\mathcal{X}} = 0,
 ```
 where ``\| \cdot \|_\mathcal{X}`` and ``\| \cdot \|_\mathcal{Y}`` are the norms associated to Hilbert spaces ``\mathcal{X}`` and ``\mathcal{Y}`` respectively.
+(The Frechet derivative does not depend on the choice of norms. All norms are _equivalent_ in finite dimensions, meaning they define the same topology and notion of convergence: if this equation is satisfied for one norm, it holds for all.)
+
 It is a good idea to consider what this looks like when ``\mathcal{X} = \mathcal{Y} = \RR`` and when ``\mathcal{X} = \mathcal{Y} = \RR^D``.
 It is sometimes helpful to refer to this definition to e.g. verify the correctness of the derivative of a function -- as with single-variable calculus, however, this is rare.
-
-
 
 _**Another aside: what does Forwards-Mode AD compute?**_
 
@@ -120,12 +121,12 @@ This is useful because we can obtain the gradient from this when ``Q = 1`` by le
 _**Adjoint Operators**_
 
 In order to generalise this algorithm to work with linear operators, we must first generalise the idea of multiplying a vector by the transpose of the Jacobian.
-The relevant concept here is that of the _adjoint_ _operator_.
+The relevant concept here is the _adjoint_ of a linear operator.
 Specifically, the adjoint ``A^\ast`` of linear operator ``A`` is the linear operator satisfying
 ```math
 \langle A^\ast \bar{y}, \dot{x} \rangle = \langle \bar{y}, A \dot{x} \rangle.
 ```
-where ``\langle \cdot, \cdot \rangle`` denotes the inner-product.
+for any ``\dot{x}, \bar{y}``, where ``\langle \cdot, \cdot \rangle`` denotes the inner-product.
 The relationship between the adjoint and matrix transpose is: if ``A (x) := J x`` for some matrix ``J``, then ``A^\ast (y) := J^\top y``.
 
 Moreover, just as ``(A B)^\top = B^\top A^\top`` when ``A`` and ``B`` are matrices, ``(A B)^\ast = B^\ast A^\ast`` when ``A`` and ``B`` are linear operators.
@@ -409,36 +410,114 @@ This "vector-Jacobian product" expression is commonly used to explain AD, and is
 
 # Directional Derivatives and Gradients
 
-Now we turn to using reverse-mode AD to compute the gradient of a function.
-In short, given a function ``g : \mathcal{X} \to \RR`` with derivative ``D g [x]`` at ``x``, its gradient is equal to ``D g [x]^\ast (1)``.
-We explain why in this section.
+Now we turn to using forwards- and reverse-mode AD to compute the gradient of a function.
 
-The derivative discussed here can be used to compute directional derivatives.
-Consider a function ``f : \mathcal{X} \to \RR`` with Frechet derivative ``D f [x] : \mathcal{X} \to \RR`` at ``x \in \mathcal{X}``.
-Then ``D f[x](\dot{x})`` returns the directional derivative in direction ``\dot{x}``.
+Recall that if ``D f[x] : \mathcal{X} \to \mathbb{R}`` is the Frechet derivative discussed here then ``D f[x](\dot{x})`` is the _directional derivative_ in the ``\dot{x}`` direction.
 
-Gradients are closely related to the adjoint of the derivative.
-Recall that the gradient of ``f`` at ``x`` is defined to be the vector ``\nabla f (x) \in \mathcal{X}`` such that ``\langle \nabla f (x), \dot{x} \rangle`` gives the directional derivative of ``f`` at ``x`` in direction ``\dot{x}``.
-Having noted that ``D f[x](\dot{x})`` is exactly this directional derivative, we can equivalently say that
+The _gradient_ of ``f : \mathcal{X} \to \mathbb{R}`` at ``x`` is defined to be the vector ``\nabla f (x) \in \mathcal{X}`` such that
 ```math
-D f[x](\dot{x}) = \langle \nabla f (x), \dot{x} \rangle .
+\langle \nabla f (x), \dot{x} \rangle = D f[x](\dot{x})
+```
+for any direction ``\dot{x}``.
+In other words, the vector ``\nabla f`` encodes all the information about the directional derivatives of ``f``, and we use the inner product to retrieve that information.
+
+An alternative characterisation is that ``\nabla f(x)`` is the vector pointing in the direction of steepest ascent whose magnitude is given by the slope in that direction.
+In other words, if ``\hat{n} \coloneqq \argmax_{\|u\|=1} D f[x](u)`` is the unit vector in the direction of steepest ascent, then ``\nabla f = \|\nabla f\| \, \hat{n}`` and ``D f[x](\hat{n}) = \|\nabla f(x)\|``.
+(That this follows from the implicit definition above is a good exercise.)
+
+_**Aside: The choice of inner product**_
+
+Notice that the value of the gradient depends on how the inner product on ``\mathcal{X}`` is defined.
+Indeed, different choices of inner product result in different values of ``\nabla f``.
+Adjoints such as ``D f[x]^*`` are also inner product dependent.
+However, the actual derivative ``D f[x]`` is of course invariant -- it does not depend on the inner product or norm.
+
+In practice, Mooncake uses the Euclidean inner product, extended in the "obvious way" to other composite data types (that is, as if everything is flattened and embedded in ``\mathbb{R}^N``), but we endeavour to keep the discussion general in order to make the role of the inner product explicit.
+
+
+
+#### Computing the gradient from forwards-mode
+
+To compute the gradient in forwards-mode, we need to evaluate the forwards pass ``\dim \mathcal{X}`` times.
+We also need to refer to a basis ``\{\mathbf{e}_i\}`` of ``\mathcal{X}`` and its reciprocal basis[^reciprocal_bases] ``\{\mathbf{e}^i\}``.
+Equipped with such a pair of bases, we can always decompose a vector ``x = \sum_i x^i \mathbf{e}_i`` into its components ``x^i = \langle x, \mathbf{e}^i \rangle``.
+Hence, the gradient is given by
+```math
+\nabla f(x)
+	= \sum_i \langle \nabla f(x), \mathbf{e}^i \rangle \mathbf{e}_i
+	= \sum_i D f[x](\mathbf{e}^i) \, \mathbf{e}_i
+```
+where the second equality follows from the gradient's definition.
+
+[^reciprocal_bases]:
+	For any basis ``\{\mathbf{e}_i\}`` there exists a reciprocal reciprocal basis ``\{\mathbf{e}^i\}`` such that ``\langle \mathbf{e}_i, \mathbf{e}^j \rangle = \delta_i^j``.
+	If the basis is orthonormal with respect to the inner product, then the original basis and its reciprocal are equal and ``\mathbf{e}_i = \mathbf{e}^i``.
+	We will always implicitly use orthonormal bases in Mooncake, so the position of indices can usually be ignored safely.
+
+If the inner product is Euclidean, then ``\mathbf{e}^i = \mathbf{e}_i`` and we can interpret the ``i``th component of ``\nabla f`` as the directional derivative when moving in the ``i``th direction.
+
+_**Example**_
+
+Consider again the Julia `function`
+```julia
+f(x::Float64, y::Tuple{Float64, Float64}) = x + y[1] * y[2]
+```
+corresponding to ``f(x, y) = x + y_1 y_2``.
+An orthonormal basis for the function's domain ``\mathbb{R} \times \mathbb{R}^2`` is
+```math
+\mathbf{e}_1 = \mathbf{e}^1 = (1, (0, 0)), \quad
+\mathbf{e}_2 = \mathbf{e}^2 = (0, (1, 0)), \quad
+\mathbf{e}_3 = \mathbf{e}^3 = (0, (0, 1)), \quad
+```
+so the gradient is
+```math
+\begin{align*}
+\nabla f(x, y)
+	&= \sum_i D f[x, y](\mathbf{e}^i) \mathbf{e}_i \\
+	&= \Big(D f[x, y](1, (0, 0)), \big(D f[x, y](0, (1, 0)), D f[x, y](0, (0, 1))\big)\Big) \\
+	&= (1, (y_2, y_1))
+\end{align*}
+```
+referring back to [Step 2 above](#AD-of-a-Julia-function:-a-slightly-less-trivial-example) for the values of ``D f[x, y](\dot{x}, \dot{y})``.
+
+#### Computing the gradient from reverse-mode
+If we perform a single reverse-pass on a function ``f : \mathcal{X} \to \RR`` to obtain ``D f[x]^\ast``, then the gradient is simply
+```math
+\nabla f (x) = D f[x]^\ast (1) .
 ```
 
-The role of the adjoint is revealed when we consider ``f := \mathcal{l} \circ g``, where ``g : \mathcal{X} \to \mathcal{Y}``, ``\mathcal{l}(y) := \langle \bar{y}, y \rangle``, and ``\bar{y} \in \mathcal{Y}`` is some fixed vector.
-Noting that ``D \mathcal{l} [y](\dot{y}) = \langle \bar{y}, \dot{y} \rangle``, we apply the chain rule to obtain
+To show this, note that ``D f [x] (\dot{x}) = \langle 1, D f[x] (\dot{x}) \rangle = \langle D f[x]^\ast (1), \dot{x} \rangle`` using the definition of the adjoint.
+Then, the definition of the gradient gives
 ```math
-\begin{align}
-D f [x] (\dot{x}) &= [(D \mathcal{l} [g(x)]) \circ (D g [x])](\dot{x}) \nonumber \\
-    &= \langle \bar{y}, D g [x] (\dot{x}) \rangle \nonumber \\
-    &= \langle D g [x]^\ast (\bar{y}), \dot{x} \rangle, \nonumber
-\end{align}
+\langle \nabla f (x), \dot{x} \rangle = \langle D f[x]^\ast (1), \dot{x} \rangle
 ```
-from which we conclude that ``D g [x]^\ast (\bar{y})`` is the gradient of the composition ``l \circ g`` at ``x``.
+which implies ``\nabla f (x) = D f[x]^\ast (1)`` since ``\dot{x}`` is arbitrary.
+
+_**Example**_
+
+The adjoint of the derivative of ``f(x, y) = x + y_1 y_2`` (see [above](#AD-of-a-Julia-function:-a-slightly-less-trivial-example)) immediately gives
+```math
+\nabla f(x, y) = D f[x, y]^\ast (1) = (1, (y_2, y_1)) .
+```
+
+_**Aside: Adjoints of Derivatives as Gradients**_
+
+It is interesting to note that value of ``D f[x]^\ast (\bar{y})`` returned by performing reverse-mode on a function ``f : \mathcal{X} \to \mathcal{Y}`` can always be viewed as the gradient of another function ``F : \mathcal{X} \to \mathbb{R}``.
+
+Let ``F \coloneqq h_{\bar{y}} \circ f`` where ``h_{\bar{y}}(y) = \langle y, \bar{y}\rangle``.
+One can show ``D h_{\bar{y}}[y]^\ast (1) = \bar{y}``.
+Then, since
+```math
+\begin{align*}
+\langle \nabla F(x), \dot{x} \rangle
+	&= \langle D F[x]^\ast (1), \dot{x} \rangle \\
+	&= \langle D f[x]^\ast (D h_{\bar{y}}[f(x)]^\ast (1)), \dot{x} \rangle \\
+	&= \langle D f[x]^\ast (\bar{y}), \dot{x} \rangle \\
+\end{align*}
+```
+we have that ``\nabla F(x) = D f[x]^\ast (\bar{y})``.
 
 The consequence is that we can always view the computation performed by reverse-mode AD as computing the gradient of the composition of the function in question and an inner product with the argument to the adjoint.
-
-The above shows that if ``\mathcal{Y} = \RR`` and ``g`` is the function we wish to compute the gradient of, we can simply set ``\bar{y} = 1`` and compute ``D g [x]^\ast (\bar{y})`` to obtain the gradient of ``g`` at ``x``.
-
 
 
 

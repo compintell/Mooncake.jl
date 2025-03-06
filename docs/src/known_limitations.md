@@ -7,6 +7,7 @@ Mooncake.jl has a number of known qualitative limitations, which we document her
 ```@meta
 DocTestSetup = quote
     using Mooncake
+    using Mooncake: NoTangent, build_rrule
 end
 ```
 

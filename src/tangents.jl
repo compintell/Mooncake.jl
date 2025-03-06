@@ -31,12 +31,24 @@ is_init(t) = true
 val(x::PossiblyUninitTangent) = is_init(x) ? x.tangent : error("Uninitialised")
 val(x) = x
 
+"""
+    Tangent{Tfields<:NamedTuple}
+
+Default type used to represent the tangent of a `struct`. See [`tangent_type`](@ref) for
+more info.
+"""
 struct Tangent{Tfields<:NamedTuple}
     fields::Tfields
 end
 
 Base.:(==)(x::Tangent, y::Tangent) = x.fields == y.fields
 
+"""
+    MutableTangent{Tfields<:NamedTuple}
+
+Default type used to represent the tangent of a `mutable struct`. See [`tangent_type`](@ref)
+for more info.
+"""
 mutable struct MutableTangent{Tfields<:NamedTuple}
     fields::Tfields
     MutableTangent{Tfields}() where {Tfields} = new{Tfields}()
@@ -111,22 +123,27 @@ end
     return Expr(:call, :tuple, tangent_field_types_exprs(P)...)
 end
 
-@generated function build_tangent(::Type{P}, fields::Vararg{Any,N}) where {P,N}
-    tangent_values_exprs = map(enumerate(tangent_field_types(P))) do (n, tt)
-        tt <: PossiblyUninitTangent && return n <= N ? :($tt(fields[$n])) : :($tt())
-        return :(fields[$n])
+function build_tangent(::Type{P}, fields...) where {P}
+    fields = map(enumerate(tangent_field_types(P))) do (n, tt)
+        tt <: PossiblyUninitTangent && return n <= length(fields) ? tt(fields[n]) : tt()
+        return fields[n]
     end
-    tuple_expr = Expr(:tuple, tangent_values_exprs...)
-    return Expr(:call, tangent_type(P), Expr(:call, NamedTuple{fieldnames(P)}, tuple_expr))
+    return tangent_type(P)(NamedTuple{fieldnames(P)}(fields))
+end
+
+function build_tangent(::Type{P}, fields...) where {P<:Union{Tuple,NamedTuple}}
+    tangent_type(P) == NoTangent && return NoTangent()
+    isconcretetype(P) && return tangent_type(P)(fields)
+    return __tangent_from_non_concrete(P, fields)
 end
 
 """
-    @tt_effects tangent_type(...)
+    macro foldable def
 
-Effects which ought to be applied to `tangent_type`.
+Shorthand for `Base.@assume_effects :foldable function f(x)...`.
 """
-macro tt_effects(expr)
-    return esc(:(Base.@assume_effects :consistent :removable $expr))
+macro foldable(expr)
+    return esc(:(Base.@assume_effects :foldable $expr))
 end
 
 """
@@ -270,7 +287,7 @@ tangent_type(::Type{<:Type}) = NoTangent
 
 tangent_type(::Type{<:TypeVar}) = NoTangent
 
-@tt_effects tangent_type(::Type{Ptr{P}}) where {P} = Ptr{tangent_type(P)}
+@foldable tangent_type(::Type{Ptr{P}}) where {P} = Ptr{tangent_type(P)}
 
 tangent_type(::Type{<:Ptr}) = NoTangent
 
@@ -279,6 +296,10 @@ tangent_type(::Type{Bool}) = NoTangent
 tangent_type(::Type{Char}) = NoTangent
 
 tangent_type(::Type{Symbol}) = NoTangent
+
+tangent_type(::Type{Cstring}) = NoTangent
+
+tangent_type(::Type{Cwstring}) = NoTangent
 
 tangent_type(::Type{Module}) = NoTangent
 
@@ -296,13 +317,13 @@ tangent_type(::Type{P}) where {P<:Union{Int8,Int16,Int32,Int64,Int128}} = NoTang
 
 tangent_type(::Type{<:Core.Builtin}) = NoTangent
 
-@tt_effects tangent_type(::Type{P}) where {P<:IEEEFloat} = P
+@foldable tangent_type(::Type{P}) where {P<:IEEEFloat} = P
 
 tangent_type(::Type{<:Core.LLVMPtr}) = NoTangent
 
 tangent_type(::Type{String}) = NoTangent
 
-@tt_effects tangent_type(::Type{<:Array{P,N}}) where {P,N} = Array{tangent_type(P),N}
+@foldable tangent_type(::Type{<:Array{P,N}}) where {P,N} = Array{tangent_type(P),N}
 
 tangent_type(::Type{<:Array{P,N} where {P}}) where {N} = Array
 
@@ -317,13 +338,6 @@ tangent_type(::Type{DimensionMismatch}) = NoTangent
 tangent_type(::Type{Method}) = NoTangent
 
 tangent_type(::Type{<:Enum}) = NoTangent
-
-# Inferable version of `findall` for `Tuple`s.
-_findall(::Any, ::Int, ::Tuple{}) = ()
-function _findall(cond, ind::Int, x::Tuple)
-    tail = _findall(cond, ind + 1, x[2:end])
-    return cond(x[1]) ? (ind, tail...) : tail
-end
 
 function split_union_tuple_type(tangent_types)
 
@@ -345,7 +359,7 @@ end
 # Generated functions cannot emit closures, so this is defined here for use below.
 isconcrete_or_union(p) = p isa Union || isconcretetype(p)
 
-@tt_effects @generated function tangent_type(::Type{P}) where {N,P<:Tuple{Vararg{Any,N}}}
+@foldable @generated function tangent_type(::Type{P}) where {N,P<:Tuple{Vararg{Any,N}}}
 
     # As with other types, tangent type of Union is Union of tangent types.
     P isa Union && return :(Union{tangent_type($(P.a)),tangent_type($(P.b))})
@@ -376,7 +390,7 @@ isconcrete_or_union(p) = p isa Union || isconcretetype(p)
         T <: $T_all_notangent && return NoTangent
 
         # If exactly one of the field types is a Union, then split.
-        union_fields = _findall(Base.Fix2(isa, Union), 1, tangent_types)
+        union_fields = _findall(Base.Fix2(isa, Union), tangent_types)
         if length(union_fields) == 1 && all(tuple_map(isconcrete_or_union, tangent_types))
             return split_union_tuple_type(tangent_types)
         end
@@ -391,7 +405,7 @@ isconcrete_or_union(p) = p isa Union || isconcretetype(p)
     end
 end
 
-@tt_effects function tangent_type(::Type{P}) where {N,P<:NamedTuple{N}}
+@foldable function tangent_type(::Type{P}) where {N,P<:NamedTuple{N}}
     P isa Union && return Union{tangent_type(P.a),tangent_type(P.b)}
     !isconcretetype(P) && return Union{NoTangent,NamedTuple{N}}
     TT = tangent_type(Tuple{fieldtypes(P)...})
@@ -399,7 +413,7 @@ end
     return isconcretetype(TT) ? NamedTuple{N,TT} : Any
 end
 
-@tt_effects @generated function tangent_type(::Type{P}) where {P}
+@foldable @generated function tangent_type(::Type{P}) where {P}
 
     # This method can only handle struct types. Something has gone wrong if P is primitive.
     if isprimitivetype(P)
@@ -431,6 +445,11 @@ end
 
 backing_type(P::Type) = NamedTuple{fieldnames(P),Tuple{tangent_field_types(P)...}}
 
+struct NoCache end
+
+Base.haskey(::NoCache, x) = false
+Base.setindex!(::NoCache, v, x) = nothing
+
 """
     zero_tangent(x)
 
@@ -445,69 +464,83 @@ Internally, `zero_tangent` calls `zero_tangent_internal`, which handles differen
 handles both circular references and aliasing correctly.
 """
 zero_tangent(x)
-zero_tangent(x::P) where {P} = zero_tangent_internal(x, isbitstype(P) ? nothing : IdDict())
+function zero_tangent(x::P) where {P}
+    return zero_tangent_internal(x, isbitstype(P) ? NoCache() : IdDict())
+end
 
-const StackDict = Union{Nothing,IdDict}
+const StackDict = Union{NoCache,IdDict}
 
 # the `stackdict` naming following convention of Julia's `deepcopy` and `deepcopy_internal`
 # https://github.com/JuliaLang/julia/blob/48d4fd48430af58502699fdf3504b90589df3852/base/deepcopy.jl#L35
-zero_tangent_internal(::Union{Int8,Int16,Int32,Int64,Int128}, ::Any) = NoTangent()
-zero_tangent_internal(x::IEEEFloat, ::Any) = zero(x)
-@generated function zero_tangent_internal(x::Tuple, stackdict::Any)
+zero_tangent_internal(::Union{Int8,Int16,Int32,Int64,Int128}, ::StackDict) = NoTangent()
+zero_tangent_internal(x::IEEEFloat, ::StackDict) = zero(x)
+@generated function zero_tangent_internal(x::Tuple, stackdict::StackDict)
     zt_exprs = map(n -> :(zero_tangent_internal(x[$n], stackdict)), 1:fieldcount(x))
     return quote
         tangent_type($x) == NoTangent && return NoTangent()
         return $(Expr(:call, :tuple, zt_exprs...))
     end
 end
-function zero_tangent_internal(x::NamedTuple, stackdict::Any)
+function zero_tangent_internal(x::NamedTuple, stackdict::StackDict)
     tangent_type(typeof(x)) == NoTangent && return NoTangent()
     return tuple_map(Base.Fix2(zero_tangent_internal, stackdict), x)
 end
-function zero_tangent_internal(x::Ptr, ::Any)
+function zero_tangent_internal(x::Ptr, ::StackDict)
     return throw(ArgumentError("zero_tangent not available for pointers."))
 end
-function zero_tangent_internal(x::SimpleVector, stackdict::IdDict)
+function zero_tangent_internal(x::SimpleVector, stackdict::StackDict)
     return map!(
         n -> zero_tangent_internal(x[n], stackdict),
         Vector{Any}(undef, length(x)),
         eachindex(x),
     )
 end
-function zero_tangent_internal(x::P, stackdict) where {P}
-    tangent_type(P) == NoTangent && return NoTangent()
+@inline @generated function zero_tangent_internal(x::P, d::StackDict) where {P}
 
-    if tangent_type(P) <: MutableTangent
-        if !(stackdict isa IdDict)
-            throw(
-                ArgumentError(
-                    "Internal error: stackdict must be an IdDict for mutable structs, not $(typeof(stackdict)). Please report this issue.",
-                ),
-            )
-        end
-        if haskey(stackdict, x)
-            return stackdict[x]::tangent_type(P)
-        end
-        stackdict[x] = tangent_type(P)() # create a uninitialised MutableTangent
-        # if circular reference exists, then the recursive call will first look up the stackdict
-        # and return the uninitialised MutableTangent
-        # after the recursive call returns, the stackdict will be initialised
-        stackdict[x].fields = zero_tangent_struct_field(x, stackdict)
-        return stackdict[x]::tangent_type(P)
-    else
-        return tangent_type(P)(zero_tangent_struct_field(x, stackdict))
-    end
-end
-
-function zero_tangent_struct_field(x::P, d) where {P}
-    Tfs = tangent_field_types(P)
+    # Loop over fields, constructing expressions to construct zeros depending on the
+    # field type and initialisation status.
     inits = always_initialised(P)
-    tangent_field_zeros = ntuple(Val(fieldcount(P))) do n
-        T = Tfs[n]
-        inits[n] && return zero_tangent_internal(getfield(x, n), d)
-        return isdefined(x, n) ? T(zero_tangent_internal(getfield(x, n), d)) : T()
+    tangent_field_exprs = map(1:fieldcount(P)) do n
+        if inits[n]
+            return :(zero_tangent_internal(getfield(x, $n), d))
+        else
+            P_field = fieldtype(P, n)
+            T_field_expr = :(PossiblyUninitTangent{tangent_type($P_field)})
+            return quote
+                if isdefined(x, $n)
+                    $T_field_expr(zero_tangent_internal(getfield(x, $n), d))
+                else
+                    $T_field_expr()
+                end
+            end
+        end
     end
-    return backing_type(P)(tangent_field_zeros)
+    tangent_fields_tuple_expr = Expr(:call, :tuple, tangent_field_exprs...)
+
+    return quote
+        tangent_type(P) == NoTangent && return NoTangent()
+
+        # If dealing with a mutable type, ensure that we have an entry in `d`.
+        if tangent_type(P) <: MutableTangent
+            haskey(d, x) && return d[x]::tangent_type(P)
+            d[x] = tangent_type(P)() # create a uninitialised MutableTangent
+        end
+
+        # For each field in `x`, construct its zero tangent. This is where the generated
+        # expression above it used. Everything else is regular code.
+        fields = backing_type(P)($tangent_fields_tuple_expr)
+
+        if tangent_type(P) <: MutableTangent
+            # if circular reference exists, then the recursive call will first look up d
+            # and return the uninitialised MutableTangent
+            # after the recursive call returns, d will be initialised
+            d[x].fields = fields
+            return d[x]::tangent_type(P)
+        else
+            return tangent_type(P)(fields)
+        end
+        return t
+    end
 end
 
 """
@@ -548,40 +581,55 @@ function randn_tangent_internal(rng::AbstractRNG, x::SimpleVector, stackdict::Id
         return randn_tangent_internal(rng, x[n], stackdict)
     end
 end
-function randn_tangent_internal(rng::AbstractRNG, x::P, stackdict) where {P}
-    tangent_type(P) == NoTangent && return NoTangent()
-    if isprimitivetype(P)
-        return throw(ArgumentError("$P is a primitive type. Defined randn_tangent for it."))
+@inline @generated function randn_tangent_internal(rng::AbstractRNG, x::P, d) where {P}
+
+    # Loop over fields, constructing expressions to construct randn tangents depending on
+    # the field type and initialisation status.
+    inits = always_initialised(P)
+    tangent_field_exprs = map(1:fieldcount(P)) do n
+        if inits[n]
+            return :(randn_tangent_internal(rng, getfield(x, $n), d))
+        else
+            P_field = fieldtype(P, n)
+            T_field_expr = :(PossiblyUninitTangent{tangent_type($P_field)})
+            return quote
+                if isdefined(x, $n)
+                    $T_field_expr(randn_tangent_internal(rng, getfield(x, $n), d))
+                else
+                    $T_field_expr()
+                end
+            end
+        end
     end
-    if tangent_type(P) <: MutableTangent
-        if !(stackdict isa IdDict)
-            throw(
-                ArgumentError(
-                    "Internal error: stackdict must be an IdDict for mutable structs, not $(typeof(stackdict)). Please report this issue.",
-                ),
-            )
+    tangent_fields_tuple_expr = Expr(:call, :tuple, tangent_field_exprs...)
+
+    return quote
+        tangent_type(P) == NoTangent && return NoTangent()
+
+        # If dealing with a mutable type, ensure that we have an entry in `d`.
+        if tangent_type(P) <: MutableTangent
+            haskey(d, x) && return d[x]::tangent_type(P)
+            d[x] = tangent_type(P)() # create a uninitialised MutableTangent
         end
-        if haskey(stackdict, x)
-            return stackdict[x]::tangent_type(P)
+
+        # For each field in `x`, construct its randn tangent. This is where the generated
+        # expression above it used. Everything else is regular code.
+        fields = backing_type(P)($tangent_fields_tuple_expr)
+
+        if tangent_type(P) <: MutableTangent
+            # if circular reference exists, then the recursive call will first look up d
+            # and return the uninitialised MutableTangent
+            # after the recursive call returns, d will be initialised
+            d[x].fields = fields
+            return d[x]::tangent_type(P)
+        else
+            return tangent_type(P)(fields)
         end
-        stackdict[x] = tangent_type(P)()
-        stackdict[x].fields = randn_tangent_struct_field(rng, x, stackdict)
-        return stackdict[x]::tangent_type(P)
-    else
-        return tangent_type(P)(randn_tangent_struct_field(rng, x, stackdict))
+        return t
     end
 end
 
-function randn_tangent_struct_field(rng::AbstractRNG, x::P, d) where {P}
-    Tfs = tangent_field_types(P)
-    inits = always_initialised(P)
-    tangent_field_zeros = ntuple(Val(fieldcount(P))) do n
-        T = Tfs[n]
-        inits[n] && return randn_tangent_internal(rng, getfield(x, n), d)
-        return isdefined(x, n) ? T(randn_tangent_internal(rng, getfield(x, n), d)) : T()
-    end
-    return backing_type(P)(tangent_field_zeros)
-end
+const IncCache = Union{NoCache,IdDict{Any,Bool}}
 
 """
     increment!!(x::T, y::T) where {T}
@@ -590,53 +638,65 @@ Add `x` to `y`. If `ismutabletype(T)`, then `increment!!(x, y) === x` must hold.
 That is, `increment!!` will mutate `x`.
 This must apply recursively if `T` is a composite type whose fields are mutable.
 """
-increment!!(::NoTangent, ::NoTangent) = NoTangent()
-increment!!(x::T, y::T) where {T<:IEEEFloat} = x + y
-increment!!(x::Ptr{T}, y::Ptr{T}) where {T} = x === y ? x : throw(error("eurgh"))
-increment!!(x::T, y::T) where {T<:Tuple} = tuple_map(increment!!, x, y)::T
-increment!!(x::T, y::T) where {T<:NamedTuple} = T(tuple_map(increment!!, x, y))
-function increment!!(x::T, y::T) where {T<:PossiblyUninitTangent}
-    is_init(x) && is_init(y) && return T(increment!!(val(x), val(y)))
+function increment!!(x::T, y::T) where {T}
+    return increment_internal!!(isbitstype(T) ? NoCache() : IdDict{Any,Bool}(), x, y)
+end
+
+increment_internal!!(::IncCache, ::NoTangent, ::NoTangent) = NoTangent()
+increment_internal!!(::IncCache, x::T, y::T) where {T<:IEEEFloat} = x + y
+function increment_internal!!(::IncCache, x::Ptr{T}, y::Ptr{T}) where {T}
+    return x === y ? x : throw(error("eurgh"))
+end
+@generated function increment_internal!!(c::IncCache, x::T, y::T) where {T<:Tuple}
+    inc_exprs = map(n -> :(increment_internal!!(c, x[$n], y[$n])), 1:fieldcount(T))
+    return Expr(:call, :tuple, inc_exprs...)
+end
+@generated function increment_internal!!(c::IncCache, x::T, y::T) where {T<:NamedTuple}
+    inc_exprs = map(n -> :(increment_internal!!(c, x[$n], y[$n])), 1:fieldcount(T))
+    return Expr(:new, T, inc_exprs...)
+end
+function increment_internal!!(c::IncCache, x::T, y::T) where {T<:PossiblyUninitTangent}
+    is_init(x) && is_init(y) && return T(increment_internal!!(c, val(x), val(y)))
     is_init(x) && !is_init(y) && error("x is initialised, but y is not")
     !is_init(x) && is_init(y) && error("x is not initialised, but y is")
     return x
 end
-increment!!(x::T, y::T) where {T<:Tangent} = T(increment!!(x.fields, y.fields))
-function increment!!(x::T, y::T) where {T<:MutableTangent}
-    x === y && return x
-    x.fields = increment!!(x.fields, y.fields)
+function increment_internal!!(c::IncCache, x::T, y::T) where {T<:Tangent}
+    return T(increment_internal!!(c, x.fields, y.fields))
+end
+function increment_internal!!(c::IncCache, x::T, y::T) where {T<:MutableTangent}
+    (x === y || haskey(c, x)) && return x
+    c[x] = true
+    x.fields = increment_internal!!(c, x.fields, y.fields)
     return x
 end
-
-struct NoCache end
-
-Base.haskey(::NoCache, x) = false
-Base.setindex!(::NoCache, v, x) = nothing
-
-const IncCache = Union{NoCache,IdDict{Any,Bool}}
 
 """
     set_to_zero!!(x)
 
 Set `x` to its zero element (`x` should be a tangent, so the zero must exist).
 """
-set_to_zero!!(x) = _set_to_zero!!(IdDict{Any,Bool}(), x)
+set_to_zero!!(x) = set_to_zero_internal!!(IdDict{Any,Bool}(), x)
 
-_set_to_zero!!(::IncCache, ::NoTangent) = NoTangent()
-_set_to_zero!!(::IncCache, x::Base.IEEEFloat) = zero(x)
-function _set_to_zero!!(c::IncCache, x::Union{Tuple,NamedTuple})
-    return tuple_map(Base.Fix1(_set_to_zero!!, c), x)
+set_to_zero_internal!!(::IncCache, ::NoTangent) = NoTangent()
+set_to_zero_internal!!(::IncCache, x::Base.IEEEFloat) = zero(x)
+function set_to_zero_internal!!(c::IncCache, x::Union{Tuple,NamedTuple})
+    return tuple_map(Base.Fix1(set_to_zero_internal!!, c), x)
 end
-function _set_to_zero!!(c::IncCache, x::T) where {T<:PossiblyUninitTangent}
-    return is_init(x) ? T(_set_to_zero!!(c, val(x))) : x
+function set_to_zero_internal!!(c::IncCache, x::T) where {T<:PossiblyUninitTangent}
+    return is_init(x) ? T(set_to_zero_internal!!(c, val(x))) : x
 end
-_set_to_zero!!(c::IncCache, x::T) where {T<:Tangent} = T(_set_to_zero!!(c, x.fields))
-function _set_to_zero!!(c::IncCache, x::MutableTangent)
+function set_to_zero_internal!!(c::IncCache, x::T) where {T<:Tangent}
+    return T(set_to_zero_internal!!(c, x.fields))
+end
+function set_to_zero_internal!!(c::IncCache, x::MutableTangent)
     haskey(c, x) && return x
     setindex!(c, false, x)
-    x.fields = _set_to_zero!!(c, x.fields)
+    x.fields = set_to_zero_internal!!(c, x.fields)
     return x
 end
+
+const MaybeCache = Union{NoCache,IdDict{Any,Any}}
 
 """
     _scale(a::Float64, t::T) where {T}
@@ -647,13 +707,26 @@ Should be defined for all standard tangent types.
 Multiply tangent `t` by scalar `a`. Always possible because any given tangent type must
 correspond to a vector field. Not using `*` in order to avoid piracy.
 """
-_scale(::Float64, ::NoTangent) = NoTangent()
-_scale(a::Float64, t::T) where {T<:IEEEFloat} = T(a * t)
-_scale(a::Float64, t::Union{Tuple,NamedTuple}) = map(Base.Fix1(_scale, a), t)
-function _scale(a::Float64, t::T) where {T<:PossiblyUninitTangent}
-    return is_init(t) ? T(_scale(a, val(t))) : T()
+_scale(a::Float64, t) = _scale_internal(IdDict{Any,Any}(), a, t)
+
+_scale_internal(::MaybeCache, ::Float64, ::NoTangent) = NoTangent()
+_scale_internal(::MaybeCache, a::Float64, t::T) where {T<:IEEEFloat} = T(a * t)
+function _scale_internal(c::MaybeCache, a::Float64, t::Union{Tuple,NamedTuple})
+    return map(t -> _scale_internal(c, a, t), t)
 end
-_scale(a::Float64, t::T) where {T<:Union{Tangent,MutableTangent}} = T(_scale(a, t.fields))
+function _scale_internal(c::MaybeCache, a::Float64, t::T) where {T<:PossiblyUninitTangent}
+    return is_init(t) ? T(_scale_internal(c, a, val(t))) : T()
+end
+function _scale_internal(c::MaybeCache, a::Float64, t::T) where {T<:Tangent}
+    return T(_scale_internal(c, a, t.fields))
+end
+function _scale_internal(c::MaybeCache, a::Float64, t::T) where {T<:MutableTangent}
+    haskey(c, t) && return c[t]::T
+    y = T()
+    c[t] = y
+    y.fields = _scale_internal(c, a, t.fields)
+    return y
+end
 
 struct FieldUndefined end
 
@@ -666,15 +739,22 @@ Should be defined for all standard tangent types.
 Inner product between tangents `t` and `s`. Must return a `Float64`.
 Always available because all tangent types correspond to finite-dimensional vector spaces.
 """
-_dot(::NoTangent, ::NoTangent) = 0.0
-_dot(t::T, s::T) where {T<:IEEEFloat} = Float64(t * s)
-_dot(t::T, s::T) where {T<:Union{Tuple,NamedTuple}} = sum(map(_dot, t, s); init=0.0)
-function _dot(t::T, s::T) where {T<:PossiblyUninitTangent}
-    is_init(t) && is_init(s) && return _dot(val(t), val(s))
+_dot(t::T, s::T) where {T} = _dot_internal(IdDict{Any,Any}(), t, s)
+
+_dot_internal(::MaybeCache, ::NoTangent, ::NoTangent) = 0.0
+_dot_internal(::MaybeCache, t::T, s::T) where {T<:IEEEFloat} = Float64(t * s)
+function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:Union{Tuple,NamedTuple}}
+    return sum(map((t, s) -> _dot_internal(c, t, s), t, s); init=0.0)
+end
+function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:PossiblyUninitTangent}
+    is_init(t) && is_init(s) && return _dot_internal(c, val(t), val(s))
     return 0.0
 end
-function _dot(t::T, s::T) where {T<:Union{Tangent,MutableTangent}}
-    return sum(_map(_dot, t.fields, s.fields); init=0.0)
+function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:Union{Tangent,MutableTangent}}
+    key = (t, s)
+    haskey(c, key) && return c[key]::Float64
+    c[key] = 0.0
+    return sum(_map((t, s) -> _dot_internal(c, t, s), t.fields, s.fields); init=0.0)
 end
 
 """
@@ -702,17 +782,24 @@ end
 Here, the value returned by `_add_to_primal` will satisfy the invariant asserted in the
 inner constructor for `Foo`.
 """
-_add_to_primal(p, t) = _add_to_primal(p, t, false)
-_add_to_primal(x, ::NoTangent, ::Bool) = x
-_add_to_primal(x::T, t::T, ::Bool) where {T<:IEEEFloat} = x + t
-function _add_to_primal(x::SimpleVector, t::Vector{Any}, unsafe::Bool)
-    return svec(map(n -> _add_to_primal(x[n], t[n], unsafe), eachindex(x))...)
+function _add_to_primal(p, t, unsafe::Bool=false)
+    return _add_to_primal_internal(IdDict{Any,Any}(), p, t, unsafe)
 end
-function _add_to_primal(x::Tuple, t::Tuple, unsafe::Bool)
-    return _map((x, t) -> _add_to_primal(x, t, unsafe), x, t)
+_add_to_primal_internal(::MaybeCache, x, ::NoTangent, ::Bool) = x
+_add_to_primal_internal(::MaybeCache, x::T, t::T, ::Bool) where {T<:IEEEFloat} = x + t
+function _add_to_primal_internal(
+    c::MaybeCache, x::SimpleVector, t::Vector{Any}, unsafe::Bool
+)
+    haskey(c, (x, t, unsafe)) && return c[(x, t, unsafe)]::SimpleVector
+    x′ = svec(map(n -> _add_to_primal_internal(c, x[n], t[n], unsafe), eachindex(x))...)
+    c[(x, t, unsafe)] = x′
+    return x′
 end
-function _add_to_primal(x::NamedTuple, t::NamedTuple, unsafe::Bool)
-    return _map((x, t) -> _add_to_primal(x, t, unsafe), x, t)
+function _add_to_primal_internal(c::MaybeCache, x::Tuple, t::Tuple, unsafe::Bool)
+    return _map((x, t) -> _add_to_primal_internal(c, x, t, unsafe), x, t)
+end
+function _add_to_primal_internal(c::MaybeCache, x::NamedTuple, t::NamedTuple, unsafe::Bool)
+    return _map((x, t) -> _add_to_primal_internal(c, x, t, unsafe), x, t)
 end
 
 struct AddToPrimalException <: Exception
@@ -735,31 +822,19 @@ function Base.showerror(io::IO, err::AddToPrimalException)
     return println(io, msg)
 end
 
-function _add_to_primal(p::P, t::T, unsafe::Bool) where {P,T<:Union{Tangent,MutableTangent}}
-    Tt = tangent_type(P)
-    if Tt != typeof(t)
-        throw(ArgumentError("p of type $P has tangent_type $Tt, but t is of type $T"))
-    end
-    tmp = map(fieldnames(P)) do f
-        tf = getfield(t.fields, f)
-        isdefined(p, f) &&
-            is_init(tf) &&
-            return _add_to_primal(getfield(p, f), val(tf), unsafe)
-        !isdefined(p, f) && !is_init(tf) && return FieldUndefined()
-        throw(error("unable to handle undefined-ness"))
-    end
-    i = findfirst(==(FieldUndefined()), tmp)
+function __construct_type(::Type{P}, unsafe::Bool, fields::Vararg{Any,N})::P where {P,N}
+    i = findfirst(==(FieldUndefined()), fields)
 
     # If unsafe mode is enabled, then call `_new_` directly, and avoid the possibility that
     # the default inner constructor for `P` does not exist.
     if unsafe
-        return i === nothing ? _new_(P, tmp...) : _new_(P, tmp[1:(i - 1)]...)
+        return i === nothing ? _new_(P, fields...) : _new_(P, fields[1:(i - 1)]...)
     end
 
     # If unsafe mode is disabled, try to use the default constructor for `P`. If this does
     # not work, then throw an informative error message.
     try
-        return i === nothing ? P(tmp...) : P(tmp[1:(i - 1)]...)
+        return i === nothing ? P(fields...) : P(fields[1:(i - 1)]...)
     catch e
         if e isa MethodError
             throw(AddToPrimalException(P))
@@ -767,6 +842,71 @@ function _add_to_primal(p::P, t::T, unsafe::Bool) where {P,T<:Union{Tangent,Muta
             rethrow(e)
         end
     end
+end
+
+function _add_to_primal_internal(
+    c::MaybeCache, p::P, t::T, unsafe::Bool
+) where {P,T<:Tangent}
+    Tt = tangent_type(P)
+    if Tt != typeof(t)
+        throw(ArgumentError("p of type $P has tangent_type $Tt, but t is of type $T"))
+    end
+    fields = map(fieldnames(P)) do f
+        tf = getfield(t.fields, f)
+        isdefined(p, f) &&
+            is_init(tf) &&
+            return _add_to_primal_internal(c, getfield(p, f), val(tf), unsafe)
+        !isdefined(p, f) && !is_init(tf) && return FieldUndefined()
+        throw(error("unable to handle undefined-ness"))
+    end
+    return __construct_type(P, unsafe, fields...)
+end
+
+function _add_to_primal_internal(
+    c::MaybeCache, p::P, t::T, unsafe::Bool
+) where {P,T<:MutableTangent}
+
+    # Do not recompute if we already have a perturbed primal.
+    key = (p, t, unsafe)
+    haskey(c, key) && return c[key]::P
+
+    # Check that `T` is the correct tangent type for `P`.
+    Tt = tangent_type(P)
+    if Tt != typeof(t)
+        throw(ArgumentError("p of type $P has tangent_type $Tt, but t is of type $T"))
+    end
+
+    # For all const fields, it is safe to immediately recurse and construct the primal, as
+    # it is not possible to have a field marked as const which contains a circular reference
+    # to `p`. Other (defined) fields are given placeholder values, and revisited in a second
+    # pass over the data structure.
+    init_fields = map(fieldnames(P)) do f
+        tf = getfield(t.fields, f)
+        if isdefined(p, f) && is_init(tf) && isconst(P, f)
+            return _add_to_primal_internal(c, getfield(p, f), val(tf), unsafe)
+        elseif isdefined(p, f) && is_init(tf) && !isconst(P, f)
+            return getfield(p, f)
+        elseif !isdefined(p, f) && !is_init(tf)
+            return FieldUndefined()
+        else
+            throw(error("unable to handle undefined-ness"))
+        end
+    end
+
+    # Construct an initial version of perturbed `p`, in which all (defined) constants fields
+    # are perturbed, but all fields which are not marked as const are the same as in `p`.
+    p′ = __construct_type(P, unsafe, init_fields...)
+    c[key] = p′
+
+    # Now that we are protected against circular references in `p`, perturb each defined
+    # mutable field in `p′`.
+    map(fieldnames(P)) do f
+        tf = getfield(t.fields, f)
+        if isdefined(p, f) && is_init(tf) && !isconst(P, f)
+            setfield!(p′, f, _add_to_primal_internal(c, getfield(p, f), val(tf), unsafe))
+        end
+    end
+    return p′
 end
 
 """
@@ -777,29 +917,59 @@ Required for testing.
 Computes the difference between `p` and `q`, which _must_ be of the same type, `P`.
 Returns a tangent of type `tangent_type(P)`.
 """
-function _diff(p::P, q::P) where {P}
+_diff(p::P, q::P) where {P} = _diff_internal(IdDict{Any,Any}(), p, q)
+function _diff_internal(c::MaybeCache, p::P, q::P) where {P}
     tangent_type(P) === NoTangent && return NoTangent()
     T = Tangent{NamedTuple{(),Tuple{}}}
     tangent_type(P) === T && return T((;))
-    return _containerlike_diff(p, q)
+    key = (p, q)
+    haskey(c, key) && return c[key]::tangent_type(P)
+    return _containerlike_diff(c, p, q)
 end
-_diff(p::P, q::P) where {P<:IEEEFloat} = p - q
-function _diff(p::P, q::P) where {P<:SimpleVector}
-    return Any[_diff(a, b) for (a, b) in zip(p, q)]
+_diff_internal(::MaybeCache, p::P, q::P) where {P<:IEEEFloat} = p - q
+function _diff_internal(c::MaybeCache, p::P, q::P) where {P<:SimpleVector}
+    key = (p, q)
+    haskey(c, key) && return c[key]::tangent_type(P)
+    t = Any[_diff_internal(c, a, b) for (a, b) in zip(p, q)]
+    c[key] = t
+    return t
 end
-function _diff(p::P, q::P) where {P<:Union{Tuple,NamedTuple}}
-    return tangent_type(P) == NoTangent ? NoTangent() : _map(_diff, p, q)
+function _diff_internal(c::MaybeCache, p::P, q::P) where {P<:Union{Tuple,NamedTuple}}
+    tangent_type(P) == NoTangent && return NoTangent()
+    return _map((p, q) -> _diff_internal(c, p, q), p, q)
 end
 
-function _containerlike_diff(p::P, q::P) where {P}
+function _containerlike_diff(c::MaybeCache, p::P, q::P) where {P}
+    if ismutabletype(P)
+        t = tangent_type(P)()
+        c[(p, q)] = t
+    end
     diffed_fields = map(fieldnames(P)) do f
-        isdefined(p, f) && isdefined(q, f) && return _diff(getfield(p, f), getfield(q, f))
-        !isdefined(p, f) && !isdefined(q, f) && return FieldUndefined()
-        throw(error("Unhandleable undefinedness"))
+        if isdefined(p, f) && isdefined(q, f)
+            return _diff_internal(c, getfield(p, f), getfield(q, f))
+        elseif !isdefined(p, f) && !isdefined(q, f)
+            return FieldUndefined()
+        else
+            throw(error("Unhandleable undefinedness"))
+        end
     end
     i = findfirst(==(FieldUndefined()), diffed_fields)
     diffed_fields = i === nothing ? diffed_fields : diffed_fields[1:(i - 1)]
-    return build_tangent(P, diffed_fields...)
+    if ismutabletype(P)
+        return _build_tangent(P, t, diffed_fields...)
+    else
+        return build_tangent(P, diffed_fields...)
+    end
+end
+
+# For mutable types.
+@generated function _build_tangent(::Type{P}, t::T, fields::Vararg{Any,N}) where {P,T,N}
+    tangent_values_exprs = map(enumerate(tangent_field_types(P))) do (n, tt)
+        tt <: PossiblyUninitTangent && return n <= N ? :($tt(fields[$n])) : :($tt())
+        return :(fields[$n])
+    end
+    nt_expr = Expr(:call, backing_type(P), Expr(:tuple, tangent_values_exprs...))
+    return Expr(:block, Expr(:call, :setfield!, :t, :(:fields), nt_expr), :(return t))
 end
 
 """
@@ -812,9 +982,14 @@ end
     return Expr(:tuple, exprs...)
 end
 
-# Optimal for homogeneously-typed Tuples with dynamic field choice.
+# Optimal for homogeneously-typed Tuples with dynamic field choice. Implementation using
+# `ifelse` chosen to ensure that the entire function comprises a single basic block. If
+# instead one wrote `n -> n == i ? v : x[n]` we would get one basic block per element of
+# `x`. This is fine for small-medium `x`, but causes a great deal of trouble for large `x`
+# (certainly for length > 1_000, but probably also for smaller sizes than that).
 function increment_field!!(x::Tuple, y, i::Int)
-    return ntuple(n -> n == i ? increment!!(x[n], y) : x[n], length(x))
+    v = increment!!(x[i], y)
+    return ntuple(n -> ifelse(n == i, v, x[n]), Val(length(x)))
 end
 
 @inline @generated function increment_field!!(x::T, y, ::Val{f}) where {T<:NamedTuple,f}
@@ -905,6 +1080,11 @@ function tangent_test_cases()
         (UnionAll, NoTangent),
         (typeof(<:), NoTangent),
     ]
+    # Construct test cases containing circular references. These typically require multiple
+    # lines of code to construct, so we build them before adding them to `rel_test_cases`.
+    circular_vector = Any[5.0]
+    circular_vector[1] = circular_vector
+
     rel_test_cases = Any[
         TestResources.StructFoo(6.0, [1.0, 2.0]),
         TestResources.StructFoo(6.0),
@@ -929,10 +1109,14 @@ function tangent_test_cases()
         (a=3, b=randn(10)),
         (a=randn(10), b=randn(10)),
         (Base.TOML.ErrorType(1), NoTangent()), # Enum
+        circular_vector,
+        TestResources.make_circular_reference_struct(),
+        TestResources.make_indirect_circular_reference_array(),
         # Regression tests to catch type inference failures, see https://github.com/compintell/Mooncake.jl/pull/422
         (((((randn(33)...,),),),),),
         (((((((((randn(33)...,),),),),), randn(5)...),),),),
         Base.OneTo{Int},
+        TestResources.build_big_isbits_struct(),
     ]
     VERSION >= v"1.11" && push!(rel_test_cases, fill!(Memory{Float64}(undef, 3), 3.0))
     return vcat(

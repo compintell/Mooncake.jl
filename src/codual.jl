@@ -38,7 +38,7 @@ function _codual_internal(::Type{P}, f::F, extractor::E) where {P,F,E}
 
     if P <: Tuple && !all(isconcretetype, (P.parameters...,))
         field_types = (P.parameters...,)
-        union_fields = _findall(Base.Fix2(isa, Union), 1, field_types)
+        union_fields = _findall(Base.Fix2(isa, Union), field_types)
         if length(union_fields) == 1 &&
             all(p -> p isa Union || isconcretetype(p), field_types)
             P_split = split_union_tuple_type(field_types)

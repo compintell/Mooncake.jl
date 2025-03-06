@@ -2,17 +2,27 @@ using Pkg
 Pkg.activate(@__DIR__)
 Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 
-using JET, Mooncake, NNlib, StableRNGs, Test
+using CUDA, cuDNN, JET, Mooncake, NNlib, StableRNGs, Test
 using Mooncake.TestUtils: test_rule
 using NNlib: dropout
 
+dropout_tester_1(Trng, x, p) = dropout(Trng(1), x, p; dims=1)
+dropout_tester_2(Trng, x, p) = dropout(Trng(1), x, p; dims=2)
+dropout_tester_3(Trng, x, p) = dropout(Trng(1), x, p; dims=(1, 2))
+
 @testset "nnlib" begin
+    cuda = CUDA.functional()
+
+    _rand = cuda ? (size...,) -> cu(randn(size...)) : (size...,) -> randn(size...)
+    float = cuda ? x -> Float32(x) : identity
+    Trng = cuda ? CUDA.RNG : StableRNG
+
     x = randn(5, 4, 3, 2)
     w = randn(2, 2, 3, 3)
     dense_cdims = DenseConvDims(x, w)
-    sep_cdims = DepthwiseConvDims(x, w)
+    sep_cd = DepthwiseConvDims(x, w)
     y = conv(x, w, dense_cdims)
-    y_sep = depthwiseconv(x, w, sep_cdims)
+    y_sep = depthwiseconv(x, w, sep_cd)
 
     pool_dims = PoolDims(size(x), 2)
 
@@ -21,98 +31,76 @@ using NNlib: dropout
     grid[:, 2, 1, 1] .= (1, -1)
     grid[:, 1, 2, 1] .= (-1, 1)
     grid[:, 2, 2, 1] .= (1, 1)
+    grid = cuda ? cu(grid) : grid
+    x = cuda ? cu(x) : x
+    w = cuda ? cu(w) : w
+    y = cuda ? cu(y) : y
+    y_sep = cuda ? cu(y_sep) : y_sep
 
-    @testset "$(typeof(fargs))" for (interface_only, perf_flag, is_primitive, fargs...) in
-                                    Any[
+    test_cases = Any[
 
         # batched_mul
-        (false, :none, true, batched_mul, randn(3, 2, 3), randn(2, 5, 3)),
+        (false, :none, true, batched_mul, _rand(3, 2, 3), _rand(2, 5, 3)),
 
         # dropout
-        (
-            true,
-            :none,
-            false,
-            (x, p) -> dropout(StableRNG(1), x, p; dims=1),
-            randn(2, 2),
-            0.5,
-        ),
-        (
-            true,
-            :none,
-            false,
-            (x, p) -> dropout(StableRNG(1), x, p; dims=2),
-            randn(2, 2),
-            0.1,
-        ),
-        (
-            true,
-            :none,
-            false,
-            (x, p) -> dropout(StableRNG(1), x, p; dims=(1, 2)),
-            randn(2, 2),
-            0.4,
-        ),
+        (true, :none, false, dropout_tester_1, Trng, _rand(2, 2), float(0.5)),
+        (true, :none, false, dropout_tester_2, Trng, _rand(2, 2), float(0.1)),
+        (true, :none, false, dropout_tester_3, Trng, _rand(2, 2), float(0.4)),
 
         # softmax
-        (false, :stability, true, softmax, randn(2)),
-        (false, :stability, true, softmax, randn(2, 2)),
-        (false, :stability, true, Core.kwcall, (dims=1,), softmax, randn(2)),
-        (false, :stability, true, Core.kwcall, (dims=1,), softmax, randn(3, 3)),
-        (false, :stability, true, Core.kwcall, (dims=2,), softmax, randn(3, 3)),
-        (false, :stability, true, Core.kwcall, (dims=(1, 2),), softmax, randn(3, 3)),
-        (false, :stability, true, Core.kwcall, (dims=(1, 2),), softmax, randn(3, 3, 2)),
-        (false, :none, false, x -> softmax(5x), randn(3, 2)),
-        (false, :none, false, x -> softmax(x; dims=1), randn(3, 2)),
-        (false, :none, false, x -> softmax(x; dims=2), randn(3, 2)),
-        (false, :none, false, x -> softmax(x; dims=(1, 2)), randn(3, 2)),
+        (false, :stability, true, softmax, _rand(2)),
+        (false, :stability, true, softmax, _rand(2, 2)),
+        (false, :stability, true, Core.kwcall, (dims=1,), softmax, _rand(2)),
+        (false, :stability, true, Core.kwcall, (dims=1,), softmax, _rand(3, 3)),
+        (false, :stability, true, Core.kwcall, (dims=2,), softmax, _rand(3, 3)),
+        (false, :stability, true, Core.kwcall, (dims=(1, 2),), softmax, _rand(3, 3)),
+        (false, :stability, true, Core.kwcall, (dims=(1, 2),), softmax, _rand(3, 3, 2)),
+        (false, :none, false, x -> softmax(x; dims=1), _rand(3, 2)),
+        (false, :none, false, x -> softmax(x; dims=2), _rand(3, 2)),
+        (false, :none, false, x -> softmax(x; dims=(1, 2)), _rand(3, 2)),
 
         # logsoftmax
-        (false, :stability, true, logsoftmax, randn(2)),
-        (false, :stability, true, logsoftmax, randn(2, 3)),
-        (false, :stability, true, logsoftmax, randn(2, 3, 2)),
-        (false, :stability, true, Core.kwcall, (dims=1,), logsoftmax, randn(2)),
-        (false, :stability, true, Core.kwcall, (dims=1,), logsoftmax, randn(3, 3)),
-        (false, :stability, true, Core.kwcall, (dims=2,), logsoftmax, randn(3, 3)),
-        (false, :stability, true, Core.kwcall, (dims=(1, 2),), logsoftmax, randn(3, 3)),
-        (false, :stability, true, Core.kwcall, (dims=(1, 2),), logsoftmax, randn(3, 3, 2)),
+        (false, :stability, true, logsoftmax, _rand(2)),
+        (false, :stability, true, logsoftmax, _rand(2, 3)),
+        (false, :stability, true, logsoftmax, _rand(2, 3, 2)),
+        (false, :stability, true, Core.kwcall, (dims=1,), logsoftmax, _rand(2)),
+        (false, :stability, true, Core.kwcall, (dims=1,), logsoftmax, _rand(3, 3)),
+        (false, :stability, true, Core.kwcall, (dims=2,), logsoftmax, _rand(3, 3)),
+        (false, :stability, true, Core.kwcall, (dims=(1, 2),), logsoftmax, _rand(3, 3)),
+        (false, :stability, true, Core.kwcall, (dims=(1, 2),), logsoftmax, _rand(3, 3, 2)),
 
         # logsumexp
-        (false, :stability, true, logsumexp, randn(2)),
-        (false, :stability, true, logsumexp, randn(3, 3)),
-        (false, :stability, true, logsumexp, randn(3, 3, 2)),
-        (false, :stability, true, Core.kwcall, (dims=1,), logsumexp, randn(2)),
-        (false, :stability, true, Core.kwcall, (dims=1,), logsumexp, randn(3, 3)),
-        (false, :stability, true, Core.kwcall, (dims=2,), logsumexp, randn(3, 3)),
-        (false, :stability, true, Core.kwcall, (dims=(1, 2),), logsumexp, randn(3, 3)),
-        (false, :stability, true, Core.kwcall, (dims=(1, 2),), logsumexp, randn(3, 3, 2)),
+        (false, :stability, true, logsumexp, _rand(2)),
+        (false, :stability, true, logsumexp, _rand(3, 3)),
+        (false, :stability, true, logsumexp, _rand(3, 3, 2)),
+        (false, :stability, true, Core.kwcall, (dims=1,), logsumexp, _rand(2)),
+        (false, :stability, true, Core.kwcall, (dims=1,), logsumexp, _rand(3, 3)),
+        (false, :stability, true, Core.kwcall, (dims=2,), logsumexp, _rand(3, 3)),
+        (false, :stability, true, Core.kwcall, (dims=(1, 2),), logsumexp, _rand(3, 3)),
+        (false, :stability, true, Core.kwcall, (dims=(1, 2),), logsumexp, _rand(3, 3, 2)),
 
         # upsample_nearest
-        (false, :stability, true, upsample_nearest, randn(3), (2,)),
-        (false, :stability, true, upsample_nearest, randn(3, 2), (2, 2)),
-        (false, :stability, true, upsample_nearest, randn(3, 2, 3), (2, 2, 5)),
+        (false, :stability, true, upsample_nearest, _rand(3), (2,)),
+        (false, :stability, true, upsample_nearest, _rand(3, 2), (2, 2)),
+        (false, :stability, true, upsample_nearest, _rand(3, 2, 3), (2, 2, 5)),
 
         # fold
-        (false, :none, true, NNlib.fold, randn(12, 12, 2), size(x), dense_cdims),
+        (false, :none, true, NNlib.fold, _rand(12, 12, 2), size(x), dense_cdims),
 
         # unfold
         (false, :none, true, NNlib.unfold, x, dense_cdims),
 
         # scatter
-        (false, :none, true, NNlib.scatter, +, randn(2), [1, 3]),
-        (false, :none, true, Core.kwcall, (;), NNlib.scatter, +, randn(2), [1, 3]),
+        (false, :none, true, NNlib.scatter, +, _rand(2), [1, 3]),
+        (false, :none, true, Core.kwcall, (;), NNlib.scatter, +, _rand(2), [1, 3]),
 
         # conv
         (false, :none, true, Core.kwcall, (;), conv, x, w, dense_cdims),
         (false, :none, true, conv, x, w, dense_cdims),
-        (false, :none, true, Core.kwcall, (;), depthwiseconv, x, w, sep_cdims),
-        (false, :none, true, depthwiseconv, x, w, sep_cdims),
 
         # ∇conv_data
         (false, :none, true, Core.kwcall, (;), ∇conv_data, y, w, dense_cdims),
         (false, :none, true, ∇conv_data, y, w, dense_cdims),
-        (false, :none, true, Core.kwcall, (;), ∇depthwiseconv_data, y_sep, w, sep_cdims),
-        (false, :none, true, ∇depthwiseconv_data, y_sep, w, sep_cdims),
 
         # ∇conv_filter
         (false, :none, true, Core.kwcall, (;), ∇conv_filter, x, y, dense_cdims),
@@ -125,10 +113,30 @@ using NNlib: dropout
         (false, :none, true, Core.kwcall, (;), meanpool, x, pool_dims),
 
         # padding
-        (false, :none, false, x -> pad_constant(x, 1, 2.0), x),
-        (false, :none, false, x -> pad_constant(x, 1, 2.0; dims=:), x),
+        (false, :none, false, x -> pad_constant(x, 1, float(2.0)), x),
+        (false, :none, false, x -> pad_constant(x, 1, float(2.0); dims=:), x),
     ]
+    if !cuda
+
+        # Tests here fail on CUDA.
+        cpu_only_test_cases = Any[
+            # softmax
+            (false, :none, false, x -> softmax(5x), _rand(3, 2)),
+
+            # conv
+            (false, :none, true, Core.kwcall, (;), depthwiseconv, x, w, sep_cd),
+            (false, :none, true, depthwiseconv, x, w, sep_cd),
+
+            # ∇conv_data
+            (false, :none, true, Core.kwcall, (;), ∇depthwiseconv_data, y_sep, w, sep_cd),
+            (false, :none, true, ∇depthwiseconv_data, y_sep, w, sep_cd),
+        ]
+        test_cases = vcat(test_cases, cpu_only_test_cases)
+    end
+    @testset "$(typeof(fargs))" for (interface_only, perf_flag, is_primitive, fargs...) in
+                                    test_cases
         @info "$(typeof(fargs))"
+        perf_flag = cuda ? :none : perf_flag
         test_rule(StableRNG(123), fargs...; perf_flag, is_primitive, interface_only)
     end
 end

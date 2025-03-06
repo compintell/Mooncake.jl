@@ -12,11 +12,13 @@
 const TwicePrecisionFloat{P<:IEEEFloat} = TwicePrecision{P}
 const TWP{P} = TwicePrecisionFloat{P}
 
-@tt_effects tangent_type(P::Type{<:TWP}) = P
+@foldable tangent_type(P::Type{<:TWP}) = P
 
 zero_tangent_internal(::TWP{F}, ::StackDict) where {F} = TWP{F}(zero(F), zero(F))
 
-function randn_tangent_internal(rng::AbstractRNG, p::TWP{F}, ::StackDict) where {F}
+function randn_tangent_internal(
+    rng::AbstractRNG, p::TWP{F}, ::Union{Nothing,IdDict}
+) where {F}
     return TWP{F}(randn(rng, F), randn(rng, F))
 end
 
@@ -27,29 +29,29 @@ function has_equal_data_internal(
     return Float64(p) ≈ Float64(q)
 end
 
-increment!!(t::T, s::T) where {T<:TWP} = t + s
+increment_internal!!(::IncCache, t::T, s::T) where {T<:TWP} = t + s
 
-_set_to_zero!!(::IncCache, t::TWP) = zero_tangent_internal(t, nothing)
+set_to_zero_internal!!(::IncCache, t::TWP) = zero_tangent_internal(t, NoCache())
 
-_add_to_primal(p::P, t::P, ::Bool) where {P<:TWP} = p + t
+_add_to_primal_internal(::MaybeCache, p::P, t::P, ::Bool) where {P<:TWP} = p + t
 
-_diff(p::P, q::P) where {P<:TWP} = p - q
+_diff_internal(::MaybeCache, p::P, q::P) where {P<:TWP} = p - q
 
-_dot(t::P, s::P) where {P<:TWP} = Float64(t) * Float64(s)
+_dot_internal(::MaybeCache, t::P, s::P) where {P<:TWP} = Float64(t) * Float64(s)
 
-_scale(a::Float64, t::TWP) = a * t
+_scale_internal(::MaybeCache, a::Float64, t::TWP) = a * t
 
-populate_address_map!(m::AddressMap, ::P, ::P) where {P<:TWP} = m
+populate_address_map_internal(m::AddressMap, ::P, ::P) where {P<:TWP} = m
 
 fdata_type(::Type{<:TWP}) = NoFData
 
 rdata_type(P::Type{<:TWP}) = P
 
-_verify_fdata_value(::P, ::P) where {P<:TWP} = nothing
+__verify_fdata_value(::IdDict{Any,Nothing}, ::P, ::P) where {P<:TWP} = nothing
 
 _verify_rdata_value(::P, ::P) where {P<:TWP} = nothing
 
-tangent_type(::Type{NoFData}, T::Type{<:TWP}) = T
+@foldable tangent_type(::Type{NoFData}, T::Type{<:TWP}) = T
 
 tangent(::NoFData, t::TWP) = t
 

@@ -49,6 +49,8 @@ include("front_matter.jl")
         include(joinpath("rrules", "misc.jl"))
     elseif test_group == "rrules/new"
         include(joinpath("rrules", "new.jl"))
+    elseif test_group == "rrules/random"
+        include(joinpath("rrules", "random.jl"))
     elseif test_group == "rrules/tasks"
         include(joinpath("rrules", "tasks.jl"))
     elseif test_group == "rrules/twice_precision"
@@ -57,6 +59,8 @@ include("front_matter.jl")
         @static if VERSION >= v"1.11.0-rc4"
             include(joinpath("rrules", "memory.jl"))
         end
+    elseif test_group == "rrules/performance_patches"
+        include(joinpath("rrules", "performance_patches.jl"))
     else
         throw(error("test_group=$(test_group) is not recognised"))
     end

@@ -6,7 +6,7 @@ which save you from having to dig in to the objects created by `build_rrule`.
 
 Since these provide access to internals, they do not follow the usual rules of semver, and
 may change without notice!
-```@docs
+```@docs; canonical=false
 Mooncake.primal_ir
 Mooncake.fwd_ir
 Mooncake.rvs_ir

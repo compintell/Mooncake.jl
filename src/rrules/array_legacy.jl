@@ -18,39 +18,54 @@ function randn_tangent_internal(
     return _map_if_assigned!(x -> randn_tangent_internal(rng, x, stackdict), dx, x)
 end
 
-function increment!!(x::T, y::T) where {P,N,T<:Array{P,N}}
-    return x === y ? x : _map_if_assigned!(increment!!, x, x, y)
+function increment_internal!!(c::IncCache, x::T, y::T) where {P,N,T<:Array{P,N}}
+    (haskey(c, x) || x === y) && return x
+    c[x] = true
+    return _map_if_assigned!((x, y) -> increment_internal!!(c, x, y), x, x, y)
 end
 
-function _set_to_zero!!(c::IncCache, x::Array)
+function set_to_zero_internal!!(c::IncCache, x::Array)
     haskey(c, x) && return x
     c[x] = false
-    return _map_if_assigned!(Base.Fix1(_set_to_zero!!, c), x, x)
+    return _map_if_assigned!(Base.Fix1(set_to_zero_internal!!, c), x, x)
 end
 
-function _scale(a::Float64, t::Array{T,N}) where {T,N}
+function _scale_internal(c::MaybeCache, a::Float64, t::Array{T,N}) where {T,N}
+    haskey(c, t) && return c[t]::Array{T,N}
     t′ = Array{T,N}(undef, size(t)...)
-    return _map_if_assigned!(Base.Fix1(_scale, a), t′, t)
+    c[t] = t′
+    return _map_if_assigned!(t -> _scale_internal(c, a, t), t′, t)
 end
 
-function _dot(t::T, s::T) where {T<:Array}
-    isbitstype(T) && return sum(_map(_dot, t, s))
+function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:Array}
+    key = (t, s)
+    haskey(c, key) && return c[key]::Float64
+    c[key] = 0.0
+    isbitstype(T) && return sum(_map((t, s) -> _dot_internal(c, t, s), t, s))
     return sum(
         _map(eachindex(t)) do n
-            (isassigned(t, n) && isassigned(s, n)) ? _dot(t[n], s[n]) : 0.0
+            (isassigned(t, n) && isassigned(s, n)) ? _dot_internal(c, t[n], s[n]) : 0.0
         end;
         init=0.0,
     )
 end
 
-function _add_to_primal(x::Array{P,N}, t::Array{<:Any,N}, unsafe::Bool) where {P,N}
+function _add_to_primal_internal(
+    c::MaybeCache, x::Array{P,N}, t::Array{<:Any,N}, unsafe::Bool
+) where {P,N}
+    key = (x, t, unsafe)
+    haskey(c, key) && return c[key]::Array{P,N}
     x′ = Array{P,N}(undef, size(x)...)
-    return _map_if_assigned!((x, t) -> _add_to_primal(x, t, unsafe), x′, x, t)
+    c[key] = x′
+    return _map_if_assigned!((x, t) -> _add_to_primal_internal(c, x, t, unsafe), x′, x, t)
 end
 
-function _diff(p::P, q::P) where {V,N,P<:Array{V,N}}
+function _diff_internal(c::MaybeCache, p::P, q::P) where {V,N,P<:Array{V,N}}
+    key = (p, q)
+    haskey(c, key) && return c[key]::tangent_type(P)
     t = Array{tangent_type(V),N}(undef, size(p))
-    return _map_if_assigned!(_diff, t, p, q)
+    c[key] = t
+    return _map_if_assigned!((p, q) -> _diff_internal(c, p, q), t, p, q)
 end
 
 @zero_adjoint MinimalCtx Tuple{Type{<:Array{T,N}},typeof(undef),Vararg} where {T,N}

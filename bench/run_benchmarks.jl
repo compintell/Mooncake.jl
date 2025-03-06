@@ -23,7 +23,10 @@ using Mooncake:
     generate_hand_written_rrule!!_test_cases,
     generate_derived_rrule!!_test_cases,
     TestUtils,
-    _typeof
+    _typeof,
+    primal,
+    tangent,
+    zero_codual
 
 using Mooncake.TestUtils: _deepcopy
 
@@ -114,7 +117,7 @@ function build_turing_problem()
     ctx = DynamicPPL.DefaultContext()
     vi = DynamicPPL.SimpleVarInfo(model)
     vi_linked = DynamicPPL.link(vi, model)
-    ldp = DynamicPPL.LogDensityFunction(vi_linked, model, ctx)
+    ldp = DynamicPPL.LogDensityFunction(model, vi_linked, ctx)
     test_function = Base.Fix1(DynamicPPL.LogDensityProblems.logdensity, ldp)
     d = DynamicPPL.LogDensityProblems.dimension(ldp)
     return test_function, randn(rng, d)
@@ -181,6 +184,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
             # Benchmark primal.
             @info "Primal"
             primals = map(x -> x isa CoDual ? primal(x) : x, args)
+            include_other_frameworks && GC.gc(true)
             suite["primal"] = Chairmarks.benchmark(
                 () -> primals,
                 primals -> (primals[1], _deepcopy(primals[2:end])),
@@ -194,6 +198,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
             rule = Mooncake.build_rrule(args...)
             coduals = map(x -> x isa CoDual ? x : zero_codual(x), args)
             to_benchmark(rule, coduals...)
+            include_other_frameworks && GC.gc(true)
             suite["mooncake"] = Chairmarks.benchmark(
                 () -> (rule, coduals),
                 identity,
@@ -205,6 +210,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
             if include_other_frameworks
                 if should_run_benchmark(Val(:zygote), args...)
                     @info "Zygote"
+                    GC.gc(true)
                     suite["zygote"] = @be(
                         _,
                         _,
@@ -219,6 +225,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
                     tape = ReverseDiff.GradientTape(primals[1], primals[2:end])
                     compiled_tape = ReverseDiff.compile(tape)
                     result = map(x -> randn(size(x)), primals[2:end])
+                    GC.gc(true)
                     suite["rd"] = @be(
                         _,
                         _,
@@ -232,6 +239,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
                     @info "Enzyme"
                     _rand_similiar(x) = x isa Real ? randn() : randn(size(x))
                     dup_args = map(x -> Duplicated(x, _rand_similiar(x)), primals[2:end])
+                    GC.gc(true)
                     suite["enzyme"] = @be(
                         _,
                         _,
@@ -330,10 +338,19 @@ function plot_ratio_histogram!(df::DataFrame)
     return histogram(df.Mooncake; xscale=:log10, xlim, bin, title="log", label="")
 end
 
+fix_sig_fig(t) = string.(round(t; sigdigits=3))
+
+function format_time(t::Float64)
+    t < 1e-6 && return fix_sig_fig(t * 1e9) * " ns"
+    t < 1e-3 && return fix_sig_fig(t * 1e6) * " μs"
+    t < 1 && return fix_sig_fig(t * 1e3) * " ms"
+    return fix_sig_fig(t) * " s"
+end
+
 function create_inter_ad_benchmarks()
     results = benchmark_inter_framework_rules()
     tools = [:Mooncake, :Zygote, :ReverseDiff, :Enzyme]
-    df = DataFrame(results)[:, [:tag, tools...]]
+    df = DataFrame(results)[:, [:tag, :primal_time, tools...]]
 
     # Plot graph of results.
     plt = plot(; yscale=:log10, legend=:topright, title="AD Time / Primal Time (Log Scale)")
@@ -343,8 +360,9 @@ function create_inter_ad_benchmarks()
     Plots.savefig(plt, "bench/benchmark_results.png")
 
     # Write table of results.
-    formatted_cols = map(t -> t => string.(round.(df[:, t]; sigdigits=3)), tools)
-    df_formatted = DataFrame(:Label => df.tag, formatted_cols...)
+    formatted_ts = format_time.(df.primal_time)
+    formatted_cols = map(t -> t => fix_sig_fig.(df[:, t]), tools)
+    df_formatted = DataFrame(:Label => df.tag, :Primal => formatted_ts, formatted_cols...)
     return open(
         io -> pretty_table(io, df_formatted), "bench/benchmark_results.txt"; write=true
     )

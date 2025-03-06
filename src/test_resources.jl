@@ -18,7 +18,9 @@ using ..Mooncake:
     ircode,
     @is_primitive,
     MinimalCtx,
-    val
+    val,
+    primal,
+    tangent
 
 using DiffTests, LinearAlgebra, Random, Setfield
 
@@ -121,6 +123,40 @@ end
 
 struct StructNoRvs
     x::Vector{Float64}
+end
+
+struct FiveFields{A,B,C,D,E}
+    a::A
+    b::B
+    c::C
+    d::D
+    e::E
+end
+
+struct FourFields{A,B,C,D}
+    a::A
+    b::B
+    c::C
+    d::D
+end
+
+struct OneField{A}
+    a::A
+end
+
+function build_big_isbits_struct()
+    return FourFields(
+        FiveFields(
+            FourFields(OneField(5.0), OneField(5.0), OneField(3), OneField(nothing)),
+            OneField(4),
+            OneField(3.0),
+            OneField(nothing),
+            OneField(false),
+        ),
+        OneField(5.0),
+        OneField(nothing),
+        OneField(4),
+    )
 end
 
 #
@@ -604,6 +640,19 @@ end
 
 highly_nested_tuple(x) = ((((x,),), x), x)
 
+# Regression test: https://github.com/compintell/Mooncake.jl/issues/450
+sig_argcount_mismatch(x) = vcat(x[1], x[2:2], x[3:3], x[4:4])
+
+# Regression test: https://github.com/compintell/Mooncake.jl/issues/473
+large_tuple_inference(x::NTuple{1_000,Float64}) = sum(cos, x)
+
+# Regression test: https://github.com/compintell/Mooncake.jl/issues/319
+function regression_319(θ)
+    d = [0.0, 0.0]
+    x = θ[1:2]
+    return d
+end
+
 function generate_test_functions()
     return Any[
         (false, :allocs, nothing, const_tester),
@@ -830,6 +879,9 @@ function generate_test_functions()
         (false, :none, nothing, typevar_tester),
         (false, :allocs, nothing, inplace_invoke!, randn(1_024)),
         (false, :allocs, nothing, highly_nested_tuple, 5.0),
+        (false, :none, nothing, sig_argcount_mismatch, ones(4)),
+        (false, :allocs, (lb=2, ub=1500), large_tuple_inference, Tuple(zeros(1_000))),
+        (false, :none, nothing, regression_319, randn(3)),
     ]
 end
 

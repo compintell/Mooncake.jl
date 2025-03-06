@@ -12,6 +12,8 @@ struct A
 end
 f(a, x) = dot(a.data, x)
 
+unstable_tester(x::Ref{Any}) = sin(x[])
+
 end
 
 @testset "s2s_reverse_mode_ad" begin
@@ -65,6 +67,22 @@ end
         # pass, then this constructor ought to error.
         @test_throws ArgumentError ad_stmt_info(ID(), ID(), nothing, nothing)
     end
+    @testset "inc_args" begin
+        @test Mooncake.inc_args(Expr(:call, sin, Argument(4))) ==
+            Expr(:call, sin, Argument(5))
+        @test Mooncake.inc_args(ReturnNode(Argument(2))) == ReturnNode(Argument(3))
+        id = ID()
+        @test Mooncake.inc_args(IDGotoIfNot(Argument(1), id)) ==
+            IDGotoIfNot(Argument(2), id)
+        @test Mooncake.inc_args(IDGotoNode(id)) == IDGotoNode(id)
+        ids = [id, ID()]
+        @test ==(
+            Mooncake.inc_args(IDPhiNode(ids, Any[Argument(1), 4])),
+            IDPhiNode(ids, Any[Argument(2), 4]),
+        )
+        @test Mooncake.inc_args(nothing) === nothing
+        @test Mooncake.inc_args(GlobalRef(Base, :sin)) == GlobalRef(Base, :sin)
+    end
     @testset "make_ad_stmts!" begin
 
         # Set up ADInfo -- this state is required by `make_ad_stmts!`, and the
@@ -106,8 +124,6 @@ end
                 @test length(stmts.fwds) == 2
                 @test stmts.fwds[1][2].stmt isa Expr
                 @test stmts.fwds[2][2].stmt isa ReturnNode
-                @test Meta.isexpr(only(stmts.rvs)[2].stmt, :call)
-                @test only(stmts.rvs)[2].stmt.args[1] == Mooncake.increment_ref!
             end
             @testset "literal" begin
                 stmt_info = make_ad_stmts!(ReturnNode(5.0), line, info)
@@ -343,5 +359,22 @@ end
     @testset "Literal Types do not appear in shared data" begin
         f() = Float64
         @test length(build_rrule(Tuple{typeof(f)}).fwds_oc.oc.captures) == 2
+    end
+    @testset "all `Ref`s for rdata are eliminated in type unstable code" begin
+        ir = Mooncake.rvs_ir(Tuple{typeof(S2SGlobals.unstable_tester),Ref{Any}})
+        stmts = Mooncake.stmt(ir.stmts)
+        @test !any(x -> Meta.isexpr(x, :new) && x.args[1] <: Base.RefValue, stmts)
+    end
+    @testset "build_rrule methods all accept kwargs" begin
+        args = (sin, 5.0)
+        sig = typeof(args)
+        rule_sig = build_rrule(sig; debug_mode=false, silence_debug_messages=true)
+        @test rule_sig == rrule!!
+        rule_args = build_rrule(args...; debug_mode=false, silence_debug_messages=true)
+        @test rule_args == rrule!!
+        rule_debug_sig = build_rrule(sig; debug_mode=true, silence_debug_messages=true)
+        @test rule_debug_sig isa Mooncake.DebugRRule
+        rule_debug_args = build_rrule(args...; debug_mode=true, silence_debug_messages=true)
+        @test rule_debug_args == rule_debug_sig
     end
 end

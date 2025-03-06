@@ -1,5 +1,5 @@
 @testset "tangents" begin
-    @testset "tangent_type($primal_type)" for (primal_type, expected_tangent_type) in Any[
+    @testset "$(tangent_type(primal_type))" for (primal_type, expected_tangent_type) in Any[
 
         ## Tuples
 
@@ -89,6 +89,10 @@
     ]
         TestUtils.test_tangent_type(primal_type, expected_tangent_type)
     end
+    @testset "type-only tests" begin
+        TestUtils.test_tangent_type(Cstring, NoTangent)
+        TestUtils.test_tangent_type(Cwstring, NoTangent)
+    end
 
     @testset "$(typeof(p))" for (interface_only, p, t...) in Mooncake.tangent_test_cases()
         test_tangent(Xoshiro(123456), p, t...; interface_only)
@@ -118,6 +122,9 @@
 
             # Homogeneous type optimisation.
             @test @inferred(increment_field!!((5.0, 4.0), 3.0, 2)) == (5.0, 7.0)
+
+            # Homogeneous type optimisations scales to large `Tuple`s.
+            @inferred(increment_field!!(Tuple(zeros(1_000)), 5.0, 3))
         end
         @testset "NamedTuple" begin
             nt = NoTangent()
@@ -174,58 +181,6 @@
         t = Mooncake.Tangent((x=5.0,))
         @test_throws Mooncake.AddToPrimalException Mooncake._add_to_primal(p, t)
         @test Mooncake._add_to_primal(p, t, true) isa typeof(p)
-    end
-end
-
-# TODO: add the following test to `tangent_test_cases`
-@testset "zero_tangent and randn_tangent" begin
-    @testset "circular reference" begin
-        foo = make_circular_reference_struct()
-        zt = Mooncake.zero_tangent(foo)
-        @test zt.fields.b.tangent === zt
-        rt = Mooncake.randn_tangent(Xoshiro(123456), foo)
-        @test rt.fields.b.tangent === rt
-        Mooncake.set_to_zero!!(zt)
-        Mooncake.set_to_zero!!(rt)
-    end
-
-    @testset "struct with non-concrete fields" begin
-        bar = Mooncake.TestResources.TypeUnstableStruct(5.0, 1.0)
-        @test ==(
-            Mooncake.zero_tangent(bar),
-            Tangent{@NamedTuple{a::Float64, b::PossiblyUninitTangent{Any}}}((
-                a=0.0, b=PossiblyUninitTangent{Any}(0.0)
-            )),
-        )
-    end
-
-    @testset "duplicate reference" begin
-        @testset "subarray" begin
-            x = [1.0, 2.0, 3.0]
-            immutable_struct = TypeUnstableStruct2(view(x, 1:2), view(x, 1:2))
-            mt = Mooncake.zero_tangent(immutable_struct)
-            @test mt isa Mooncake.Tangent
-            @test mt.fields.a === mt.fields.b
-            rt = Mooncake.randn_tangent(Xoshiro(123456), immutable_struct)
-            @test rt.fields.a === rt.fields.b
-
-            mutable_struct = TypeUnstableMutableStruct2(view(x, 1:2), view(x, 1:2))
-            mt = Mooncake.zero_tangent(mutable_struct)
-            @test mt isa Mooncake.MutableTangent
-            @test mt.fields.a.fields.parent === mt.fields.b.fields.parent
-            rt = Mooncake.randn_tangent(Xoshiro(123456), mutable_struct)
-            @test rt.fields.a.fields.parent === rt.fields.b.fields.parent
-        end
-    end
-
-    @testset "indirect circular reference" begin
-        m = make_indirect_circular_reference_array()
-        zt = Mooncake.zero_tangent(m)
-        @test zt[1][1] === zt
-        rt = Mooncake.randn_tangent(Xoshiro(123456), m)
-        @test rt[1][1] === rt
-        Mooncake.set_to_zero!!(zt)
-        Mooncake.set_to_zero!!(rt)
     end
 end
 

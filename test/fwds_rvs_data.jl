@@ -1,5 +1,13 @@
 module FwdsRvsDataTestResources
 struct Foo{A} end
+struct Bar{A,B,C}
+    a::A
+    b::B
+    c::C
+end
+struct SV{S<:Tuple,T,L}
+    data::NTuple{L,T}
+end
 end
 
 @testset "fwds_rvs_data" begin
@@ -19,6 +27,7 @@ end
     end
     @testset "zero_rdata_from_type checks" begin
         @test can_produce_zero_rdata_from_type(Vector) == true
+        check_allocs(can_produce_zero_rdata_from_type, Vector)
         @test zero_rdata_from_type(Vector) == NoRData()
         @test !can_produce_zero_rdata_from_type(FwdsRvsDataTestResources.Foo)
         @test can_produce_zero_rdata_from_type(Tuple{Float64,Type{Float64}})
@@ -47,6 +56,18 @@ end
         # Check for ambiguity.
         @test Mooncake.can_produce_zero_rdata_from_type(Union{})
         @test Mooncake.zero_rdata_from_type(Union{}) === NoRData()
+
+        # Performance.
+        @testset "$P" for P in Any[
+            Vector{Vector{Vector{Vector{Float64}}}},
+            Vector{Vector{Vector{NTuple{11,Float64}}}},
+            FwdsRvsDataTestResources.Bar{Float64,Float64,Float64},
+            FwdsRvsDataTestResources.Bar{
+                FwdsRvsDataTestResources.SV{Tuple{1},Float64,1},Float64,Float64
+            },
+        ]
+            @test TestUtils.is_foldable(can_produce_zero_rdata_from_type, Tuple{Type{P}})
+        end
     end
     @testset "lazy construction checks" begin
         # Check that lazy construction is in fact lazy for some cases where performance

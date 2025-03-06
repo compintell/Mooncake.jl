@@ -253,37 +253,24 @@ get_rev_data_id(::ADInfo, ::Any) = nothing
 """
     reverse_data_ref_stmts(info::ADInfo)
 
-Create the statements which initialise the reverse-data `Ref`s.
+Create the `:new` statements which initialise the reverse-data `Ref`s. Interpolates the
+initial rdata directly into the statement, which is safe because it is always a bits type.
 """
 function reverse_data_ref_stmts(info::ADInfo)
+    function make_ref_stmt(id, P)
+        ref_type = Base.RefValue{P <: Type ? NoRData : zero_like_rdata_type(P)}
+        init_ref_val = P <: Type ? NoRData() : Mooncake.zero_like_rdata_from_type(P)
+        return (id, new_inst(Expr(:new, ref_type, QuoteNode(init_ref_val))))
+    end
     return vcat(
         map(collect(info.arg_rdata_ref_ids)) do (k, id)
-            (id, new_inst(Expr(:call, __make_ref, CC.widenconst(info.arg_types[k]))))
+            return make_ref_stmt(id, CC.widenconst(info.arg_types[k]))
         end,
         map(collect(info.ssa_rdata_ref_ids)) do (k, id)
-            (id, new_inst(Expr(:call, __make_ref, CC.widenconst(info.ssa_insts[k].type))))
+            return make_ref_stmt(id, CC.widenconst(info.ssa_insts[k].type))
         end,
     )
 end
-
-"""
-    __make_ref(p::Type{P}) where {P}
-
-Helper for [`reverse_data_ref_stmts`](@ref). Constructs a `Ref` whose element type is the
-[`zero_like_rdata_type`](@ref) for `P`, and whose element is the zero-like rdata for `P`.
-"""
-@inline function __make_ref(p::Type{P}) where {P}
-    _P = @isdefined(P) ? P : _typeof(p)
-    return Ref{zero_like_rdata_type(_P)}(Mooncake.zero_like_rdata_from_type(_P))
-end
-
-# This specialised method is necessary to ensure that `__make_ref` works properly for
-# `DataType`s with unbound type parameters. See `TestResources.typevar_tester` for an
-# example. The above method requires that `P` be a type in which all parameters are fully-
-# bound. Strange errors occur if this property does not hold.
-@inline __make_ref(::Type{<:Type}) = Ref{NoRData}(NoRData())
-
-@inline __make_ref(::Type{Union{}}) = nothing
 
 # Returns the number of arguments that the primal function has.
 num_args(info::ADInfo) = length(info.arg_types)
@@ -367,6 +354,31 @@ function comms_channel(info::ADStmtInfo)
 end
 
 """
+    inc_args(stmt)
+
+Increment by `1` the `n` field of any `Argument`s present in `stmt`.
+Used in `make_ad_stmts!`.
+"""
+inc_args(x::Expr) = Expr(x.head, map(__inc, x.args)...)
+inc_args(x::ReturnNode) = isdefined(x, :val) ? ReturnNode(__inc(x.val)) : x
+inc_args(x::IDGotoIfNot) = IDGotoIfNot(__inc(x.cond), x.dest)
+inc_args(x::IDGotoNode) = x
+function inc_args(x::IDPhiNode)
+    new_values = Vector{Any}(undef, length(x.values))
+    for n in eachindex(x.values)
+        if isassigned(x.values, n)
+            new_values[n] = __inc(x.values[n])
+        end
+    end
+    return IDPhiNode(x.edges, new_values)
+end
+inc_args(::Nothing) = nothing
+inc_args(x::GlobalRef) = x
+
+__inc(x::Argument) = Argument(x.n + 1)
+__inc(x) = x
+
+"""
     make_ad_stmts!(inst::NewInstruction, line::ID, info::ADInfo)::ADStmtInfo
 
 Every line in the primal code is associated to one or more lines in the forwards-pass of AD,
@@ -418,7 +430,7 @@ function make_ad_stmts!(stmt::ReturnNode, line::ID, info::ADInfo)
     end
     if is_active(stmt.val)
         rdata_id = get_rev_data_id(info, stmt.val)
-        rvs = new_inst(Expr(:call, increment_ref!, rdata_id, Argument(2)))
+        rvs = increment_ref_stmts(rdata_id, Argument(2))
         assert_id = ID()
         val = __inc(stmt.val)
         fwds = [
@@ -492,7 +504,13 @@ function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
         val_rdata_ref_id = get_rev_data_id(info, stmt.val)
         output_rdata_ref_id = get_rev_data_id(info, line)
         fwds = PiNode(__inc(stmt.val), fcodual_type(CC.widenconst(stmt.typ)))
-        rvs = Expr(:call, __pi_rvs!, P, val_rdata_ref_id, output_rdata_ref_id)
+
+        # Get the rdata from the output_rdata_ref, and set its new value to zero, and
+        # increment the output ref.
+        output_rdata_id = ID()
+        deref_stmts = deref_and_zero_stmts(P, output_rdata_ref_id, output_rdata_id)
+        inc_exprs = increment_ref_stmts(val_rdata_ref_id, output_rdata_id)
+        rvs = vcat(deref_stmts, inc_exprs)
     else
         # If the value of the PiNode is a constant / QuoteNode etc, then there is nothing to
         # do on the reverse-pass.
@@ -505,11 +523,6 @@ function make_ad_stmts!(stmt::PiNode, line::ID, info::ADInfo)
     end
 
     return ad_stmt_info(line, nothing, fwds, rvs)
-end
-
-@inline function __pi_rvs!(::Type{P}, val_rdata_ref::Ref, output_rdata_ref::Ref) where {P}
-    increment_ref!(val_rdata_ref, __deref_and_zero(P, output_rdata_ref))
-    return nothing
 end
 
 # Constant GlobalRefs are handled. See const_codual. Non-constant GlobalRefs are handled by
@@ -736,17 +749,53 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         rvs_pass = if T_pb!! <: NoPullback
             nothing
         else
-            Expr(
-                :call,
-                __run_rvs_pass!,
-                get_primal_type(info, line),
-                sig,
-                pb,
-                get_rev_data_id(info, line),
-                map(Base.Fix1(get_rev_data_id, info), args)...,
+            # Get the rdata which we pass into the pullback from its rdata ref.
+            rdata_ref_id = get_rev_data_id(info, line)
+            rdata_output_id = ID()
+            rdata_output_expr = Expr(:call, getfield, rdata_ref_id, QuoteNode(:x))
+            rdata_output = (rdata_output_id, new_inst(rdata_output_expr))
+
+            # Zero out the value stored in this rdata ref now that we have its current
+            # value. The new value is rdata, so must be an instance of a bits type, so is
+            # safe to interpolate straight into instruction.
+            zero_val = zero_like_rdata_from_type(get_primal_type(info, line))
+            zero_rdata_expr = Expr(:call, setfield!, rdata_ref_id, QuoteNode(:x), zero_val)
+            zero_rdata_ref = (ID(), new_inst(zero_rdata_expr))
+
+            # Run the pullback. The result is a tuple comprising `length(args)` elements.
+            call_pullback_id = ID()
+            call_pullback = (call_pullback_id, new_inst(Expr(:call, pb, rdata_output_id)))
+
+            # For each element of the tuple returned by call_pullback, if the corresponding
+            # value in the primal IR is an Argument / SSA (if `get_rev_data_id` does not
+            # return nothing), increment the value in its rdata ref. This is equivalent to
+            # rdata_ref[] = increment!!(rdata_ref[], rdata_inc_resulting_from_pullback),
+            # but written out manually to ensure nothing fails to inline.
+            # If the corresponding value in the primal IR is not an Argument / SSA (e.g. it
+            # is a literal, a `QuoteNode`, or a `GlobalRef`), do nothing as we do not track
+            # gradients w.r.t. it.
+            tmp = map(enumerate(args)) do (n, arg)
+                rev_data_id = get_rev_data_id(info, arg)
+
+                # If arg is not an SSA / Argument, then no rdata ref to inc.
+                rev_data_id === nothing && return nothing
+
+                # Extract rdata from result of calling pullback.
+                rdata_inc_id = ID()
+                rdata_inc_expr = Expr(:call, getfield, call_pullback_id, n)
+                rdata_inc = (rdata_inc_id, new_inst(rdata_inc_expr))
+
+                # Construct statments to increment ref.
+                return vcat(rdata_inc, increment_ref_stmts(rev_data_id, rdata_inc_id))
+            end
+
+            # Concatenate all statements, and return them.
+            vcat(
+                IDInstPair[rdata_output, zero_rdata_ref, call_pullback],
+                reduce(vcat, filter(x -> !(x === nothing), tmp); init=IDInstPair[]),
             )
         end
-        return ad_stmt_info(line, comms_id, fwds, new_inst(rvs_pass))
+        return ad_stmt_info(line, comms_id, fwds, rvs_pass)
 
     elseif Meta.isexpr(stmt, :boundscheck)
         # For some reason the compiler cannot handle boundscheck statements when we run it
@@ -795,6 +844,29 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
     end
 end
 
+"""
+    increment_ref_stmts(ref_id::ID, inc_data)::Vector{IDInstPair}
+
+Equivalent to `ref[] = increment!!(ref[], inc_data)`, where `ref` and `inc_data` are the
+values associated to `ref_id` and `inc_data` respectively.
+"""
+function increment_ref_stmts(ref_id::ID, inc_data)::Vector{IDInstPair}
+
+    # Get the value stored in the `Base.RefValue`.
+    ref_val_id = ID()
+    ref_val = (ref_val_id, new_inst(Expr(:call, getfield, ref_id, QuoteNode(:x))))
+
+    # Increment the value by inc_data.
+    new_val_id = ID()
+    new_val = (new_val_id, new_inst(Expr(:call, increment!!, ref_val_id, inc_data)))
+
+    # Update the value stored in the rdata reference.
+    set_ref_expr = Expr(:call, setfield!, ref_id, QuoteNode(:x), new_val_id)
+    set_ref = (ID(), new_inst(set_ref_expr))
+
+    return IDInstPair[ref_val, new_val, set_ref]
+end
+
 is_active(::Union{Argument,ID}) = true
 is_active(::Any) = false
 
@@ -820,33 +892,6 @@ end
 __get_primal(x::CoDual) = primal(x)
 __get_primal(x) = x
 
-"""
-    __run_rvs_pass!(
-        P::Type, ::Type{sig}, pb!!, ret_rev_data_ref::Ref, arg_rev_data_refs...
-    ) where {sig}
-
-Used in `make_ad_stmts!` method for `Expr(:call, ...)` and `Expr(:invoke, ...)`.
-"""
-@inline function __run_rvs_pass!(
-    P::Type, ::Type{sig}, pb!!, ret_rev_data_ref::Ref, arg_rev_data_refs...
-) where {sig}
-    tuple_map(increment_if_ref!, arg_rev_data_refs, pb!!(ret_rev_data_ref[]))
-    set_ret_ref_to_zero!!(P, ret_rev_data_ref)
-    return nothing
-end
-
-@inline increment_if_ref!(ref::Ref, rvs_data) = increment_ref!(ref, rvs_data)
-@inline increment_if_ref!(::Ref, ::ZeroRData) = nothing
-@inline increment_if_ref!(::Nothing, ::Any) = nothing
-
-@inline increment_ref!(x::Ref, t) = setindex!(x, increment!!(x[], t))
-@inline increment_ref!(::Base.RefValue{NoRData}, t) = nothing
-
-@inline function set_ret_ref_to_zero!!(::Type{P}, r::Ref{R}) where {P,R}
-    return r[] = zero_like_rdata_from_type(P)
-end
-@inline set_ret_ref_to_zero!!(::Type{P}, r::Base.RefValue{NoRData}) where {P} = nothing
-
 const RuleMC{A,R} = MistyClosure{OpaqueClosure{A,R}}
 
 #
@@ -854,32 +899,34 @@ const RuleMC{A,R} = MistyClosure{OpaqueClosure{A,R}}
 # between differing varargs conventions.
 #
 
-struct Pullback{Tprimal,Tpb_args,Tpb_ret,isva}
+struct Pullback{Tprimal,Tpb_args,Tpb_ret,isva,nargs}
     pb_oc::Base.RefValue{RuleMC{Tpb_args,Tpb_ret}}
 end
 
-function Pullback(Tprimal, pb_oc::Tpb_oc, isva::Bool) where {A,R,Tpb_oc<:Ref{RuleMC{A,R}}}
-    return Pullback{Tprimal,A,R,isva}(pb_oc)
+function Pullback(sig, pb_oc::Ref{<:RuleMC{A,R}}, isva::Bool, nargs::Int) where {A,R}
+    return Pullback{sig,A,R,isva,nargs}(pb_oc)
 end
 
 _isva(::Pullback{<:Any,<:Any,<:Any,isva}) where {isva} = isva
-
-@inline function (pb::Pullback{sig})(dy) where {sig}
-    return __flatten_varargs(_isva(pb), pb.pb_oc[].oc(dy), nvargs(_isva(pb), sig)())
+_nargs(::Pullback{<:Any,<:Any,<:Any,<:Any,nargs}) where {nargs} = nargs
+function nvargs(pb::Pullback{sig}) where {sig}
+    return Val{_isva(pb) ? _nargs(pb) - length(sig.parameters) + 1 : 0}
 end
+
+@inline (pb::Pullback)(dy) = __flatten_varargs(_isva(pb), pb.pb_oc[].oc(dy), nvargs(pb)())
 
 struct DerivedRule{Tprimal,Tfwd_args,Tfwd_ret,Tpb_args,Tpb_ret,isva,Tnargs<:Val}
     fwds_oc::RuleMC{Tfwd_args,Tfwd_ret}
-    pb::Pullback{Tprimal,Tpb_args,Tpb_ret,isva}
+    pb_oc_ref::Base.RefValue{RuleMC{Tpb_args,Tpb_ret}}
     nargs::Tnargs
 end
 
 _isva(::DerivedRule{A,B,C,D,E,isva}) where {A,B,C,D,E,isva} = isva
 
 function DerivedRule(
-    Tprimal, fwds_oc::RuleMC{FA,FR}, pb::Pullback{<:Any,RA,RR}, isva::Bool, nargs::W
+    sig, fwds_oc::RuleMC{FA,FR}, pb_oc::Base.RefValue{RuleMC{RA,RR}}, isva::Bool, nargs::W
 ) where {FA,FR,RA,RR,W}
-    return DerivedRule{Tprimal,FA,FR,RA,RR,isva,W}(fwds_oc, pb, nargs)
+    return DerivedRule{sig,FA,FR,RA,RR,isva,W}(fwds_oc, pb_oc, nargs)
 end
 
 # Extends functionality defined for debug_mode.
@@ -894,9 +941,8 @@ _copy(::Nothing) = nothing
 function _copy(x::P) where {P<:DerivedRule}
     new_captures = _copy(x.fwds_oc.oc.captures)
     new_fwds_oc = replace_captures(x.fwds_oc, new_captures)
-    new_pb_oc_ref = Ref(replace_captures(x.pb.pb_oc[], new_captures))
-    new_pb = typeof(x.pb)(new_pb_oc_ref)
-    return P(new_fwds_oc, new_pb, x.nargs)
+    new_pb_oc_ref = Ref(replace_captures(x.pb_oc_ref[], new_captures))
+    return P(new_fwds_oc, new_pb_oc_ref, x.nargs)
 end
 
 _copy(x::Symbol) = x
@@ -911,9 +957,10 @@ _copy(x::Type) = x
 
 _copy(x) = copy(x)
 
-@inline function (fwds::DerivedRule{P,Q,S})(args::Vararg{CoDual,N}) where {P,Q,S,N}
+@inline function (fwds::DerivedRule{sig})(args::Vararg{CoDual,N}) where {sig,N}
     uf_args = __unflatten_codual_varargs(_isva(fwds), args, fwds.nargs)
-    return fwds.fwds_oc.oc(uf_args...)::CoDual, fwds.pb
+    pb = Pullback(sig, fwds.pb_oc_ref, _isva(fwds), N)
+    return fwds.fwds_oc.oc(uf_args...)::CoDual, pb
 end
 
 """
@@ -948,8 +995,8 @@ end
 # Rule derivation.
 #
 
-_is_primitive(C::Type, mi::Core.MethodInstance) = is_primitive(C, mi.specTypes)
-_is_primitive(C::Type, sig::Type) = is_primitive(C, sig)
+_get_sig(sig::Type) = sig
+_get_sig(mi::Core.MethodInstance) = mi.specTypes
 
 function forwards_ret_type(primal_ir::IRCode)
     return fcodual_type(Base.Experimental.compute_ir_rettype(primal_ir))
@@ -958,38 +1005,6 @@ end
 function pullback_ret_type(primal_ir::IRCode)
     return Tuple{map(rdata_type ∘ tangent_type ∘ CC.widenconst, primal_ir.argtypes)...}
 end
-
-"""
-    rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where {C}
-
-Compute the concrete type of the rule that will be returned from `build_rrule`. This is
-important for performance in dynamic dispatch, and to ensure that recursion works
-properly.
-"""
-function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where {C}
-    if _is_primitive(C, sig_or_mi)
-        return debug_mode ? DebugRRule{typeof(rrule!!)} : typeof(rrule!!)
-    end
-
-    ir, _ = lookup_ir(interp, sig_or_mi)
-    Treturn = Base.Experimental.compute_ir_rettype(ir)
-    isva, _ = is_vararg_and_sparam_names(sig_or_mi)
-
-    arg_types = map(CC.widenconst, ir.argtypes)
-    sig = Tuple{arg_types...}
-    fwd_args_type = Tuple{map(fcodual_type, arg_types)...}
-    fwd_return_type = forwards_ret_type(ir)
-    pb_args_type = Tuple{rdata_type(tangent_type(Treturn))}
-    pb_return_type = pullback_ret_type(ir)
-    nargs = Val{length(ir.argtypes)}
-
-    Tderived_rule = DerivedRule{
-        sig,fwd_args_type,fwd_return_type,pb_args_type,pb_return_type,isva,nargs
-    }
-    return debug_mode ? DebugRRule{Tderived_rule} : Tderived_rule
-end
-
-nvargs(isva, sig) = Val{isva ? length(sig.parameters[end].parameters) : 0}
 
 struct MooncakeRuleCompilationError <: Exception
     interp::MooncakeInterpreter
@@ -1018,21 +1033,22 @@ function Base.showerror(io::IO, err::MooncakeRuleCompilationError)
 end
 
 """
-    build_rrule(args...; debug_mode=false)
+    build_rrule(args...; kwargs...)
 
-Helper method. Only uses static information from `args`.
+Helper method: equivalent to extracting the signature from `args` and calling
+`build_rrule(sig; kwargs...)`.
 """
-function build_rrule(args...; debug_mode=false)
+function build_rrule(args...; kwargs...)
     interp = get_interpreter()
-    return build_rrule(interp, _typeof(TestUtils.__get_primals(args)); debug_mode)
+    return build_rrule(interp, _typeof(TestUtils.__get_primals(args)); kwargs...)
 end
 
 """
-    build_rrule(sig::Type{<:Tuple})
+    build_rrule(sig::Type{<:Tuple}; kwargs...)
 
-Equivalent to `build_rrule(Mooncake.get_interpreter(), sig)`.
+Helper method: Equivalent to `build_rrule(Mooncake.get_interpreter(), sig; kwargs...)`.
 """
-build_rrule(sig::Type{<:Tuple}) = build_rrule(get_interpreter(), sig)
+build_rrule(sig::Type{<:Tuple}; kwargs...) = build_rrule(get_interpreter(), sig; kwargs...)
 
 const MOONCAKE_INFERENCE_LOCK = ReentrantLock()
 
@@ -1076,7 +1092,11 @@ function build_rrule(
     end
 
     # If we have a hand-coded rule, just use that.
-    _is_primitive(C, sig_or_mi) && return (debug_mode ? DebugRRule(rrule!!) : rrule!!)
+    sig = _get_sig(sig_or_mi)
+    if is_primitive(C, sig)
+        rule = build_primitive_rrule(sig)
+        return (debug_mode ? DebugRRule(rule) : rule)
+    end
 
     # We don't have a hand-coded rule, so derived one.
     lock(MOONCAKE_INFERENCE_LOCK)
@@ -1093,7 +1113,6 @@ function build_rrule(
             rvs_oc = misty_closure(dri.rvs_ret_type, dri.rvs_ir, dri.shared_data...)
 
             # Compute the signature. Needs careful handling with varargs.
-            sig = sig_or_mi isa Core.MethodInstance ? sig_or_mi.specTypes : sig_or_mi
             nargs = num_args(dri.info)
             if dri.isva
                 sig = Tuple{
@@ -1101,8 +1120,7 @@ function build_rrule(
                 }
             end
 
-            pb = Pullback(sig, Ref(rvs_oc), dri.isva)
-            raw_rule = DerivedRule(sig, fwd_oc, pb, dri.isva, Val(num_args(dri.info)))
+            raw_rule = DerivedRule(sig, fwd_oc, Ref(rvs_oc), dri.isva, Val(nargs))
             rule = debug_mode ? DebugRRule(raw_rule) : raw_rule
             interp.oc_cache[oc_cache_key] = rule
             return rule
@@ -1446,7 +1464,7 @@ function pullback_ir(
 
         # De-reference the nth rdata.
         rdata_id = ID()
-        rdata = new_inst(Expr(:call, getindex, arg_rdata_ref_ids[n]))
+        rdata = new_inst(Expr(:call, getfield, arg_rdata_ref_ids[n], QuoteNode(:x)))
 
         # Get the nth lazy zero rdata.
         lazy_zero_rdata_id = ID()
@@ -1496,7 +1514,7 @@ function pullback_ir(
     # avoid annoying the Julia compiler.
     blks = vcat(entry_block, main_blocks, exit_block)
     pb_ir = BBCode(blks, arg_types, ir.sptypes, ir.linetable, ir.meta)
-    return remove_unreachable_blocks!(_sort_blocks!(pb_ir))
+    return remove_unreachable_blocks!(sort_blocks!(pb_ir))
 end
 
 """
@@ -1520,11 +1538,12 @@ function conclude_rvs_block(
 
     # Create statements which extract + zero the rdata refs associated to them.
     rdata_ids = map(_ -> ID(), phi_ids)
-    deref_stmts = map(phi_ids, rdata_ids) do phi_id, deref_id
+    tmp = map(phi_ids, rdata_ids) do phi_id, deref_id
         P = get_primal_type(info, phi_id)
         r = get_rev_data_id(info, phi_id)
-        return (deref_id, new_inst(Expr(:call, __deref_and_zero, P, r)))
+        return deref_and_zero_stmts(P, r, deref_id)
     end
+    deref_stmts = reduce(vcat, tmp; init=IDInstPair[])
 
     # For each predecessor, create a `BBlock` which processes its corresponding edge in
     # each of the `PhiNode`s.
@@ -1549,14 +1568,19 @@ function __get_value(edge::ID, x::IDPhiNode)
 end
 
 """
-    __deref_and_zero(::Type{P}, x::Ref) where {P}
+    deref_and_zero_stmts(P, ref_id, val_id)
 
-Helper, used in conclude_rvs_block.
+Equivalent to something like
+```julia
+val = ref[]
+ref[] = zero_rdata_from_type(P)
+```
 """
-@inline function __deref_and_zero(::Type{P}, x::Ref) where {P}
-    t = x[]
-    x[] = Mooncake.zero_like_rdata_from_type(P)
-    return t
+function deref_and_zero_stmts(P, ref_id, val_id)
+    val = (val_id, new_inst(Expr(:call, getfield, ref_id, QuoteNode(:x))))
+    r = Mooncake.zero_like_rdata_from_type(P)
+    set_ref = (ID(), new_inst(Expr(:call, setfield!, ref_id, QuoteNode(:x), r)))
+    return IDInstPair[val, set_ref]
 end
 
 """
@@ -1571,10 +1595,14 @@ of some block:
 %6 = φ (#2 => _1, #3 => %5)
 %7 = φ (#2 => 5., #3 => _2)
 ```
-Let the tangent refs associated to `%6`, `%7`, and `_1`` be denoted `t%6`, `t%7`, and `t_1`
-resp., and let `pred_id` be `#2`, then this function will produce a basic block of the form
+Let the rdata refs associated to `%6`, `%7`, and `_1`` be denoted `r%6`, `r%7`, and `r_1`
+resp., and let `pred_id` be `#2`, and `increment_ref!` be the following function,
 ```julia
-increment_ref!(t_1, t%6)
+increment_ref!(ref, x) = ref[] = increment!!(ref[], x)
+```
+then this `rvs_phi_block` will produce a basic block of the form
+```julia
+increment_ref!(r_1, r%6)
 nothing
 goto #2
 ```
@@ -1586,15 +1614,23 @@ on.
 
 The same ideas apply if `pred_id` were `#3`. The block would end with `#3`, and there would
 be two `increment_ref!` calls because both `%5` and `_2` are not constants.
+
+In practice, code which is equivalent to `increment_ref!` is created directly, rather than
+inserting a call to a generic Julia function. This is because we need to be certain that
+the getfield and setfield! calls applied to any references are visible to the SROA
+optimisation pass. If we insert a call to a function like `increment_ref!`, it might not be
+inlined away, making such references opaque.
 """
 function rvs_phi_block(
     pred_id::ID, rdata_ids::Vector{ID}, values::Vector{Any}, info::ADInfo
 )
     @assert length(rdata_ids) == length(values)
-    inc_stmts = map(rdata_ids, values) do id, val
-        stmt = Expr(:call, increment_if_ref!, get_rev_data_id(info, val), id)
-        return (ID(), new_inst(stmt))
+    tmp = map(rdata_ids, values) do id, val
+        rev_data_id = get_rev_data_id(info, val)
+        rev_data_id === nothing && return nothing
+        return increment_ref_stmts(rev_data_id, id)
     end
+    inc_stmts = reduce(vcat, filter(x -> !(x === nothing), tmp); init=IDInstPair[])
     goto_stmt = (ID(), new_inst(IDGotoNode(pred_id)))
     return BBlock(ID(), vcat(inc_stmts, goto_stmt))
 end
@@ -1718,6 +1754,50 @@ Note: the signature of the primal for which this is a rule is stored in the type
 reason to keep this around is for debugging -- it is very helpful to have this type visible
 in the stack trace when something goes wrong, as it allows you to trivially determine which
 bit of your code is the culprit.
+
+# Extended Help
+
+There are two main reasons why deferring the construction of a `DerivedRule` until we need
+to use it is crucial.
+
+The first is to do with recursion. Consider the following function:
+```julia
+f(x) = x > 0 ? f(x - 1) : x
+```
+If we generate the `IRCode` for this function, we will see something like the following:
+```julia
+julia> Base.code_ircode_by_type(Tuple{typeof(f), Float64})[1][1]
+1 1 ─ %1  = Base.lt_float(0.0, _2)::Bool
+  │   %2  = Base.or_int(%1, false)::Bool
+  └──       goto #6 if not %2
+  2 ─ %4  = Base.sub_float(_2, 1.0)::Float64
+  │   %5  = Base.lt_float(0.0, %4)::Bool
+  │   %6  = Base.or_int(%5, false)::Bool
+  └──       goto #4 if not %6
+  3 ─ %8  = Base.sub_float(%4, 1.0)::Float64
+  │   %9  = invoke Main.f(%8::Float64)::Float64
+  └──       goto #5
+  4 ─       goto #5
+  5 ┄ %12 = φ (#3 => %9, #4 => %4)::Float64
+  └──       return %12
+  6 ─       return _2
+```
+Suppose that we decide to construct a `DerivedRule` immediately whenever we find an
+`:invoke` statement in a rule that we're currently building a `DerivedRule` for.
+In the above example, we produce an infinite recursion when we attempt to produce a
+`DerivedRule` for %9, because it has the same signature as the call which generates this IR.
+By instead adopting a policy of constructing a `LazyDerivedRule` whenever we encounter an
+`:invoke` statement, we avoid this problem.
+
+The second reason that delaying the construction of a `DerivedRule`, is essential is that it
+ensures that we don't derive rules for method instances which aren't run. Suppose that
+function B contains code for which we can't derive a rule -- perhaps it contains an
+unsupported language feature like a `PhiCNode` or an `UpsilonNode`. Suppose that function A
+contains an `:invoke` which refers to function `B`, but that this call is on a branch which
+deals with error handling, and doesn't get run run unless something goes wrong. By deferring
+the derivation of the rule for B, we only ever attempt to derive it if we land on this
+error handling branch. Conversely, if we attempted to derive the rule for B when we derive
+the rule for A, we would be unable to complete the derivation of the rule for A.
 """
 mutable struct LazyDerivedRule{primal_sig,Trule}
     debug_mode::Bool
@@ -1743,4 +1823,35 @@ end
 @noinline function _build_rule!(rule::LazyDerivedRule{sig,Trule}, args) where {sig,Trule}
     rule.rule = build_rrule(get_interpreter(), rule.mi; debug_mode=rule.debug_mode)
     return rule.rule(args...)
+end
+
+"""
+    rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where {C}
+
+Compute the concrete type of the rule that will be returned from `build_rrule`. This is
+important for performance in dynamic dispatch, and to ensure that recursion works
+properly.
+"""
+function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where {C}
+    if is_primitive(C, _get_sig(sig_or_mi))
+        rule = build_primitive_rrule(_get_sig(sig_or_mi))
+        return debug_mode ? DebugRRule{typeof(rule)} : typeof(rule)
+    end
+
+    ir, _ = lookup_ir(interp, sig_or_mi)
+    Treturn = Base.Experimental.compute_ir_rettype(ir)
+    isva, _ = is_vararg_and_sparam_names(sig_or_mi)
+
+    arg_types = map(CC.widenconst, ir.argtypes)
+    sig = Tuple{arg_types...}
+    fwd_args_type = Tuple{map(fcodual_type, arg_types)...}
+    fwd_return_type = forwards_ret_type(ir)
+    pb_args_type = Tuple{rdata_type(tangent_type(Treturn))}
+    pb_return_type = pullback_ret_type(ir)
+    nargs = Val{length(ir.argtypes)}
+
+    Tderived_rule = DerivedRule{
+        sig,fwd_args_type,fwd_return_type,pb_args_type,pb_return_type,isva,nargs
+    }
+    return debug_mode ? DebugRRule{Tderived_rule} : Tderived_rule
 end
