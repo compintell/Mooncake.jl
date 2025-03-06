@@ -1225,43 +1225,6 @@ function __is_completely_stable_type(::Type{P}) where {P}
     return all(__is_completely_stable_type, fieldtypes(P))
 end
 
-"""
-    test_tangent(rng::AbstractRNG, p::P, x::T, y::T, z_target::T) where {P, T}
-
-Verify that primal `p` with tangents `z_target`, `x`, and `y`, satisfies the tangent
-interface. If these tests pass, then it should be possible to write rules for primals
-of type `P`, and to test them using [`test_rule`](@ref).
-
-It should be the case that `z_target` == `increment!!(x, y)`.
-
-As always, there are limits to the errors that these tests can identify -- they form
-necessary but not sufficient conditions for the correctness of your code.
-"""
-function test_tangent(
-    rng::AbstractRNG, p::P, x::T, y::T, z_target::T; interface_only, perf=true
-) where {P,T}
-    @nospecialize rng p x y z_target
-
-    # Check the interface.
-    test_tangent_consistency(rng, p; interface_only=false)
-
-    # Is the tangent_type of `P` what we expected?
-    @test tangent_type(P) == T
-
-    # Check that zero_tangent infers.
-    @inferred Mooncake.zero_tangent(p)
-
-    # Verify that adding together `x` and `y` gives the value the user expected.
-    z_pred = increment!!(x, y)
-    @test has_equal_data(z_pred, z_target)
-    if ismutabletype(P)
-        @test z_pred === x
-    end
-
-    # Check performance is as expected.
-    return perf && test_tangent_performance(rng, p)
-end
-
 function test_equality_comparison(x)
     @nospecialize x
 
