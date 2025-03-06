@@ -1,4 +1,4 @@
-@inline function zero_tangent_internal(x::Array{P,N}, dict::IdDict) where {P,N}
+@inline function zero_tangent_internal(x::Array{P,N}, dict::MaybeCache) where {P,N}
     haskey(dict, x) && return dict[x]::tangent_type(typeof(x))
 
     zt = Array{tangent_type(P),N}(undef, size(x)...)
