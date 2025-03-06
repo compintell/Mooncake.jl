@@ -19,7 +19,7 @@ function zero_tangent_internal(p::Task, dict::MaybeCache)
     end
 end
 
-function randn_tangent_internal(rng::AbstractRNG, p::Task, dict::Any)
+function randn_tangent_internal(rng::AbstractRNG, p::Task, dict::MaybeCache)
     if haskey(dict, p)
         return dict[p]::TaskTangent
     else
