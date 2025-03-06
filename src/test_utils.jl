@@ -809,17 +809,17 @@ error for a given value of `p`, then that `p` satisfies the tangent interface.
 
 Verifies that the following functions are implemented correctly (as far as possible) for
 `p` / its type, and its tangents / their type:
-- [`tangent_type`](@ref)
-- [`zero_tangent`](@ref)
-- [`randn_tangent`](@ref)
-- [`TestUtils.has_equal_data`](@ref)
-- [`increment!!`](@ref)
-- [`set_to_zero!!`](@ref)
-- [`_add_to_primal`](@ref)
-- [`_diff`](@ref)
-- [`_dot`](@ref)
-- [`_scale`](@ref)
-- [`TestUtils.populate_address_map`](@ref)
+- [`Mooncake.tangent_type`](@ref)
+- [`Mooncake.zero_tangent`](@ref)
+- [`Mooncake.randn_tangent`](@ref)
+- [`Mooncake.TestUtils.has_equal_data`](@ref)
+- [`Mooncake.increment!!`](@ref)
+- [`Mooncake.set_to_zero!!`](@ref)
+- [`Mooncake._add_to_primal`](@ref)
+- [`Mooncake._diff`](@ref)
+- [`Mooncake._dot`](@ref)
+- [`Mooncake._scale`](@ref)
+- [`Mooncake.TestUtils.populate_address_map`](@ref)
 
 In conjunction with the functions tested by [`test_tangent_splitting`](@ref), these functions
 constitute a complete set of functions which must be applicable to `p` in order to ensure
