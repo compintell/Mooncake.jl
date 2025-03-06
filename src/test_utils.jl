@@ -743,129 +743,6 @@ function run_rrule!!_test_cases(rng_ctor, v::Val)
     return run_derived_rrule!!_test_cases(rng_ctor, v)
 end
 
-#
-# Test that some basic operations work on a given type.
-#
-
-generate_args(::typeof(===), x) = [(x, 0.0), (1.0, x)]
-function generate_args(::typeof(Core.ifelse), x)
-    return [(true, x, 0.0), (false, x, 0.0), (true, 0.0, x), (false, 0.0, x)]
-end
-generate_args(::typeof(Core.sizeof), x) = [(x,)]
-generate_args(::typeof(Core.svec), x) = [(x,), (x, x)]
-function generate_args(::typeof(getfield), x)
-    syms = filter(f -> isdefined(x, f), fieldnames(_typeof(x)))
-    fs = vcat(syms..., eachindex(syms)...)
-    return vcat(map(n -> (x, n), fs), map(n -> (x, n, :not_atomic), fs))
-end
-function generate_args(::typeof(lgetfield), x)
-    syms = filter(f -> isdefined(x, f), fieldnames(_typeof(x)))
-    fs = vcat(syms..., eachindex(syms)...)
-    return vcat(map(n -> (x, Val(n)), fs), map(n -> (x, Val(n), Val(:not_atomic)), fs))
-end
-
-_new_excluded(::Type) = false
-_new_excluded(::Type{<:Union{String}}) = true
-
-@static if VERSION < v"1.11-"
-    # Prior to 1.11, Arrays are special objects, with special constructors that don't
-    # involve calling the `:new` instruction. From 1.11 onwards, they behave more like
-    # regular mutable composite types, so calling `_new_` becomes meaningful.
-    _new_excluded(::Type{<:Array}) = true
-else
-    # Memory and MemoryRef appeared in 1.11. Neither are constructed in the usual manner
-    # via the `:new` instruction, but rather by a variety of built-ins and `ccall`s.
-    # Consequently, it does not make sense to call `_new_` on them -- while this _can_ be
-    # made to work, it typically yields segfaults in very short order, and I _believe_ it
-    # should never occur in practice.
-    _new_excluded(::Type{<:Union{Memory,MemoryRef}}) = true
-end
-
-function generate_args(::typeof(Mooncake._new_), x)
-    _new_excluded(_typeof(x)) && return []
-    syms = filter(f -> isdefined(x, f), fieldnames(_typeof(x)))
-    field_values = map(sym -> getfield(x, sym), syms)
-    return [(_typeof(x), field_values...)]
-end
-generate_args(::typeof(isa), x) = [(x, Float64), (x, Int), (x, _typeof(x))]
-function generate_args(::typeof(setfield!), x)
-    names = filter(fieldnames(_typeof(x))) do f
-        return !isconst(_typeof(x), f) && isdefined(x, f)
-    end
-    return map(n -> (x, n, getfield(x, n)), vcat(names..., eachindex(names)...))
-end
-function generate_args(::typeof(lsetfield!), x)
-    names = filter(fieldnames(_typeof(x))) do f
-        return !isconst(_typeof(x), f) && isdefined(x, f)
-    end
-    return map(n -> (x, Val(n), getfield(x, n)), vcat(names..., eachindex(names)...))
-end
-generate_args(::typeof(tuple), x) = [(x,), (x, x), (x, x, x)]
-generate_args(::typeof(typeassert), x) = [(x, _typeof(x))]
-generate_args(::typeof(typeof), x) = [(x,)]
-
-function functions_for_all_types()
-    return [===, Core.ifelse, Core.sizeof, isa, tuple, typeassert, typeof]
-end
-
-function functions_for_structs()
-    return vcat(functions_for_all_types(), [getfield, lgetfield, Mooncake._new_])
-end
-
-function functions_for_mutable_structs()
-    return vcat(
-        functions_for_structs(),
-        [setfield!, lsetfield!],# modifyfield!, replacefield!, swapfield!],
-    )
-end
-
-"""
-    test_rule_and_type_interactions(rng::AbstractRNG, p)
-
-Check that a collection of standard functions for which we _ought_ to have a working rrule
-for `p` work, and produce the correct answer. For example, the `rrule!!` for `typeof` should
-work correctly on any type, we should have a working rule for `getfield` for any
-struct-type, and we should have a rule for `setfield!` for any mutable struct type.
-See implementation for details.
-
-The purpose of this test is to ensure that, for any given `p`, the full range of primitive
-functions that _ought_ to work on it, do indeed work on it.
-
-This is one part of the interface where some care _might_ be required. If, for some reason,
-it should _never_ be the case that e.g. for a particular `p`, `getfield` should be called,
-then it may make no sense at all to run these tests. In such cases, the author of the type
-is responsible for knowing what they are doing. Please open an issue to discuss for your
-type if you are at all unsure what to do.
-"""
-function test_rule_and_type_interactions(rng::AbstractRNG, p::P) where {P}
-    @nospecialize rng p
-
-    # Generate standard test cases.
-    fs = if ismutabletype(P)
-        functions_for_mutable_structs()
-    elseif isstructtype(P)
-        functions_for_structs()
-    else
-        functions_for_all_types()
-    end
-
-    # Run standardised tests for all functions.
-    @testset "$f" for f in fs
-        arg_sets = generate_args(f, p)
-        @testset for args in arg_sets
-            test_rule(
-                rng,
-                f,
-                args...;
-                interface_only=true,
-                is_primitive=true,
-                perf_flag=:none,
-                interp=Mooncake.get_interpreter(),
-            )
-        end
-    end
-end
-
 """
     test_tangent(rng::AbstractRNG, p, T; interface_only=false, perf=true)
 
@@ -1338,7 +1215,141 @@ function test_tangent_splitting(rng::AbstractRNG, p::P) where {P}
 end
 
 """
-    test_data(rng::AbstractRNG, x::P)
+    test_rule_and_type_interactions(rng::AbstractRNG, p)
+
+Check that a collection of standard functions for which we _ought_ to have a working rrule
+for `p` work, and produce the correct answer. For example, the `rrule!!` for `typeof` should
+work correctly on any type, we should have a working rule for `getfield` for any
+struct-type, and we should have a rule for `setfield!` for any mutable struct type.
+See extended help for more info.
+
+# Extended Help
+
+The purpose of this test is to ensure that, for any given `p`, the full range of primitive
+functions that _ought_ to work on it, do indeed work on it.
+
+This is one part of the interface where some care _might_ be required. If, for some reason,
+it should _never_ be the case that e.g. for a particular `p`, `getfield` should be called,
+then it may make no sense at all to run these tests. In such cases, the author of the type
+is responsible for knowing what they are doing. Please open an issue to discuss for your
+type if you are at all unsure what to do.
+
+When defining a custom tangent type for `P`, the functions that you will need to pay
+attention to writing rules for are
+- [`Mooncake.__new__`](@ref)
+- [`Mooncake.lgetfield`](@ref)
+- [`Mooncake.lsetfield!`](@ref)
+
+In all cases, you may wish to consult the current implementations of `rrule!!` for these
+functions for inspiration regarding how you might implement them for your type.
+"""
+function test_rule_and_type_interactions(rng::AbstractRNG, p::P) where {P}
+    @nospecialize rng p
+
+    # Generate standard test cases.
+    fs = if ismutabletype(P)
+        functions_for_mutable_structs()
+    elseif isstructtype(P)
+        functions_for_structs()
+    else
+        functions_for_all_types()
+    end
+
+    # Run standardised tests for all functions.
+    @testset "$f" for f in fs
+        arg_sets = generate_args(f, p)
+        @testset for args in arg_sets
+            test_rule(
+                rng,
+                f,
+                args...;
+                interface_only=true,
+                is_primitive=true,
+                perf_flag=:none,
+                interp=Mooncake.get_interpreter(),
+            )
+        end
+    end
+end
+
+#
+# Test that some basic operations work on a given type.
+#
+
+generate_args(::typeof(===), x) = [(x, 0.0), (1.0, x)]
+function generate_args(::typeof(Core.ifelse), x)
+    return [(true, x, 0.0), (false, x, 0.0), (true, 0.0, x), (false, 0.0, x)]
+end
+generate_args(::typeof(Core.sizeof), x) = [(x,)]
+generate_args(::typeof(Core.svec), x) = [(x,), (x, x)]
+function generate_args(::typeof(getfield), x)
+    syms = filter(f -> isdefined(x, f), fieldnames(_typeof(x)))
+    fs = vcat(syms..., eachindex(syms)...)
+    return vcat(map(n -> (x, n), fs), map(n -> (x, n, :not_atomic), fs))
+end
+function generate_args(::typeof(lgetfield), x)
+    syms = filter(f -> isdefined(x, f), fieldnames(_typeof(x)))
+    fs = vcat(syms..., eachindex(syms)...)
+    return vcat(map(n -> (x, Val(n)), fs), map(n -> (x, Val(n), Val(:not_atomic)), fs))
+end
+
+_new_excluded(::Type) = false
+_new_excluded(::Type{<:Union{String}}) = true
+
+@static if VERSION < v"1.11-"
+    # Prior to 1.11, Arrays are special objects, with special constructors that don't
+    # involve calling the `:new` instruction. From 1.11 onwards, they behave more like
+    # regular mutable composite types, so calling `_new_` becomes meaningful.
+    _new_excluded(::Type{<:Array}) = true
+else
+    # Memory and MemoryRef appeared in 1.11. Neither are constructed in the usual manner
+    # via the `:new` instruction, but rather by a variety of built-ins and `ccall`s.
+    # Consequently, it does not make sense to call `_new_` on them -- while this _can_ be
+    # made to work, it typically yields segfaults in very short order, and I _believe_ it
+    # should never occur in practice.
+    _new_excluded(::Type{<:Union{Memory,MemoryRef}}) = true
+end
+
+function generate_args(::typeof(Mooncake._new_), x)
+    _new_excluded(_typeof(x)) && return []
+    syms = filter(f -> isdefined(x, f), fieldnames(_typeof(x)))
+    field_values = map(sym -> getfield(x, sym), syms)
+    return [(_typeof(x), field_values...)]
+end
+generate_args(::typeof(isa), x) = [(x, Float64), (x, Int), (x, _typeof(x))]
+function generate_args(::typeof(setfield!), x)
+    names = filter(fieldnames(_typeof(x))) do f
+        return !isconst(_typeof(x), f) && isdefined(x, f)
+    end
+    return map(n -> (x, n, getfield(x, n)), vcat(names..., eachindex(names)...))
+end
+function generate_args(::typeof(lsetfield!), x)
+    names = filter(fieldnames(_typeof(x))) do f
+        return !isconst(_typeof(x), f) && isdefined(x, f)
+    end
+    return map(n -> (x, Val(n), getfield(x, n)), vcat(names..., eachindex(names)...))
+end
+generate_args(::typeof(tuple), x) = [(x,), (x, x), (x, x, x)]
+generate_args(::typeof(typeassert), x) = [(x, _typeof(x))]
+generate_args(::typeof(typeof), x) = [(x,)]
+
+function functions_for_all_types()
+    return [===, Core.ifelse, Core.sizeof, isa, tuple, typeassert, typeof]
+end
+
+function functions_for_structs()
+    return vcat(functions_for_all_types(), [getfield, lgetfield, Mooncake._new_])
+end
+
+function functions_for_mutable_structs()
+    return vcat(
+        functions_for_structs(),
+        [setfield!, lsetfield!],# modifyfield!, replacefield!, swapfield!],
+    )
+end
+
+"""
+    test_data(rng::AbstractRNG, p::P)
 
 Verify that all tangent / fdata / rdata functionality work properly for `x`. Furthermore,
 verify that all primitives listed in `TestUtils.test_rule_and_type_interactions` work
@@ -1346,6 +1357,10 @@ correctly on `x`. This functionality is particularly useful if you are writing y
 custom tangent / fdata / rdata types and want to be confident that you have implemented the
 functionality that you need in order to make these custom types work with all the rules
 written in Mooncake itself.
+
+You should consult the docstrings for [`test_tangent_interface`](@ref),
+[`test_tangent_splitting`](@ref), and [`test_rule_and_type_interactions`](@ref), in order to
+see what is required to satisfy the full tangent interface for `p`.
 """
 function test_data(rng::AbstractRNG, p::P; interface_only=false) where {P}
     test_tangent_interface(rng, p; interface_only)
