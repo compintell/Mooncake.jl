@@ -1257,6 +1257,7 @@ Ensure that [`test_tangent_interface`](@ref) runs for `p` before running these t
 - [`Mooncake.rdata`](@ref)
 - [`Mooncake.uninit_fdata`](@ref)
 - [`Mooncake.tangent_type`](@ref) (binary method)
+- [`Mooncake.tangent`](@ref) (binary method)
 """
 function test_tangent_splitting(rng::AbstractRNG, p::P) where {P}
 
