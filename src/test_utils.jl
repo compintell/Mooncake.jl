@@ -1236,7 +1236,7 @@ type if you are at all unsure what to do.
 
 When defining a custom tangent type for `P`, the functions that you will need to pay
 attention to writing rules for are
-- [`Mooncake.__new__`](@ref)
+- [`Mooncake._new_`](@ref)
 - [`Mooncake.lgetfield`](@ref)
 - [`Mooncake.lsetfield!`](@ref)
 
