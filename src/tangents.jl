@@ -501,9 +501,7 @@ function zero_tangent_internal(x::Ptr, ::MaybeCache)
 end
 function zero_tangent_internal(x::SimpleVector, dict::MaybeCache)
     return map!(
-        n -> zero_tangent_internal(x[n], dict),
-        Vector{Any}(undef, length(x)),
-        eachindex(x),
+        n -> zero_tangent_internal(x[n], dict), Vector{Any}(undef, length(x)), eachindex(x)
     )
 end
 @inline @generated function zero_tangent_internal(x::P, d::MaybeCache) where {P}
