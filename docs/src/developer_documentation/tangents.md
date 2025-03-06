@@ -1,7 +1,7 @@
 # Tangents
 
 As discussed in [Representing Gradients](@ref), Mooncake requires that each "primal" type be associated to a unique "tangent" type, given by the function [tangent_type](@ref).
-Moreover, we must be able to "split" a given tangent into its _fdata_ ("forwards-data") and _rdata_ ("reverse-data"), whose types are given by [fdata_type](@ref) and `rdata_type` respectively.
+Moreover, we must be able to "split" a given tangent into its _fdata_ ("forwards-data") and _rdata_ ("reverse-data"), whose types are given by [`Mooncake.fdata_type`](@ref) and [`Mooncake.rdata_type`](@ref) respectively.
 
 Very occassionally it may be necessary to specify your own tangent type.
 This is not an entirely trivial undertaking, as there is quite a lot of functionality that must be added to make it work properly.
