@@ -30,7 +30,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:linear_algebr
     return test_cases, memory
 end
 
-@is_primitive MinimalCtx Tuple{typeof(Losses.mse),Matrix{<:IEEEFloat},Matrix{<:IEEEFloat}}
+@is_primitive DefaultCtx Tuple{typeof(Losses.mse),Matrix{<:IEEEFloat},Matrix{<:IEEEFloat}}
 
 function rrule!!(
     ::CoDual{typeof(Losses.mse)},
@@ -55,7 +55,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:linear_algebr
             return Any[
                 (
                     false,
-                    :stability_and_allocs,
+                    :none,
                     nothing,
                     Losses.mse,
                     P.([1, 1, 1]),
@@ -63,7 +63,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:linear_algebr
                 ),
                 (
                     false,
-                    :stability_and_allocs,
+                    :none,
                     nothing,
                     Losses.mse,
                     P.([1e1, 1e2, 1e3]),
