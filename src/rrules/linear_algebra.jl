@@ -48,10 +48,6 @@ function rrule!!(
     return CoDual(Losses.mse(X.x, Y.x), NoFData()), FluxMSE_pullback
 end
 
-function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:linear_algebra})
-    return Any[], Any[]
-end
-
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:linear_algebra})
     test_cases = reduce(
         vcat,
