@@ -30,6 +30,26 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:linear_algebr
     return test_cases, memory
 end
 
+@is_primitive MinimalCtx Tuple{
+    typeof(Flux.Losses.mse),Matrix{<:IEEEFloat},Matrix{<:IEEEFloat}
+}
+
+function rrule!!(
+    ::CoDual{typeof(Flux.Losses.mse)},
+    X::CoDual{<:AbstractMatrix{P}},
+    Y::CoDual{<:AbstractMatrix{P}},
+) where {P<:IEEEFloat}
+    N = 2.0 / length(X.x)
+    function FluxMSE_adjoint(dloss::P)
+        # adjoints got by VJP reverse pass equations.
+        X.dx .+= N * dloss .* (X.x - Y.x)
+        Y.dx .+= -1.0 .* X.dx
+        return NoRData(), NoRData(), NoRData()
+    end
+    # in forward pass it returns codual float64, hence coduals dx is nofdata().
+    return CoDual(Flux.Losses.mse(X.x, Y.x), NoFData()), FluxMSE_adjoint
+end
+
 function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:linear_algebra})
     return Any[], Any[]
 end
