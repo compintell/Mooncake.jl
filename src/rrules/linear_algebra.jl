@@ -30,6 +30,10 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:linear_algebr
     return test_cases, memory
 end
 
+function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:linear_algebra})
+    return Any[], Any[]
+end
+
 @is_primitive DefaultCtx Tuple{
     typeof(Losses.mse),AbstractArray{<:IEEEFloat},AbstractArray{<:IEEEFloat}
 }
