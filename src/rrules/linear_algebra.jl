@@ -57,25 +57,29 @@ function rrule!!(
 end
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:linear_algebra})
-    test_cases = reduce(
-        vcat,
-        # wierd behaviour for Float 32,64 in _dot_internal while comparing 
-        # FDM and AD results in test_rule_correctness
-        map([Float16, Float32, Float64]) do P
-            return Any[
-                (true, :none, nothing, Losses.mse, P.([13, 13, 13]), P.([13, 13, 13])),
-                (true, :none, nothing, Losses.mse, P.([1e1, 1e2, 1e3]), P.([1e3, 1e4, 0])),
-                (
-                    true,
-                    :none,
-                    nothing,
-                    Losses.mse,
-                    P.([1e-3, 1e-4, 0]),
-                    P.([1e-1, 1e-2, 1e-3]),
-                ),
-            ]
+    # Testing specific floating point precisions as FDM is unstable for certain tests.
+    # Larger differences can compare well with AD for higher precisions as FDM is relatively stable.
+    # for smaller differences we get worse FDM gradients for all floating points as FDM error and instability scales
+
+    test_cases = vcat(
+        map([Float64]) do P
+            return (
+                false, :none, nothing, Losses.mse, P.([1e1, 1e2, 1e3]), P.([1e3, 1e4, 0])
+            )
         end,
+        map([Float16, Float32, Float64]) do P
+            return (
+                true,
+                :none,
+                nothing,
+                Losses.mse,
+                P.([1e-3, 1e-4, 0]),
+                P.([1e-1, 1e-2, 1e-3]),
+            )
+        end,
+        (true, :none, nothing, Losses.mse, Float64.([13, 13, 13]), Float64.([13, 13, 13])),
     )
+
     memory = Any[]
     return test_cases, memory
 end
