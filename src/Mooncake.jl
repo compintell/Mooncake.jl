@@ -46,8 +46,6 @@ using LinearAlgebra.BLAS: @blasfunc, BlasInt, trsm!, BlasFloat
 using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!, potrf!, potrs!
 using FunctionWrappers: FunctionWrapper
 
-using Flux: Losses
-
 # Needs to be defined before various other things.
 function _foreigncall_ end
 
