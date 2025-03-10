@@ -16,14 +16,14 @@ using Mooncake.TestUtils: test_rule
 
         map([Float64]) do P
             return (
-                false, :none, nothing, Losses.mse, P.([1e1, 1e2, 1e3]), P.([1e3, 1e4, 0])
+                false, :none, false, Losses.mse, P.([1e1, 1e2, 1e3]), P.([1e3, 1e4, 0])
             )
         end,
         map([Float32, Float64]) do P
             return (
                 false,
                 :none,
-                nothing,
+                false,
                 Losses.mse,
                 Float64.([13, 13, 13]),
                 Float64.([13, 13, 13]),
@@ -31,12 +31,7 @@ using Mooncake.TestUtils: test_rule
         end,
         map([Float16, Float32, Float64]) do P
             return (
-                false,
-                :none,
-                nothing,
-                Losses.mse,
-                P.([1e-3, 1e-4, 0]),
-                P.([1e-1, 1e-2, 1e-3]),
+                false, :none, false, Losses.mse, P.([1e-3, 1e-4, 0]), P.([1e-1, 1e-2, 1e-3])
             )
         end,
     )
