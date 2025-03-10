@@ -48,10 +48,10 @@ jobs:
           - x64
         include:
           - test_group: 'basic'
-            version: '1.10'
+            version: 'lts'
             arch: x86
           - test_group: 'rrules/array_legacy'
-            version: '1.10'
+            version: 'lts'
             arch: x64
     steps:
       - uses: actions/checkout@v4
