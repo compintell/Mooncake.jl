@@ -4,7 +4,7 @@ using Mooncake
 using Base: IEEEFloat
 using Flux
 import Mooncake:
-    DefaultlCtx, rrule!!, @is_primitive, @mooncake_overlay, CoDual, zero_fcodual, NoRData
+    DefaultCtx, rrule!!, @is_primitive, @mooncake_overlay, CoDual, zero_fcodual, NoRData
 
 # Basic rule for Flux.mse.
 
