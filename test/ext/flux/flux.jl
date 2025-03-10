@@ -7,7 +7,7 @@ using Flux: Losses
 using Mooncake.TestUtils: test_rule
 
 @testset "flux" begin
-    @testset "$f, $(_typeof(fargs))" for (
+    @testset "$f, $(typeof(fargs))" for (
         interface_only, perf_flag, is_primitive, f, fargs...
     ) in vcat(
         # Testing specific floating point precisions as FDM is unstable for certain tests.
