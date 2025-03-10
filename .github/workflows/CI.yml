@@ -50,6 +50,9 @@ jobs:
           - test_group: 'basic'
             version: '1.10'
             arch: x86
+          - test_group: 'rrules/array_legacy'
+            version: '1.10'
+            arch: x64
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2

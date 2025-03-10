@@ -262,7 +262,11 @@ function rrule!!(
 
         # Increment dsrc.
         src_idx = _soffs:(_soffs + _n - 1)
-        dsrc[src_idx] .= increment!!.(view(dsrc, src_idx), view(ddest, dest_idx))
+        @inbounds for (s, d) in zip(src_idx, dest_idx)
+            if isassigned(dsrc, s)
+                dsrc[s] = increment!!(dsrc[s], ddest[d])
+            end
+        end
 
         # Restore initial state.
         @inbounds for n in eachindex(dest_copy)
@@ -449,6 +453,17 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:array_legacy}
             3,
         ),
         (
+            false,
+            :none,
+            nothing,
+            unsafe_copyto!,
+            fill!(Vector{Any}(undef, 3), 4.0),
+            1,
+            Vector{Any}(undef, 2),
+            1,
+            2,
+        ),
+        (
             true,
             :none,
             nothing,
@@ -486,7 +501,6 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:array_legacy}
             randn(4),
             1,
         ),
-        (false, :stability, nothing, Base.arrayset, false, _a, randn(4), 1),
         (
             false,
             :stability,
