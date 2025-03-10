@@ -43,12 +43,13 @@ function rrule!!(
     X::CoDual{<:AbstractArray{P}},
     Y::CoDual{<:AbstractArray{P}},
 ) where {P<:IEEEFloat}
-    N = P(2) / P(length(X.x))
+    N = P(2) / P(length(X.x)) .* (X.x - Y.x)
 
     function FluxMSE_pullback(dloss::P)
         # adjoints got by VJP reverse pass equations.
-        @. X.dx += dloss * N * (X.x - Y.x)
-        @. Y.dx -= X.dx
+        temp = N .* dloss
+        @. X.dx += temp
+        @. Y.dx -= temp
         return NoRData(), NoRData(), NoRData()
     end
 
@@ -60,6 +61,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:linear_algebr
     # Testing specific floating point precisions as FDM is unstable for certain tests.
     # Larger differences can compare well with AD for higher precisions as FDM is relatively stable.
     # for smaller differences we get worse FDM gradients for all floating points as FDM error and instability scales
+    #  first test case success starts at a difference of ~ 1e4
 
     test_cases = vcat(
         map([Float64]) do P
