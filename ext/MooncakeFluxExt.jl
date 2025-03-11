@@ -1,16 +1,13 @@
 module MooncakeFluxExt
 
-using Mooncake
+using Mooncake, Flux
 using Base: IEEEFloat
-using Flux
 import Mooncake:
     DefaultCtx, rrule!!, @is_primitive, @mooncake_overlay, CoDual, zero_fcodual, NoRData
 
-# Basic rule for Flux.mse.
-
-@is_primitive(
-    DefaultCtx, Tuple{typeof(Flux.Losses.mse),Array{P},Array{P}}
-) where {P<:IEEEFloat}
+@is_primitive DefaultCtx Tuple{
+    typeof(Flux.Losses.mse),Array{P},Array{P}
+} where {P<:IEEEFloat}
 
 function rrule!!(
     ::CoDual{typeof(Flux.Losses.mse)}, X::CoDual{<:Array{P}}, Y::CoDual{<:Array{P}}
@@ -26,7 +23,7 @@ function rrule!!(
     end
 
     # in forward pass it returns codual float64, hence coduals dx is NoFData().
-    return zero_fcodual(Losses.mse(X.x, Y.x)), flux_mse_pullback
+    return zero_fcodual(Flux.Losses.mse(X.x, Y.x)), flux_mse_pullback
 end
 
 end
