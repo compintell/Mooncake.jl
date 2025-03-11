@@ -2,7 +2,7 @@ using Pkg
 Pkg.activate(@__DIR__)
 Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 
-using Mooncake, StableRNGs, Test, Flux
+using Mooncake, StableRNGs, Test, Flux, JET
 using Mooncake.TestUtils: test_rule
 
 @testset "flux" begin
