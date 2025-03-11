@@ -11,7 +11,6 @@ import Mooncake: DefaultCtx, rrule!!, @is_primitive, CoDual, zero_fcodual, NoRDa
 function rrule!!(
     ::CoDual{typeof(Flux.Losses.mse)}, X::CoDual{<:Array{P}}, Y::CoDual{<:Array{P}}
 ) where {P<:IEEEFloat}
-    norm_factor = P(2) / P(length(X.x)) .* (X.x .- Y.x)
 
     function flux_mse_pullback(dloss::P)
         # adjoints got by VJP reverse pass equations.
