@@ -15,13 +15,16 @@ function rrule!!(
 
     function flux_mse_pullback(dloss::P)
         # adjoints got by VJP reverse pass equations.
-        temp = norm_factor .* dloss
-        @. X.dx += temp
-        @. Y.dx -= temp
+
+        tmp = dloss * P(2 / length(X.x))
+        @inbounds for n in eachindex(X.x)
+            d = X.x[n] - Y.x[n]
+            X.dx[n] += tmp * d
+            Y.dx[n] -= tmp * d
+        end
         return NoRData(), NoRData(), NoRData()
     end
 
-    # in forward pass it returns codual float64, hence coduals dx is NoFData().
     return zero_fcodual(Flux.Losses.mse(X.x, Y.x)), flux_mse_pullback
 end
 
