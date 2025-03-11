@@ -20,7 +20,7 @@ using Mooncake.TestUtils: test_rule
                 false,
                 Flux.Losses.mse,
                 randn(StableRNG(1), P, 3),
-                randn(StableRNG(2), P, 3);
+                randn(StableRNG(2), P, 3),
             )
         end,
     )
