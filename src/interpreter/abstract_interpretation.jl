@@ -54,7 +54,7 @@ struct MooncakeInterpreter{C} <: CC.AbstractInterpreter
             for m in CC._methods_by_ftype(tt, 10, ip.world)::Vector
                 m = m::CC.MethodMatch
                 typ = Any[m.spec_types.parameters...]
-                for i in 1:length(typ)
+                for i in eachindex(typ)
                     typ[i] = CC.unwraptv(typ[i])
                 end
                 CC.typeinf_type(ip, m.method, Tuple{typ...}, m.sparams)
