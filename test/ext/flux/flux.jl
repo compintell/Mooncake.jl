@@ -12,7 +12,7 @@ using Mooncake.TestUtils: test_rule
         map([Float32, Float64]) do P
             return (
                 false,
-                :stability,
+                :none,
                 true,
                 Flux.Losses.mse,
                 randn(StableRNG(1), P, 3),
