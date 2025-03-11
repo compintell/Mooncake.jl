@@ -36,8 +36,10 @@ jobs:
           'rrules/memory',
           'rrules/misc',
           'rrules/new',
+          'rrules/random',
           'rrules/tasks',
           'rrules/twice_precision',
+          'rrules/performance_patches',
         ]
         version:
           - 'lts'
@@ -46,8 +48,11 @@ jobs:
           - x64
         include:
           - test_group: 'basic'
-            version: '1.10'
+            version: 'lts'
             arch: x86
+          - test_group: 'rrules/array_legacy'
+            version: 'lts'
+            arch: x64
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
@@ -75,6 +80,7 @@ jobs:
       matrix:
         test_group: [
           {test_type: 'ext', label: 'differentiation_interface'},
+          {test_type: 'ext', label: 'flux'},
           {test_type: 'ext', label: 'luxlib'},
           {test_type: 'ext', label: 'nnlib'},
           {test_type: 'ext', label: 'special_functions'},

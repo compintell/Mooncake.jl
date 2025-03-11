@@ -16,7 +16,7 @@ Documentation for Mooncake.jl is on its way!
     It will be merged in chunks over the next month or so as good first drafts of sections are completed.
     Please don't be alarmed that not all of it is here!
 
-# Getting Started
+## Getting Started
 
 Check that you're running a version of Julia that Mooncake.jl supports.
 See the [`SUPPORT_POLICY.md`](https://github.com/compintell/Mooncake.jl/blob/main/SUPPORT_POLICY.md) for more info.
@@ -40,7 +40,7 @@ We are committed to ensuring support for DifferentiationInterface, which is why 
 If you are interested in interacting in a more direct fashion with `Mooncake.jl`, you should consider `Mooncake.value_and_gradient!!`.
 See its docstring for more info.
 
-# Project Goals
+## Project Goals
 
 Below the four central objectives of this project are outlined, and the approaches that we take to achieve them.
 
@@ -85,7 +85,7 @@ Additionally, the strategy of immediately incrementing (co)tangents resolves lon
 This sits in contrast to `Enzyme.jl`, which targets LLVM and is primarily written in C++.
 These two approaches entail different tradeoffs.
 
-# Project Name
+## Project Name
 
 Before an initial release, this package was called `Taped.jl`, but that name ceased to be helpful when we stopped using a classic "Wengert list"-style type to implement AD.
 For about 48 hours is was called `Phi.jl`, but the community guidelines state that the name of packages in the general registry should generally be at least 5 characters in length.
@@ -98,7 +98,7 @@ The last version while the package was called `Tapir.jl` was 0.2.51.
 Upon renaming, the version was bumped to 0.3.0.
 We finally settled on `Mooncake.jl`. Hopefully this name will stick.
 
-# Project Status
+## Project Status
 
 The plan is to proceed in three phases:
 1. design, correctness and testing

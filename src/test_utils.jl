@@ -11,7 +11,18 @@ module TestTypes
 using Base.Iterators: product
 using Core: svec
 using ExprTools: combinedef
-using ..Mooncake: NoTangent, tangent_type, _typeof
+using ..Mooncake:
+    NoTangent,
+    tangent_type,
+    _typeof,
+    set_to_zero!!,
+    increment!!,
+    is_primitive,
+    randn_tangent,
+    _scale,
+    _add_to_primal,
+    _diff,
+    _dot
 
 const PRIMALS = Tuple{Bool,Any,Tuple}[]
 
@@ -91,7 +102,15 @@ using Random, Mooncake, Test, InteractiveUtils
 using Mooncake:
     CoDual,
     NoTangent,
+    PossiblyUninitTangent,
+    Tangent,
+    MutableTangent,
     rrule!!,
+    build_rrule,
+    tangent_type,
+    zero_tangent,
+    primal,
+    tangent,
     is_init,
     zero_codual,
     DefaultCtx,
@@ -126,17 +145,29 @@ using Mooncake:
     lsetfield!,
     increment_internal!!,
     set_to_zero_internal!!,
-    CC
+    CC,
+    set_to_zero!!,
+    increment!!,
+    is_primitive,
+    randn_tangent,
+    _scale,
+    _add_to_primal,
+    _diff,
+    _dot,
+    NoFData,
+    fdata_type,
+    fdata,
+    NoRData,
+    rdata_type,
+    rdata
 
 struct Shim end
 
-function test_opt(::Any, args...)
-    throw(error("Load JET to use this function."))
-end
+test_opt(x...) = test_opt_internal(Shim(), x...)
+test_opt_internal(::Any, x...) = throw(error("Load JET to use this function."))
 
-function report_opt(::Any, tt)
-    throw(error("Load JET to use this function."))
-end
+report_opt(tt) = report_opt_internal(Shim(), tt)
+report_opt_internal(::Any, tt) = throw(error("Load JET to use this function."))
 
 """
     has_equal_data(x, y; equal_undefs=true)
@@ -390,12 +421,14 @@ function test_rule_correctness(rng::AbstractRNG, x_x̄...; rule, unsafe_perturb:
     # Use finite differences to estimate vjps. Compute the estimate at a range of different
     # step sizes. We'll just require that one of them ends up being close to what AD gives.
     ẋ = map(_x -> randn_tangent(rng, _x), x)
-    fd_results = map([1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8]) do ε
+    ε_list = [1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8]
+    fd_results = Vector{Any}(undef, length(ε_list))
+    for (n, ε) in enumerate(ε_list)
         x′_l = _add_to_primal(x, _scale(ε, ẋ), unsafe_perturb)
         y′_l = x′_l[1](x′_l[2:end]...)
         x′_r = _add_to_primal(x, _scale(-ε, ẋ), unsafe_perturb)
         y′_r = x′_r[1](x′_r[2:end]...)
-        return (
+        fd_results[n] = (
             ẏ=_scale(1 / 2ε, _diff(y′_l, y′_r)),
             ẋ_post=map((_x′, _x_p) -> _scale(1 / 2ε, _diff(_x′, _x_p)), x′_l, x′_r),
         )
@@ -536,7 +569,7 @@ function test_rrule_interface(f_f̄, x_x̄...; rule)
     @test all(map((a, b) -> _typeof(a) == _typeof(rdata(b)), x̄_new, x̄))
 end
 
-function __forwards_and_backwards(rule, x_x̄::Vararg{Any,N}) where {N}
+@noinline function __forwards_and_backwards(rule::R, x_x̄::Vararg{Any,N}) where {R,N}
     out, pb!! = rule(x_x̄...)
     return pb!!(Mooncake.zero_rdata(primal(out)))
 end
@@ -559,15 +592,15 @@ function test_rrule_performance(
     if performance_checks_flag in (:stability, :stability_and_allocs)
 
         # Test primal stability.
-        test_opt(Shim(), primal(f_f̄), map(_typeof ∘ primal, x_x̄))
+        test_opt(primal(f_f̄), map(_typeof ∘ primal, x_x̄))
 
         # Test forwards-pass stability.
-        test_opt(Shim(), rule, (_typeof(to_fwds(f_f̄)), map(_typeof ∘ to_fwds, x_x̄)...))
+        test_opt(rule, (_typeof(to_fwds(f_f̄)), map(_typeof ∘ to_fwds, x_x̄)...))
 
         # Test reverse-pass stability.
         y_ȳ, pb!! = rule(to_fwds(f_f̄), map(to_fwds, _deepcopy(x_x̄))...)
         rvs_data = Mooncake.rdata(zero_tangent(primal(y_ȳ), tangent(y_ȳ)))
-        test_opt(Shim(), pb!!, (_typeof(rvs_data),))
+        test_opt(pb!!, (_typeof(rvs_data),))
     end
 
     if performance_checks_flag in (:allocs, :stability_and_allocs)
@@ -582,7 +615,8 @@ function test_rrule_performance(
         f_f̄_fwds = to_fwds(f_f̄)
         x_x̄_fwds = map(to_fwds, x_x̄)
         __forwards_and_backwards(rule, f_f̄_fwds, x_x̄_fwds...)
-        @test (@allocations __forwards_and_backwards(rule, f_f̄_fwds, x_x̄_fwds...)) == 0
+        count_allocs(__forwards_and_backwards, rule, f_f̄_fwds, x_x̄_fwds...)
+        @test count_allocs(__forwards_and_backwards, rule, f_f̄_fwds, x_x̄_fwds...) == 0
     end
 end
 
@@ -657,8 +691,6 @@ function test_rule(
     debug_mode::Bool=false,
     unsafe_perturb::Bool=false,
 )
-    @nospecialize rng x
-
     # Construct the rule.
     sig = _typeof(__get_primals(x))
     rule = Mooncake.build_rrule(interp, sig; debug_mode)
@@ -828,6 +860,24 @@ function test_rule_and_type_interactions(rng::AbstractRNG, p::P) where {P}
 end
 
 """
+    is_foldable(f, types)::Bool
+
+`true` if the effects inferred for the application of `f` to arguments of type `types`
+indicate that the compiler believes such a call can be constant-folded.
+
+See the docstrings for `Base.@infer_effects` and `Base.infer_effects` for more information
+on the effects system in Julia.
+"""
+function is_foldable(f, types)::Bool
+    effects = Base.infer_effects(f, types)
+    tmp = VERSION > v"1.11" ? effects.noub == CC.ALWAYS_TRUE && effects.nortcall : true
+    return effects.consistent == CC.ALWAYS_TRUE &&
+           effects.effect_free == CC.ALWAYS_TRUE &&
+           effects.terminates &&
+           tmp
+end
+
+"""
     test_tangent_type(primal_type, expected_tangent_type)
 
 Checks that `tangent_type(primal_type)` yields `expected_tangent_type`, and that everything
@@ -835,12 +885,8 @@ infers / optimises away, and that the effects are as expected.
 """
 function test_tangent_type(primal_type::Type, expected_tangent_type::Type)
     @test tangent_type(primal_type) == expected_tangent_type
-    effects = Base.infer_effects(tangent_type, (Type{expected_tangent_type},))
-    @test effects.consistent == CC.ALWAYS_TRUE
-    @test effects.effect_free == CC.ALWAYS_TRUE
-    @test effects.nothrow
-    @test effects.terminates
-    return test_opt(Shim(), tangent_type, Tuple{_typeof(primal_type)})
+    @test is_foldable(tangent_type, (Type{expected_tangent_type},))
+    return test_opt(tangent_type, Tuple{_typeof(primal_type)})
 end
 
 """
@@ -987,7 +1033,8 @@ function test_set_tangent_field!_correctness(t1::T, t2::T) where {T<:MutableTang
     end
 end
 
-function check_allocs(::Any, f::F, x::Vararg{Any,N}) where {F,N}
+check_allocs(f, x...) = check_allocs_internal(Shim(), f, x...)
+function check_allocs_internal(::Any, f::F, x::Vararg{Any,N}) where {F,N}
     throw(error("Load AllocCheck.jl to use this functionality."))
 end
 
@@ -1018,8 +1065,10 @@ function test_tangent_performance(rng::AbstractRNG, p::P) where {P}
 
     # Check there are no allocations when there ought not to be.
     if !__tangent_generation_should_allocate(P)
-        test_opt(Shim(), Tuple{typeof(zero_tangent),P})
-        test_opt(Shim(), Tuple{typeof(randn_tangent),Xoshiro,P})
+        test_opt(Tuple{typeof(zero_tangent),P})
+        check_allocs(Mooncake.zero_tangent, p)
+        test_opt(Tuple{typeof(randn_tangent),Xoshiro,P})
+        check_allocs(Mooncake.randn_tangent, rng, p)
     end
 
     # `increment!!` should always infer.
@@ -1038,10 +1087,11 @@ function test_tangent_performance(rng::AbstractRNG, p::P) where {P}
 end
 
 function test_allocations(t::T, z::T) where {T}
-    check_allocs(Shim(), increment_internal!!, Mooncake.NoCache(), t, t)
-    check_allocs(Shim(), increment_internal!!, Mooncake.NoCache(), t, z)
-    check_allocs(Shim(), increment_internal!!, Mooncake.NoCache(), z, t)
-    return check_allocs(Shim(), increment_internal!!, Mooncake.NoCache(), z, z)
+    check_allocs(increment_internal!!, Mooncake.NoCache(), t, t)
+    check_allocs(increment_internal!!, Mooncake.NoCache(), t, z)
+    check_allocs(increment_internal!!, Mooncake.NoCache(), z, t)
+    check_allocs(increment_internal!!, Mooncake.NoCache(), z, z)
+    return nothing
 end
 
 _set_tangent_field!(x, ::Val{i}, v) where {i} = set_tangent_field!(x, i, v)
@@ -1054,7 +1104,7 @@ function test_set_tangent_field!_performance(t1::T, t2::T) where {V,T<:MutableTa
 
         # Int mode.
         _set_tangent_field!(t1, Val(n), v)
-        report_opt(Shim(), Tuple{typeof(_set_tangent_field!),typeof(t1),Val{n},typeof(v)})
+        report_opt(Tuple{typeof(_set_tangent_field!),typeof(t1),Val{n},typeof(v)})
 
         if all(n -> !(fieldtype(V, n) <: Mooncake.PossiblyUninitTangent), 1:fieldcount(V))
             i = Val(n)
@@ -1065,9 +1115,7 @@ function test_set_tangent_field!_performance(t1::T, t2::T) where {V,T<:MutableTa
         # Symbol mode.
         s = Val(fieldname(V, n))
         @inferred _set_tangent_field!(t1, s, v)
-        report_opt(
-            Shim(), Tuple{typeof(_set_tangent_field!),typeof(t1),typeof(s),typeof(v)}
-        )
+        report_opt(Tuple{typeof(_set_tangent_field!),typeof(t1),typeof(s),typeof(v)})
 
         if all(n -> !(fieldtype(V, n) <: Mooncake.PossiblyUninitTangent), 1:fieldcount(V))
             _set_tangent_field!(t1, s, v)
@@ -1085,13 +1133,13 @@ function test_get_tangent_field_performance(t::Union{MutableTangent,Tangent})
 
         # Int mode.
         i = Val(n)
-        report_opt(Shim(), Tuple{typeof(_get_tangent_field),typeof(t),typeof(i)})
+        report_opt(Tuple{typeof(_get_tangent_field),typeof(t),typeof(i)})
         @inferred _get_tangent_field(t, i)
         @test count_allocs(_get_tangent_field, t, i) == 0
 
         # Symbol mode.
         s = Val(fieldname(V, n))
-        report_opt(Shim(), Tuple{typeof(_get_tangent_field),typeof(t),typeof(s)})
+        report_opt(Tuple{typeof(_get_tangent_field),typeof(t),typeof(s)})
         @inferred _get_tangent_field(t, s)
         @test count_allocs(_get_tangent_field, t, s) == 0
     end
@@ -1195,10 +1243,10 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
     T = tangent_type(P)
     F = Mooncake.fdata_type(T)
     @test F isa Type
-    check_allocs(Shim(), Mooncake.fdata_type, T)
+    check_allocs(Mooncake.fdata_type, T)
     R = Mooncake.rdata_type(T)
     @test R isa Type
-    check_allocs(Shim(), Mooncake.rdata_type, T)
+    check_allocs(Mooncake.rdata_type, T)
 
     # Check that fdata and rdata produce the correct types.
     t = randn_tangent(rng, p)
@@ -1223,6 +1271,7 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
 
     # Compute the tangent type associated to `F` and `R`, and check it is equal to `T`.
     @test tangent_type(F, R) == T
+    @test is_foldable(tangent_type, (Type{F}, Type{R}))
 
     # Check that combining f and r yields a tangent of the correct type and value.
     t_combined = Mooncake.tangent(f, r)
@@ -1249,13 +1298,13 @@ function test_fwds_rvs_data(rng::AbstractRNG, p::P) where {P}
 
     # Check that when the zero element is asked from the primal type alone, the result is
     # either an instance of R _or_ a `CannotProduceZeroRDataFromType`.
-    test_opt(Shim(), zero_rdata_from_type, Tuple{Type{P}})
+    test_opt(zero_rdata_from_type, Tuple{Type{P}})
     rzero_from_type = @inferred zero_rdata_from_type(P)
     @test rzero_from_type isa R || rzero_from_type isa CannotProduceZeroRDataFromType
     @test can_make_zero != isa(rzero_from_type, CannotProduceZeroRDataFromType)
 
     # Check that we can produce a lazy zero rdata, and that it has the correct type.
-    test_opt(Shim(), lazy_zero_rdata, Tuple{P})
+    test_opt(lazy_zero_rdata, Tuple{P})
     lazy_rzero = @inferred lazy_zero_rdata(p)
     @test instantiate(lazy_rzero) isa R
 

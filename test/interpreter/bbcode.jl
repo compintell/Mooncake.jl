@@ -62,13 +62,13 @@ end
         @test all(map(==, ir.stmts.line, new_ir.stmts.line))
         @test all(map(==, ir.stmts.flag, new_ir.stmts.flag))
         @test length(Mooncake.collect_stmts(bb_code)) == length(stmt(ir.stmts))
-        @test Mooncake.id_to_line_map(bb_code) isa Dict{ID,Int}
+        @test Mooncake.BasicBlockCode.id_to_line_map(bb_code) isa Dict{ID,Int}
     end
     @testset "control_flow_graph" begin
         ir = Base.code_ircode_by_type(Tuple{typeof(sin),Float64})[1][1]
         bb = BBCode(ir)
         new_ir = Core.Compiler.IRCode(bb)
-        cfg = Mooncake.control_flow_graph(bb)
+        cfg = Mooncake.BasicBlockCode.control_flow_graph(bb)
         @test all(map((l, r) -> l.stmts == r.stmts, ir.cfg.blocks, cfg.blocks))
         @test all(map((l, r) -> sort(l.preds) == sort(r.preds), ir.cfg.blocks, cfg.blocks))
         @test all(map((l, r) -> sort(l.succs) == sort(r.succs), ir.cfg.blocks, cfg.blocks))
@@ -152,51 +152,53 @@ end
             @testset "Expr" begin
                 id = ID()
                 d = Dict{ID,Bool}(id => false)
-                Mooncake._find_id_uses!(d, Expr(:call, sin, 5))
+                Mooncake.BasicBlockCode._find_id_uses!(d, Expr(:call, sin, 5))
                 @test d[id] == false
-                Mooncake._find_id_uses!(d, Expr(:call, sin, id))
+                Mooncake.BasicBlockCode._find_id_uses!(d, Expr(:call, sin, id))
                 @test d[id] == true
             end
             @testset "IDGotoIfNot" begin
                 id = ID()
                 d = Dict{ID,Bool}(id => false)
-                Mooncake._find_id_uses!(d, IDGotoIfNot(ID(), ID()))
+                Mooncake.BasicBlockCode._find_id_uses!(d, IDGotoIfNot(ID(), ID()))
                 @test d[id] == false
-                Mooncake._find_id_uses!(d, IDGotoIfNot(true, ID()))
+                Mooncake.BasicBlockCode._find_id_uses!(d, IDGotoIfNot(true, ID()))
                 @test d[id] == false
-                Mooncake._find_id_uses!(d, IDGotoIfNot(id, ID()))
+                Mooncake.BasicBlockCode._find_id_uses!(d, IDGotoIfNot(id, ID()))
                 @test d[id] == true
             end
             @testset "IDGotoNode" begin
                 id = ID()
                 d = Dict{ID,Bool}(id => false)
-                Mooncake._find_id_uses!(d, IDGotoNode(ID()))
+                Mooncake.BasicBlockCode._find_id_uses!(d, IDGotoNode(ID()))
                 @test d[id] == false
             end
             @testset "IDPhiNode" begin
                 id = ID()
                 d = Dict{ID,Bool}(id => false)
-                Mooncake._find_id_uses!(d, IDPhiNode([ID()], Vector{Any}(undef, 1)))
+                Mooncake.BasicBlockCode._find_id_uses!(
+                    d, IDPhiNode([ID()], Vector{Any}(undef, 1))
+                )
                 @test d[id] == false
-                Mooncake._find_id_uses!(d, IDPhiNode([ID()], Any[id]))
+                Mooncake.BasicBlockCode._find_id_uses!(d, IDPhiNode([ID()], Any[id]))
                 @test d[id] == true
             end
             @testset "PiNode" begin
                 id = ID()
                 d = Dict{ID,Bool}(id => false)
-                Mooncake._find_id_uses!(d, PiNode(false, Bool))
+                Mooncake.BasicBlockCode._find_id_uses!(d, PiNode(false, Bool))
                 @test d[id] == false
-                Mooncake._find_id_uses!(d, PiNode(id, Bool))
+                Mooncake.BasicBlockCode._find_id_uses!(d, PiNode(id, Bool))
                 @test d[id] == true
             end
             @testset "ReturnNode" begin
                 id = ID()
                 d = Dict{ID,Bool}(id => false)
-                Mooncake._find_id_uses!(d, ReturnNode())
+                Mooncake.BasicBlockCode._find_id_uses!(d, ReturnNode())
                 @test d[id] == false
-                Mooncake._find_id_uses!(d, ReturnNode(5))
+                Mooncake.BasicBlockCode._find_id_uses!(d, ReturnNode(5))
                 @test d[id] == false
-                Mooncake._find_id_uses!(d, ReturnNode(id))
+                Mooncake.BasicBlockCode._find_id_uses!(d, ReturnNode(id))
                 @test d[id] == true
             end
         end
@@ -225,7 +227,8 @@ end
             ],
             Any[Any for _ in 1:4],
         )
-        @test Mooncake._is_reachable(BBCode(ir).blocks) == [true, false, false]
+        @test Mooncake.BasicBlockCode._is_reachable(BBCode(ir).blocks) ==
+            [true, false, false]
     end
     @testset "remove_unreachable_blocks!" begin
 
@@ -265,21 +268,5 @@ end
             GotoNode(2), PhiNode(Int32[1], Any[true]), ReturnNode(SSAValue(2))
         ]
         @test Mooncake.stmt(new_ir.stmts) == expected_stmts
-    end
-    @testset "inc_args" begin
-        @test Mooncake.inc_args(Expr(:call, sin, Argument(4))) ==
-            Expr(:call, sin, Argument(5))
-        @test Mooncake.inc_args(ReturnNode(Argument(2))) == ReturnNode(Argument(3))
-        id = ID()
-        @test Mooncake.inc_args(IDGotoIfNot(Argument(1), id)) ==
-            IDGotoIfNot(Argument(2), id)
-        @test Mooncake.inc_args(IDGotoNode(id)) == IDGotoNode(id)
-        ids = [id, ID()]
-        @test ==(
-            Mooncake.inc_args(IDPhiNode(ids, Any[Argument(1), 4])),
-            IDPhiNode(ids, Any[Argument(2), 4]),
-        )
-        @test Mooncake.inc_args(nothing) === nothing
-        @test Mooncake.inc_args(GlobalRef(Base, :sin)) == GlobalRef(Base, :sin)
     end
 end

@@ -6,7 +6,6 @@ using ADTypes,
     ChainRules,
     DiffRules,
     ExprTools,
-    Graphs,
     InteractiveUtils,
     LinearAlgebra,
     MistyClosures,
@@ -43,7 +42,7 @@ using Core:
     compilerbarrier
 using Core.Compiler: IRCode, NewInstruction
 using Core.Intrinsics: pointerref, pointerset
-using LinearAlgebra.BLAS: @blasfunc, BlasInt, trsm!
+using LinearAlgebra.BLAS: @blasfunc, BlasInt, trsm!, BlasFloat
 using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!, potrf!, potrs!
 using FunctionWrappers: FunctionWrapper
 
@@ -105,10 +104,13 @@ include("codual.jl")
 include("debug_mode.jl")
 include("stack.jl")
 
+include(joinpath("interpreter", "bbcode.jl"))
+using .BasicBlockCode
+
 include(joinpath("interpreter", "contexts.jl"))
 include(joinpath("interpreter", "abstract_interpretation.jl"))
+include(joinpath("interpreter", "patch_for_319.jl"))
 include(joinpath("interpreter", "ir_utils.jl"))
-include(joinpath("interpreter", "bbcode.jl"))
 include(joinpath("interpreter", "ir_normalisation.jl"))
 include(joinpath("interpreter", "zero_like_rdata.jl"))
 include(joinpath("interpreter", "s2s_reverse_mode_ad.jl"))
@@ -129,6 +131,7 @@ include(joinpath("rrules", "linear_algebra.jl"))
 include(joinpath("rrules", "low_level_maths.jl"))
 include(joinpath("rrules", "misc.jl"))
 include(joinpath("rrules", "new.jl"))
+include(joinpath("rrules", "random.jl"))
 include(joinpath("rrules", "tasks.jl"))
 include(joinpath("rrules", "twice_precision.jl"))
 @static if VERSION >= v"1.11-rc4"
@@ -136,38 +139,17 @@ include(joinpath("rrules", "twice_precision.jl"))
 else
     include(joinpath("rrules", "array_legacy.jl"))
 end
+include(joinpath("rrules", "performance_patches.jl"))
 
 include("interface.jl")
 include("config.jl")
 include("developer_tools.jl")
 
-export primal,
-    tangent,
-    randn_tangent,
-    increment!!,
-    NoTangent,
-    Tangent,
-    MutableTangent,
-    PossiblyUninitTangent,
-    set_to_zero!!,
-    tangent_type,
-    zero_tangent,
-    _scale,
-    _add_to_primal,
-    _diff,
-    _dot,
-    zero_codual,
-    codual_type,
-    rrule!!,
-    build_rrule,
-    value_and_gradient!!,
-    value_and_pullback!!,
-    NoFData,
-    NoRData,
-    fdata_type,
-    rdata_type,
-    fdata,
-    rdata,
-    get_interpreter
+# Public, not exported
+include("public.jl")
+@public Config, value_and_pullback!!, prepare_pullback_cache
+
+# Public, exported
+export value_and_gradient!!, prepare_gradient_cache
 
 end

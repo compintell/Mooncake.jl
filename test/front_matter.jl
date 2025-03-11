@@ -1,5 +1,4 @@
-using AllocCheck,
-    Aqua,
+using Aqua,
     BenchmarkTools,
     DiffRules,
     JET,
@@ -10,6 +9,8 @@ using AllocCheck,
     Mooncake,
     Test
 
+using AllocCheck: AllocCheck # load to enable testing functionality
+
 using ChainRulesCore: ChainRulesCore
 
 using Base: unsafe_load, pointer_from_objref, IEEEFloat, TwicePrecision
@@ -18,6 +19,38 @@ using Core:
     bitcast, svec, ReturnNode, PhiNode, PiNode, GotoIfNot, GotoNode, SSAValue, Argument
 using Core.Intrinsics: pointerref, pointerset
 using FunctionWrappers: FunctionWrapper
+
+using Mooncake
+
+using Mooncake:
+    primal,
+    tangent,
+    randn_tangent,
+    increment!!,
+    NoTangent,
+    Tangent,
+    MutableTangent,
+    PossiblyUninitTangent,
+    set_to_zero!!,
+    tangent_type,
+    zero_tangent,
+    _scale,
+    _add_to_primal,
+    _diff,
+    _dot,
+    zero_codual,
+    codual_type,
+    rrule!!,
+    build_rrule,
+    value_and_gradient!!,
+    value_and_pullback!!,
+    NoFData,
+    NoRData,
+    fdata_type,
+    rdata_type,
+    fdata,
+    rdata,
+    get_interpreter
 
 using Mooncake:
     CC,
@@ -72,7 +105,8 @@ using .TestUtils:
     AddressMap,
     populate_address_map_internal,
     populate_address_map,
-    test_tangent
+    test_tangent,
+    check_allocs
 
 using .TestResources:
     TypeStableMutableStruct,

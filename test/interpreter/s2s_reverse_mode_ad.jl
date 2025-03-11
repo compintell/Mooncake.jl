@@ -67,6 +67,22 @@ end
         # pass, then this constructor ought to error.
         @test_throws ArgumentError ad_stmt_info(ID(), ID(), nothing, nothing)
     end
+    @testset "inc_args" begin
+        @test Mooncake.inc_args(Expr(:call, sin, Argument(4))) ==
+            Expr(:call, sin, Argument(5))
+        @test Mooncake.inc_args(ReturnNode(Argument(2))) == ReturnNode(Argument(3))
+        id = ID()
+        @test Mooncake.inc_args(IDGotoIfNot(Argument(1), id)) ==
+            IDGotoIfNot(Argument(2), id)
+        @test Mooncake.inc_args(IDGotoNode(id)) == IDGotoNode(id)
+        ids = [id, ID()]
+        @test ==(
+            Mooncake.inc_args(IDPhiNode(ids, Any[Argument(1), 4])),
+            IDPhiNode(ids, Any[Argument(2), 4]),
+        )
+        @test Mooncake.inc_args(nothing) === nothing
+        @test Mooncake.inc_args(GlobalRef(Base, :sin)) == GlobalRef(Base, :sin)
+    end
     @testset "make_ad_stmts!" begin
 
         # Set up ADInfo -- this state is required by `make_ad_stmts!`, and the
@@ -348,5 +364,17 @@ end
         ir = Mooncake.rvs_ir(Tuple{typeof(S2SGlobals.unstable_tester),Ref{Any}})
         stmts = Mooncake.stmt(ir.stmts)
         @test !any(x -> Meta.isexpr(x, :new) && x.args[1] <: Base.RefValue, stmts)
+    end
+    @testset "build_rrule methods all accept kwargs" begin
+        args = (sin, 5.0)
+        sig = typeof(args)
+        rule_sig = build_rrule(sig; debug_mode=false, silence_debug_messages=true)
+        @test rule_sig == rrule!!
+        rule_args = build_rrule(args...; debug_mode=false, silence_debug_messages=true)
+        @test rule_args == rrule!!
+        rule_debug_sig = build_rrule(sig; debug_mode=true, silence_debug_messages=true)
+        @test rule_debug_sig isa Mooncake.DebugRRule
+        rule_debug_args = build_rrule(args...; debug_mode=true, silence_debug_messages=true)
+        @test rule_debug_args == rule_debug_sig
     end
 end

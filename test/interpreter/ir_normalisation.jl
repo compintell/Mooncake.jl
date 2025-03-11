@@ -152,4 +152,21 @@
         )
         @test Mooncake.lift_gc_preservation(Expr(:gc_preserve_end, SSAValue(2))) === nothing
     end
+    @testset "remove_edge!" begin
+        ir = Mooncake.ircode(
+            Any[
+                Expr(:call, :sin, Argument(2)),
+                GotoNode(3),
+                PhiNode(Int32[1], Any[5]),
+                ReturnNode(SSAValue(3)),
+            ],
+            Any[Any, Vector{Float64}],
+        )
+        Mooncake.remove_edge!(ir, 1, 2)
+        phi_node = stmt(ir.stmts)[3]
+        @test isempty(phi_node.edges)
+        @test isempty(phi_node.values)
+        @test isempty(ir.cfg.blocks[1].succs)
+        @test isempty(ir.cfg.blocks[2].preds)
+    end
 end

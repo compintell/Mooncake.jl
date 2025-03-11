@@ -354,6 +354,31 @@ function comms_channel(info::ADStmtInfo)
 end
 
 """
+    inc_args(stmt)
+
+Increment by `1` the `n` field of any `Argument`s present in `stmt`.
+Used in `make_ad_stmts!`.
+"""
+inc_args(x::Expr) = Expr(x.head, map(__inc, x.args)...)
+inc_args(x::ReturnNode) = isdefined(x, :val) ? ReturnNode(__inc(x.val)) : x
+inc_args(x::IDGotoIfNot) = IDGotoIfNot(__inc(x.cond), x.dest)
+inc_args(x::IDGotoNode) = x
+function inc_args(x::IDPhiNode)
+    new_values = Vector{Any}(undef, length(x.values))
+    for n in eachindex(x.values)
+        if isassigned(x.values, n)
+            new_values[n] = __inc(x.values[n])
+        end
+    end
+    return IDPhiNode(x.edges, new_values)
+end
+inc_args(::Nothing) = nothing
+inc_args(x::GlobalRef) = x
+
+__inc(x::Argument) = Argument(x.n + 1)
+__inc(x) = x
+
+"""
     make_ad_stmts!(inst::NewInstruction, line::ID, info::ADInfo)::ADStmtInfo
 
 Every line in the primal code is associated to one or more lines in the forwards-pass of AD,
@@ -1008,21 +1033,22 @@ function Base.showerror(io::IO, err::MooncakeRuleCompilationError)
 end
 
 """
-    build_rrule(args...; debug_mode=false)
+    build_rrule(args...; kwargs...)
 
-Helper method. Only uses static information from `args`.
+Helper method: equivalent to extracting the signature from `args` and calling
+`build_rrule(sig; kwargs...)`.
 """
-function build_rrule(args...; debug_mode=false)
+function build_rrule(args...; kwargs...)
     interp = get_interpreter()
-    return build_rrule(interp, _typeof(TestUtils.__get_primals(args)); debug_mode)
+    return build_rrule(interp, _typeof(TestUtils.__get_primals(args)); kwargs...)
 end
 
 """
-    build_rrule(sig::Type{<:Tuple})
+    build_rrule(sig::Type{<:Tuple}; kwargs...)
 
-Equivalent to `build_rrule(Mooncake.get_interpreter(), sig)`.
+Helper method: Equivalent to `build_rrule(Mooncake.get_interpreter(), sig; kwargs...)`.
 """
-build_rrule(sig::Type{<:Tuple}) = build_rrule(get_interpreter(), sig)
+build_rrule(sig::Type{<:Tuple}; kwargs...) = build_rrule(get_interpreter(), sig; kwargs...)
 
 const MOONCAKE_INFERENCE_LOCK = ReentrantLock()
 
@@ -1488,7 +1514,7 @@ function pullback_ir(
     # avoid annoying the Julia compiler.
     blks = vcat(entry_block, main_blocks, exit_block)
     pb_ir = BBCode(blks, arg_types, ir.sptypes, ir.linetable, ir.meta)
-    return remove_unreachable_blocks!(_sort_blocks!(pb_ir))
+    return remove_unreachable_blocks!(sort_blocks!(pb_ir))
 end
 
 """

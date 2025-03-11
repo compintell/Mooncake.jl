@@ -34,6 +34,13 @@ function normalise!(ir::IRCode, spnames::Vector{Symbol})
         inst = lift_gc_preservation(inst)
         stmt(ir.stmts)[n] = inst
     end
+    ir = const_prop_gotoifnots!(ir)
+
+    # Dynamic error checks. Removing these would be like removing things from the test
+    # suite. i.e. do not remove unless you're quite sure that they're redundant.
+    CC.verify_ir(ir)
+    verify_no_constant_gotoifnots(ir)
+
     return ir
 end
 
@@ -396,4 +403,91 @@ function lift_gc_preservation(inst)
     Meta.isexpr(inst, :gc_preserve_begin) && return Expr(:call, gc_preserve, inst.args...)
     Meta.isexpr(inst, :gc_preserve_end) && return nothing
     return inst
+end
+
+"""
+    const_prop_gotoifnots(ir::IRCode)
+
+Replace all occurences in `ir` of `goto %n if not true` in block `b` with a `goto b + 1`,
+and all occurences of `goto %n if not false` with `goto n`, and make the adjustments to
+`ir` that this necessitates.
+"""
+function const_prop_gotoifnots!(ir::IRCode)
+    stmts = stmt(ir.stmts)
+    for (n, stmt) in enumerate(stmts)
+        if stmt isa GotoIfNot
+            _current_blk = findfirst(i -> i > n, ir.cfg.index)
+            current_blk = _current_blk === nothing ? length(ir.cfg.blocks) : _current_blk
+            if stmt.cond === true
+                stmts[n] = nothing
+                remove_edge!(ir, current_blk, stmt.dest)
+            elseif stmt.cond === false
+                stmts[n] = GotoNode(stmt.dest)
+                remove_edge!(ir, current_blk, current_blk + 1)
+            end
+        end
+    end
+    return ir
+end
+
+"""
+    remove_edge!(ir::IRCode, from::Int, to::Int)
+
+Removes an edge in `ir` from `from` to `to`. See implementation for what this entails.
+
+Note: this is slightly different from `Core.Compiler.kill_edge!`, in that it also updates
+`PhiNode`s in the `to` block. Moreover, the available methods of `remove_edge!` differ
+between 1.10 and 1.11, so we need something which is stable across both.
+"""
+function remove_edge!(ir::IRCode, from::Int, to::Int)
+
+    # Remove the `to` block from the `from` block's successor list.
+    succs = ir.cfg.blocks[from].succs
+    deleteat!(succs, findfirst(n -> n == to, succs))
+
+    # Remove the `from` block from the `to` block's predecessor list.
+    to_blk = ir.cfg.blocks[to]
+    preds = to_blk.preds
+    deleteat!(preds, findfirst(n -> n == from, preds))
+
+    # Remove the `from` edge from any `PhiNode`s at the start of next blk.
+    stmts = stmt(ir.stmts)
+    for n in to_blk.stmts
+        stmt = stmts[n]
+        if stmt isa PhiNode
+            edge_index = findfirst(i::Int32 -> i == from, stmt.edges)
+            edge_index === nothing && continue
+            deleteat!(stmt.edges, edge_index)
+            deleteat!(stmt.values, edge_index)
+        else
+            break
+        end
+    end
+    return nothing
+end
+
+"""
+    verify_no_constant_gotoifnots(ir::IRCode)
+
+Verify that we have successfully removed all instances of `goto %n if not true` and
+`goto %n if not false`, as these can be reduced to simpler nodes (namely, `GotoNode`s or
+"fallthrough"s). Moreover, removing them tends to yield performance improvements by reducing
+the amount of information Mooncake must keep in its block stacks.
+
+This is essentially just testing functionality for `const_prop_constant_gotoifnots`. This is
+usually run each time a rule is compiled, as it is cheap, and because it is hard to
+construct a convincing set of test cases which, if passed at test-time, would indicate we
+were done.
+"""
+function verify_no_constant_gotoifnots(ir::IRCode)
+    for (n, stmt) in enumerate(stmt(ir.stmts))
+        if stmt isa GotoIfNot
+            if stmt.cond isa Bool
+                println("Constant GotoIfNot found at SSA $n in the following IRCode:")
+                dislay(ir)
+                println()
+                throw(error("Bad IR, see above."))
+            end
+        end
+    end
 end

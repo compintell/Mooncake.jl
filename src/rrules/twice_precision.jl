@@ -12,11 +12,13 @@
 const TwicePrecisionFloat{P<:IEEEFloat} = TwicePrecision{P}
 const TWP{P} = TwicePrecisionFloat{P}
 
-@tt_effects tangent_type(P::Type{<:TWP}) = P
+@foldable tangent_type(P::Type{<:TWP}) = P
 
 zero_tangent_internal(::TWP{F}, ::StackDict) where {F} = TWP{F}(zero(F), zero(F))
 
-function randn_tangent_internal(rng::AbstractRNG, p::TWP{F}, ::StackDict) where {F}
+function randn_tangent_internal(
+    rng::AbstractRNG, p::TWP{F}, ::Union{Nothing,IdDict}
+) where {F}
     return TWP{F}(randn(rng, F), randn(rng, F))
 end
 
@@ -29,7 +31,7 @@ end
 
 increment_internal!!(::IncCache, t::T, s::T) where {T<:TWP} = t + s
 
-set_to_zero_internal!!(::IncCache, t::TWP) = zero_tangent_internal(t, nothing)
+set_to_zero_internal!!(::IncCache, t::TWP) = zero_tangent_internal(t, NoCache())
 
 _add_to_primal_internal(::MaybeCache, p::P, t::P, ::Bool) where {P<:TWP} = p + t
 
@@ -49,7 +51,7 @@ __verify_fdata_value(::IdDict{Any,Nothing}, ::P, ::P) where {P<:TWP} = nothing
 
 _verify_rdata_value(::P, ::P) where {P<:TWP} = nothing
 
-tangent_type(::Type{NoFData}, T::Type{<:TWP}) = T
+@foldable tangent_type(::Type{NoFData}, T::Type{<:TWP}) = T
 
 tangent(::NoFData, t::TWP) = t
 

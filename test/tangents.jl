@@ -89,6 +89,10 @@
     ]
         TestUtils.test_tangent_type(primal_type, expected_tangent_type)
     end
+    @testset "type-only tests" begin
+        TestUtils.test_tangent_type(Cstring, NoTangent)
+        TestUtils.test_tangent_type(Cwstring, NoTangent)
+    end
 
     @testset "$(typeof(data))" for (interface_only, data...) in
                                    Mooncake.tangent_test_cases()
@@ -119,6 +123,9 @@
 
             # Homogeneous type optimisation.
             @test @inferred(increment_field!!((5.0, 4.0), 3.0, 2)) == (5.0, 7.0)
+
+            # Homogeneous type optimisations scales to large `Tuple`s.
+            @inferred(increment_field!!(Tuple(zeros(1_000)), 5.0, 3))
         end
         @testset "NamedTuple" begin
             nt = NoTangent()

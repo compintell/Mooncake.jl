@@ -33,12 +33,12 @@ _**The Solution**_
 Check that the types of the fdata / rdata associated to arguments are exactly what `tangent_type` / `fdata_type` / `rdata_type` require upon entry to / exit from rules and pullbacks.
 
 This is implemented via `DebugRRule`:
-```@docs
+```@docs; canonical=false
 Mooncake.DebugRRule
 ```
 
 You can straightforwardly enable it when building a rule via the `debug_mode` kwarg in the following:
-```@docs
+```@docs; canonical=false
 Mooncake.build_rrule
 ```
 
