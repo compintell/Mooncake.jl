@@ -2,8 +2,7 @@ module MooncakeFluxExt
 
 using Mooncake, Flux
 using Base: IEEEFloat
-import Mooncake:
-    DefaultCtx, rrule!!, @is_primitive, @mooncake_overlay, CoDual, zero_fcodual, NoRData
+import Mooncake: DefaultCtx, rrule!!, @is_primitive, CoDual, zero_fcodual, NoRData
 
 @is_primitive DefaultCtx Tuple{
     typeof(Flux.Losses.mse),Array{P},Array{P}
