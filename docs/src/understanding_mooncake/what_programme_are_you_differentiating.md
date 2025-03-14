@@ -350,10 +350,50 @@ Finally, return a tuple containing the gradients w.r.t. each of the arguments to
 There are other equivalent ways to implement the above -- see e.g. [Zygote Implementation](@ref) below.
 If nothing else, the derivations in this section provide a clear route to explain what goes on there.
 
+At this point, we have enough to understand the bulk of many AD systems.
+If you squint, the above provides a good starting point from which to understand what [Zygote.jl](https://github.com/FluxML/Zygote.jl), [ReverseDiff.jl](https://github.com/JuliaDiff/ReverseDiff.jl), [PyTorch](https://pytorch.org), and [JAX](https://github.com/jax-ml/jax) do, albeit each of these systems has their own particular way of achieving the above (JAX in particular).
+The defining property of each of these systems is that they (for the most part) involve pure-functions.
 
-## Part 3: Computational Graphs of Mutating Functions
+## Part 3: Applying Sequences of Mutating Functions
 
-## Part 4: Computational Graphs of Mutating Functions with Aliasing
+Julia `function` can modify their inputs.
+For example, consider
+```julia
+function f!(x::Vector{Float64})
+    x .= 2 .* x
+    return nothing
+end
+```
+This `function` mutates (modifies / changes) the values stored in each element of `x`.
+In order to model this kind of behaviour, we introduce the notion of state, as discussed in [Mooncake.jl's Rule System](@ref).
+In particular, we associate to `f!` a differentiable function ``f : \mathcal{X} \to \mathcal{X}``, defined such that if `x` is associated to value ``x`` prior to running `f!`, it has value ``f(x)`` after running `f!`.
+We call ``f`` the _transition_ _function_ associated to `f!`.
+We now have something to differentiate.
+
+We first study `function`s of the following form:
+```julia
+function f!(x::Vector{Float64})
+    f_1!(x)
+    f_2!(x)
+    ...
+    f_N!(x)
+    return nothing
+end
+```
+We associate to each `f_n!` its transition function ``f_n : \mathcal{X} \to \mathcal{X}``, where ``\mathcal{X} := \mathbb{R}^D`` (assume for now that the `length(x)` is not modified by any of the operations).
+The transition function ``f`` associated to `f` is simply
+```math
+f := f_N \circ \dots \circ f_1
+```
+
+
+
+
+
+
+## Part 4: Computational Graphs of Mutating Functions
+
+## Part 5: Computational Graphs of Mutating Functions with Aliasing
 
 
 [^implementing_mathematics_on_a_computer]: put differently, suppose that someone wrote down some equations in a paper or textbook, and gave you a piece of code which they claim is an implementation of these equations (e.g. a neural network, a probabilistic model, an ODE, etc). Under what conditions would you be satisfied that the implementation was correct? We all do this in informal ways all of the time. I propose that you apply the same set of standards here: we have written down some equations for the adjoints, and are claiming that our rule system is an implementation of these. The fact that we arrived at this set of equations by modelling a computer programme is neither here nor there for this step of the process.
