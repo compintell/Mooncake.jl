@@ -1,3 +1,6 @@
+@zero_adjoint MinimalCtx Tuple{Type{<:MersenneTwister},Any}
+@zero_adjoint MinimalCtx Tuple{Type{<:Xoshiro},Union{Integer,AbstractString}}
+
 const KnownRNGs = Union{MersenneTwister,RandomDevice,TaskLocalRNG,Xoshiro}
 @zero_adjoint MinimalCtx Tuple{typeof(randn),KnownRNGs}
 @zero_adjoint MinimalCtx Tuple{typeof(randexp),KnownRNGs}
@@ -27,6 +30,13 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:random})
     rngs = [MersenneTwister(123), TaskLocalRNG(), Xoshiro(123)]
     all_rngs = vcat(rngs, RandomDevice())
     test_cases = vcat(
+
+        # Random number generator construction.
+        # There are some undefined fields at construction, so we cannot run equality tests.
+        (true, :none, nothing, MersenneTwister, 123),
+        (true, :none, nothing, Xoshiro, 123),
+
+        # Random number generation.
         map_prod([randn, randexp], all_rngs) do (f, rng)
             (true, :stability_and_allocs, nothing, f, rng)
         end...,
@@ -42,6 +52,8 @@ end
 
 function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:random})
     test_cases = Any[
+
+        # Random number generation.
         (false, :none, nothing, x -> x * randn(Xoshiro(123)), 3.0),
         (false, :none, nothing, x -> x * randexp(Xoshiro(123)), 3.0),
         (false, :none, nothing, x -> x * randn(Xoshiro(123), Float32), 3.0),
@@ -50,6 +62,16 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:random})
         (false, :none, nothing, x -> x .* randexp!(Xoshiro(123), x), randn(9)),
         (false, :none, nothing, x -> x .* randn(Xoshiro(123), size(x)...), randn(9)),
         (false, :none, nothing, x -> x .* randexp(Xoshiro(123), size(x)...), randn(9)),
+
+        # RNG construction.
+        (false, :none, nothing, x -> randn(MersenneTwister(x)), 123),
+        (false, :none, nothing, x -> randn(Xoshiro(x)), 123),
+        (false, :none, nothing, x -> randn(Random.seed!(TaskLocalRNG(), x)), 123),
+
+        # It is not possible to make the numbers produced by a `RandomDevice` be
+        # deterministic, because it gets is randomness "from the device". As such, we cannot
+        # test that the numbers coming out of this are consistent, just that it runs.
+        (true, :none, nothing, () -> randn(RandomDevice())),
     ]
     return test_cases, Any[]
 end
