@@ -117,7 +117,7 @@ end
 
 const REVERSE_AFFINITY = true  # stick the new instruction in the previous CFG block (incremental insertion cannot be done before "where we are")
 
-function MyInstruction(stmt)
+function new_instruction(stmt)
     return CC.NewInstruction(
         stmt,
         Any,
@@ -168,7 +168,7 @@ function modify_fwd_ad_stmts!(
         dual_ir, SSAValue(dual_ssa), Expr(:call, _primal, inc_args(dual_stmt).cond)
     )
     # reinsert the GotoIfNot right after the call to primal
-    new_gotoifnot_inst = MyInstruction(Core.GotoIfNot(SSAValue(dual_ssa), dual_stmt.dest))
+    new_gotoifnot_inst = new_instruction(Core.GotoIfNot(SSAValue(dual_ssa), dual_stmt.dest))
     CC.insert_node_here!(dual_ir, new_gotoifnot_inst, REVERSE_AFFINITY)
     return nothing
 end
@@ -202,7 +202,7 @@ function modify_fwd_ad_stmts!(
             dual_ir, SSAValue(dual_ssa), Expr(:call, _dual, inc_args(dual_stmt).val)
         )
         # return the result from the previous Dual conversion
-        new_return_inst = MyInstruction(ReturnNode(SSAValue(dual_ssa)))
+        new_return_inst = new_instruction(ReturnNode(SSAValue(dual_ssa)))
         CC.insert_node_here!(dual_ir, new_return_inst, REVERSE_AFFINITY)
     else
         # a ReturnNode without a val is an unreachable
@@ -308,7 +308,7 @@ function modify_fwd_ad_stmts!(
         # args[1] is a Symbol, args[2] is the condition which must be primalized
         primal_cond = Expr(:call, _primal, inc_args(stmt).args[2])
         replace_call!(dual_ir, SSAValue(dual_ssa), primal_cond)
-        new_undef_inst = MyInstruction(
+        new_undef_inst = new_instruction(
             Expr(:throw_undef_if_not, stmt.args[1], SSAValue(dual_ssa))
         )
         CC.insert_node_here!(dual_ir, new_undef_inst, REVERSE_AFFINITY)
