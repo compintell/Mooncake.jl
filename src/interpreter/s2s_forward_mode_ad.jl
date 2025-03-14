@@ -80,11 +80,7 @@ function generate_dual_ir(
     # - add one for the rule in front
     # - convert the rest to dual types
     for (a, P) in enumerate(primal_ir.argtypes)
-        if P isa DataType
-            dual_ir.argtypes[a] = dual_type(P)
-        elseif P isa Core.Const
-            dual_ir.argtypes[a] = dual_type(_typeof(P.val))
-        end
+        dual_ir.argtypes[a] = dual_type(CC.widenconst(P))
     end
     pushfirst!(dual_ir.argtypes, Any)
 
