@@ -1,5 +1,5 @@
 # Contains a ccall, which must be avoided.
-@zero_adjoint MinimalCtx Tuple{Type{<:MersenneTwister},Any}
+@zero_adjoint MinimalCtx Tuple{Type{MersenneTwister},Any}
 
 const KnownRNGs = Union{MersenneTwister,RandomDevice,TaskLocalRNG,Xoshiro}
 @zero_adjoint MinimalCtx Tuple{typeof(randn),KnownRNGs}
