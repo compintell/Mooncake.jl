@@ -113,7 +113,9 @@ end
 # code duplication, but it wound up not being any cleaner than this copy + pasted version.
 
 @is_primitive MinimalCtx Tuple{typeof(lgetfield),Any,Val,Val}
-@inline function frule!!(::Dual{typeof(lgetfield)}, x::Dual, ::Dual{Val{f}}, ::Dual{Val{order}}) where {f,order}
+@inline function frule!!(
+    ::Dual{typeof(lgetfield)}, x::Dual, ::Dual{Val{f}}, ::Dual{Val{order}}
+) where {f,order}
     P = typeof(primal(x))
     primal_field = getfield(primal(x), f, order)
     tangent_field = if tangent_type(P) === NoTangent
