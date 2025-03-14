@@ -359,16 +359,16 @@ The defining property of each of these systems is that they (for the most part) 
 Julia `function` can modify their inputs.
 For example, consider
 ```julia
-function f!(x::Vector{Float64})
-    x .= 2 .* x
+function square!(x::Vector{Float64})
+    x .= x .^ 2
     return nothing
 end
 ```
 This `function` mutates (modifies / changes) the values stored in each element of `x`.
 In order to model this kind of behaviour, we introduce the notion of state, as discussed in [Mooncake.jl's Rule System](@ref).
-In particular, we associate to `f!` a differentiable function ``f : \mathcal{X} \to \mathcal{X}``, defined such that if `x` is associated to value ``x`` prior to running `f!`, it has value ``f(x)`` after running `f!`.
+In general, we associate to a Julia `function` `f!` a differentiable function ``f : \mathcal{X} \to \mathcal{X}``, defined such that if `x` is associated to value ``x`` prior to running `f!`, it has value ``f(x)`` after running `f!`.
 We call ``f`` the _transition_ _function_ associated to `f!`.
-We now have something to differentiate.
+In the case of `square!`, the transition function is ``f(x) = x \odot x``.
 
 We first study `function`s of the following form:
 ```julia
@@ -381,14 +381,85 @@ function f!(x::Vector{Float64})
 end
 ```
 We associate to each `f_n!` its transition function ``f_n : \mathcal{X} \to \mathcal{X}``, where ``\mathcal{X} := \mathbb{R}^D`` (assume for now that the `length(x)` is not modified by any of the operations).
-The transition function ``f`` associated to `f` is simply
+The transition function ``f : \mathcal{X} \to \mathcal{X}`` associated to `f!` is simply
 ```math
 f := f_N \circ \dots \circ f_1
 ```
+Therefore the adjoint of the derivative is
+```math
+D[f, x]^\ast = D[f_1, x_1]^\ast \circ \dots \circ D[f_N, x_N]^\ast,
+```
+where ``x_{n+1} := f_n(x_n)`` and ``x_1 := x`` as usual.
+How might we implement this?
+The crucial difference from before is that we lose access to some (or perhaps all) of e.g. ``x_n`` when we apply `f_n!` to put `x` into the state with value ``x_{n+1}``.
+This is important in the case of `square!`.
+To see this, first note that the derivative of its transition function is ``D[f, x](\dot{x}) = 2 x \odot \dot{x}``, with corresponding adjoint ``D[f, x]^\ast(\bar{y}) = 2 \bar{y} \odot x``.
+The fact that ``x`` appears in the adjoint expression means that we need access to the value that the programme variable `x` takes _before_ running `square!`, but this is overwritten when we run `square!`.
+The same consideration applies to each `f_n` in `f!` -- if the adjoints of their transition functions involve ``x``, we need access to the value that `x` took at the point just before running `f_n!`.
 
+We can solve this problem by insisting that the reverse-pass of a rule for a `function` return its arguments to the state that they were in prior to running the `function`, thus granting rules license to safely assume that all state is "as they left it" from the forwards-pass.
 
+Under this framework, a rule for `square!` might be something like
+```julia
+function rule(::typeof(square!), x::CoDual{Vector{Float64}})
+    # Save current value of `x` for use in the reverse-pass.
+    x_copy = copy(primal(x))
 
+    # Run primal operation.
+    square!(x)
 
+    # On entry, x̄ is the gradient associated to the value of `x` after running `square!`.
+    function square!_reverse()
+
+        # Reset `x` to have the value it took before running the forwards pass.
+        primal(x) .= x_copy
+
+        # Modify gradient to correspond to result of adjoint of transition function.
+        tangent(x) .= 2 .* primal(x)
+
+        return nothing
+    end
+
+    return nothing, square!_reverse
+end
+```
+where `CoDual{Vector{Float64}}` is a `struct` containing the value associated to `x`, retrieved using `primal(x)`, and memory into which its gradients can be written, retrieved using `tangent(x)`.
+It has value equal to the input to the transition function before running the reverse-pass, and value equal to the application of the adjoint to this input after running the reverse-pass.
+
+So to use the above `rule` to compute the adjoint of the transition function associated to `square!`, you might do the following:
+1. initialise `x = CoDual(x, zeros(x))`,
+2. compute `_, square!_reverse = rule(square!, x)`,
+3. set `tangent(x)` equal to the gradient you wish to use as the input to the adjoint of the transition function associated to `square!`,
+4. run `square!_reverse`, and
+5. retrieve the gradient `tangent(x)`.
+
+Notice that this has a distinctly different style to before.
+The forwards-pass happens through mutation of the argument `x`, and the reverse-pass happens entirely as a side-effect of running the closure `square!_reverse`.
+
+Similarly, we can implement a rule for `f!` as follows:
+```julia
+function rule(::typeof(f!), x::CoDual{Vector{Float64}})
+
+    # Run forwards-pass.
+    _, f_1!_reverse = rule(f_1!, x)
+    _, f_2!_reverse = rule(f_2!, x)
+    ...
+    _, f_N!_reverse = rule(f_N!, x)
+
+    # Define reverse-pass -- just run all rules in reverse.
+    function f!_reverse()
+        f_N!_reverse()
+        ...
+        f_2!_reverse()
+        f_1!_reverse()
+        return nothing
+    end
+
+    # Return nothing, and the new rule.
+    return nothing, f!_reverse
+end
+```
+This rule satisfies our requirement that all modifications to `x` are un-done by `f!_reverse` inductively -- we assume that each `f_n!_reverse` satisfies this require.
 
 
 ## Part 4: Computational Graphs of Mutating Functions
