@@ -406,7 +406,7 @@ Convenience functionality to assist in using `ChainRulesCore.rrule`s to write `r
 ```jldoctest
 julia> using Mooncake: @from_rrule, DefaultCtx, rrule!!, zero_fcodual, TestUtils
 
-julia> using ChainRulesCore
+julia> import ChainRulesCore
 
 julia> foo(x::Real) = 5x;
 
@@ -430,7 +430,7 @@ Test Passed
 ```jldoctest
 julia> using Mooncake: @from_rrule, DefaultCtx, rrule!!, zero_fcodual, TestUtils
 
-julia> using ChainRulesCore
+julia> import ChainRulesCore
 
 julia> foo(x::Real; cond::Bool) = cond ? 5x : 4x;
 

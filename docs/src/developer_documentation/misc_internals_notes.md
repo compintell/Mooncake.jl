@@ -132,7 +132,7 @@ Last checked: 09/02/2025, Julia v1.10.8 / v1.11.3, Mooncake 0.4.82.
 Mooncake handles recursive function calls by delaying code generation for generic function calls until the first time that they are actually run.
 The docstring below contains a thorough explanation:
 
-```@docs
+```@docs; canonical=false
 Mooncake.LazyDerivedRule
 ```
 

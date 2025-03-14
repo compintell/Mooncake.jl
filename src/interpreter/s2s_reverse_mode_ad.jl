@@ -354,6 +354,32 @@ function comms_channel(info::ADStmtInfo)
 end
 
 """
+    inc_args(stmt)
+
+Increment by `1` the `n` field of any `Argument`s present in `stmt`.
+Used in `make_ad_stmts!`.
+"""
+inc_args(x::Expr) = Expr(x.head, map(__inc, x.args)...)
+inc_args(x::ReturnNode) = isdefined(x, :val) ? ReturnNode(__inc(x.val)) : x
+inc_args(x::Union{GotoIfNot,IDGotoIfNot}) = typeof(x)(__inc(x.cond), x.dest)
+inc_args(x::Union{GotoNode,IDGotoNode}) = x
+function inc_args(x::T) where {T<:Union{IDPhiNode,PhiNode}}
+    new_values = Vector{Any}(undef, length(x.values))
+    for n in eachindex(x.values)
+        if isassigned(x.values, n)
+            new_values[n] = __inc(x.values[n])
+        end
+    end
+    return T(x.edges, new_values)
+end
+inc_args(::Nothing) = nothing
+inc_args(x::GlobalRef) = x
+inc_args(x::PiNode) = PiNode(__inc(x.val), x.typ)
+
+__inc(x::Argument) = Argument(x.n + 1)
+__inc(x) = x
+
+"""
     make_ad_stmts!(inst::NewInstruction, line::ID, info::ADInfo)::ADStmtInfo
 
 Every line in the primal code is associated to one or more lines in the forwards-pass of AD,
@@ -1489,7 +1515,7 @@ function pullback_ir(
     # avoid annoying the Julia compiler.
     blks = vcat(entry_block, main_blocks, exit_block)
     pb_ir = BBCode(blks, arg_types, ir.sptypes, ir.linetable, ir.meta)
-    return remove_unreachable_blocks!(_sort_blocks!(pb_ir))
+    return remove_unreachable_blocks!(sort_blocks!(pb_ir))
 end
 
 """

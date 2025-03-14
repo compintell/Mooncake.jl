@@ -175,10 +175,7 @@ _copy!!(::Number, src::Number) = src
 """
     prepare_pullback_cache(f, x...)
 
-WARNING: experimental functionality. Interface subject to change without warning!
-
-Returns a `cache` which can be passed to `value_and_gradient!!`. See the docstring for
-`Mooncake.value_and_gradient!!` for more info.
+Returns a cache used with [`value_and_pullback!!`](@ref). See that function for more info.
 """
 function prepare_pullback_cache(fx...; kwargs...)
 
@@ -200,18 +197,46 @@ end
 """
     value_and_pullback!!(cache::Cache, ȳ, f, x...)
 
-WARNING: experimental functionality. Interface subject to change without warning!
+!!! info
+    If `f(x...)` returns a scalar, you should use [`value_and_gradient!!`](@ref), not this
+    function.
 
-Like other methods of `value_and_pullback!!`, but makes use of the `cache` object returned
-by [`prepare_pullback_cache`](@ref) in order to avoid having to re-allocate various tangent
-objects repeatedly. You must ensure that `f` and `x` are the same types and sizes as those
-used to construct `cache`.
+Computes a 2-tuple. The first element is `f(x...)`, and the second is a tuple containing the
+pullback of `f` applied to `ȳ`. The first element is the component of the pullback
+associated to any fields of `f`, the second w.r.t the first element of `x`, etc.
 
-Warning: `cache` owns any mutable state returned by this function, meaning that mutable
-components of values returned by it will be mutated if you run this function again with
-different arguments. Therefore, if you need to keep the values returned by this function
-around over multiple calls to this function with the same `cache`, you should take a copy
-(using `copy` or `deepcopy`) of them before calling again.
+There are no restrictions on what `y = f(x...)` is permitted to return. However, `ȳ` must be
+an acceptable tangent for `y`. This means that, for example, it must be true that
+`tangent_type(typeof(y)) == typeof(ȳ)`.
+
+As with all functionality in Mooncake, if `f` modifes itself or `x`, `value_and_gradient!!`
+will return both to their original state as part of the process of computing the gradient.
+
+!!! info
+    `cache` must be the output of [`prepare_pullback_cache`](@ref), and (fields of) `f` and
+    `x` must be of the same size and shape as those used to construct the `cache`. This is
+    to ensure that the gradient can be written to the memory allocated when the `cache` was
+    built.
+
+!!! warning
+    `cache` owns any mutable state returned by this function, meaning that mutable
+    components of values returned by it will be mutated if you run this function again with
+    different arguments. Therefore, if you need to keep the values returned by this function
+    around over multiple calls to this function with the same `cache`, you should take a
+    copy (using `copy` or `deepcopy`) of them before calling again.
+
+# Example Usage
+```jldoctest
+f(x, y) = sum(x .* y)
+x = [2.0, 2.0]
+y = [1.0, 1.0]
+cache = Mooncake.prepare_pullback_cache(f, x, y)
+Mooncake.value_and_pullback!!(cache, 1.0, f, x, y)
+
+# output
+
+(4.0, (NoTangent(), [1.0, 1.0], [2.0, 2.0]))
+```
 """
 function value_and_pullback!!(cache::Cache, ȳ, f::F, x::Vararg{Any,N}) where {F,N}
     tangents = tuple_map(set_to_zero!!, cache.tangents)
@@ -222,10 +247,7 @@ end
 """
     prepare_gradient_cache(f, x...)
 
-WARNING: experimental functionality. Interface subject to change without warning!
-
-Returns a `cache` which can be passed to `value_and_gradient!!`. See the docstring for
-`Mooncake.value_and_gradient!!` for more info.
+Returns a cache used with [`value_and_gradient!!`](@ref). See that function for more info.
 """
 function prepare_gradient_cache(fx...; kwargs...)
     rule = build_rrule(fx...; kwargs...)
@@ -236,20 +258,42 @@ function prepare_gradient_cache(fx...; kwargs...)
 end
 
 """
-    value_and_gradient!!(cache::Cache, fx::Vararg{Any, N}) where {N}
+    value_and_gradient!!(cache::Cache, f, x...)
 
-WARNING: experimental functionality. Interface subject to change without warning!
+Computes a 2-tuple. The first element is `f(x...)`, and the second is a tuple containing the
+gradient of `f` w.r.t. each argument. The first element is the gradient w.r.t any
+differentiable fields of `f`, the second w.r.t the first element of `x`, etc.
 
-Like other methods of `value_and_gradient!!`, but makes use of the `cache` object returned
-by [`prepare_gradient_cache`](@ref) in order to avoid having to re-allocate various tangent
-objects repeatedly. You must ensure that `f` and `x` are the same types and sizes as those
-used to construct `cache`.
+Assumes that `f` returns a `Union{Float16, Float32, Float64}`.
 
-Warning: `cache` owns any mutable state returned by this function, meaning that mutable
-components of values returned by it will be mutated if you run this function again with
-different arguments. Therefore, if you need to keep the values returned by this function
-around over multiple calls to this function with the same `cache`, you should take a copy
-(using `copy` or `deepcopy`) of them before calling again.
+As with all functionality in Mooncake, if `f` modifes itself or `x`, `value_and_gradient!!`
+will return both to their original state as part of the process of computing the gradient.
+
+!!! info
+    `cache` must be the output of [`prepare_gradient_cache`](@ref), and (fields of) `f` and
+    `x` must be of the same size and shape as those used to construct the `cache`. This is
+    to ensure that the gradient can be written to the memory allocated when the `cache` was
+    built.
+
+!!! warning
+    `cache` owns any mutable state returned by this function, meaning that mutable
+    components of values returned by it will be mutated if you run this function again with
+    different arguments. Therefore, if you need to keep the values returned by this function
+    around over multiple calls to this function with the same `cache`, you should take a
+    copy (using `copy` or `deepcopy`) of them before calling again.
+
+# Example Usage
+```jldoctest
+f(x, y) = sum(x .* y)
+x = [2.0, 2.0]
+y = [1.0, 1.0]
+cache = prepare_gradient_cache(f, x, y)
+value_and_gradient!!(cache, f, x, y)
+
+# output
+
+(4.0, (NoTangent(), [1.0, 1.0], [2.0, 2.0]))
+```
 """
 function value_and_gradient!!(cache::Cache, f::F, x::Vararg{Any,N}) where {F,N}
     coduals = tuple_map(CoDual, (f, x...), tuple_map(set_to_zero!!, cache.tangents))

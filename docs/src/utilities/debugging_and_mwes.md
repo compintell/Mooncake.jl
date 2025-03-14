@@ -5,7 +5,7 @@ In order to debug what is going on when this happens, or to produce an MWE, it i
 
 We recommend making use of Mooncake.jl's testing functionality to generate your test cases:
 
-```@docs
+```@docs; canonical=false
 Mooncake.TestUtils.test_rule
 ```
 

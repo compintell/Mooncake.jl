@@ -110,7 +110,8 @@ import ..Mooncake:
     rdata,
     increment_rdata!!,
     zero_fcodual,
-    zero_dual
+    zero_dual,
+    NoTangent
 
 using Core.Intrinsics: atomic_pointerref
 

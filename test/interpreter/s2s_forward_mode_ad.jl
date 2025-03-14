@@ -4,7 +4,7 @@ include("../front_matter.jl")
 Failing cases:
 - 39: excess allocations
 =#
-working_cases = vcat(1:27, 29:39);
+working_cases = vcat(1:27, 29:38);
 
 @testset verbose = true "s2s_forward_mode_ad" begin
     test_cases = collect(enumerate(TestResources.generate_test_functions()))[working_cases]

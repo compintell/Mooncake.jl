@@ -23,7 +23,10 @@ using Mooncake:
     generate_hand_written_rrule!!_test_cases,
     generate_derived_rrule!!_test_cases,
     TestUtils,
-    _typeof
+    _typeof,
+    primal,
+    tangent,
+    zero_codual
 
 using Mooncake.TestUtils: _deepcopy
 
@@ -114,7 +117,7 @@ function build_turing_problem()
     ctx = DynamicPPL.DefaultContext()
     vi = DynamicPPL.SimpleVarInfo(model)
     vi_linked = DynamicPPL.link(vi, model)
-    ldp = DynamicPPL.LogDensityFunction(vi_linked, model, ctx)
+    ldp = DynamicPPL.LogDensityFunction(model, vi_linked, ctx)
     test_function = Base.Fix1(DynamicPPL.LogDensityProblems.logdensity, ldp)
     d = DynamicPPL.LogDensityProblems.dimension(ldp)
     return test_function, randn(rng, d)
@@ -181,6 +184,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
             # Benchmark primal.
             @info "Primal"
             primals = map(x -> x isa CoDual ? primal(x) : x, args)
+            include_other_frameworks && GC.gc(true)
             suite["primal"] = Chairmarks.benchmark(
                 () -> primals,
                 primals -> (primals[1], _deepcopy(primals[2:end])),
@@ -194,6 +198,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
             rule = Mooncake.build_rrule(args...)
             coduals = map(x -> x isa CoDual ? x : zero_codual(x), args)
             to_benchmark(rule, coduals...)
+            include_other_frameworks && GC.gc(true)
             suite["mooncake"] = Chairmarks.benchmark(
                 () -> (rule, coduals),
                 identity,
@@ -205,6 +210,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
             if include_other_frameworks
                 if should_run_benchmark(Val(:zygote), args...)
                     @info "Zygote"
+                    GC.gc(true)
                     suite["zygote"] = @be(
                         _,
                         _,
@@ -219,6 +225,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
                     tape = ReverseDiff.GradientTape(primals[1], primals[2:end])
                     compiled_tape = ReverseDiff.compile(tape)
                     result = map(x -> randn(size(x)), primals[2:end])
+                    GC.gc(true)
                     suite["rd"] = @be(
                         _,
                         _,
@@ -232,6 +239,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
                     @info "Enzyme"
                     _rand_similiar(x) = x isa Real ? randn() : randn(size(x))
                     dup_args = map(x -> Duplicated(x, _rand_similiar(x)), primals[2:end])
+                    GC.gc(true)
                     suite["enzyme"] = @be(
                         _,
                         _,

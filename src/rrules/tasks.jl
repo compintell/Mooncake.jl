@@ -9,7 +9,7 @@ mutable struct TaskTangent end
 
 tangent_type(::Type{Task}) = TaskTangent
 
-function zero_tangent_internal(p::Task, stackdict::Any)
+function zero_tangent_internal(p::Task, stackdict::StackDict)
     if haskey(stackdict, p)
         return stackdict[p]::TaskTangent
     else

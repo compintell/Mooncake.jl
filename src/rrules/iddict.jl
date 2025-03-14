@@ -1,8 +1,8 @@
 # We're going to use `IdDict`s to represent tangents for `IdDict`s.
 
-@tt_effects tangent_type(::Type{<:IdDict{K,V}}) where {K,V} = IdDict{K,tangent_type(V)}
+@foldable tangent_type(::Type{<:IdDict{K,V}}) where {K,V} = IdDict{K,tangent_type(V)}
 
-function zero_tangent_internal(d::P, stackdict::Any) where {P<:IdDict}
+function zero_tangent_internal(d::P, stackdict::StackDict) where {P<:IdDict}
     T = tangent_type(P)
     if haskey(stackdict, d)
         return stackdict[d]::T
@@ -106,7 +106,7 @@ rdata(t::IdDict) = NoRData()
 
 __verify_fdata_value(::IdDict{Any,Nothing}, p::IdDict, f::IdDict) = nothing
 
-tangent_type(::Type{T}, ::Type{NoRData}) where {T<:IdDict} = T
+@foldable tangent_type(::Type{T}, ::Type{NoRData}) where {T<:IdDict} = T
 tangent(f::IdDict, ::NoRData) = f
 
 # All of the rules in here are provided in order to avoid nasty `:ccall`s, and to support

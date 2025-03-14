@@ -14,9 +14,9 @@
 
 const Maybe{T} = Union{Nothing,T}
 
-@tt_effects tangent_type(::Type{<:Memory{P}}) where {P} = Memory{tangent_type(P)}
+@foldable tangent_type(::Type{<:Memory{P}}) where {P} = Memory{tangent_type(P)}
 
-function zero_tangent_internal(x::Memory{P}, stackdict::Maybe{IdDict}) where {P}
+function zero_tangent_internal(x::Memory{P}, stackdict::StackDict) where {P}
     T = tangent_type(typeof(x))
 
     # If no stackdict is provided, then the caller promises that there is no need for it.
@@ -132,7 +132,7 @@ end
 
 # FData / RData Interface Implementation
 
-tangent_type(::Type{F}, ::Type{NoRData}) where {F<:Memory} = F
+@foldable tangent_type(::Type{F}, ::Type{NoRData}) where {F<:Memory} = F
 
 tangent(f::Memory, ::NoRData) = f
 
@@ -150,7 +150,7 @@ end
 # Array -- tangent interface implementation
 #
 
-@inline function zero_tangent_internal(x::Array, stackdict::Maybe{IdDict})
+@inline function zero_tangent_internal(x::Array, stackdict::StackDict)
     T = tangent_type(typeof(x))
 
     # If we already have a tangent for this, just return that.
@@ -265,7 +265,9 @@ function rrule!!(
         # Increment gradients.
         @inbounds for i in 1:n
             src_ref = memoryref(src.dx, i)
-            src_ref[] = increment!!(src_ref[], memoryref(tmp, i)[])
+            if isassigned(src_ref)
+                src_ref[] = increment!!(src_ref[], memoryref(tmp, i)[])
+            end
         end
 
         return ntuple(_ -> NoRData(), 4)
@@ -279,7 +281,7 @@ end
 
 # Tangent Interface Implementation
 
-@tt_effects tangent_type(::Type{<:MemoryRef{P}}) where {P} = MemoryRef{tangent_type(P)}
+@foldable tangent_type(::Type{<:MemoryRef{P}}) where {P} = MemoryRef{tangent_type(P)}
 
 #=
 Given a new chunk of memory `m`, construct a `MemoryRef` which points to the same relative
@@ -298,7 +300,7 @@ function construct_ref(x::MemoryRef, m::Memory)
     return isempty(m) ? memoryref(m) : memoryref(m, Core.memoryrefoffset(x))
 end
 
-function zero_tangent_internal(x::MemoryRef, stackdict::Maybe{IdDict})
+function zero_tangent_internal(x::MemoryRef, stackdict::StackDict)
     return construct_ref(x, zero_tangent_internal(x.mem, stackdict))
 end
 
@@ -351,7 +353,7 @@ fdata_type(::Type{<:MemoryRef{T}}) where {T} = MemoryRef{T}
 
 rdata_type(::Type{<:MemoryRef}) = NoRData
 
-tangent_type(::Type{<:MemoryRef{T}}, ::Type{NoRData}) where {T} = MemoryRef{T}
+@foldable tangent_type(::Type{<:MemoryRef{T}}, ::Type{NoRData}) where {T} = MemoryRef{T}
 
 tangent(f::MemoryRef, ::NoRData) = f
 
@@ -557,7 +559,7 @@ function rrule!!(
     ::CoDual{Type{Memory{P}}}, ::CoDual{UndefInitializer}, n::CoDual{Int}
 ) where {P}
     x = Memory{P}(undef, primal(n))
-    dx = zero_tangent_internal(x, nothing)
+    dx = zero_tangent_internal(x, NoCache())
     return CoDual(x, dx), NoPullback((NoRData(), NoRData(), NoRData()))
 end
 
@@ -827,6 +829,15 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:memory})
             unsafe_copyto!,
             [randn(rng, 10), randn(rng, 5)].ref,
             [randn(rng, 10), randn(rng, 3)].ref,
+            2,
+        ),
+        (
+            false,
+            :none,
+            nothing,
+            unsafe_copyto!,
+            memoryref(fill!(Memory{Any}(undef, 3), 4.0), 1),
+            memoryref(Memory{Any}(undef, 2)),
             2,
         ),
 
