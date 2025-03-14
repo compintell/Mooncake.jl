@@ -1,5 +1,5 @@
+# Contains a ccall, which must be avoided.
 @zero_adjoint MinimalCtx Tuple{Type{<:MersenneTwister},Any}
-@zero_adjoint MinimalCtx Tuple{Type{<:Xoshiro},Union{Integer,AbstractString}}
 
 const KnownRNGs = Union{MersenneTwister,RandomDevice,TaskLocalRNG,Xoshiro}
 @zero_adjoint MinimalCtx Tuple{typeof(randn),KnownRNGs}
@@ -34,7 +34,6 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:random})
         # Random number generator construction.
         # There are some undefined fields at construction, so we cannot run equality tests.
         (true, :none, nothing, MersenneTwister, 123),
-        (true, :none, nothing, Xoshiro, 123),
 
         # Random number generation.
         map_prod([randn, randexp], all_rngs) do (f, rng)
@@ -65,7 +64,7 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:random})
 
         # RNG construction.
         (false, :none, nothing, x -> randn(MersenneTwister(x)), 123),
-        (false, :none, nothing, x -> randn(Xoshiro(x)), 123),
+        (false, :none, nothing, Xoshiro, 123),
         (false, :none, nothing, x -> randn(Random.seed!(TaskLocalRNG(), x)), 123),
 
         # It is not possible to make the numbers produced by a `RandomDevice` be
