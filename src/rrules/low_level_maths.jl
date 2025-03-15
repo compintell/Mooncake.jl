@@ -35,6 +35,10 @@ for (M, f, arity) in DiffRules.diffrules(; filter_modules=nothing)
 end
 
 @is_primitive MinimalCtx Tuple{typeof(sin),<:IEEEFloat}
+function frule!!(::Dual{typeof(sin)}, x::Dual{<:IEEEFloat})
+    s, c = sincos(primal(x))
+    return Dual(s, c * tangent(x))
+end
 function rrule!!(::CoDual{typeof(sin),NoFData}, x::CoDual{P,NoFData}) where {P<:IEEEFloat}
     s, c = sincos(primal(x))
     sin_pullback!!(dy::P) = NoRData(), dy * c
@@ -42,6 +46,10 @@ function rrule!!(::CoDual{typeof(sin),NoFData}, x::CoDual{P,NoFData}) where {P<:
 end
 
 @is_primitive MinimalCtx Tuple{typeof(cos),<:IEEEFloat}
+function frule!!(::Dual{typeof(cos)}, x::Dual{<:IEEEFloat})
+    s, c = sincos(primal(x))
+    return Dual(c, -s * tangent(x))
+end
 function rrule!!(::CoDual{typeof(cos),NoFData}, x::CoDual{P,NoFData}) where {P<:IEEEFloat}
     s, c = sincos(primal(x))
     cos_pullback!!(dy::P) = NoRData(), -dy * s

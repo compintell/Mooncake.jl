@@ -58,6 +58,21 @@ This approach is identical to the one taken by `Zygote.jl` to circumvent the sam
 lgetfield(x, ::Val{f}) where {f} = getfield(x, f)
 
 @is_primitive MinimalCtx Tuple{typeof(lgetfield),Any,Val}
+@inline function frule!!(::Dual{typeof(lgetfield)}, x::Dual, ::Dual{Val{f}}) where {f}
+    P = typeof(primal(x))
+    primal_field = getfield(primal(x), f)
+    tangent_field = if tangent_type(P) === NoTangent
+        NoTangent()
+    else
+        _get_field(tangent(x), f)
+    end
+    return Dual(primal_field, tangent_field)
+end
+
+@inline _get_field(t::Array, f) = getfield(t, f)  # TODO: why?
+@inline _get_field(t::Union{Tuple,NamedTuple}, f) = getfield(t, f)
+@inline _get_field(t::Union{Tangent,MutableTangent}, f) = val(getfield(t.fields, f))
+
 @inline function rrule!!(
     ::CoDual{typeof(lgetfield)}, x::CoDual{P,F}, ::CoDual{Val{f}}
 ) where {P,F<:StandardFDataType,f}
@@ -98,6 +113,18 @@ end
 # code duplication, but it wound up not being any cleaner than this copy + pasted version.
 
 @is_primitive MinimalCtx Tuple{typeof(lgetfield),Any,Val,Val}
+@inline function frule!!(
+    ::Dual{typeof(lgetfield)}, x::Dual, ::Dual{Val{f}}, ::Dual{Val{order}}
+) where {f,order}
+    P = typeof(primal(x))
+    primal_field = getfield(primal(x), f, order)
+    tangent_field = if tangent_type(P) === NoTangent
+        NoTangent()
+    else
+        _get_field(tangent(x), f)
+    end
+    return Dual(primal_field, tangent_field)
+end
 @inline function rrule!!(
     ::CoDual{typeof(lgetfield)}, x::CoDual{P,F}, ::CoDual{Val{f}}, ::CoDual{Val{order}}
 ) where {P,F<:StandardFDataType,f,order}

@@ -89,7 +89,9 @@ using Core: Intrinsics
 using Mooncake
 import ..Mooncake:
     rrule!!,
+    frule!!,
     CoDual,
+    Dual,
     primal,
     tangent,
     zero_tangent,
@@ -107,7 +109,9 @@ import ..Mooncake:
     NoRData,
     rdata,
     increment_rdata!!,
-    zero_fcodual
+    zero_fcodual,
+    zero_dual,
+    NoTangent
 
 using Core.Intrinsics: atomic_pointerref
 
@@ -144,6 +148,11 @@ macro inactive_intrinsic(name)
         function rrule!!(f::CoDual{typeof($name)}, args::Vararg{Any,N}) where {N}
             return Mooncake.zero_adjoint(f, args...)
         end
+        function frule!!(f::Dual{typeof($name)}, args::Vararg{Dual,N}) where {N}
+            f_primal = primal(f)
+            args_primal = map(primal, args)
+            return zero_dual(f_primal(args_primal...))
+        end
     end
     return esc(expr)
 end
@@ -156,6 +165,11 @@ function rrule!!(::CoDual{typeof(abs_float)}, x)
 end
 
 @intrinsic add_float
+function frule!!(::Dual{typeof(add_float)}, a, b)
+    c = add_float(primal(a), primal(b))
+    d = add_float(tangent(a), tangent(b))
+    return Dual(c, d)
+end
 function rrule!!(::CoDual{typeof(add_float)}, a, b)
     add_float_pb!!(c̄) = NoRData(), c̄, c̄
     c = add_float(primal(a), primal(b))
@@ -205,6 +219,25 @@ end
 # atomic_pointerswap
 
 @intrinsic bitcast
+function frule!!(f::Dual{typeof(bitcast)}, t::Dual{Type{T}}, x) where {T}
+    if T <: IEEEFloat
+        msg =
+            "It is not permissible to bitcast to a differentiable type during AD, as " *
+            "this risks dropping tangents, and therefore risks silently giving the wrong " *
+            "answer. If this call to bitcast appears as part of the implementation of a " *
+            "differentiable function, you should write a rule for this function, or modify " *
+            "its implementation to avoid the bitcast."
+        throw(ArgumentError(msg))
+    end
+    _x = primal(x)
+    v = bitcast(T, _x)
+    if T <: Ptr && _x isa Ptr
+        dv = bitcast(Ptr{tangent_type(eltype(T))}, tangent(x))
+    else
+        dv = NoTangent()
+    end
+    return Dual(v, dv)
+end
 function rrule!!(f::CoDual{typeof(bitcast)}, t::CoDual{Type{T}}, x) where {T}
     if T <: IEEEFloat
         msg =
@@ -342,6 +375,11 @@ end
 @inactive_intrinsic lt_float_fast
 
 @intrinsic mul_float
+function frule!!(::Dual{typeof(mul_float)}, a, b)
+    p = mul_float(primal(a), primal(b))
+    dp = add_float(mul_float(primal(a), tangent(b)), mul_float(primal(b), tangent(a)))
+    return Dual(p, dp)
+end
 function rrule!!(::CoDual{typeof(mul_float)}, a, b)
     _a = primal(a)
     _b = primal(b)
@@ -608,6 +646,14 @@ end
 
 const StandardFDataType = Union{Tuple,NamedTuple,FData,MutableTangent,NoFData}
 
+function frule!!(::Dual{typeof(getfield)}, x::Dual{P}, name::Dual) where {P}
+    if tangent_type(P) == NoTangent
+        y = uninit_dual(getfield(primal(x), primal(name)))
+        return y
+    else
+        error("case not handled yet")
+    end
+end
 function rrule!!(
     f::CoDual{typeof(getfield)}, x::CoDual{P,<:StandardFDataType}, name::CoDual
 ) where {P}
@@ -672,7 +718,7 @@ is_homogeneous_and_immutable(::Any) = false
 
 # invoke
 
-@zero_adjoint MinimalCtx Tuple{typeof(isa),Any,Any}
+@zero_derivative MinimalCtx Tuple{typeof(isa),Any,Any}
 @zero_adjoint MinimalCtx Tuple{typeof(isdefined),Vararg}
 
 # modifyfield!
@@ -700,6 +746,15 @@ end
 @inline tuple_pullback(dy) = NoRData(), dy...
 
 @inline tuple_pullback(dy::NoRData) = NoRData()
+
+function frule!!(f::Dual{typeof(tuple)}, args::Vararg{Any,N}) where {N}
+    primal_output = tuple(map(primal, args)...)
+    if tangent_type(_typeof(primal_output)) == NoTangent
+        return zero_dual(primal_output)
+    else
+        return Dual(primal_output, tuple(map(tangent, args)...))
+    end
+end
 
 function rrule!!(f::CoDual{typeof(tuple)}, args::Vararg{Any,N}) where {N}
     primal_output = tuple(map(primal, args)...)
