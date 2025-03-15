@@ -9,7 +9,7 @@ Configuration struct for use with `ADTypes.AutoMooncake`.
     switched on if you are trying to debug something that has gone wrong in Mooncake.
 - `silence_debug_messages::Bool=false`: if `false` and `debug_mode` is `true`, Mooncake will
     display some warnings that debug mode is enabled, in order to help prevent accidentally
-    leaving debug mode on. If you wish to disable these messages off, set this to `true`.
+    leaving debug mode on. If you wish to disable these messages, set this to `true`.
 """
 @kwdef struct Config
     debug_mode::Bool = false
