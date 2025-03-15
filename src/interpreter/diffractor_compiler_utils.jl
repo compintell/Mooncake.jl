@@ -90,8 +90,7 @@ function Base.iterate(it::Iterators.Reverse{BBIdxIter},
     return (bb, idx - 1), (bb, idx - 1)
 end
 
-Base.lastindex(x::CC.InstructionStream) =
-    CC.length(x)
+Base.lastindex(x::CC.InstructionStream) = CC.length(x)
 
 """
     find_end_of_phi_block(ir::IRCode, start_search_idx::Int)
