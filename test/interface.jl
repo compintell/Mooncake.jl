@@ -98,4 +98,28 @@ end
             end
         end
     end
+    @testset "prepare_pullback_cache" begin
+        test_output = [[1], [1.0], 1]
+        test_output[2] = test_output[1]
+        @test_throws(
+            Mooncake.ValueAndGradientReturnTypeError,
+            Mooncake.__exclude_unsupported_output(test_output)
+        )
+
+        test_output = [[1], [1.0], 1]
+        test_output[2] = test_output
+        @test_throws(
+            Mooncake.ValueAndGradientReturnTypeError,
+            Mooncake.__exclude_unsupported_output(test_output)
+        )
+
+        @testset "$res" for res in vcat(
+            Mooncake.__exclude_unsupported_output(identity((1, (1.0, 1.0)))),
+            Mooncake.__exclude_unsupported_output(identity((1.0, 1.0))),
+            Mooncake.__exclude_unsupported_output(identity((1, [[1.0, 1, 1.0], 1.0]))),
+            Mooncake.__exclude_unsupported_output(identity((1.0, [1.0]))),
+        )
+            @test isnothing(res)
+        end
+    end
 end

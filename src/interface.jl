@@ -50,7 +50,7 @@ end
 function throw_forward_ret_type_error(y)
     throw(
         ValueAndGradientReturnTypeError(
-            "Primal of output cannot be of type $(typeof(y)), the amount of memory referred to must be known.",
+            "Primal of output cannot contain or be of type $(typeof(y)), the amount of memory referred to must be known.",
         ),
     )
 end
@@ -190,45 +190,47 @@ _copy!!(dst, src) = copy!(dst, src)
 _copy!!(::Number, src::Number) = src
 
 """
-    __exclude_unsupported_primals(y::P) where {P}
+    __exclude_unsupported_output(y)
 
 Required for the robust design of value_and_pullback(), prepare_pullback_cache().
-Handles aliasing, circular references and excludes Ptr datatype.
-Primal(y) can only be a "Tree" like datastructure or a primitive type.
+Handles aliasing, circular references and excludes the Ptr datatype.
+In the forward pass f(args...) output can only return a "Tree" like datastructure with leaf nodes as primitive types.
 Refer https://github.com/compintell/Mooncake.jl/issues/517#issuecomment-2715202789 and related issue for details.
-Internally calls __exclude_unsupported_primals_internal!().
+Internally calls __exclude_unsupported_output_internal!().
 The design is modelled after `zero_tangent`.
 """
 
-function __exclude_unsupported_primals(y::P) where {P}
-    return __exclude_unsupported_primals_internal!(
-        y, isbitstype(P) ? NoCache() : Set{UInt}()
-    )
+function __exclude_unsupported_output(y)
+    return __exclude_unsupported_output_internal!(y, Set{UInt}())
 end
 
-function __exclude_unsupported_primals_internal!(y::P, address_set::Set{UInt}) where {P}
+function __exclude_unsupported_output_internal!(y::P, address_set::Set{UInt}) where {P}
     if objectid(y) in address_set
-        if isbitstype(P)
-            return nothing
-        end
         throw_circular_reference_or_alias_error(y)
     end
 
     push!(address_set, objectid(y))
 
-    # recurse over a generic custom struct.
-    for y_sub in fieldnames(P)
-        __exclude_unsupported_primals_internal!(getfield(y, y_sub), address_set)
+    # recurse over a generic struct.
+    # iterate not defined for custom struct, so must use getfield() and fieldnames().
+    for y_sub in y
+        __exclude_unsupported_output_internal!(y_sub, address_set)
     end
     return nothing
 end
 
-function __exclude_unsupported_primals_internal!(y::Ptr, ::StackDict)
-    return throw_forward_ret_type_error(y)
+# if __exclude_unsupported_output() is called over an immutable isbitstype.
+# custom structs objects are not bitstype, but thier fields can be.
+function __exclude_unsupported_output_internal!(
+    y::Union{Int8,Int16,Int32,Int64,Int128,UInt8,UInt16,UInt32,UInt64,UInt128,IEEEFloat},
+    ::Set{UInt},
+)
+    return nothing
 end
 
-function __exclude_unsupported_primals_internal!(y, ::NoCache)
-    return nothing
+# in case f(args...) directly outputs a Ptr{T} or it contains a nested Ptr{T}
+function __exclude_unsupported_output_internal!(y::Ptr, ::Set{UInt})
+    return throw_forward_ret_type_error(y)
 end
 
 """
@@ -237,8 +239,12 @@ end
 Returns a cache used with [`value_and_pullback!!`](@ref). See that function for more info.
 """
 function prepare_pullback_cache(fx...; kwargs...)
-
     # Take a copy before mutating.
+    fx_temp = deepcopy(fx)
+
+    # Handle forward pass primal exceptions
+    __exclude_unsupported_output(fx_temp[1](fx_temp[2:end]...))
+    # In case any of f_new... have gone through mutations
     fx = deepcopy(fx)
 
     # Construct rule and tangents.
@@ -247,9 +253,6 @@ function prepare_pullback_cache(fx...; kwargs...)
 
     # Run the rule forwards -- this should do a decent chunk of pre-allocation.
     y, _ = rule(map((x, dx) -> CoDual(x, fdata(dx)), fx, tangents)...)
-
-    # Handle primal(y) exceptions
-    __exclude_unsupported_primals(primal(y))
 
     # Construct cache for output. Check that `copy!`ing appears to work.
     y_cache = copy(primal(y))
