@@ -47,6 +47,23 @@ function throw_val_and_grad_ret_type_error(y)
     )
 end
 
+function throw_forward_ret_type_error(y)
+    throw(
+        ValueAndGradientReturnTypeError(
+            "Primal of output cannot be of type $(typeof(y)), the amount of memory referred to must be known.",
+        ),
+    )
+end
+
+function throw_circular_reference_or_alias_error(y)
+    throw(
+        ValueAndGradientReturnTypeError(
+            "Error: Object with address $(objectid(y)) and type $(typeof(y)) has been seen before." *
+            " Primal of output cannot contain Circular references or aliases",
+        ),
+    )
+end
+
 """
     __value_and_gradient!!(rule, f::CoDual, x::CoDual...)
 
@@ -173,6 +190,48 @@ _copy!!(dst, src) = copy!(dst, src)
 _copy!!(::Number, src::Number) = src
 
 """
+    __exclude_unsupported_primals(y::P) where {P}
+
+Required for the robust design of value_and_pullback(), prepare_pullback_cache().
+Handles aliasing, circular references and excludes Ptr datatype.
+Primal(y) can only be a "Tree" like datastructure or a primitive type.
+Refer https://github.com/compintell/Mooncake.jl/issues/517#issuecomment-2715202789 and related issue for details.
+Internally calls __exclude_unsupported_primals_internal!().
+The design is modelled after `zero_tangent`.
+"""
+
+function __exclude_unsupported_primals(y::P) where {P}
+    return __exclude_unsupported_primals_internal!(
+        y, isbitstype(P) ? NoCache() : Set{UInt}()
+    )
+end
+
+function __exclude_unsupported_primals_internal!(y::P, address_set::Set{UInt}) where {P}
+    if objectid(y) in address_set
+        if isbitstype(P)
+            return nothing
+        end
+        throw_circular_reference_or_alias_error(y)
+    end
+
+    push!(address_set, objectid(y))
+
+    # recurse over a generic custom struct.
+    for y_sub in fieldnames(P)
+        __exclude_unsupported_primals_internal!(getfield(y, y_sub), address_set)
+    end
+    return nothing
+end
+
+function __exclude_unsupported_primals_internal!(y::Ptr, ::StackDict)
+    return throw_forward_ret_type_error(y)
+end
+
+function __exclude_unsupported_primals_internal!(y, ::NoCache)
+    return nothing
+end
+
+"""
     prepare_pullback_cache(f, x...)
 
 Returns a cache used with [`value_and_pullback!!`](@ref). See that function for more info.
@@ -188,6 +247,9 @@ function prepare_pullback_cache(fx...; kwargs...)
 
     # Run the rule forwards -- this should do a decent chunk of pre-allocation.
     y, _ = rule(map((x, dx) -> CoDual(x, fdata(dx)), fx, tangents)...)
+
+    # Handle primal(y) exceptions
+    __exclude_unsupported_primals(primal(y))
 
     # Construct cache for output. Check that `copy!`ing appears to work.
     y_cache = copy(primal(y))
