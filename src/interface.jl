@@ -216,10 +216,11 @@ end
     __exclude_unsupported_output(y)
 
 Required for the robust design of [`value_and_pullback`](@ref), [`prepare_pullback_cache`](@ref).  
-Ensures that `y` contains no aliasing, circular references or `Ptr`s.  
+Ensures that `y` contains no aliasing, circular references, `Ptr`s or non differentiable datatypes. 
 In the forward pass f(args...) output can only return a "Tree" like datastructure with leaf nodes as primitive types.  
 Refer https://github.com/compintell/Mooncake.jl/issues/517#issuecomment-2715202789 and related issue for details.  
-Internally calls [`__exclude_unsupported_output_internal!`](@ref).  
+Internally calls [`__exclude_unsupported_output_internal!`](@ref).
+`__exclude_unsupported_output_internal` performs a recursive depth first search over the function output 'y'.
 The design is modelled after `zero_tangent`.
 """
 function __exclude_unsupported_output(y::T) where {T}
@@ -268,11 +269,6 @@ Returns a cache used with [`value_and_pullback!!`](@ref). See that function for 
 """
 function prepare_pullback_cache(fx...; kwargs...)
     # Take a copy before mutating.
-    fx_temp = deepcopy(fx)
-
-    # Handle forward pass primal exceptions
-    __exclude_unsupported_output(fx_temp[1](fx_temp[2:end]...))
-    # In case any of f_new... have gone through mutations
     fx = deepcopy(fx)
 
     # Construct rule and tangents.
@@ -281,6 +277,9 @@ function prepare_pullback_cache(fx...; kwargs...)
 
     # Run the rule forwards -- this should do a decent chunk of pre-allocation.
     y, _ = rule(map((x, dx) -> CoDual(x, fdata(dx)), fx, tangents)...)
+
+    # Handle forward pass's primal exceptions
+    __exclude_unsupported_output(y)
 
     # Construct cache for output. Check that `copy!`ing appears to work.
     y_cache = copy(primal(y))
