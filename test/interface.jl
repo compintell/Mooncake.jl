@@ -100,11 +100,72 @@ end
     end
 
     @testset "prepare_pullback_cache errors" begin
-        @testset "Valid and Invalid outputs" for (test_tofail_cases, test_topass_cases) in
-                                                 Mooncake.alias_and_circular_reference_test_cases()
-            TestUtils.test_valid_outputs(
-                Xoshiro(123456), test_tofail_cases, test_topass_cases
-            )
+        # Test when function outputs a valid type.
+        struct userdefinedstruct
+            a::Int64
+            b::Vector{Float64}
+            c::Vector{Vector{Float64}}
         end
+
+        mutable struct userdefinedmutablestruct
+            a::Int64
+            b::Vector{Float64}
+            c::Vector{Vector{Float64}}
+        end
+
+        test_topass_cases = [
+            (1, (1.0, 1.0)),
+            (1.0, 1.0),
+            (1, [[1.0, 1, 1.0], 1.0]),
+            (1.0, [1.0]),
+            userdefinedstruct(1, [1.0, 1.0, 1.0], [[1.0]]),
+            userdefinedmutablestruct(1, [1.0, 1.0, 1.0], [[1.0]]),
+        ]
+
+        @testset "Valid Output types" for res in test_topass_cases
+            @test isnothing(Mooncake.__exclude_unsupported_output(res))
+        end
+
+        # Test when function outputs an invalid type. 
+        test_tofail_cases = []
+
+        # ---- Aliasing Cases ----
+        alias_vector = [[1, 2], [3, 4]]
+        alias_vector[2] = alias_vector[1]
+        push!(test_tofail_cases, alias_vector)
+
+        alias_tuple = ((1.0, 2.0), (3.0, 4.0))
+        alias_tuple = (alias_tuple[1], alias_tuple[1])
+        push!(test_tofail_cases, alias_tuple)
+
+        # ---- Circular Referencing Cases ----
+        circular_vector = Any[[1.0, 2.0]]
+        push!(circular_vector, circular_vector)
+        push!(test_tofail_cases, circular_vector)
+        mutable struct CircularStruct
+            data::Any
+            numeric::Int64
+        end
+
+        circ_obj = CircularStruct(nothing, 1)
+        circ_obj.data = circ_obj  # Self-referential struct
+        push!(test_tofail_cases, circ_obj)
+
+        # ---- Unsupported Types ----
+        push!(test_tofail_cases, Ptr{Float64}(12345))
+        push!(test_tofail_cases, (1, Ptr{Float64}(12345)))
+        push!(test_tofail_cases, [Ptr{Float64}(12345)])
+
+        # ---- Non Differentiable Cases ----
+        nondiff_dict = Dict(:a => [1, 2], :b => [3, 4])
+        push!(test_tofail_cases, nondiff_dict)
+        nondiff_set = Set([1, 2])
+        push!(test_tofail_cases, nondiff_set)
+        # push!(test_tofail_cases,Ptr{Float64}(1))
+
+        @test_throws(
+            Mooncake.ValueAndGradientReturnTypeError,
+            Mooncake.__exclude_unsupported_output.(test_tofail_cases)
+        )
     end
 end

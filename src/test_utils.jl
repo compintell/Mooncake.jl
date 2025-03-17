@@ -1332,31 +1332,3 @@ function test_data(rng::AbstractRNG, p::P; interface_only=false) where {P}
 end
 
 end
-
-"""
-    test_valid_outputs(rng::AbstractRNG, test_tofail_cases::P, test_topass_cases::P) where {P}
-
-Verify that for a differentiable function's primal(output) `y` the forward pass is valid.
-If these tests pass, then the interface for [`prepare_pullback_cache`](@ref)
-successfully checks for valid types for `P`, and it is possible to test them using [`test_rule`](@ref).
-test_tofail_cases tests the scenarios where function output is invalid, while test_topass_cases tests for valid outputs.
-
-As always, there are limits to the errors that these tests can identify -- they form
-necessary but not sufficient conditions for the correctness of your code.
-"""
-function test_valid_outputs(
-    rng::AbstractRNG, test_tofail_cases::P, test_topass_cases::P
-) where {P}
-    @nospecialize rng test_tofail_cases test_topass_cases
-
-    println("sadas")
-    @test_throws Mooncake.ValueAndGradientReturnTypeError Mooncake.__exclude_unsupported_output(
-        test_tofail_cases[1]
-    )
-
-    @testset "$res" for res in Mooncake.__exclude_unsupported_output.(test_topass_cases)
-        @test isnothing(res)
-    end
-
-    return nothing
-end
