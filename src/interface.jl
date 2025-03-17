@@ -64,6 +64,14 @@ function throw_circular_reference_or_alias_error(y)
     )
 end
 
+function throw_datastructure_output_error(y)
+    throw(
+        ValueAndGradientReturnTypeError(
+            "Error: Object of type $(typeof(y)) does not have a Real finite Hilbert space. "
+        ),
+    )
+end
+
 """
     __value_and_gradient!!(rule, f::CoDual, x::CoDual...)
 
@@ -186,8 +194,21 @@ struct Cache{Trule,Ty_cache,Ttangents<:Tuple}
     tangents::Ttangents
 end
 
-_copy!!(dst, src) = copy!(dst, src)
-_copy!!(::Number, src::Number) = src
+"""
+    is_user_defined_struct(T)
+
+Required for checking if datatype is a immutable Composite, Mutable Composite type (returns true) or a built in collection type (returns false).
+Helps in identifying user defined struct for recursing over fields correctly. 
+"""
+
+function is_user_defined_struct(T)
+    return isconcretetype(T) &&
+           !isprimitivetype(T) &&
+           !(T <: Tuple) &&
+           !(T <: Array) &&
+           !(T <: NamedTuple) &&
+           !(T <: Memory)
+end
 
 """
     __exclude_unsupported_output(y)
@@ -200,27 +221,39 @@ Internally calls __exclude_unsupported_output_internal!().
 The design is modelled after `zero_tangent`.
 """
 
-function __exclude_unsupported_output(y)
-    return __exclude_unsupported_output_internal!(y, Set{UInt}())
+function __exclude_unsupported_output(y::T) where {T}
+    if (T <: Dict) || (T <: Set)
+        throw_datastructure_output_error(y)
+    end
+    __exclude_unsupported_output_internal!(y, Set{UInt}())
+    return nothing
 end
 
-function __exclude_unsupported_output_internal!(y::P, address_set::Set{UInt}) where {P}
+# For Mutable/immutable composite types.
+function __exclude_unsupported_output_internal!(y::T, address_set::Set{UInt}) where {T}
     if objectid(y) in address_set
         throw_circular_reference_or_alias_error(y)
     end
 
     push!(address_set, objectid(y))
 
-    # recurse over a generic struct.
-    # iterate not defined for custom struct, so must use getfield() and fieldnames().
-    for y_sub in y
-        __exclude_unsupported_output_internal!(y_sub, address_set)
+    if is_user_defined_struct(T)
+        # recurse over a composite type.
+        for y_sub in fieldnames(T)
+            __exclude_unsupported_output_internal!(getfield(y, y_sub), address_set)
+        end
+    else
+        # recurse over built in collections.
+        for y_sub in y
+            __exclude_unsupported_output_internal!(y_sub, address_set)
+        end
     end
+
     return nothing
 end
 
-# if __exclude_unsupported_output() is called over an immutable isbitstype.
-# custom structs objects are not bitstype, but thier fields can be.
+# what about Complex types? And are rational numbers differentiable?
+# recurse condition when the leaf node is an isbitstype.
 function __exclude_unsupported_output_internal!(
     y::Union{Int8,Int16,Int32,Int64,Int128,UInt8,UInt16,UInt32,UInt64,UInt128,IEEEFloat},
     ::Set{UInt},
@@ -228,7 +261,7 @@ function __exclude_unsupported_output_internal!(
     return nothing
 end
 
-# in case f(args...) directly outputs a Ptr{T} or it contains a nested Ptr{T}
+# in case f(args...) directly outputs a Ptr{T} or it contains a nested Ptr{T}.
 function __exclude_unsupported_output_internal!(y::Ptr, ::Set{UInt})
     return throw_forward_ret_type_error(y)
 end

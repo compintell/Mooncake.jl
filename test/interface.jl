@@ -113,11 +113,29 @@ end
             Mooncake.__exclude_unsupported_output(test_output)
         )
 
+        struct userdefinedstruct
+            a::Int64
+            b::Vector{Float64}
+            c::Vector{Vector{Float64}}
+        end
+
+        mutable struct userdefinedmutablestruct
+            a::Int64
+            b::Vector{Float64}
+            c::Vector{Vector{Float64}}
+        end
+
         @testset "$res" for res in vcat(
             Mooncake.__exclude_unsupported_output(identity((1, (1.0, 1.0)))),
             Mooncake.__exclude_unsupported_output(identity((1.0, 1.0))),
             Mooncake.__exclude_unsupported_output(identity((1, [[1.0, 1, 1.0], 1.0]))),
             Mooncake.__exclude_unsupported_output(identity((1.0, [1.0]))),
+            Mooncake.__exclude_unsupported_output(
+                identity(userdefinedstruct(1, [1.0, 1.0, 1.0], [[1.0]]))
+            ),
+            Mooncake.__exclude_unsupported_output(
+                identity(userdefinedmutablestruct(1, [1.0, 1.0, 1.0], [[1.0]]))
+            ),
         )
             @test isnothing(res)
         end
