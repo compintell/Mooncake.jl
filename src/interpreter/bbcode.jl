@@ -346,7 +346,7 @@ Internal method implementing [`compute_all_successors`](@ref). This method is ea
 construct test cases for because it only requires the collection of `BBlocks`, not all of
 the other stuff that goes into a `BBCode`.
 """
-function _compute_all_successors(blks::Vector{BBlock})::Dict{ID,Vector{ID}}
+@noinline function _compute_all_successors(blks::Vector{BBlock})::Dict{ID,Vector{ID}}
     succs = map(enumerate(blks)) do (n, blk)
         is_final_block = n == length(blks)
         t = terminator(blk)
