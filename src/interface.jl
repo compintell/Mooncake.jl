@@ -219,7 +219,6 @@ Ensures that `y` contains no aliasing, circular references, `Ptr`s or non differ
 In the forward pass f(args...) output can only return a "Tree" like datastructure with leaf nodes as primitive types.  
 Refer https://github.com/compintell/Mooncake.jl/issues/517#issuecomment-2715202789 and related issue for details.  
 Internally calls [`__exclude_unsupported_output_internal!`](@ref).
-`__exclude_unsupported_output_internal` performs a recursive depth first search over the function output 'y'.
 The design is modelled after `zero_tangent`.
 """
 function __exclude_unsupported_output(y::T) where {T}
@@ -230,7 +229,15 @@ function __exclude_unsupported_output(y::T) where {T}
     return nothing
 end
 
-# For Mutable/immutable composite types.
+"""
+    __exclude_unsupported_output_internal(y::T, address_set::Set{UInt}) where {T}
+
+For checking if output`y` is a valid Mutable/immutable composite or a primitive type.
+Performs a recursive depth first search over the function output `y` with an `isbitstype()` check base case. The visited memory addresses are stored inside `address_set`.
+If the set already contains a newly visited address, it errors out indicating an Alais or Circular reference.
+Also errors out if `y` is or contains a Pointer.
+It is called internally by [`__exclude_unsupported_output(y)`](@ref).
+"""
 function __exclude_unsupported_output_internal!(y::T, address_set::Set{UInt}) where {T}
     if objectid(y) in address_set
         if isbitstype(T)
@@ -389,4 +396,86 @@ value_and_gradient!!(cache, f, x, y)
 function value_and_gradient!!(cache::Cache, f::F, x::Vararg{Any,N}) where {F,N}
     coduals = tuple_map(CoDual, (f, x...), tuple_map(set_to_zero!!, cache.tangents))
     return __value_and_gradient!!(cache.rule, coduals...)
+end
+
+"""
+    alias_and_circular_reference_test_cases()
+
+Constructs a `Vector` of test cases to check aliasing, circular references, or other invalid output datatypes in 
+[`prepare_pullback_cache`](@ref)
+
+Test cases include:
+1. **Alias detection** - ensuring that different references to the same object are detected.
+2. **Circular references** - catching cases where an object references itself directly or indirectly.
+3. **Unsupported return types** - checking for cases where `Ptr` or other disallowed types are returned.
+"""
+function alias_and_circular_reference_test_cases()
+
+    # Test where function outputs an invalid type. 
+    test_tofail_cases = []
+
+    # ---- Aliasing Cases ----
+    alias_vector = [[1, 2], [3, 4]]
+    alias_vector[2] = alias_vector[1]
+    push!(test_tofail_cases, alias_vector)
+
+    alias_tuple = ((1.0, 2.0), (3.0, 4.0))
+    alias_tuple = (alias_tuple[1], alias_tuple[1])
+    push!(test_tofail_cases, alias_tuple)
+
+    struct RefStruct
+        data::Vector{Float64}
+        numerics::Vector{Float64}
+    end
+    ref_obj = RefStruct(nothing, 1.0)
+    ref_obj.data = ref_obj.numerics  # Aliasing struct
+    push!(test_tofail_cases, ref_obj)
+
+    # ---- Circular Referencing Cases ----
+    circular_vector = Any[[1.0, 2.0]]
+    push!(circular_vector, circular_vector)
+    push!(test_tofail_cases, circular_vector)
+
+    mutable struct CircularStruct
+        data::Any
+        numeric::Int64
+    end
+    circ_obj = CircularStruct(nothing, 1.0)
+    circ_obj.data = circ_obj  # Self-referential struct
+    push!(test_tofail_cases, circ_obj)
+
+    # ---- Unsupported Types ----
+    push!(test_tofail_cases, Ptr{Float64}(12345))  # Directly returning a pointer
+    push!(test_tofail_cases, (1, Ptr{Float64}(12345)))  # Tuple containing a pointer
+    push!(test_tofail_cases, [Ptr{Float64}(12345)])  # Array containing a pointer
+
+    # ---- Non Differentiable Cases ----
+    nondiff_dict = Dict(:a => [1, 2], :b => [3, 4])
+    push!(test_tofail_cases, nondiff_dict)
+    nondiff_set = Set([1, 2])
+    push!(test_tofail_cases, nondiff_set)
+
+    # Test where function outputs a valid type.
+    struct userdefinedstruct
+        a::Int64
+        b::Vector{Float64}
+        c::Vector{Vector{Float64}}
+    end
+
+    mutable struct userdefinedmutablestruct
+        a::Int64
+        b::Vector{Float64}
+        c::Vector{Vector{Float64}}
+    end
+
+    test_topass_cases = [
+        (1, (1.0, 1.0)),
+        (1.0, 1.0),
+        (1, [[1.0, 1, 1.0], 1.0]),
+        (1.0, [1.0]),
+        userdefinedstruct(1, [1.0, 1.0, 1.0], [[1.0]]),
+        userdefinedmutablestruct(1, [1.0, 1.0, 1.0], [[1.0]]),
+    ]
+
+    return (test_tofail_cases, test_topass_cases)
 end

@@ -98,50 +98,13 @@ end
             end
         end
     end
+
     @testset "prepare_pullback_cache errors" begin
-        test_output = [[1], [1.0], 1]
-        test_output[2] = test_output[1]
-        @test_throws(
-            Mooncake.ValueAndGradientReturnTypeError,
-            vcat(
-                Mooncake.__exclude_unsupported_output(test_output),
-                Mooncake.prepare_pullback_cache(x -> pointer(x), randn(5)),
-            # Mooncake.__exclude_unsupported_output(Ptr{Float64}(1))
+        @testset "Valid and Invalid outputs" for (test_tofail_cases, test_topass_cases) in
+                                                 Mooncake.alias_and_circular_reference_test_cases()
+            TestUtils.test_valid_outputs(
+                Xoshiro(123456), test_tofail_cases, test_topass_cases
             )
-        )
-
-        test_output = [[1], [1.0], 1]
-        test_output[2] = test_output
-        @test_throws(
-            Mooncake.ValueAndGradientReturnTypeError,
-            Mooncake.__exclude_unsupported_output(test_output)
-        )
-
-        struct userdefinedstruct
-            a::Int64
-            b::Vector{Float64}
-            c::Vector{Vector{Float64}}
-        end
-
-        mutable struct userdefinedmutablestruct
-            a::Int64
-            b::Vector{Float64}
-            c::Vector{Vector{Float64}}
-        end
-
-        @testset "$res" for res in vcat(
-            Mooncake.__exclude_unsupported_output(identity((1, (1.0, 1.0)))),
-            Mooncake.__exclude_unsupported_output(identity((1.0, 1.0))),
-            Mooncake.__exclude_unsupported_output(identity((1, [[1.0, 1, 1.0], 1.0]))),
-            Mooncake.__exclude_unsupported_output(identity((1.0, [1.0]))),
-            Mooncake.__exclude_unsupported_output(
-                identity(userdefinedstruct(1, [1.0, 1.0, 1.0], [[1.0]]))
-            ),
-            Mooncake.__exclude_unsupported_output(
-                identity(userdefinedmutablestruct(1, [1.0, 1.0, 1.0], [[1.0]]))
-            ),
-        )
-            @test isnothing(res)
         end
     end
 end
