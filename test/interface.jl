@@ -103,9 +103,11 @@ end
         test_output[2] = test_output[1]
         @test_throws(
             Mooncake.ValueAndGradientReturnTypeError,
-            Mooncake.__exclude_unsupported_output(test_output),
-            Mooncake.prepare_pullback_cache(x -> pointer(x), randn(5)),
+            vcat(
+                Mooncake.__exclude_unsupported_output(test_output),
+                Mooncake.prepare_pullback_cache(x -> pointer(x), randn(5)),
             # Mooncake.__exclude_unsupported_output(Ptr{Float64}(1))
+            )
         )
 
         test_output = [[1], [1.0], 1]
