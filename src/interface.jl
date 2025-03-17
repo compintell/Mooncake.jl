@@ -208,8 +208,7 @@ function is_user_defined_struct(T)
            !isprimitivetype(T) &&
            !(T <: Tuple) &&
            !(T <: Array) &&
-           !(T <: NamedTuple) &&
-           !(T <: Memory)
+           !(T <: NamedTuple)
 end
 
 """
