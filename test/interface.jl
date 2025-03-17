@@ -168,9 +168,9 @@ end
             Mooncake.__exclude_unsupported_output.(test_tofail_cases)
         )
 
-        Crazy_testcases_set = Mooncake.tangent_test_cases()
+        additional_testset = Mooncake.tangent_test_cases()
 
-        for i in eachindex(Crazy_testcases_set)
+        for i in eachindex(additional_testset)
             try
                 Mooncake.__exclude_unsupported_output(more[i][2])
             catch err
