@@ -167,5 +167,15 @@ end
             Mooncake.ValueAndGradientReturnTypeError,
             Mooncake.__exclude_unsupported_output.(test_tofail_cases)
         )
+
+        Crazy_testcases_set = Mooncake.tangent_test_cases()
+
+        for i in eachindex(Crazy_testcases_set)
+            try
+                Mooncake.__exclude_unsupported_output(more[i][2])
+            catch err
+                @test isa(err, Mooncake.ValueAndGradientReturnTypeError)
+            end
+        end
     end
 end

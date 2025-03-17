@@ -72,6 +72,14 @@ function throw_datastructure_output_error(y)
     )
 end
 
+function throw_undef_err(y)
+    throw(
+        ValueAndGradientReturnTypeError(
+            "Error: Object $(y) cannot be or contain undefined memory addresses. "
+        ),
+    )
+end
+
 """
     __value_and_gradient!!(rule, f::CoDual, x::CoDual...)
 
@@ -197,18 +205,19 @@ struct Cache{Trule,Ty_cache,Ttangents<:Tuple}
     tangents::Ttangents
 end
 
+const supportedcollections = Union{Tuple,NamedTuple}
+
 """
     is_user_defined_struct(T)
 
-Required for checking if datatype is a immutable Composite, Mutable Composite type (returns true) or a built in collection type (returns false).
+Required for checking if datatype `T` is a immutable Composite, Mutable Composite type (returns true) or a built in collection type (returns false).
 Helps in identifying user defined struct for recursing over fields correctly. 
 """
 function is_user_defined_struct(T)
     return isconcretetype(T) &&
            !isprimitivetype(T) &&
-           !(T <: Tuple) &&
-           !(T <: Array) &&
-           !(T <: NamedTuple)
+           !(T <: supportedcollections) &&
+           !(T <: Array)
 end
 
 """
@@ -222,7 +231,7 @@ Internally calls [`__exclude_unsupported_output_internal!`](@ref).
 The design is modelled after `zero_tangent`.
 """
 function __exclude_unsupported_output(y::T) where {T}
-    if (T <: Dict) || (T <: Set)
+    if (T <: Union{Dict,Set})
         throw_datastructure_output_error(y)
     end
     __exclude_unsupported_output_internal!(y, Set{UInt}())
@@ -239,10 +248,10 @@ Also errors out if `y` is or contains a Pointer.
 It is called internally by [`__exclude_unsupported_output(y)`](@ref).
 """
 function __exclude_unsupported_output_internal!(y::T, address_set::Set{UInt}) where {T}
+    if isbitstype(T)
+        return nothing
+    end
     if objectid(y) in address_set
-        if isbitstype(T)
-            return nothing
-        end
         throw_circular_reference_or_alias_error(y)
     end
 
@@ -251,12 +260,21 @@ function __exclude_unsupported_output_internal!(y::T, address_set::Set{UInt}) wh
     if is_user_defined_struct(T)
         # recurse over a composite type.
         for y_sub in fieldnames(T)
-            __exclude_unsupported_output_internal!(getfield(y, y_sub), address_set)
+            if !(T <: supportedcollections) && !isdefined(y, y_sub)
+                throw_undef_err(y)
+            else
+                __exclude_unsupported_output_internal!(getfield(y, y_sub), address_set)
+            end
         end
     else
         # recurse over built in collections.
-        for y_sub in y
-            __exclude_unsupported_output_internal!(y_sub, address_set)
+        for i in eachindex(y)
+            # isassigned not defined for tuples
+            if !(T <: supportedcollections) && !isassigned(y, i)
+                throw_undef_err(y)
+            else
+                __exclude_unsupported_output_internal!(y[i], address_set)
+            end
         end
     end
 
