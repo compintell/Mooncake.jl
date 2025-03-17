@@ -170,9 +170,9 @@ end
 
         additional_testset = Mooncake.tangent_test_cases()
 
-        for i in eachindex(additional_testset)
+        @testset for i in eachindex(additional_testset)
             try
-                Mooncake.__exclude_unsupported_output(more[i][2])
+                Mooncake.__exclude_unsupported_output(additional_testset[i][2])
             catch err
                 @test isa(err, Mooncake.ValueAndGradientReturnTypeError)
             end
