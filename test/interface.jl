@@ -98,12 +98,13 @@ end
             end
         end
     end
-    @testset "prepare_pullback_cache" begin
+    @testset "prepare_pullback_cache errors" begin
         test_output = [[1], [1.0], 1]
         test_output[2] = test_output[1]
         @test_throws(
             Mooncake.ValueAndGradientReturnTypeError,
-            Mooncake.__exclude_unsupported_output(test_output)
+            Mooncake.__exclude_unsupported_output(test_output),
+            Mooncake.__exclude_unsupported_output(Ptr{Float64}(1))
         )
 
         test_output = [[1], [1.0], 1]

@@ -50,7 +50,7 @@ end
 function throw_forward_ret_type_error(y)
     throw(
         ValueAndGradientReturnTypeError(
-            "Primal of output cannot contain or be of type $(typeof(y)), the amount of memory referred to must be known.",
+            "Found a value of type $(typeof(y)) in output, but output is not permitted to be or contain a pointer. This is because the amount of memory to which it refers is unknown, therefore Mooncake.jl is unable to allocate appropriate memory for its gradients.",
         ),
     )
 end
@@ -58,8 +58,8 @@ end
 function throw_circular_reference_or_alias_error(y)
     throw(
         ValueAndGradientReturnTypeError(
-            "Error: Object with address $(objectid(y)) and type $(typeof(y)) has been seen before." *
-            " Primal of output cannot contain Circular references or aliases",
+            "Object with address $(objectid(y)) and type $(typeof(y)) appears more than once." *
+            " Output cannot contain Circular references or aliases",
         ),
     )
 end
@@ -170,6 +170,9 @@ function value_and_gradient!!(rule::R, fx::Vararg{Any,N}) where {R,N}
     return __value_and_gradient!!(rule, __create_coduals(fx)...)
 end
 
+_copy!!(dst, src) = copy!(dst, src)
+_copy!!(::Number, src::Number) = src
+
 function __create_coduals(args)
     try
         return tuple_map(zero_codual, args)
@@ -200,7 +203,6 @@ end
 Required for checking if datatype is a immutable Composite, Mutable Composite type (returns true) or a built in collection type (returns false).
 Helps in identifying user defined struct for recursing over fields correctly. 
 """
-
 function is_user_defined_struct(T)
     return isconcretetype(T) &&
            !isprimitivetype(T) &&
@@ -213,14 +215,13 @@ end
 """
     __exclude_unsupported_output(y)
 
-Required for the robust design of value_and_pullback(), prepare_pullback_cache().
-Handles aliasing, circular references and excludes the Ptr datatype.
-In the forward pass f(args...) output can only return a "Tree" like datastructure with leaf nodes as primitive types.
-Refer https://github.com/compintell/Mooncake.jl/issues/517#issuecomment-2715202789 and related issue for details.
-Internally calls __exclude_unsupported_output_internal!().
+Required for the robust design of [`value_and_pullback`](@ref), [`prepare_pullback_cache`](@ref).  
+Ensures that `y` contains no aliasing, circular references or `Ptr`s.  
+In the forward pass f(args...) output can only return a "Tree" like datastructure with leaf nodes as primitive types.  
+Refer https://github.com/compintell/Mooncake.jl/issues/517#issuecomment-2715202789 and related issue for details.  
+Internally calls [`__exclude_unsupported_output_internal!`](@ref).  
 The design is modelled after `zero_tangent`.
 """
-
 function __exclude_unsupported_output(y::T) where {T}
     if (T <: Dict) || (T <: Set)
         throw_datastructure_output_error(y)
@@ -232,6 +233,9 @@ end
 # For Mutable/immutable composite types.
 function __exclude_unsupported_output_internal!(y::T, address_set::Set{UInt}) where {T}
     if objectid(y) in address_set
+        if isbitstype(T)
+            return nothing
+        end
         throw_circular_reference_or_alias_error(y)
     end
 
@@ -249,15 +253,6 @@ function __exclude_unsupported_output_internal!(y::T, address_set::Set{UInt}) wh
         end
     end
 
-    return nothing
-end
-
-# what about Complex types? And are rational numbers differentiable?
-# recurse condition when the leaf node is an isbitstype.
-function __exclude_unsupported_output_internal!(
-    y::Union{Int8,Int16,Int32,Int64,Int128,UInt8,UInt16,UInt32,UInt64,UInt128,IEEEFloat},
-    ::Set{UInt},
-)
     return nothing
 end
 
