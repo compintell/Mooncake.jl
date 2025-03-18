@@ -217,7 +217,7 @@ function is_user_defined_struct(T)
     return isconcretetype(T) &&
            !isprimitivetype(T) &&
            !(T <: supportedcollections) &&
-           !(T <: Array)
+           !(T <: Union{Array,Memory})
 end
 
 """
@@ -248,9 +248,7 @@ Also errors out if `y` is or contains a Pointer.
 It is called internally by [`__exclude_unsupported_output(y)`](@ref).
 """
 function __exclude_unsupported_output_internal!(y::T, address_set::Set{UInt}) where {T}
-    if isbitstype(T)
-        return nothing
-    end
+    isbitstype(T) && return nothing
     if objectid(y) in address_set
         throw_circular_reference_or_alias_error(y)
     end
@@ -260,6 +258,7 @@ function __exclude_unsupported_output_internal!(y::T, address_set::Set{UInt}) wh
     if is_user_defined_struct(T)
         # recurse over a composite type.
         for y_sub in fieldnames(T)
+            # isassigned, isdefined are not defined for Tuples, NamedTuples.
             if !(T <: supportedcollections) && !isdefined(y, y_sub)
                 throw_undef_err(y)
             else
@@ -269,7 +268,7 @@ function __exclude_unsupported_output_internal!(y::T, address_set::Set{UInt}) wh
     else
         # recurse over built in collections.
         for i in eachindex(y)
-            # isassigned not defined for tuples
+            # isassigned is valid for Arrays.
             if !(T <: supportedcollections) && !isassigned(y, i)
                 throw_undef_err(y)
             else
@@ -292,6 +291,7 @@ end
 Returns a cache used with [`value_and_pullback!!`](@ref). See that function for more info.
 """
 function prepare_pullback_cache(fx...; kwargs...)
+
     # Take a copy before mutating.
     fx = deepcopy(fx)
 

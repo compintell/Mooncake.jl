@@ -121,6 +121,8 @@ end
             userdefinedstruct(1, [1.0, 1.0, 1.0], [[1.0]]),
             userdefinedmutablestruct(1, [1.0, 1.0, 1.0], [[1.0]]),
         ]
+        VERSION >= v"1.11" &&
+            push!(test_topass_cases, fill!(Memory{Float64}(undef, 3), 3.0))
 
         @testset "Valid Output types" for res in test_topass_cases
             @test isnothing(Mooncake.__exclude_unsupported_output(res))
