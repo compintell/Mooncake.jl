@@ -217,7 +217,8 @@ function is_user_defined_struct(T)
     return isconcretetype(T) &&
            !isprimitivetype(T) &&
            !(T <: supportedcollections) &&
-           !(T <: Union{Array,Memory})
+           !(T <: Array) &&
+           !(T <: Memory)
 end
 
 """
