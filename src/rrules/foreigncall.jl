@@ -173,6 +173,18 @@ function rrule!!(
     return zero_fcodual(y), NoPullback(ntuple(_ -> NoRData(), length(args) + 8))
 end
 
+function frule!!(
+    ::Dual{typeof(_foreigncall_)},
+    ::Dual{Val{:jl_type_unionall}},
+    ::Dual{Val{Any}}, # return type
+    ::Dual{Tuple{Val{Any},Val{Any}}}, # arg types
+    ::Dual{Val{0}}, # number of required args
+    ::Dual{Val{:ccall}},
+    a::Dual,
+    b::Dual,
+)
+    return zero_dual(ccall(:jl_type_unionall, Any, (Any, Any), primal(a), primal(b)))
+end
 function rrule!!(
     ::CoDual{typeof(_foreigncall_)},
     ::CoDual{Val{:jl_type_unionall}},
@@ -204,6 +216,12 @@ end
 @zero_adjoint MinimalCtx Tuple{Type{UnionAll},TypeVar,Any}
 @zero_adjoint MinimalCtx Tuple{Type{UnionAll},TypeVar,Type}
 @zero_adjoint MinimalCtx Tuple{typeof(hash),Vararg}
+
+function frule!!(
+    ::Dual{typeof(_foreigncall_)}, ::Dual{Val{:jl_string_ptr}}, args::Vararg{Dual,N}
+) where {N}
+    return uninit_dual(_foreigncall_(Val(:jl_string_ptr), tuple_map(primal, args)...))
+end
 
 function rrule!!(
     f::CoDual{typeof(_foreigncall_)}, ::CoDual{Val{:jl_string_ptr}}, args::Vararg{CoDual,N}

@@ -4,9 +4,17 @@ function build_frule(args...; debug_mode=false)
     return build_frule(interp, sig; debug_mode)
 end
 
+struct DualRuleInfo
+    isva::Bool
+    nargs::Int
+    dual_ret_type::Type
+end
+
 function build_frule(
     interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode=false, silence_debug_messages=true
 ) where {C}
+    @nospecialize sig_or_mi
+
     # To avoid segfaults, ensure that we bail out if the interpreter's world age is greater
     # than the current world age.
     if Base.get_world_counter() > interp.world
@@ -37,9 +45,9 @@ function build_frule(
         #     return interp.oc_cache[oc_cache_key]
         # else
         # Derive forward-pass IR, and shove in a `MistyClosure`.
-        dual_ir = generate_dual_ir(interp, sig_or_mi; debug_mode)
-        dual_oc = MistyClosure(dual_ir; do_compile=true)
-        raw_rule = DerivedFRule(dual_oc)
+        dual_ir, captures, info = generate_dual_ir(interp, sig_or_mi; debug_mode)
+        dual_oc = misty_closure(info.dual_ret_type, dual_ir, captures...; do_compile=true)
+        raw_rule = DerivedFRule{typeof(dual_oc),info.isva,info.nargs}(dual_oc)
         rule = debug_mode ? DebugFRule(raw_rule) : raw_rule
         interp.oc_cache[oc_cache_key] = rule
         return rule
@@ -51,12 +59,31 @@ function build_frule(
     end
 end
 
-struct DerivedFRule{Tfwd_oc}
+struct DerivedFRule{Tfwd_oc,isva,nargs}
     fwd_oc::Tfwd_oc
 end
 
-@inline function (fwd::DerivedFRule)(args::Vararg{Dual,N}) where {N}
-    return fwd.fwd_oc(args...)
+@inline function (fwd::DerivedFRule{sig,isva,nargs})(
+    args::Vararg{Dual,N}
+) where {sig,N,isva,nargs}
+    return fwd.fwd_oc(__unflatten_dual_varargs(isva, args, Val(nargs))...)
+end
+
+"""
+    __unflatten_dual_varargs(isva::Bool, args, ::Val{nargs}) where {nargs}
+
+If isva and nargs=2, then inputs `(Dual(5.0, 0.0), Dual(4.0, 0.0), Dual(3.0, 0.0))`
+are transformed into `(Dual(5.0, 0.0), Dual((5.0, 4.0), (0.0, 0.0)))`.
+"""
+function __unflatten_dual_varargs(isva::Bool, args, ::Val{nargs}) where {nargs}
+    isva || return args
+    group_primal = map(primal, args[nargs:end])
+    if tangent_type(_typeof(group_primal)) == NoTangent
+        grouped_args = zero_dual(group_primal)
+    else
+        grouped_args = Dual(group_primal, map(tangent, args[nargs:end]))
+    end
+    return (args[1:(nargs - 1)]..., grouped_args)
 end
 
 function generate_dual_ir(
@@ -68,10 +95,12 @@ function generate_dual_ir(
 
     # Grab code associated to the primal.
     primal_ir, _ = lookup_ir(interp, sig_or_mi)
+    nargs = length(primal_ir.argtypes)
 
     # Normalise the IR.
-    _, spnames = is_vararg_and_sparam_names(sig_or_mi)
+    isva, spnames = is_vararg_and_sparam_names(sig_or_mi)
     primal_ir = normalise!(primal_ir, spnames)
+    # display(primal_ir)
 
     # Keep a copy of the primal IR with the insertions
     dual_ir = copy(primal_ir)
@@ -84,201 +113,204 @@ function generate_dual_ir(
     end
     pushfirst!(dual_ir.argtypes, Any)
 
-    # Modify dual IR incrementally (do the same over primal because otherwise they won't match due to nothing statements)
-    primal_ir_comp = CC.IncrementalCompact(primal_ir)
-    dual_ir_comp = CC.IncrementalCompact(dual_ir)
+    # Data structure into which we can push any data which is to live in the captures field
+    # of the OpaqueClosure used to implement this rule. The index at which a piece of data
+    # lives in this data structure is equal to the index of the captures field of the
+    # OpaqueClosure in which it will live. To write code which retrieves items from the
+    # captures data structure, make use of `get_capture`.
+    captures = Any[]
 
-    for (((_, primal_ssa), primal_stmt), ((_, dual_ssa), dual_stmt)) in
-        zip(primal_ir_comp, dual_ir_comp)
+    for (n, inst) in enumerate(dual_ir.stmts)
+        ssa = SSAValue(n)
         modify_fwd_ad_stmts!(
-            dual_stmt,
-            primal_stmt,
-            dual_ir_comp,
-            primal_ir_comp,
-            dual_ssa,
-            primal_ssa,
-            interp;
-            debug_mode,
+            inst.stmt, dual_ir, primal_ir, ssa, interp, captures; debug_mode
         )
     end
-    dual_ir_comp = CC.finish(dual_ir_comp)
-    dual_ir_comp = CC.compact!(dual_ir_comp)
+
+    # Process new nodes etc.
+    dual_ir = CC.compact!(dual_ir)
 
     # display(primal_ir)
 
-    CC.verify_ir(dual_ir_comp)
+    CC.verify_ir(dual_ir)
+
+    # Update first argument type to reflect the data stored in the captures.
+    captures_tuple = (captures...,)
+    dual_ir.argtypes[1] = _typeof(captures_tuple)
 
     # Optimize dual IR
-    dual_ir_opt = optimise_ir!(dual_ir_comp; do_inline)  # TODO: toggle
-    return dual_ir_opt
+    dual_ir_opt = optimise_ir!(dual_ir; do_inline)
+    return dual_ir_opt, captures_tuple, DualRuleInfo(isva, nargs, dual_ret_type(primal_ir))
+end
+
+@inline get_capture(captures::T, n::Int) where {T} = captures[n]
+
+"""
+    const_dual(captures::Vector{Any}, stmt)::Union{Dual,Int}
+
+Build a `Dual` from `stmt`, with zero / uninitialised fdata. If the resulting `Dual` is
+a bits type, then it is returned. If it is not, then the `Dual` is put into captures,
+and its location in `captures` returned.
+
+Whether or not the value is a literal, or an index into the captures, can be determined from
+the return type.
+"""
+function const_dual(captures::Vector{Any}, stmt)::Union{Dual,Int}
+    v = get_const_primal_value(stmt)
+    x = uninit_dual(v)
+    if safe_for_literal(v)
+        return x
+    else
+        push!(captures, x)
+        return length(captures)
+    end
 end
 
 ## Modification of IR nodes
 
-const REVERSE_AFFINITY = true  # stick the new instruction in the previous CFG block (incremental insertion cannot be done before "where we are")
-
-function new_instruction(stmt)
-    return CC.NewInstruction(
-        stmt,
-        Any,
-        CC.NoCallInfo(),
-        Int32(1),  # meaningless
-        CC.IR_FLAG_REFINED,
-    )
-end
-
 function modify_fwd_ad_stmts!(
-    dual_stmt::Nothing,
-    primal_stmt::Nothing,
-    dual_ir::CC.IncrementalCompact,
-    primal_ir::CC.IncrementalCompact,
-    dual_ssa::Integer,
-    primal_ssa::Integer,
-    ::MooncakeInterpreter;
+    stmt::Nothing,
+    dual_ir::IRCode,
+    primal_ir::IRCode,
+    ssa::SSAValue,
+    ::MooncakeInterpreter,
+    captures::Vector{Any};
     kwargs...,
 )
     return nothing
 end
 
 function modify_fwd_ad_stmts!(
-    dual_stmt::GotoNode,
-    primal_stmt::GotoNode,
-    dual_ir::CC.IncrementalCompact,
-    primal_ir::CC.IncrementalCompact,
-    dual_ssa::Integer,
-    primal_ssa::Integer,
-    ::MooncakeInterpreter;
+    stmt::GotoNode,
+    dual_ir::IRCode,
+    primal_ir::IRCode,
+    ssa::SSAValue,
+    ::MooncakeInterpreter,
+    captures::Vector{Any};
     kwargs...,
 )
     return nothing
 end
 
 function modify_fwd_ad_stmts!(
-    dual_stmt::GotoIfNot,
-    primal_stmt::GotoIfNot,
-    dual_ir::CC.IncrementalCompact,
-    primal_ir::CC.IncrementalCompact,
-    dual_ssa::Integer,
-    primal_ssa::Integer,
-    ::MooncakeInterpreter;
+    stmt::GotoIfNot,
+    dual_ir::IRCode,
+    primal_ir::IRCode,
+    ssa::SSAValue,
+    ::MooncakeInterpreter,
+    captures::Vector{Any};
     kwargs...,
 )
     # replace GotoIfNot with the call to primal
-    Mooncake.replace_call!(
-        dual_ir, SSAValue(dual_ssa), Expr(:call, _primal, inc_args(dual_stmt).cond)
-    )
+    Mooncake.replace_call!(dual_ir, ssa, Expr(:call, _primal, inc_args(stmt).cond))
+
     # reinsert the GotoIfNot right after the call to primal
-    new_gotoifnot_inst = new_instruction(Core.GotoIfNot(SSAValue(dual_ssa), dual_stmt.dest))
-    CC.insert_node_here!(dual_ir, new_gotoifnot_inst, REVERSE_AFFINITY)
+    new_gotoifnot_inst = new_inst(Core.GotoIfNot(ssa, stmt.dest))
+    CC.insert_node!(dual_ir, ssa, new_gotoifnot_inst, true)
     return nothing
 end
 
 function modify_fwd_ad_stmts!(
-    dual_stmt::GlobalRef,
-    primal_stmt::GlobalRef,
-    dual_ir::CC.IncrementalCompact,
-    primal_ir::CC.IncrementalCompact,
-    dual_ssa::Integer,
-    primal_ssa::Integer,
-    ::MooncakeInterpreter;
+    stmt::GlobalRef,
+    dual_ir::IRCode,
+    primal_ir::IRCode,
+    ssa::SSAValue,
+    ::MooncakeInterpreter,
+    captures::Vector{Any};
     kwargs...,
 )
-    return nothing
-end
-
-function modify_fwd_ad_stmts!(
-    dual_stmt::ReturnNode,
-    primal_stmt::ReturnNode,
-    dual_ir::CC.IncrementalCompact,
-    primal_ir::CC.IncrementalCompact,
-    dual_ssa::Integer,
-    primal_ssa::Integer,
-    ::MooncakeInterpreter;
-    kwargs...,
-)
-    # make sure that we always return a Dual even when it's a constant
-    if isdefined(primal_stmt, :val)
-        Mooncake.replace_call!(
-            dual_ir, SSAValue(dual_ssa), Expr(:call, _dual, inc_args(dual_stmt).val)
-        )
-        # return the result from the previous Dual conversion
-        new_return_inst = new_instruction(ReturnNode(SSAValue(dual_ssa)))
-        CC.insert_node_here!(dual_ir, new_return_inst, REVERSE_AFFINITY)
+    if isconst(stmt)
+        d = const_dual(captures, stmt)
+        if d isa Int
+            Mooncake.replace_call!(dual_ir, ssa, Expr(:call, get_capture, Argument(1), d))
+        else
+            Mooncake.replace_call!(dual_ir, ssa, Expr(:call, identity, d))
+        end
     else
-        # a ReturnNode without a val is an unreachable
-        nothing
+        new_ssa = CC.insert_node!(dual_ir, ssa, new_inst(stmt), false)
+        zero_dual_call = Expr(:call, Mooncake.zero_dual, new_ssa)
+        Mooncake.replace_call!(dual_ir, ssa, zero_dual_call)
     end
+
     return nothing
 end
 
 function modify_fwd_ad_stmts!(
-    dual_stmt::PhiNode,
-    primal_stmt::PhiNode,
-    dual_ir::CC.IncrementalCompact,
-    primal_ir::CC.IncrementalCompact,
-    dual_ssa::Integer,
-    primal_ssa::Integer,
-    ::MooncakeInterpreter;
+    stmt::ReturnNode,
+    dual_ir::IRCode,
+    primal_ir::IRCode,
+    ssa::SSAValue,
+    ::MooncakeInterpreter,
+    captures::Vector{Any};
     kwargs...,
 )
-    dual_ir[SSAValue(dual_ssa)][:stmt] = inc_args(dual_stmt)
-    # TODO: translate constants like GlobalRef into constant Duals
-    dual_ir[SSAValue(dual_ssa)][:type] = Any
-    dual_ir[SSAValue(dual_ssa)][:flag] = CC.IR_FLAG_REFINED
+    # undefined `val` field means that stmt is unreachable.
+    isdefined(stmt, :val) || return nothing
+
+    # stmt is an Argument, then already a dual, and must just be incremented.
+    if stmt.val isa Union{Argument,SSAValue}
+        Mooncake.replace_call!(dual_ir, ssa, ReturnNode(__inc(stmt.val)))
+        return nothing
+    end
+
+    # stmt is a const, so we have to turn it into a dual.
+    dual_stmt = ReturnNode(const_dual(captures, stmt.val))
+    Mooncake.replace_call!(dual_ir, ssa, dual_stmt)
     return nothing
 end
 
 function modify_fwd_ad_stmts!(
-    dual_stmt::PiNode,
-    primal_stmt::PiNode,
-    dual_ir::CC.IncrementalCompact,
-    primal_ir::CC.IncrementalCompact,
-    dual_ssa::Integer,
-    primal_ssa::Integer,
-    ::MooncakeInterpreter;
+    stmt::PhiNode,
+    dual_ir::IRCode,
+    primal_ir::IRCode,
+    ssa::SSAValue,
+    ::MooncakeInterpreter,
+    captures::Vector{Any};
     kwargs...,
 )
-    dual_ir[SSAValue(dual_ssa)][:stmt] = PiNode(inc_args(dual_stmt).val, Any)  # TODO: deduce proper dual type (impossible now because PhiNodes may return undualized values with GlobalRefs)
-    dual_ir[SSAValue(dual_ssa)][:type] = Any
-    dual_ir[SSAValue(dual_ssa)][:flag] = CC.IR_FLAG_REFINED
+    for n in eachindex(stmt.values)
+        isassigned(stmt.values, n) || continue
+        stmt.values[n] isa Union{Argument,SSAValue} && continue
+        stmt.values[n] = uninit_dual(get_const_primal_value(stmt.values[n]))
+    end
+    dual_ir[ssa][:stmt] = inc_args(stmt)
+    dual_ir[ssa][:type] = dual_type(dual_ir[ssa][:type])
+    return nothing
+end
+
+function modify_fwd_ad_stmts!(
+    stmt::PiNode,
+    dual_ir::IRCode,
+    primal_ir::IRCode,
+    ssa::SSAValue,
+    ::MooncakeInterpreter,
+    captures::Vector{Any};
+    kwargs...,
+)
+    dual_ir[ssa][:stmt] = PiNode(inc_args(stmt).val, dual_type(CC.widenconst(stmt.typ)))
+    dual_ir[ssa][:type] = Any
+    dual_ir[ssa][:flag] = CC.IR_FLAG_REFINED
     return nothing
 end
 
 ## Modification of IR nodes - expressions
 
-struct DualArguments{FR}
-    frule::FR
-end
-
-function Base.show(io::IO, da::DualArguments)
-    return print(io, "DualArguments($(da.frule))")
-end
-
-# TODO: wrapping in Dual must not be systematic (e.g. Argument or SSAValue)
-function (da::DualArguments)(f::F, args::Vararg{Any,N}) where {F,N}
-    return da.frule(tuple_map(_dual, (f, args...))...)
-end
-
 function modify_fwd_ad_stmts!(
-    dual_stmt::Expr,
-    primal_stmt::Expr,
-    dual_ir::CC.IncrementalCompact,
-    primal_ir::CC.IncrementalCompact,
-    dual_ssa::Integer,
-    primal_ssa::Integer,
-    interp::MooncakeInterpreter;
+    stmt::Expr,
+    dual_ir::IRCode,
+    primal_ir::IRCode,
+    ssa::SSAValue,
+    interp::MooncakeInterpreter,
+    captures::Vector{Any};
     debug_mode,
 )
-    stmt = dual_stmt
-
     if isexpr(stmt, :invoke) || isexpr(stmt, :call)
         sig, mi = if isexpr(stmt, :invoke)
             mi = stmt.args[1]::Core.MethodInstance
             mi.specTypes, mi
         else
-            sig_types = map(primal_stmt.args) do primal_arg
-                T = get_forward_primal_type(primal_ir, primal_arg)
-                return T
+            sig_types = map(stmt.args) do primal_arg
+                return CC.widenconst(get_forward_primal_type(primal_ir, primal_arg))
             end
             Tuple{sig_types...}, missing
         end
@@ -287,9 +319,17 @@ function modify_fwd_ad_stmts!(
         else
             inc_args(stmt).args
         end
+
+        # Dual-ise arguments. If an argument is not an `Argument` or `SSAValue`, it must be
+        # a non-dual constant.
+        dual_args = map(shifted_args) do arg
+            arg isa Union{Argument,SSAValue} && return arg
+            return zero_dual(get_const_primal_value(arg))
+        end
+
         if is_primitive(context_type(interp), sig)
-            call_frule = Expr(:call, DualArguments(frule!!), shifted_args...)
-            replace_call!(dual_ir, SSAValue(dual_ssa), call_frule)
+            call_frule = Expr(:call, frule!!, dual_args...)
+            replace_call!(dual_ir, ssa, call_frule)
         else
             if isexpr(stmt, :invoke)
                 rule = LazyFRule(mi, debug_mode)
@@ -297,21 +337,23 @@ function modify_fwd_ad_stmts!(
                 rule = DynamicFRule(debug_mode)
             end
             # TODO: could this insertion of a naked rule in the IR cause a memory leak?
-            call_rule = Expr(:call, DualArguments(rule), shifted_args...)
-            replace_call!(dual_ir, SSAValue(dual_ssa), call_rule)
+            # Push the rule into the captures, and insert a statement to retrieve it.
+            push!(captures, rule)
+            get_rule = Expr(:call, get_capture, Argument(1), length(captures))
+            rule_ssa = CC.insert_node!(dual_ir, ssa, new_inst(get_rule))
+            call_rule = Expr(:call, rule_ssa, dual_args...)
+            replace_call!(dual_ir, ssa, call_rule)
         end
     elseif isexpr(stmt, :boundscheck) || isexpr(stmt, :loopinfo)
         nothing
     elseif isexpr(stmt, :code_coverage_effect)
-        replace_call!(dual_ir, SSAValue(dual_ssa), nothing)
+        replace_call!(dual_ir, ssa, nothing)
     elseif isexpr(stmt, :throw_undef_if_not)
         # args[1] is a Symbol, args[2] is the condition which must be primalized
         primal_cond = Expr(:call, _primal, inc_args(stmt).args[2])
-        replace_call!(dual_ir, SSAValue(dual_ssa), primal_cond)
-        new_undef_inst = new_instruction(
-            Expr(:throw_undef_if_not, stmt.args[1], SSAValue(dual_ssa))
-        )
-        CC.insert_node_here!(dual_ir, new_undef_inst, REVERSE_AFFINITY)
+        replace_call!(dual_ir, ssa, primal_cond)
+        new_undef_inst = new_inst(Expr(:throw_undef_if_not, stmt.args[1], ssa))
+        CC.insert_node!(dual_ir, ssa, new_undef_inst, true)
     else
         throw(
             ArgumentError(
@@ -322,27 +364,14 @@ function modify_fwd_ad_stmts!(
     return nothing
 end
 
-function get_forward_primal_type(ir::CC.IncrementalCompact, a::Argument)
-    return ir.ir.argtypes[a.n]
-end
-
-function get_forward_primal_type(ir::CC.IncrementalCompact, ssa::SSAValue)
-    return ir[ssa][:type]
-end
-
-function get_forward_primal_type(::CC.IncrementalCompact, x::QuoteNode)
-    return _typeof(x.value)
-end
-
-function get_forward_primal_type(::CC.IncrementalCompact, x)
-    return _typeof(x)
-end
-
-function get_forward_primal_type(::CC.IncrementalCompact, x::GlobalRef)
+get_forward_primal_type(ir::CC.IRCode, a::Argument) = ir.argtypes[a.n]
+get_forward_primal_type(ir::CC.IRCode, ssa::SSAValue) = ir[ssa][:type]
+get_forward_primal_type(::CC.IRCode, x::QuoteNode) = _typeof(x.value)
+get_forward_primal_type(::CC.IRCode, x) = _typeof(x)
+function get_forward_primal_type(::CC.IRCode, x::GlobalRef)
     return isconst(x) ? _typeof(getglobal(x.mod, x.name)) : x.binding.ty
 end
-
-function get_forward_primal_type(::CC.IncrementalCompact, x::Expr)
+function get_forward_primal_type(::CC.IRCode, x::Expr)
     x.head === :boundscheck && return Bool
     return error("Unrecognised expression $x found in argument slot.")
 end
@@ -373,16 +402,23 @@ end
     return rule.rule(args...)
 end
 
-function frule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where {C}
-    if is_primitive(C, _get_sig(sig_or_mi))
+function dual_ret_type(primal_ir::IRCode)
+    return dual_type(Base.Experimental.compute_ir_rettype(primal_ir))
+end
+
+function frule_type(
+    interp::MooncakeInterpreter{C}, mi::CC.MethodInstance; debug_mode
+) where {C}
+    if is_primitive(C, _get_sig(mi))
         return debug_mode ? DebugFRule{typeof(frule!!)} : typeof(frule!!)
     end
-    ir, _ = lookup_ir(interp, sig_or_mi)
+    ir, _ = lookup_ir(interp, mi)
+    nargs = length(ir.argtypes)
+    isva, _ = is_vararg_and_sparam_names(mi)
     arg_types = map(CC.widenconst, ir.argtypes)
-    fwd_args_type = Tuple{map(dual_type, arg_types)...}
-    fwd_return_type = dual_type(Base.Experimental.compute_ir_rettype(ir))
-    closure_type = RuleMC{fwd_args_type,fwd_return_type}
-    Tderived_rule = DerivedFRule{closure_type}
+    dual_args_type = Tuple{map(dual_type, arg_types)...}
+    closure_type = RuleMC{dual_args_type,dual_ret_type(ir)}
+    Tderived_rule = DerivedFRule{closure_type,isva,nargs}
     return debug_mode ? DebugFRule{Tderived_rule} : Tderived_rule
 end
 
@@ -395,13 +431,12 @@ DynamicFRule(debug_mode::Bool) = DynamicFRule(Dict{Any,Any}(), debug_mode)
 
 _copy(x::P) where {P<:DynamicFRule} = P(Dict{Any,Any}(), x.debug_mode)
 
-function (dynamic_rule::DynamicFRule)(args::Vararg{Any,N}) where {N}
-    args_dual = map(_dual, args)  # TODO: don't turn everything into a Dual, be clever with Argument and SSAValue
-    sig = Tuple{map(_typeof ∘ primal, args_dual)...}
+function (dynamic_rule::DynamicFRule)(args::Vararg{Dual,N}) where {N}
+    sig = Tuple{map(_typeof ∘ primal, args)...}
     rule = get(dynamic_rule.cache, sig, nothing)
     if rule === nothing
         rule = build_frule(get_interpreter(), sig; debug_mode=dynamic_rule.debug_mode)
         dynamic_rule.cache[sig] = rule
     end
-    return rule(args_dual...)
+    return rule(args...)
 end

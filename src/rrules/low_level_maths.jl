@@ -11,6 +11,10 @@ for (M, f, arity) in DiffRules.diffrules(; filter_modules=nothing)
         pb_name = Symbol("$(M).$(f)_pb!!")
         @eval begin
             @is_primitive MinimalCtx Tuple{typeof($M.$f),P} where {P<:IEEEFloat}
+            function frule!!(::Dual{typeof($M.$f)}, _x::Dual{P}) where {P<:IEEEFloat}
+                x = primal(_x)
+                return Dual(($M.$f)(x), tangent(_x) * $dx)
+            end
             function rrule!!(::CoDual{typeof($M.$f)}, _x::CoDual{P}) where {P<:IEEEFloat}
                 x = primal(_x) # needed for dx expression
                 $pb_name(ȳ::P) = NoRData(), ȳ * $dx
@@ -22,6 +26,13 @@ for (M, f, arity) in DiffRules.diffrules(; filter_modules=nothing)
         pb_name = Symbol("$(M).$(f)_pb!!")
         @eval begin
             @is_primitive MinimalCtx Tuple{typeof($M.$f),P,P} where {P<:IEEEFloat}
+            function frule!!(
+                ::Dual{typeof($M.$f)}, _a::Dual{P}, _b::Dual{P}
+            ) where {P<:IEEEFloat}
+                a = primal(_a)
+                b = primal(_b)
+                return Dual(($M.$f)(a, b), tangent(_a) * $da + tangent(_b) * $db)
+            end
             function rrule!!(
                 ::CoDual{typeof($M.$f)}, _a::CoDual{P}, _b::CoDual{P}
             ) where {P<:IEEEFloat}
@@ -57,6 +68,10 @@ function rrule!!(::CoDual{typeof(cos),NoFData}, x::CoDual{P,NoFData}) where {P<:
 end
 
 @is_primitive MinimalCtx Tuple{typeof(exp),<:IEEEFloat}
+function frule!!(::Dual{typeof(exp)}, x::Dual{P}) where {P<:IEEEFloat}
+    y = exp(primal(x))
+    return Dual(y, y * tangent(x))
+end
 function rrule!!(::CoDual{typeof(exp)}, x::CoDual{P}) where {P<:IEEEFloat}
     y = exp(primal(x))
     exp_pb!!(dy::P) = NoRData(), dy * y

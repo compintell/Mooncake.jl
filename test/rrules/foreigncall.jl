@@ -1,5 +1,5 @@
 @testset "foreigncall" begin
-    TestUtils.run_rrule!!_test_cases(StableRNG, Val(:foreigncall))
+    TestUtils.run_rule_test_cases(StableRNG, Val(:foreigncall))
 
     @testset "foreigncalls that should never be hit: $name" for name in [
         :jl_alloc_array_1d,

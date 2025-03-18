@@ -426,6 +426,27 @@ end
     } where {T<:BlasRealFloat},
 )
 
+# function frule!!(
+#     ::Dual{typeof(BLAS.gemm!)},
+#     transA::Dual{Char},
+#     transB::Dual{Char},
+#     alpha::Dual{T},
+#     A::Dual{<:AbstractMatrix{T}},
+#     B::Dual{<:AbstractMatrix{T}},
+#     beta::Dual{T},
+#     C::Dual{<:AbstractMatrix{T}},
+# ) where {T<:BlasRealFloat}
+#     tA = primal(transA)
+#     tB = primal(transB)
+#     a = primal(alpha)
+#     b = primal(beta)
+#     p_A, dA = arrayify(A)
+#     p_B, dB = arrayify(B)
+#     p_C, dC = arrayify(C)
+
+#     return C
+# end
+
 function rrule!!(
     ::CoDual{typeof(BLAS.gemm!)},
     transA::CoDual{Char},

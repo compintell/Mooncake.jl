@@ -11,18 +11,7 @@ module TestTypes
 using Base.Iterators: product
 using Core: svec
 using ExprTools: combinedef
-using ..Mooncake:
-    NoTangent,
-    tangent_type,
-    _typeof,
-    set_to_zero!!,
-    increment!!,
-    is_primitive,
-    randn_tangent,
-    _scale,
-    _add_to_primal,
-    _diff,
-    _dot
+using ..Mooncake: NoTangent
 
 const PRIMALS = Tuple{Bool,Any,Tuple}[]
 
@@ -105,6 +94,7 @@ using Mooncake:
     PossiblyUninitTangent,
     Tangent,
     MutableTangent,
+    frule!!,
     rrule!!,
     build_rrule,
     tangent_type,
@@ -419,12 +409,22 @@ function test_frule_correctness(rng::AbstractRNG, x_ẋ...; frule, unsafe_pertur
     x_primal = _deepcopy(x)
     y_primal = x_primal[1](x_primal[2:end]...)
 
-    # Use finite differences to estimate Frechet derivative at ẋ.
-    ε = 1e-7
-    x′ = _add_to_primal(x, _scale(ε, ẋ), unsafe_perturb)
-    y′ = x′[1](x′[2:end]...)
-    ẏ_fd = _scale(1 / ε, _diff(y′, y_primal))
-    ẋ_fd = map((_x′, _x_p) -> _scale(1 / ε, _diff(_x′, _x_p)), x′, x_primal)
+    # Use finite differences to estimate Frechet derivative. Compute the estimate at a range
+    # of different step sizes. We'll just require that one of them ends up being close to
+    # what AD gives.
+    ẋ = map(_x -> randn_tangent(rng, _x), x)
+    ε_list = [1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8]
+    fd_results = Vector{Any}(undef, length(ε_list))
+    for (n, ε) in enumerate(ε_list)
+        x′_l = _add_to_primal(x, _scale(ε, ẋ), unsafe_perturb)
+        y′_l = x′_l[1](x′_l[2:end]...)
+        x′_r = _add_to_primal(x, _scale(-ε, ẋ), unsafe_perturb)
+        y′_r = x′_r[1](x′_r[2:end]...)
+        fd_results[n] = (
+            ẏ=_scale(1 / 2ε, _diff(y′_l, y′_r)),
+            ẋ=map((_x′, _x_p) -> _scale(1 / 2ε, _diff(_x′, _x_p)), x′_l, x′_r),
+        )
+    end
 
     # Use AD to compute Frechet derivative at ẋ.
     x_ẋ_rule = map((x, ẋ) -> dual_type(_typeof(x))(_deepcopy(x), ẋ), x, ẋ)
@@ -448,11 +448,21 @@ function test_frule_correctness(rng::AbstractRNG, x_ẋ...; frule, unsafe_pertur
     # Check that all aliasing structure is correct.
     @test address_maps_are_consistent(inputs_address_map, outputs_address_map)
 
-    # Any linear projection of the outputs ought to do.
-    x̄ = map(Base.Fix1(randn_tangent, rng), x′)
-    ȳ = randn_tangent(rng, y′)
-    @test _dot(ȳ, ẏ_fd) + _dot(x̄, ẋ_fd) ≈ _dot(ȳ, ẏ_ad) + _dot(x̄, ẋ_ad) rtol = 1e-3 atol =
-        1e-3
+    # Any linear projection of the outputs ought to do. Require only one
+    # precision to be close to the answer AD gives. i.e. prove that there exists a step size
+    # such that AD and central differences agree on the answer.
+    x̄ = map(Base.Fix1(randn_tangent, rng), x_primal)
+    ȳ = randn_tangent(rng, y_primal)
+    isapprox_results = map(fd_results) do result
+        ẏ_fd, ẋ_fd = result
+        return isapprox(
+            _dot(ȳ, ẏ_fd) + _dot(x̄, ẋ_fd),
+            _dot(ȳ, ẏ_ad) + _dot(x̄, ẋ_ad);
+            rtol=1e-3,
+            atol=1e-3,
+        )
+    end
+    @test any(isapprox_results)
 end
 
 # Assumes that the interface has been tested, and we can simply check for numerical issues.
@@ -677,11 +687,10 @@ function test_frule_performance(
     if performance_checks_flag in (:stability, :stability_and_allocs)
 
         # Test primal stability.
-        test_opt(Shim(), primal(f_ḟ), map(_typeof ∘ primal, x_ẋ))
+        test_opt(primal(f_ḟ), map(_typeof ∘ primal, x_ẋ))
 
         # Test forwards-mode stability.
-        @show (_typeof(f_ḟ), map(_typeof, x_ẋ)...), rule
-        test_opt(Shim(), rule, (_typeof(f_ḟ), map(_typeof, x_ẋ)...))
+        test_opt(rule, (_typeof(f_ḟ), map(_typeof, x_ẋ)...))
     end
 
     if performance_checks_flag in (:allocs, :stability_and_allocs)
@@ -892,12 +901,13 @@ function test_rule(
     return testset
 end
 
-function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)
+function run_hand_written_rule_test_cases(rng_ctor, v::Val, forward=false)
     test_cases, memory = Mooncake.generate_hand_written_rrule!!_test_cases(rng_ctor, v)
     GC.@preserve memory @testset "$f, $(_typeof(x))" for (
         interface_only, perf_flag, _, f, x...
     ) in test_cases
-        test_rule(rng_ctor(123), f, x...; interface_only, perf_flag)
+        @info "forwards, $(Mooncake._typeof((f, x...)))"
+        test_rule(rng_ctor(123), f, x...; interface_only, perf_flag, forward)
     end
 end
 
@@ -910,9 +920,11 @@ function run_derived_rrule!!_test_cases(rng_ctor, v::Val)
     end
 end
 
-function run_rrule!!_test_cases(rng_ctor, v::Val)
-    run_hand_written_rrule!!_test_cases(rng_ctor, v)
-    return run_derived_rrule!!_test_cases(rng_ctor, v)
+function run_rule_test_cases(rng_ctor, v::Val)
+    run_hand_written_rule_test_cases(rng_ctor, v, true)
+    run_hand_written_rule_test_cases(rng_ctor, v)
+    run_derived_rrule!!_test_cases(rng_ctor, v)
+    return nothing
 end
 
 #

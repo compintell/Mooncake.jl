@@ -19,15 +19,14 @@ function parse_signature_expr(sig::Expr)
 end
 
 function construct_rrule_def(arg_names, arg_types, where_params, body)
-    name = :(Mooncake.rrule!!)
-    arg_exprs = map((n, t) -> :($n::$t), arg_names, arg_types)
-    def = Dict(:head => :function, :name => name, :args => arg_exprs, :body => body)
-    where_params !== nothing && setindex!(def, where_params, :whereparams)
-    return ExprTools.combinedef(def)
+    return construct_rule_def(:(Mooncake.rrule!!), arg_names, arg_types, where_params, body)
 end
 
 function construct_frule_def(arg_names, arg_types, where_params, body)
-    name = :(Mooncake.frule!!)
+    return construct_rule_def(:(Mooncake.frule!!), arg_names, arg_types, where_params, body)
+end
+
+function construct_rule_def(name, arg_names, arg_types, where_params, body)
     arg_exprs = map((n, t) -> :($n::$t), arg_names, arg_types)
     def = Dict(:head => :function, :name => name, :args => arg_exprs, :body => body)
     where_params !== nothing && setindex!(def, where_params, :whereparams)
@@ -243,7 +242,7 @@ macro zero_derivative(ctx, sig)
     # then the last argument requires special treatment.
     arg_type_symbols, where_params = parse_signature_expr(sig)
     arg_names = map(n -> Symbol("x_$n"), eachindex(arg_type_symbols))
-    is_vararg = arg_type_symbols[end] === :Vararg
+    is_vararg = arg_type_symbols[end] == Expr(:escape, :Vararg)
     if is_vararg
         arg_types_deriv = vcat(
             map(t -> :(Mooncake.Dual{<:$t}), arg_type_symbols[1:(end - 1)]),
