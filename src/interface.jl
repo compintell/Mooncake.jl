@@ -218,7 +218,7 @@ function is_user_defined_struct(T)
            !isprimitivetype(T) &&
            !(T <: supportedcollections) &&
            !(T <: Array) &&
-           !(T <: Memory)
+           (@static VERSION >= v"1.11" ? !(T <: Memory) : true)
 end
 
 """
