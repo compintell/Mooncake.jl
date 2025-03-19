@@ -23,19 +23,19 @@ function generate_hand_written_rrule!!_test_cases(
     _x = Ref(5.0)
     _dx = Ref(4.0)
     test_cases = vcat(
-        # Any[
-        # # Rules to avoid pointer type conversions.
-        # (
-        #     true,
-        #     :stability_and_allocs,
-        #     nothing,
-        #     +,
-        #     CoDual(
-        #         bitcast(Ptr{Float64}, pointer_from_objref(_x)),
-        #         bitcast(Ptr{Float64}, pointer_from_objref(_dx)),
-        #     ),
-        #     2,
-        # ),],
+        Any[
+        # Rules to avoid pointer type conversions.
+        (
+            true,
+            :stability_and_allocs,
+            nothing,
+            +,
+            CoDual(
+                bitcast(Ptr{Float64}, pointer_from_objref(_x)),
+                bitcast(Ptr{Float64}, pointer_from_objref(_dx)),
+            ),
+            2,
+        ),],
 
         # Rules in order to avoid introducing determinism.
         reduce(

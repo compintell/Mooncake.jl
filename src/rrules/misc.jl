@@ -62,12 +62,11 @@ lgetfield(x, ::Val{f}) where {f} = getfield(x, f)
     ::Dual{typeof(lgetfield)}, x::Dual{P,T}, ::Dual{Val{f}}
 ) where {P,T<:StandardTangentType,f}
     primal_field = getfield(primal(x), f)
-    tangent_field = if tangent_type(P) === NoTangent
-        NoTangent()
+    if tangent_type(P) === NoTangent
+        return uninit_dual(primal_field)
     else
-        _get_tangent_field(tangent(x), f)
+        Dual(primal_field, _get_tangent_field(tangent(x), f))
     end
-    return Dual(primal_field, tangent_field)
 end
 
 _get_tangent_field(f::Union{NamedTuple,Tuple}, name) = getfield(f, name)
@@ -124,12 +123,11 @@ end
     ::Dual{Val{order}},
 ) where {P,f,order}
     primal_field = getfield(primal(x), f, order)
-    tangent_field = if tangent_type(P) === NoTangent
-        NoTangent()
+    if tangent_type(P) === NoTangent
+        return uninit_dual(primal_field)
     else
-        _get_tangent_field(tangent(x), f)
+        return Dual(primal_field, _get_tangent_field(tangent(x), f))
     end
-    return Dual(primal_field, tangent_field)
 end
 @inline function rrule!!(
     ::CoDual{typeof(lgetfield)}, x::CoDual{P,F}, ::CoDual{Val{f}}, ::CoDual{Val{order}}
@@ -210,17 +208,17 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
 
     specific_test_cases = Any[
         # Rules to avoid pointer type conversions.
-        # (
-        #     true,
-        #     :stability,
-        #     nothing,
-        #     +,
-        #     CoDual(
-        #         bitcast(Ptr{Float64}, pointer_from_objref(_x)),
-        #         bitcast(Ptr{Float64}, pointer_from_objref(_dx)),
-        #     ),
-        #     2,
-        # ),
+        (
+            true,
+            :stability,
+            nothing,
+            +,
+            CoDual(
+                bitcast(Ptr{Float64}, pointer_from_objref(_x)),
+                bitcast(Ptr{Float64}, pointer_from_objref(_dx)),
+            ),
+            2,
+        ),
 
         # Lack of activity-analysis rules:
         (false, :stability_and_allocs, nothing, Base.elsize, randn(5, 4)),
