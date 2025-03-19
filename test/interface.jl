@@ -120,6 +120,9 @@ end
             (1.0, [1.0]),
             userdefinedstruct(1, [1.0, 1.0, 1.0], [[1.0]]),
             userdefinedmutablestruct(1, [1.0, 1.0, 1.0], [[1.0]]),
+            SA[1, 2, 4],
+            Dict(:a => [1, 2], :b => [3, 4]),
+            Set([1, 2]),
         ]
         VERSION >= v"1.11" &&
             push!(test_topass_cases, fill!(Memory{Float64}(undef, 3), 3.0))
@@ -157,13 +160,6 @@ end
         push!(test_tofail_cases, Ptr{Float64}(12345))
         push!(test_tofail_cases, (1, Ptr{Float64}(12345)))
         push!(test_tofail_cases, [Ptr{Float64}(12345)])
-
-        # ---- Non Differentiable Cases ----
-        nondiff_dict = Dict(:a => [1, 2], :b => [3, 4])
-        push!(test_tofail_cases, nondiff_dict)
-        nondiff_set = Set([1, 2])
-        push!(test_tofail_cases, nondiff_set)
-        # push!(test_tofail_cases,Ptr{Float64}(1))
 
         @test_throws(
             Mooncake.ValueAndGradientReturnTypeError,
