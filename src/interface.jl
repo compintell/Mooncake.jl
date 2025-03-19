@@ -64,22 +64,6 @@ function throw_circular_reference_or_alias_error(y)
     )
 end
 
-function throw_datastructure_output_error(y)
-    throw(
-        ValueAndGradientReturnTypeError(
-            "Error: Object of type $(typeof(y)) does not have a Real finite Hilbert space. "
-        ),
-    )
-end
-
-function throw_undef_err(y)
-    throw(
-        ValueAndGradientReturnTypeError(
-            "Error: Object $(y) cannot be or contain undefined memory addresses. "
-        ),
-    )
-end
-
 """
     __value_and_gradient!!(rule, f::CoDual, x::CoDual...)
 
@@ -205,8 +189,6 @@ struct Cache{Trule,Ty_cache,Ttangents<:Tuple}
     tangents::Ttangents
 end
 
-const supportedcollections = Union{Tuple,NamedTuple}
-
 """
     is_user_defined_struct(T)
 
@@ -216,8 +198,7 @@ Helps in identifying user defined struct for recursing over fields correctly.
 function is_user_defined_struct(T)
     return isconcretetype(T) &&
            !isprimitivetype(T) &&
-           !(T <: supportedcollections) &&
-           !(T <: Array) &&
+           !(T <: Union{Tuple,NamedTuple,Array}) &&
            (@static VERSION >= v"1.11" ? !(T <: Memory) : true)
 end
 
@@ -232,9 +213,6 @@ Internally calls [`__exclude_unsupported_output_internal!`](@ref).
 The design is modelled after `zero_tangent`.
 """
 function __exclude_unsupported_output(y::T) where {T}
-    if (T <: Union{Dict,Set})
-        throw_datastructure_output_error(y)
-    end
     __exclude_unsupported_output_internal!(y, Set{UInt}())
     return nothing
 end
@@ -254,30 +232,32 @@ function __exclude_unsupported_output_internal!(y::T, address_set::Set{UInt}) wh
         throw_circular_reference_or_alias_error(y)
     end
 
-    push!(address_set, objectid(y))
+    # immutable types are always copied.
+    ismutable(y) && push!(address_set, objectid(y))
 
     if is_user_defined_struct(T)
         # recurse over a composite type.
         for y_sub in fieldnames(T)
             # isassigned, isdefined are not defined for Tuples, NamedTuples.
-            if !(T <: supportedcollections) && !isdefined(y, y_sub)
-                throw_undef_err(y)
-            else
-                __exclude_unsupported_output_internal!(getfield(y, y_sub), address_set)
-            end
+            !isdefined(y, y_sub) && continue
+            __exclude_unsupported_output_internal!(getfield(y, y_sub), address_set)
         end
     else
         # recurse over built in collections.
         for i in eachindex(y)
             # isassigned is valid for Arrays.
-            if !(T <: supportedcollections) && !isassigned(y, i)
-                throw_undef_err(y)
-            else
-                __exclude_unsupported_output_internal!(y[i], address_set)
-            end
+            !isassigned(y, i) && continue
+            __exclude_unsupported_output_internal!(y[i], address_set)
         end
     end
 
+    return nothing
+end
+
+function __exclude_unsupported_output_internal!(
+    y::Union{Tuple,NamedTuple}, address_set::Set{UInt}
+)
+    map(Base.Fix2(__exclude_unsupported_output_internal!, address_set), y)
     return nothing
 end
 
