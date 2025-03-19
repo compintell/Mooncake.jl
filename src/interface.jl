@@ -47,9 +47,13 @@ function throw_val_and_grad_ret_type_error(y)
     )
 end
 
+struct ValueAndPullbackReturnTypeError <: Exception
+    msg::String
+end
+
 function throw_forward_ret_type_error(y)
     throw(
-        ValueAndGradientReturnTypeError(
+        ValueAndPullbackReturnTypeError(
             "Found a value of type $(typeof(y)) in output, but output is not permitted to be or contain a pointer. This is because the amount of memory to which it refers is unknown, therefore Mooncake.jl is unable to allocate appropriate memory for its gradients.",
         ),
     )
@@ -57,7 +61,7 @@ end
 
 function throw_circular_reference_or_alias_error(y)
     throw(
-        ValueAndGradientReturnTypeError(
+        ValueAndPullbackReturnTypeError(
             "Object with address $(objectid(y)) and type $(typeof(y)) appears more than once." *
             " Output cannot contain Circular references or aliases",
         ),

@@ -101,19 +101,19 @@ end
 
     @testset "prepare_pullback_cache errors" begin
         # Test when function outputs a valid type.
-        struct userdefinedstruct
+        struct UserDefinedStruct
             a::Int64
             b::Vector{Float64}
             c::Vector{Vector{Float64}}
         end
 
-        mutable struct userdefinedmutablestruct
+        mutable struct UserDefinedMutableStruct
             a::Int64
             b::Vector{Float64}
             c::Vector{Vector{Float64}}
         end
 
-        test_topass_cases = [
+        test_to_pass_cases = [
             (1, (1.0, 1.0)),
             (1.0, 1.0),
             (1, [[1.0, 1, 1.0], 1.0]),
@@ -161,7 +161,7 @@ end
         push!(test_tofail_cases, [Ptr{Float64}(12345)])
 
         @test_throws(
-            Mooncake.ValueAndGradientReturnTypeError,
+            Mooncake.ValueAndPullbackReturnTypeError,
             Mooncake.__exclude_unsupported_output.(test_tofail_cases)
         )
 
@@ -171,7 +171,7 @@ end
             try
                 Mooncake.__exclude_unsupported_output(additional_testset[i][2])
             catch err
-                @test isa(err, Mooncake.ValueAndGradientReturnTypeError)
+                @test isa(err, Mooncake.ValueAndPullbackReturnTypeError)
             end
         end
     end
