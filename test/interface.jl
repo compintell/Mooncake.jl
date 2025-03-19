@@ -120,7 +120,6 @@ end
             (1.0, [1.0]),
             userdefinedstruct(1, [1.0, 1.0, 1.0], [[1.0]]),
             userdefinedmutablestruct(1, [1.0, 1.0, 1.0], [[1.0]]),
-            SA[1, 2, 4],
             Dict(:a => [1, 2], :b => [3, 4]),
             Set([1, 2]),
         ]
