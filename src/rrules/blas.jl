@@ -33,7 +33,7 @@ Return the primal field of `x`, and convert its fdata into an array of the same 
 primal. This operation is not guaranteed to be possible for all array types, but seems to be
 possible for all array types of interest so far.
 """
-function arrayify(x::CoDual{A}) where {A<:AbstractArray{<:BlasFloat}}
+function arrayify(x::Union{Dual{A},CoDual{A}}) where {A<:AbstractArray{<:BlasFloat}}
     return arrayify(primal(x), tangent(x))  # NOTE: for complex number, the tangent is a reinterpreted version of the primal
 end
 arrayify(x::Array{P}, dx::Array{P}) where {P<:BlasRealFloat} = (x, dx)
@@ -426,26 +426,35 @@ end
     } where {T<:BlasRealFloat},
 )
 
-# function frule!!(
-#     ::Dual{typeof(BLAS.gemm!)},
-#     transA::Dual{Char},
-#     transB::Dual{Char},
-#     alpha::Dual{T},
-#     A::Dual{<:AbstractMatrix{T}},
-#     B::Dual{<:AbstractMatrix{T}},
-#     beta::Dual{T},
-#     C::Dual{<:AbstractMatrix{T}},
-# ) where {T<:BlasRealFloat}
-#     tA = primal(transA)
-#     tB = primal(transB)
-#     a = primal(alpha)
-#     b = primal(beta)
-#     p_A, dA = arrayify(A)
-#     p_B, dB = arrayify(B)
-#     p_C, dC = arrayify(C)
+function frule!!(
+    ::Dual{typeof(BLAS.gemm!)},
+    transA::Dual{Char},
+    transB::Dual{Char},
+    alpha::Dual{T},
+    A::Dual{<:AbstractMatrix{T}},
+    B::Dual{<:AbstractMatrix{T}},
+    beta::Dual{T},
+    C::Dual{<:AbstractMatrix{T}},
+) where {T<:BlasRealFloat}
+    tA = primal(transA)
+    tB = primal(transB)
+    a = primal(alpha)
+    b = primal(beta)
+    p_A, dA = arrayify(A)
+    p_B, dB = arrayify(B)
+    p_C, dC = arrayify(C)
 
-#     return C
-# end
+    # Primal computation.
+    BLAS.gemm!(tA, tB, a, p_A, p_B, b, p_C)
+
+    # Tangent computation.
+    BLAS.gemm!(tA, tB, tangent(alpha), p_A, p_B, b, dC)
+    BLAS.gemm!(tA, tB, a, dA, p_B, one(T), dC)
+    BLAS.gemm!(tA, tB, a, p_A, dB, one(T), dC)
+    dC .+= b .* p_C
+
+    return C
+end
 
 function rrule!!(
     ::CoDual{typeof(BLAS.gemm!)},

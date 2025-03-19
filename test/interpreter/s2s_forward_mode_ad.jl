@@ -1,7 +1,5 @@
-working_cases = vcat(1:75, 77:105, 107:121, 123:127);
-
 @testset verbose = true "s2s_forward_mode_ad" begin
-    test_cases = collect(enumerate(TestResources.generate_test_functions()))[working_cases]
+    test_cases = collect(enumerate(TestResources.generate_test_functions()))
     @testset "$n - $(_typeof((f, x...)))" for (n, (int_only, pf, _, f, x...)) in test_cases
         sig = _typeof((f, x...))
         @info "$n: $sig"
