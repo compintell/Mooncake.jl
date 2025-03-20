@@ -194,19 +194,6 @@ struct Cache{Trule,Ty_cache,Ttangents<:Tuple}
 end
 
 """
-    is_user_defined_struct(T)
-
-Required for checking if datatype `T` is a immutable Composite, Mutable Composite type (returns true) or a built in collection type (returns false).
-Helps in identifying user defined struct for recursing over fields correctly. 
-"""
-function is_user_defined_struct(T)
-    return isconcretetype(T) &&
-           !isprimitivetype(T) &&
-           !(T <: Union{Tuple,NamedTuple,Array}) &&
-           (@static VERSION >= v"1.11" ? !(T <: Memory) : true)
-end
-
-"""
     __exclude_unsupported_output(y)
 
 Required for the robust design of [`value_and_pullback`](@ref), [`prepare_pullback_cache`](@ref).  
@@ -236,23 +223,36 @@ function __exclude_unsupported_output_internal!(y::T, address_set::Set{UInt}) wh
         throw_circular_reference_or_alias_error(y)
     end
 
-    # immutable types are always copied.
+    # immutable types are copied on the stack.
     ismutable(y) && push!(address_set, objectid(y))
 
-    if is_user_defined_struct(T)
-        # recurse over a composite type.
-        for y_sub in fieldnames(T)
-            # isassigned, isdefined are not defined for Tuples, NamedTuples.
-            !isdefined(y, y_sub) && continue
-            __exclude_unsupported_output_internal!(getfield(y, y_sub), address_set)
-        end
-    else
-        # recurse over built in collections.
-        for i in eachindex(y)
-            # isassigned is valid for Arrays.
-            !isassigned(y, i) && continue
-            __exclude_unsupported_output_internal!(y[i], address_set)
-        end
+    # recurse over a composite type's fields.
+    for y_sub in fieldnames(T)
+        # isdefined() is valid for Mutable Structs, Structs.
+        !isdefined(y, y_sub) && continue
+        __exclude_unsupported_output_internal!(getfield(y, y_sub), address_set)
+    end
+
+    return nothing
+end
+
+function __exclude_unsupported_output_internal!(
+    y::T, address_set::Set{UInt}
+) where {T<:Union{Array,@static if VERSION >= v"1.11"
+        Memory
+    end}}
+    if objectid(y) in address_set
+        throw_circular_reference_or_alias_error(y)
+    end
+
+    # mutable types are always stored on the heap.
+    push!(address_set, objectid(y))
+
+    # recurse over iterable collections.
+    for i in eachindex(y)
+        # isassigned() is valid for Arrays, Memory.
+        !isassigned(y, i) && continue
+        __exclude_unsupported_output_internal!(y[i], address_set)
     end
 
     return nothing
