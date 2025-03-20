@@ -237,45 +237,29 @@ function __exclude_unsupported_output_internal!(y::T, address_set::Set{UInt}) wh
 end
 
 @static if VERSION >= v"1.11"
-    function __exclude_unsupported_output_internal!(
-        y::T, address_set::Set{UInt}
-    ) where {T<:Union{Array,Memory}}
-        if objectid(y) in address_set
-            throw_circular_reference_or_alias_error(y)
-        end
-
-        # mutable types are always stored on the heap.
-        push!(address_set, objectid(y))
-
-        # recurse over iterable collections.
-        for i in eachindex(y)
-            # isassigned() is valid for Arrays, Memory.
-            !isassigned(y, i) && continue
-            __exclude_unsupported_output_internal!(y[i], address_set)
-        end
-
-        return nothing
-    end
+    const IterableCollections = Union{Array,Memory}
 else
-    function __exclude_unsupported_output_internal!(
-        y::T, address_set::Set{UInt}
-    ) where {T<:Array}
-        if objectid(y) in address_set
-            throw_circular_reference_or_alias_error(y)
-        end
+    const IterableCollections = Array
+end
 
-        # mutable types are always stored on the heap.
-        push!(address_set, objectid(y))
-
-        # recurse over iterable collections.
-        for i in eachindex(y)
-            # isassigned() is valid for Arrays, Memory.
-            !isassigned(y, i) && continue
-            __exclude_unsupported_output_internal!(y[i], address_set)
-        end
-
-        return nothing
+function __exclude_unsupported_output_internal!(
+    y::T, address_set::Set{UInt}
+) where {T<:IterableCollections}
+    if objectid(y) in address_set
+        throw_circular_reference_or_alias_error(y)
     end
+
+    # mutable types are always stored on the heap.
+    push!(address_set, objectid(y))
+
+    # recurse over iterable collections.
+    for i in eachindex(y)
+        # isassigned() is valid for Arrays, Memory.
+        !isassigned(y, i) && continue
+        __exclude_unsupported_output_internal!(y[i], address_set)
+    end
+
+    return nothing
 end
 
 function __exclude_unsupported_output_internal!(
