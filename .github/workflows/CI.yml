@@ -31,7 +31,7 @@ jobs:
           # 'rrules/functionwrappers',
           # 'rrules/iddict',
           # 'rrules/lapack',
-          # 'rrules/linear_algebra',
+          'rrules/linear_algebra',
           'rrules/low_level_maths',
           'rrules/memory',
           'rrules/misc',
