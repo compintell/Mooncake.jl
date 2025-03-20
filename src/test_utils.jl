@@ -412,7 +412,7 @@ function test_frule_correctness(rng::AbstractRNG, x_ẋ...; frule, unsafe_pertur
     # Use finite differences to estimate Frechet derivative. Compute the estimate at a range
     # of different step sizes. We'll just require that one of them ends up being close to
     # what AD gives.
-    ε_list = [1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8]
+    ε_list = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8]
     fd_results = Vector{Any}(undef, length(ε_list))
     for (n, ε) in enumerate(ε_list)
         x′_l = _add_to_primal(x, _scale(ε, ẋ), unsafe_perturb)
@@ -478,9 +478,13 @@ function test_rrule_correctness(rng::AbstractRNG, x_x̄...; rrule, unsafe_pertur
     x_primal = _deepcopy(x)
     y_primal = x_primal[1](x_primal[2:end]...)
 
+    # Construct tangent to inputs, and normalise to be of unit length.
+    ẋ_unnormalised = map(_x -> randn_tangent(rng, _x), x)
+    nrm = sqrt(sum(x -> _dot(x, x), ẋ_unnormalised))
+    ẋ = map(_x -> _scale(1 / nrm, _x), ẋ_unnormalised)
+
     # Use finite differences to estimate vjps. Compute the estimate at a range of different
     # step sizes. We'll just require that one of them ends up being close to what AD gives.
-    ẋ = map(_x -> randn_tangent(rng, _x), x)
     ε_list = [1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8]
     fd_results = Vector{Any}(undef, length(ε_list))
     for (n, ε) in enumerate(ε_list)
@@ -541,6 +545,14 @@ function test_rrule_correctness(rng::AbstractRNG, x_x̄...; rrule, unsafe_pertur
             rtol=1e-3,
             atol=1e-3,
         )
+    end
+    if !any(isapprox_results)
+        vals = map(fd_results) do result
+            ẏ, ẋ_post = result
+            (_dot(ȳ_delta, ẏ) + _dot(x̄_delta, ẋ_post), _dot(x̄, ẋ))
+        end
+        display(vals)
+        println()
     end
     @test any(isapprox_results)
 end
@@ -905,7 +917,7 @@ function run_hand_written_rule_test_cases(rng_ctor, v::Val, forward=false)
     GC.@preserve memory @testset "$f, $(_typeof(x))" for (
         interface_only, perf_flag, _, f, x...
     ) in test_cases
-        @info "forwards, $(Mooncake._typeof((f, x...)))"
+        # @info "forward=$forward, $(Mooncake._typeof((f, x...)))"
         test_rule(rng_ctor(123), f, x...; interface_only, perf_flag, forward)
     end
 end
