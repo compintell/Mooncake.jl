@@ -236,42 +236,46 @@ function __exclude_unsupported_output_internal!(y::T, address_set::Set{UInt}) wh
     return nothing
 end
 
-function __exclude_unsupported_output_internal!(y::Array, address_set::Set{UInt}) where {T}
-    if objectid(y) in address_set
-        throw_circular_reference_or_alias_error(y)
+@static if VERSION >= v"1.11"
+    function __exclude_unsupported_output_internal!(
+        y::T, address_set::Set{UInt}
+    ) where {T<:Union{Array,Memory}}
+        if objectid(y) in address_set
+            throw_circular_reference_or_alias_error(y)
+        end
+
+        # mutable types are always stored on the heap.
+        push!(address_set, objectid(y))
+
+        # recurse over iterable collections.
+        for i in eachindex(y)
+            # isassigned() is valid for Arrays, Memory.
+            !isassigned(y, i) && continue
+            __exclude_unsupported_output_internal!(y[i], address_set)
+        end
+
+        return nothing
     end
+else
+    function __exclude_unsupported_output_internal!(
+        y::T, address_set::Set{UInt}
+    ) where {T<:Array}
+        if objectid(y) in address_set
+            throw_circular_reference_or_alias_error(y)
+        end
 
-    # mutable types are always stored on the heap.
-    push!(address_set, objectid(y))
+        # mutable types are always stored on the heap.
+        push!(address_set, objectid(y))
 
-    # recurse over iterable collections.
-    for i in eachindex(y)
-        # isassigned() is valid for Arrays, Memory.
-        !isassigned(y, i) && continue
-        __exclude_unsupported_output_internal!(y[i], address_set)
+        # recurse over iterable collections.
+        for i in eachindex(y)
+            # isassigned() is valid for Arrays, Memory.
+            !isassigned(y, i) && continue
+            __exclude_unsupported_output_internal!(y[i], address_set)
+        end
+
+        return nothing
     end
-
-    return nothing
-end
-
-@static VERSION >= v"1.11" function __exclude_unsupported_output_internal!(
-    y::Memory, address_set::Set{UInt}
-) where {T}
-    if objectid(y) in address_set
-        throw_circular_reference_or_alias_error(y)
-    end
-
-    # mutable types are always stored on the heap.
-    push!(address_set, objectid(y))
-
-    # recurse over iterable collections.
-    for i in eachindex(y)
-        # isassigned() is valid for Arrays, Memory.
-        !isassigned(y, i) && continue
-        __exclude_unsupported_output_internal!(y[i], address_set)
-    end
-
-    return nothing
 end
 
 function __exclude_unsupported_output_internal!(
