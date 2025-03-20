@@ -236,11 +236,7 @@ function __exclude_unsupported_output_internal!(y::T, address_set::Set{UInt}) wh
     return nothing
 end
 
-@static if VERSION >= v"1.11"
-    const IterableCollections = Union{Array,Memory}
-else
-    const IterableCollections = Array
-end
+const IterableCollections = @static VERSION >= v"1.11" ? Union{Array,Memory} : Array
 
 function __exclude_unsupported_output_internal!(
     y::T, address_set::Set{UInt}
