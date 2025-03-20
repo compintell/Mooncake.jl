@@ -238,9 +238,7 @@ end
 
 function __exclude_unsupported_output_internal!(
     y::T, address_set::Set{UInt}
-) where {T<:Union{Array,@static if VERSION >= v"1.11"
-        Memory
-    end}}
+) where {T <: Array||@static VERSION >= v"1.11" ? (T <: Memory) : true}
     if objectid(y) in address_set
         throw_circular_reference_or_alias_error(y)
     end
