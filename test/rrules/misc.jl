@@ -26,5 +26,5 @@
         @test x.b === new_b
     end
 
-    TestUtils.run_rrule!!_test_cases(StableRNG, Val(:misc))
+    TestUtils.run_rule_test_cases(StableRNG, Val(:misc))
 end
