@@ -308,8 +308,6 @@ function modify_fwd_ad_stmts!(
             else
                 rule = DynamicFRule(info.debug_mode)
             end
-            # TODO: could this insertion of a naked rule in the IR cause a memory leak?
-            # Push the rule into the captures, and insert a statement to retrieve it.
             push!(captures, rule)
             get_rule = Expr(:call, get_capture, Argument(1), length(captures))
             rule_ssa = CC.insert_node!(dual_ir, ssa, new_inst(get_rule))
