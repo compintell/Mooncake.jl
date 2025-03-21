@@ -238,17 +238,30 @@ end
 
 const _BuiltinArrays = @static VERSION >= v"1.11" ? Union{Array,Memory} : Array
 
-
+# explicit for svec
 function _copy_temp(x::P) where {P<:SimpleVector}
     return Core.svec([map(_copy_temp, x_sub) for x_sub in x]...)
 end
 
+# mutable composite types
 function _copy_temp(x::P) where {P}
     isbitstype(P) && return x
-    return P((map(_copy_temp, getfield(x, x_sub)) for x_sub in fieldnames(P))...)
+    # return undef values as is (improve)
+    return P(
+        (
+            map(i -> !isdefined(x, i) ? undef : _copy_temp(x[i]), getfield(x, x_sub)) for
+            x_sub in fieldnames(P)
+        )...,
+    )
 end
 
+# iterable collections
 function _copy_temp(x::P) where {P<:_BuiltinArrays}
+    # return undef values as is (improve)
+    return map(i -> !isassigned(x, i) ? undef : _copy_temp(x[i]), eachindex(x))
+end
+
+function _copy_temp(x::P) where {P<:Union{Tuple,NamedTuple}}
     return map(_copy_temp, x)
 end
 

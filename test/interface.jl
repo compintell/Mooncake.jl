@@ -175,5 +175,49 @@ end
                 @test isa(err, Mooncake.ValueAndPullbackReturnTypeError)
             end
         end
+
+        additional_test_set = Mooncake.tangent_test_cases()
+        @testset for i in eachindex(additional_test_set)
+            original = additional_test_set[i][2]
+            try
+                if isnothing(Mooncake.__exclude_unsupported_output(original))
+                    test_copy = Mooncake._copy_temp(original)
+
+                    if typeof(test_copy) <: Mooncake._BuiltinArrays
+                        for i in eachindex(original)
+                            !isassigned(original, i) && throw(
+                                Mooncake.ValueAndPullbackReturnTypeError((
+                                    "Placeholder errorr"
+                                ),),
+                            )
+                        end
+
+                        @test test_copy == original
+                        # isbitstypes with same values are stored in the same address (Value Caching).
+                        if !isbitstype(typeof(original))
+                            @test test_copy !== original
+                        end
+                    else
+                        fields_copy = [
+                            getfield(test_copy, name) for
+                            name in fieldnames(typeof(test_copy))
+                        ]
+                        fields_orig = [
+                            getfield(original, name) for
+                            name in fieldnames(typeof(original))
+                        ]
+                        @test fields_copy == fields_orig
+
+                        # Value caching for pure immutable Types!
+                        if !any(isbitstype.(typeof.(fields_orig)))
+                            @test !any(fields_copy .=== fields_orig)
+                        end
+                        @test typeof(test_copy) == typeof(original)
+                    end
+                end
+            catch err
+                @test isa(err, Mooncake.ValueAndPullbackReturnTypeError)
+            end
+        end
     end
 end
