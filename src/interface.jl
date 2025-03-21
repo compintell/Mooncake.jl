@@ -16,7 +16,7 @@ function __value_and_pullback!!(
     out, pb!! = rule(fx_fwds...)
     @assert _typeof(tangent(out)) == fdata_type(T)
     increment!!(tangent(out), fdata(ȳ))
-    v = y_cache === nothing ? copy(primal(out)) : _copy!!(y_cache, primal(out))
+    v = y_cache === nothing ? _copy_temp(primal(out)) : _copy!!(y_cache, primal(out))
     return v, tuple_map((f, r) -> tangent(fdata(tangent(f)), r), fx, pb!!(rdata(ȳ)))
 end
 
@@ -169,6 +169,19 @@ end
 _copy!!(dst, src) = copy!(dst, src)
 _copy!!(::Number, src::Number) = src
 
+function _copy_temp(x::P) where {P<:SimpleVector}
+    return Core.svec([map(_copy_temp, x_sub) for x_sub in x]...)
+end
+
+function _copy_temp(x::P) where {P}
+    isbitstype(P) && return x
+    return P((map(_copy_temp, getfield(x, x_sub)) for x_sub in fieldnames(P))...)
+end
+
+function _copy_temp(x::P) where {P<:_BuiltinArrays}
+    return map(_copy_temp, x)
+end
+
 function __create_coduals(args)
     try
         return tuple_map(zero_codual, args)
@@ -291,7 +304,7 @@ function prepare_pullback_cache(fx...; kwargs...)
     __exclude_unsupported_output(y)
 
     # Construct cache for output. Check that `copy!`ing appears to work.
-    y_cache = copy(primal(y))
+    y_cache = _copy_temp(primal(y))
     return Cache(rule, _copy!!(y_cache, primal(y)), tangents)
 end
 
