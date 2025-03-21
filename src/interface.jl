@@ -47,6 +47,27 @@ function throw_val_and_grad_ret_type_error(y)
     )
 end
 
+struct ValueAndPullbackReturnTypeError <: Exception
+    msg::String
+end
+
+function throw_forward_ret_type_error(y)
+    throw(
+        ValueAndPullbackReturnTypeError(
+            "Found a value of type $(typeof(y)) in output, but output is not permitted to be or contain a pointer. This is because the amount of memory to which it refers is unknown, therefore Mooncake.jl is unable to allocate appropriate memory for its gradients.",
+        ),
+    )
+end
+
+function throw_circular_reference_or_alias_error(y)
+    throw(
+        ValueAndPullbackReturnTypeError(
+            "Object with address $(objectid(y)) and type $(typeof(y)) appears more than once." *
+            " Output cannot contain Circular references or aliases",
+        ),
+    )
+end
+
 """
     __value_and_gradient!!(rule, f::CoDual, x::CoDual...)
 
@@ -145,6 +166,9 @@ function value_and_gradient!!(rule::R, fx::Vararg{Any,N}) where {R,N}
     return __value_and_gradient!!(rule, __create_coduals(fx)...)
 end
 
+_copy!!(dst, src) = copy!(dst, src)
+_copy!!(::Number, src::Number) = src
+
 function __create_coduals(args)
     try
         return tuple_map(zero_codual, args)
@@ -169,8 +193,82 @@ struct Cache{Trule,Ty_cache,Ttangents<:Tuple}
     tangents::Ttangents
 end
 
-_copy!!(dst, src) = copy!(dst, src)
-_copy!!(::Number, src::Number) = src
+"""
+    __exclude_unsupported_output(y)
+
+Required for the robust design of [`value_and_pullback`](@ref), [`prepare_pullback_cache`](@ref).  
+Ensures that `y` contains no aliasing, circular references, `Ptr`s or non differentiable datatypes. 
+In the forward pass f(args...) output can only return a "Tree" like datastructure with leaf nodes as primitive types.  
+Refer https://github.com/compintell/Mooncake.jl/issues/517#issuecomment-2715202789 and related issue for details.  
+Internally calls [`__exclude_unsupported_output_internal!`](@ref).
+The design is modelled after `zero_tangent`.
+"""
+function __exclude_unsupported_output(y::T) where {T}
+    __exclude_unsupported_output_internal!(y, Set{UInt}())
+    return nothing
+end
+
+"""
+    __exclude_unsupported_output_internal(y::T, address_set::Set{UInt}) where {T}
+
+For checking if output`y` is a valid Mutable/immutable composite or a primitive type.
+Performs a recursive depth first search over the function output `y` with an `isbitstype()` check base case. The visited memory addresses are stored inside `address_set`.
+If the set already contains a newly visited address, it errors out indicating an Alais or Circular reference.
+Also errors out if `y` is or contains a Pointer.
+It is called internally by [`__exclude_unsupported_output(y)`](@ref).
+"""
+function __exclude_unsupported_output_internal!(y::T, address_set::Set{UInt}) where {T}
+    isbitstype(T) && return nothing
+    if objectid(y) in address_set
+        throw_circular_reference_or_alias_error(y)
+    end
+
+    # immutable types are copied on the stack.
+    ismutable(y) && push!(address_set, objectid(y))
+
+    # recurse over a composite type's fields.
+    for y_sub in fieldnames(T)
+        # isdefined() is valid for Mutable Structs, Structs.
+        !isdefined(y, y_sub) && continue
+        __exclude_unsupported_output_internal!(getfield(y, y_sub), address_set)
+    end
+
+    return nothing
+end
+
+const _BuiltinArrays = @static VERSION >= v"1.11" ? Union{Array,Memory} : Array
+
+function __exclude_unsupported_output_internal!(
+    y::T, address_set::Set{UInt}
+) where {T<:_BuiltinArrays}
+    if objectid(y) in address_set
+        throw_circular_reference_or_alias_error(y)
+    end
+
+    # mutable types are always stored on the heap.
+    push!(address_set, objectid(y))
+
+    # recurse over iterable collections.
+    for i in eachindex(y)
+        # isassigned() is valid for Arrays, Memory.
+        !isassigned(y, i) && continue
+        __exclude_unsupported_output_internal!(y[i], address_set)
+    end
+
+    return nothing
+end
+
+function __exclude_unsupported_output_internal!(
+    y::Union{Tuple,NamedTuple}, address_set::Set{UInt}
+)
+    map(Base.Fix2(__exclude_unsupported_output_internal!, address_set), y)
+    return nothing
+end
+
+# in case f(args...) directly outputs a Ptr{T} or it contains a nested Ptr{T}.
+function __exclude_unsupported_output_internal!(y::Ptr, ::Set{UInt})
+    return throw_forward_ret_type_error(y)
+end
 
 """
     prepare_pullback_cache(f, x...)
@@ -188,6 +286,9 @@ function prepare_pullback_cache(fx...; kwargs...)
 
     # Run the rule forwards -- this should do a decent chunk of pre-allocation.
     y, _ = rule(map((x, dx) -> CoDual(x, fdata(dx)), fx, tangents)...)
+
+    # Handle forward pass's primal exceptions
+    __exclude_unsupported_output(y)
 
     # Construct cache for output. Check that `copy!`ing appears to work.
     y_cache = copy(primal(y))

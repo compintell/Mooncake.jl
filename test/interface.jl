@@ -98,4 +98,82 @@ end
             end
         end
     end
+
+    @testset "prepare_pullback_cache errors" begin
+        # Test when function outputs a valid type.
+        struct UserDefinedStruct
+            a::Int64
+            b::Vector{Float64}
+            c::Vector{Vector{Float64}}
+        end
+
+        mutable struct UserDefinedMutableStruct
+            a::Int64
+            b::Vector{Float64}
+            c::Vector{Vector{Float64}}
+        end
+
+        test_to_pass_cases = [
+            (1, (1.0, 1.0)),
+            (1.0, 1.0),
+            (1, [[1.0, 1, 1.0], 1.0]),
+            (1.0, [1.0]),
+            UserDefinedStruct(1, [1.0, 1.0, 1.0], [[1.0]]),
+            UserDefinedMutableStruct(1, [1.0, 1.0, 1.0], [[1.0]]),
+            Dict(:a => [1, 2], :b => [3, 4]),
+            Set([1, 2]),
+        ]
+        VERSION >= v"1.11" &&
+            push!(test_to_pass_cases, fill!(Memory{Float64}(undef, 3), 3.0))
+
+        @testset "Valid Output types" for res in test_to_pass_cases
+            @test isnothing(Mooncake.__exclude_unsupported_output(res))
+        end
+
+        # Test when function outputs an invalid type. 
+        test_to_fail_cases = []
+
+        # ---- Aliasing Cases ----
+        alias_vector = [[1, 2], [3, 4]]
+        alias_vector[2] = alias_vector[1]
+        push!(test_to_fail_cases, alias_vector)
+
+        alias_tuple = ((1.0, 2.0), (3.0, 4.0))
+        alias_tuple = (alias_tuple[1], alias_tuple[1])
+        push!(test_to_fail_cases, alias_tuple)
+
+        # ---- Circular Referencing Cases ----
+        circular_vector = Any[[1.0, 2.0]]
+        push!(circular_vector, circular_vector)
+        push!(test_to_fail_cases, circular_vector)
+
+        mutable struct CircularStruct
+            data::Any
+            numeric::Int64
+        end
+
+        circ_obj = CircularStruct(nothing, 1)
+        circ_obj.data = circ_obj  # Self-referential struct
+        push!(test_to_fail_cases, circ_obj)
+
+        # ---- Unsupported Types ----
+        push!(test_to_fail_cases, Ptr{Float64}(12345))
+        push!(test_to_fail_cases, (1, Ptr{Float64}(12345)))
+        push!(test_to_fail_cases, [Ptr{Float64}(12345)])
+
+        @test_throws(
+            Mooncake.ValueAndPullbackReturnTypeError,
+            Mooncake.__exclude_unsupported_output.(test_to_fail_cases)
+        )
+
+        additional_test_set = Mooncake.tangent_test_cases()
+
+        @testset for i in eachindex(additional_test_set)
+            try
+                Mooncake.__exclude_unsupported_output(additional_test_set[i][2])
+            catch err
+                @test isa(err, Mooncake.ValueAndPullbackReturnTypeError)
+            end
+        end
+    end
 end
