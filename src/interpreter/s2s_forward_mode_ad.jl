@@ -92,6 +92,13 @@ function __unflatten_dual_varargs(isva::Bool, args, ::Val{nargs}) where {nargs}
     return (args[1:(nargs - 1)]..., grouped_args)
 end
 
+struct DualInfo
+    primal_ir::IRCode
+    interp::MooncakeInterpreter
+    is_used::Vector{Bool}
+    debug_mode::Bool
+end
+
 function generate_dual_ir(
     interp::MooncakeInterpreter, sig_or_mi; debug_mode=false, do_inline=true
 )
@@ -106,7 +113,6 @@ function generate_dual_ir(
     # Normalise the IR.
     isva, spnames = is_vararg_and_sparam_names(sig_or_mi)
     primal_ir = normalise!(primal_ir, spnames)
-    # display(primal_ir)
 
     # Keep a copy of the primal IR with the insertions
     dual_ir = copy(primal_ir)
@@ -126,17 +132,15 @@ function generate_dual_ir(
     # captures data structure, make use of `get_capture`.
     captures = Any[]
 
+    is_used = characterised_used_ssas(primal_ir.stmts.stmt)
+    info = DualInfo(primal_ir, interp, is_used, debug_mode)
     for (n, inst) in enumerate(dual_ir.stmts)
         ssa = SSAValue(n)
-        modify_fwd_ad_stmts!(
-            inst.stmt, dual_ir, primal_ir, ssa, interp, captures; debug_mode
-        )
+        modify_fwd_ad_stmts!(inst.stmt, dual_ir, ssa, captures, info)
     end
 
     # Process new nodes etc.
     dual_ir = CC.compact!(dual_ir)
-
-    # display(primal_ir)
 
     CC.verify_ir(dual_ir)
 
@@ -174,38 +178,12 @@ end
 
 ## Modification of IR nodes
 
-function modify_fwd_ad_stmts!(
-    stmt::Nothing,
-    dual_ir::IRCode,
-    primal_ir::IRCode,
-    ssa::SSAValue,
-    ::MooncakeInterpreter,
-    captures::Vector{Any};
-    kwargs...,
-)
-    return nothing
-end
+modify_fwd_ad_stmts!(::Nothing, ::IRCode, ::SSAValue, ::Vector{Any}, ::DualInfo) = nothing
+
+modify_fwd_ad_stmts!(::GotoNode, ::IRCode, ::SSAValue, ::Vector{Any}, ::DualInfo) = nothing
 
 function modify_fwd_ad_stmts!(
-    stmt::GotoNode,
-    dual_ir::IRCode,
-    primal_ir::IRCode,
-    ssa::SSAValue,
-    ::MooncakeInterpreter,
-    captures::Vector{Any};
-    kwargs...,
-)
-    return nothing
-end
-
-function modify_fwd_ad_stmts!(
-    stmt::GotoIfNot,
-    dual_ir::IRCode,
-    primal_ir::IRCode,
-    ssa::SSAValue,
-    ::MooncakeInterpreter,
-    captures::Vector{Any};
-    kwargs...,
+    stmt::GotoIfNot, dual_ir::IRCode, ssa::SSAValue, captures::Vector{Any}, info::DualInfo
 )
     # replace GotoIfNot with the call to primal
     Mooncake.replace_call!(dual_ir, ssa, Expr(:call, _primal, inc_args(stmt).cond))
@@ -217,13 +195,7 @@ function modify_fwd_ad_stmts!(
 end
 
 function modify_fwd_ad_stmts!(
-    stmt::GlobalRef,
-    dual_ir::IRCode,
-    primal_ir::IRCode,
-    ssa::SSAValue,
-    ::MooncakeInterpreter,
-    captures::Vector{Any};
-    kwargs...,
+    stmt::GlobalRef, dual_ir::IRCode, ssa::SSAValue, captures::Vector{Any}, ::DualInfo
 )
     if isconst(stmt)
         d = const_dual(captures, stmt)
@@ -242,13 +214,7 @@ function modify_fwd_ad_stmts!(
 end
 
 function modify_fwd_ad_stmts!(
-    stmt::ReturnNode,
-    dual_ir::IRCode,
-    primal_ir::IRCode,
-    ssa::SSAValue,
-    ::MooncakeInterpreter,
-    captures::Vector{Any};
-    kwargs...,
+    stmt::ReturnNode, dual_ir::IRCode, ssa::SSAValue, captures::Vector{Any}, ::DualInfo
 )
     # undefined `val` field means that stmt is unreachable.
     isdefined(stmt, :val) || return nothing
@@ -266,13 +232,7 @@ function modify_fwd_ad_stmts!(
 end
 
 function modify_fwd_ad_stmts!(
-    stmt::PhiNode,
-    dual_ir::IRCode,
-    primal_ir::IRCode,
-    ssa::SSAValue,
-    ::MooncakeInterpreter,
-    captures::Vector{Any};
-    kwargs...,
+    stmt::PhiNode, dual_ir::IRCode, ssa::SSAValue, captures::Vector{Any}, ::DualInfo
 )
     for n in eachindex(stmt.values)
         isassigned(stmt.values, n) || continue
@@ -285,13 +245,7 @@ function modify_fwd_ad_stmts!(
 end
 
 function modify_fwd_ad_stmts!(
-    stmt::PiNode,
-    dual_ir::IRCode,
-    primal_ir::IRCode,
-    ssa::SSAValue,
-    ::MooncakeInterpreter,
-    captures::Vector{Any};
-    kwargs...,
+    stmt::PiNode, dual_ir::IRCode, ssa::SSAValue, ::Vector{Any}, ::DualInfo
 )
     dual_ir[ssa][:stmt] = PiNode(inc_args(stmt).val, dual_type(CC.widenconst(stmt.typ)))
     dual_ir[ssa][:type] = Any
@@ -301,14 +255,10 @@ end
 
 ## Modification of IR nodes - expressions
 
+__get_primal(x::Dual) = primal(x)
+
 function modify_fwd_ad_stmts!(
-    stmt::Expr,
-    dual_ir::IRCode,
-    primal_ir::IRCode,
-    ssa::SSAValue,
-    interp::MooncakeInterpreter,
-    captures::Vector{Any};
-    debug_mode,
+    stmt::Expr, dual_ir::IRCode, ssa::SSAValue, captures::Vector{Any}, info::DualInfo
 )
     if isexpr(stmt, :invoke) || isexpr(stmt, :call)
         sig, mi = if isexpr(stmt, :invoke)
@@ -316,7 +266,7 @@ function modify_fwd_ad_stmts!(
             mi.specTypes, mi
         else
             sig_types = map(stmt.args) do primal_arg
-                return CC.widenconst(get_forward_primal_type(primal_ir, primal_arg))
+                return CC.widenconst(get_forward_primal_type(info.primal_ir, primal_arg))
             end
             Tuple{sig_types...}, missing
         end
@@ -326,6 +276,22 @@ function modify_fwd_ad_stmts!(
             inc_args(stmt).args
         end
 
+        # Special case: if the result of a call to getfield is un-used, then leave the
+        # primal statment alone (just increment arguments as usual). This was causing
+        # performance problems in a couple of situations where the field being requested is
+        # not known at compile time. `getfield` cannot be dead-code eliminated, because it
+        # can throw an error if the requested field does not exist. Everything _other_ than
+        # the boundscheck is eliminated in LLVM codegen, so it's important that AD doesn't
+        # get in the way of this.
+        #
+        # This might need to be generalised to more things than just `getfield`, but at the
+        # time of writing this comment, it's unclear whether or not this is the case.
+        if !info.is_used[ssa.id] && get_const_primal_value(shifted_args[1]) == getfield
+            fwds = new_inst(Expr(:call, __fwds_pass_no_ad!, shifted_args...))
+            replace_call!(dual_ir, ssa, fwds)
+            return nothing
+        end
+
         # Dual-ise arguments. If an argument is not an `Argument` or `SSAValue`, it must be
         # a non-dual constant.
         dual_args = map(shifted_args) do arg
@@ -333,14 +299,14 @@ function modify_fwd_ad_stmts!(
             return zero_dual(get_const_primal_value(arg))
         end
 
-        if is_primitive(context_type(interp), sig)
+        if is_primitive(context_type(info.interp), sig)
             call_frule = Expr(:call, frule!!, dual_args...)
             replace_call!(dual_ir, ssa, call_frule)
         else
             if isexpr(stmt, :invoke)
-                rule = LazyFRule(mi, debug_mode)
+                rule = LazyFRule(mi, info.debug_mode)
             else
-                rule = DynamicFRule(debug_mode)
+                rule = DynamicFRule(info.debug_mode)
             end
             # TODO: could this insertion of a naked rule in the IR cause a memory leak?
             # Push the rule into the captures, and insert a statement to retrieve it.
