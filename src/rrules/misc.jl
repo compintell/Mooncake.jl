@@ -151,19 +151,20 @@ end
 
 @is_primitive MinimalCtx Tuple{typeof(lsetfield!),Any,Any,Any}
 @inline function frule!!(
-    ::Dual{typeof(lsetfield!)}, value::Dual{P,T}, ::Dual{Val{name}}, x::Dual
-) where {P,T<:StandardTangentType,name}
-    setfield!(primal(value), name, primal(x))
-    if T !== NoTangent
-        set_tangent_field!(tangent(value), name, tangent(x))
-    end
-    return x
+    ::Dual{typeof(lsetfield!)}, value::Dual{P,T}, name::Dual, x::Dual
+) where {P,T<:StandardTangentType}
+    return lsetfield_frule(value, name, x)
 end
-
 @inline function rrule!!(
     ::CoDual{typeof(lsetfield!)}, value::CoDual{P,F}, name::CoDual, x::CoDual
 ) where {P,F<:StandardFDataType}
     return lsetfield_rrule(value, name, x)
+end
+
+function lsetfield_frule(value::Dual{P,T}, ::Dual{Val{name}}, x::Dual) where {P,T,name}
+    setfield!(primal(value), name, primal(x))
+    T !== NoTangent && set_tangent_field!(tangent(value), name, tangent(x))
+    return x
 end
 
 function lsetfield_rrule(

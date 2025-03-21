@@ -1222,60 +1222,60 @@ end
 
 function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
     test_cases = Any[
-    # (false, :none, nothing, _apply_iterate_equivalent, Base.iterate, *, 5.0, 4.0),
-    # (false, :none, nothing, _apply_iterate_equivalent, Base.iterate, *, (5.0, 4.0)),
-    # (false, :none, nothing, _apply_iterate_equivalent, Base.iterate, *, [5.0, 4.0]),
-    # (false, :none, nothing, _apply_iterate_equivalent, Base.iterate, *, [5.0], (4.0,)),
-    # (false, :none, nothing, _apply_iterate_equivalent, Base.iterate, *, 3, (4.0,)),
-    # (
-    #     # 33 arguments is the critical length at which splatting gives up on inferring,
-    #     # and backs off to `Core._apply_iterate`. It's important to check this in order
-    #     # to verify that we don't wind up in an infinite recursion.
-    #     false,
-    #     :none,
-    #     nothing,
-    #     _apply_iterate_equivalent,
-    #     Base.iterate,
-    #     +,
-    #     randn(33),
-    # ),
-    # (
-    #     # Check that Core._apply_iterate gets lifted to _apply_iterate_equivalent.
-    #     false,
-    #     :none,
-    #     nothing,
-    #     x -> +(x...),
-    #     randn(33),
-    # ),
-    # (
-    #     false,
-    #     :none,
-    #     nothing,
-    #     (function (x)
-    #         rx = Ref(x)
-    #         return pointerref(bitcast(Ptr{Float64}, pointer_from_objref(rx)), 1, 1)
-    #     end),
-    #     5.0,
-    # ),
-    # (
-    #     false,
-    #     :none,
-    #     nothing,
-    #     (v, x) -> (pointerset(pointer(x), v, 2, 1); x),
-    #     3.0,
-    #     randn(5),
-    # ),
-    # (
-    #     false,
-    #     :none,
-    #     nothing,
-    #     x -> (pointerset(pointer(x), UInt8(3), 2, 1); x),
-    #     rand(UInt8, 5),
-    # ),
-    # (false, :none, nothing, getindex, randn(5), [1, 1]),
-    # (false, :none, nothing, getindex, randn(5), [1, 2, 2]),
-    # (false, :none, nothing, setindex!, randn(5), [4.0, 5.0], [1, 1]),
-    # (false, :none, nothing, setindex!, randn(5), [4.0, 5.0, 6.0], [1, 2, 2]),
-]
+        (false, :none, nothing, _apply_iterate_equivalent, Base.iterate, *, 5.0, 4.0),
+        (false, :none, nothing, _apply_iterate_equivalent, Base.iterate, *, (5.0, 4.0)),
+        (false, :none, nothing, _apply_iterate_equivalent, Base.iterate, *, [5.0, 4.0]),
+        (false, :none, nothing, _apply_iterate_equivalent, Base.iterate, *, [5.0], (4.0,)),
+        (false, :none, nothing, _apply_iterate_equivalent, Base.iterate, *, 3, (4.0,)),
+        (
+            # 33 arguments is the critical length at which splatting gives up on inferring,
+            # and backs off to `Core._apply_iterate`. It's important to check this in order
+            # to verify that we don't wind up in an infinite recursion.
+            false,
+            :none,
+            nothing,
+            _apply_iterate_equivalent,
+            Base.iterate,
+            +,
+            randn(33),
+        ),
+        (
+            # Check that Core._apply_iterate gets lifted to _apply_iterate_equivalent.
+            false,
+            :none,
+            nothing,
+            x -> +(x...),
+            randn(33),
+        ),
+        (
+            false,
+            :none,
+            nothing,
+            (function (x)
+                rx = Ref(x)
+                return pointerref(bitcast(Ptr{Float64}, pointer_from_objref(rx)), 1, 1)
+            end),
+            5.0,
+        ),
+        (
+            false,
+            :none,
+            nothing,
+            (v, x) -> (pointerset(pointer(x), v, 2, 1); x),
+            3.0,
+            randn(5),
+        ),
+        (
+            false,
+            :none,
+            nothing,
+            x -> (pointerset(pointer(x), UInt8(3), 2, 1); x),
+            rand(UInt8, 5),
+        ),
+        (false, :none, nothing, getindex, randn(5), [1, 1]),
+        (false, :none, nothing, getindex, randn(5), [1, 2, 2]),
+        (false, :none, nothing, setindex!, randn(5), [4.0, 5.0], [1, 1]),
+        (false, :none, nothing, setindex!, randn(5), [4.0, 5.0, 6.0], [1, 2, 2]),
+    ]
     return test_cases, Any[]
 end

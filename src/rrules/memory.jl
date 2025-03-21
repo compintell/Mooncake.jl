@@ -806,6 +806,7 @@ end
 # Misc. other rules which are required for correctness.
 
 @is_primitive MinimalCtx Tuple{typeof(copy),Array}
+frule!!(::Dual{typeof(copy)}, a::Dual{<:Array}) = Dual(copy(primal(a)), copy(tangent(a)))
 function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Array})
     dx = tangent(a)
     dy = copy(dx)
@@ -819,6 +820,11 @@ end
 
 @is_primitive MinimalCtx Tuple{typeof(fill!),Array{<:Union{UInt8,Int8}},Integer}
 @is_primitive MinimalCtx Tuple{typeof(fill!),Memory{<:Union{UInt8,Int8}},Integer}
+function frule!!(
+    ::Dual{typeof(fill!)}, a::Dual{T}, x::Dual{<:Integer}
+) where {V<:Union{UInt8,Int8},T<:Union{Array{V},Memory{V}}}
+    return Dual(fill!(primal(a), primal(x)), tangent(a))
+end
 function rrule!!(
     ::CoDual{typeof(fill!)}, a::CoDual{T}, x::CoDual{<:Integer}
 ) where {V<:Union{UInt8,Int8},T<:Union{Array{V},Memory{V}}}
@@ -1026,6 +1032,9 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:memory})
         (false, :none, nothing, setfield!, randn(rng, 10), 1, randn(rng, 10).ref),
         (false, :none, nothing, setfield!, randn(rng, 10), :size, (10,)),
         (false, :none, nothing, setfield!, randn(rng, 10), 2, (10,)),
+        (false, :stability, nothing, copy, randn(10)),
+        (false, :stability, nothing, fill!, fill!(Memory{Int8}(undef, 5), 0), Int8(1)),
+        (false, :stability, nothing, fill!, fill!(Memory{UInt8}(undef, 5), 0), UInt8(1)),
     )
     memory = Any[]
     return test_cases, memory
@@ -1035,61 +1044,61 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:memory})
     rng = rng_ctor(123)
     x = Memory{Float64}(randn(rng, 10))
     test_cases = Any[
-    # (true, :none, nothing, Array{Float64,0}, undef),
-    # (true, :none, nothing, Array{Float64,1}, undef, 5),
-    # (true, :none, nothing, Array{Float64,2}, undef, 5, 4),
-    # (true, :none, nothing, Array{Float64,3}, undef, 5, 4, 3),
-    # (true, :none, nothing, Array{Float64,4}, undef, 5, 4, 3, 2),
-    # (true, :none, nothing, Array{Float64,5}, undef, 5, 4, 3, 2, 1),
-    # (true, :none, nothing, Array{Float64,0}, undef, ()),
-    # (true, :none, nothing, Array{Float64,4}, undef, (2, 3, 4, 5)),
-    # (true, :none, nothing, Array{Float64,5}, undef, (2, 3, 4, 5, 6)),
-    # (false, :none, nothing, copy, randn(5, 4)),
-    # (false, :none, nothing, Base._deletebeg!, randn(5), 0),
-    # (false, :none, nothing, Base._deletebeg!, randn(5), 2),
-    # (false, :none, nothing, Base._deletebeg!, randn(5), 5),
-    # (false, :none, nothing, Base._deleteend!, randn(5), 2),
-    # (false, :none, nothing, Base._deleteend!, randn(5), 5),
-    # (false, :none, nothing, Base._deleteend!, randn(5), 0),
-    # (false, :none, nothing, Base._deleteat!, randn(5), 2, 2),
-    # (false, :none, nothing, Base._deleteat!, randn(5), 1, 5),
-    # (false, :none, nothing, Base._deleteat!, randn(5), 5, 1),
-    # (false, :none, nothing, fill!, rand(Int8, 5), Int8(2)),
-    # (false, :none, nothing, fill!, rand(UInt8, 5), UInt8(2)),
-    # (false, :none, nothing, fill!, Memory{Int8}(rand(Int8, 5)), Int8(3)),
-    # (false, :none, nothing, fill!, Memory{UInt8}(rand(UInt8, 5)), UInt8(5)),
-    # (true, :none, nothing, Base._growbeg!, randn(5), 3),
-    # (true, :none, nothing, Base._growend!, randn(5), 3),
-    # (true, :none, nothing, Base._growat!, randn(5), 2, 2),
-    # (false, :none, nothing, sizehint!, randn(5), 10),
-    # (false, :none, nothing, unsafe_copyto!, randn(4), 2, randn(3), 1, 2),
-    # (
-    #     false,
-    #     :none,
-    #     nothing,
-    #     unsafe_copyto!,
-    #     [rand(3) for _ in 1:5],
-    #     2,
-    #     [rand(4) for _ in 1:4],
-    #     1,
-    #     3,
-    # ),
-    # (
-    #     false,
-    #     :none,
-    #     nothing,
-    #     unsafe_copyto!,
-    #     Vector{Any}(undef, 5),
-    #     2,
-    #     Any[rand() for _ in 1:4],
-    #     1,
-    #     3,
-    # ),
-    # (false, :none, nothing, x -> unsafe_copyto!(memoryref(x, 1), memoryref(x), 3), x),
-    # (false, :none, nothing, x -> unsafe_copyto!(memoryref(x), memoryref(x), 3), x),
-    # (false, :none, nothing, x -> unsafe_copyto!(memoryref(x), memoryref(x, 2), 3), x),
-    # (false, :none, nothing, x -> unsafe_copyto!(memoryref(x), memoryref(x, 4), 3), x),
-]
+        (true, :none, nothing, Array{Float64,0}, undef),
+        (true, :none, nothing, Array{Float64,1}, undef, 5),
+        (true, :none, nothing, Array{Float64,2}, undef, 5, 4),
+        (true, :none, nothing, Array{Float64,3}, undef, 5, 4, 3),
+        (true, :none, nothing, Array{Float64,4}, undef, 5, 4, 3, 2),
+        (true, :none, nothing, Array{Float64,5}, undef, 5, 4, 3, 2, 1),
+        (true, :none, nothing, Array{Float64,0}, undef, ()),
+        (true, :none, nothing, Array{Float64,4}, undef, (2, 3, 4, 5)),
+        (true, :none, nothing, Array{Float64,5}, undef, (2, 3, 4, 5, 6)),
+        (false, :none, nothing, copy, randn(5, 4)),
+        (false, :none, nothing, Base._deletebeg!, randn(5), 0),
+        (false, :none, nothing, Base._deletebeg!, randn(5), 2),
+        (false, :none, nothing, Base._deletebeg!, randn(5), 5),
+        (false, :none, nothing, Base._deleteend!, randn(5), 2),
+        (false, :none, nothing, Base._deleteend!, randn(5), 5),
+        (false, :none, nothing, Base._deleteend!, randn(5), 0),
+        (false, :none, nothing, Base._deleteat!, randn(5), 2, 2),
+        (false, :none, nothing, Base._deleteat!, randn(5), 1, 5),
+        (false, :none, nothing, Base._deleteat!, randn(5), 5, 1),
+        (false, :none, nothing, fill!, rand(Int8, 5), Int8(2)),
+        (false, :none, nothing, fill!, rand(UInt8, 5), UInt8(2)),
+        (false, :none, nothing, fill!, Memory{Int8}(rand(Int8, 5)), Int8(3)),
+        (false, :none, nothing, fill!, Memory{UInt8}(rand(UInt8, 5)), UInt8(5)),
+        (true, :none, nothing, Base._growbeg!, randn(5), 3),
+        (true, :none, nothing, Base._growend!, randn(5), 3),
+        (true, :none, nothing, Base._growat!, randn(5), 2, 2),
+        (false, :none, nothing, sizehint!, randn(5), 10),
+        (false, :none, nothing, unsafe_copyto!, randn(4), 2, randn(3), 1, 2),
+        (
+            false,
+            :none,
+            nothing,
+            unsafe_copyto!,
+            [rand(3) for _ in 1:5],
+            2,
+            [rand(4) for _ in 1:4],
+            1,
+            3,
+        ),
+        (
+            false,
+            :none,
+            nothing,
+            unsafe_copyto!,
+            Vector{Any}(undef, 5),
+            2,
+            Any[rand() for _ in 1:4],
+            1,
+            3,
+        ),
+        (false, :none, nothing, x -> unsafe_copyto!(memoryref(x, 1), memoryref(x), 3), x),
+        (false, :none, nothing, x -> unsafe_copyto!(memoryref(x), memoryref(x), 3), x),
+        (false, :none, nothing, x -> unsafe_copyto!(memoryref(x), memoryref(x, 2), 3), x),
+        (false, :none, nothing, x -> unsafe_copyto!(memoryref(x), memoryref(x, 4), 3), x),
+    ]
     memory = Any[]
     return test_cases, memory
 end

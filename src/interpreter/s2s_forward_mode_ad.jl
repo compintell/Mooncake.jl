@@ -40,18 +40,20 @@ function build_frule(
     try
         # If we've already derived the OpaqueClosures and info, do not re-derive, just
         # create a copy and pass in new shared data.
-        oc_cache_key = ClosureCacheKey(interp.world, (sig_or_mi, debug_mode))
-        # if haskey(interp.oc_cache, oc_cache_key)
-        #     return interp.oc_cache[oc_cache_key]
-        # else
-        # Derive forward-pass IR, and shove in a `MistyClosure`.
-        dual_ir, captures, info = generate_dual_ir(interp, sig_or_mi; debug_mode)
-        dual_oc = misty_closure(info.dual_ret_type, dual_ir, captures...; do_compile=true)
-        raw_rule = DerivedFRule{typeof(dual_oc),info.isva,info.nargs}(dual_oc)
-        rule = debug_mode ? DebugFRule(raw_rule) : raw_rule
-        interp.oc_cache[oc_cache_key] = rule
-        return rule
-        # end
+        oc_cache_key = ClosureCacheKey(interp.world, (sig_or_mi, debug_mode, :forward))
+        if haskey(interp.oc_cache, oc_cache_key)
+            return interp.oc_cache[oc_cache_key]
+        else
+            # Derive forward-pass IR, and shove in a `MistyClosure`.
+            dual_ir, captures, info = generate_dual_ir(interp, sig_or_mi; debug_mode)
+            dual_oc = misty_closure(
+                info.dual_ret_type, dual_ir, captures...; do_compile=true
+            )
+            raw_rule = DerivedFRule{typeof(dual_oc),info.isva,info.nargs}(dual_oc)
+            rule = debug_mode ? DebugFRule(raw_rule) : raw_rule
+            interp.oc_cache[oc_cache_key] = rule
+            return rule
+        end
     catch e
         rethrow(e)
     finally
@@ -67,6 +69,10 @@ end
     args::Vararg{Dual,N}
 ) where {sig,N,isva,nargs}
     return fwd.fwd_oc(__unflatten_dual_varargs(isva, args, Val(nargs))...)
+end
+
+function _copy(x::P) where {P<:DerivedFRule}
+    return P(replace_captures(x.fwd_oc, _copy(x.fwd_oc.oc.captures)))
 end
 
 """
@@ -348,6 +354,12 @@ function modify_fwd_ad_stmts!(
         nothing
     elseif isexpr(stmt, :code_coverage_effect)
         replace_call!(dual_ir, ssa, nothing)
+    elseif Meta.isexpr(stmt, :copyast)
+        new_copyast_inst = CC.NewInstruction(primal_ir[ssa])
+        new_copyast_ssa = CC.insert_node!(dual_ir, ssa, new_copyast_inst)
+        replace_call!(dual_ir, ssa, Expr(:call, zero_dual, new_copyast_ssa))
+    elseif Meta.isexpr(stmt, :loopinfo)
+        # Leave this node alone.
     elseif isexpr(stmt, :throw_undef_if_not)
         # args[1] is a Symbol, args[2] is the condition which must be primalized
         primal_cond = Expr(:call, _primal, inc_args(stmt).args[2])

@@ -683,6 +683,7 @@ end
 function test_frule_performance(
     performance_checks_flag::Symbol, rule::R, f_ḟ::F, x_ẋ::Vararg{Any,N}
 ) where {R,F,N}
+    x_ẋ = _deepcopy(x_ẋ)
 
     # Verify that a valid performance flag has been passed.
     valid_flags = (:none, :stability, :allocs, :stability_and_allocs)
@@ -922,19 +923,22 @@ function run_hand_written_rule_test_cases(rng_ctor, v::Val, forward=false)
     end
 end
 
-function run_derived_rrule!!_test_cases(rng_ctor, v::Val)
+function run_derived_rule_test_cases(rng_ctor, v::Val, forward=false)
     test_cases, memory = Mooncake.generate_derived_rrule!!_test_cases(rng_ctor, v)
     GC.@preserve memory @testset "$f, $(typeof(x))" for (
         interface_only, perf_flag, _, f, x...
     ) in test_cases
-        test_rule(rng_ctor(123), f, x...; interface_only, perf_flag, is_primitive=false)
+        test_rule(
+            rng_ctor(123), f, x...; interface_only, perf_flag, is_primitive=false, forward
+        )
     end
 end
 
 function run_rule_test_cases(rng_ctor, v::Val)
     run_hand_written_rule_test_cases(rng_ctor, v, true)
     run_hand_written_rule_test_cases(rng_ctor, v)
-    run_derived_rrule!!_test_cases(rng_ctor, v)
+    run_derived_rule_test_cases(rng_ctor, v, true)
+    run_derived_rule_test_cases(rng_ctor, v)
     return nothing
 end
 
