@@ -319,7 +319,7 @@ function modify_fwd_ad_stmts!(
     elseif isexpr(stmt, :code_coverage_effect)
         replace_call!(dual_ir, ssa, nothing)
     elseif Meta.isexpr(stmt, :copyast)
-        new_copyast_inst = CC.NewInstruction(primal_ir[ssa])
+        new_copyast_inst = CC.NewInstruction(info.primal_ir[ssa])
         new_copyast_ssa = CC.insert_node!(dual_ir, ssa, new_copyast_inst)
         replace_call!(dual_ir, ssa, Expr(:call, zero_dual, new_copyast_ssa))
     elseif Meta.isexpr(stmt, :loopinfo)
