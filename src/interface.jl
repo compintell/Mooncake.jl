@@ -236,11 +236,11 @@ function __exclude_unsupported_output_internal!(y::T, address_set::Set{UInt}) wh
     return nothing
 end
 
-const IterableCollections = @static VERSION >= v"1.11" ? Union{Array,Memory} : Array
+const _BuiltinArrays = @static VERSION >= v"1.11" ? Union{Array,Memory} : Array
 
 function __exclude_unsupported_output_internal!(
     y::T, address_set::Set{UInt}
-) where {T<:IterableCollections}
+) where {T<:_BuiltinArrays}
     if objectid(y) in address_set
         throw_circular_reference_or_alias_error(y)
     end
