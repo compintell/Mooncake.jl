@@ -169,19 +169,6 @@ end
 _copy!!(dst, src) = copy!(dst, src)
 _copy!!(::Number, src::Number) = src
 
-function _copy_temp(x::P) where {P<:SimpleVector}
-    return Core.svec([map(_copy_temp, x_sub) for x_sub in x]...)
-end
-
-function _copy_temp(x::P) where {P}
-    isbitstype(P) && return x
-    return P((map(_copy_temp, getfield(x, x_sub)) for x_sub in fieldnames(P))...)
-end
-
-function _copy_temp(x::P) where {P<:_BuiltinArrays}
-    return map(_copy_temp, x)
-end
-
 function __create_coduals(args)
     try
         return tuple_map(zero_codual, args)
@@ -250,6 +237,20 @@ function __exclude_unsupported_output_internal!(y::T, address_set::Set{UInt}) wh
 end
 
 const _BuiltinArrays = @static VERSION >= v"1.11" ? Union{Array,Memory} : Array
+
+
+function _copy_temp(x::P) where {P<:SimpleVector}
+    return Core.svec([map(_copy_temp, x_sub) for x_sub in x]...)
+end
+
+function _copy_temp(x::P) where {P}
+    isbitstype(P) && return x
+    return P((map(_copy_temp, getfield(x, x_sub)) for x_sub in fieldnames(P))...)
+end
+
+function _copy_temp(x::P) where {P<:_BuiltinArrays}
+    return map(_copy_temp, x)
+end
 
 function __exclude_unsupported_output_internal!(
     y::T, address_set::Set{UInt}
