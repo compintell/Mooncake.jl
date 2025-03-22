@@ -255,7 +255,7 @@ end
 function _copy_temp(x::P) where {P<:_BuiltinArrays}
     temp = P(undef, size(x)...)
     map!(i -> if isassigned(x, i)
-        _copy_temp1(x[i])
+        _copy_temp(x[i])
     end, temp, eachindex(x))
     return temp
 end
