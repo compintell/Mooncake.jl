@@ -243,24 +243,24 @@ function _copy_temp(x::P) where {P<:SimpleVector}
     return Core.svec([map(_copy_temp, x_sub) for x_sub in x]...)
 end
 
-# mutable composite types
+# mutable composite types, bitstype
 function _copy_temp(x::P) where {P}
     isbitstype(P) && return x
-    # return undef values as is (improve)
-    return P(
-        (
-            map(i -> !isdefined(x, i) ? undef : _copy_temp(x[i]), getfield(x, x_sub)) for
-            x_sub in fieldnames(P)
-        )...,
-    )
+    return P((map(x_sub -> if isdefined(x, x_sub)
+        return _copy_temp(getfield(x, x_sub))
+    end, fieldnames(P)))...)
 end
 
-# iterable collections
+# Array, Memory
 function _copy_temp(x::P) where {P<:_BuiltinArrays}
-    # return undef values as is (improve)
-    return map(i -> !isassigned(x, i) ? undef : _copy_temp(x[i]), eachindex(x))
+    temp = P(undef, size(x)...)
+    map!(i -> if isassigned(x, i)
+        _copy_temp1(x[i])
+    end, temp, eachindex(x))
+    return temp
 end
 
+# Tuple, NamedTuple
 function _copy_temp(x::P) where {P<:Union{Tuple,NamedTuple}}
     return map(_copy_temp, x)
 end
