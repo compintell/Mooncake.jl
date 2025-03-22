@@ -254,10 +254,8 @@ end
 # Array, Memory
 function _copy_temp(x::P) where {P<:_BuiltinArrays}
     temp = P(undef, size(x)...)
-    for i in eachindex(temp)
-        if isassigned(x, i)
-            temp[i] = _copy_temp(x[i])
-        end
+    @inbounds for i in eachindex(temp)
+        isassigned(x, i) && (temp[i] = _copy_temp(x[i]))
     end
     return temp
 end
