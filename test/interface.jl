@@ -217,7 +217,7 @@ end
                     end
                 end
             catch err
-                # @test isa(err, Mooncake.ValueAndPullbackReturnTypeError)
+                @test isa(err, Mooncake.ValueAndPullbackReturnTypeError)
             end
         end
     end
