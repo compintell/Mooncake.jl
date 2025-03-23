@@ -217,14 +217,6 @@ end
                     end
                 end
             catch err
-                if isa(err, Mooncake.ValueAndPullbackReturnTypeError)
-                    @test true
-                else
-                    println(original)
-                    println(Mooncake._copy_temp(original))
-                    println(Mooncake.__exclude_unsupported_output(original))
-                    @test true
-                end
                 # @test isa(err, Mooncake.ValueAndPullbackReturnTypeError)
             end
         end
