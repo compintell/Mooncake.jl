@@ -245,8 +245,8 @@ end
 
 # mutable composite types, bitstype
 function _copy_temp(x::P) where {P}
+    isbitstype(P) && return x
     nf = nfields(P)
-    (isbitstype(P) || nf==0) && return x
 
     if ismutable(x)
         temp = ccall(:jl_new_struct_uninit, Any, (Any,), P)
