@@ -182,52 +182,48 @@ end
             try
                 if isnothing(Mooncake.__exclude_unsupported_output(original))
                     test_copy = Mooncake._copy_temp(original)
-                    if typeof(test_copy) <: Mooncake._BuiltinArrays
+
+                    function comparisons(
+                        original::P, test_copy::P
+                    ) where {P<:Mooncake._BuiltinArrays}
+                        @test original !== test_copy
+                        @test size(original) == size(test_copy)
+
+                        # Value caching for pure immutable Types!
                         for i in eachindex(test_copy)
                             if !isassigned(test_copy, i)
                                 @test !isassigned(original, i)
                             else
-                                @test test_copy[i] == original[i]
+                                comparisons(original[i], test_copy[i])
                             end
                         end
+                    end
 
-                        # isbitstypes with same values are stored in the same address (Value Caching).
-                        if !isbitstype(typeof(original))
-                            @test test_copy !== original
+                    function comparisons(original::P, test_copy::P) where {P}
+                        if isbitstype(P)
+                            return @test test_copy == original
                         end
-                    else
                         fields_copy = [
-                            if (
-                                !isdefined(test_copy, name) ||
-                                isnan(getfield(test_copy, name))
-                            )
+                            if !isdefined(test_copy, name)
                                 nothing
                             else
                                 getfield(test_copy, name)
                             end for name in fieldnames(typeof(test_copy))
                         ]
                         fields_orig = [
-                            if (
-                                !isdefined(original, name) ||
-                                isnan(getfield(test_copy, name))
-                            )
-                                nothing
-                            else
-                                getfield(original, name)
-                            end for name in fieldnames(typeof(original))
+                            !isdefined(original, name) ? nothing : getfield(original, name)
+                            for name in fieldnames(typeof(original))
                         ]
-                        if all(fields_copy .== fields_orig)
-                            @test true
-                        else
-                            println()
-                            println(original)
-                        end
 
-                        # Value caching for pure immutable Types!
-                        if !any(isbitstype.(typeof.(fields_orig)))
-                            @test !all(fields_copy .=== fields_orig)
-                        end
-                        @test typeof(test_copy) == typeof(original)
+                        return comparisons(fields_orig, fields_copy)
+                    end
+
+                    @test typeof(test_copy) == typeof(original)
+                    # isbitstypes with same values are stored in the same address (Value Caching).
+                    if isbitstype(typeof(original))
+                        @test test_copy == original
+                    else
+                        comparisons(original, test_copy)
                     end
                 end
             catch err
