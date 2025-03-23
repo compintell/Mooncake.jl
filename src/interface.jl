@@ -246,10 +246,13 @@ end
 # mutable composite types, bitstype
 function _copy_temp(x::P) where {P}
     isbitstype(P) && return x
+    i = 1
+    temp = Vector(undef, count(f -> isdefined(x, f), fieldnames(P)))
 
-    temp = []
     @inbounds for x_sub in fieldnames(P)
-        isdefined(x, x_sub) && push!(temp, _copy_temp(getfield(x, x_sub)))
+        !isdefined(x, x_sub) && continue
+        temp[i] = _copy_temp(getfield(x, x_sub))
+        i += 1
     end
     return P(temp...)
 end
