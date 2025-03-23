@@ -175,7 +175,8 @@ end
                 @test isa(err, Mooncake.ValueAndPullbackReturnTypeError)
             end
         end
-        additional_test_set = Mooncake.tangent_test_cases()
+
+        # Test for new copy function
         @testset for i in eachindex(additional_test_set)
             original = additional_test_set[i][2]
             try
