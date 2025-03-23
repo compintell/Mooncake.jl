@@ -177,6 +177,8 @@ end
         end
 
         # Test for new copy function
+
+        # Test for new copy function
         @testset for i in eachindex(additional_test_set)
             original = additional_test_set[i][2]
             try
@@ -200,7 +202,8 @@ end
                     end
 
                     function comparisons(original::P, test_copy::P) where {P}
-                        isnan(original) && return @test isnan(test_copy)
+                        (isbitstype(P) && !isnothing(original) && isnan(original)) &&
+                            return @test isnan(test_copy)
                         isbitstype(P) && return @test test_copy == original
 
                         fields_copy = [
