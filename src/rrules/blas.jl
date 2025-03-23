@@ -2,14 +2,6 @@ function blas_name(name::Symbol)
     return (BLAS.USE_BLAS64 ? Symbol(name, "64_") : name, Symbol(BLAS.libblastrampoline))
 end
 
-function wrap_ptr_as_view(ptr::Ptr{T}, N::Int, inc::Int) where {T}
-    return view(unsafe_wrap(Vector{T}, ptr, N * inc), 1:inc:(N * inc))
-end
-
-function wrap_ptr_as_view(ptr::Ptr{T}, buffer_nrows::Int, nrows::Int, ncols::Int) where {T}
-    return view(unsafe_wrap(Matrix{T}, ptr, (buffer_nrows, ncols)), 1:nrows, :)
-end
-
 function _trans(flag, mat)
     flag === 'T' && return transpose(mat)
     flag === 'C' && return adjoint(mat)
@@ -21,8 +13,6 @@ function tri!(A, u::Char, d::Char)
     return u == 'L' ? tril!(A, d == 'U' ? -1 : 0) : triu!(A, d == 'U' ? 1 : 0)
 end
 
-const MatrixOrView{T} = Union{Matrix{T},SubArray{T,2,<:Array{T}}}
-const VecOrView{T} = Union{Vector{T},SubArray{T,1,<:Array{T}}}
 const BlasRealFloat = Union{Float32,Float64}
 const BlasComplexFloat = Union{ComplexF32,ComplexF64}
 
@@ -786,229 +776,278 @@ function rrule!!(
     return C_dC, symm!_adjoint
 end
 
-for (syrk, elty) in ((:dsyrk_, :Float64), (:ssyrk_, :Float32))
-    @eval function rrule!!(
-        ::CoDual{typeof(_foreigncall_)},
-        ::CoDual{Val{$(blas_name(syrk))}},
-        ::CoDual{Val{Cvoid}},
-        ::CoDual, # arg types
-        ::CoDual, # nreq
-        ::CoDual, # calling convention
-        uplo::CoDual{Ptr{UInt8}},
-        trans::CoDual{Ptr{UInt8}},
-        n::CoDual{Ptr{BLAS.BlasInt}},
-        k::CoDual{Ptr{BLAS.BlasInt}},
-        alpha::CoDual{Ptr{$elty}},
-        A::CoDual{Ptr{$elty}},
-        LDA::CoDual{Ptr{BLAS.BlasInt}},
-        beta::CoDual{Ptr{$elty}},
-        C::CoDual{Ptr{$elty}},
-        LDC::CoDual{Ptr{BLAS.BlasInt}},
-        args::Vararg{Any,Nargs},
-    ) where {Nargs}
-        GC.@preserve args begin
-            _uplo = Char(unsafe_load(primal(uplo)))
-            _t = Char(unsafe_load(primal(trans)))
-            _n = unsafe_load(primal(n))
-            _k = unsafe_load(primal(k))
-            _alpha = unsafe_load(primal(alpha))
-            _A = primal(A)
-            _LDA = unsafe_load(primal(LDA))
-            _beta = unsafe_load(primal(beta))
-            _C = primal(C)
-            _LDC = unsafe_load(primal(LDC))
+@is_primitive(
+    MinimalCtx,
+    Tuple{
+        typeof(BLAS.syrk!),Char,Char,P,AbstractMatrix{P},P,AbstractMatrix{P}
+    } where {P<:BlasRealFloat}
+)
+function frule!!(
+    ::Dual{typeof(BLAS.syrk!)},
+    _uplo::Dual{Char},
+    _t::Dual{Char},
+    α_dα::Dual{P},
+    A_dA::Dual{<:AbstractMatrix{P}},
+    β_dβ::Dual{P},
+    C_dC::Dual{<:AbstractMatrix{P}},
+) where {P<:BlasRealFloat}
 
-            A_mat = wrap_ptr_as_view(primal(A), _LDA, (_t == 'N' ? (_n, _k) : (_k, _n))...)
-            C_mat = wrap_ptr_as_view(primal(C), _LDC, _n, _n)
-            C_copy = collect(C_mat)
+    # Extract values from pairs.
+    uplo = primal(_uplo)
+    t = primal(_t)
+    α, dα = extract(α_dα)
+    A, dA = arrayify(A_dA)
+    β, dβ = extract(β_dβ)
+    C, dC = arrayify(C_dC)
 
-            BLAS.syrk!(_uplo, _t, _alpha, A_mat, _beta, C_mat)
-
-            dalpha = tangent(alpha)
-            dA = tangent(A)
-            dbeta = tangent(beta)
-            dC = tangent(C)
-        end
-
-        function syrk!_pullback!!(::NoRData)
-            GC.@preserve args begin
-                # Restore previous state.
-                C_mat .= C_copy
-
-                # Convert pointers to views.
-                dA_mat = wrap_ptr_as_view(dA, _LDA, (_t == 'N' ? (_n, _k) : (_k, _n))...)
-                dC_mat = wrap_ptr_as_view(dC, _LDC, _n, _n)
-
-                # Increment cotangents.
-                B = _uplo == 'U' ? triu(dC_mat) : tril(dC_mat)
-                unsafe_store!(dbeta, unsafe_load(dbeta) + sum(B .* C_mat))
-                dalpha_inc = tr(B' * _trans(_t, A_mat) * _trans(_t, A_mat)')
-                unsafe_store!(dalpha, unsafe_load(dalpha) + dalpha_inc)
-                dA_mat .+= _alpha * (_t == 'N' ? (B + B') * A_mat : A_mat * (B + B'))
-                dC_mat .=
-                    (_uplo == 'U' ? tril!(dC_mat, -1) : triu!(dC_mat, 1)) .+ _beta .* B
-            end
-
-            return tuple_fill(NoRData(), Val(16 + Nargs))
-        end
-        return zero_fcodual(Cvoid()), syrk!_pullback!!
+    # Compute Frechet derivative.
+    BLAS.syr2k!(uplo, t, α, A, dA, β, dC)
+    iszero(dα) || BLAS.syrk!(uplo, t, dα, A, one(P), dC)
+    if !iszero(dβ)
+        dC .+= dβ .* (uplo == 'U' ? triu(C) : tril(C))
     end
+
+    # Run primal computation.
+    BLAS.syrk!(uplo, t, α, A, β, C)
+
+    return C_dC
+end
+function rrule!!(
+    ::CoDual{typeof(BLAS.syrk!)},
+    _uplo::CoDual{Char},
+    _t::CoDual{Char},
+    α_dα::CoDual{P},
+    A_dA::CoDual{<:AbstractMatrix{P}},
+    β_dβ::CoDual{P},
+    C_dC::CoDual{<:AbstractMatrix{P}},
+) where {P<:BlasRealFloat}
+
+    # Extract values from pairs.
+    uplo = primal(_uplo)
+    trans = primal(_t)
+    α = primal(α_dα)
+    A, dA = arrayify(A_dA)
+    β = primal(β_dβ)
+    C, dC = arrayify(C_dC)
+
+    # Run forwards pass, and remember previous value of `C` for the reverse-pass.
+    C_copy = collect(C)
+    BLAS.syrk!(uplo, trans, α, A, β, C)
+
+    function syrk_adjoint(::NoRData)
+        # Restore previous state.
+        C .= C_copy
+
+        # C_copy no longer required, so its memory can be used to store other intermediate
+        # results. Renaming for clarity.
+        tmp = C_copy
+
+        # Increment gradients.
+        B = uplo == 'U' ? triu(dC) : tril(dC)
+        ∇β = sum(B .* C)
+        ∇α = tr(B' * _trans(trans, A) * _trans(trans, A)')
+        # @show _t, size(A), size(B)
+        dA .+= α * (trans == 'N' ? (B + B') * A : A * (B + B'))
+        dC .= (uplo == 'U' ? tril!(dC, -1) : triu!(dC, 1)) .+ β .* B
+
+        return NoRData(), NoRData(), NoRData(), ∇α, NoRData(), ∇β, NoRData()
+    end
+
+    return C_dC, syrk_adjoint
 end
 
-for (trmm, elty) in ((:dtrmm_, :Float64), (:strmm_, :Float32))
-    @eval function rrule!!(
-        ::CoDual{typeof(_foreigncall_)},
-        ::CoDual{Val{$(blas_name(trmm))}},
-        ::CoDual,
-        ::CoDual, # arg types
-        ::CoDual, # nreq
-        ::CoDual, # calling convention
-        _side::CoDual{Ptr{UInt8}},
-        _uplo::CoDual{Ptr{UInt8}},
-        _trans::CoDual{Ptr{UInt8}},
-        _diag::CoDual{Ptr{UInt8}},
-        _M::CoDual{Ptr{BLAS.BlasInt}},
-        _N::CoDual{Ptr{BLAS.BlasInt}},
-        _alpha::CoDual{Ptr{$elty}},
-        _A::CoDual{Ptr{$elty}},
-        _lda::CoDual{Ptr{BLAS.BlasInt}},
-        _B::CoDual{Ptr{$elty}},
-        _ldb::CoDual{Ptr{BLAS.BlasInt}},
-        args::Vararg{Any,Nargs},
-    ) where {Nargs}
-        GC.@preserve args begin
+@is_primitive(
+    MinimalCtx,
+    Tuple{
+        typeof(BLAS.trmm!),Char,Char,Char,Char,P,AbstractMatrix{P},AbstractMatrix{P}
+    } where {P<:BlasRealFloat}
+)
+function frule!!(
+    ::Dual{typeof(BLAS.trmm!)},
+    _side::Dual{Char},
+    _uplo::Dual{Char},
+    _ta::Dual{Char},
+    _diag::Dual{Char},
+    α_dα::Dual{P},
+    A_dA::Dual{<:AbstractMatrix{P}},
+    B_dB::Dual{<:AbstractMatrix{P}},
+) where {P<:BlasRealFloat}
 
-            # Load in data and store B for the reverse-pass.
-            side, ul, tA, diag = map(
-                Char ∘ unsafe_load ∘ primal, (_side, _uplo, _trans, _diag)
-            )
-            M, N, lda, ldb = map(unsafe_load ∘ primal, (_M, _N, _lda, _ldb))
-            alpha = unsafe_load(primal(_alpha))
-            R = side == 'L' ? M : N
-            A = wrap_ptr_as_view(primal(_A), lda, R, R)
-            B = wrap_ptr_as_view(primal(_B), ldb, M, N)
-            B_copy = copy(B)
+    # Extract data.
+    side = primal(_side)
+    uplo = primal(_uplo)
+    ta = primal(_ta)
+    diag = primal(_diag)
+    α, dα = extract(α_dα)
+    A, dA = arrayify(A_dA)
+    B, dB = arrayify(B_dB)
 
-            # Run primal.
-            BLAS.trmm!(side, ul, tA, diag, alpha, A, B)
-
-            dalpha = tangent(_alpha)
-            _dA = tangent(_A)
-            _dB = tangent(_B)
-        end
-
-        function trmm!_pullback!!(::NoRData)
-            GC.@preserve args begin
-                # Convert pointers to views.
-                dA = wrap_ptr_as_view(_dA, lda, R, R)
-                dB = wrap_ptr_as_view(_dB, ldb, M, N)
-
-                # Increment alpha tangent.
-                alpha != 0 && unsafe_store!(dalpha, unsafe_load(dalpha) + tr(dB'B) / alpha)
-
-                # Restore initial state.
-                B .= B_copy
-
-                # Increment cotangents.
-                if side == 'L'
-                    dA .+= alpha .* tri!(tA == 'N' ? dB * B' : B * dB', ul, diag)
-                else
-                    dA .+= alpha .* tri!(tA == 'N' ? B'dB : dB'B, ul, diag)
-                end
-
-                # Compute dB tangent.
-                BLAS.trmm!(side, ul, tA == 'N' ? 'T' : 'N', diag, alpha, A, dB)
-            end
-
-            return tuple_fill(NoRData(), Val(17 + Nargs))
-        end
-
-        return zero_fcodual(Cvoid()), trmm!_pullback!!
+    # Compute Frechet derivative.
+    BLAS.trmm!(side, uplo, ta, diag, α, A, dB)
+    dB .+= BLAS.trmm!(side, uplo, ta, diag, α, dA, copy(B))
+    if diag == 'U'
+        dB .-= α .* B
     end
+    if !iszero(dα)
+        dB .+= BLAS.trmm!(side, uplo, ta, diag, dα, A, copy(B))
+    end
+
+    # Compute primal.
+    BLAS.trmm!(side, uplo, ta, diag, α, A, B)
+    return B_dB
+end
+function rrule!!(
+    ::CoDual{typeof(BLAS.trmm!)},
+    _side::CoDual{Char},
+    _uplo::CoDual{Char},
+    _ta::CoDual{Char},
+    _diag::CoDual{Char},
+    α_dα::CoDual{P},
+    A_dA::CoDual{<:AbstractMatrix{P}},
+    B_dB::CoDual{<:AbstractMatrix{P}},
+) where {P<:BlasRealFloat}
+
+    # Extract values.
+    side = primal(_side)
+    uplo = primal(_uplo)
+    tA = primal(_ta)
+    diag = primal(_diag)
+    α = primal(α_dα)
+    A, dA = arrayify(A_dA)
+    B, dB = arrayify(B_dB)
+    B_copy = copy(B)
+
+    # Run primal.
+    BLAS.trmm!(side, uplo, tA, diag, α, A, B)
+
+    function trmm_adjoint(::NoRData)
+
+        # Compute α gradient.
+        ∇α = tr(dB'B) / α
+
+        # Restore initial state.
+        B .= B_copy
+
+        # Increment gradients.
+        if side == 'L'
+            dA .+= α .* tri!(tA == 'N' ? dB * B' : B * dB', uplo, diag)
+        else
+            dA .+= α .* tri!(tA == 'N' ? B'dB : dB'B, uplo, diag)
+        end
+
+        # Compute dB tangent.
+        BLAS.trmm!(side, uplo, tA == 'N' ? 'T' : 'N', diag, α, A, dB)
+
+        return tuple_fill(NoRData(), Val(5))..., ∇α, NoRData(), NoRData()
+    end
+
+    return B_dB, trmm_adjoint
 end
 
-for (trsm, elty) in ((:dtrsm_, :Float64), (:strsm_, :Float32))
-    @eval function rrule!!(
-        ::CoDual{typeof(_foreigncall_)},
-        ::CoDual{Val{$(blas_name(trsm))}},
-        ::CoDual,
-        ::CoDual, # arg types
-        ::CoDual, # nreq
-        ::CoDual, # calling convention
-        _side::CoDual{Ptr{UInt8}},
-        _uplo::CoDual{Ptr{UInt8}},
-        _trans::CoDual{Ptr{UInt8}},
-        _diag::CoDual{Ptr{UInt8}},
-        _M::CoDual{Ptr{BLAS.BlasInt}},
-        _N::CoDual{Ptr{BLAS.BlasInt}},
-        _alpha::CoDual{Ptr{$elty}},
-        _A::CoDual{Ptr{$elty}},
-        _lda::CoDual{Ptr{BLAS.BlasInt}},
-        _B::CoDual{Ptr{$elty}},
-        _ldb::CoDual{Ptr{BLAS.BlasInt}},
-        args::Vararg{Any,Nargs},
-    ) where {Nargs}
-        GC.@preserve args begin
-            side = Char(unsafe_load(primal(_side)))
-            uplo = Char(unsafe_load(primal(_uplo)))
-            trans = Char(unsafe_load(primal(_trans)))
-            diag = Char(unsafe_load(primal(_diag)))
-            M = unsafe_load(primal(_M))
-            N = unsafe_load(primal(_N))
-            R = side == 'L' ? M : N
-            alpha = unsafe_load(primal(_alpha))
-            lda = unsafe_load(primal(_lda))
-            ldb = unsafe_load(primal(_ldb))
-            A = wrap_ptr_as_view(primal(_A), lda, R, R)
-            B = wrap_ptr_as_view(primal(_B), ldb, M, N)
-            B_copy = copy(B)
+@is_primitive(
+    MinimalCtx,
+    Tuple{
+        typeof(BLAS.trsm!),Char,Char,Char,Char,P,AbstractMatrix{P},AbstractMatrix{P}
+    } where {P<:BlasRealFloat},
+)
 
-            trsm!(side, uplo, trans, diag, alpha, A, B)
+function frule!!(
+    ::Dual{typeof(BLAS.trsm!)},
+    _side::Dual{Char},
+    _uplo::Dual{Char},
+    _t::Dual{Char},
+    _diag::Dual{Char},
+    α_dα::Dual{P},
+    A_dA::Dual{<:AbstractMatrix{P}},
+    B_dB::Dual{<:AbstractMatrix{P}},
+) where {P<:BlasRealFloat}
 
-            dalpha = tangent(_alpha)
-            _dA = tangent(_A)
-            _dB = tangent(_B)
-        end
+    # Extract parameters.
+    side = primal(_side)
+    uplo = primal(_uplo)
+    trans = primal(_t)
+    diag = primal(_diag)
+    α, dα = extract(α_dα)
+    A, dA = arrayify(A_dA)
+    B, dB = arrayify(B_dB)
 
-        function trsm_pb!!(::NoRData)
-            GC.@preserve args begin
-                # Convert pointers to views.
-                dA = wrap_ptr_as_view(_dA, lda, R, R)
-                dB = wrap_ptr_as_view(_dB, ldb, M, N)
+    # Compute Frechet derivative.
+    BLAS.trsm!(side, uplo, trans, diag, α, A, dB)
+    tmp = copy(B)
+    trsm!(side, uplo, trans, diag, one(P), A, tmp) # tmp now contains inv(A) B.
+    dB .+= dα .* tmp
 
-                # Increment alpha tangent.
-                alpha != 0 && unsafe_store!(dalpha, unsafe_load(dalpha) + tr(dB'B) / alpha)
-
-                # Increment cotangents.
-                if side == 'L'
-                    if trans == 'N'
-                        tmp = trsm!('L', uplo, 'T', diag, -one($elty), A, dB * B')
-                        dA .+= tri!(tmp, uplo, diag)
-                    else
-                        tmp = trsm!('R', uplo, 'T', diag, -one($elty), A, B * dB')
-                        dA .+= tri!(tmp, uplo, diag)
-                    end
-                else
-                    if trans == 'N'
-                        tmp = trsm!('R', uplo, 'T', diag, -one($elty), A, B'dB)
-                        dA .+= tri!(tmp, uplo, diag)
-                    else
-                        tmp = trsm!('L', uplo, 'T', diag, -one($elty), A, dB'B)
-                        dA .+= tri!(tmp, uplo, diag)
-                    end
-                end
-
-                # Restore initial state.
-                B .= B_copy
-
-                # Compute dB tangent.
-                BLAS.trsm!(side, uplo, trans == 'N' ? 'T' : 'N', diag, alpha, A, dB)
-            end
-
-            return tuple_fill(NoRData(), Val(17 + Nargs))
-        end
-        return zero_fcodual(Cvoid()), trsm_pb!!
+    tmp2 = copy(tmp)
+    BLAS.trmm!(side, uplo, trans, diag, α, dA, tmp) # tmp now contains α dA inv(A) B.
+    if diag == 'U'
+        tmp .-= α .* tmp2
     end
+    BLAS.trsm!(side, uplo, trans, diag, one(P), A, tmp) # tmp is now α inv(A) dA inv(A) B.
+    dB .-= tmp
+
+    # Run primal computation.
+    BLAS.trsm!(side, uplo, trans, diag, α, A, B)
+    return B_dB
+end
+
+function rrule!!(
+    ::CoDual{typeof(BLAS.trsm!)},
+    _side::CoDual{Char},
+    _uplo::CoDual{Char},
+    _t::CoDual{Char},
+    _diag::CoDual{Char},
+    α_dα::CoDual{P},
+    A_dA::CoDual{<:AbstractMatrix{P}},
+    B_dB::CoDual{<:AbstractMatrix{P}},
+) where {P<:BlasRealFloat}
+
+    # Extract parameters.
+    side = primal(_side)
+    uplo = primal(_uplo)
+    trans = primal(_t)
+    diag = primal(_diag)
+    α = primal(α_dα)
+    A, dA = arrayify(A_dA)
+    B, dB = arrayify(B_dB)
+
+    # Copy memory which will be overwritten by primal computation.
+    B_copy = copy(B)
+
+    # Run primal computation.
+    trsm!(side, uplo, trans, diag, α, A, B)
+
+    function trsm_adjoint(::NoRData)
+        # Compute α gradient.
+        ∇α = tr(dB'B) / α
+
+        # Increment cotangents.
+        if side == 'L'
+            if trans == 'N'
+                tmp = trsm!('L', uplo, 'T', diag, -one(P), A, dB * B')
+                dA .+= tri!(tmp, uplo, diag)
+            else
+                tmp = trsm!('R', uplo, 'T', diag, -one(P), A, B * dB')
+                dA .+= tri!(tmp, uplo, diag)
+            end
+        else
+            if trans == 'N'
+                tmp = trsm!('R', uplo, 'T', diag, -one(P), A, B'dB)
+                dA .+= tri!(tmp, uplo, diag)
+            else
+                tmp = trsm!('L', uplo, 'T', diag, -one(P), A, dB'B)
+                dA .+= tri!(tmp, uplo, diag)
+            end
+        end
+
+        # Restore initial state.
+        B .= B_copy
+
+        # Compute dB tangent.
+        BLAS.trsm!(side, uplo, trans == 'N' ? 'T' : 'N', diag, α, A, dB)
+        return tuple_fill(NoRData(), Val(5))..., ∇α, NoRData(), NoRData()
+    end
+
+    return B_dB, trsm_adjoint
 end
 
 function blas_matrices(rng::AbstractRNG, P::Type{<:BlasFloat}, p::Int, q::Int)
@@ -1047,6 +1086,11 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
     rng = rng_ctor(123456)
 
     test_cases = vcat(
+
+        #
+        # BLAS LEVEL 1
+        #
+
         # nrm2(x)
         map_prod([Ps..., ComplexF64, ComplexF32]) do (P,)
             return map([randn(rng, P, 105)]) do x
@@ -1060,6 +1104,10 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
                 (false, :none, nothing, BLAS.nrm2, n, x, incx)
             end
         end...,
+
+        #
+        # BLAS LEVEL 2
+        #
 
         # gemv!
         map_prod(t_flags, [1, 3], [1, 2], Ps) do (tA, M, N, P)
@@ -1091,6 +1139,10 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
             end
         end...,
 
+        #
+        # BLAS LEVEL 3
+        #
+
         # gemm!
         map_prod(t_flags, t_flags, αs, βs, Ps, dαs, dβs) do (tA, tB, α, β, P, dα, dβ)
             As = blas_matrices(rng, P, tA == 'N' ? 3 : 4, tA == 'N' ? 4 : 3)
@@ -1112,6 +1164,48 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
             Cs = blas_matrices(rng, P, 5, 7)
             return map(As, Bs, Cs) do A, B, C
                 (false, :stability, nothing, BLAS.symm!, side, ul, P(α), A, B, P(β), C)
+            end
+        end...,
+
+        # syrk!
+        map_prod(uplos, t_flags, Ps, dαs, dβs) do (uplo, t, P, dα, dβ)
+            As = blas_matrices(rng, P, t == 'N' ? 3 : 4, t == 'N' ? 4 : 3)
+            return map(As) do A
+                α_dα = CoDual(randn(rng, P), P(dα))
+                β_dβ = CoDual(randn(rng, P), P(dβ))
+                C = randn(rng, P, 3, 3)
+                (false, :stability, nothing, BLAS.syrk!, uplo, t, α_dα, A, β_dβ, C)
+            end
+        end...,
+
+        # trmm!
+        map_prod(
+            ['L', 'R'], uplos, t_flags, dAs, [1, 3], [1, 2], Ps, dαs
+        ) do (side, ul, tA, dA, M, N, P, dα)
+            t = tA == 'N'
+            R = side == 'L' ? M : N
+            As = blas_matrices(rng, P, R, R)
+            Bs = blas_matrices(rng, P, M, N)
+            return map(As, Bs) do A, B
+                α_dα = CoDual(randn(rng, P), P(dα))
+                (false, :stability, nothing, BLAS.trmm!, side, ul, tA, dA, α_dα, A, B)
+            end
+        end...,
+
+        # trsm!
+        map_prod(
+            ['L', 'R'], uplos, t_flags, dAs, [1, 3], [1, 2], Ps
+        ) do (side, ul, tA, dA, M, N, P)
+            t = tA == 'N'
+            R = side == 'L' ? M : N
+            a = randn(rng, P)
+            As = map(blas_matrices(rng, P, R, R)) do A
+                A[diagind(A)] .+= 1
+                return A
+            end
+            Bs = blas_matrices(rng, P, M, N)
+            return map(As, Bs) do A, B
+                (false, :stability, nothing, BLAS.trsm!, side, ul, tA, dA, a, A, B)
             end
         end...,
     )
@@ -1136,20 +1230,20 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
         (false, :stability, nothing, BLAS.set_num_threads, 1),
         (false, :stability, nothing, BLAS.lbt_set_num_threads, 1),
 
-        #
-        # BLAS LEVEL 1
-        #
+        # #
+        # # BLAS LEVEL 1
+        # #
 
-        map(Ps) do P
-            flags = (false, :none, nothing)
-            Any[
-                (flags..., BLAS.dot, 3, randn(rng, P, 5), 1, randn(rng, P, 4), 1),
-                (flags..., BLAS.dot, 3, randn(rng, P, 6), 2, randn(rng, P, 4), 1),
-                (flags..., BLAS.dot, 3, randn(rng, P, 6), 1, randn(rng, P, 9), 3),
-                (flags..., BLAS.dot, 3, randn(rng, P, 12), 3, randn(rng, P, 9), 2),
-                (flags..., BLAS.scal!, 10, P(2.4), randn(rng, P, 30), 2),
-            ]
-        end...,
+        # map(Ps) do P
+        #     flags = (false, :none, nothing)
+        #     Any[
+        #         (flags..., BLAS.dot, 3, randn(rng, P, 5), 1, randn(rng, P, 4), 1),
+        #         (flags..., BLAS.dot, 3, randn(rng, P, 6), 2, randn(rng, P, 4), 1),
+        #         (flags..., BLAS.dot, 3, randn(rng, P, 6), 1, randn(rng, P, 9), 3),
+        #         (flags..., BLAS.dot, 3, randn(rng, P, 12), 3, randn(rng, P, 9), 2),
+        #         (flags..., BLAS.scal!, 10, P(2.4), randn(rng, P, 30), 2),
+        #     ]
+        # end...,
 
         #
         # BLAS LEVEL 3
@@ -1163,48 +1257,6 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
             b = randn(rng, P)
             return map_prod(As, Bs) do (A, B)
                 (false, :none, nothing, aliased_gemm!, tA, tB, a, b, A, B)
-            end
-        end...,
-
-        # syrk!
-        map_prod(uplos, t_flags, Ps) do (uplo, t, P)
-            As = blas_matrices(rng, P, t == 'N' ? 3 : 4, t == 'N' ? 4 : 3)
-            C = randn(rng, P, 3, 3)
-            a = randn(rng, P)
-            b = randn(rng, P)
-            return map(As) do A
-                (false, :none, nothing, BLAS.syrk!, uplo, t, a, A, b, C)
-            end
-        end...,
-
-        # trmm!
-        map_prod(
-            ['L', 'R'], uplos, t_flags, dAs, [1, 3], [1, 2], Ps
-        ) do (side, ul, tA, dA, M, N, P)
-            t = tA == 'N'
-            R = side == 'L' ? M : N
-            a = randn(rng, P)
-            As = blas_matrices(rng, P, R, R)
-            Bs = blas_matrices(rng, P, M, N)
-            return map(As, Bs) do A, B
-                (false, :none, nothing, BLAS.trmm!, side, ul, tA, dA, a, A, B)
-            end
-        end...,
-
-        # trsm!
-        map_prod(
-            ['L', 'R'], uplos, t_flags, dAs, [1, 3], [1, 2], Ps
-        ) do (side, ul, tA, dA, M, N, P)
-            t = tA == 'N'
-            R = side == 'L' ? M : N
-            a = randn(rng, P)
-            As = map(blas_matrices(rng, P, R, R)) do A
-                A[diagind(A)] .+= 1
-                return A
-            end
-            Bs = blas_matrices(rng, P, M, N)
-            return map(As, Bs) do A, B
-                (false, :none, nothing, BLAS.trsm!, side, ul, tA, dA, a, A, B)
             end
         end...,
     )

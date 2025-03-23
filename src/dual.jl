@@ -8,6 +8,13 @@ tangent(x::Dual) = x.tangent
 Base.copy(x::Dual) = Dual(copy(primal(x)), copy(tangent(x)))
 _copy(x::P) where {P<:Dual} = x
 
+"""
+    extract(x::CoDual)
+
+Helper function. Returns the 2-tuple `x.x, x.dx`.
+"""
+extract(x::Dual) = primal(x), tangent(x)
+
 zero_dual(x) = Dual(x, zero_tangent(x))
 randn_dual(rng::AbstractRNG, x) = Dual(x, randn_tangent(rng, x))
 
