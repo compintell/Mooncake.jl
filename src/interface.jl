@@ -249,8 +249,7 @@ function _copy_temp(x::P) where {P}
 
     temp = []
     @inbounds for x_sub in fieldnames(P)
-        isdefined(x, x_sub) && continue
-        push!(temp, _copy_temp(getfield(x, x_sub)))
+        isdefined(x, x_sub) && push!(temp, _copy_temp(getfield(x, x_sub)))
     end
     return P(temp...)
 end
