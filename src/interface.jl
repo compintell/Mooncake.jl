@@ -246,23 +246,37 @@ end
 # mutable composite types, bitstype
 function _copy_temp(x::P) where {P}
     isbitstype(P) && return x
-    temp = ccall(:jl_new_struct_uninit, Any, (Any,), P)
+    nf = nfields(P)
 
-    i = 1
-    for x_sub in fieldnames(P)
-        if isdefined(x, x_sub)
-            ccall(
-                :jl_set_nth_field,
-                Cvoid,
-                (Any, Csize_t, Any),
-                temp,
-                i - 1,
-                _copy_temp(getfield(x, x_sub)),
-            )
-            i += 1
+    if ismutable(x)
+        temp = ccall(:jl_new_struct_uninit, Any, (Any,), P)
+        for x_sub in 1:nf
+            if isdefined(x, x_sub)
+                ccall(
+                    :jl_set_nth_field,
+                    Cvoid,
+                    (Any, Csize_t, Any),
+                    temp,
+                    x_sub - 1,
+                    _copy_temp(getfield(x, x_sub)),
+                )
+            end
         end
+        
+        return temp
+    else
+        flds = Vector{Any}(undef, nf)
+        for x_sub in 1:nf
+            if isdefined(x, x_sub)
+                flds[x_sub] = _copy_temp(getfield(x, x_sub))
+            else
+                nf = x_sub - 1
+                break
+            end
+        end
+
+        return ccall(:jl_new_structv, Any, (Any, Ptr{Any}, UInt32), P, flds, nf)
     end
-    return temp
 end
 
 # Array, Memory
