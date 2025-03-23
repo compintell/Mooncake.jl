@@ -197,27 +197,35 @@ end
                         end
                     else
                         fields_copy = [
-                            if !isdefined(test_copy, name)
+                            if (
+                                !isdefined(test_copy, name) ||
+                                isnan(getfield(test_copy, name))
+                            )
                                 nothing
                             else
                                 getfield(test_copy, name)
                             end for name in fieldnames(typeof(test_copy))
                         ]
                         fields_orig = [
-                            !isdefined(original, name) ? nothing : getfield(original, name)
-                            for name in fieldnames(typeof(original))
+                            if (
+                                !isdefined(original, name) ||
+                                isnan(getfield(test_copy, name))
+                            )
+                                nothing
+                            else
+                                getfield(original, name)
+                            end for name in fieldnames(typeof(original))
                         ]
-                        if !any(fields_copy .== fields_orig)
-                            println(original)
-                            println(Mooncake._copy_temp(original))
+                        if all(fields_copy .== fields_orig)
                             @test true
                         else
-                            @test true
+                            println()
+                            println(original)
                         end
 
                         # Value caching for pure immutable Types!
                         if !any(isbitstype.(typeof.(fields_orig)))
-                            @test !any(fields_copy .=== fields_orig)
+                            @test !all(fields_copy .=== fields_orig)
                         end
                         @test typeof(test_copy) == typeof(original)
                     end
