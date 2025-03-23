@@ -200,9 +200,9 @@ end
                     end
 
                     function comparisons(original::P, test_copy::P) where {P}
-                        if isbitstype(P)
-                            return @test test_copy == original
-                        end
+                        isnan(original) && return @test isnan(test_copy)
+                        isbitstype(P) && return @test test_copy == original
+
                         fields_copy = [
                             if !isdefined(test_copy, name)
                                 nothing
