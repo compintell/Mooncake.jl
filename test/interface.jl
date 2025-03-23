@@ -196,11 +196,14 @@ end
                         end
                     else
                         fields_copy = [
-                            isdefined(test_copy, name) ? getfield(test_copy, name) : nothing 
-                            for name in fieldnames(typeof(test_copy))
+                            if !isdefined(test_copy, name)
+                                nothing
+                            else
+                                getfield(test_copy, name)
+                            end for name in fieldnames(typeof(test_copy))
                         ]
                         fields_orig = [
-                            isdefined(original, name) ? getfield(original, name) : nothing
+                            !isdefined(original, name) ? nothing : getfield(original, name)
                             for name in fieldnames(typeof(original))
                         ]
                         @test fields_copy == fields_orig
