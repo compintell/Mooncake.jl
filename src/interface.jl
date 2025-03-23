@@ -262,7 +262,7 @@ function _copy_temp(x::P) where {P}
                 )
             end
         end
-        
+
         return temp
     else
         flds = Vector{Any}(undef, nf)
