@@ -246,9 +246,13 @@ end
 # mutable composite types, bitstype
 function _copy_temp(x::P) where {P}
     isbitstype(P) && return x
-    return P((map(x_sub -> if isdefined(x, x_sub)
-        return _copy_temp(getfield(x, x_sub))
-    end, fieldnames(P)))...)
+
+    temp = []
+    @inbounds for x_sub in fieldnames(P)
+        isdefined(x, x_sub) && continue
+        push!(temp, _copy_temp(getfield(x, x_sub)))
+    end
+    return P(temp...)
 end
 
 # Array, Memory
