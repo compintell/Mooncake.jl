@@ -238,9 +238,28 @@ end
 
 const _BuiltinArrays = @static VERSION >= v"1.11" ? Union{Array,Memory} : Array
 
+# tests of the form Struct_Vector_Int64_Int64(#undef, -1152921504606846976)
+function _copy_temp(x::P) where {P<:Number}
+    return x
+end
+
 # explicit for svec
 function _copy_temp(x::P) where {P<:SimpleVector}
     return Core.svec([map(_copy_temp, x_sub) for x_sub in x]...)
+end
+
+# Array, Memory
+function _copy_temp(x::P) where {P<:_BuiltinArrays}
+    temp = P(undef, size(x)...)
+    @inbounds for i in eachindex(temp)
+        isassigned(x, i) && (temp[i] = _copy_temp(x[i]))
+    end
+    return temp
+end
+
+# Tuple, NamedTuple
+function _copy_temp(x::P) where {P<:Union{Tuple,NamedTuple}}
+    return map(_copy_temp, x)
 end
 
 # mutable composite types, bitstype
@@ -277,25 +296,6 @@ function _copy_temp(x::P) where {P}
 
         return ccall(:jl_new_structv, Any, (Any, Ptr{Any}, UInt32), P, flds, nf)
     end
-end
-
-# Array, Memory
-function _copy_temp(x::P) where {P<:_BuiltinArrays}
-    temp = P(undef, size(x)...)
-    @inbounds for i in eachindex(temp)
-        isassigned(x, i) && (temp[i] = _copy_temp(x[i]))
-    end
-    return temp
-end
-
-# Tuple, NamedTuple
-function _copy_temp(x::P) where {P<:Union{Tuple,NamedTuple}}
-    return map(_copy_temp, x)
-end
-
-# tests of the form Struct_Vector_Int64_Int64(#undef, -1152921504606846976)
-function _copy_temp(x::P) where {P<:Number}
-    return x
 end
 
 function __exclude_unsupported_output_internal!(
