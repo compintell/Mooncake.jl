@@ -97,7 +97,7 @@ for (fname, elty) in ((:cblas_ddot, :Float64), (:cblas_sdot, :Float32))
             _dDX = view(unsafe_wrap(Vector{$elty}, tangent(_DX), n * incx), xinds)
             _dDY = view(unsafe_wrap(Vector{$elty}, tangent(_DY), n * incy), yinds)
 
-            return Dual(dot(DX, DY), dot(DX, _dDY) + dot(_dDY, DY))
+            return Dual(dot(DX, DY), dot(DX, _dDY) + dot(_dDX, DY))
         end
     end
     @eval @inline function rrule!!(
@@ -206,54 +206,68 @@ function rrule!!(
     return CoDual(y, NoFData()), nrm2_pb!!
 end
 
-for (fname, elty) in ((:dscal_, :Float64), (:sscal_, :Float32))
-    @eval @inline function Mooncake.rrule!!(
-        ::CoDual{typeof(_foreigncall_)},
-        ::CoDual{Val{$(blas_name(fname))}},
-        ::CoDual, # return type
-        ::CoDual, # argument types
-        ::CoDual, # nreq
-        ::CoDual, # calling convention
-        n::CoDual{Ptr{BLAS.BlasInt}},
-        DA::CoDual{Ptr{$elty}},
-        DX::CoDual{Ptr{$elty}},
-        incx::CoDual{Ptr{BLAS.BlasInt}},
-        args::Vararg{Any,N},
-    ) where {N}
-        GC.@preserve args begin
+@is_primitive(
+    MinimalCtx,
+    Tuple{typeof(BLAS.scal!),Integer,P,AbstractArray{P},Integer} where {P<:BlasRealFloat}
+)
+function frule!!(
+    ::Dual{typeof(BLAS.scal!)},
+    _n::Dual{<:Integer},
+    a_da::Dual{P},
+    X_dX::Dual{<:AbstractArray{P}},
+    _incx::Dual{<:Integer},
+) where {P<:BlasRealFloat}
 
-            # Load in values from pointers, and turn pointers to memory buffers into Vectors.
-            _n = unsafe_load(primal(n))
-            _incx = unsafe_load(primal(incx))
-            _DA = unsafe_load(primal(DA))
-            _DX = unsafe_wrap(Vector{$elty}, primal(DX), _n * _incx)
-            _DX_s = unsafe_wrap(Vector{$elty}, tangent(DX), _n * _incx)
+    # Extract params.
+    n = primal(_n)
+    incx = primal(_incx)
+    a, da = extract(a_da)
+    X, dX = arrayify(X_dX)
 
-            inds = 1:_incx:(_incx * _n)
-            DX_copy = _DX[inds]
-            BLAS.scal!(_n, _DA, _DX, _incx)
+    # Compute Frechet derivative.
+    BLAS.scal!(n, a, dX, incx)
+    BLAS.axpy!(n, da, X, incx, dX, incx)
 
-            dDA = tangent(DA)
-            dDX = tangent(DX)
-        end
+    # Perform primal computation.
+    BLAS.scal!(n, a, X, incx)
+    return X_dX
+end
+function rrule!!(
+    ::CoDual{typeof(BLAS.scal!)},
+    _n::CoDual{<:Integer},
+    a_da::CoDual{P},
+    X_dX::CoDual{<:AbstractArray{P}},
+    _incx::CoDual{<:Integer},
+) where {P<:BlasRealFloat}
 
-        function dscal_pullback!!(::NoRData)
-            GC.@preserve args begin
+    # Extract params.
+    n = primal(_n)
+    incx = primal(_incx)
+    a = primal(a_da)
+    X, dX = arrayify(X_dX)
 
-                # Set primal to previous state.
-                _DX[inds] .= DX_copy
+    # Take a copy of previous state in order to recover it on the reverse pass.
+    X_copy = copy(X)
+    dX_copy = copy(dX)
 
-                # Compute cotangent w.r.t. scaling.
-                unsafe_store!(dDA, BLAS.dot(_n, _DX, _incx, dDX, _incx) + unsafe_load(dDA))
+    # Run primal computation.
+    BLAS.scal!(n, a, X, incx)
 
-                # Compute cotangent w.r.t. DX.
-                BLAS.scal!(_n, _DA, _DX_s, _incx)
-            end
+    function scal_adjoint(::NoRData)
 
-            return tuple_fill(NoRData(), Val(10 + N))
-        end
-        return zero_fcodual(Cvoid()), dscal_pullback!!
+        # Set primal to previous state.
+        X .= X_copy
+
+        # Compute gradient w.r.t. scaling.
+        ∇a = BLAS.dot(n, X, incx, dX, incx)
+
+        # Compute gradient w.r.t. DX.
+        BLAS.scal!(n, a, dX, incx)
+        BLAS.axpy!(n, one(P), dX, incx, dX_copy, incx)
+
+        return NoRData(), NoRData(), ∇a, NoRData(), NoRData()
     end
+    return X_dX, scal_adjoint
 end
 
 #
@@ -1104,6 +1118,10 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
                 (false, :none, nothing, BLAS.nrm2, n, x, incx)
             end
         end...,
+        map_prod(Ps, [1, 3, 11], [1, 2, 11]) do (P, n, incx)
+            flags = (false, :none, nothing)
+            return (flags..., BLAS.scal!, n, randn(rng, P), randn(rng, P, n * incx), incx)
+        end,
 
         #
         # BLAS LEVEL 2
@@ -1230,20 +1248,19 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:blas})
         (false, :stability, nothing, BLAS.set_num_threads, 1),
         (false, :stability, nothing, BLAS.lbt_set_num_threads, 1),
 
-        # #
-        # # BLAS LEVEL 1
-        # #
+        #
+        # BLAS LEVEL 1
+        #
 
-        # map(Ps) do P
-        #     flags = (false, :none, nothing)
-        #     Any[
-        #         (flags..., BLAS.dot, 3, randn(rng, P, 5), 1, randn(rng, P, 4), 1),
-        #         (flags..., BLAS.dot, 3, randn(rng, P, 6), 2, randn(rng, P, 4), 1),
-        #         (flags..., BLAS.dot, 3, randn(rng, P, 6), 1, randn(rng, P, 9), 3),
-        #         (flags..., BLAS.dot, 3, randn(rng, P, 12), 3, randn(rng, P, 9), 2),
-        #         (flags..., BLAS.scal!, 10, P(2.4), randn(rng, P, 30), 2),
-        #     ]
-        # end...,
+        map(Ps) do P
+            flags = (false, :none, nothing)
+            Any[
+                (flags..., BLAS.dot, 3, randn(rng, P, 5), 1, randn(rng, P, 4), 1),
+                (flags..., BLAS.dot, 3, randn(rng, P, 6), 2, randn(rng, P, 4), 1),
+                (flags..., BLAS.dot, 3, randn(rng, P, 6), 1, randn(rng, P, 9), 3),
+                (flags..., BLAS.dot, 3, randn(rng, P, 12), 3, randn(rng, P, 9), 2),
+            ]
+        end...,
 
         #
         # BLAS LEVEL 3
