@@ -239,7 +239,7 @@ end
 const _BuiltinArrays = @static VERSION >= v"1.11" ? Union{Array,Memory} : Array
 
 # tests of the form Struct_Vector_Int64_Int64(#undef, -1152921504606846976)
-function _copy_temp(x::P) where {P<:Union{Int64,Float64}}
+function _copy_temp(x::Number)
     return x
 end
 
