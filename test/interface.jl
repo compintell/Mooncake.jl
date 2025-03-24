@@ -200,7 +200,6 @@ end
                     end
 
                     function comparisons(original::P, test_copy::P) where {P}
-                        println("Comparing: ", original, " ", test_copy)
                         (isbitstype(P) && !isnothing(original) && isnan(original)) &&
                             return @test isnan(test_copy)
                         isbitstype(P) && return @test test_copy == original

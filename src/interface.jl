@@ -293,6 +293,11 @@ function _copy_temp(x::P) where {P<:Union{Tuple,NamedTuple}}
     return map(_copy_temp, x)
 end
 
+# tests of the form Struct_Vector_Int64_Int64(#undef, -1152921504606846976)
+function _copy_temp(x::P) where {P<:Number}
+    return x
+end
+
 function __exclude_unsupported_output_internal!(
     y::T, address_set::Set{UInt}
 ) where {T<:_BuiltinArrays}
