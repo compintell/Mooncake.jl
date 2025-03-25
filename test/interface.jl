@@ -183,7 +183,6 @@ end
                 if isnothing(Mooncake.__exclude_unsupported_output(original))
                     test_copy = Mooncake._copy_temp(original)
 
-                    println("comparing : ", original, " ", test_copy)
                     function comparisons(
                         original::P, test_copy::P
                     ) where {P<:Mooncake._BuiltinArrays}
@@ -201,10 +200,6 @@ end
                     end
 
                     function comparisons(original::P, test_copy::P) where {P}
-                        if P <: Number
-                            println("comparing inside: ", original, " ", test_copy)
-                        end
-
                         (isbitstype(P) && !isnothing(original) && isnan(original)) &&
                             return @test isnan(test_copy)
                         isbitstype(P) && return @test test_copy == original
