@@ -238,11 +238,6 @@ end
 
 const _BuiltinArrays = @static VERSION >= v"1.11" ? Union{Array,Memory} : Array
 
-# tests of the form Struct_Vector_Int64_Int64(#undef, -1152921504606846976)
-function _copy_temp(x::Number)
-    return x
-end
-
 # explicit for svec
 function _copy_temp(x::P) where {P<:SimpleVector}
     return Core.svec([map(_copy_temp, x_sub) for x_sub in x]...)
@@ -289,11 +284,13 @@ function _copy_temp(x::P) where {P}
             if isdefined(x, x_sub)
                 flds[x_sub] = _copy_temp(getfield(x, x_sub))
             else
-                nf = x_sub - 1
+                nf = x_sub - 1  # Assumes if a undefined field is found, all subsequent fields are undefined.
                 break
             end
         end
 
+        # when immutable struct object created by non initializing inner constructor. (Base.deepcopy misses this out)
+        !isassigned(flds, 1) && return x
         return ccall(:jl_new_structv, Any, (Any, Ptr{Any}, UInt32), P, flds, nf)
     end
 end
