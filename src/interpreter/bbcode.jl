@@ -337,9 +337,7 @@ Base.copy(ir::BBCode) = BBCode(ir, copy(ir.blocks))
 
 Compute a map from the `ID of each `BBlock` in `ir` to its possible successors.
 """
-function compute_all_successors(ir::BBCode)::Dict{ID,Vector{ID}}
-    return _compute_all_successors(ir.blocks)
-end
+compute_all_successors(ir::BBCode)::Dict{ID,Vector{ID}} = _compute_all_successors(ir.blocks)
 
 """
     _compute_all_successors(blks::Vector{BBlock})::Dict{ID, Vector{ID}}
@@ -348,22 +346,26 @@ Internal method implementing [`compute_all_successors`](@ref). This method is ea
 construct test cases for because it only requires the collection of `BBlocks`, not all of
 the other stuff that goes into a `BBCode`.
 """
-function _compute_all_successors(blks::Vector{BBlock})::Dict{ID,Vector{ID}}
+@noinline function _compute_all_successors(blks::Vector{BBlock})::Dict{ID,Vector{ID}}
     succs = map(enumerate(blks)) do (n, blk)
-        return successors(terminator(blk), n, blks, n == length(blks))
+        is_final_block = n == length(blks)
+        t = terminator(blk)
+        if t === nothing
+            return is_final_block ? ID[] : ID[blks[n + 1].id]
+        elseif t isa IDGotoNode
+            return [t.label]
+        elseif t isa IDGotoIfNot
+            return is_final_block ? ID[t.dest] : ID[t.dest, blks[n + 1].id]
+        elseif t isa ReturnNode
+            return ID[]
+        elseif t isa Switch
+            return vcat(t.dests, t.fallthrough_dest)
+        else
+            error("Unhandled terminator $t")
+        end
     end
-    return Dict{ID,Vector{ID}}(zip(map(b -> b.id, blks), succs))
+    return Dict{ID,Vector{ID}}((b.id, succ) for (b, succ) in zip(blks, succs))
 end
-
-function successors(::Nothing, n::Int, blks::Vector{BBlock}, is_final_block::Bool)
-    return is_final_block ? ID[] : ID[blks[n + 1].id]
-end
-successors(t::IDGotoNode, ::Int, ::Vector{BBlock}, ::Bool) = [t.label]
-function successors(t::IDGotoIfNot, n::Int, blks::Vector{BBlock}, is_final_block::Bool)
-    return is_final_block ? ID[t.dest] : ID[t.dest, blks[n + 1].id]
-end
-successors(::ReturnNode, ::Int, ::Vector{BBlock}, ::Bool) = ID[]
-successors(t::Switch, ::Int, ::Vector{BBlock}, ::Bool) = vcat(t.dests, t.fallthrough_dest)
 
 """
     compute_all_predecessors(ir::BBCode)::Dict{ID, Vector{ID}}
