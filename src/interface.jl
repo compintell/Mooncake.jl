@@ -348,7 +348,7 @@ function prepare_pullback_cache(fx...; kwargs...)
     __exclude_unsupported_output(y)
 
     # Construct cache for output. Check that `copy!`ing appears to work.
-    y_cache = _copy_temp(primal(y))
+    y_cache = copy(primal(y))
     return Cache(rule, _copy!!(y_cache, primal(y)), tangents)
 end
 
