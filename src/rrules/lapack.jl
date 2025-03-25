@@ -1,4 +1,18 @@
 @is_primitive(MinimalCtx, Tuple{typeof(LAPACK.getrf!),AbstractMatrix{<:BlasRealFloat}})
+function frule!!(
+    ::Dual{typeof(LAPACK.getrf!)}, A_dA::Dual{<:AbstractMatrix{P}}
+) where {P<:BlasRealFloat}
+
+    # Extract arguments.
+    A, dA = arrayify(_A)
+
+    # Run primal computation.
+    LAPACK.getrf!(A)
+
+    # Compute Frechet derivative.
+
+    return A_dA
+end
 function rrule!!(
     ::CoDual{typeof(LAPACK.getrf!)}, _A::CoDual{<:AbstractMatrix{P}}
 ) where {P<:BlasRealFloat}
