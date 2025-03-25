@@ -98,7 +98,7 @@ jobs:
         ]
         version:
           - '1'
-          - 'lts' https://github.com/compintell/Mooncake.jl/issues/532
+          # - 'lts' https://github.com/compintell/Mooncake.jl/issues/532
         arch:
           - x64
     steps:
