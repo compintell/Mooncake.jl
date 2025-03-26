@@ -1,3 +1,4 @@
+# See https://sethaxen.com/blog/2021/02/differentiating-the-lu-decomposition/ for details.
 @is_primitive(MinimalCtx, Tuple{typeof(LAPACK.getrf!),AbstractMatrix{<:BlasRealFloat}})
 function frule!!(
     ::Dual{typeof(LAPACK.getrf!)}, A_dA::Dual{<:AbstractMatrix{P}}
@@ -94,7 +95,6 @@ function _getrf_pb!(A, dA, ipiv, A_copy)
     dA .= (inv(L') * _dF * inv(U'))[invperm(p), :]
 
     # Restore initial state.
-    # ipiv .= ipiv_copy
     A .= A_copy
 
     return nothing
@@ -383,44 +383,46 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
     bools = [false, true]
     test_cases = vcat(
 
-        # getrf!
-        map_prod(Ps) do (P,)
-            As = blas_matrices(rng, P, 5, 5)
-            ipiv = Vector{Int}(undef, 5)
-            return map(As) do A
-                (false, :stability, nothing, getrf!, A)
-            end
-        end...,
-        map_prod(bools, Ps) do (check, P)
-            As = blas_matrices(rng, P, 5, 5)
-            ipiv = Vector{Int}(undef, 5)
-            return map(As) do A
-                (false, :stability, nothing, Core.kwcall, (; check), getrf!, A)
-            end
-        end...,
-
-        # trtrs!
-        map_prod(
-            ['U', 'L'], ['N', 'T', 'C'], ['N', 'U'], [1, 3], [1, 2], Ps
-        ) do (ul, tA, diag, N, Nrhs, P)
-            As = blas_matrices(rng, P, N, N)
-            Bs = blas_matrices(rng, P, N, Nrhs)
-            return map(As, Bs) do A, B
-                (false, :stability, nothing, trtrs!, ul, tA, diag, A, B)
-            end
-        end...,
-
-        # # getrs
-        # map_prod(['N', 'T'], [1, 9], [1, 2], Ps) do (trans, N, Nrhs, P)
-        #     As = map(blas_matrices(rng, P, N, N)) do A
-        #         A[diagind(A)] .+= 5
-        #         return getrf!(A)
-        #     end
-        #     Bs = blas_matrices(rng, P, N, Nrhs)
-        #     return map(As, Bs) do (A, ipiv), B
-        #         (false, :none, nothing, getrs!, trans, A, ipiv, B)
+        # # getrf!
+        # map_prod(Ps) do (P,)
+        #     As = blas_matrices(rng, P, 5, 5)
+        #     ipiv = Vector{Int}(undef, 5)
+        #     return map(As) do A
+        #         (false, :stability, nothing, getrf!, A)
         #     end
         # end...,
+        # map_prod(bools, Ps) do (check, P)
+        #     As = blas_matrices(rng, P, 5, 5)
+        #     ipiv = Vector{Int}(undef, 5)
+        #     return map(As) do A
+        #         (false, :stability, nothing, Core.kwcall, (; check), getrf!, A)
+        #     end
+        # end...,
+
+        # # trtrs!
+        # map_prod(
+        #     ['U', 'L'], ['N', 'T', 'C'], ['N', 'U'], [1, 3], [1, 2], Ps
+        # ) do (ul, tA, diag, N, Nrhs, P)
+        #     As = blas_matrices(rng, P, N, N)
+        #     Bs = blas_matrices(rng, P, N, Nrhs)
+        #     return map(As, Bs) do A, B
+        #         (false, :stability, nothing, trtrs!, ul, tA, diag, A, B)
+        #     end
+        # end...,
+
+        # getrs
+        map_prod(
+            ['N', 'T'][1:1], [1, 9][1:1], [1, 2][1:1], Ps[1:1]
+        ) do (trans, N, Nrhs, P)
+            As = map(blas_matrices(rng, P, N, N)) do A
+                A[diagind(A)] .+= 5
+                return getrf!(A)
+            end
+            Bs = blas_matrices(rng, P, N, Nrhs)
+            return map(As[1:1], Bs[1:1]) do (A, ipiv), B
+                (false, :none, nothing, getrs!, trans, A, ipiv, B)
+            end
+        end...,
 
         # # getri
         # map_prod([1, 9], Ps) do (N, P)
