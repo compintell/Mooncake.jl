@@ -16,7 +16,7 @@ function __value_and_pullback!!(
     out, pb!! = rule(fx_fwds...)
     @assert _typeof(tangent(out)) == fdata_type(T)
     increment!!(tangent(out), fdata(ȳ))
-    v = y_cache === nothing ? copy(primal(out)) : _copy!!(y_cache, primal(out))
+    v = y_cache === nothing ? _copy_temp(primal(out)) : _copy!!(y_cache, primal(out))
     return v, tuple_map((f, r) -> tangent(fdata(tangent(f)), r), fx, pb!!(rdata(ȳ)))
 end
 
@@ -348,7 +348,7 @@ function prepare_pullback_cache(fx...; kwargs...)
     __exclude_unsupported_output(y)
 
     # Construct cache for output. Check that `copy!`ing appears to work.
-    y_cache = copy(primal(y))
+    y_cache = _copy_temp(primal(y))
     return Cache(rule, _copy!!(y_cache, primal(y)), tangents)
 end
 
