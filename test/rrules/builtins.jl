@@ -1,11 +1,11 @@
 @testset "builtins" begin
     @test_throws(
         ErrorException,
-        Mooncake.rrule!!(zero_fcodual(IntrinsicsWrappers.add_ptr), 5.0, 4.0),
+        Mooncake.rrule!!(CoDual(IntrinsicsWrappers.add_ptr, NoTangent()), 5.0, 4.0),
     )
     @test_throws(
         ErrorException,
-        Mooncake.rrule!!(zero_fcodual(IntrinsicsWrappers.sub_ptr), 5.0, 4.0),
+        Mooncake.rrule!!(CoDual(IntrinsicsWrappers.sub_ptr, NoTangent()), 5.0, 4.0),
     )
 
     @testset "_apply_iterate_equivalent with $(typeof(args))" for args in Any[
