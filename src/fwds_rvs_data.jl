@@ -155,7 +155,7 @@ fdata_type(T)
 
 fdata_type(x) = throw(error("$x is not a type. Perhaps you meant typeof(x)?"))
 
-fdata_type(::Type{Union{}}) = Union{}
+@foldable fdata_type(::Type{Union{}}) = Union{}
 
 fdata_type(::Type{T}) where {T<:IEEEFloat} = NoFData
 
@@ -421,7 +421,7 @@ rdata_type(T)
 
 rdata_type(x) = throw(error("$x is not a type. Perhaps you meant typeof(x)?"))
 
-rdata_type(::Type{Union{}}) = Union{}
+@foldable rdata_type(::Type{Union{}}) = Union{}
 
 rdata_type(::Type{T}) where {T<:IEEEFloat} = T
 

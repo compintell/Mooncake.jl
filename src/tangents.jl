@@ -276,7 +276,7 @@ tangent_type(T)
 tangent_type(x) = throw(error("$x is not a type. Perhaps you meant typeof(x)?"))
 
 # The "Bottom" type.
-tangent_type(::Type{Union{}}) = Union{}
+@foldable tangent_type(::Type{Union{}}) = Union{}
 
 # This is essential for DataType, as the recursive definition always recurses infinitely,
 # because one of the fieldtypes is itself always a DataType. In particular, we'll always
