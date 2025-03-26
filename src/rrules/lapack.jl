@@ -106,6 +106,39 @@ end
         typeof(trtrs!),Char,Char,Char,AbstractMatrix{P},AbstractVecOrMat{P}
     } where {P<:BlasRealFloat},
 )
+function frule!!(
+    ::Dual{typeof(trtrs!)},
+    _uplo::Dual{Char},
+    _trans::Dual{Char},
+    _diag::Dual{Char},
+    A_dA::Dual{<:AbstractMatrix{P}},
+    B_dB::Dual{<:AbstractVecOrMat{P}},
+) where {P<:BlasRealFloat}
+
+    # Extract data.
+    uplo = primal(_uplo)
+    trans = primal(_trans)
+    diag = primal(_diag)
+    A, dA = arrayify(A_dA)
+    B, dB = arrayify(B_dB)
+
+    # Compute Frechet derivative.
+    LAPACK.trtrs!(uplo, trans, diag, A, dB)
+    tmp = copy(B)
+    LAPACK.trtrs!(uplo, trans, diag, A, tmp) # tmp now contains inv(A) B.
+
+    tmp2 = copy(tmp)
+    BLAS.trmm!('L', uplo, trans, diag, one(P), dA, tmp) # tmp now contains α dA inv(A) B.
+    if diag == 'U'
+        tmp .-= tmp2
+    end
+    LAPACK.trtrs!(uplo, trans, diag, A, tmp) # tmp is now α inv(A) dA inv(A) B.
+    dB .-= tmp
+
+    # Run primal computation.
+    LAPACK.trtrs!(uplo, trans, diag, A, B)
+    return B_dB
+end
 function rrule!!(
     ::CoDual{typeof(trtrs!)},
     _uplo::CoDual{Char},
@@ -355,27 +388,27 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
             As = blas_matrices(rng, P, 5, 5)
             ipiv = Vector{Int}(undef, 5)
             return map(As) do A
-                (false, :none, nothing, getrf!, A)
+                (false, :stability, nothing, getrf!, A)
             end
         end...,
         map_prod(bools, Ps) do (check, P)
             As = blas_matrices(rng, P, 5, 5)
             ipiv = Vector{Int}(undef, 5)
             return map(As) do A
-                (false, :none, nothing, Core.kwcall, (; check), getrf!, A)
+                (false, :stability, nothing, Core.kwcall, (; check), getrf!, A)
             end
         end...,
 
-        # # trtrs
-        # map_prod(
-        #     ['U', 'L'], ['N', 'T', 'C'], ['N', 'U'], [1, 3], [1, 2], Ps
-        # ) do (ul, tA, diag, N, Nrhs, P)
-        #     As = blas_matrices(rng, P, N, N)
-        #     Bs = blas_matrices(rng, P, N, Nrhs)
-        #     return map(As, Bs) do A, B
-        #         (false, :none, nothing, trtrs!, ul, tA, diag, A, B)
-        #     end
-        # end...,
+        # trtrs!
+        map_prod(
+            ['U', 'L'], ['N', 'T', 'C'], ['N', 'U'], [1, 3], [1, 2], Ps
+        ) do (ul, tA, diag, N, Nrhs, P)
+            As = blas_matrices(rng, P, N, N)
+            Bs = blas_matrices(rng, P, N, Nrhs)
+            return map(As, Bs) do A, B
+                (false, :stability, nothing, trtrs!, ul, tA, diag, A, B)
+            end
+        end...,
 
         # # getrs
         # map_prod(['N', 'T'], [1, 9], [1, 2], Ps) do (trans, N, Nrhs, P)
