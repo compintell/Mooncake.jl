@@ -1108,18 +1108,18 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
         # nrm2(x)
         map_prod([Ps..., ComplexF64, ComplexF32]) do (P,)
             return map([randn(rng, P, 105)]) do x
-                (false, :none, nothing, BLAS.nrm2, x)
+                (false, :stability, nothing, BLAS.nrm2, x)
             end
         end...,
 
         # nrm2(n, x, incx)
         map_prod([Ps..., ComplexF64, ComplexF32], [5, 3], [1, 2]) do (P, n, incx)
             return map([randn(rng, P, 105)]) do x
-                (false, :none, nothing, BLAS.nrm2, n, x, incx)
+                (false, :stability, nothing, BLAS.nrm2, n, x, incx)
             end
         end...,
         map_prod(Ps, [1, 3, 11], [1, 2, 11]) do (P, n, incx)
-            flags = (false, :none, nothing)
+            flags = (false, :stability, nothing)
             return (flags..., BLAS.scal!, n, randn(rng, P), randn(rng, P, n * incx), incx)
         end,
 
