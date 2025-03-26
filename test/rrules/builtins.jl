@@ -1,3 +1,5 @@
+foo_throws(e) = throw(e)
+
 @testset "builtins" begin
     @test_throws(
         ErrorException,
@@ -54,28 +56,27 @@
         )
     end
 
-    # @testset "throw" begin
-    #     # Throw primitive continues to throw the exception it is meant to.
-    #     @test_throws(
-    #         ArgumentError,
-    #         Mooncake.rrule!!(zero_fcodual(throw), zero_fcodual(ArgumentError("hello")))
-    #     )
-    #     @test_throws(
-    #         AssertionError,
-    #         Mooncake.rrule!!(zero_fcodual(throw), zero_fcodual(AssertionError("hello")))
-    #     )
+    @testset "throw" begin
+        # Throw primitive continues to throw the exception it is meant to.
+        @test_throws(
+            ArgumentError,
+            Mooncake.rrule!!(zero_fcodual(throw), zero_fcodual(ArgumentError("hello")))
+        )
+        @test_throws(
+            AssertionError,
+            Mooncake.rrule!!(zero_fcodual(throw), zero_fcodual(AssertionError("hello")))
+        )
 
-    #     # Derived rule throws the correct exception.
-    #     foo_throws(e) = throw(e)
-    #     rule_arg = Mooncake.build_rrule(Tuple{typeof(foo_throws),ArgumentError})
-    #     @test_throws(
-    #         ArgumentError,
-    #         rule_arg(zero_fcodual(foo_throws), zero_fcodual(ArgumentError("hello")))
-    #     )
-    #     rule_assert = Mooncake.build_rrule(Tuple{typeof(foo_throws),AssertionError})
-    #     @test_throws(
-    #         AssertionError,
-    #         rule_assert(zero_fcodual(foo_throws), zero_fcodual(AssertionError("hmmm")))
-    #     )
-    # end
+        # Derived rule throws the correct exception.
+        rule_arg = Mooncake.build_rrule(Tuple{typeof(foo_throws),ArgumentError})
+        @test_throws(
+            ArgumentError,
+            rule_arg(zero_fcodual(foo_throws), zero_fcodual(ArgumentError("hello")))
+        )
+        rule_assert = Mooncake.build_rrule(Tuple{typeof(foo_throws),AssertionError})
+        @test_throws(
+            AssertionError,
+            rule_assert(zero_fcodual(foo_throws), zero_fcodual(AssertionError("hmmm")))
+        )
+    end
 end
