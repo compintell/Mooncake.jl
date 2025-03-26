@@ -1,12 +1,11 @@
 @testset "builtins" begin
     @test_throws(
         ErrorException,
-        Mooncake.rrule!!(CoDual(IntrinsicsWrappers.add_ptr, NoTangent()), 5.0, 4.0),
+        Mooncake.rrule!!(zero_fcodual(IntrinsicsWrappers.add_ptr), 5.0, 4.0),
     )
-
     @test_throws(
         ErrorException,
-        Mooncake.rrule!!(CoDual(IntrinsicsWrappers.sub_ptr, NoTangent()), 5.0, 4.0),
+        Mooncake.rrule!!(zero_fcodual(IntrinsicsWrappers.sub_ptr), 5.0, 4.0),
     )
 
     @testset "_apply_iterate_equivalent with $(typeof(args))" for args in Any[
@@ -54,4 +53,27 @@
             rrule!!(zero_fcodual(bitcast), zero_fcodual(Float64), zero_fcodual(5))
         )
     end
+
+    # Throw primitive continues to throw the exception it is meant to.
+    @test_throws(
+        ArgumentError,
+        Mooncake.rrule!!(zero_fcodual(throw), zero_fcodual(ArgumentError("hello")))
+    )
+    @test_throws(
+        AssertionError,
+        Mooncake.rrule!!(zero_fcodual(throw), zero_fcodual(AssertionError("hello")))
+    )
+
+    # Derived rule throws the correct exception.
+    foo_throws(e) = throw(e)
+    rule_arg = Mooncake.build_rrule(Tuple{typeof(foo_throws),ArgumentError})
+    @test_throws(
+        ArgumentError,
+        rule_arg(zero_fcodual(foo_throws), zero_fcodual(ArgumentError("hello")))
+    )
+    rule_assert = Mooncake.build_rrule(Tuple{typeof(foo_throws),AssertionError})
+    @test_throws(
+        AssertionError,
+        rule_assert(zero_fcodual(foo_throws), zero_fcodual(AssertionError("hmmm")))
+    )
 end
