@@ -704,7 +704,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
             if is_active(arg)
                 return __inc(arg)
             elseif safe_for_literal(arg)
-                return uninit_fcodual(arg)
+                return uninit_fcodual(get_const_primal_value(arg))
             else
                 id = ID()
                 push!(codual_args, (id, new_inst(inc_or_const_stmt(arg, info))))
