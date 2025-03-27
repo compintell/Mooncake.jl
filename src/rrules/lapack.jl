@@ -356,6 +356,35 @@ end
 __sym(X) = (X + X') / 2
 
 @is_primitive(MinimalCtx, Tuple{typeof(potrf!),Char,AbstractMatrix{<:BlasRealFloat}})
+function frule!!(
+    ::Dual{typeof(potrf!)}, _uplo::Dual{Char}, A_dA::Dual{<:AbstractMatrix{<:BlasRealFloat}}
+)
+    # Extract args and take a copy of A.
+    uplo = primal(_uplo)
+    A, dA = arrayify(A_dA)
+
+    # Run primal computation.
+    _, info = LAPACK.potrf!(uplo, A)
+
+    # Compute Frechet derivative.
+    if uplo == 'L'
+        L = LowerTriangular(A)
+        tmp = LowerTriangular(ldiv!(L, Symmetric(dA, :L) / L'))
+        @inbounds for n in 1:size(A, 1)
+            tmp[n, n] = tmp[n, n] / 2
+        end
+        copytrito!(dA, lmul!(L, tmp), 'L')
+    else
+        U = UpperTriangular(A)
+        tmp = UpperTriangular(rdiv!(U' \ Symmetric(dA, :U), U))
+        @inbounds for n in 1:size(A, 1)
+            tmp[n, n] = tmp[n, n] / 2
+        end
+        copytrito!(dA, rmul!(tmp, U), 'U')
+    end
+
+    return Dual((A, info), (tangent(A_dA), NoTangent()))
+end
 function rrule!!(
     ::CoDual{typeof(potrf!)},
     _uplo::CoDual{Char},
@@ -400,6 +429,36 @@ end
         typeof(potrs!),Char,AbstractMatrix{P},AbstractVecOrMat{P}
     } where {P<:BlasRealFloat},
 )
+function frule!!(
+    ::Dual{typeof(potrs!)},
+    _uplo::Dual{Char},
+    A_dA::Dual{<:AbstractMatrix{P}},
+    B_dB::Dual{<:AbstractVecOrMat{P}},
+) where {P<:BlasRealFloat}
+
+    # Extract args and take a copy of B.
+    uplo = primal(_uplo)
+    A, dA = arrayify(A_dA)
+    B, dB = arrayify(B_dB)
+
+    # Run primal computation.
+    LAPACK.potrs!(uplo, A, B)
+
+    # Compute Frechet derivative.
+    if uplo == 'L'
+        L = LowerTriangular(A)
+        dL = LowerTriangular(dA)
+        BLAS.symm!('L', 'L', -one(P), dL * L' + L * dL', B, one(P), dB)
+        LAPACK.potrs!(uplo, A, dB)
+    else
+        U = UpperTriangular(A)
+        dU = UpperTriangular(dA)
+        BLAS.symm!('L', 'U', -one(P), U'dU + dU'U, B, one(P), dB)
+        LAPACK.potrs!(uplo, A, dB)
+    end
+
+    return B_dB
+end
 function rrule!!(
     ::CoDual{typeof(potrs!)},
     _uplo::CoDual{Char},
@@ -494,26 +553,27 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
             end
         end...,
 
-        # # potrf
-        # map_prod([1, 3, 9], Ps) do (N, P)
-        #     As = map(blas_matrices(rng, P, N, N)) do A
-        #         A .= A * A' + I
-        #         return A
-        #     end
-        #     return map(['L', 'U'], As) do uplo, A
-        #         return (false, :none, nothing, potrf!, uplo, A)
-        #     end
-        # end...,
+        # potrf
+        map_prod([1, 3, 9], Ps) do (N, P)
+            As = map(blas_matrices(rng, P, N, N)) do A
+                A .= A * A' + I
+                return A
+            end
+            return map_prod(['L', 'U'], As) do (uplo, A)
+                return (false, :stability, nothing, potrf!, uplo, A)
+            end
+        end...,
 
-        # # potrs
-        # map_prod([1, 3, 9], [1, 2], Ps) do (N, Nrhs, P)
-        #     X = randn(rng, P, N, N)
-        #     A = X * X' + I
-        #     Bs = blas_matrices(rng, P, N, Nrhs)
-        #     return map(['L', 'U'], Bs) do uplo, B
-        #         (false, :none, nothing, potrs!, uplo, potrf!(uplo, copy(A))[1], copy(B))
-        #     end
-        # end...,
+        # potrs
+        map_prod([1, 3, 9], [1, 2], Ps) do (N, Nrhs, P)
+            X = randn(rng, P, N, N)
+            A = X * X' + I
+            Bs = blas_matrices(rng, P, N, Nrhs)
+            return map_prod(['L', 'U'], Bs) do (uplo, B)
+                tmp = potrf!(uplo, copy(A))[1]
+                (false, :stability, nothing, potrs!, uplo, tmp, copy(B))
+            end
+        end...,
     )
     memory = Any[]
     return test_cases, memory
@@ -525,7 +585,6 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
     getrf_wrapper!(x, check) = getrf!(x; check)
     test_cases = vcat(map_prod([false, true], [Float64, Float32]) do (check, P)
         As = blas_matrices(rng, P, 5, 5)
-        # ipiv = Vector{Int}(undef, 5)
         return map(As) do A
             (false, :none, nothing, getrf_wrapper!, A, check)
         end
