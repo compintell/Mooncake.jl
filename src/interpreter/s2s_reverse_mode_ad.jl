@@ -699,9 +699,12 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         #
 
         # Make arguments to rrule call. Things which are not already CoDual must be made so.
-        codual_arg_ids = map(_ -> ID(), collect(args))
-        codual_args = map(args, codual_arg_ids) do arg, id
-            return (id, new_inst(inc_or_const_stmt(arg, info)))
+        codual_args = IDInstPair[]
+        codual_arg_ids = map(args) do arg
+            is_active(arg) && return __inc(arg)
+            id = ID()
+            push!(codual_args, (id, new_inst(inc_or_const_stmt(arg, info))))
+            return id
         end
 
         # Make call to rule.
