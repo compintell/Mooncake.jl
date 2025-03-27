@@ -701,10 +701,10 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         # Make arguments to rrule call. Things which are not already CoDual must be made so.
         codual_args = IDInstPair[]
         codual_arg_ids = map(args) do arg
-            if is_active(arg)
-                return __inc(arg)
-            elseif safe_for_literal(arg)
-                return uninit_fcodual(get_const_primal_value(arg))
+            is_active(arg) && return __inc(arg)
+            v = get_const_primal_value(arg)
+            if safe_for_literal(v)
+                return uninit_fcodual(v)
             else
                 id = ID()
                 push!(codual_args, (id, new_inst(inc_or_const_stmt(arg, info))))
@@ -1190,6 +1190,8 @@ function generate_ir(
     rvs_ir = pullback_ir(
         primal_ir, Treturn, ad_stmts_blocks, pb_comms_insts, info, _typeof(shared_data)
     )
+    # display(IRCode(fwd_ir))
+    # display(IRCode(rvs_ir))
     opt_fwd_ir = optimise_ir!(IRCode(fwd_ir); do_inline)
     opt_rvs_ir = optimise_ir!(IRCode(rvs_ir); do_inline)
     return DerivedRuleInfo(
