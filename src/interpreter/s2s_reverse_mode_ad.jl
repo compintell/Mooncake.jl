@@ -702,14 +702,9 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         codual_args = IDInstPair[]
         codual_arg_ids = map(args) do arg
             is_active(arg) && return __inc(arg)
-            v = get_const_primal_value(arg)
-            if safe_for_literal(v)
-                return uninit_fcodual(v)
-            else
-                id = ID()
-                push!(codual_args, (id, new_inst(inc_or_const_stmt(arg, info))))
-                return id
-            end
+            id = ID()
+            push!(codual_args, (id, new_inst(inc_or_const_stmt(arg, info))))
+            return id
         end
 
         # Make call to rule.
@@ -1190,8 +1185,6 @@ function generate_ir(
     rvs_ir = pullback_ir(
         primal_ir, Treturn, ad_stmts_blocks, pb_comms_insts, info, _typeof(shared_data)
     )
-    # display(IRCode(fwd_ir))
-    # display(IRCode(rvs_ir))
     opt_fwd_ir = optimise_ir!(IRCode(fwd_ir); do_inline)
     opt_rvs_ir = optimise_ir!(IRCode(rvs_ir); do_inline)
     return DerivedRuleInfo(

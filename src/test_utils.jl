@@ -717,7 +717,8 @@ function test_rule(
     test_rrule_performance(perf_flag, rule, x_x̄...)
 
     # Test the interface again, in order to verify that caching is working correctly.
-    return test_rrule_interface(x_x̄...; rule=Mooncake.build_rrule(interp, sig; debug_mode))
+    test_rrule_interface(x_x̄...; rule=Mooncake.build_rrule(interp, sig; debug_mode))
+    return nothing
 end
 
 function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)
