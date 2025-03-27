@@ -30,7 +30,7 @@ jobs:
           'rrules/foreigncall',
           # 'rrules/functionwrappers',
           'rrules/iddict',
-          # 'rrules/lapack',
+          'rrules/lapack',
           'rrules/linear_algebra',
           'rrules/low_level_maths',
           'rrules/memory',
