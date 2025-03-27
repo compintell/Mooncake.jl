@@ -32,7 +32,7 @@ Equivalent to `CoDual(x, uninit_tangent(x))`.
 uninit_codual(x) = CoDual(x, uninit_tangent(x))
 
 function _codual_internal(::Type{P}, f::F, extractor::E) where {P,F,E}
-    P == Union{} && return CoDual
+    P == Union{} && return Union{}
     P == DataType && return CoDual
     P isa Union && return Union{f(P.a),f(P.b)}
 
