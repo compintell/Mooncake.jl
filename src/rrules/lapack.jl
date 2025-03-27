@@ -257,7 +257,7 @@ function rrule!!(
         B2 .= B2[invperm(p), :]
     end
 
-    function trtrs_pb!!(::NoRData)
+    function getrs_pb!!(::NoRData)
         if trans == 'N'
 
             # Run pullback for inv(U) * B.
@@ -289,12 +289,39 @@ function rrule!!(
         B .= B0
         return tuple_fill(NoRData(), Val(5))
     end
-    return _B, trtrs_pb!!
+    return _B, getrs_pb!!
 end
 
 @is_primitive(
     MinimalCtx, Tuple{typeof(getri!),AbstractMatrix{<:BlasRealFloat},AbstractVector{Int}},
 )
+function frule!!(
+    ::Dual{typeof(getri!)},
+    A_dA::Dual{<:AbstractMatrix{<:BlasRealFloat}},
+    _ipiv::Dual{<:AbstractVector{Int}},
+)
+    # Extract args.
+    A, dA = arrayify(A_dA)
+    ipiv = primal(_ipiv)
+
+    # Compute part of Frechet derivative.
+    L = UnitLowerTriangular(A)
+    dL = tril(dA, -1)
+    U = UpperTriangular(A)
+    dU = triu(dA)
+    tmp1 = U \ dU
+    tmp2 = dL / L
+
+    # Perform primal computation.
+    LAPACK.getri!(A, ipiv)
+
+    # Compute Frechet derivative.
+    tmp3 = tmp1 * A
+    tmp4 = A * tmp2
+    dA .= .-tmp3 .- tmp4
+
+    return A_dA
+end
 function rrule!!(
     ::CoDual{typeof(getri!)},
     _A::CoDual{<:AbstractMatrix{<:BlasRealFloat}},
@@ -456,16 +483,16 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
             end
         end...,
 
-        # # getri
-        # map_prod([1, 9], Ps) do (N, P)
-        #     As = map(blas_matrices(rng, P, N, N)) do A
-        #         A[diagind(A)] .+= 5
-        #         return getrf!(A)
-        #     end
-        #     return map(As) do (A, ipiv)
-        #         (false, :none, nothing, getri!, A, ipiv)
-        #     end
-        # end...,
+        # getri
+        map_prod([1, 9], Ps) do (N, P)
+            As = map(blas_matrices(rng, P, N, N)) do A
+                A[diagind(A)] .+= 5
+                return getrf!(A)
+            end
+            return map(As) do (A, ipiv)
+                (false, :stability, nothing, getri!, A, ipiv)
+            end
+        end...,
 
         # # potrf
         # map_prod([1, 3, 9], Ps) do (N, P)
