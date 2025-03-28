@@ -1,6 +1,11 @@
 @testset "tangents" begin
     @testset "$(tangent_type(primal_type))" for (primal_type, expected_tangent_type) in Any[
 
+        ## Misc. Specific Types
+        (Cstring, NoTangent),
+        (Cwstring, NoTangent),
+        (Union{}, Union{}),
+
         ## Tuples
 
         # Unions of Tuples.
@@ -88,10 +93,6 @@
         ),
     ]
         TestUtils.test_tangent_type(primal_type, expected_tangent_type)
-    end
-    @testset "type-only tests" begin
-        TestUtils.test_tangent_type(Cstring, NoTangent)
-        TestUtils.test_tangent_type(Cwstring, NoTangent)
     end
 
     @testset "$(typeof(data))" for (interface_only, data...) in

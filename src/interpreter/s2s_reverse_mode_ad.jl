@@ -699,9 +699,12 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
         #
 
         # Make arguments to rrule call. Things which are not already CoDual must be made so.
-        codual_arg_ids = map(_ -> ID(), collect(args))
-        codual_args = map(args, codual_arg_ids) do arg, id
-            return (id, new_inst(inc_or_const_stmt(arg, info)))
+        codual_args = IDInstPair[]
+        codual_arg_ids = map(args) do arg
+            is_active(arg) && return __inc(arg)
+            id = ID()
+            push!(codual_args, (id, new_inst(inc_or_const_stmt(arg, info))))
+            return id
         end
 
         # Make call to rule.
@@ -1374,10 +1377,6 @@ Produce the IR associated to the `OpaqueClosure` which runs most of the pullback
 function pullback_ir(
     ir::BBCode, Tret, ad_stmts_blocks::ADStmts, pb_comms_insts, info::ADInfo, Tshared_data
 )
-
-    # Compute the argument types associated to the reverse-pass.
-    arg_types = vcat(Tshared_data, rdata_type(tangent_type(Tret)))
-
     # Compute the blocks which return in the primal.
     primal_exit_blocks_inds = findall(is_reachable_return_node ∘ terminator, ir.blocks)
 
@@ -1390,12 +1389,15 @@ function pullback_ir(
     # won't succeed on the forwards-pass. As such, the reverse-pass can just be a no-op.
     if isempty(primal_exit_blocks_inds)
         blocks = [BBlock(ID(), [(ID(), new_inst(ReturnNode(nothing)))])]
-        return BBCode(blocks, arg_types, ir.sptypes, ir.linetable, ir.meta)
+        return BBCode(blocks, Any[Any], ir.sptypes, ir.linetable, ir.meta)
     end
 
     #
     # Standard path pullback generation -- applies to 99% of primals:
     #
+
+    # Compute the argument types associated to the reverse-pass.
+    arg_types = vcat(Tshared_data, rdata_type(tangent_type(Tret)))
 
     # Create entry block which:
     # 1. extracts items from shared data to the correct IDs,
@@ -1846,7 +1848,8 @@ function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where 
     sig = Tuple{arg_types...}
     fwd_args_type = Tuple{map(fcodual_type, arg_types)...}
     fwd_return_type = forwards_ret_type(ir)
-    pb_args_type = Tuple{rdata_type(tangent_type(Treturn))}
+    Trdata_return = rdata_type(tangent_type(Treturn))
+    pb_args_type = Trdata_return === Union{} ? Union{} : Tuple{Trdata_return}
     pb_return_type = pullback_ret_type(ir)
     nargs = Val{length(ir.argtypes)}
 
