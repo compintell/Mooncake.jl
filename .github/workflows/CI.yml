@@ -98,7 +98,7 @@ jobs:
         ]
         version:
           - '1'
-          - 'lts'
+          # - 'lts'
         arch:
           - x64
     steps:
