@@ -467,11 +467,6 @@ function test_frule_correctness(rng::AbstractRNG, x_ẋ...; frule, unsafe_pertur
             (_dot(ȳ, ẏ_fd) + _dot(x̄, ẋ_fd), _dot(ȳ, ẏ_ad) + _dot(x̄, ẋ_ad))
         end
         display(vals)
-        println()
-        display(ȳ)
-        display(ẏ_ad)
-        display(x̄)
-        display(ẋ_ad)
     end
     @test any(isapprox_results)
 end
