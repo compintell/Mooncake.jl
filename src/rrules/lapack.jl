@@ -128,7 +128,11 @@ function frule!!(
     LAPACK.trtrs!(uplo, trans, diag, A, tmp) # tmp now contains inv(A) B.
 
     tmp2 = copy(tmp)
-    BLAS.trmm!('L', uplo, trans, diag, one(P), dA, tmp) # tmp now contains α dA inv(A) B.
+    if tmp isa AbstractVector
+        BLAS.trmv!(uplo, trans, diag, dA, tmp) # tmp now contains α dA inv(A) B.
+    else
+        BLAS.trmm!('L', uplo, trans, diag, one(P), dA, tmp) # tmp now contains α dA inv(A) B.
+    end
     if diag == 'U'
         tmp .-= tmp2
     end
@@ -196,22 +200,24 @@ function frule!!(
     ipiv = primal(_ipiv)
     B, dB = arrayify(B_dB)
 
-    # Initial part of Frechet derivative computation.
-    LAPACK.getrs!(trans, A, ipiv, dB)
-
     # Run primal computation.
     LAPACK.getrs!(trans, A, ipiv, B)
 
     # Compute Frechet derivative.
     L = UnitLowerTriangular(A)
+    dL_plus_I = UnitLowerTriangular(dA)
     U = UpperTriangular(A)
+    dU = UpperTriangular(dA)
+    p = LinearAlgebra.ipiv2perm(ipiv, size(dB, 1))
+    tmp = dL_plus_I * U
+    tmp .-= U
+    tmp2 = mul!(tmp, L, dU, one(P), one(P))[invperm(p), :]
     if trans == 'N'
-        tmp = triu(dA) + L \ (tril(dA, -1) * U)
-        dB .-= (U \ (tmp * B))
+        mul!(dB, tmp2, B, -one(P), one(P))
     else
-        tmp = tril(dA, -1) + L * triu(dA) / U
-        dB .-= (L' \ (tmp'B))
+        mul!(dB, tmp2', B, -one(P), one(P))
     end
+    LAPACK.getrs!(trans, A, ipiv, dB)
 
     return B_dB
 end
@@ -297,28 +303,28 @@ end
 )
 function frule!!(
     ::Dual{typeof(getri!)},
-    A_dA::Dual{<:AbstractMatrix{<:BlasRealFloat}},
+    A_dA::Dual{<:AbstractMatrix{P}},
     _ipiv::Dual{<:AbstractVector{Int}},
-)
+) where {P<:BlasRealFloat}
     # Extract args.
     A, dA = arrayify(A_dA)
     ipiv = primal(_ipiv)
 
     # Compute part of Frechet derivative.
     L = UnitLowerTriangular(A)
-    dL = tril(dA, -1)
+    dL_plus_I = UnitLowerTriangular(dA)
     U = UpperTriangular(A)
-    dU = triu(dA)
-    tmp1 = U \ dU
-    tmp2 = dL / L
+    dU = UpperTriangular(dA)
+    p = LinearAlgebra.ipiv2perm(ipiv, size(dA, 1))
+    tmp = dL_plus_I * U
+    tmp .-= U
+    tmp2 = mul!(tmp, L, dU, one(P), one(P))[invperm(p), :]
 
     # Perform primal computation.
     LAPACK.getri!(A, ipiv)
 
     # Compute Frechet derivative.
-    tmp3 = tmp1 * A
-    tmp4 = A * tmp2
-    dA .= .-tmp3 .- tmp4
+    dA .= (-A * tmp2 * A)
 
     return A_dA
 end
@@ -498,7 +504,6 @@ end
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
     rng = rng_ctor(123)
-    rng2 = rng_ctor(123)
     Ps = [Float64, Float32]
     bools = [false, true]
     test_cases = vcat(
@@ -532,12 +537,13 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
 
         # getrs
         map_prod(['N', 'T', 'C'], [1, 9], [1, 2], Ps) do (trans, N, Nrhs, P)
-            As = map(blas_matrices(rng2, P, N, N)) do A
+            As = map(blas_matrices(rng, P, N, N)) do A
                 A[diagind(A)] .+= 5
                 return getrf!(A)
             end
-            Bs = blas_matrices(rng2, P, N, Nrhs)
-            return map(As, Bs) do (A, ipiv), B
+            Bs = blas_matrices(rng, P, N, Nrhs)
+            return map(As, Bs) do (A, _), B
+                ipiv = fill(N, N)
                 (false, :none, nothing, getrs!, trans, A, ipiv, B)
             end
         end...,
@@ -548,8 +554,9 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
                 A[diagind(A)] .+= 5
                 return getrf!(A)
             end
-            return map(As) do (A, ipiv)
-                (false, :stability, nothing, getri!, A, ipiv)
+            return map(As) do (A, _)
+                ipiv = fill(N, N)
+                (false, :none, nothing, getri!, A, ipiv)
             end
         end...,
 
