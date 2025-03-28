@@ -642,7 +642,12 @@ __vec_to_tuple(v::Vector) = Tuple(v)
 
 @is_primitive MinimalCtx Tuple{typeof(__vec_to_tuple),Vector}
 function frule!!(::Dual{typeof(__vec_to_tuple)}, v::Dual{<:Vector})
-    return Dual(__vec_to_tuple(primal(v)), __vec_to_tuple(tangent(v)))
+    x = __vec_to_tuple(primal(v))
+    if tangent_type(_typeof(x)) == NoTangent
+        return zero_dual(x)
+    else
+        return Dual(x, __vec_to_tuple(tangent(v)))
+    end
 end
 
 function rrule!!(::CoDual{typeof(__vec_to_tuple)}, v::CoDual{<:Vector})
@@ -1112,6 +1117,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :none, nothing, __vec_to_tuple, [1.0]),
         (false, :none, nothing, __vec_to_tuple, Any[1.0]),
         (false, :none, nothing, __vec_to_tuple, Any[[1.0]]),
+        (false, :none, nothing, __vec_to_tuple, [1]),
         # Core._apply_pure -- NEEDS IMPLEMENTING AND TESTING
         # Core._call_in_world -- NEEDS IMPLEMENTING AND TESTING
         # Core._call_in_world_total -- NEEDS IMPLEMENTING AND TESTING
