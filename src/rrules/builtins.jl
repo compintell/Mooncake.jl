@@ -874,7 +874,8 @@ function rrule!!(::CoDual{typeof(setfield!)}, value::CoDual, name::CoDual, x::Co
 end
 
 # swapfield!
-# throw
+
+rrule!!(::CoDual{typeof(throw)}, args::CoDual...) = throw(map(primal, args)...)
 
 struct TuplePullback{N} end
 
@@ -1209,7 +1210,6 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
         (false, :none, _range, setfield!, NonDifferentiableFoo(5, false), 1, 4),
         (false, :none, _range, setfield!, NonDifferentiableFoo(5, true), 2, false),
         # swapfield! -- NEEDS IMPLEMENTING AND TESTING
-        # throw -- NEEDS IMPLEMENTING AND TESTING
         (false, :stability_and_allocs, nothing, tuple, 5.0, 4.0),
         (false, :stability_and_allocs, nothing, tuple, randn(5), 5.0),
         (false, :stability_and_allocs, nothing, tuple, randn(5), randn(4)),
