@@ -71,60 +71,60 @@ jobs:
           files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
-  # extra:
-  #   name: ${{matrix.test_group.test_type}}-${{ matrix.test_group.label }}-${{ matrix.version }}-${{ matrix.arch }}
-  #   runs-on: ubuntu-latest
-  #   if: github.event_name != 'schedule'
-  #   strategy:
-  #     fail-fast: false
-  #     matrix:
-  #       test_group: [
-  #         {test_type: 'ext', label: 'differentiation_interface'},
-  #         {test_type: 'ext', label: 'flux'},
-  #         {test_type: 'ext', label: 'luxlib'},
-  #         {test_type: 'ext', label: 'nnlib'},
-  #         {test_type: 'ext', label: 'special_functions'},
-  #         {test_type: 'integration_testing', label: 'array'},
-  #         {test_type: 'integration_testing', label: 'bijectors'},
-  #         {test_type: 'integration_testing', label: 'diff_tests'},
-  #         {test_type: 'integration_testing', label: 'distributions'},
-  #         {test_type: 'integration_testing', label: 'gp'},
-  #         {test_type: 'integration_testing', label: 'logexpfunctions'},
-  #         {test_type: 'integration_testing', label: 'lux'},
-  #         {test_type: 'integration_testing', label: 'battery_tests'},
-  #         {test_type: 'integration_testing', label: 'misc_abstract_array'},
-  #         {test_type: 'integration_testing', label: 'temporalgps'},
-  #         {test_type: 'integration_testing', label: 'turing'},
-  #       ]
-  #       version:
-  #         - '1'
-  #         - 'lts'
-  #       arch:
-  #         - x64
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: julia-actions/setup-julia@v2
-  #       with:
-  #         version: ${{ matrix.version }}
-  #         arch: ${{ matrix.arch }}
-  #         include-all-prereleases: false
-  #     - uses: julia-actions/cache@v2
-  #     - uses: julia-actions/julia-buildpkg@v1
-  #     - run: |
-  #         if [ ${{ matrix.test_group.test_type }} == 'ext' ]; then
-  #           julia --code-coverage=user --eval 'include("test/run_extra.jl")'
-  #         else
-  #           julia --eval 'include("test/run_extra.jl")'
-  #         fi
-  #       env:
-  #         LABEL: ${{ matrix.test_group.label }}
-  #         TEST_TYPE: ${{ matrix.test_group.test_type }}
-  #     - uses: julia-actions/julia-processcoverage@v1
-  #     - uses: codecov/codecov-action@v5
-  #       with:
-  #         files: lcov.info
-  #         token: ${{ secrets.CODECOV_TOKEN }}
-  #         fail_ci_if_error: false
+  extra:
+    name: ${{matrix.test_group.test_type}}-${{ matrix.test_group.label }}-${{ matrix.version }}-${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
+    strategy:
+      fail-fast: false
+      matrix:
+        test_group: [
+          # {test_type: 'ext', label: 'differentiation_interface'},
+          # {test_type: 'ext', label: 'flux'},
+          # {test_type: 'ext', label: 'luxlib'},
+          # {test_type: 'ext', label: 'nnlib'},
+          # {test_type: 'ext', label: 'special_functions'},
+          # {test_type: 'integration_testing', label: 'array'},
+          # {test_type: 'integration_testing', label: 'bijectors'},
+          {test_type: 'integration_testing', label: 'diff_tests'},
+          # {test_type: 'integration_testing', label: 'distributions'},
+          # {test_type: 'integration_testing', label: 'gp'},
+          # {test_type: 'integration_testing', label: 'logexpfunctions'},
+          # {test_type: 'integration_testing', label: 'lux'},
+          # {test_type: 'integration_testing', label: 'battery_tests'},
+          # {test_type: 'integration_testing', label: 'misc_abstract_array'},
+          # {test_type: 'integration_testing', label: 'temporalgps'},
+          # {test_type: 'integration_testing', label: 'turing'},
+        ]
+        version:
+          - '1'
+          - 'lts'
+        arch:
+          - x64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ matrix.version }}
+          arch: ${{ matrix.arch }}
+          include-all-prereleases: false
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/julia-buildpkg@v1
+      - run: |
+          if [ ${{ matrix.test_group.test_type }} == 'ext' ]; then
+            julia --code-coverage=user --eval 'include("test/run_extra.jl")'
+          else
+            julia --eval 'include("test/run_extra.jl")'
+          fi
+        env:
+          LABEL: ${{ matrix.test_group.label }}
+          TEST_TYPE: ${{ matrix.test_group.test_type }}
+      - uses: julia-actions/julia-processcoverage@v1
+      - uses: codecov/codecov-action@v5
+        with:
+          files: lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
   # perf:
   #   name: "Performance (${{ matrix.perf_group }})"
   #   runs-on: ubuntu-latest
