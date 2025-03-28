@@ -284,24 +284,33 @@ end
 @inline function frule!!(
     ::Dual{typeof(BLAS.gemv!)},
     tA::Dual{Char},
-    α::Dual{P},
+    alpha::Dual{P},
     A_dA::Dual{<:AbstractMatrix{P}},
     x_dx::Dual{<:AbstractVector{P}},
-    β::Dual{P},
+    beta::Dual{P},
     y_dy::Dual{<:AbstractVector{P}},
 ) where {P<:BlasRealFloat}
     A, dA = arrayify(A_dA)
     x, dx = arrayify(x_dx)
     y, dy = arrayify(y_dy)
+    α, dα = extract(alpha)
+    β, dβ = extract(beta)
 
     # Derivative computation.
-    BLAS.gemv!(primal(tA), tangent(α), A, x, primal(β), dy)
-    BLAS.gemv!(primal(tA), primal(α), dA, x, one(P), dy)
-    BLAS.gemv!(primal(tA), primal(α), A, dx, one(P), dy)
-    dy .+= tangent(β) .* y
+    BLAS.gemv!(primal(tA), dα, A, x, β, dy)
+    BLAS.gemv!(primal(tA), α, dA, x, one(P), dy)
+    BLAS.gemv!(primal(tA), α, A, dx, one(P), dy)
+
+    # Strong zero is essential here, in case `y` has undefined element values.
+    if !iszero(dβ)
+        @inbounds for n in eachindex(y)
+            tmp = dβ * y[n]
+            dy[n] = ifelse(isnan(y[n]), dy[n], tmp + dy[n])
+        end
+    end
 
     # Primal computation.
-    BLAS.gemv!(primal(tA), primal(α), A, x, primal(β), y)
+    BLAS.gemv!(primal(tA), α, A, x, β, y)
 
     return y_dy
 end
@@ -374,7 +383,7 @@ function frule!!(
     # Extract primals.
     ul = primal(uplo)
     α = primal(alpha)
-    β = primal(beta)
+    β, dβ = extract(beta)
     A, dA = arrayify(A_dA)
     x, dx = arrayify(x_dx)
     y, dy = arrayify(y_dy)
@@ -383,7 +392,12 @@ function frule!!(
     BLAS.symv!(ul, tangent(alpha), A, x, β, dy)
     BLAS.symv!(ul, α, dA, x, one(T), dy)
     BLAS.symv!(ul, α, A, dx, one(T), dy)
-    dy .+= tangent(beta) .* y
+    if !iszero(dβ)
+        @inbounds for n in eachindex(y)
+            tmp = dβ * y[n]
+            dy[n] = ifelse(isnan(y[n]), dy[n], tmp + dy[n])
+        end
+    end
 
     # Run primal computation.
     BLAS.symv!(ul, α, A, x, β, y)
@@ -581,33 +595,39 @@ function frule!!(
     transA::Dual{Char},
     transB::Dual{Char},
     alpha::Dual{T},
-    A::Dual{<:AbstractMatrix{T}},
-    B::Dual{<:AbstractMatrix{T}},
+    A_dA::Dual{<:AbstractMatrix{T}},
+    B_dB::Dual{<:AbstractMatrix{T}},
     beta::Dual{T},
-    C::Dual{<:AbstractMatrix{T}},
+    C_dC::Dual{<:AbstractMatrix{T}},
 ) where {T<:BlasRealFloat}
     tA = primal(transA)
     tB = primal(transB)
-    a = primal(alpha)
-    b = primal(beta)
-    p_A, dA = arrayify(A)
-    p_B, dB = arrayify(B)
-    p_C, dC = arrayify(C)
+    α, dα = extract(alpha)
+    β, dβ = extract(beta)
+    A, dA = arrayify(A_dA)
+    B, dB = arrayify(B_dB)
+    C, dC = arrayify(C_dC)
 
     # Tangent computation.
-    BLAS.gemm!(tA, tB, a, dA, p_B, b, dC)
-    BLAS.gemm!(tA, tB, a, p_A, dB, one(T), dC)
-    if !iszero(tangent(alpha))
-        BLAS.gemm!(tA, tB, tangent(alpha), p_A, p_B, one(T), dC)
+    BLAS.gemm!(tA, tB, α, dA, B, β, dC)
+    BLAS.gemm!(tA, tB, α, A, dB, one(T), dC)
+    if !iszero(dα)
+        BLAS.gemm!(tA, tB, dα, A, B, one(T), dC)
     end
-    if !iszero(tangent(beta))
-        dC .+= tangent(beta) .* p_C
+    if !iszero(dβ)
+        @inbounds for n in eachindex(C)
+            dC[n] = ifelse_nan(C[n], dC[n], dC[n] + dβ * C[n])
+        end
     end
 
     # Primal computation.
-    BLAS.gemm!(tA, tB, a, p_A, p_B, b, p_C)
+    BLAS.gemm!(tA, tB, α, A, B, β, C)
 
-    return C
+    return C_dC
+end
+
+function ifelse_nan(cond, left::P, right::P) where {P<:BlasRealFloat}
+    return isnan(cond) * left + !isnan(cond) * right
 end
 
 function rrule!!(
@@ -697,8 +717,8 @@ function frule!!(
     # Extract primals.
     s = primal(side)
     ul = primal(uplo)
-    α = primal(alpha)
-    β = primal(beta)
+    α, dα = extract(alpha)
+    β, dβ = extract(beta)
     A, dA = arrayify(A_dA)
     B, dB = arrayify(B_dB)
     C, dC = arrayify(C_dC)
@@ -706,11 +726,13 @@ function frule!!(
     # Compute Frechet derivative.
     BLAS.symm!(s, ul, α, A, dB, β, dC)
     BLAS.symm!(s, ul, α, dA, B, one(T), dC)
-    if !iszero(tangent(alpha))
-        BLAS.symm!(s, ul, tangent(alpha), A, B, one(T), dC)
+    if !iszero(dα)
+        BLAS.symm!(s, ul, dα, A, B, one(T), dC)
     end
-    if !iszero(tangent(beta))
-        dC .+= tangent(beta) .* C
+    if !iszero(dβ)
+        @inbounds for n in eachindex(C)
+            dC[n] = ifelse_nan(C[n], dC[n], dC[n] + dβ * C[n])
+        end
     end
 
     # Run primal computation.
@@ -1137,13 +1159,13 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
         #
 
         # gemv!
-        map_prod(t_flags, [1, 3], [1, 2], Ps) do (tA, M, N, P)
+        map_prod(t_flags, [1, 3], [1, 2], Ps, αs, βs) do (tA, M, N, P, α, β)
             As = blas_matrices(rng, P, tA == 'N' ? M : N, tA == 'N' ? N : M)
             xs = blas_vectors(rng, P, N)
             ys = blas_vectors(rng, P, M)
             flags = (false, :stability, (lb=1e-3, ub=10.0))
             return map(As, xs, ys) do A, x, y
-                (flags..., BLAS.gemv!, tA, randn(rng, P), A, x, randn(rng, P), y)
+                (flags..., BLAS.gemv!, tA, P(α), A, x, P(β), y)
             end
         end...,
 
@@ -1166,9 +1188,9 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:blas})
             end
         end...,
 
-        #
-        # BLAS LEVEL 3
-        #
+        # #
+        # # BLAS LEVEL 3
+        # #
 
         # gemm!
         map_prod(t_flags, t_flags, αs, βs, Ps, dαs, dβs) do (tA, tB, α, β, P, dα, dβ)
