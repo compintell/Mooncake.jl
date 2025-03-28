@@ -79,6 +79,11 @@ function rrule!!(::CoDual{typeof(exp)}, x::CoDual{P}) where {P<:IEEEFloat}
 end
 
 @from_rrule MinimalCtx Tuple{typeof(^),P,P} where {P<:IEEEFloat}
+function frule!!(::Dual{typeof(^)}, x::Dual{P}, y::Dual{P}) where {P<:IEEEFloat}
+    t = (ChainRules.NoTangent(), tangent(x), tangent(y))
+    z, dz = ChainRules.frule(t, ^, primal(x), primal(y))
+    return Dual(z, dz)
+end
 
 rand_inputs(rng, P::Type{<:IEEEFloat}, f, arity) = randn(rng, P, arity)
 rand_inputs(rng, P::Type{<:IEEEFloat}, ::typeof(acosh), _) = (rand(rng) + 1 + 1e-3,)
