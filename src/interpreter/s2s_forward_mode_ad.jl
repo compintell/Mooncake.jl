@@ -240,7 +240,7 @@ function modify_fwd_ad_stmts!(
         stmt.values[n] = uninit_dual(get_const_primal_value(stmt.values[n]))
     end
     dual_ir[ssa][:stmt] = inc_args(stmt)
-    dual_ir[ssa][:type] = dual_type(dual_ir[ssa][:type])
+    dual_ir[ssa][:type] = dual_type(CC.widenconst(dual_ir[ssa][:type]))
     return nothing
 end
 
