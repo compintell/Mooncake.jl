@@ -512,7 +512,7 @@ end
 @intrinsic pointerset
 function frule!!(::Dual{typeof(pointerset)}, p, x, idx, z)
     pointerset(primal(p), primal(x), primal(idx), primal(z))
-    pointerset(tangent(p), zero_tangent(primal(x)), primal(idx), primal(z))
+    pointerset(tangent(p), tangent(x), primal(idx), primal(z))
     return p
 end
 function rrule!!(::CoDual{typeof(pointerset)}, p, x, idx, z)
