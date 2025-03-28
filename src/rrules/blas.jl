@@ -1076,6 +1076,15 @@ function blas_matrices(rng::AbstractRNG, P::Type{<:BlasFloat}, p::Int, q::Int)
     return Xs
 end
 
+function invertible_blas_matrices(rng::AbstractRNG, P::Type{<:BlasFloat}, p::Int)
+    return map(blas_matrices(rng, P, p, p)) do A
+        U, _, V = svd(0.1 * A + I)
+        λs = p > 1 ? collect(range(1.0, 2.0; length=p)) : [1.0]
+        A .= collect(U * Diagonal(λs) * V')
+        return A
+    end
+end
+
 function blas_vectors(rng::AbstractRNG, P::Type{<:BlasFloat}, p::Int)
     xs = Any[
         randn(rng, P, p),

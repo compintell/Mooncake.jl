@@ -128,12 +128,12 @@ function frule!!(
     LAPACK.trtrs!(uplo, trans, diag, A, tmp) # tmp now contains inv(A) B.
 
     tmp2 = copy(tmp)
-    if tmp isa AbstractVector
-        BLAS.trmv!(uplo, trans, diag, dA, tmp) # tmp now contains α dA inv(A) B.
+    if diag == 'N'
+        a = uplo == 'L' ? LowerTriangular(dA) : UpperTriangular(dA)
+        lmul!(trans == 'N' ? a : a', tmp)
     else
-        BLAS.trmm!('L', uplo, trans, diag, one(P), dA, tmp) # tmp now contains α dA inv(A) B.
-    end
-    if diag == 'U'
+        a = uplo == 'L' ? UnitLowerTriangular(dA) : UnitUpperTriangular(dA)
+        lmul!(trans == 'N' ? a : a', tmp)
         tmp .-= tmp2
     end
     LAPACK.trtrs!(uplo, trans, diag, A, tmp) # tmp is now α inv(A) dA inv(A) B.
@@ -454,12 +454,12 @@ function frule!!(
     if uplo == 'L'
         L = LowerTriangular(A)
         dL = LowerTriangular(dA)
-        BLAS.symm!('L', 'L', -one(P), dL * L' + L * dL', B, one(P), dB)
+        mul!(dB, Symmetric(dL * L' + L * dL'), B, -one(P), one(P))
         LAPACK.potrs!(uplo, A, dB)
     else
         U = UpperTriangular(A)
         dU = UpperTriangular(dA)
-        BLAS.symm!('L', 'U', -one(P), U'dU + dU'U, B, one(P), dB)
+        mul!(dB, Symmetric(U'dU + dU'U), B, -one(P), one(P))
         LAPACK.potrs!(uplo, A, dB)
     end
 
@@ -526,23 +526,21 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
 
         # trtrs!
         map_prod(
-            ['U', 'L'], ['N', 'T', 'C'], ['N', 'U'], [1, 3], [1, 2], Ps
+            ['U', 'L'], ['N', 'T', 'C'], ['N', 'U'], [1, 3], [-1, 1, 2], Ps
         ) do (ul, tA, diag, N, Nrhs, P)
-            As = blas_matrices(rng, P, N, N)
-            Bs = blas_matrices(rng, P, N, Nrhs)
-            return map(As, Bs) do A, B
-                (false, :stability, nothing, trtrs!, ul, tA, diag, A, B)
+            As = invertible_blas_matrices(rng, P, N)
+            Bs = Nrhs == -1 ? blas_vectors(rng, P, N) : blas_matrices(rng, P, N, Nrhs)
+            Bs = filter(B -> stride(B, 1) == 1, Bs)
+            return map_prod(As, Bs) do (A, B)
+                (false, :none, nothing, trtrs!, ul, tA, diag, A, B)
             end
         end...,
 
         # getrs
-        map_prod(['N', 'T', 'C'], [1, 9], [1, 2], Ps) do (trans, N, Nrhs, P)
-            As = map(blas_matrices(rng, P, N, N)) do A
-                A[diagind(A)] .+= 5
-                return getrf!(A)
-            end
-            Bs = blas_matrices(rng, P, N, Nrhs)
-            return map(As, Bs) do (A, _), B
+        map_prod(['N', 'T', 'C'], [1, 5], [-1, 1, 2], Ps) do (trans, N, Nrhs, P)
+            As = map(LAPACK.getrf!, invertible_blas_matrices(rng, P, N))
+            Bs = Nrhs == -1 ? [randn(rng, P, N)] : blas_matrices(rng, P, N, Nrhs)
+            return map_prod(As, Bs) do ((A, _), B)
                 ipiv = fill(N, N)
                 (false, :none, nothing, getrs!, trans, A, ipiv, B)
             end
@@ -550,10 +548,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
 
         # getri
         map_prod([1, 9], Ps) do (N, P)
-            As = map(blas_matrices(rng, P, N, N)) do A
-                A[diagind(A)] .+= 5
-                return getrf!(A)
-            end
+            As = map(LAPACK.getrf!, invertible_blas_matrices(rng, P, N))
             return map(As) do (A, _)
                 ipiv = fill(N, N)
                 (false, :none, nothing, getri!, A, ipiv)
@@ -572,10 +567,10 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
         end...,
 
         # potrs
-        map_prod([1, 3, 9], [1, 2], Ps) do (N, Nrhs, P)
+        map_prod([1, 3, 9], [-1, 1, 2], Ps) do (N, Nrhs, P)
             X = randn(rng, P, N, N)
             A = X * X' + I
-            Bs = blas_matrices(rng, P, N, Nrhs)
+            Bs = Nrhs == -1 ? blas_vectors(rng, P, N) : blas_matrices(rng, P, N, Nrhs)
             return map_prod(['L', 'U'], Bs) do (uplo, B)
                 tmp = potrf!(uplo, copy(A))[1]
                 (false, :stability, nothing, potrs!, uplo, tmp, copy(B))
