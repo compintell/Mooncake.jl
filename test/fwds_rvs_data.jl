@@ -24,7 +24,7 @@ end
         @test rdata_type(tangent_type(P)) == R
     end
     @testset "$(typeof(p))" for (_, p, _...) in Mooncake.tangent_test_cases()
-        TestUtils.test_fwds_rvs_data(Xoshiro(123456), p)
+        TestUtils.test_tangent_splitting(Xoshiro(123456), p)
     end
     @testset "zero_rdata_from_type checks" begin
         @test can_produce_zero_rdata_from_type(Vector) == true
@@ -123,7 +123,7 @@ end
     end
 
     # Tests that the static type of an fdata / rdata is correct happen in
-    # test_fwds_rvs_data, so here we only need to test the specific quirks for a given type.
+    # test_tangent_splitting, so here we only need to test the specific quirks for a given type.
     @testset "fdata and rdata verification" begin
         @testset "Array" begin
             @test_throws InvalidFDataException verify_fdata_value(randn(10), randn(11))

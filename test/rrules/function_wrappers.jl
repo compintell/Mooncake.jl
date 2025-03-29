@@ -5,8 +5,8 @@
         FunctionWrapper{Float64,Tuple{Float64}}(sin),
         FunctionWrapper{Float64,Tuple{Float64}}(x -> x * _data[]),
     ]
-        TestUtils.test_tangent_consistency(rng, p)
-        TestUtils.test_fwds_rvs_data(rng, p)
+        TestUtils.test_tangent_interface(rng, p)
+        TestUtils.test_tangent_splitting(rng, p)
 
         # Check that we can run `to_cr_tangent` on tangents for FunctionWrappers.
         t = zero_tangent(p)
