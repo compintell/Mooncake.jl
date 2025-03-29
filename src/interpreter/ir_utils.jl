@@ -268,3 +268,23 @@ function replace_uses_with!(stmt, def::Union{Argument,SSAValue}, val)
         return stmt
     end
 end
+
+"""
+    characterised_used_ssas(stmts::Vector{Any})::Vector{Bool}
+
+For each statement in `stmts`, determine whether the SSAValue that it corresponds to has
+any uses in the other statements. In particular, if `SSAValue(n)` has any uses in `stmts`,
+the `n`th element of the returned `Vector{Bool}` will be `true`, and `false` otherwise.
+
+This function will usually be applied to the `stmts` field of an `CC.InstructionStream`.
+"""
+function characterised_used_ssas(stmts::Vector{Any})::Vector{Bool}
+    is_used = fill(false, length(stmts))
+    for stmt in stmts
+        for use in CC.userefs(stmt)
+            use[] isa SSAValue || continue
+            is_used[use[].id] = true
+        end
+    end
+    return is_used
+end

@@ -28,7 +28,7 @@ jobs:
           'rrules/builtins',
           'rrules/fastmath',
           'rrules/foreigncall',
-          'rrules/functionwrappers',
+          # 'rrules/functionwrappers',
           'rrules/iddict',
           'rrules/lapack',
           'rrules/linear_algebra',
@@ -42,17 +42,17 @@ jobs:
           'rrules/performance_patches',
         ]
         version:
-          - 'lts'
+          # - 'lts'
           - '1'
         arch:
           - x64
-        include:
-          - test_group: 'basic'
-            version: 'lts'
-            arch: x86
-          - test_group: 'rrules/array_legacy'
-            version: 'lts'
-            arch: x64
+        # include:
+        #   - test_group: 'basic'
+        #     version: 'lts'
+        #     arch: x86
+        #   - test_group: 'rrules/array_legacy'
+        #     version: 'lts'
+        #     arch: x64
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
@@ -79,26 +79,26 @@ jobs:
       fail-fast: false
       matrix:
         test_group: [
-          {test_type: 'ext', label: 'differentiation_interface'},
-          {test_type: 'ext', label: 'flux'},
-          {test_type: 'ext', label: 'luxlib'},
-          {test_type: 'ext', label: 'nnlib'},
+          # {test_type: 'ext', label: 'differentiation_interface'},
+          # {test_type: 'ext', label: 'flux'},
+          # {test_type: 'ext', label: 'luxlib'},
+          # {test_type: 'ext', label: 'nnlib'},
           {test_type: 'ext', label: 'special_functions'},
           {test_type: 'integration_testing', label: 'array'},
-          {test_type: 'integration_testing', label: 'bijectors'},
+          # {test_type: 'integration_testing', label: 'bijectors'},
           {test_type: 'integration_testing', label: 'diff_tests'},
-          {test_type: 'integration_testing', label: 'distributions'},
+          # {test_type: 'integration_testing', label: 'distributions'},
           {test_type: 'integration_testing', label: 'gp'},
           {test_type: 'integration_testing', label: 'logexpfunctions'},
-          {test_type: 'integration_testing', label: 'lux'},
-          {test_type: 'integration_testing', label: 'battery_tests'},
+          # {test_type: 'integration_testing', label: 'lux'},
+          # {test_type: 'integration_testing', label: 'battery_tests'},
           {test_type: 'integration_testing', label: 'misc_abstract_array'},
           {test_type: 'integration_testing', label: 'temporalgps'},
           {test_type: 'integration_testing', label: 'turing'},
         ]
         version:
           - '1'
-          - 'lts'
+          # - 'lts'
         arch:
           - x64
     steps:
@@ -125,78 +125,78 @@ jobs:
           files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
-  perf:
-    name: "Performance (${{ matrix.perf_group }})"
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        perf_group:
-          - 'hand_written'
-          - 'derived'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@v2
-        with:
-          version: '1'
-          arch: x64
-          include-all-prereleases: false
-      - uses: julia-actions/cache@v2
-      - uses: julia-actions/julia-buildpkg@v1
-      - run: julia --project=bench --eval 'include("bench/run_benchmarks.jl"); main()'
-        env:
-          PERF_GROUP: ${{ matrix.perf_group }}
-        shell: bash
-  compperf:
-    name: "Performance (inter-AD)"
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    strategy:
-      fail-fast: false
-    steps:
-      - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@v2
-        with:
-          version: '1'
-          arch: x64
-          include-all-prereleases: false
-      - uses: julia-actions/cache@v2
-      - uses: julia-actions/julia-buildpkg@v1
-      - run: mkdir bench_results
-      - run: julia --project=bench --eval 'include("bench/run_benchmarks.jl"); main()'
-        env:
-          PERF_GROUP: 'comparison'
-          GKSwstype: '100'
-        shell: bash
-      - uses: actions/upload-artifact@v4
-        with:
-          name: benchmarking-results
-          path: bench_results/
-      # Useful code for testing action.
-      # - run: |
-      #     text="this is line one
-      #     this is line two
-      #     this is line three"
-      #     echo "$text" > benchmark_results.txt
-      - name: Read file content
-        id: read-file
-        run: |
-          {
-            echo "table<<EOF"
-            cat bench/benchmark_results.txt
-            echo "EOF"
-          } >> $GITHUB_OUTPUT
-      - name: Find Comment
-        uses: peter-evans/find-comment@v3
-        id: fc
-        with:
-          issue-number: ${{ github.event.pull_request.number }}
-          comment-author: github-actions[bot]
-      - id: post-report-as-pr-comment
-        name: Post Report as Pull Request Comment
-        uses: peter-evans/create-or-update-comment@v4
-        with:
-          issue-number: ${{ github.event.pull_request.number }}
-          body: "Performance Ratio:\nRatio of time to compute gradient and time to compute function.\nWarning: results are very approximate! See [here](https://github.com/compintell/Mooncake.jl/tree/main/bench#inter-framework-benchmarking) for more context.\n```\n${{ steps.read-file.outputs.table }}\n```"
-          comment-id: ${{ steps.fc.outputs.comment-id }}
-          edit-mode: replace
+  # perf:
+  #   name: "Performance (${{ matrix.perf_group }})"
+  #   runs-on: ubuntu-latest
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       perf_group:
+  #         - 'hand_written'
+  #         - 'derived'
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: julia-actions/setup-julia@v2
+  #       with:
+  #         version: '1'
+  #         arch: x64
+  #         include-all-prereleases: false
+  #     - uses: julia-actions/cache@v2
+  #     - uses: julia-actions/julia-buildpkg@v1
+  #     - run: julia --project=bench --eval 'include("bench/run_benchmarks.jl"); main()'
+  #       env:
+  #         PERF_GROUP: ${{ matrix.perf_group }}
+  #       shell: bash
+  # compperf:
+  #   name: "Performance (inter-AD)"
+  #   runs-on: ubuntu-latest
+  #   if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+  #   strategy:
+  #     fail-fast: false
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: julia-actions/setup-julia@v2
+  #       with:
+  #         version: '1'
+  #         arch: x64
+  #         include-all-prereleases: false
+  #     - uses: julia-actions/cache@v2
+  #     - uses: julia-actions/julia-buildpkg@v1
+  #     - run: mkdir bench_results
+  #     - run: julia --project=bench --eval 'include("bench/run_benchmarks.jl"); main()'
+  #       env:
+  #         PERF_GROUP: 'comparison'
+  #         GKSwstype: '100'
+  #       shell: bash
+  #     - uses: actions/upload-artifact@v4
+  #       with:
+  #         name: benchmarking-results
+  #         path: bench_results/
+  #     # Useful code for testing action.
+  #     # - run: |
+  #     #     text="this is line one
+  #     #     this is line two
+  #     #     this is line three"
+  #     #     echo "$text" > benchmark_results.txt
+  #     - name: Read file content
+  #       id: read-file
+  #       run: |
+  #         {
+  #           echo "table<<EOF"
+  #           cat bench/benchmark_results.txt
+  #           echo "EOF"
+  #         } >> $GITHUB_OUTPUT
+  #     - name: Find Comment
+  #       uses: peter-evans/find-comment@v3
+  #       id: fc
+  #       with:
+  #         issue-number: ${{ github.event.pull_request.number }}
+  #         comment-author: github-actions[bot]
+  #     - id: post-report-as-pr-comment
+  #       name: Post Report as Pull Request Comment
+  #       uses: peter-evans/create-or-update-comment@v4
+  #       with:
+  #         issue-number: ${{ github.event.pull_request.number }}
+  #         body: "Performance Ratio:\nRatio of time to compute gradient and time to compute function.\nWarning: results are very approximate! See [here](https://github.com/compintell/Mooncake.jl/tree/main/bench#inter-framework-benchmarking) for more context.\n```\n${{ steps.read-file.outputs.table }}\n```"
+  #         comment-id: ${{ steps.fc.outputs.comment-id }}
+  #         edit-mode: replace

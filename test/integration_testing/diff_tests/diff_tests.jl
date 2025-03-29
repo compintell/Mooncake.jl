@@ -14,6 +14,7 @@ using Mooncake.TestUtils: test_rule
         ),
     )
         @info "$n: $(typeof((f, x...)))"
+        test_rule(StableRNG(123456), f, x...; is_primitive=false, forward=true)
         test_rule(StableRNG(123456), f, x...; is_primitive=false)
     end
 end
