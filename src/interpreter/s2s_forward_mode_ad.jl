@@ -49,7 +49,7 @@ function build_frule(
             dual_oc = misty_closure(
                 info.dual_ret_type, dual_ir, captures...; do_compile=true
             )
-            raw_rule = DerivedFRule{typeof(dual_oc),info.isva,info.nargs}(dual_oc)
+            raw_rule = DerivedFRule{sig,typeof(dual_oc),info.isva,info.nargs}(dual_oc)
             rule = debug_mode ? DebugFRule(raw_rule) : raw_rule
             interp.oc_cache[oc_cache_key] = rule
             return rule
@@ -61,13 +61,13 @@ function build_frule(
     end
 end
 
-struct DerivedFRule{Tfwd_oc,isva,nargs}
+struct DerivedFRule{primal_sig,Tfwd_oc,isva,nargs}
     fwd_oc::Tfwd_oc
 end
 
-@inline function (fwd::DerivedFRule{sig,isva,nargs})(
+@inline function (fwd::DerivedFRule{P,sig,isva,nargs})(
     args::Vararg{Dual,N}
-) where {sig,N,isva,nargs}
+) where {P,sig,N,isva,nargs}
     return fwd.fwd_oc(__unflatten_dual_varargs(isva, args, Val(nargs))...)
 end
 
@@ -247,7 +247,12 @@ end
 function modify_fwd_ad_stmts!(
     stmt::PiNode, dual_ir::IRCode, ssa::SSAValue, ::Vector{Any}, ::DualInfo
 )
-    dual_ir[ssa][:stmt] = PiNode(inc_args(stmt).val, dual_type(CC.widenconst(stmt.typ)))
+    if stmt.val isa Union{Argument,SSAValue}
+        v = __inc(stmt.val)
+    else
+        v = uninit_dual(get_const_primal_value(stmt.val))
+    end
+    dual_ir[ssa][:stmt] = PiNode(v, dual_type(CC.widenconst(stmt.typ)))
     dual_ir[ssa][:type] = Any
     dual_ir[ssa][:flag] = CC.IR_FLAG_REFINED
     return nothing
@@ -262,8 +267,11 @@ function modify_fwd_ad_stmts!(
 )
     if isexpr(stmt, :invoke) || isexpr(stmt, :call)
         sig, mi = if isexpr(stmt, :invoke)
+            sig_types = map(stmt.args[2:end]) do primal_arg
+                return CC.widenconst(get_forward_primal_type(info.primal_ir, primal_arg))
+            end
             mi = stmt.args[1]::Core.MethodInstance
-            mi.specTypes, mi
+            Tuple{sig_types...}, mi
         else
             sig_types = map(stmt.args) do primal_arg
                 return CC.widenconst(get_forward_primal_type(info.primal_ir, primal_arg))
@@ -385,7 +393,8 @@ end
 function frule_type(
     interp::MooncakeInterpreter{C}, mi::CC.MethodInstance; debug_mode
 ) where {C}
-    if is_primitive(C, _get_sig(mi))
+    primal_sig = _get_sig(mi)
+    if is_primitive(C, primal_sig)
         return debug_mode ? DebugFRule{typeof(frule!!)} : typeof(frule!!)
     end
     ir, _ = lookup_ir(interp, mi)
@@ -394,7 +403,7 @@ function frule_type(
     arg_types = map(CC.widenconst, ir.argtypes)
     dual_args_type = Tuple{map(dual_type, arg_types)...}
     closure_type = RuleMC{dual_args_type,dual_ret_type(ir)}
-    Tderived_rule = DerivedFRule{closure_type,isva,nargs}
+    Tderived_rule = DerivedFRule{primal_sig,closure_type,isva,nargs}
     return debug_mode ? DebugFRule{Tderived_rule} : Tderived_rule
 end
 

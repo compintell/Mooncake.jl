@@ -875,6 +875,7 @@ end
 
 # swapfield!
 
+frule!!(::Dual{typeof(throw)}, args::Dual...) = throw(map(primal, args)...)
 rrule!!(::CoDual{typeof(throw)}, args::CoDual...) = throw(map(primal, args)...)
 
 struct TuplePullback{N} end
