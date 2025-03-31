@@ -114,7 +114,7 @@ function generate_dual_ir(
     primal_ir = normalise!(primal_ir, spnames)
 
     # Keep a copy of the primal IR with the insertions
-    dual_ir = copy(primal_ir)
+    dual_ir = CC.copy(primal_ir)
 
     # Modify dual argument types:
     # - add one for the rule in front
@@ -238,8 +238,8 @@ function modify_fwd_ad_stmts!(
         stmt.values[n] isa Union{Argument,SSAValue} && continue
         stmt.values[n] = uninit_dual(get_const_primal_value(stmt.values[n]))
     end
-    set_stmt!(dual_ir[ssa], inc_args(stmt))
-    dual_ir[ssa][:type] = dual_type(CC.widenconst(dual_ir[ssa][:type]))
+    set_stmt!(dual_ir, ssa, inc_args(stmt))
+    set_ir!(dual_ir, ssa, :type, dual_type(CC.widenconst(get_ir(dual_ir, ssa, :type))))
     return nothing
 end
 
@@ -251,9 +251,7 @@ function modify_fwd_ad_stmts!(
     else
         v = uninit_dual(get_const_primal_value(stmt.val))
     end
-    set_stmt!(dual_ir[ssa], PiNode(v, dual_type(CC.widenconst(stmt.typ))))
-    dual_ir[ssa][:type] = Any
-    dual_ir[ssa][:flag] = CC.IR_FLAG_REFINED
+    replace_call!(dual_ir, ssa, PiNode(v, dual_type(CC.widenconst(stmt.typ))))
     return nothing
 end
 
@@ -306,13 +304,13 @@ function modify_fwd_ad_stmts!(
         end
     elseif isexpr(stmt, :boundscheck)
         # Keep the boundscheck, but put it in a Dual.
-        inst = CC.NewInstruction(info.primal_ir[ssa])
+        inst = CC.NewInstruction(get_ir(info.primal_ir, ssa))
         bc_ssa = CC.insert_node!(dual_ir, ssa, inst, false)
         replace_call!(dual_ir, ssa, Expr(:call, zero_dual, bc_ssa))
     elseif isexpr(stmt, :code_coverage_effect)
         replace_call!(dual_ir, ssa, nothing)
     elseif Meta.isexpr(stmt, :copyast)
-        new_copyast_inst = CC.NewInstruction(info.primal_ir[ssa])
+        new_copyast_inst = CC.NewInstruction(get_ir(info.primal_ir, ssa))
         new_copyast_ssa = CC.insert_node!(dual_ir, ssa, new_copyast_inst)
         replace_call!(dual_ir, ssa, Expr(:call, zero_dual, new_copyast_ssa))
     elseif Meta.isexpr(stmt, :loopinfo)
@@ -331,7 +329,7 @@ function modify_fwd_ad_stmts!(
 end
 
 get_forward_primal_type(ir::CC.IRCode, a::Argument) = ir.argtypes[a.n]
-get_forward_primal_type(ir::CC.IRCode, ssa::SSAValue) = ir[ssa][:type]
+get_forward_primal_type(ir::CC.IRCode, ssa::SSAValue) = get_ir(ir, ssa, :type)
 get_forward_primal_type(::CC.IRCode, x::QuoteNode) = _typeof(x.value)
 get_forward_primal_type(::CC.IRCode, x) = _typeof(x)
 function get_forward_primal_type(::CC.IRCode, x::GlobalRef)

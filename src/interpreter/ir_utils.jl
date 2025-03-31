@@ -1,26 +1,38 @@
+stmt_field_name() = @static VERSION < v"1.11" ? :inst : :stmt
+
 """
     stmt(ir::CC.InstructionStream)
 
 Get the field containing the instructions in `ir`. This changed name in 1.11 from `inst` to
 `stmt`.
 """
-stmt(ir::CC.InstructionStream) = @static VERSION < v"1.11.0-rc4" ? ir.inst : ir.stmt
+stmt(ir::CC.InstructionStream) = CC.getfield(ir, stmt_field_name())
 
 """
     stmt(x::CC.Instruction)
 
 Get the statement from `x`. This field changed name in 1.11 from `inst` to `stmt`.
 """
-stmt(x::CC.Instruction) = @static VERSION < v"1.11.0-rc4" ? x.inst : x.stmt
+stmt(x::CC.Instruction) = CC.getindex(x, stmt_field_name())
+
+set_stmt!(ir::IRCode, ssa::SSAValue, a) = set_ir!(ir, ssa, stmt_field_name(), a)
+
+get_ir(ir::IRCode, idx::SSAValue) = CC.getindex(ir, idx)
+get_ir(ir::IRCode, idx::SSAValue, name::Symbol) = CC.getindex(get_ir(ir, idx), name)
 
 """
-    set_stmt!(x::CC.Instruction, a)
 
-Sets the statement in `x`. This field changed name in 1.11 from `inst` to `stmt`.
 """
-function set_stmt!(x::CC.Instruction, a)
-    fieldname = @static VERSION < v"1.11.0-rc4" ? :inst : :stmt
-    return CC.setindex!(x, a, fieldname)
+function set_ir!(ir::IRCode, idx::SSAValue, name::Symbol, value)
+    return CC.setindex!(CC.getindex(ir, idx), value, name)
+end
+
+function replace_call!(ir, idx::SSAValue, new_call)
+    set_ir!(ir, idx, :inst, new_call)
+    set_ir!(ir, idx, :type, Any)
+    set_ir!(ir, idx, :info, CC.NoCallInfo())
+    set_ir!(ir, idx, :flag, CC.IR_FLAG_REFINED)
+    return nothing
 end
 
 """
@@ -298,9 +310,17 @@ This function will usually be applied to the `stmts` field of an `CC.Instruction
 function characterised_used_ssas(stmts::Vector{Any})::Vector{Bool}
     is_used = fill(false, length(stmts))
     for stmt in stmts
-        for use in CC.userefs(stmt)
-            use[] isa SSAValue || continue
-            is_used[use[].id] = true
+
+        # Manually written-out iteration to avoid Core.Compiler type piracy.
+        urs = CC.userefs(stmt)
+        v = CC.iterate(urs)
+        while v !== nothing
+            (use_ref, state) = v
+            use = CC.getindex(use_ref)
+            if use isa SSAValue
+                is_used[use.id] = true
+            end
+            v = CC.iterate(urs, state)
         end
     end
     return is_used

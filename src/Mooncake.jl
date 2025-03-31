@@ -105,8 +105,6 @@ programming (e.g. via `@generated` functions) more generally.
 """
 build_primitive_rrule(::Type{<:Tuple}) = rrule!!
 
-include("interpreter/diffractor_compiler_utils.jl")
-
 include("utils.jl")
 include("tangents.jl")
 include("dual.jl")
