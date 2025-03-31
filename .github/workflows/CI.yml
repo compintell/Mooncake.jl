@@ -42,17 +42,17 @@ jobs:
           'rrules/performance_patches',
         ]
         version:
-          # - 'lts'
+          - 'lts'
           - '1'
         arch:
           - x64
-        # include:
-        #   - test_group: 'basic'
-        #     version: 'lts'
-        #     arch: x86
-        #   - test_group: 'rrules/array_legacy'
-        #     version: 'lts'
-        #     arch: x64
+        include:
+          - test_group: 'basic'
+            version: 'lts'
+            arch: x86
+          - test_group: 'rrules/array_legacy'
+            version: 'lts'
+            arch: x64
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
@@ -98,7 +98,7 @@ jobs:
         ]
         version:
           - '1'
-          # - 'lts'
+          - 'lts'
         arch:
           - x64
     steps:

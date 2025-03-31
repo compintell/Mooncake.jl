@@ -132,11 +132,11 @@ function generate_dual_ir(
     # captures data structure, make use of `get_capture`.
     captures = Any[]
 
-    is_used = characterised_used_ssas(primal_ir.stmts.stmt)
+    is_used = characterised_used_ssas(stmt(primal_ir.stmts))
     info = DualInfo(primal_ir, interp, is_used, debug_mode)
     for (n, inst) in enumerate(dual_ir.stmts)
         ssa = SSAValue(n)
-        modify_fwd_ad_stmts!(inst.stmt, dual_ir, ssa, captures, info)
+        modify_fwd_ad_stmts!(stmt(inst), dual_ir, ssa, captures, info)
     end
 
     # Process new nodes etc.
@@ -239,7 +239,7 @@ function modify_fwd_ad_stmts!(
         stmt.values[n] isa Union{Argument,SSAValue} && continue
         stmt.values[n] = uninit_dual(get_const_primal_value(stmt.values[n]))
     end
-    dual_ir[ssa][:stmt] = inc_args(stmt)
+    set_stmt!(dual_ir[ssa], inc_args(stmt))
     dual_ir[ssa][:type] = dual_type(CC.widenconst(dual_ir[ssa][:type]))
     return nothing
 end
@@ -252,7 +252,7 @@ function modify_fwd_ad_stmts!(
     else
         v = uninit_dual(get_const_primal_value(stmt.val))
     end
-    dual_ir[ssa][:stmt] = PiNode(v, dual_type(CC.widenconst(stmt.typ)))
+    set_stmt!(dual_ir[ssa], PiNode(v, dual_type(CC.widenconst(stmt.typ))))
     dual_ir[ssa][:type] = Any
     dual_ir[ssa][:flag] = CC.IR_FLAG_REFINED
     return nothing
@@ -304,7 +304,7 @@ function modify_fwd_ad_stmts!(
         # a non-dual constant.
         dual_args = map(shifted_args) do arg
             arg isa Union{Argument,SSAValue} && return arg
-            return zero_dual(get_const_primal_value(arg))
+            return uninit_dual(get_const_primal_value(arg))
         end
 
         if is_primitive(context_type(info.interp), sig)
@@ -322,7 +322,13 @@ function modify_fwd_ad_stmts!(
             call_rule = Expr(:call, rule_ssa, dual_args...)
             replace_call!(dual_ir, ssa, call_rule)
         end
-    elseif isexpr(stmt, :boundscheck) || isexpr(stmt, :loopinfo)
+    elseif isexpr(stmt, :boundscheck)
+        # Keep the boundscheck, but put it in a Dual.
+        bc_ssa = CC.insert_node!(
+            dual_ir, ssa, CC.NewInstruction(info.primal_ir[ssa]), false
+        )
+        replace_call!(dual_ir, ssa, Expr(:call, zero_dual, bc_ssa))
+    elseif isexpr(stmt, :loopinfo)
         nothing
     elseif isexpr(stmt, :code_coverage_effect)
         replace_call!(dual_ir, ssa, nothing)

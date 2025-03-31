@@ -135,7 +135,7 @@ end
 
 @is_primitive MinimalCtx Tuple{typeof(Base._deleteat!),Vector,Integer,Integer}
 function frule!!(
-    ::Dual{typeof(base._deleteat!)},
+    ::Dual{typeof(Base._deleteat!)},
     a::Dual{<:Vector},
     i::Dual{<:Integer},
     delta::Dual{<:Integer},
@@ -172,7 +172,9 @@ function rrule!!(
 end
 
 @is_primitive MinimalCtx Tuple{typeof(Base._growbeg!),Vector,Integer}
-function frule!!(::Dual{typeof(Base._growbeg!)}, a::Dual{<:Vector{T}}, d::Dual{<:Integer})
+function frule!!(
+    ::Dual{typeof(Base._growbeg!)}, a::Dual{<:Vector{T}}, d::Dual{<:Integer}
+) where {T}
     Base._growbeg!(primal(a), primal(d))
     Base._growbeg!(tangent(a), primal(d))
     return zero_dual(nothing)

@@ -7,6 +7,23 @@ Get the field containing the instructions in `ir`. This changed name in 1.11 fro
 stmt(ir::CC.InstructionStream) = @static VERSION < v"1.11.0-rc4" ? ir.inst : ir.stmt
 
 """
+    stmt(x::CC.Instruction)
+
+Get the statement from `x`. This field changed name in 1.11 from `inst` to `stmt`.
+"""
+stmt(x::CC.Instruction) = @static VERSION < v"1.11.0-rc4" ? x.inst : x.stmt
+
+"""
+    set_stmt!(x::CC.Instruction, a)
+
+Sets the statement in `x`. This field changed name in 1.11 from `inst` to `stmt`.
+"""
+function set_stmt!(x::CC.Instruction, a)
+    fieldname = @static VERSION < v"1.11.0-rc4" ? :inst : :stmt
+    return CC.setindex!(x, a, fieldname)
+end
+
+"""
     ircode(
         inst::Vector{Any},
         argtypes::Vector{Any},

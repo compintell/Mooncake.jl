@@ -619,6 +619,7 @@ function get_const_primal_value(x::GlobalRef)
     return getglobal(x.mod, x.name)
 end
 get_const_primal_value(x::QuoteNode) = x.value
+get_const_primal_value(x::Expr) = eval(x)
 get_const_primal_value(x) = x
 
 # Mooncake does not yet handle `PhiCNode`s. Throw an error if one is encountered.
