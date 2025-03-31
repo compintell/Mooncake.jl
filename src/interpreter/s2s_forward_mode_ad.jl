@@ -1,7 +1,6 @@
 function build_frule(args...; debug_mode=false)
-    interp = get_interpreter()
     sig = _typeof(TestUtils.__get_primals(args))
-    return build_frule(interp, sig; debug_mode)
+    return build_frule(get_interpreter(), sig; debug_mode)
 end
 
 struct DualRuleInfo
@@ -266,23 +265,13 @@ function modify_fwd_ad_stmts!(
     stmt::Expr, dual_ir::IRCode, ssa::SSAValue, captures::Vector{Any}, info::DualInfo
 )
     if isexpr(stmt, :invoke) || isexpr(stmt, :call)
-        sig, mi = if isexpr(stmt, :invoke)
-            sig_types = map(stmt.args[2:end]) do primal_arg
-                return CC.widenconst(get_forward_primal_type(info.primal_ir, primal_arg))
-            end
-            mi = stmt.args[1]::Core.MethodInstance
-            Tuple{sig_types...}, mi
-        else
-            sig_types = map(stmt.args) do primal_arg
-                return CC.widenconst(get_forward_primal_type(info.primal_ir, primal_arg))
-            end
-            Tuple{sig_types...}, missing
+        raw_args = isexpr(stmt, :invoke) ? stmt.args[2:end] : stmt.args
+        sig_types = map(raw_args) do x
+            return CC.widenconst(get_forward_primal_type(info.primal_ir, x))
         end
-        shifted_args = if isexpr(stmt, :invoke)
-            inc_args(stmt).args[2:end]  # first arg is method instance
-        else
-            inc_args(stmt).args
-        end
+        sig = Tuple{sig_types...}
+        mi = isexpr(stmt, :invoke) ? stmt.args[1] : missing
+        args = map(__inc, raw_args)
 
         # Special case: if the result of a call to getfield is un-used, then leave the
         # primal statment alone (just increment arguments as usual). This was causing
@@ -294,42 +283,32 @@ function modify_fwd_ad_stmts!(
         #
         # This might need to be generalised to more things than just `getfield`, but at the
         # time of writing this comment, it's unclear whether or not this is the case.
-        if !info.is_used[ssa.id] && get_const_primal_value(shifted_args[1]) == getfield
-            fwds = new_inst(Expr(:call, __fwds_pass_no_ad!, shifted_args...))
+        if !info.is_used[ssa.id] && get_const_primal_value(args[1]) == getfield
+            fwds = new_inst(Expr(:call, __fwds_pass_no_ad!, args...))
             replace_call!(dual_ir, ssa, fwds)
             return nothing
         end
 
-        # Dual-ise arguments. If an argument is not an `Argument` or `SSAValue`, it must be
-        # a non-dual constant.
-        dual_args = map(shifted_args) do arg
+        # Dual-ise arguments.
+        dual_args = map(args) do arg
             arg isa Union{Argument,SSAValue} && return arg
             return uninit_dual(get_const_primal_value(arg))
         end
 
         if is_primitive(context_type(info.interp), sig)
-            call_frule = Expr(:call, frule!!, dual_args...)
-            replace_call!(dual_ir, ssa, call_frule)
+            replace_call!(dual_ir, ssa, Expr(:call, frule!!, dual_args...))
         else
-            if isexpr(stmt, :invoke)
-                rule = LazyFRule(mi, info.debug_mode)
-            else
-                rule = DynamicFRule(info.debug_mode)
-            end
-            push!(captures, rule)
+            dm = info.debug_mode
+            push!(captures, isexpr(stmt, :invoke) ? LazyFRule(mi, dm) : DynamicFRule(dm))
             get_rule = Expr(:call, get_capture, Argument(1), length(captures))
             rule_ssa = CC.insert_node!(dual_ir, ssa, new_inst(get_rule))
-            call_rule = Expr(:call, rule_ssa, dual_args...)
-            replace_call!(dual_ir, ssa, call_rule)
+            replace_call!(dual_ir, ssa, Expr(:call, rule_ssa, dual_args...))
         end
     elseif isexpr(stmt, :boundscheck)
         # Keep the boundscheck, but put it in a Dual.
-        bc_ssa = CC.insert_node!(
-            dual_ir, ssa, CC.NewInstruction(info.primal_ir[ssa]), false
-        )
+        inst = CC.NewInstruction(info.primal_ir[ssa])
+        bc_ssa = CC.insert_node!(dual_ir, ssa, inst, false)
         replace_call!(dual_ir, ssa, Expr(:call, zero_dual, bc_ssa))
-    elseif isexpr(stmt, :loopinfo)
-        nothing
     elseif isexpr(stmt, :code_coverage_effect)
         replace_call!(dual_ir, ssa, nothing)
     elseif Meta.isexpr(stmt, :copyast)
@@ -345,11 +324,8 @@ function modify_fwd_ad_stmts!(
         new_undef_inst = new_inst(Expr(:throw_undef_if_not, stmt.args[1], ssa))
         CC.insert_node!(dual_ir, ssa, new_undef_inst, true)
     else
-        throw(
-            ArgumentError(
-                "Expressions of type `:$(stmt.head)` are not yet supported in forward mode"
-            ),
-        )
+        msg = "Expressions of type `:$(stmt.head)` are not yet supported in forward mode"
+        throw(ArgumentError(msg))
     end
     return nothing
 end
