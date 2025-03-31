@@ -379,14 +379,14 @@ function frule!!(
         @inbounds for n in 1:size(A, 1)
             tmp[n, n] = tmp[n, n] / 2
         end
-        copytrito!(dA, lmul!(L, tmp), 'L')
+        _copytrito!(dA, lmul!(L, tmp), 'L')
     else
         U = UpperTriangular(A)
         tmp = UpperTriangular(rdiv!(U' \ Symmetric(dA, :U), U))
         @inbounds for n in 1:size(A, 1)
             tmp[n, n] = tmp[n, n] / 2
         end
-        copytrito!(dA, rmul!(tmp, U), 'U')
+        _copytrito!(dA, rmul!(tmp, U), 'U')
     end
 
     return Dual((A, info), (tangent(A_dA), NoTangent()))
@@ -573,7 +573,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
             Bs = Nrhs == -1 ? blas_vectors(rng, P, N) : blas_matrices(rng, P, N, Nrhs)
             return map_prod(['L', 'U'], Bs) do (uplo, B)
                 tmp = potrf!(uplo, copy(A))[1]
-                (false, :stability, nothing, potrs!, uplo, tmp, copy(B))
+                (false, :none, nothing, potrs!, uplo, tmp, copy(B))
             end
         end...,
     )
@@ -583,7 +583,6 @@ end
 
 function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:lapack})
     rng = rng_ctor(123)
-    return Any[], Any[]
     getrf_wrapper!(x, check) = getrf!(x; check)
     test_cases = vcat(map_prod([false, true], [Float64, Float32]) do (check, P)
         As = blas_matrices(rng, P, 5, 5)
