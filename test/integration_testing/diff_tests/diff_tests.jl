@@ -73,7 +73,7 @@ const TEST_CASES = vcat(
 
 @testset "diff_tests" begin
     @testset "$f, $(typeof(x))" for (n, (interface_only, f, x...)) in enumerate(
-        vcat(TEST_CASES[1:66], TEST_CASES[68:89], TEST_CASES[91:end]),
+        vcat(TEST_CASES[1:66], TEST_CASES[68:89], TEST_CASES[91:end])
     )
         @info "$n: $(typeof((f, x...)))"
         test_rule(StableRNG(123456), f, x...; is_primitive=false)
