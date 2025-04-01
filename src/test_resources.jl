@@ -928,20 +928,7 @@ end
 
 my_setfield!(args...) = setfield!(args...)
 
-function _setfield!(value::MutableTangent, name, x)
-    fields = value.fields
-    v = typeof(value)()
-    v.fields = map(fieldnames(typeof(fields))) do n
-        f = getfield(fields, n)
-        n == name || return f
-        if f isa PossiblyUninitTangent
-            return typeof(f)(x)
-        else
-            return x
-        end
-    end
-    return x
-end
+_setfield!(value::MutableTangent, name, x) = x
 
 function Mooncake.rrule!!(::Mooncake.CoDual{typeof(my_setfield!)}, value, name, x)
     _name = primal(name)
