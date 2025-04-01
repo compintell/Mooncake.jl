@@ -168,64 +168,23 @@ end
 
         additional_test_set = Mooncake.tangent_test_cases()
 
-        @testset for i in eachindex(additional_test_set)
+        @testset "__exclude_unsupported_output , $(test_set)" for test_set in
+                                                                  additional_test_set
             try
-                Mooncake.__exclude_unsupported_output(additional_test_set[i][2])
+                Mooncake.__exclude_unsupported_output(test_set[2])
             catch err
                 @test isa(err, Mooncake.ValueAndPullbackReturnTypeError)
             end
         end
 
-        # Test for new copy function
-        @testset for i in eachindex(additional_test_set)
-            original = additional_test_set[i][2]
+        @testset "_copy_temp , $(test_set)" for test_set in additional_test_set
+            original = test_set[2]
             try
                 if isnothing(Mooncake.__exclude_unsupported_output(original))
                     test_copy = Mooncake._copy_temp(original)
 
-                    function comparisons(
-                        original::P, test_copy::P
-                    ) where {P<:Mooncake._BuiltinArrays}
-                        @test original !== test_copy
-                        @test size(original) == size(test_copy)
-
-                        # Value caching for pure immutable Types!
-                        for i in eachindex(test_copy)
-                            if !isassigned(test_copy, i)
-                                @test !isassigned(original, i)
-                            else
-                                comparisons(original[i], test_copy[i])
-                            end
-                        end
-                    end
-
-                    function comparisons(original::P, test_copy::P) where {P}
-                        (isbitstype(P) && !isnothing(original) && isnan(original)) &&
-                            return @test isnan(test_copy)
-                        isbitstype(P) && return @test test_copy == original
-
-                        fields_copy = [
-                            if !isdefined(test_copy, name)
-                                nothing
-                            else
-                                getfield(test_copy, name)
-                            end for name in fieldnames(typeof(test_copy))
-                        ]
-                        fields_orig = [
-                            !isdefined(original, name) ? nothing : getfield(original, name)
-                            for name in fieldnames(typeof(original))
-                        ]
-
-                        return comparisons(fields_orig, fields_copy)
-                    end
-
+                    @test Mooncake.TestUtils.has_equal_data(original, test_copy)
                     @test typeof(test_copy) == typeof(original)
-                    # isbitstypes with same values are stored in the same address (Value Caching).
-                    if isbitstype(typeof(original))
-                        @test test_copy == original
-                    else
-                        comparisons(original, test_copy)
-                    end
                 end
             catch err
                 @test isa(err, Mooncake.ValueAndPullbackReturnTypeError)

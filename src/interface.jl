@@ -239,9 +239,7 @@ end
 const _BuiltinArrays = @static VERSION >= v"1.11" ? Union{Array,Memory} : Array
 
 # explicit for svec
-function _copy_temp(x::P) where {P<:SimpleVector}
-    return Core.svec([map(_copy_temp, x_sub) for x_sub in x]...)
-end
+_copy_temp(x::SimpleVector) = Core.svec([map(_copy_temp, x_sub) for x_sub in x]...)
 
 # Array, Memory
 function _copy_temp(x::P) where {P<:_BuiltinArrays}
@@ -253,9 +251,7 @@ function _copy_temp(x::P) where {P<:_BuiltinArrays}
 end
 
 # Tuple, NamedTuple
-function _copy_temp(x::P) where {P<:Union{Tuple,NamedTuple}}
-    return map(_copy_temp, x)
-end
+_copy_temp(x::Union{Tuple,NamedTuple}) = map(_copy_temp, x)
 
 # mutable composite types, bitstype
 function _copy_temp(x::P) where {P}
