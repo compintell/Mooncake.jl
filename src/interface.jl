@@ -16,7 +16,7 @@ function __value_and_pullback!!(
     out, pb!! = rule(fx_fwds...)
     @assert _typeof(tangent(out)) == fdata_type(T)
     increment!!(tangent(out), fdata(ȳ))
-    v = y_cache === nothing ? copy(primal(out)) : _copy!!(y_cache, primal(out))
+    v = y_cache === nothing ? _copy_output(primal(out)) : _copy!!(y_cache, primal(out))
     return v, tuple_map((f, r) -> tangent(fdata(tangent(f)), r), fx, pb!!(rdata(ȳ)))
 end
 
@@ -238,6 +238,59 @@ end
 
 const _BuiltinArrays = @static VERSION >= v"1.11" ? Union{Array,Memory} : Array
 
+# explicit for svec
+_copy_output(x::SimpleVector) = Core.svec([map(_copy_output, x_sub) for x_sub in x]...)
+
+# Array, Memory
+function _copy_output(x::P) where {P<:_BuiltinArrays}
+    temp = P(undef, size(x)...)
+    @inbounds for i in eachindex(temp)
+        isassigned(x, i) && (temp[i] = _copy_output(x[i]))
+    end
+    return temp
+end
+
+# Tuple, NamedTuple
+_copy_output(x::Union{Tuple,NamedTuple}) = map(_copy_output, x)
+
+# mutable composite types, bitstype
+function _copy_output(x::P) where {P}
+    isbitstype(P) && return x
+    nf = nfields(P)
+
+    if ismutable(x)
+        temp = ccall(:jl_new_struct_uninit, Any, (Any,), P)
+        for x_sub in 1:nf
+            if isdefined(x, x_sub)
+                ccall(
+                    :jl_set_nth_field,
+                    Cvoid,
+                    (Any, Csize_t, Any),
+                    temp,
+                    x_sub - 1,
+                    _copy_output(getfield(x, x_sub)),
+                )
+            end
+        end
+
+        return temp
+    else
+        flds = Vector{Any}(undef, nf)
+        for x_sub in 1:nf
+            if isdefined(x, x_sub)
+                flds[x_sub] = _copy_output(getfield(x, x_sub))
+            else
+                nf = x_sub - 1  # Assumes if a undefined field is found, all subsequent fields are undefined.
+                break
+            end
+        end
+
+        # when immutable struct object created by non initializing inner constructor. (Base.deepcopy misses this out)
+        !isassigned(flds, 1) && return x
+        return ccall(:jl_new_structv, Any, (Any, Ptr{Any}, UInt32), P, flds, nf)
+    end
+end
+
 function __exclude_unsupported_output_internal!(
     y::T, address_set::Set{UInt}
 ) where {T<:_BuiltinArrays}
@@ -291,7 +344,7 @@ function prepare_pullback_cache(fx...; kwargs...)
     __exclude_unsupported_output(y)
 
     # Construct cache for output. Check that `copy!`ing appears to work.
-    y_cache = copy(primal(y))
+    y_cache = _copy_output(primal(y))
     return Cache(rule, _copy!!(y_cache, primal(y)), tangents)
 end
 
