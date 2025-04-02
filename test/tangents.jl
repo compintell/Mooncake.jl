@@ -95,9 +95,8 @@
         TestUtils.test_tangent_type(primal_type, expected_tangent_type)
     end
 
-    @testset "$(typeof(data))" for (interface_only, data...) in
-                                   Mooncake.tangent_test_cases()
-        test_tangent(Xoshiro(123456), data...; interface_only)
+    @testset "$(typeof(p))" for (interface_only, p, t...) in Mooncake.tangent_test_cases()
+        test_tangent(Xoshiro(123456), p, t...; interface_only)
     end
 
     tangent(nt::NamedTuple) = Tangent(map(PossiblyUninitTangent, nt))

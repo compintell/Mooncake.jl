@@ -9,22 +9,22 @@ mutable struct TaskTangent end
 
 tangent_type(::Type{Task}) = TaskTangent
 
-function zero_tangent_internal(p::Task, stackdict::StackDict)
-    if haskey(stackdict, p)
-        return stackdict[p]::TaskTangent
+function zero_tangent_internal(p::Task, dict::MaybeCache)
+    if haskey(dict, p)
+        return dict[p]::TaskTangent
     else
         t = TaskTangent()
-        stackdict[p] = t
+        dict[p] = t
         return t
     end
 end
 
-function randn_tangent_internal(rng::AbstractRNG, p::Task, stackdict::Any)
-    if haskey(stackdict, p)
-        return stackdict[p]::TaskTangent
+function randn_tangent_internal(rng::AbstractRNG, p::Task, dict::MaybeCache)
+    if haskey(dict, p)
+        return dict[p]::TaskTangent
     else
         t = TaskTangent()
-        stackdict[p] = t
+        dict[p] = t
         return t
     end
 end
