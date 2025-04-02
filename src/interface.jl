@@ -16,7 +16,7 @@ function __value_and_pullback!!(
     out, pb!! = rule(fx_fwds...)
     @assert _typeof(tangent(out)) == fdata_type(T)
     increment!!(tangent(out), fdata(ȳ))
-    v = y_cache === nothing ? _copy_temp(primal(out)) : _copy!!(y_cache, primal(out))
+    v = y_cache === nothing ? _copy_output(primal(out)) : _copy!!(y_cache, primal(out))
     return v, tuple_map((f, r) -> tangent(fdata(tangent(f)), r), fx, pb!!(rdata(ȳ)))
 end
 
@@ -239,22 +239,22 @@ end
 const _BuiltinArrays = @static VERSION >= v"1.11" ? Union{Array,Memory} : Array
 
 # explicit for svec
-_copy_temp(x::SimpleVector) = Core.svec([map(_copy_temp, x_sub) for x_sub in x]...)
+_copy_output(x::SimpleVector) = Core.svec([map(_copy_output, x_sub) for x_sub in x]...)
 
 # Array, Memory
-function _copy_temp(x::P) where {P<:_BuiltinArrays}
+function _copy_output(x::P) where {P<:_BuiltinArrays}
     temp = P(undef, size(x)...)
     @inbounds for i in eachindex(temp)
-        isassigned(x, i) && (temp[i] = _copy_temp(x[i]))
+        isassigned(x, i) && (temp[i] = _copy_output(x[i]))
     end
     return temp
 end
 
 # Tuple, NamedTuple
-_copy_temp(x::Union{Tuple,NamedTuple}) = map(_copy_temp, x)
+_copy_output(x::Union{Tuple,NamedTuple}) = map(_copy_output, x)
 
 # mutable composite types, bitstype
-function _copy_temp(x::P) where {P}
+function _copy_output(x::P) where {P}
     isbitstype(P) && return x
     nf = nfields(P)
 
@@ -268,7 +268,7 @@ function _copy_temp(x::P) where {P}
                     (Any, Csize_t, Any),
                     temp,
                     x_sub - 1,
-                    _copy_temp(getfield(x, x_sub)),
+                    _copy_output(getfield(x, x_sub)),
                 )
             end
         end
@@ -278,7 +278,7 @@ function _copy_temp(x::P) where {P}
         flds = Vector{Any}(undef, nf)
         for x_sub in 1:nf
             if isdefined(x, x_sub)
-                flds[x_sub] = _copy_temp(getfield(x, x_sub))
+                flds[x_sub] = _copy_output(getfield(x, x_sub))
             else
                 nf = x_sub - 1  # Assumes if a undefined field is found, all subsequent fields are undefined.
                 break
@@ -344,7 +344,7 @@ function prepare_pullback_cache(fx...; kwargs...)
     __exclude_unsupported_output(y)
 
     # Construct cache for output. Check that `copy!`ing appears to work.
-    y_cache = _copy_temp(primal(y))
+    y_cache = _copy_output(primal(y))
     return Cache(rule, _copy!!(y_cache, primal(y)), tangents)
 end
 

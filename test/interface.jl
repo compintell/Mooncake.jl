@@ -177,11 +177,11 @@ end
             end
         end
 
-        @testset "_copy_temp , $(test_set)" for test_set in additional_test_set
+        @testset "_copy_output , $(test_set)" for test_set in additional_test_set
             original = test_set[2]
             try
                 if isnothing(Mooncake.__exclude_unsupported_output(original))
-                    test_copy = Mooncake._copy_temp(original)
+                    test_copy = Mooncake._copy_output(original)
 
                     @test Mooncake.TestUtils.has_equal_data(original, test_copy)
                     @test typeof(test_copy) == typeof(original)
