@@ -141,6 +141,9 @@ function Core.Compiler.abstract_call_gf_by_type(
         sv::CC.AbsIntState,
         max_methods::Int,
     )
+    if cm isa Core.Compiler.Future
+        cm = cm[]
+    end
 
     # Check to see whether the call in question is a Mooncake primitive. If it is, set its
     # call info such that in the `CC.inlining_policy` it is not inlined away.
@@ -178,7 +181,7 @@ end
         )
     end
 
-else # 1.11 and up.
+elseif VERSION < v"1.12-"
     function CC.inlining_policy(
         interp::MooncakeInterpreter,
         @nospecialize(src),
@@ -193,6 +196,7 @@ else # 1.11 and up.
             interp::CC.AbstractInterpreter, src::Any, info::CC.CallInfo, stmt_flag::UInt32
         )
     end
+else
 end
 
 """
@@ -200,7 +204,7 @@ end
 
 Globally cached interpreter. Should only be accessed via `get_interpreter`.
 """
-const GLOBAL_INTERPRETER = Ref(MooncakeInterpreter())
+const GLOBAL_INTERPRETER = Ref{MooncakeInterpreter{DefaultCtx}}()
 
 """
     get_interpreter()
@@ -211,7 +215,7 @@ interpreter if one already exists for the current world age, otherwise creates a
 This should be prefered over constructing a `MooncakeInterpreter` directly.
 """
 function get_interpreter()
-    if GLOBAL_INTERPRETER[].world != Base.get_world_counter()
+    if !isassigned(GLOBAL_INTERPRETER) || GLOBAL_INTERPRETER[].world != Base.get_world_counter()
         GLOBAL_INTERPRETER[] = MooncakeInterpreter()
     end
     return GLOBAL_INTERPRETER[]

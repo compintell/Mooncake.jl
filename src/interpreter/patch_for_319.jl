@@ -81,7 +81,7 @@ end
     end
 
     # Calls populate_def_use_map! -- see above.
-    function CC._ir_abstract_constant_propagation(
+    function CC.ir_abstract_constant_propagation(
         interp::BugPatchInterpreter,
         irsv::CC.IRInterpretationState;
         externally_refined::Union{Nothing,BitSet}=nothing,

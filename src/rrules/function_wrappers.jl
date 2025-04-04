@@ -53,19 +53,19 @@ function _function_wrapper_tangent(R, obj::Tobj, A, obj_tangent) where {Tobj}
     # run `rule` and push the pullback to `pb_stack`. The reverse-pass will pop and run it.
     pb_stack = Stack{pullback_type(typeof(rule), (Tobj, A.parameters...))}()
 
-    # Construct reverse-pass. Note: this closes over `pb_stack`.
-    run_rvs_pass = Base.Experimental.@opaque rvs_sig dy -> begin
-        obj_rdata, dx... = pop!(pb_stack)(dy)
-        obj_tangent_ref[] = increment_rdata!!(obj_tangent_ref[], obj_rdata)
-        return NoRData(), dx...
-    end
+    # # Construct reverse-pass. Note: this closes over `pb_stack`.
+    # run_rvs_pass = Base.Experimental.@opaque rvs_sig dy -> begin
+    #     obj_rdata, dx... = pop!(pb_stack)(dy)
+    #     obj_tangent_ref[] = increment_rdata!!(obj_tangent_ref[], obj_rdata)
+    #     return NoRData(), dx...
+    # end
 
-    # Construct fowards-pass. Note: this closes over the reverse-pass and `pb_stack`.
-    run_fwds_pass = Base.Experimental.@opaque fwd_sig (x...) -> begin
-        y, pb = rule(CoDual(obj, fdata(obj_tangent_ref[])), x...)
-        push!(pb_stack, pb)
-        return y, run_rvs_pass
-    end
+    # # Construct fowards-pass. Note: this closes over the reverse-pass and `pb_stack`.
+    # run_fwds_pass = Base.Experimental.@opaque fwd_sig (x...) -> begin
+    #     y, pb = rule(CoDual(obj, fdata(obj_tangent_ref[])), x...)
+    #     push!(pb_stack, pb)
+    #     return y, run_rvs_pass
+    # end
 
     t = FunctionWrapperTangent(run_fwds_pass, obj_tangent_ref)
     return t, obj_tangent_ref
