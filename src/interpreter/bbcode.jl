@@ -335,7 +335,7 @@ Base.copy(ir::BBCode) = BBCode(ir, copy(ir.blocks))
 """
     compute_all_successors(ir::BBCode)::Dict{ID, Vector{ID}}
 
-Compute a map from the `ID of each `BBlock` in `ir` to its possible successors.
+Compute a map from the `ID` of each `BBlock` in `ir` to its possible successors.
 """
 compute_all_successors(ir::BBCode)::Dict{ID,Vector{ID}} = _compute_all_successors(ir.blocks)
 
@@ -370,7 +370,7 @@ end
 """
     compute_all_predecessors(ir::BBCode)::Dict{ID, Vector{ID}}
 
-Compute a map from the `ID of each `BBlock` in `ir` to its possible predecessors.
+Compute a map from the `ID` of each `BBlock` in `ir` to its possible predecessors.
 """
 function compute_all_predecessors(ir::BBCode)::Dict{ID,Vector{ID}}
     return _compute_all_predecessors(ir.blocks)
@@ -379,7 +379,7 @@ end
 """
     _compute_all_predecessors(blks::Vector{BBlock})::Dict{ID, Vector{ID}}
 
-Internal method implementing [`compute_all_predecessors`](@ref). This method is easier to
+Internal method implementing [`BasicBlockCode.compute_all_predecessors`](@ref). This method is easier to
 construct test cases for because it only requires the collection of `BBlocks`, not all of
 the other stuff that goes into a `BBCode`.
 """
