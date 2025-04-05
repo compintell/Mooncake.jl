@@ -88,8 +88,9 @@ CFG with 3 blocks:
   bb 2 (stmt 4)
   bb 3 (stmts 5:6)
 ```
-For example, the above states that "bb" (basic block) 1 comprises statement 1 to 3 of the IR, and has successor blocks 2 and 3.
+For example, the above states that "bb" (basic block) 1 comprises statement 1 to 3 of the IR, and has successor blocks 2 and 3 (ie. once the instructions in basic block 1 have executed, we know for certain that either those in block 2 or block 3 will run next).
 Blocks 2 and 3 have no successors, because they both end in a `return` statement.
+The predecessors of each basic block (the blocks which could possibly have run immediately prior to a given block) are also stored in the blocks of the `CFG`, even thought this is not printed -- you should have a play around with this data structure to see what is in there.
 
 Additionally, note that `Base.lt_float` (used to check if one floating point number is less than another) and `Base.or_int` do not appear as `invoke` statements -- this is because they are not generic Julia functions.
 Rather, they are Julia intrinsics:
@@ -146,7 +147,7 @@ Julia's SSA-form IR comprises a sequence of statements, which can be broken down
 Each basic block begins with a (potentially empty) collection of phi nodes, followed by a seqeuence of statements, and potentially finished by a _terminator_ (goto, goto-if-not, return).
 Control flow is dictated by the terminators at the end of basic blocks -- if there is no terminator then we "fall through" to the next statement.
 
-## Julia Compiler IR Representation
+## Julia Compiler's IR Representation
 
 The Julia compiler represents the IR associated to a signature via an object called `Core.Compiler.IRCode`.
 The statements are given by the `stmts` field, which is a `Core.Compiler.InstructionStream`.
@@ -186,6 +187,85 @@ julia> Base.code_ircode_by_type(Tuple{typeof(my_factorial), Int})[1][1].stmts.ty
 As seen in [Control Flow](@ref), the control flow graph (CFG) is represented as a separate data structure, stored in the `cfg` field of the `IRCode`.
 The argument types associated to the signature are stored in the `argtypes` field of the `IRCode`.
 
+## Mooncake's IR for Reverse-Mode
+
+For the transformations required for forwards-mode AD, the above representation is sufficient.
+However, for reverse-mode, a variety of operations are quite awkward.
+Mooncake instead makes use of a custom representation of Julia's IR, called `BBCode`.
+We emphasise that `BBCode` represents the _same_ thing under the hood, it is just represented in memory in a slightly different way, such that certain kinds of transformations are straightforward to implement.
+We first state what BBCode is, then see what kinds of code transformation are trivial to undertake with `BBCode`, but which are tricky to do correctly using `IRCode`.
+
+You can construct a `BBCode` from an `IRCode`, and vice versa:
+```jldoctest my_factorial
+julia> using Mooncake: BBCode
+
+julia> ir = Base.code_ircode_by_type(Tuple{typeof(my_factorial), Int})[1][1];
+
+julia> bb_ir = BBCode(ir);
+
+julia> bb_ir isa BBCode
+true
+
+julia> Core.Compiler.IRCode(bb_ir)
+  1 ─      nothing::Nothing
+4 2 ┄ %2 = φ (#1 => 1, #3 => %7)::Int64
+  │   %3 = φ (#1 => 0, #3 => %6)::Int64
+  │   %4 = Base.slt_int(%3, _2)::Bool
+  └──      goto #4 if not %4
+5 3 ─ %6 = Base.add_int(%3, 1)::Int64
+6 │   %7 = Base.mul_int(%2, %6)::Int64
+7 └──      goto #2
+8 4 ─      return %2
+```
+At present, `BBCode` does not display itself nicely, so to look at it we must inspect its fields.
+
+Instead of storing all of the statements in a single vector (and the types in their own vector, etc), `BBCode` groups Julia's SSA-form IR into one vector per basic block, and stores these in a `Vector{Mooncake.BBlock}`.
+```jldoctest my_factorial
+julia> typeof(bb_ir.blocks)
+Vector{BBlock} (alias for Array{Mooncake.BasicBlockCode.BBlock, 1})
+```
+Each `BBlock` has a field `insts`, containing the instructions associated to that basic block.
+This is stored as a `Vector{Core.Compiler.NewInstruction}`, because `Core.Compiler.NewInstruction` contains the 5 fields that define an instruction in `IRCode` (you should compare the fields of a `Core.Compiler.NewInstruction` with those of `Core.Compiler.InstructionStream` to see the correspondence).
+For example, consider
+```jldoctest my_factorial
+julia> using Mooncake.BasicBlockCode: ID # to improve printing
+
+julia> bb_ir.blocks[3].insts[1]
+Core.Compiler.NewInstruction(:(Base.add_int(ID(97), 1)), Int64, Core.Compiler.NoCallInfo(), 9, 0x000012e0)
+```
+This is the first instruction of the third basic block.
+The first field is a call to `Base.add_int`, the second field is `Int64` (we promise that the other fields are just copies of the corresponding data from the `Core.Compiler.InstructionStream` in the original `IRCode` representation of this IR).
+
+The other structural difference is that `BBCode` has no field containing the control-flow graph.
+Instead, the control-flow graph is represented implicitly as part of the `blocks` field.
+The upside of this is that any transformations of `blocks` which modify the CFG are automatically reflected in the `blocks` -- there is no need to perform any book-keeping to ensure that the CFG is kept in sync with the instructions.
+This saves both time / memory at run-time -- when basic block structure changes a scan of the entire `IRCode` is required to modify any statements which refer to a given block, and yields code simplifications.
+The downside is that the CFG must be computed whenever it is needed.
+Neither `IRCode` nor `BBCode`'s representation of the CFG is strictly better than the other.
+To extract CFG-related information from a `BBCode`, see [`Mooncake.BasicBlockCode.compute_all_successors`](@ref), [`Mooncake.BasicBlockCode.compute_all_predecessors`](@ref), and [`Mooncake.BasicBlockCode.control_flow_graph`](@ref).
 
 
+The final major difference between `IRCode` and `BBCode` is that all ssa values in an `IRCode` (`%1`, `%2`, `%n`, etc) are replaced with unique `ID`s. The `ID` associated to a statement is stored separately from the statement in the `inst_ids` field of a `BBlock`:
+```jldoctest my_factorial
+julia> bb_ir.blocks[3].inst_ids
+3-element Vector{ID}:
+ ID(100)
+ ID(101)
+ ID(102)
+```
+There is exactly one `ID` per instruction.
+Similarly, while the number associated to a basic block in `IRCode` is a function of the number of basic blocks which preceed it, the `ID` of a basic block in `BBCode` is stored in its `id` field:
+```jldoctest my_factorial
+julia> bb_ir.blocks[3].id
+ID(106)
+```
+As a result of this, all references to ssa values and basic block numbers in `IRCode` are replaced with `ID`s in `BBCode`.
+The purpose of this is to guarantee that the "name" of a basic block and an instruction does not change when you insert new basic blocks and new instructions.
+We shall see how this is useful in the example transformations to follow.
 
+
+## Docstrings
+
+```@autodocs; canonical=true
+Modules = [Mooncake.BasicBlockCode]
+```
