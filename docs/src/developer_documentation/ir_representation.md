@@ -116,7 +116,7 @@ julia> function my_factorial(x::Int)
        end
 my_factorial (generic function with 1 method)
 
-julia> Base.code_ircode_by_type(Tuple{typeof(my_factorial), Int})[1][1]
+julia> ir = Base.code_ircode_by_type(Tuple{typeof(my_factorial), Int})[1][1]
   1 ─      nothing::Nothing
 4 2 ┄ %2 = φ (#1 => 1, #3 => %7)::Int64
   │   %3 = φ (#1 => 0, #3 => %6)::Int64
@@ -171,7 +171,7 @@ julia> Base.code_ircode_by_type(Tuple{typeof(my_factorial), Int})[1][1].stmts.st
 ```
 The types can be accessed in a similar way:
 ```jldoctest my_factorial
-julia> Base.code_ircode_by_type(Tuple{typeof(my_factorial), Int})[1][1].stmts.type
+julia> ir.stmts.type
 9-element Vector{Any}:
  Nothing
  Int64
@@ -187,19 +187,18 @@ julia> Base.code_ircode_by_type(Tuple{typeof(my_factorial), Int})[1][1].stmts.ty
 As seen in [Control Flow](@ref), the control flow graph (CFG) is represented as a separate data structure, stored in the `cfg` field of the `IRCode`.
 The argument types associated to the signature are stored in the `argtypes` field of the `IRCode`.
 
-## Mooncake's IR for Reverse-Mode
+## An Alternative IR Representation
 
-For the transformations required for forwards-mode AD, the above representation is sufficient.
+`IRCode` is a perfectly good way to represent Julia's IR the vast majority of the time.
+For example, it suffices for the code transformations required for forwards-mode AD.
 However, for reverse-mode, a variety of operations are quite awkward.
-Mooncake instead makes use of a custom representation of Julia's IR, called `BBCode`.
+Mooncake's implementation of reverse-mode AD instead makes use of a custom representation of Julia's IR, called `BBCode`.
 We emphasise that `BBCode` represents the _same_ thing under the hood, it is just represented in memory in a slightly different way, such that certain kinds of transformations are straightforward to implement.
 We first state what BBCode is, then see what kinds of code transformation are trivial to undertake with `BBCode`, but which are tricky to do correctly using `IRCode`.
 
 You can construct a `BBCode` from an `IRCode`, and vice versa:
 ```jldoctest my_factorial
 julia> using Mooncake: BBCode
-
-julia> ir = Base.code_ircode_by_type(Tuple{typeof(my_factorial), Int})[1][1];
 
 julia> bb_ir = BBCode(ir);
 
@@ -263,6 +262,287 @@ As a result of this, all references to ssa values and basic block numbers in `IR
 The purpose of this is to guarantee that the "name" of a basic block and an instruction does not change when you insert new basic blocks and new instructions.
 We shall see how this is useful in the example transformations to follow.
 
+## Code Transformations
+
+In what follows, we look at a few transformations of Julia's IR, and see how these can be undertaken using both `IRCode` and `BBCode`.
+The purpose is two-fold:
+1. to enable readers to understand the code used to implement Mooncake, and
+2. to highlight the relative merits of `IRCode` vs `BBCode`.
+
+### Replacing Instructions
+
+This is just about the simplest code transformation that you could hope to undertake.
+It is used in both forwards-mode and reverse-mode in Mooncake to replace calls of the form
+```julia
+f(x, y, z)
+```
+with calls of the form
+```julia
+frule!!(f, x, y, z)
+```
+This kind of transformation is performed in basically the same way in both `IRCode` and `BBCode`.
+For example,
+```jldoctest my_factorial
+julia> using Core: SSAValue
+
+julia> const CC = Core.Compiler;
+
+julia> new_ir = Core.Compiler.copy(ir);
+
+julia> old_stmt = new_ir.stmts.stmt[7];
+
+julia> new_stmt = Expr(:call, Base.add_int, old_stmt.args[2:end]...);
+
+julia> # new_ir[SSAValue(7)][:stmt] = new_stmt
+       CC.setindex!(CC.getindex(new_ir, SSAValue(7)), new_stmt, :stmt);
+
+julia> new_ir
+  1 ─      nothing::Nothing
+4 2 ┄ %2 = φ (#1 => 1, #3 => %7)::Int64
+  │   %3 = φ (#1 => 0, #3 => %6)::Int64
+  │   %4 = Base.slt_int(%3, _2)::Bool
+  └──      goto #4 if not %4
+5 3 ─ %6 = Base.add_int(%3, 1)::Int64
+6 │   %7 = (Core.Intrinsics.add_int)(%2, %6)::Int64
+7 └──      goto #2
+8 4 ─      return %2
+```
+Observe that ssa `7` has been replaced with the new `:call` to `add_int`.
+Unfortunately, in order to avoid commiting type-piracy against `Core.Compiler`, we cannot currently write `new_ir[SSAValue(7)][:stmt]`.
+In general, I would recommend defining helper functions to improve the DRYness of your code.
+
+The same transformation can be performed on `BBCode`:
+```jldoctest my_factorial
+julia> bb_ir_copy = copy(bb_ir);
+
+julia> old_inst = bb_ir_copy.blocks[3].insts[2];
+
+julia> new_stmt = Expr(:call, Base.add_int, old_inst.stmt.args[2:end]...);
+
+julia> bb_ir_copy.blocks[3].insts[2] = CC.NewInstruction(old_inst; stmt=new_stmt);
+
+julia> CC.IRCode(bb_ir_copy)
+  1 ─      nothing::Nothing
+4 2 ┄ %2 = φ (#1 => 1, #3 => %7)::Int64
+  │   %3 = φ (#1 => 0, #3 => %6)::Int64
+  │   %4 = Base.slt_int(%3, _2)::Bool
+  └──      goto #4 if not %4
+5 3 ─ %6 = Base.add_int(%3, 1)::Int64
+6 │   %7 = (Core.Intrinsics.add_int)(%2, %6)::Int64
+7 └──      goto #2
+8 4 ─      return %2
+```
+As you can see, in both instances, we wind up with the same `IRCode` at the end.
+
+### Inserting New Instructions
+
+Inserting entirely new instructions into the IR requires a little more thought, but is ultimately very straightforward using either `IRCode` or `BBCode`.
+
+First, `IRCode`. Suppose that we wish to insert another instruction immediately before the first `add_int` instruction which multiplies `%3` by 2 before adding `1` to it in `#3`.
+In `IRCode`, this kind of modification requires some care, because naively inserting an instruction between the 5th and 6th line changes the name of all instructions from the 6th onwards.
+Consequently, we need to replace all uses of e.g. `%6` with uses of `%7`, etc.
+Happily, `IRCode` has a mechanism to achieve just this.
+```jldoctest my_factorial
+julia> ni = CC.NewInstruction(Expr(:call, Base.mul_int, SSAValue(3), 2), Int);
+
+julia> new_ssa = CC.insert_node!(new_ir, SSAValue(6), ni)
+:(%10)
+
+julia> new_ir
+  1 ─      nothing::Nothing
+4 2 ┄ %2 = φ (#1 => 1, #3 => %7)::Int64
+  │   %3 = φ (#1 => 0, #3 => %6)::Int64
+  │   %4 = Base.slt_int(%3, _2)::Bool
+  └──      goto #4 if not %4
+5 3 ─      (Core.Intrinsics.mul_int)(%3, 2)::Int64
+  │   %6 = Base.add_int(%3, 1)::Int64
+6 │   %7 = (Core.Intrinsics.add_int)(%2, %6)::Int64
+7 └──      goto #2
+8 4 ─      return %2
+```
+`CC.insert_node!(ir, ssa, new_inst)` inserts `new_inst` into `ir` immediately before `ssa`, and attaches it to the same basic block as `ssa` resides.
+Here, we see it has inserted the instruction to multiply `%3` by `2` immediately before `%6`.
+However, observe that the `IRCode` has not changed the name associated to the subsequently `add_int` instruction -- it still assigns to `%6`.
+This is achieved via `IRCode`'s `new_nodes` field -- upon calling `CC.insert_node!`, this list is appended to.
+
+To conclude this transformation, we replace the first argument of the `add_int` instruction with the new ssa output by `insert_node!`, and then call `CC.compact!` to process all of the nodes currently in the `new_nodes` list, and produce a valid `IRCode`:
+```jldoctest my_factorial
+julia> stmt = CC.getindex(CC.getindex(new_ir, SSAValue(6)), :stmt)
+:(Base.add_int(%3, 1))
+
+julia> stmt.args[2] = new_ssa;
+
+julia> new_ir
+  1 ─       nothing::Nothing
+4 2 ┄ %2  = φ (#1 => 1, #3 => %7)::Int64
+  │   %3  = φ (#1 => 0, #3 => %6)::Int64
+  │   %4  = Base.slt_int(%3, _2)::Bool
+  └──       goto #4 if not %4
+5 3 ─ %10 = (Core.Intrinsics.mul_int)(%3, 2)::Int64
+  │   %6  = Base.add_int(%10, 1)::Int64
+6 │   %7  = (Core.Intrinsics.add_int)(%2, %6)::Int64
+7 └──       goto #2
+8 4 ─       return %2
+
+julia> new_ir = CC.compact!(new_ir)
+  1 ─      nothing::Nothing
+4 2 ┄ %2 = φ (#1 => 1, #3 => %8)::Int64
+  │   %3 = φ (#1 => 0, #3 => %7)::Int64
+  │   %4 = Base.slt_int(%3, _2)::Bool
+  └──      goto #4 if not %4
+5 3 ─ %6 = (Core.Intrinsics.mul_int)(%3, 2)::Int64
+  │   %7 = Base.add_int(%6, 1)::Int64
+6 │   %8 = (Core.Intrinsics.add_int)(%2, %7)::Int64
+7 └──      goto #2
+8 4 ─      return %2
+```
+Observe that, before `compact!`-ing, the first instruction in basic block `%3` is still labelled as being `%10`.
+After `compact!`-ing, we have standard sequentially-ordered IR again.
+
+Performing this transformation using `BBCode` is similarly straightforward.
+Since the name associated to instructions does not change when you insert another instruction, you really just need to insert an instruction + its `ID`, update the next instruction (as before), and you're done:
+```jldoctest my_factorial
+julia> using Mooncake.BasicBlockCode: ID, new_inst
+
+julia> new_id = ID() # this produces a new unique `ID`.
+ID(108)
+
+julia> target_id = bb_ir_copy.blocks[3].insts[1].stmt.args[2] # find `ID` of argument to add_int.
+ID(97)
+
+julia> ni = new_inst(Expr(:call, Base.mul_int, target_id, 2), Int);
+
+julia> insert!(bb_ir_copy.blocks[3], 1, new_id, ni)
+
+julia> bb_ir_copy.blocks[3].insts[2].stmt.args[2] = new_id
+ID(108)
+
+julia> CC.IRCode(bb_ir_copy)
+  1 ─      nothing::Nothing
+4 2 ┄ %2 = φ (#1 => 1, #3 => %8)::Int64
+  │   %3 = φ (#1 => 0, #3 => %7)::Int64
+  │   %4 = Base.slt_int(%3, _2)::Bool
+  └──      goto #4 if not %4
+2 3 ─ %6 = (Core.Intrinsics.mul_int)(%3, 2)::Int64
+5 │   %7 = Base.add_int(%6, 1)::Int64
+6 │   %8 = (Core.Intrinsics.add_int)(%2, %7)::Int64
+7 └──      goto #2
+8 4 ─      return %2
+```
+We see here that `IRCode` and `BBCode` involve similar levels of complexity to insert an instruction.
+
+### Inserting New Basic Blocks
+
+This is the situation in which the design of `BBCode` shines vs `IRCode`.
+`IRCode` does not, at present, really have much to say about transformations which change control flow.
+
+It is, however, straightforward using `BBCode`.
+Suppose that we wish to modify the above to display the value of `%2` if it is even.
+Since this involves control flow, it necessarily requires at least one additional basic block.
+
+We do this in two steps.
+We first insert an additional basic block between blocks `#3` and `#4` which always prints out the value of `%2`, and then goes to block `#2`:
+```jldoctest my_factorial
+julia> using Mooncake.BasicBlockCode: BBlock, new_inst, IDGotoNode, IDGotoIfNot
+
+julia> block_2_id = bb_ir_copy.blocks[2].id;
+
+julia> new_bb_id = ID();
+
+julia> new_bb = BBlock(
+           new_bb_id,
+           ID[ID(), ID()],
+           CC.NewInstruction[
+               new_inst(Expr(:call, println, CC.SSAValue(2))),
+               new_inst(IDGotoNode(block_2_id)),
+           ],
+       );
+
+julia> insert!(bb_ir_copy.blocks, 4, new_bb);
+
+julia> CC.IRCode(bb_ir_copy)
+  1 ─      nothing::Nothing
+4 2 ┄ %2 = φ (#1 => 1, #3 => %8)::Int64
+  │   %3 = φ (#1 => 0, #3 => %7)::Int64
+  │   %4 = Base.slt_int(%3, _2)::Bool
+  └──      goto #5 if not %4
+2 3 ─ %6 = (Core.Intrinsics.mul_int)(%3, 2)::Int64
+5 │   %7 = Base.add_int(%6, 1)::Int64
+6 │   %8 = (Core.Intrinsics.add_int)(%2, %7)::Int64
+7 └──      goto #2
+2 4 ─      (println)(%2)::Any
+  └──      goto #2
+8 5 ─      return %2
+```
+Observe that, in this case, rather than creating a new basic block and inserting instructions into it, we simply create the block _with_ the instructions.
+This programming style is often convenient.
+Additionally note that we create an `ID` for each statement in the new basic block.
+These `ID`s are never actually used anywhere, but `BBCode` requires that each instruction be associated to an `ID`, so we must create them.
+
+Additionally, note the usage of an `IDGotoNode`.
+This is exactly the same thing as a `Core.Compiler.GotoNode`, except it contains an `ID` stating which basic block to jump to, rather than an `Int`.
+Similarly, the `IDGotoIfNot` is a direct translation of `Core.Compiler.GotoIfNot`, with the `dest` field being an `ID` rather than an `Int`.
+
+Furthermore, note that the `goto if not` instruction at the end of basic block `#2` now (correctly) jumps to basic block `#5`, whereas before it jumped to block `#4`.
+That is, by virtue of the fact that the `ID` associated to each basic block remains unchanged in `BBCode`, all pre-existing control flow relationships have remained the same.
+Moreover, we did not have to write any book-keeping code to ensure that this update happened correctly.
+
+Now that we've created the new basic block, we modify block `#3` to fall-through to the new block if `%2` is even, and to jump straight back to block `#2` if not:
+```jldoctest my_factorial
+julia> bb = bb_ir_copy.blocks[3];
+
+julia> cond_id = ID();
+
+julia> target_id = bb_ir_copy.blocks[2].inst_ids[1];
+
+julia> insert!(bb, 4, cond_id, new_inst(Expr(:call, iseven, target_id)));
+
+julia> bb.insts[end] = new_inst(IDGotoIfNot(cond_id, block_2_id));
+
+julia> new_ir = CC.IRCode(bb_ir_copy)
+  1 ─      nothing::Nothing
+4 2 ┄ %2 = φ (#1 => 1, #3 => %8)::Int64
+  │   %3 = φ (#1 => 0, #3 => %7)::Int64
+  │   %4 = Base.slt_int(%3, _2)::Bool
+  └──      goto #5 if not %4
+2 3 ─ %6 = (Core.Intrinsics.mul_int)(%3, 2)::Int64
+5 │   %7 = Base.add_int(%6, 1)::Int64
+6 │   %8 = (Core.Intrinsics.add_int)(%2, %7)::Int64
+2 │   %9 = (iseven)(%2)::Any
+  └──      goto #2 if not %9
+  4 ─      (println)(%2)::Any
+  └──      goto #2
+8 5 ─      return %2
+```
+Observe that in order to tie the conditional to the goto-if-not, we simply ensure that the `ID` associated to the instruction which computes the conditional appears in the `IDGotoIfNot` instruction.
+
+### Run the new code
+
+As ever, we can simply shove this code in a `Core.OpaqueClosure` in order to produce something which can actually run:
+```jldoctest my_factorial
+julia> oc = Core.OpaqueClosure(new_ir; do_compile=true)
+(::Int64)::Int64->◌
+
+julia> oc(1000)
+2
+12
+58
+248
+1014
+2037
+```
+Exactly what `oc` is computing is neither here nor there.
+The point is that we've successfully inserted a new basic block into Julia's IR, and produced a callable from it.
+
+## Summary
+
+We have reviewed the two representations of Julia IR used in Mooncake.
+Where possible, we always use `IRCode` -- as discussed, forwards-mode AD exclusively uses `IRCode`.
+`BBCode` is basically only needed when undertaking transformations which involve changes to basic block structure -- the insertion of new basic blocks, and the modification of terminators in a way which changes the predecessors / successors of a given block being the primary sources of these kinds of changes.
+Reverse-mode AD makes extensive use of such transformations, so `BBCode` is currently quite important there.
+
+There are various efforts to augment `IRCode` with the capability to handle changes to basic block structure in a convenient way.
+Ideally, these efforts would be a succeed, and at some time in the future we would completely do away with `BBCode`.
 
 ## Docstrings
 
