@@ -379,7 +379,7 @@ end
 """
     _compute_all_predecessors(blks::Vector{BBlock})::Dict{ID, Vector{ID}}
 
-Internal method implementing [`BasicBlockCode.compute_all_predecessors`](@ref). This method is easier to
+Internal method implementing [`compute_all_predecessors`](@ref). This method is easier to
 construct test cases for because it only requires the collection of `BBlocks`, not all of
 the other stuff that goes into a `BBCode`.
 """
