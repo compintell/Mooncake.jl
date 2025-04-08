@@ -39,14 +39,14 @@ This means that the type information is available for each statement.
 For example, the `::Float64` at the end of the first and second statements indicates that the type of `%1` and `%2` is always `Float64`.
 The types are also displayed at uses -- the call to `sin` involves `_2::Float64`, not just `_2`.
 
-Additionally notice that the statements are `invoke` statements, rather than just call statments.
+Additionally notice that the statements are `invoke` statements, rather than just call statements.
 In Julia's IR, an `invoke` statement represents static dispatch to a particular `MethodInstance` -- i.e. running type inference + optimisation passes has determined enough about the argument types to make it possible to know exactly which `MethodInstance` of `sin` and `cos` to call.
-This is a very common occurence in type-stable code.
+This is a very common occurrence in type-stable code.
 
 ### Control Flow
 
 The above is straight-line code -- it does not involve any control flow.
-Julia has several statments which are involved in handling control flow.
+Julia has several statements which are involved in handling control flow.
 For example
 ```jldoctest bar
 julia> function bar(x)
@@ -146,7 +146,7 @@ You should convince yourself that `%2` corresponds to the value of `s` at each i
 ### Summary
 
 Julia's SSA-form IR comprises a sequence of statements, which can be broken down into a collection of basic blocks.
-Each basic block begins with a (potentially empty) collection of phi nodes, followed by a seqeuence of statements, and potentially finished by a _terminator_ (goto, goto-if-not, return).
+Each basic block begins with a (potentially empty) collection of phi nodes, followed by a sequence of statements, and potentially finished by a _terminator_ (goto, goto-if-not, return).
 Control flow is dictated by the terminators at the end of basic blocks -- if there is no terminator then we "fall through" to the next basic block.
 
 ## Julia Compiler's IR Datastructure
@@ -311,7 +311,7 @@ julia> new_ir
 8 4 ─      return %2
 ```
 Observe that ssa `7` has been replaced with the new `:call` to `add_int`.
-Unfortunately, in order to avoid commiting type-piracy against `Core.Compiler`, we cannot currently write `new_ir[SSAValue(7)][:stmt]`.
+Unfortunately, in order to avoid committing type-piracy against `Core.Compiler`, we cannot currently write `new_ir[SSAValue(7)][:stmt]`.
 In general, I would recommend defining helper functions to improve the DRYness of your code.
 
 The same transformation can be performed on `BBCode`:
