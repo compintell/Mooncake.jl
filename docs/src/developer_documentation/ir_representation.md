@@ -1,7 +1,8 @@
 # IR Representation
 
-Mooncake.jl operates by transforming Julia's SSA-form (static single assignment) Intermediate Representation (IR), albeit we use a different data structure to represent this IR than is usually found in the compiler.
-A good understanding of Julia's IR is therefore needed to understand Mooncake, so we go through the essentials here, prior to discussing how Mooncake represents this IR (and constrasting this with how the compiler represents this IR).
+Mooncake.jl works by transforming Julia's SSA-form (static single assignment) Intermediate Representation (IR), so a good understanding of Julia's IR is needed to understand Mooncake.
+Furthermore, Mooncake holds Julia's IR in a different data structure than the one usually used when producing code for reverse-mode AD.
+We discuss both data structures below, and provide examples of the kinds of transformations which must be applied to Julia's IR in order to implement AD, contrasting the two different data structures.
 
 Please note that Julia's SSA-form IR typically changes representation slightly between minor versions of Julia, as it's not part of the public interface of the language.
 The information below is accurate on version 1.11.4, but you might well find that things are slightly different on different versions.
@@ -29,18 +30,18 @@ julia> Base.code_ircode_by_type(signature)[1][1]
 ```
 
 What you can see here is that the calls to `sin` and `cos` in the original function are associated to a number, denoted `%1` and `%2`. We refers to these as the "ssa"s associated to each statement.
-Each statement is associated to a single ssa, and this association is simply determined by where it appears in the list of statements.
+Each statement is associated to a single ssa, and this association is determined by where it appears in the list of statements -- the first statement is associated to `%1`, the second to `%2`, and so on.
 You will also notice that the argument `x` has been replaced with a `_2` in the first statement -- in general, all uses of the `n`th argument are indicated by `_n` (the first argument is the function itself).
 The final statement requires no explanation.
 
 Note that this IR is obtained after both type inference and various Julia-level optimisation passes.
 This means that the type information is available for each statement.
-For example, the `::Float64` at the end of the first and second statements indicates that the type of `%1` and `%2` is going to be `Float64`.
+For example, the `::Float64` at the end of the first and second statements indicates that the type of `%1` and `%2` is always `Float64`.
 The types are also displayed at uses -- the call to `sin` involves `_2::Float64`, not just `_2`.
 
 Additionally notice that the statements are `invoke` statements, rather than just call statments.
 In Julia's IR, an `invoke` statement represents static dispatch to a particular `MethodInstance` -- i.e. running type inference + optimisation passes has determined enough about the argument types to make it possible to know exactly which `MethodInstance` of `sin` and `cos` to call.
-This is very common occurence in type-stable code.
+This is a very common occurence in type-stable code.
 
 ### Control Flow
 
@@ -66,7 +67,7 @@ julia> Base.code_ircode_by_type(Tuple{typeof(bar),Float64})[1][1]
   └──      return %5
 ```
 In this example we see the statement `goto #3 if not %2`.
-This should be read as "jump to basic block 3 if %2 is equal to `false`".
+This should be read as "jump to basic block 3 if %2 is `false`".
 The second half of that statement should be clear, but to understand the first half requires knowing what a basic block is:
 ```julia
   1 ─
@@ -77,7 +78,8 @@ The second half of that statement should be clear, but to understand the first h
   └──
 ```
 Here, everything is removed from the above example except for information about the basic block structure.
-To first approximation, each basic block is a sequence of statements which _must_ always execute one after the other, before doing something else.
+To first approximation, each basic block is a sequence of statements which _must_ always execute one after the other.
+Once all statements in a basic block have run, we typically either jump to another basic block, or hit a `return` statement.
 In this example, we have three basic blocks -- you can see this from the numbers `1`, `2`, and `3`.
 The first basic block comprises three statements, the second only one statement, and the third two statements.
 Another way to investigate this structure is to look at the control-flow graph associated to the IR:
@@ -88,7 +90,7 @@ CFG with 3 blocks:
   bb 2 (stmt 4)
   bb 3 (stmts 5:6)
 ```
-For example, the above states that "bb" (basic block) 1 comprises statement 1 to 3 of the IR, and has successor blocks 2 and 3 (ie. once the instructions in basic block 1 have executed, we know for certain that either those in block 2 or block 3 will run next).
+For example, the above states that "bb" (basic block) 1 comprises statements 1 to 3, and has successor blocks 2 and 3 (ie. once the statements in basic block 1 have executed, we know for certain that either those in block 2 or block 3 will run next).
 Blocks 2 and 3 have no successors, because they both end in a `return` statement.
 The predecessors of each basic block (the blocks which could possibly have run immediately prior to a given block) are also stored in the blocks of the `CFG`, even thought this is not printed -- you should have a play around with this data structure to see what is in there.
 
@@ -130,14 +132,14 @@ julia> ir = Base.code_ircode_by_type(Tuple{typeof(my_factorial), Int})[1][1]
 There are a few new intrinsics that we have not seen previously (`Base.slt_int` (used to check whether one int is strictly less than another), `Base.add_int`, and `Base.mul_int`).
 Additionally, there is the node `goto #2`, which simply states that control flow should jump to basic block 2 whenever it is hit.
 
-The most interesting additional nodes, however, are the two `φ` nodes.
+The most interesting additional nodes, however, are the two `φ` (phi) nodes.
 These are a defining feature of SSA-form IR. Consider the first `φ` node:
 ```julia
 %2 = φ (#1 => 1, #3 => %7)
 ```
 means ssa `%2` takes value `1` if the previous basic block was `#1`, and whatever value is currently associated to ssa `%7` if the previous basic block was `#3`.
 It is helpful to step through this code in your head: upon calling `my_factorial` we enter basic block `#1`, and proceed directly to basic block `#2`.
-Therefore, on the first iteration, `%2` takes value `1`. We never return to basic block `#1`, so all subsequent iterations must take value `%7`.
+Therefore, on the first iteration, `%2` takes value `1`. We never return to basic block `#1`, so all subsequent visits to this `φ` node will result in `%2` taking the value associated to `%7`.
 You should convince yourself that `%2` corresponds to the value of `s` at each iteration, and `%3` corresponds to the value of `n` at each iteration.
 
 
@@ -145,11 +147,11 @@ You should convince yourself that `%2` corresponds to the value of `s` at each i
 
 Julia's SSA-form IR comprises a sequence of statements, which can be broken down into a collection of basic blocks.
 Each basic block begins with a (potentially empty) collection of phi nodes, followed by a seqeuence of statements, and potentially finished by a _terminator_ (goto, goto-if-not, return).
-Control flow is dictated by the terminators at the end of basic blocks -- if there is no terminator then we "fall through" to the next statement.
+Control flow is dictated by the terminators at the end of basic blocks -- if there is no terminator then we "fall through" to the next basic block.
 
-## Julia Compiler's IR Representation
+## Julia Compiler's IR Datastructure
 
-The Julia compiler represents the IR associated to a signature via an object called `Core.Compiler.IRCode`.
+The Julia compiler represents the IR associated to a signature via a `struct` called `Core.Compiler.IRCode`.
 The statements are given by the `stmts` field, which is a `Core.Compiler.InstructionStream`.
 An `InstructionStream` is a collection of 5 `Vector`s, each of which have the same length.
 The properties of the `n`th statement in the `IR` are given by the `n`th element of each of these vectors.
@@ -157,7 +159,7 @@ For example, the `stmt` field contains the statement itself, the `type` field co
 We'll skip the rest for now.
 For example, the statements associated to the `my_factorial` function above can be retrieved as follows:
 ```jldoctest my_factorial
-julia> Base.code_ircode_by_type(Tuple{typeof(my_factorial), Int})[1][1].stmts.stmt
+julia> ir.stmts.stmt
 9-element Vector{Any}:
  nothing
  :(φ (%1 => 1, %3 => %7))
@@ -187,14 +189,13 @@ julia> ir.stmts.type
 As seen in [Control Flow](@ref), the control flow graph (CFG) is represented as a separate data structure, stored in the `cfg` field of the `IRCode`.
 The argument types associated to the signature are stored in the `argtypes` field of the `IRCode`.
 
-## An Alternative IR Representation
+## An Alternative IR Datastructure
 
 `IRCode` is a perfectly good way to represent Julia's IR the vast majority of the time.
 For example, it suffices for the code transformations required for forwards-mode AD.
-However, for reverse-mode, a variety of operations are quite awkward.
+However, some IR transformations needed in reverse-mode are prohibitively awkward to undertake using `IRCode`.
 Mooncake's implementation of reverse-mode AD instead makes use of a custom representation of Julia's IR, called `BBCode`.
 We emphasise that `BBCode` represents the _same_ thing under the hood, it is just represented in memory in a slightly different way, such that certain kinds of transformations are straightforward to implement.
-We first state what BBCode is, then see what kinds of code transformation are trivial to undertake with `BBCode`, but which are tricky to do correctly using `IRCode`.
 
 You can construct a `BBCode` from an `IRCode`, and vice versa:
 ```jldoctest my_factorial
@@ -216,14 +217,14 @@ julia> Core.Compiler.IRCode(bb_ir)
 7 └──      goto #2
 8 4 ─      return %2
 ```
-At present, `BBCode` does not display itself nicely, so to look at it we must inspect its fields.
+At present, `BBCode` does not display itself nicely, so to look at it we must either inspect its fields, or convert it back to an `IRCode` (which _does_ print nicely).
 
-Instead of storing all of the statements in a single vector (and the types in their own vector, etc), `BBCode` groups Julia's SSA-form IR into one vector per basic block, and stores these in a `Vector{Mooncake.BBlock}`.
+Instead of storing all of the statements in a single vector (and the types in their own vector, etc), `BBCode` stores all statements associated to a particular basic block in a `Mooncake.BBlock`, and stores these in a `Vector{Mooncake.BBlock}`.
 ```jldoctest my_factorial
 julia> typeof(bb_ir.blocks)
 Vector{BBlock} (alias for Array{Mooncake.BasicBlockCode.BBlock, 1})
 ```
-Each `BBlock` has a field `insts`, containing the instructions associated to that basic block.
+Each `BBlock` has a field `insts`, containing the statements associated to that basic block.
 This is stored as a `Vector{Core.Compiler.NewInstruction}`, because `Core.Compiler.NewInstruction` contains the 5 fields that define an instruction in `IRCode` (you should compare the fields of a `Core.Compiler.NewInstruction` with those of `Core.Compiler.InstructionStream` to see the correspondence).
 For example, consider
 ```jldoctest my_factorial
@@ -238,9 +239,9 @@ The first field is a call to `Base.add_int`, the second field is `Int64` (we pro
 The other structural difference is that `BBCode` has no field containing the control-flow graph.
 Instead, the control-flow graph is represented implicitly as part of the `blocks` field.
 The upside of this is that any transformations of `blocks` which modify the CFG are automatically reflected in the `blocks` -- there is no need to perform any book-keeping to ensure that the CFG is kept in sync with the instructions.
-This saves both time / memory at run-time -- when basic block structure changes a scan of the entire `IRCode` is required to modify any statements which refer to a given block, and yields code simplifications.
-The downside is that the CFG must be computed whenever it is needed.
-Neither `IRCode` nor `BBCode`'s representation of the CFG is strictly better than the other.
+This saves both time and memory when inserting new basic blocks -- when basic block structure changes a scan of the entire `IRCode` is required to modify any statements which refer to a given block, and yields code simplifications.
+The downside is that the CFG must be computed whenever we need to know about it.
+As a resut, neither `IRCode` nor `BBCode`'s representation of the CFG is strictly better than the other.
 To extract CFG-related information from a `BBCode`, see [`Mooncake.BasicBlockCode.compute_all_successors`](@ref), [`Mooncake.BasicBlockCode.compute_all_predecessors`](@ref), and [`Mooncake.BasicBlockCode.control_flow_graph`](@ref).
 
 
@@ -252,7 +253,7 @@ julia> bb_ir.blocks[3].inst_ids
  ID(101)
  ID(102)
 ```
-There is exactly one `ID` per instruction.
+There is exactly one `ID` per instruction, and it is an error to have the same `ID` associated to multiple instructions.
 Similarly, while the number associated to a basic block in `IRCode` is a function of the number of basic blocks which preceed it, the `ID` of a basic block in `BBCode` is stored in its `id` field:
 ```jldoctest my_factorial
 julia> bb_ir.blocks[3].id
@@ -260,7 +261,7 @@ ID(106)
 ```
 As a result of this, all references to ssa values and basic block numbers in `IRCode` are replaced with `ID`s in `BBCode`.
 The purpose of this is to guarantee that the "name" of a basic block and an instruction does not change when you insert new basic blocks and new instructions.
-We shall see how this is useful in the example transformations to follow.
+We shall see how this is useful in the examples below.
 
 ## Code Transformations
 
@@ -271,7 +272,7 @@ The purpose is two-fold:
 
 ### Replacing Instructions
 
-This is just about the simplest code transformation that you could hope to undertake.
+This is a very simple code transformation.
 It is used in both forwards-mode and reverse-mode in Mooncake to replace calls of the form
 ```julia
 f(x, y, z)
@@ -281,7 +282,7 @@ with calls of the form
 frule!!(f, x, y, z)
 ```
 This kind of transformation is performed in basically the same way in both `IRCode` and `BBCode`.
-For example,
+For example, the `mul_int` statement associated to ssa `%7` can be replaced with an `add_int` statement as follows:
 ```jldoctest my_factorial
 julia> using Core: SSAValue
 
@@ -289,9 +290,11 @@ julia> const CC = Core.Compiler;
 
 julia> new_ir = Core.Compiler.copy(ir);
 
-julia> old_stmt = new_ir.stmts.stmt[7];
+julia> old_stmt = new_ir.stmts.stmt[7]
+:(Base.mul_int(%2, %6))
 
-julia> new_stmt = Expr(:call, Base.add_int, old_stmt.args[2:end]...);
+julia> new_stmt = Expr(:call, Base.add_int, old_stmt.args[2:end]...)
+:((Core.Intrinsics.add_int)(%2, %6))
 
 julia> # new_ir[SSAValue(7)][:stmt] = new_stmt
        CC.setindex!(CC.getindex(new_ir, SSAValue(7)), new_stmt, :stmt);
@@ -315,9 +318,11 @@ The same transformation can be performed on `BBCode`:
 ```jldoctest my_factorial
 julia> bb_ir_copy = copy(bb_ir);
 
-julia> old_inst = bb_ir_copy.blocks[3].insts[2];
+julia> old_inst = bb_ir_copy.blocks[3].insts[2]
+Core.Compiler.NewInstruction(:(Base.mul_int(ID(96), ID(100))), Int64, Core.Compiler.NoCallInfo(), 10, 0x000012e0)
 
-julia> new_stmt = Expr(:call, Base.add_int, old_inst.stmt.args[2:end]...);
+julia> new_stmt = Expr(:call, Base.add_int, old_inst.stmt.args[2:end]...)
+:((Core.Intrinsics.add_int)(ID(96), ID(100)))
 
 julia> bb_ir_copy.blocks[3].insts[2] = CC.NewInstruction(old_inst; stmt=new_stmt);
 
@@ -332,18 +337,20 @@ julia> CC.IRCode(bb_ir_copy)
 7 └──      goto #2
 8 4 ─      return %2
 ```
-As you can see, in both instances, we wind up with the same `IRCode` at the end.
+As you can see, in both cases we wind up with the same `IRCode` at the end.
 
 ### Inserting New Instructions
 
 Inserting entirely new instructions into the IR requires a little more thought, but is ultimately very straightforward using either `IRCode` or `BBCode`.
 
-First, `IRCode`. Suppose that we wish to insert another instruction immediately before the first `add_int` instruction which multiplies `%3` by 2 before adding `1` to it in `#3`.
+First, `IRCode`.
+Suppose that we wish to insert another instruction immediately before the first `add_int` instruction which multiplies `%3` by 2 before adding `1` to it in `#3`.
 In `IRCode`, this kind of modification requires some care, because naively inserting an instruction between the 5th and 6th line changes the name of all instructions from the 6th onwards.
-Consequently, we need to replace all uses of e.g. `%6` with uses of `%7`, etc.
+Consequently, we need to replace all existing uses of e.g. `%6` with uses of `%7`, etc.
 Happily, `IRCode` has a mechanism to achieve just this.
 ```jldoctest my_factorial
-julia> ni = CC.NewInstruction(Expr(:call, Base.mul_int, SSAValue(3), 2), Int);
+julia> ni = CC.NewInstruction(Expr(:call, Base.mul_int, SSAValue(3), 2), Int)
+Core.Compiler.NewInstruction(:((Core.Intrinsics.mul_int)(%3, 2)), Int64, Core.Compiler.NoCallInfo(), nothing, nothing)
 
 julia> new_ssa = CC.insert_node!(new_ir, SSAValue(6), ni)
 :(%10)
@@ -360,12 +367,15 @@ julia> new_ir
 7 └──      goto #2
 8 4 ─      return %2
 ```
-`CC.insert_node!(ir, ssa, new_inst)` inserts `new_inst` into `ir` immediately before `ssa`, and attaches it to the same basic block as `ssa` resides.
+`CC.insert_node!(ir, ssa, new_inst)` inserts `new_inst` into `ir` immediately before `ssa`, and attaches it to 
+the same basic block as `ssa` resides.
+It returns an `SSAValue`, which is the "name" associated to the inserted instruction in the IR.
 Here, we see it has inserted the instruction to multiply `%3` by `2` immediately before `%6`.
-However, observe that the `IRCode` has not changed the name associated to the subsequently `add_int` instruction -- it still assigns to `%6`.
-This is achieved via `IRCode`'s `new_nodes` field -- upon calling `CC.insert_node!`, this list is appended to.
+However, observe that the `IRCode` has not changed the name associated to the subsequent `add_int` instruction -- it still assigns to `%6`, despite not being the 6th statement in the IR anymore.
+This is achieved via `IRCode`'s `new_nodes` field -- upon calling `CC.insert_node!`, rather than inserting the instruction directly into the `InstructionStream`, this list is appended to.
+We can do this as many times as we like, and then call `CC.compact!` at the end to handle all of the book-keeping involved in inserting all of the statements, updating all ssa uses where required, and updating the `cfg` field of the IR.
 
-To conclude this transformation, we replace the first argument of the `add_int` instruction with the new ssa output by `insert_node!`, and then call `CC.compact!` to process all of the nodes currently in the `new_nodes` list, and produce a valid `IRCode`:
+To conclude this transformation, we replace the first argument of the `add_int` instruction with the new ssa returned by `insert_node!`, and then call `CC.compact!` to process all of the nodes currently in the `new_nodes` list, and produce a valid `IRCode`:
 ```jldoctest my_factorial
 julia> stmt = CC.getindex(CC.getindex(new_ir, SSAValue(6)), :stmt)
 :(Base.add_int(%3, 1))
@@ -397,7 +407,8 @@ julia> new_ir = CC.compact!(new_ir)
 8 4 ─      return %2
 ```
 Observe that, before `compact!`-ing, the first instruction in basic block `%3` is still labelled as being `%10`.
-After `compact!`-ing, we have standard sequentially-ordered IR again.
+After `compact!`-ing, we have standard sequentially-labelled IR again.
+Note that the above is exactly the kind of thing that we do in our implementation of forwards-mode AD -- all insertions of nodes are performed in a single pass over the `IRCode`, and `CC.compact!` is called once at the end.
 
 Performing this transformation using `BBCode` is similarly straightforward.
 Since the name associated to instructions does not change when you insert another instruction, you really just need to insert an instruction + its `ID`, update the next instruction (as before), and you're done:
@@ -435,9 +446,8 @@ We see here that `IRCode` and `BBCode` involve similar levels of complexity to i
 
 This is the situation in which the design of `BBCode` shines vs `IRCode`.
 `IRCode` does not, at present, really have much to say about transformations which change control flow.
-
 It is, however, straightforward using `BBCode`.
-Suppose that we wish to modify the above to display the value of `%2` if it is even.
+Suppose that we wish to modify the above to display the value of `%2` if it is even on any given iteration.
 Since this involves control flow, it necessarily requires at least one additional basic block.
 
 We do this in two steps.
@@ -474,7 +484,7 @@ julia> CC.IRCode(bb_ir_copy)
   └──      goto #2
 8 5 ─      return %2
 ```
-Observe that, in this case, rather than creating a new basic block and inserting instructions into it, we simply create the block _with_ the instructions.
+Observe that, in this case, rather than creating `new_bb` and then inserting instructions into it, we simply create the block _with_ the instructions.
 This programming style is often convenient.
 Additionally note that we create an `ID` for each statement in the new basic block.
 These `ID`s are never actually used anywhere, but `BBCode` requires that each instruction be associated to an `ID`, so we must create them.
@@ -518,7 +528,7 @@ Observe that in order to tie the conditional to the goto-if-not, we simply ensur
 
 ### Run the new code
 
-As ever, we can simply shove this code in a `Core.OpaqueClosure` in order to produce something which can actually run:
+As ever, we can construct a `Core.OpaqueClosure` using `IRCode` in order to produce something runnable:
 ```jldoctest my_factorial
 julia> oc = Core.OpaqueClosure(new_ir; do_compile=true)
 (::Int64)::Int64->◌
@@ -539,10 +549,10 @@ The point is that we've successfully inserted a new basic block into Julia's IR,
 We have reviewed the two representations of Julia IR used in Mooncake.
 Where possible, we always use `IRCode` -- as discussed, forwards-mode AD exclusively uses `IRCode`.
 `BBCode` is basically only needed when undertaking transformations which involve changes to basic block structure -- the insertion of new basic blocks, and the modification of terminators in a way which changes the predecessors / successors of a given block being the primary sources of these kinds of changes.
-Reverse-mode AD makes extensive use of such transformations, so `BBCode` is currently quite important there.
+Reverse-mode AD makes extensive use of such transformations, so `BBCode` is currently important there.
 
 There are various efforts to augment `IRCode` with the capability to handle changes to basic block structure in a convenient way.
-Ideally, these efforts would be a succeed, and at some time in the future we would completely do away with `BBCode`.
+Ideally these efforts will succeed, then we can do away with `BBCode`.
 
 ## Docstrings
 
