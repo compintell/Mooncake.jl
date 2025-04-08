@@ -367,8 +367,7 @@ julia> new_ir
 7 └──      goto #2
 8 4 ─      return %2
 ```
-`CC.insert_node!(ir, ssa, new_inst)` inserts `new_inst` into `ir` immediately before `ssa`, and attaches it to 
-the same basic block as `ssa` resides.
+`CC.insert_node!(ir, ssa, new_inst)` inserts `new_inst` into `ir` immediately before `ssa`, and attaches it to the same basic block as `ssa` resides.
 It returns an `SSAValue`, which is the "name" associated to the inserted instruction in the IR.
 Here, we see it has inserted the instruction to multiply `%3` by `2` immediately before `%6`.
 However, observe that the `IRCode` has not changed the name associated to the subsequent `add_int` instruction -- it still assigns to `%6`, despite not being the 6th statement in the IR anymore.
