@@ -239,7 +239,7 @@ The first field is a call to `Base.add_int`, the second field is `Int64` (we pro
 The other structural difference is that `BBCode` has no field containing the control-flow graph.
 Instead, the control-flow graph is represented implicitly as part of the `blocks` field.
 The upside of this is that any transformations of `blocks` which modify the CFG are automatically reflected in the `blocks` -- there is no need to perform any book-keeping to ensure that the CFG is kept in sync with the instructions.
-This saves both time and memory when inserting new basic blocks -- when basic block structure changes a scan of the entire `IRCode` is required to modify any statements which refer to a given block, and yields code simplifications.
+This saves both time and memory when inserting new basic blocks -- when basic block structure changes, a scan of the entire `IRCode` is required to modify any statements which refer to a given block, and yields code simplifications.
 The downside is that the CFG must be computed whenever we need to know about it.
 As a resut, neither `IRCode` nor `BBCode`'s representation of the CFG is strictly better than the other.
 To extract CFG-related information from a `BBCode`, see [`Mooncake.BasicBlockCode.compute_all_successors`](@ref), [`Mooncake.BasicBlockCode.compute_all_predecessors`](@ref), and [`Mooncake.BasicBlockCode.control_flow_graph`](@ref).
@@ -281,7 +281,7 @@ with calls of the form
 ```julia
 frule!!(f, x, y, z)
 ```
-This kind of transformation is performed in basically the same way in both `IRCode` and `BBCode`.
+This kind of transformation is performed in basically the same way for both `IRCode` and `BBCode`.
 For example, the `mul_int` statement associated to ssa `%7` can be replaced with an `add_int` statement as follows:
 ```jldoctest my_factorial
 julia> using Core: SSAValue
@@ -405,7 +405,7 @@ julia> new_ir = CC.compact!(new_ir)
 7 └──      goto #2
 8 4 ─      return %2
 ```
-Observe that, before `compact!`-ing, the first instruction in basic block `%3` is still labelled as being `%10`.
+Observe that, before `compact!`-ing, the first instruction in basic block `#3` is still labelled as being `%10`.
 After `compact!`-ing, we have standard sequentially-labelled IR again.
 Note that the above is exactly the kind of thing that we do in our implementation of forwards-mode AD -- all insertions of nodes are performed in a single pass over the `IRCode`, and `CC.compact!` is called once at the end.
 
@@ -484,13 +484,13 @@ julia> CC.IRCode(bb_ir_copy)
 8 5 ─      return %2
 ```
 Observe that, in this case, rather than creating `new_bb` and then inserting instructions into it, we simply create the block _with_ the instructions.
-This programming style is often convenient.
+This programming style is often more convenient.
 Additionally note that we create an `ID` for each statement in the new basic block.
 These `ID`s are never actually used anywhere, but `BBCode` requires that each instruction be associated to an `ID`, so we must create them.
 
-Additionally, note the usage of an `IDGotoNode`.
+Additionally, note the usage of an [`IDGotoNode`](@ref).
 This is exactly the same thing as a `Core.Compiler.GotoNode`, except it contains an `ID` stating which basic block to jump to, rather than an `Int`.
-Similarly, the `IDGotoIfNot` is a direct translation of `Core.Compiler.GotoIfNot`, with the `dest` field being an `ID` rather than an `Int`.
+Similarly, the [`IDGotoIfNot`](@ref) is a direct translation of `Core.Compiler.GotoIfNot`, with the `dest` field being an `ID` rather than an `Int`.
 
 Furthermore, note that the `goto if not` instruction at the end of basic block `#2` now (correctly) jumps to basic block `#5`, whereas before it jumped to block `#4`.
 That is, by virtue of the fact that the `ID` associated to each basic block remains unchanged in `BBCode`, all pre-existing control flow relationships have remained the same.
