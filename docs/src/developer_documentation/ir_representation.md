@@ -550,7 +550,7 @@ Where possible, we always use `IRCode` -- as discussed, forwards-mode AD exclusi
 `BBCode` is basically only needed when undertaking transformations which involve changes to basic block structure -- the insertion of new basic blocks, and the modification of terminators in a way which changes the predecessors / successors of a given block being the primary sources of these kinds of changes.
 Reverse-mode AD makes extensive use of such transformations, so `BBCode` is currently important there.
 
-There are various efforts to augment `IRCode` with the capability to handle changes to basic block structure in a convenient way.
+There are efforts such as [this PR](https://github.com/JuliaLang/julia/pull/45305) to augment `IRCode` with the capability to manipulate the CFG structure in a convenient manner.
 Ideally these efforts will succeed, then we can do away with `BBCode`.
 
 ## Docstrings
