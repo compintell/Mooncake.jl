@@ -490,9 +490,9 @@ This programming style is often more convenient.
 Additionally note that we create an `ID` for each statement in the new basic block.
 These `ID`s are never actually used anywhere, but `BBCode` requires that each instruction be associated to an `ID`, so we must create them.
 
-Additionally, note the usage of an [`IDGotoNode`](@ref).
+Additionally, note the usage of an [`Mooncake.BasicBlockCode.IDGotoNode`](@ref).
 This is exactly the same thing as a `Core.Compiler.GotoNode`, except it contains an `ID` stating which basic block to jump to, rather than an `Int`.
-Similarly, the [`IDGotoIfNot`](@ref) is a direct translation of `Core.Compiler.GotoIfNot`, with the `dest` field being an `ID` rather than an `Int`.
+Similarly, the [`Mooncake.BasicBlockCode.IDGotoIfNot`](@ref) is a direct translation of `Core.Compiler.GotoIfNot`, with the `dest` field being an `ID` rather than an `Int`.
 
 Furthermore, note that the `goto if not` instruction at the end of basic block `#2` now (correctly) jumps to basic block `#5`, whereas before it jumped to block `#4`.
 That is, by virtue of the fact that the `ID` associated to each basic block remains unchanged in `BBCode`, all pre-existing control flow relationships have remained the same.
