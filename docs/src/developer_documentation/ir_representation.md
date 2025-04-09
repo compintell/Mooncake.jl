@@ -193,7 +193,7 @@ The argument types associated to the signature are stored in the `argtypes` fiel
 
 `IRCode` is a perfectly good way to represent Julia's IR the vast majority of the time.
 For example, it suffices for the code transformations required for forwards-mode AD.
-However, some IR transformations needed in reverse-mode are prohibitively awkward to undertake using `IRCode`.
+However, IR transformations involving multiple changes to the control flow structure of a programme are needed in reverse-mode, and are prohibitively awkward to undertake using `IRCode`.
 Mooncake's implementation of reverse-mode AD instead makes use of a custom representation of Julia's IR, called `BBCode`.
 We emphasise that `BBCode` represents the _same_ thing under the hood, it is just represented in memory in a slightly different way, such that certain kinds of transformations are straightforward to implement.
 
@@ -311,7 +311,7 @@ julia> new_ir
 8 4 ─      return %2
 ```
 Observe that ssa `7` has been replaced with the new `:call` to `add_int`.
-Unfortunately, in order to avoid committing type-piracy against `Core.Compiler`, we cannot currently write `new_ir[SSAValue(7)][:stmt]`.
+Unfortunately, in order to avoid committing type-piracy against `Core.Compiler`, we cannot currently write `new_ir[SSAValue(7)][:stmt]`. (`CC.getindex` is a different function from `Base.getindex` -- the same is true for `CC.setindex!` vs `Base.setindex!`).
 In general, I would recommend defining helper functions to improve the DRYness of your code.
 
 The same transformation can be performed on `BBCode`:
@@ -373,6 +373,8 @@ Here, we see it has inserted the instruction to multiply `%3` by `2` immediately
 However, observe that the `IRCode` has not changed the name associated to the subsequent `add_int` instruction -- it still assigns to `%6`, despite not being the 6th statement in the IR anymore.
 This is achieved via `IRCode`'s `new_nodes` field -- upon calling `CC.insert_node!`, rather than inserting the instruction directly into the `InstructionStream`, this list is appended to.
 We can do this as many times as we like, and then call `CC.compact!` at the end to handle all of the book-keeping involved in inserting all of the statements, updating all ssa uses where required, and updating the `cfg` field of the IR.
+
+Also observe that the inserted statement is printed without a `%10 =` at the start of it -- this is because there are not (yet) any uses of `%10`, so `IRCode` does not print it out (presumably in order to reduce visual noise).
 
 To conclude this transformation, we replace the first argument of the `add_int` instruction with the new ssa returned by `insert_node!`, and then call `CC.compact!` to process all of the nodes currently in the `new_nodes` list, and produce a valid `IRCode`:
 ```jldoctest my_factorial
