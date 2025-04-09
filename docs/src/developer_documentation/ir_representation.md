@@ -92,7 +92,7 @@ CFG with 3 blocks:
 ```
 For example, the above states that "bb" (basic block) 1 comprises statements 1 to 3, and has successor blocks 2 and 3 (ie. once the statements in basic block 1 have executed, we know for certain that either those in block 2 or block 3 will run next).
 Blocks 2 and 3 have no successors, because they both end in a `return` statement.
-The predecessors of each basic block (the blocks which could possibly have run immediately prior to a given block) are also stored in the blocks of the `CFG`, even thought this is not printed -- you should have a play around with this data structure to see what is in there.
+The predecessors of each basic block (the blocks which could possibly have run immediately prior to a given block) are also stored in the blocks of the `CFG`, even though this is not printed -- you should have a play around with this data structure to see what is in there.
 
 Additionally, note that `Base.lt_float` (used to check if one floating point number is less than another) and `Base.or_int` do not appear as `invoke` statements -- this is because they are not generic Julia functions.
 Rather, they are Julia intrinsics:
