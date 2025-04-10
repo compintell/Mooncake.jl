@@ -330,18 +330,18 @@ Returns a cache used with [`value_and_pullback!!`](@ref). See that function for 
 """
 function prepare_pullback_cache(fx...; kwargs...)
 
-    # Take a copy before mutating.
-    fx = deepcopy(fx)
-
     # Construct rule and tangents.
     rule = build_rrule(get_interpreter(), Tuple{map(_typeof, fx)...}; kwargs...)
     tangents = map(zero_tangent, fx)
 
     # Run the rule forwards -- this should do a decent chunk of pre-allocation.
-    y, _ = rule(map((x, dx) -> CoDual(x, fdata(dx)), fx, tangents)...)
+    y, rvs!! = rule(map((x, dx) -> CoDual(x, fdata(dx)), fx, tangents)...)
 
     # Handle forward pass's primal exceptions
     __exclude_unsupported_output(y)
+
+    # Run reverse-pass in order to reset stacks + state.
+    rvs!!(zero_rdata(primal(y)))
 
     # Construct cache for output. Check that `copy!`ing appears to work.
     y_cache = _copy_output(primal(y))
@@ -406,8 +406,9 @@ Returns a cache used with [`value_and_gradient!!`](@ref). See that function for 
 function prepare_gradient_cache(fx...; kwargs...)
     rule = build_rrule(fx...; kwargs...)
     tangents = map(zero_tangent, fx)
-    y, _ = rule(map((x, dx) -> CoDual(x, fdata(dx)), fx, tangents)...)
+    y, rvs!! = rule(map((x, dx) -> CoDual(x, fdata(dx)), fx, tangents)...)
     primal(y) isa IEEEFloat || throw_val_and_grad_ret_type_error(primal(y))
+    rvs!!(zero_tangent(primal(y))) # run reverse-pass to reset stacks + state
     return Cache(rule, nothing, tangents)
 end
 
