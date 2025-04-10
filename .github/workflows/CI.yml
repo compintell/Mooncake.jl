@@ -28,7 +28,7 @@ jobs:
           'rrules/builtins',
           'rrules/fastmath',
           'rrules/foreigncall',
-          'rrules/functionwrappers',
+          # 'rrules/functionwrappers',
           'rrules/iddict',
           'rrules/lapack',
           'rrules/linear_algebra',
@@ -197,6 +197,12 @@ jobs:
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
-          body: "Performance Ratio:\nRatio of time to compute gradient and time to compute function.\nWarning: results are very approximate! See [here](https://github.com/compintell/Mooncake.jl/tree/main/bench#inter-framework-benchmarking) for more context.\n```\n${{ steps.read-file.outputs.table }}\n```"
+          body: > 
+            Performance Ratio:
+            Ratio of time to compute gradient and time to compute function.
+            Note that forwards-mode timings are for a single evaluation, not a gradient computation.
+            Warning: results are very approximate! See [here](https://github.com/compintell/Mooncake.jl/tree/main/bench#inter-framework-benchmarking)
+            for more context.
+            ```\n${{ steps.read-file.outputs.table }}```"
           comment-id: ${{ steps.fc.outputs.comment-id }}
           edit-mode: replace
