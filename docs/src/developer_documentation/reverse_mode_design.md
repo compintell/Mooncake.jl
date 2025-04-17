@@ -11,7 +11,7 @@ Rule building is done statically, based on types. Some methods accept values, e.
 ```julia
 build_rrule(args...; debug_mode=false)
 ```
-but these simply extract the types of all the arguments and call the main method (non Helper) for [`build_rrule`](@ref).
+but these simply extract the types of all the arguments and call the main method (non Helper) for [`build_rrule`](@ref Mooncake.build_rrule).
 
 The action happens in [`s2s_reverse_mode_ad.jl`](https://github.com/compintell/Mooncake.jl/blob/main/src/interpreter/s2s_reverse_mode_ad.jl), in particular the following method:
 ```julia
@@ -22,7 +22,7 @@ Signatures are extracted from `Core.MethodInstance`s as necessary.
 
 If a signature has a custom rule ([`Mooncake.is_primitive`](@ref) returns `true`), we take it, otherwise we generate the IR and differentiate it.
 
-The forward and reverse pass IRs are created by the [`generate_ir`](@ref) method.
+The forward and reverse pass IRs are created by the [`generate_ir`](@ref Mooncake.generate_ir) method.
 The `OpaqueClosure` allows going back from the IR to a callable object. More precisely we use `MistyClosure` to store the associated IR.
 
 The `Pullback` and `DerivedRule` structs are convenience wrappers for `MistyClosure`s with some bookkeeping.
@@ -35,19 +35,19 @@ generate_ir(
 )
 ```
 
-The function [`lookup_ir`](@ref) calls `Core.Compiler.typeinf_ircode` on a method instance, which is a lower-level version of `Base.code_ircode`.
+The function [`lookup_ir`](@ref Mooncake.lookup_ir) calls `Core.Compiler.typeinf_ircode` on a method instance, which is a lower-level version of `Base.code_ircode`.
 
-The IR considered is of type [`IRCode`](@ref), which is different from the `CodeInfo` returned by `@code_typed`.
+The IR considered is of type [`IRCode`](@ref Mooncake.CC.IRCode), which is different from the `CodeInfo` returned by `@code_typed`.
 This format is obtained from `CodeInfo`, used to perform most optimizations in the Julia IR in the [evaluation pipeline](https://docs.julialang.org/en/v1/devdocs/eval/), then converted back to `CodeInfo`.
 
-The function [`normalise!`](@ref) is a custom pass to modify `IRCode` and make some expressions nicer to work with.
+The function [`normalise!`](@ref Mooncake.normalise!) is a custom pass to modify `IRCode` and make some expressions nicer to work with.
 The possible expressions one can encountered in lowered ASTs are documented [here](https://docs.julialang.org/en/v1/devdocs/ast/#Lowered-form).
 
 Reverse-mode specific stuff: return type retrieval, `ADInfo`, `bbcode.jl`, `zero_like_rdata.jl`. The `BBCode` structure was a convenience for IR transformation.
 
 Beyond the [`interpreter`](https://github.com/compintell/Mooncake.jl/blob/main/src/interpreter/) folder, check out [`tangents.jl`](https://github.com/compintell/Mooncake.jl/blob/main/src/tangents.jl) for forward mode.
 
-[`Tangent`](@ref) is the correct representation required for Forward mode AD. `FData` and `RData` are not representations needed directly.
+[`Tangent`](@ref Mooncake.Tangent) is the correct representation required for Forward mode AD. `FData` and `RData` are not representations needed directly.
 
 For testing, all the tests got via the `generate_test_functions` method (defined in [`test_resources.jl`](https://github.com/compintell/Mooncake.jl/blob/1894b2f23916091d5022134db0af61a75c1035ee/src/test_resources.jl#L655)) must pass.
 Recycle the functionality from reverse mode test utils.
