@@ -133,7 +133,7 @@ end
 function should_run_benchmark(
     ::Val{:enzyme}, ::Base.Fix1{<:typeof(DynamicPPL.LogDensityProblems.logdensity)}, x...
 )
-    return false
+    return true
 end
 
 @inline g(x, a, ::Val{N}) where {N} = N > 0 ? g(x * a, a, Val(N - 1)) : x
