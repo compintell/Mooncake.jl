@@ -634,7 +634,7 @@ function make_ad_stmts!(stmt::Core.UpsilonNode, ::ID, ::ADInfo)
         "re-writing code such that it avoids generating any UpsilonNodes, or writing a " *
         "rule to differentiate the code by hand. If you are in any doubt as to what to " *
         "do, please request assistance by opening an issue at " *
-        "github.com/compintell/Mooncake.jl.",
+        "github.com/chalk-lab/Mooncake.jl.",
     )
 end
 
@@ -1020,7 +1020,7 @@ function Base.showerror(io::IO, err::MooncakeRuleCompilationError)
         "MooncakeRuleCompilationError: an error occured while Mooncake was compiling a " *
         "rule to differentiate something. If the `caused by` error " *
         "message below does not make it clear to you how the problem can be fixed, " *
-        "please open an issue at github.com/compintell/Mooncake.jl describing your " *
+        "please open an issue at github.com/chalk-lab/Mooncake.jl describing your " *
         "problem.\n" *
         "To replicate this error run the following:\n"
     println(io, msg)

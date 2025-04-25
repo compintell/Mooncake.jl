@@ -199,7 +199,7 @@ end
 Required for the robust design of [`value_and_pullback`](@ref), [`prepare_pullback_cache`](@ref).  
 Ensures that `y` contains no aliasing, circular references, `Ptr`s or non differentiable datatypes. 
 In the forward pass f(args...) output can only return a "Tree" like datastructure with leaf nodes as primitive types.  
-Refer https://github.com/compintell/Mooncake.jl/issues/517#issuecomment-2715202789 and related issue for details.  
+Refer https://github.com/chalk-lab/Mooncake.jl/issues/517#issuecomment-2715202789 and related issue for details.  
 Internally calls [`__exclude_unsupported_output_internal!`](@ref).
 The design is modelled after `zero_tangent`.
 """
