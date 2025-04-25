@@ -243,16 +243,21 @@ _copy_to_output!(dst::Number, src::Number) = src
 
 # explicit copy for Core.svec
 function _copy_to_output!(dst::SimpleVector, src::SimpleVector)
-    Core.svec(map(_copy_to_output!, dst, src)...)
+    return Core.svec(map(_copy_to_output!, dst, src)...)
 end
 _copy_output(x::SimpleVector) = Core.svec([map(_copy_output, x_sub) for x_sub in x]...)
 
 # copy for Array, Memory
-function _copy_to_output!(dst::P, src::P) where {P <: _BuiltinArrays}
-    map!(_copy_to_output!, dst, dst, src)
+function _copy_to_output!(dst::P, src::P) where {P<:_BuiltinArrays}
+    @inbounds for i in eachindex(src)
+        if isassigned(src, i)
+            dst[i] = _copy_to_output!(dst[i], src[i])
+        end
+    end
+    return dst
 end
 
-function _copy_output(x::P) where {P <: _BuiltinArrays}
+function _copy_output(x::P) where {P<:_BuiltinArrays}
     temp = P(undef, size(x)...)
     @inbounds for i in eachindex(temp)
         isassigned(x, i) && (temp[i] = _copy_output(x[i]))
@@ -261,17 +266,50 @@ function _copy_output(x::P) where {P <: _BuiltinArrays}
 end
 
 # Tuple, NamedTuple
-function _copy_to_output!(dst::P, src::P) where {P <: Union{Tuple, NamedTuple}}
+function _copy_to_output!(dst::P, src::P) where {P<:Union{Tuple,NamedTuple}}
     isbitstype(P) && return src
-    map(_copy_to_output!, dst, src)
+    return map(_copy_to_output!, dst, src)
 end
 
-_copy_output(x::Union{Tuple, NamedTuple}) = map(_copy_output, x)
+_copy_output(x::Union{Tuple,NamedTuple}) = map(_copy_output, x)
 
 # Handling structs
 function _copy_to_output!(dst::P, src::P) where {P}
     isbitstype(P) && return src
-    P((_copy_to_output!(getfield(dst, src_sub), getfield(src, src_sub)) for src_sub in fieldnames(P))...)
+    nf = nfields(P)
+
+    if ismutable(src)
+        for src_sub in 1:nf
+            if isdefined(src, src_sub)
+                ccall(
+                    :jl_set_nth_field,
+                    Cvoid,
+                    (Any, Csize_t, Any),
+                    dst,
+                    src_sub - 1,
+                    _copy_to_output!(getfield(dst, src_sub), getfield(src, src_sub)),
+                )
+            end
+        end
+
+        return dst
+    else
+        flds = Vector{Any}(undef, nf)
+        for src_sub in 1:nf
+            if isdefined(src, src_sub)
+                flds[src_sub] = _copy_to_output!(
+                    getfield(dst, src_sub), getfield(src, src_sub)
+                )
+            else
+                nf = src_sub - 1  # Assumes if a undefined field is found, all subsequent fields are undefined.
+                break
+            end
+        end
+
+        # when immutable struct object created by non initializing inner constructor. (Base.deepcopy misses this out)
+        !isassigned(flds, 1) && return src
+        return ccall(:jl_new_structv, Any, (Any, Ptr{Any}, UInt32), P, flds, nf)
+    end
 end
 
 function _copy_output(x::P) where {P}
