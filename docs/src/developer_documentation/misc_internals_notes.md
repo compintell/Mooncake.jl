@@ -11,7 +11,7 @@ Last checked: 21/01/2025, Julia v1.10.7 / v1.11.2, Mooncake 0.4.
 
 Mooncake.jl makes extensive use of `@generated` functions to ensure that its `tangent_type` function (among others) is both type-stable, and constant folds.
 I recently changed how `tangent_type` is implemented in Mooncake.jl to ensure that the implementations respect some specific limitations of generated functions.
-Here I outline the overall problem, the mistake the previous implementation made, and how [the recent changes](https://github.com/compintell/Mooncake.jl/pull/426) fix it.
+Here I outline the overall problem, the mistake the previous implementation made, and how [the recent changes](https://github.com/chalk-lab/Mooncake.jl/pull/426) fix it.
 
 ### `tangent_type`
 

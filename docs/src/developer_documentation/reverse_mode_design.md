@@ -13,7 +13,7 @@ build_rrule(args...; debug_mode=false)
 ```
 but these simply extract the types of all the arguments and call the main method (non Helper) for [`build_rrule`](@ref Mooncake.build_rrule).
 
-The action happens in [`s2s_reverse_mode_ad.jl`](https://github.com/compintell/Mooncake.jl/blob/main/src/interpreter/s2s_reverse_mode_ad.jl), in particular the following method:
+The action happens in [`s2s_reverse_mode_ad.jl`](https://github.com/chalk-lab/Mooncake.jl/blob/main/src/interpreter/s2s_reverse_mode_ad.jl), in particular the following method:
 ```julia
 build_rrule(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode=false)
 ```
@@ -45,11 +45,11 @@ The possible expressions one can encountered in lowered ASTs are documented [her
 
 Reverse-mode specific stuff: return type retrieval, `ADInfo`, `bbcode.jl`, `zero_like_rdata.jl`. The `BBCode` structure was a convenience for IR transformation.
 
-Beyond the [`interpreter`](https://github.com/compintell/Mooncake.jl/blob/main/src/interpreter/) folder, check out [`tangents.jl`](https://github.com/compintell/Mooncake.jl/blob/main/src/tangents.jl) for forward mode.
+Beyond the [`interpreter`](https://github.com/chalk-lab/Mooncake.jl/blob/main/src/interpreter/) folder, check out [`tangents.jl`](https://github.com/chalk-lab/Mooncake.jl/blob/main/src/tangents.jl) for forward mode.
 
 [`Tangent`](@ref Mooncake.Tangent) is the correct representation required for Forward mode AD. `FData` and `RData` are not representations needed directly.
 
-For testing, all the tests got via the `generate_test_functions` method (defined in [`test_resources.jl`](https://github.com/compintell/Mooncake.jl/blob/1894b2f23916091d5022134db0af61a75c1035ee/src/test_resources.jl#L655)) must pass.
+For testing, all the tests got via the `generate_test_functions` method (defined in [`test_resources.jl`](https://github.com/chalk-lab/Mooncake.jl/blob/1894b2f23916091d5022134db0af61a75c1035ee/src/test_resources.jl#L655)) must pass.
 Recycle the functionality from reverse mode test utils.
 
 To manipulate `IRCode`, check out the fields:
@@ -73,12 +73,12 @@ Examples of how line-by-line transformations can be done, are defined in [`Moonc
 The `IRCode` nodes are not explicitly documented in <https://docs.julialang.org/en/v1/devdocs/ast/#Lowered-form> or <https://docs.julialang.org/en/v1/devdocs/ssair/#Main-SSA-data-structure>. Might need completion of official docs, but Mooncake docs in the meantime.
 
 Inlining pass can prevent us from using high-level rules by inlining the function (e.g. unrolling a loop).
-The contexts in [`interpreter/contexts.jl`](https://github.com/compintell/Mooncake.jl/blob/src/interpreter/contexts.jl) are `MinimalCtx` (necessary for AD to work) and `DefaultCtx` (ensure that we hit all of the rules).
+The contexts in [`interpreter/contexts.jl`](https://github.com/chalk-lab/Mooncake.jl/blob/src/interpreter/contexts.jl) are `MinimalCtx` (necessary for AD to work) and `DefaultCtx` (ensure that we hit all of the rules).
 Distinction between rules is not well maintained in Mooncake at the moment.
 The function `is_primitive` defines whether we should recurse into the function during AD and break it into parts, or look for a rule.
 If we define a rule we should set `is_primitive` to `true` for the corresponding function.
 
-In [`interpreter/abstract_interpretation.jl`](https://github.com/compintell/Mooncake.jl/blob/src/interpreter/abstract_interpretation.jl) we interact with the Julia compiler.
+In [`interpreter/abstract_interpretation.jl`](https://github.com/chalk-lab/Mooncake.jl/blob/src/interpreter/abstract_interpretation.jl) we interact with the Julia compiler.
 The most important part is preventing the compiler from inlining.
 
 The `MooncakeInterpreter` subtypes `Core.Compiler.AbstractInterpreter` to interpret Julia code.
