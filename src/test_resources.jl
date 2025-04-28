@@ -276,7 +276,7 @@ const __x_for_gref_tester_4::Float64 = 3.0
 __x_for_gref_tester_5 = 5.0
 @eval globalref_tester_5() = $(GlobalRef(@__MODULE__, :__x_for_gref_tester_5))
 
-# See https://github.com/compintell/Mooncake.jl/issues/329 .
+# See https://github.com/chalk-lab/Mooncake.jl/issues/329 .
 const __x = randn(10)
 @noinline globalref_tester_6_inner(x) = sum(x)
 globalref_tester_6() = globalref_tester_6_inner(__x)
@@ -639,13 +639,13 @@ end
 
 highly_nested_tuple(x) = ((((x,),), x), x)
 
-# Regression test: https://github.com/compintell/Mooncake.jl/issues/450
+# Regression test: https://github.com/chalk-lab/Mooncake.jl/issues/450
 sig_argcount_mismatch(x) = vcat(x[1], x[2:2], x[3:3], x[4:4])
 
-# Regression test: https://github.com/compintell/Mooncake.jl/issues/473
+# Regression test: https://github.com/chalk-lab/Mooncake.jl/issues/473
 large_tuple_inference(x::NTuple{1_000,Float64}) = sum(cos, x)
 
-# Regression test: https://github.com/compintell/Mooncake.jl/issues/319
+# Regression test: https://github.com/chalk-lab/Mooncake.jl/issues/319
 function regression_319(θ)
     d = [0.0, 0.0]
     x = θ[1:2]

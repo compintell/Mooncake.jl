@@ -58,4 +58,4 @@ makedocs(;
     ],
 )
 
-deploydocs(; repo="github.com/compintell/Mooncake.jl.git", push_preview=true)
+deploydocs(; repo="github.com/chalk-lab/Mooncake.jl.git", push_preview=true)

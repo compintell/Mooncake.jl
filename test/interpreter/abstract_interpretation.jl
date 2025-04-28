@@ -70,7 +70,7 @@ contains_primitive_behind_call(x) = @inline contains_primitive(x)
             @test stmt(ad_ir.stmts)[invoke_line].args[2] == GlobalRef(Main, :a_primitive)
         end
 
-        # Regression test for https://github.com/compintell/Mooncake.jl/issues/238
+        # Regression test for https://github.com/chalk-lab/Mooncake.jl/issues/238
         @testset "238" begin
             f = Base.Fix1(view, [5.0, 4.0])
             fargs = (Base._mapreduce_dim, f, vcat, Float64[], [1:1, 2:2], :)
