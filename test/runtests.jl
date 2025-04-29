@@ -3,7 +3,7 @@ include("front_matter.jl")
 @testset "Mooncake.jl" begin
     if test_group == "quality"
         Aqua.test_all(Mooncake)
-        @test JuliaFormatter.format(Mooncake; verbose=false, overwrite=false)
+        @test JuliaFormatter.format(Mooncake; verbose=true, overwrite=false)
     elseif test_group == "basic"
         include("utils.jl")
         include("tangents.jl")
