@@ -86,7 +86,7 @@ end
 # Run type inference and constant propagation on the ir. Credit to @oxinabox:
 # https://gist.github.com/oxinabox/cdcffc1392f91a2f6d80b2524726d802#file-example-jl-L54
 function __infer_ir!(ir, interp::CC.AbstractInterpreter, mi::CC.MethodInstance)
-    method_info = CC.MethodInfo(true, nothing) #=propagate_inbounds=#
+    method_info = CC.MethodInfo(true, nothing)#=propagate_inbounds=#
     min_world = world = get_inference_world(interp)
     max_world = Base.get_world_counter()
     irsv = CC.IRInterpretationState(
@@ -135,7 +135,7 @@ function optimise_ir!(ir::IRCode; show_ir=false, do_inline=true)
     inline_state = CC.InliningState(local_interp)
     CC.verify_ir(ir)
     if do_inline
-        ir = CC.ssa_inlining_pass!(ir, inline_state, true) #=propagate_inbounds=#
+        ir = CC.ssa_inlining_pass!(ir, inline_state, true)#=propagate_inbounds=#
         ir = CC.compact!(ir)
     end
     ir = __strip_coverage!(ir)

@@ -180,6 +180,7 @@ end
 
         @testset "__exclude_unsupported_output , $(test_set)" for test_set in
                                                                   additional_test_set
+
             try
                 Mooncake.__exclude_unsupported_output(test_set[2])
             catch err
