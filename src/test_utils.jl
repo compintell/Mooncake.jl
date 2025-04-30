@@ -725,6 +725,7 @@ function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)
     GC.@preserve memory @testset "$f, $(_typeof(x))" for (
         interface_only, perf_flag, _, f, x...
     ) in test_cases
+
         test_rule(rng_ctor(123), f, x...; interface_only, perf_flag)
     end
 end
@@ -734,6 +735,7 @@ function run_derived_rrule!!_test_cases(rng_ctor, v::Val)
     GC.@preserve memory @testset "$f, $(typeof(x))" for (
         interface_only, perf_flag, _, f, x...
     ) in test_cases
+
         test_rule(rng_ctor(123), f, x...; interface_only, perf_flag, is_primitive=false)
     end
 end

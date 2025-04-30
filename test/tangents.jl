@@ -71,8 +71,8 @@
             @NamedTuple{a::Float64, b::T} where {T<:Int},
             Union{NoTangent,NamedTuple{(:a, :b)}},
         ),
-        (Union{@NamedTuple{a::T},@NamedTuple{b::T, c::T}} where {T<:Any}, Any),
-        (Union{@NamedTuple{T, Float64},@NamedTuple{T, Float64, Int}} where {T}, Any),
+        (Union{@NamedTuple{a::T},@NamedTuple{b::T,c::T}} where {T<:Any}, Any),
+        (Union{@NamedTuple{T,Float64},@NamedTuple{T,Float64,Int}} where {T}, Any),
 
         # Edge case
         (@NamedTuple{}, NoTangent),
