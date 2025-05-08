@@ -154,3 +154,7 @@ Honestly, your best bet is just to avoid differentiating functions whose argumen
 ```@meta
 DocTestSetup = nothing
 ```
+
+## Other limitations 
+
+See also [what won't work](./known_limitations/). 
