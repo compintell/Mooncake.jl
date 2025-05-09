@@ -17,6 +17,8 @@ jobs:
 
     steps:
       - name: Build and deploy Documenter.jl docs
+        env:
+          GKSwstype: nul # turn off GR's interactive plotting for notebooks
         uses: TuringLang/actions/DocsDocumenter@main
 
 
