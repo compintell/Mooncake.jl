@@ -2,7 +2,7 @@
 
 Mooncake.jl has a number of known qualitative limitations, which we document here.
 
-## Coverage of Julia syntax and standard library
+## Coverage of Julia Syntax and Standard Library
 
 While `Mooncake.jl` should now work on a very large subset of the language, there remain things that you should expect not to work. A non-exhaustive list of things to bear in mind includes:
 1. It is always necessary to produce hand-written rules for `ccall`s (and, more generally, foreigncall nodes). We have rules for many `ccall`s, but not all. If you encounter a foreigncall without a hand-written rule, you should get an informative error message which tells you what is going on and how to deal with it.
