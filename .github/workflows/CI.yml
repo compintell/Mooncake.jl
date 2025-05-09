@@ -186,17 +186,27 @@ jobs:
             cat bench/benchmark_results.txt
             echo "EOF"
           } >> $GITHUB_OUTPUT
+          
       - name: Find Comment
         uses: peter-evans/find-comment@v3
         id: fc
         with:
           issue-number: ${{ github.event.pull_request.number }}
           comment-author: github-actions[bot]
+          body-includes: "perf-results"
+
       - id: post-report-as-pr-comment
         name: Post Report as Pull Request Comment
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
-          body: "Performance Ratio:\nRatio of time to compute gradient and time to compute function.\nWarning: results are very approximate! See [here](https://github.com/chalk-lab/Mooncake.jl/tree/main/bench#inter-framework-benchmarking) for more context.\n```\n${{ steps.read-file.outputs.table }}\n```"
+          body: |
+            <!-- perf-results -->
+            Performance Ratio:
+            Ratio of time to compute gradient and time to compute function.
+            Warning: results are very approximate! See [here](https://github.com/chalk-lab/Mooncake.jl/tree/main/bench#inter-framework-benchmarking) for more context.
+            ```
+            ${{ steps.read-file.outputs.table }}
+            ```
           comment-id: ${{ steps.fc.outputs.comment-id }}
           edit-mode: replace
