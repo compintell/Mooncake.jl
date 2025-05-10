@@ -12,6 +12,11 @@ concurrency:
   # Cancel intermediate builds: only if it is a pull request build.
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+  
+permissions:
+  contents: write
+  pull-requests: write
+  
 jobs:
   test:
     name: ${{ matrix.test_group }}-${{ matrix.version }}-${{ matrix.arch }}
