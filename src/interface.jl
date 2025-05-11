@@ -16,7 +16,7 @@ function __value_and_pullback!!(
     out, pb!! = rule(fx_fwds...)
     @assert _typeof(tangent(out)) == fdata_type(T)
     increment!!(tangent(out), fdata(ȳ))
-    v = y_cache === nothing ? copy(primal(out)) : _copy!!(y_cache, primal(out))
+    v = y_cache === nothing ? _copy_output(primal(out)) : _copy!!(y_cache, primal(out))
     return v, tuple_map((f, r) -> tangent(fdata(tangent(f)), r), fx, pb!!(rdata(ȳ)))
 end
 
@@ -199,7 +199,7 @@ end
 Required for the robust design of [`value_and_pullback`](@ref), [`prepare_pullback_cache`](@ref).  
 Ensures that `y` contains no aliasing, circular references, `Ptr`s or non differentiable datatypes. 
 In the forward pass f(args...) output can only return a "Tree" like datastructure with leaf nodes as primitive types.  
-Refer https://github.com/compintell/Mooncake.jl/issues/517#issuecomment-2715202789 and related issue for details.  
+Refer https://github.com/chalk-lab/Mooncake.jl/issues/517#issuecomment-2715202789 and related issue for details.  
 Internally calls [`__exclude_unsupported_output_internal!`](@ref).
 The design is modelled after `zero_tangent`.
 """
@@ -237,6 +237,59 @@ function __exclude_unsupported_output_internal!(y::T, address_set::Set{UInt}) wh
 end
 
 const _BuiltinArrays = @static VERSION >= v"1.11" ? Union{Array,Memory} : Array
+
+# explicit for svec
+_copy_output(x::SimpleVector) = Core.svec([map(_copy_output, x_sub) for x_sub in x]...)
+
+# Array, Memory
+function _copy_output(x::P) where {P<:_BuiltinArrays}
+    temp = P(undef, size(x)...)
+    @inbounds for i in eachindex(temp)
+        isassigned(x, i) && (temp[i] = _copy_output(x[i]))
+    end
+    return temp
+end
+
+# Tuple, NamedTuple
+_copy_output(x::Union{Tuple,NamedTuple}) = map(_copy_output, x)
+
+# mutable composite types, bitstype
+function _copy_output(x::P) where {P}
+    isbitstype(P) && return x
+    nf = nfields(P)
+
+    if ismutable(x)
+        temp = ccall(:jl_new_struct_uninit, Any, (Any,), P)
+        for x_sub in 1:nf
+            if isdefined(x, x_sub)
+                ccall(
+                    :jl_set_nth_field,
+                    Cvoid,
+                    (Any, Csize_t, Any),
+                    temp,
+                    x_sub - 1,
+                    _copy_output(getfield(x, x_sub)),
+                )
+            end
+        end
+
+        return temp
+    else
+        flds = Vector{Any}(undef, nf)
+        for x_sub in 1:nf
+            if isdefined(x, x_sub)
+                flds[x_sub] = _copy_output(getfield(x, x_sub))
+            else
+                nf = x_sub - 1  # Assumes if a undefined field is found, all subsequent fields are undefined.
+                break
+            end
+        end
+
+        # when immutable struct object created by non initializing inner constructor. (Base.deepcopy misses this out)
+        !isassigned(flds, 1) && return x
+        return ccall(:jl_new_structv, Any, (Any, Ptr{Any}, UInt32), P, flds, nf)
+    end
+end
 
 function __exclude_unsupported_output_internal!(
     y::T, address_set::Set{UInt}
@@ -277,21 +330,21 @@ Returns a cache used with [`value_and_pullback!!`](@ref). See that function for 
 """
 function prepare_pullback_cache(fx...; kwargs...)
 
-    # Take a copy before mutating.
-    fx = deepcopy(fx)
-
     # Construct rule and tangents.
     rule = build_rrule(get_interpreter(), Tuple{map(_typeof, fx)...}; kwargs...)
     tangents = map(zero_tangent, fx)
 
     # Run the rule forwards -- this should do a decent chunk of pre-allocation.
-    y, _ = rule(map((x, dx) -> CoDual(x, fdata(dx)), fx, tangents)...)
+    y, rvs!! = rule(map((x, dx) -> CoDual(x, fdata(dx)), fx, tangents)...)
 
     # Handle forward pass's primal exceptions
     __exclude_unsupported_output(y)
 
+    # Run reverse-pass in order to reset stacks + state.
+    rvs!!(zero_rdata(primal(y)))
+
     # Construct cache for output. Check that `copy!`ing appears to work.
-    y_cache = copy(primal(y))
+    y_cache = _copy_output(primal(y))
     return Cache(rule, _copy!!(y_cache, primal(y)), tangents)
 end
 
@@ -353,8 +406,9 @@ Returns a cache used with [`value_and_gradient!!`](@ref). See that function for 
 function prepare_gradient_cache(fx...; kwargs...)
     rule = build_rrule(fx...; kwargs...)
     tangents = map(zero_tangent, fx)
-    y, _ = rule(map((x, dx) -> CoDual(x, fdata(dx)), fx, tangents)...)
+    y, rvs!! = rule(map((x, dx) -> CoDual(x, fdata(dx)), fx, tangents)...)
     primal(y) isa IEEEFloat || throw_val_and_grad_ret_type_error(primal(y))
+    rvs!!(zero_tangent(primal(y))) # run reverse-pass to reset stacks + state
     return Cache(rule, nothing, tangents)
 end
 

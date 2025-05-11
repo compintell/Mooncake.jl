@@ -258,7 +258,7 @@ initial rdata directly into the statement, which is safe because it is always a 
 """
 function reverse_data_ref_stmts(info::ADInfo)
     function make_ref_stmt(id, P)
-        ref_type = Base.RefValue{P <: Type ? NoRData : zero_like_rdata_type(P)}
+        ref_type = Base.RefValue{P<:Type ? NoRData : zero_like_rdata_type(P)}
         init_ref_val = P <: Type ? NoRData() : Mooncake.zero_like_rdata_from_type(P)
         return (id, new_inst(Expr(:new, ref_type, QuoteNode(init_ref_val))))
     end
@@ -636,7 +636,7 @@ function make_ad_stmts!(stmt::Core.UpsilonNode, ::ID, ::ADInfo)
         "re-writing code such that it avoids generating any UpsilonNodes, or writing a " *
         "rule to differentiate the code by hand. If you are in any doubt as to what to " *
         "do, please request assistance by opening an issue at " *
-        "github.com/compintell/Mooncake.jl.",
+        "github.com/chalk-lab/Mooncake.jl.",
     )
 end
 
@@ -1022,7 +1022,7 @@ function Base.showerror(io::IO, err::MooncakeRuleCompilationError)
         "MooncakeRuleCompilationError: an error occured while Mooncake was compiling a " *
         "rule to differentiate something. If the `caused by` error " *
         "message below does not make it clear to you how the problem can be fixed, " *
-        "please open an issue at github.com/compintell/Mooncake.jl describing your " *
+        "please open an issue at github.com/chalk-lab/Mooncake.jl describing your " *
         "problem.\n" *
         "To replicate this error run the following:\n"
     println(io, msg)
@@ -1809,7 +1809,7 @@ mutable struct LazyDerivedRule{primal_sig,Trule}
     rule::Trule
     function LazyDerivedRule(mi::Core.MethodInstance, debug_mode::Bool)
         interp = get_interpreter()
-        return new{mi.specTypes,rule_type(interp, mi; debug_mode)}(debug_mode, mi)
+        return new{mi.specTypes,rule_type(interp, mi;debug_mode)}(debug_mode, mi)
     end
     function LazyDerivedRule{Tprimal_sig,Trule}(
         mi::Core.MethodInstance, debug_mode::Bool

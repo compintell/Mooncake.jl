@@ -438,7 +438,7 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:foreigncall})
             _x,
         ),
         (false, :none, nothing, isassigned, randn(5), 4),
-        (false, :none, nothing, x -> (Base._growbeg!(x, 2); x[1:2] .= 2.0), randn(5)),
+        (false, :none, nothing, x -> (Base._growbeg!(x, 2); x[1:2].=2.0), randn(5)),
         (
             false,
             :none,

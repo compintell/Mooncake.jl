@@ -925,7 +925,7 @@ function run_hand_written_rule_test_cases(rng_ctor, v::Val, forward=false)
     GC.@preserve memory @testset "$f, $(_typeof(x))" for (
         interface_only, perf_flag, _, f, x...
     ) in test_cases
-        # @info "forward=$forward, $(Mooncake._typeof((f, x...)))"
+        test_rule(rng_ctor(123), f, x...; interface_only, perf_flag, forward)
         test_rule(rng_ctor(123), f, x...; interface_only, perf_flag, forward)
     end
 end

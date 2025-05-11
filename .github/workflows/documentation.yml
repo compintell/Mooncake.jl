@@ -1,0 +1,24 @@
+name: Documentation
+
+on:
+  push:
+    branches:
+      - main
+    tags: '*'
+  pull_request:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Build and deploy Documenter.jl docs
+        env:
+          GKSwstype: nul # turn off GR's interactive plotting for notebooks
+        uses: TuringLang/actions/DocsDocumenter@main
+
+

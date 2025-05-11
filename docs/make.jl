@@ -48,7 +48,9 @@ makedocs(;
         "Developer Documentation" => [
             joinpath("developer_documentation", "running_tests_locally.md"),
             joinpath("developer_documentation", "developer_tools.md"),
+            joinpath("developer_documentation", "ir_representation.md"),
             joinpath("developer_documentation", "forwards_mode_design.md"),
+            joinpath("developer_documentation", "reverse_mode_design.md"),
             joinpath("developer_documentation", "misc_internals_notes.md"),
             joinpath("developer_documentation", "internal_docstrings.md"),
         ],
@@ -56,4 +58,4 @@ makedocs(;
     ],
 )
 
-deploydocs(; repo="github.com/compintell/Mooncake.jl.git", push_preview=true)
+deploydocs(; repo="github.com/chalk-lab/Mooncake.jl.git", push_preview=true)
