@@ -11,7 +11,7 @@ using Mooncake.TestUtils: test_tangent_interface, test_tangent_splitting, test_r
         p = CuArray{Float32,2,CUDA.DeviceMemory}(undef, 8, 8)
         test_tangent_interface(StableRNG(123456), p; interface_only=false)
         test_tangent_splitting(StableRNG(123456), p)
-    
+
         # Check we can instantiate a CuArray.
         test_rule(
             StableRNG(123456),
