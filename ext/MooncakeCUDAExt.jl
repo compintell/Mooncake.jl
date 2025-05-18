@@ -28,7 +28,7 @@ import Mooncake:
     MaybeCache,
     IncCache,
     NoRData,
-    StackDict
+    Maybe
 
 import Mooncake.TestUtils:
     populate_address_map_internal, AddressMap, __increment_should_allocate
@@ -38,16 +38,16 @@ const CuFloatArray = CuArray{<:IEEEFloat}
 # Tell Mooncake.jl how to handle CuArrays.
 
 Mooncake.@foldable tangent_type(::Type{P}) where {P<:CuFloatArray} = P
-function zero_tangent_internal(x::CuFloatArray, stackdict::StackDict)
-    haskey(stackdict, x) && return stackdict[x]::tangent_type(typeof(x))
+function zero_tangent_internal(x::CuFloatArray, dict::MaybeCache)
+    haskey(dict, x) && return dict[x]::tangent_type(typeof(x))
     t = zero(x)
-    stackdict[x] = t
+    dict[x] = t
     return t
 end
-function randn_tangent_internal(rng::AbstractRNG, x::CuFloatArray, stackdict::Any)
-    haskey(stackdict, x) && return stackdict[x]::tangent_type(typeof(x))
+function randn_tangent_internal(rng::AbstractRNG, x::CuFloatArray, dict::MaybeCache)
+    haskey(dict, x) && return dict[x]::tangent_type(typeof(x))
     t = cu(randn(rng, Float32, size(x)...))
-    stackdict[x] = t
+    dict[x] = t
     return t
 end
 function TestUtils.has_equal_data_internal(

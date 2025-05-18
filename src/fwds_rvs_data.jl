@@ -267,6 +267,11 @@ function fdata(t::T) where {T<:Union{Tuple,NamedTuple}}
     return fdata_type(T) == NoFData ? NoFData() : tuple_map(fdata, t)
 end
 
+"""
+    uninit_fdata(p)
+
+Equivalent to `fdata(uninit_tangent(p))`.
+"""
 uninit_fdata(p) = fdata(uninit_tangent(p))
 
 """
