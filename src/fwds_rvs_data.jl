@@ -155,6 +155,8 @@ fdata_type(T)
 
 fdata_type(x) = throw(error("$x is not a type. Perhaps you meant typeof(x)?"))
 
+@foldable fdata_type(::Type{Union{}}) = Union{}
+
 fdata_type(::Type{T}) where {T<:IEEEFloat} = NoFData
 
 function fdata_type(::Type{PossiblyUninitTangent{T}}) where {T}
@@ -423,6 +425,8 @@ See extended help in [`fdata_type`](@ref) docstring.
 rdata_type(T)
 
 rdata_type(x) = throw(error("$x is not a type. Perhaps you meant typeof(x)?"))
+
+@foldable rdata_type(::Type{Union{}}) = Union{}
 
 rdata_type(::Type{T}) where {T<:IEEEFloat} = T
 

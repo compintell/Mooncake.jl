@@ -15,7 +15,7 @@
 #   improvement over what we currently have, and helps to prevent the addition of flakey
 #   rules which cause robustness or correctness problems.
 
-# Performance issue: https://github.com/compintell/Mooncake.jl/issues/156
+# Performance issue: https://github.com/chalk-lab/Mooncake.jl/issues/156
 @is_primitive(DefaultCtx, Tuple{typeof(sum),Array{<:IEEEFloat}})
 function rrule!!(::CoDual{typeof(sum)}, x::CoDual{<:Array{P}}) where {P<:IEEEFloat}
     dx = x.dx
@@ -26,7 +26,7 @@ function rrule!!(::CoDual{typeof(sum)}, x::CoDual{<:Array{P}}) where {P<:IEEEFlo
     return zero_fcodual(sum(identity, x.x)), sum_pb!!
 end
 
-# Performance issue: https://github.com/compintell/Mooncake.jl/issues/156
+# Performance issue: https://github.com/chalk-lab/Mooncake.jl/issues/156
 @is_primitive(DefaultCtx, Tuple{typeof(sum),typeof(abs2),Array{<:IEEEFloat}})
 function rrule!!(
     ::CoDual{typeof(sum)}, ::CoDual{typeof(abs2)}, x::CoDual{<:Array{P}}

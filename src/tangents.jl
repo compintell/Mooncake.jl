@@ -276,7 +276,7 @@ tangent_type(T)
 tangent_type(x) = throw(error("$x is not a type. Perhaps you meant typeof(x)?"))
 
 # The "Bottom" type.
-tangent_type(::Type{Union{}}) = NoTangent
+@foldable tangent_type(::Type{Union{}}) = Union{}
 
 # This is essential for DataType, as the recursive definition always recurses infinitely,
 # because one of the fieldtypes is itself always a DataType. In particular, we'll always
@@ -1168,7 +1168,7 @@ function tangent_test_cases()
         circular_vector,
         TestResources.make_circular_reference_struct(),
         TestResources.make_indirect_circular_reference_array(),
-        # Regression tests to catch type inference failures, see https://github.com/compintell/Mooncake.jl/pull/422
+        # Regression tests to catch type inference failures, see https://github.com/chalk-lab/Mooncake.jl/pull/422
         (((((randn(33)...,),),),),),
         (((((((((randn(33)...,),),),),), randn(5)...),),),),
         Base.OneTo{Int},

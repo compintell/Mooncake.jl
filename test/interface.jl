@@ -35,17 +35,22 @@ end
             ((x, y) -> x + sin(y), randn(Float32), randn(Float32)),
             ((x...) -> x[1] + x[2], randn(Float64), randn(Float64)),
             (sum, randn(10)),
+            (x -> (x .*= 2; sum(x)), randn(10)),
         ]
             kwargs = (debug_mode=false, silence_debug_messages=true)
             rule = build_rrule(fargs...; kwargs...)
-            f, args... = fargs
-            v, dfargs = value_and_gradient!!(rule, fargs...)
+            v, dfargs = value_and_gradient!!(rule, deepcopy(fargs)...)
+            f, args... = deepcopy(fargs)
             @test v == f(args...)
             for (arg, darg) in zip(fargs, dfargs)
                 @test tangent_type(typeof(arg)) == typeof(darg)
             end
 
+            # Create cache and verify that mutation is undone.
+            original_fargs = deepcopy(fargs)
             cache = Mooncake.prepare_gradient_cache(fargs...; kwargs...)
+            @test fargs == original_fargs
+
             _v, _dfargs = value_and_gradient!!(cache, fargs...)
             @test _v == v
             for (arg, darg) in zip(fargs, _dfargs)
@@ -72,19 +77,24 @@ end
     @testset "value_and_pullback!!" begin
         @testset "($(typeof(fargs))" for (ȳ, fargs...) in Any[
             (randn(10), identity, randn(10)),
+            (randn(10), x -> (x .*= 2; x), randn(10)),
             (randn(), sin, randn(Float64)),
             (randn(), sum, randn(Float64)),
         ]
             kwargs = (debug_mode=false, silence_debug_messages=true)
             rule = build_rrule(fargs...; kwargs...)
             f, args... = fargs
-            v, dfargs = value_and_pullback!!(rule, ȳ, fargs...)
-            @test v == f(args...)
+            v, dfargs = value_and_pullback!!(rule, ȳ, deepcopy(fargs)...)
+            @test v == f(deepcopy(args)...)
             for (arg, darg) in zip(fargs, dfargs)
                 @test tangent_type(typeof(arg)) == typeof(darg)
             end
 
+            # Create cache and verify fargs is unchanged afterwards.
+            original_args = deepcopy(fargs)
             cache = Mooncake.prepare_pullback_cache(fargs...; kwargs...)
+            @test original_args == fargs
+
             _v, _dfargs = value_and_pullback!!(cache, ȳ, fargs...)
             @test _v == v
             for (arg, darg) in zip(fargs, _dfargs)
@@ -168,9 +178,25 @@ end
 
         additional_test_set = Mooncake.tangent_test_cases()
 
-        @testset for i in eachindex(additional_test_set)
+        @testset "__exclude_unsupported_output , $(test_set)" for test_set in
+                                                                  additional_test_set
+
             try
-                Mooncake.__exclude_unsupported_output(additional_test_set[i][2])
+                Mooncake.__exclude_unsupported_output(test_set[2])
+            catch err
+                @test isa(err, Mooncake.ValueAndPullbackReturnTypeError)
+            end
+        end
+
+        @testset "_copy_output , $(test_set)" for test_set in additional_test_set
+            original = test_set[2]
+            try
+                if isnothing(Mooncake.__exclude_unsupported_output(original))
+                    test_copy = Mooncake._copy_output(original)
+
+                    @test Mooncake.TestUtils.has_equal_data(original, test_copy)
+                    @test typeof(test_copy) == typeof(original)
+                end
             catch err
                 @test isa(err, Mooncake.ValueAndPullbackReturnTypeError)
             end

@@ -22,7 +22,7 @@ function generate_hand_written_rrule!!_test_cases(
     test_cases = vcat(
         Any[
         # Rules to avoid pointer type conversions.
-        (
+            (
             true,
             :stability_and_allocs,
             nothing,

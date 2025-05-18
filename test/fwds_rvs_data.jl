@@ -12,6 +12,7 @@ end
 
 @testset "fwds_rvs_data" begin
     @testset "fdata_type / rdata_type($P)" for (P, F, R) in Any[
+        (Union{}, Union{}, Union{}),
         (
             Tuple{Any,Vector{Float64}},
             Tuple{Any,Vector{Float64}},

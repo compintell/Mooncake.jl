@@ -1,4 +1,3 @@
-
 """
     module TestResources
 
@@ -22,7 +21,7 @@ using ..Mooncake:
     primal,
     tangent
 
-using DiffTests, LinearAlgebra, Random, Setfield
+using LinearAlgebra, Random
 
 #
 # Types used for testing purposes
@@ -277,7 +276,7 @@ const __x_for_gref_tester_4::Float64 = 3.0
 __x_for_gref_tester_5 = 5.0
 @eval globalref_tester_5() = $(GlobalRef(@__MODULE__, :__x_for_gref_tester_5))
 
-# See https://github.com/compintell/Mooncake.jl/issues/329 .
+# See https://github.com/chalk-lab/Mooncake.jl/issues/329 .
 const __x = randn(10)
 @noinline globalref_tester_6_inner(x) = sum(x)
 globalref_tester_6() = globalref_tester_6_inner(__x)
@@ -640,13 +639,13 @@ end
 
 highly_nested_tuple(x) = ((((x,),), x), x)
 
-# Regression test: https://github.com/compintell/Mooncake.jl/issues/450
+# Regression test: https://github.com/chalk-lab/Mooncake.jl/issues/450
 sig_argcount_mismatch(x) = vcat(x[1], x[2:2], x[3:3], x[4:4])
 
-# Regression test: https://github.com/compintell/Mooncake.jl/issues/473
+# Regression test: https://github.com/chalk-lab/Mooncake.jl/issues/473
 large_tuple_inference(x::NTuple{1_000,Float64}) = sum(cos, x)
 
-# Regression test: https://github.com/compintell/Mooncake.jl/issues/319
+# Regression test: https://github.com/chalk-lab/Mooncake.jl/issues/319
 function regression_319(θ)
     d = [0.0, 0.0]
     x = θ[1:2]
@@ -929,10 +928,7 @@ end
 
 my_setfield!(args...) = setfield!(args...)
 
-function _setfield!(value::MutableTangent, name, x)
-    @set value.fields.$name = x
-    return x
-end
+_setfield!(value::MutableTangent, name, x) = x
 
 function Mooncake.rrule!!(::Mooncake.CoDual{typeof(my_setfield!)}, value, name, x)
     _name = primal(name)
@@ -942,72 +938,6 @@ function Mooncake.rrule!!(::Mooncake.CoDual{typeof(my_setfield!)}, value, name, 
     )
     return y, nothing
 end
-
-# Tests brought in from DiffTests.jl
-const _rng = Xoshiro(123456)
-
-const DIFFTESTS_FUNCTIONS = vcat(
-    tuple.(
-        fill(false, length(DiffTests.NUMBER_TO_NUMBER_FUNCS)),
-        DiffTests.NUMBER_TO_NUMBER_FUNCS,
-        rand(_rng, length(DiffTests.NUMBER_TO_NUMBER_FUNCS)) .+ 1e-1,
-    ),
-    tuple.(
-        fill(false, length(DiffTests.NUMBER_TO_ARRAY_FUNCS)),
-        DiffTests.NUMBER_TO_ARRAY_FUNCS,
-        [rand(_rng) + 1e-1 for _ in DiffTests.NUMBER_TO_ARRAY_FUNCS],
-    ),
-    tuple.(
-        fill(false, length(DiffTests.INPLACE_NUMBER_TO_ARRAY_FUNCS)),
-        DiffTests.INPLACE_NUMBER_TO_ARRAY_FUNCS,
-        [rand(_rng, 5) .+ 1e-1 for _ in DiffTests.INPLACE_ARRAY_TO_ARRAY_FUNCS],
-        [rand(_rng) + 1e-1 for _ in DiffTests.INPLACE_ARRAY_TO_ARRAY_FUNCS],
-    ),
-    tuple.(
-        fill(false, length(DiffTests.VECTOR_TO_NUMBER_FUNCS)),
-        DiffTests.VECTOR_TO_NUMBER_FUNCS,
-        [rand(_rng, 5) .+ 1e-1 for _ in DiffTests.VECTOR_TO_NUMBER_FUNCS],
-    ),
-    tuple.(
-        fill(false, length(DiffTests.MATRIX_TO_NUMBER_FUNCS)),
-        DiffTests.MATRIX_TO_NUMBER_FUNCS,
-        [rand(_rng, 5, 5) .+ 1e-1 for _ in DiffTests.MATRIX_TO_NUMBER_FUNCS],
-    ),
-    tuple.(
-        fill(false, length(DiffTests.BINARY_MATRIX_TO_MATRIX_FUNCS)),
-        DiffTests.BINARY_MATRIX_TO_MATRIX_FUNCS,
-        [rand(_rng, 5, 5) .+ 1e-1 + I for _ in DiffTests.BINARY_MATRIX_TO_MATRIX_FUNCS],
-        [rand(_rng, 5, 5) .+ 1e-1 + I for _ in DiffTests.BINARY_MATRIX_TO_MATRIX_FUNCS],
-    ),
-    tuple.(
-        fill(false, length(DiffTests.TERNARY_MATRIX_TO_NUMBER_FUNCS)),
-        DiffTests.TERNARY_MATRIX_TO_NUMBER_FUNCS,
-        [rand(_rng, 5, 5) .+ 1e-1 for _ in DiffTests.TERNARY_MATRIX_TO_NUMBER_FUNCS],
-        [rand(_rng, 5, 5) .+ 1e-1 for _ in DiffTests.TERNARY_MATRIX_TO_NUMBER_FUNCS],
-        [rand(_rng, 5, 5) .+ 1e-1 for _ in DiffTests.TERNARY_MATRIX_TO_NUMBER_FUNCS],
-    ),
-    tuple.(
-        fill(false, length(DiffTests.INPLACE_ARRAY_TO_ARRAY_FUNCS)),
-        DiffTests.INPLACE_ARRAY_TO_ARRAY_FUNCS,
-        [rand(_rng, 26) .+ 1e-1 for _ in DiffTests.INPLACE_ARRAY_TO_ARRAY_FUNCS],
-        [rand(_rng, 26) .+ 1e-1 for _ in DiffTests.INPLACE_ARRAY_TO_ARRAY_FUNCS],
-    ),
-    tuple.(
-        fill(false, length(DiffTests.VECTOR_TO_VECTOR_FUNCS)),
-        DiffTests.VECTOR_TO_VECTOR_FUNCS,
-        [rand(_rng, 26) .+ 1e-1 for _ in DiffTests.VECTOR_TO_VECTOR_FUNCS],
-    ),
-    tuple.(
-        fill(false, length(DiffTests.ARRAY_TO_ARRAY_FUNCS)),
-        DiffTests.ARRAY_TO_ARRAY_FUNCS,
-        [rand(_rng, 26) .+ 1e-1 for _ in DiffTests.ARRAY_TO_ARRAY_FUNCS],
-    ),
-    tuple.(
-        fill(false, length(DiffTests.MATRIX_TO_MATRIX_FUNCS)),
-        DiffTests.MATRIX_TO_MATRIX_FUNCS,
-        [rand(_rng, 5, 5) .+ 1e-1 for _ in DiffTests.MATRIX_TO_MATRIX_FUNCS],
-    ),
-)
 
 export MutableFoo, StructFoo, NonDifferentiableFoo, FullyInitMutableStruct
 
