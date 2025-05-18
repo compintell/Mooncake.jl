@@ -273,7 +273,6 @@ Conversely, we refer to both inputs and outputs to the adjoint of this derivativ
 Note, however, that the sets involved are the same whether dealing with a derivative or its adjoint.
 Consequently, we use the same type to represent both.
 
-
 _**Representing Gradients**_
 
 This package assigns to each type in Julia a unique `tangent_type`, the purpose of which is to contain the gradients computed during reverse mode AD.
@@ -298,6 +297,11 @@ The following docstring provides the best in-depth explanation.
 ```@docs; canonical=false
 Mooncake.fdata_type(T)
 ```
+
+_**More Info**_
+
+See [Tangents](@ref) for complete information on what you must do if you wish to implement your own tangent type.
+(In the vast majority of cases this is unnecessary).
 
 _**CoDuals**_
 
