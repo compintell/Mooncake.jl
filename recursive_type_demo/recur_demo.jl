@@ -1,3 +1,6 @@
+using Pkg
+Pkg.add(path="../")
+
 using Mooncake
 using Mooncake.Random: AbstractRNG
 
