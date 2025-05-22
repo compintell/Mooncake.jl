@@ -205,7 +205,7 @@ must have signature
 Tuple{Trule, CoDual{typeof(foo), NoFData}, CoDual{Float64, NoFData}} ->
     Tuple{CoDual{Float64, NoFData}, Trvs_pass}
 ```
-For example, if we call `foo(5.0)`, it rules would be called as `rule(CoDual(foo, NoFData()), CoDual(5.0, NoFData()))`.
+For example, if we call `foo(5.0)`, its rules would be called as `rule(CoDual(foo, NoFData()), CoDual(5.0, NoFData()))`.
 The precise definition and role of `NoFData` will be explained shortly, but the general scheme is that to a rule for `foo` you must pass `foo` itself, its arguments, and some additional data for book-keeping.
 `foo` and each of its arguments are paired with this additional book-keeping data via the `CoDual` type.
 
