@@ -281,6 +281,7 @@ function _copy_to_output!(dst::P, src::P) where {P}
     if ismutable(src)
         for src_sub in 1:nf
             if isdefined(src, src_sub)
+                # using ccall as setfield! fails for const fields of a mutable struct.
                 ccall(
                     :jl_set_nth_field,
                     Cvoid,
