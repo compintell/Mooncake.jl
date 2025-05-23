@@ -295,6 +295,7 @@ function _copy_to_output!(dst::P, src::P) where {P}
 
         return dst
     else
+        # this allocation is needed for handling undef fields in immutable structs.
         flds = Vector{Any}(undef, nf)
         for src_sub in 1:nf
             if isdefined(src, src_sub)
