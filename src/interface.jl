@@ -239,13 +239,18 @@ end
 
 const _BuiltinArrays = @static VERSION >= v"1.11" ? Union{Array,Memory} : Array
 
+"""
+    _copy_to_output!(dst::T, src::T)
+
+Copy the contents of `src` to `dst`, with zero or minimal new memory allocation. The type of `dst` and `src` must be the same.
+Required as Base.copy!() does not work for all supported primal types. For example, `Base.copy!` does not work for `Core.svec`.
+"""
 _copy_to_output!(dst::Number, src::Number) = src
 
 # explicit copy for Core.svec
 function _copy_to_output!(dst::SimpleVector, src::SimpleVector)
     return Core.svec(map(_copy_to_output!, dst, src)...)
 end
-_copy_output(x::SimpleVector) = Core.svec([map(_copy_output, x_sub) for x_sub in x]...)
 
 # copy for Array, Memory
 function _copy_to_output!(dst::P, src::P) where {P<:_BuiltinArrays}
@@ -257,21 +262,11 @@ function _copy_to_output!(dst::P, src::P) where {P<:_BuiltinArrays}
     return dst
 end
 
-function _copy_output(x::P) where {P<:_BuiltinArrays}
-    temp = P(undef, size(x)...)
-    @inbounds for i in eachindex(temp)
-        isassigned(x, i) && (temp[i] = _copy_output(x[i]))
-    end
-    return temp
-end
-
 # Tuple, NamedTuple
 function _copy_to_output!(dst::P, src::P) where {P<:Union{Tuple,NamedTuple}}
     isbitstype(P) && return src
     return map(_copy_to_output!, dst, src)
 end
-
-_copy_output(x::Union{Tuple,NamedTuple}) = map(_copy_output, x)
 
 # Handling structs
 function _copy_to_output!(dst::P, src::P) where {P}
@@ -313,6 +308,24 @@ function _copy_to_output!(dst::P, src::P) where {P}
         return ccall(:jl_new_structv, Any, (Any, Ptr{Any}, UInt32), P, flds, nf)
     end
 end
+
+"""
+    _copy_output(x::T)
+
+Returns a copy of `x`, of the same type `T`. Allocates new memory for the copy.
+Required as Base.copy() does not work for all supported primal types. For example, `Base.copy` does not work for `Core.svec`.
+"""
+_copy_output(x::SimpleVector) = Core.svec([map(_copy_output, x_sub) for x_sub in x]...)
+
+function _copy_output(x::P) where {P<:_BuiltinArrays}
+    temp = P(undef, size(x)...)
+    @inbounds for i in eachindex(temp)
+        isassigned(x, i) && (temp[i] = _copy_output(x[i]))
+    end
+    return temp
+end
+
+_copy_output(x::Union{Tuple,NamedTuple}) = map(_copy_output, x)
 
 function _copy_output(x::P) where {P}
     isbitstype(P) && return x
