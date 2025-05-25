@@ -317,6 +317,7 @@ Required as Base.copy() does not work for all supported primal types. For exampl
 """
 _copy_output(x::SimpleVector) = Core.svec([map(_copy_output, x_sub) for x_sub in x]...)
 
+# Array, Memory
 function _copy_output(x::P) where {P<:_BuiltinArrays}
     temp = P(undef, size(x)...)
     @inbounds for i in eachindex(temp)
@@ -325,8 +326,10 @@ function _copy_output(x::P) where {P<:_BuiltinArrays}
     return temp
 end
 
+# Tuple, NamedTuple
 _copy_output(x::Union{Tuple,NamedTuple}) = map(_copy_output, x)
 
+# mutable composite types, bitstype
 function _copy_output(x::P) where {P}
     isbitstype(P) && return x
     nf = nfields(P)
