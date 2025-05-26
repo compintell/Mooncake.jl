@@ -1002,6 +1002,7 @@ end
 
 _get_sig(sig::Type) = sig
 _get_sig(mi::Core.MethodInstance) = mi.specTypes
+_get_sig(mc::MistyClosure) = Tuple{map(CC.widenconst, mc.ir[].argtypes)...}
 
 function forwards_ret_type(primal_ir::IRCode)
     return fcodual_type(Base.Experimental.compute_ir_rettype(primal_ir))

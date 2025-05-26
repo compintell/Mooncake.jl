@@ -159,7 +159,7 @@ end
 Returns a 2-tuple. The first element is true if `m` is a vararg method, and false if not.
 The second element contains the names of the static parameters associated to `m`.
 """
-is_vararg_and_sparam_names(m::Method) = m.isva, sparam_names(m)
+is_vararg_and_sparam_names(m::Method)::Tuple{Bool,Vector{Symbol}} = m.isva, sparam_names(m)
 
 """
     is_vararg_and_sparam_names(sig)::Tuple{Bool, Vector{Symbol}}
@@ -184,6 +184,14 @@ Calls `is_vararg_and_sparam_names` on `mi.def::Method`.
 function is_vararg_and_sparam_names(mi::Core.MethodInstance)::Tuple{Bool,Vector{Symbol}}
     return is_vararg_and_sparam_names(mi.def)
 end
+
+"""
+    is_vararg_and_sparam_names(mc::MistyClosure)::Tuple{Bool,Vector{Symbol}}
+
+Basic implementation for MistyClosure. Assumes is not a varargs function, and has no static
+parameter names appearing in the source.
+"""
+is_vararg_and_sparam_names(::MistyClosure)::Tuple{Bool,Vector{Symbol}} = false, Symbol[]
 
 """
     sparam_names(m::Core.Method)::Vector{Symbol}

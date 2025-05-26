@@ -50,6 +50,8 @@ include("front_matter.jl")
         include(joinpath("rrules", "low_level_maths.jl"))
     elseif test_group == "rrules/misc"
         include(joinpath("rrules", "misc.jl"))
+    elseif test_group == "rrules/misty_closures"
+        include(joinpath("rrules", "misty_closures.jl"))
     elseif test_group == "rrules/new"
         include(joinpath("rrules", "new.jl"))
     elseif test_group == "rrules/random"

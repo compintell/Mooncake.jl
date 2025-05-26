@@ -249,6 +249,12 @@ function lookup_ir(
     return CC.typeinf_ircode(interp, mi.def, mi.specTypes, mi.sparam_vals, optimize_until)
 end
 
+function lookup_ir(::CC.AbstractInterpreter, mc::MistyClosure; optimize_until=nothing)
+    return mc.ir[], return_type(mc.oc)
+end
+
+return_type(::Core.OpaqueClosure{A,B}) where {A,B} = B
+
 """
     is_unreachable_return_node(x::ReturnNode)
 
