@@ -7,11 +7,11 @@ _dual_mc(p::MistyClosure) = build_frule(get_interpreter(), p)
 
 tangent_type(::Type{<:MistyClosure}) = MistyClosureTangent
 
-function zero_tangent_internal(p::MistyClosure, d::StackDict)
+function zero_tangent_internal(p::MistyClosure, d::MaybeCache)
     return MistyClosureTangent(zero_tangent_internal(p.oc.captures, d), _dual_mc(p))
 end
 
-function randn_tangent_internal(rng::AbstractRNG, p::MistyClosure, d::StackDict)
+function randn_tangent_internal(rng::AbstractRNG, p::MistyClosure, d::MaybeCache)
     return MistyClosureTangent(randn_tangent_internal(rng, p.oc.captures, d), _dual_mc(p))
 end
 

@@ -2,24 +2,24 @@
 
 @foldable tangent_type(::Type{<:IdDict{K,V}}) where {K,V} = IdDict{K,tangent_type(V)}
 
-function zero_tangent_internal(d::P, stackdict::StackDict) where {P<:IdDict}
+function zero_tangent_internal(d::P, dict::MaybeCache) where {P<:IdDict}
     T = tangent_type(P)
-    if haskey(stackdict, d)
-        return stackdict[d]::T
+    if haskey(dict, d)
+        return dict[d]::T
     else
-        t = T([k => zero_tangent_internal(v, stackdict) for (k, v) in d])
-        stackdict[d] = t
+        t = T([k => zero_tangent_internal(v, dict) for (k, v) in d])
+        dict[d] = t
         return t
     end
 end
 
-function randn_tangent_internal(rng::AbstractRNG, d::P, stackdict::Any) where {P<:IdDict}
+function randn_tangent_internal(rng::AbstractRNG, d::P, dict::MaybeCache) where {P<:IdDict}
     T = tangent_type(P)
-    if haskey(stackdict, d)
-        return stackdict[d]::T
+    if haskey(dict, d)
+        return dict[d]::T
     else
-        t = T([k => randn_tangent_internal(rng, v, stackdict) for (k, v) in d])
-        stackdict[d] = t
+        t = T([k => randn_tangent_internal(rng, v, dict) for (k, v) in d])
+        dict[d] = t
         return t
     end
 end
