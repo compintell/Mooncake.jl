@@ -35,6 +35,10 @@ A *recursive type* is a struct that contains itself (directly or indirectly) as 
 ```@setup custom_tangent_type
 using Mooncake: Mooncake
 using DifferentiationInterface
+using Jet
+using AllocCheck
+using Test
+using Random
 ```
 
 ```@example custom_tangent_type
@@ -173,9 +177,6 @@ With these, you can now differentiate simple functions:
 ```@example custom_tangent_type
 a = A(1.0)
 val, grad = DifferentiationInterface.value_and_gradient(f1, AutoMooncake(; config=nothing), a)
-@show val
-@show grad.x
-@show grad.a
 ```
 
 Another example:
@@ -187,10 +188,6 @@ function prod_x(a::A{T}) where {T}
 end
 sum_a = A(1.0, A(2.0, A(3.0)))
 val_f5, grad_f5 = DifferentiationInterface.value_and_gradient(prod_x, AutoMooncake(; config=nothing), sum_a)
-@show val_f5
-@show grad_f5.x
-@show grad_f5.a.x
-@show grad_f5.a.a.x
 ```
 
 Depending on your use case, this may be sufficient.
@@ -231,7 +228,473 @@ You must provide adjoints for every `getfield`/`lgetfield` variant that appears 
 
 | Override                                             | What it proves                                             |
 | ---------------------------------------------------- | ---------------------------------------------------------- |
-| [`populate_address_map_internal`](@ref)              | Tangent-to-primal pointer correspondence (cycle safety)    |
-| [`has_equal_data_internal!!`](@ref Mooncake.has_equal_data!!) (primal & tangent) | Deep equality ignoring pointer identity; handles recursion |
+| [`TestUtils.populate_address_map_internal`](@ref)              | Tangent-to-primal pointer correspondence (cycle safety)    |
+| [`TestUtils.has_equal_data_internal!!`](@ref Mooncake.has_equal_data!!) (primal & tangent) | Deep equality ignoring pointer identity; handles recursion |
 
 By following this process—starting with a minimal set of methods and expanding as Mooncake requests more—you can support recursive types robustly in Mooncake.jl.
+
+## Appendix: Full Implementations
+
+Before defining the full implementation, `TestUtils.test_data` will fail.
+
+```@example custom_tangent_type
+Mooncake.TestUtils.test_data(Random.default_rng(), A(1.0, A(2.0, A(3.0))))
+```
+
+```@example custom_tangent_type
+
+Mooncake.rdata(::TangentForA{Tx}) where {Tx} = Mooncake.NoRData()
+Mooncake.tangent(t::TangentForA{Tx}, ::Mooncake.NoRData) where {Tx} = t
+
+function Mooncake.tangent_type(::Type{TangentForA{Tx}}) where {Tx}
+    return TangentForA{Tx}
+end
+Mooncake.tangent_type(::Type{TangentForA{Tx}}, ::Type{Mooncake.NoRData}) where {Tx} = TangentForA{Tx}
+
+_field_symbol(f::Symbol) = f
+_field_symbol(i::Int) = i == 1 ? :x : i == 2 ? :a :
+    throw(ArgumentError("Invalid field index '$i' for type A."))
+_field_symbol(::Type{Val{F}}) where F = _field_symbol(F)
+_field_symbol(::Val{F}) where F = _field_symbol(F)
+
+function _rrule_getfield_common(obj_cd::Mooncake.CoDual{A{T},TangentForA{Tx}},
+                                field_sym::Symbol,
+                                n_args::Int) where {T,Tx}
+    a = Mooncake.primal(obj_cd)
+    a_t = Mooncake.tangent(obj_cd)
+
+    value_primal = getfield(a, field_sym)
+
+    field_tan = field_sym === :x ? a_t.x : field_sym === :a ? a_t.a :
+        throw(ArgumentError("Unknown field '$field_sym' for type A."))
+
+    y_cd = Mooncake.CoDual(value_primal, Mooncake.fdata(field_tan))
+
+    function pb(Δy_rdata)
+        if field_sym === :x
+            if !(Δy_rdata isa Mooncake.NoRData)
+                a_t.x = Mooncake.increment_rdata!!(a_t.x, Δy_rdata)
+            end
+        else
+            @assert Δy_rdata isa Mooncake.NoRData
+        end
+        return ntuple(_ -> Mooncake.NoRData(), n_args)
+    end
+
+    return y_cd, pb
+end
+
+Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{typeof(Mooncake.lgetfield),A{T},Val{S}} where {T,S<:Symbol}
+
+function Mooncake.rrule!!(
+    ::Mooncake.CoDual{typeof(Mooncake.lgetfield),Mooncake.NoFData},
+    obj_cd::Mooncake.CoDual{A{T},TangentForA{Tx}},
+    ::Mooncake.CoDual{Val{FieldName},Mooncake.NoFData},
+) where {T,Tx,FieldName}
+    field_symbol = _field_symbol(FieldName)
+    return _rrule_getfield_common(obj_cd, field_symbol, 3)
+end
+
+# Rule for lgetfield(A, Val{Field}, Val{Order})
+Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{typeof(Mooncake.lgetfield),A{T},Val,Val} where {T}
+function Mooncake.rrule!!(
+    ::Mooncake.CoDual{typeof(Mooncake.lgetfield),F},
+    obj_cd::Mooncake.CoDual{A{T},TangentForA{Tx}},
+    ::Mooncake.CoDual{Val{VFieldName},Mooncake.NoFData},
+    ::Mooncake.CoDual{Val{VOrderName},Mooncake.NoFData}
+) where {F,T,Tx,VFieldName,VOrderName}
+    field_symbol = _field_symbol(VFieldName)
+    return _rrule_getfield_common(obj_cd, field_symbol, 4)
+end
+
+# Rule for getfield(A, ::Symbol)
+Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{typeof(getfield),A{T},Symbol} where {T}
+function Mooncake.rrule!!(
+    ::Mooncake.CoDual{typeof(getfield)},
+    obj_cd::Mooncake.CoDual{A{T},TangentForA{Tx}},
+    field_name_symbol_cd::Mooncake.CoDual{Symbol,Mooncake.NoFData},
+) where {T,Tx}
+    field_sym = Mooncake.primal(field_name_symbol_cd)
+    return _rrule_getfield_common(obj_cd, field_sym, 3)
+end
+
+# Rule for getfield(A, ::Int)
+Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{typeof(getfield),A{T},Int} where {T}
+function Mooncake.rrule!!(
+    ::Mooncake.CoDual{typeof(getfield)},
+    obj_cd::Mooncake.CoDual{A{T},TangentForA{Tx}},
+    field_idx_cd::Mooncake.CoDual{Int,Mooncake.NoFData},
+) where {T,Tx}
+    field_sym = _field_symbol(Mooncake.primal(field_idx_cd))
+    return _rrule_getfield_common(obj_cd, field_sym, 3)
+end
+
+# Rule for getfield(A, ::Symbol, ::Symbol) e.g. getfield(obj, :field, :not_atomic)
+Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{typeof(getfield),A{T},Symbol,Symbol} where {T}
+function Mooncake.rrule!!(
+    ::Mooncake.CoDual{typeof(getfield)},
+    obj_cd::Mooncake.CoDual{A{T},TangentForA{Tx}},
+    field_name_symbol_cd::Mooncake.CoDual{Symbol,Mooncake.NoFData},
+    ::Mooncake.CoDual{Symbol,Mooncake.NoFData}
+) where {T,Tx}
+    field_sym = Mooncake.primal(field_name_symbol_cd)
+    return _rrule_getfield_common(obj_cd, field_sym, 4)
+end
+
+# Rule for getfield(A, ::Int, ::Symbol) e.g. getfield(obj, 1, :not_atomic)
+Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{typeof(getfield),A{T},Int,Symbol} where {T}
+function Mooncake.rrule!!(
+    ::Mooncake.CoDual{typeof(getfield)},
+    obj_cd::Mooncake.CoDual{A{T},TangentForA{Tx}},
+    field_idx_cd::Mooncake.CoDual{Int,Mooncake.NoFData},
+    ::Mooncake.CoDual{Symbol,Mooncake.NoFData}
+) where {T,Tx}
+    field_sym = _field_symbol(Mooncake.primal(field_idx_cd))
+    return _rrule_getfield_common(obj_cd, field_sym, 4)
+end
+
+function Mooncake.zero_tangent_internal(p::A{T}, dict::Mooncake.MaybeCache) where {T}
+    Tx = Mooncake.tangent_type(T)
+    Tx == Mooncake.NoTangent && return Mooncake.NoTangent()
+    if haskey(dict, p)
+        return dict[p]::TangentForA{Tx}
+    end
+    x_t = Mooncake.zero_tangent_internal(p.x, dict)::Tx
+    t = TangentForA{Tx}(x_t)
+    dict[p] = t
+    if p.a === nothing
+        t.a = Mooncake.NoTangent()
+    else
+        t.a = Mooncake.zero_tangent_internal(p.a, dict)::Union{TangentForA{Tx},Mooncake.NoTangent}
+    end
+    return t
+end
+
+function Mooncake.randn_tangent_internal(rng::AbstractRNG, p::A{T}, dict::Mooncake.MaybeCache) where {T}
+    Tx = Mooncake.tangent_type(T)
+    Tx == Mooncake.NoTangent && return Mooncake.NoTangent()
+    if haskey(dict, p)
+        return dict[p]::TangentForA{Tx}
+    end
+    x_t = Mooncake.randn_tangent_internal(rng, p.x, dict)::Tx
+    t = TangentForA{Tx}(x_t)
+    dict[p] = t
+    if p.a === nothing
+        t.a = Mooncake.NoTangent()
+    else
+        t.a = Mooncake.randn_tangent_internal(rng, p.a, dict)::Union{TangentForA{Tx},Mooncake.NoTangent}
+    end
+    return t
+end
+
+function Mooncake.increment_internal!!(c::Mooncake.IncCache, t::TangentForA{Tx}, s::TangentForA{Tx}) where {Tx}
+    (haskey(c, t) || t === s) && return t
+    c[t] = true
+    t.x = Mooncake.increment_internal!!(c, t.x, s.x)
+    if !(t.a isa Mooncake.NoTangent)
+        t.a = Mooncake.increment_internal!!(c, t.a, s.a)
+    end
+    return t
+end
+
+function Mooncake.set_to_zero_internal!!(c::Mooncake.IncCache, t::TangentForA{Tx}) where {Tx}
+    haskey(c, t) && return t
+    c[t] = false
+    t.x = Mooncake.set_to_zero_internal!!(c, t.x)
+    if !(t.a isa Mooncake.NoTangent)
+        t.a = Mooncake.set_to_zero_internal!!(c, t.a)
+    end
+    return t
+end
+
+function Mooncake._add_to_primal_internal(c::Mooncake.MaybeCache, p::A{T}, t::TangentForA{Tx}, unsafe::Bool) where {T,Tx}
+    key = (p, t, unsafe)
+    haskey(c, key) && return c[key]::A{T}
+    x_new = Mooncake._add_to_primal_internal(c, p.x, t.x, unsafe)
+    a_new = p.a === nothing ? nothing : Mooncake._add_to_primal_internal(c, p.a, t.a, unsafe)
+    p_new = a_new === nothing ? A(x_new) : A(x_new, a_new)
+    c[key] = p_new
+    return p_new
+end
+
+function Mooncake._diff_internal(c::Mooncake.MaybeCache, p::A{T}, q::A{T}) where {T}
+    key = (p, q)
+    haskey(c, key) && return c[key]::Union{TangentForA{Mooncake.tangent_type(T)},Mooncake.NoTangent}
+    Tx = Mooncake.tangent_type(T)
+    if Tx == Mooncake.NoTangent
+        t = Mooncake.NoTangent()
+        c[key] = t
+        return t
+    end
+    x_t = Mooncake._diff_internal(c, p.x, q.x)
+    a_t = if p.a === nothing
+        Mooncake.NoTangent()
+    else
+        Mooncake._diff_internal(c, p.a, q.a)
+    end
+    t = TangentForA{Tx}(x_t, a_t)
+    c[key] = t
+    return t
+end
+
+function Mooncake._dot_internal(c::Mooncake.MaybeCache, t::TangentForA{Tx}, s::TangentForA{Tx}) where {Tx}
+    key = (t, s)
+    haskey(c, key) && return c[key]::Float64
+    c[key] = 0.0
+    res = Mooncake._dot_internal(c, t.x, s.x)
+    if !(t.a isa Mooncake.NoTangent)
+        res += Mooncake._dot_internal(c, t.a, s.a)
+    end
+    c[key] = res
+    return res
+end
+
+function Mooncake._scale_internal(c::Mooncake.MaybeCache, a::Float64, t::TangentForA{Tx}) where {Tx}
+    haskey(c, t) && return c[t]::TangentForA{Tx}
+    x_new = Mooncake._scale_internal(c, a, t.x)
+    a_new = t.a isa Mooncake.NoTangent ? Mooncake.NoTangent() : Mooncake._scale_internal(c, a, t.a)
+    t_new = TangentForA{Tx}(x_new, a_new)
+    c[t] = t_new
+    return t_new
+end
+
+@inline function Mooncake.get_tangent_field(t::TangentForA, f)
+    if f === :x
+        return t.x
+    elseif f === :a
+        return t.a
+    else
+        throw(error("Unhandled field $f"))
+    end
+end
+
+Mooncake.__verify_fdata_value(::IdDict{Any,Nothing}, ::A{T}, ::TangentForA{Tx}) where {T,Tx} = nothing
+
+# rrule for A(x::T)
+Mooncake.@is_primitive Mooncake.DefaultCtx Tuple{typeof(Mooncake._new_),Type{A{T}},T} where {T}
+
+function Mooncake.rrule!!(
+    ::Mooncake.CoDual{typeof(Mooncake._new_)},
+    ::Mooncake.CoDual{Type{A{T}}},
+    x_cd::Mooncake.CoDual{T},
+) where {T}
+    primal_x = Mooncake.primal(x_cd)
+    y_primal = A(primal_x)
+
+    Tx_for_field = Mooncake.tangent_type(T)
+
+    y_fdata = if Tx_for_field == Mooncake.NoTangent
+        Mooncake.NoTangent()
+    else
+        raw_x_tan = Mooncake.tangent(x_cd)
+        processed_x_tan = if (raw_x_tan isa Mooncake.NoTangent) || (raw_x_tan isa Mooncake.NoFData)
+            Mooncake.zero_tangent(primal_x)::Tx_for_field
+        else
+            raw_x_tan
+        end
+        TangentForA{Tx_for_field}(processed_x_tan)
+    end
+
+    y_cd = Mooncake.CoDual(y_primal, y_fdata)
+
+    function _new_A_x_pullback(Δy_rdata)
+        # For scalar types, return the appropriate zero value
+        if T <: AbstractFloat || T <: Integer
+            return (Mooncake.NoRData(), Mooncake.NoRData(), zero(T))
+        else
+            x_tangent_val = Mooncake.tangent(x_cd)
+            rdata_for_x = (x_tangent_val isa Mooncake.NoTangent) || (x_tangent_val isa Mooncake.NoFData) ? Mooncake.NoRData() : zero(Mooncake.rdata(x_tangent_val))
+            return (Mooncake.NoRData(), Mooncake.NoRData(), rdata_for_x)
+        end
+    end
+    return y_cd, _new_A_x_pullback
+end
+
+# A(x::T, a::A{T})
+Mooncake.@is_primitive Mooncake.DefaultCtx Tuple{typeof(Mooncake._new_),Type{A{T}},T,A{T}} where {T}
+
+function Mooncake.rrule!!(
+    ::Mooncake.CoDual{typeof(Mooncake._new_)},
+    ::Mooncake.CoDual{Type{A{T}}},
+    x_cd::Mooncake.CoDual{T},
+    a_cd::Mooncake.CoDual{A{T},TangentForA{Tx}},
+) where {T,Tx}
+    primal_x = Mooncake.primal(x_cd)
+
+    raw_tangent_x = Mooncake.tangent(x_cd)
+
+    final_tangent_for_x_field = if (raw_tangent_x isa Mooncake.NoTangent) || (raw_tangent_x isa Mooncake.NoFData)
+        Mooncake.zero_tangent(primal_x)::Tx
+    else
+        raw_tangent_x
+    end
+
+    primal_a = Mooncake.primal(a_cd)
+    tangent_a = Mooncake.tangent(a_cd)
+
+    y_primal = A(primal_x, primal_a)
+
+    y_fdata = TangentForA{Tx}(final_tangent_for_x_field, tangent_a)
+
+    y_cd = Mooncake.CoDual(y_primal, y_fdata)
+
+    function _new_A_x_a_pullback(Δy_rdata)
+        # For scalar types, return the appropriate zero value
+        if T <: AbstractFloat || T <: Integer
+            rdata_for_x = zero(T)
+        else
+            x_tangent_val = Mooncake.tangent(x_cd)
+            rdata_for_x = (x_tangent_val isa Mooncake.NoTangent) || (x_tangent_val isa Mooncake.NoFData) ? Mooncake.NoRData() : zero(Mooncake.rdata(x_tangent_val))
+        end
+
+        rdata_for_a = Mooncake.NoRData()
+
+        return (Mooncake.NoRData(), Mooncake.NoRData(), rdata_for_x, rdata_for_a)
+    end
+    return y_cd, _new_A_x_a_pullback
+end
+
+# A(x::T, a::Nothing)
+Mooncake.@is_primitive Mooncake.DefaultCtx Tuple{typeof(Mooncake._new_),Type{A{T}},T,Nothing} where {T}
+function Mooncake.rrule!!(
+    ::Mooncake.CoDual{typeof(Mooncake._new_)},
+    ::Mooncake.CoDual{Type{A{T}}},
+    x_cd::Mooncake.CoDual{T},
+    a_nothing_cd::Mooncake.CoDual{Nothing,Mooncake.NoFData},
+) where {T}
+    primal_x = Mooncake.primal(x_cd)
+
+    y_primal = A(primal_x)
+
+    Tx = Mooncake.tangent_type(T)
+
+    y_fdata = if Tx == Mooncake.NoTangent
+        Mooncake.NoTangent()
+    else
+        raw_tangent_x = Mooncake.tangent(x_cd)
+        processed_tx = (raw_tangent_x isa Mooncake.NoTangent) || (raw_tangent_x isa Mooncake.NoFData) ? Mooncake.zero_tangent(primal_x) : raw_tangent_x
+        TangentForA{Tx}(processed_tx)
+    end
+
+    y_cd = Mooncake.CoDual(y_primal, y_fdata)
+
+    function _new_A_x_nothing_pullback(Δy_rdata)
+        # For Float64 inputs, we need to return Float64 rdata, not NoRData
+        if T <: AbstractFloat
+            return (Mooncake.NoRData(), Mooncake.NoRData(), zero(T), Mooncake.NoRData())
+        else
+            x_tangent_val = Mooncake.tangent(x_cd)
+            rdata_for_x = (x_tangent_val isa Mooncake.NoTangent) || (x_tangent_val isa Mooncake.NoFData) ? Mooncake.NoRData() : zero(Mooncake.rdata(x_tangent_val))
+            return (Mooncake.NoRData(), Mooncake.NoRData(), rdata_for_x, Mooncake.NoRData())
+        end
+    end
+    return y_cd, _new_A_x_nothing_pullback
+end
+
+# rrule for lsetfield!(A)
+Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{typeof(Mooncake.lsetfield!),A{T},Val{F},Any} where {T,F}
+function Mooncake.rrule!!(
+    ::Mooncake.CoDual{typeof(Mooncake.lsetfield!)},
+    obj_cd::Mooncake.CoDual{A{T},TangentForA{Tx}},
+    field_val_cd::Mooncake.CoDual{Val{FieldName}},
+    new_val_cd::Mooncake.CoDual{V}
+) where {T,Tx,FieldName,V}
+    a = Mooncake.primal(obj_cd)
+    a_t = Mooncake.tangent(obj_cd)
+    new_val_primal = Mooncake.primal(new_val_cd)
+    new_val_tangent = Mooncake.tangent(new_val_cd)
+
+    field_sym = if FieldName isa Symbol
+        FieldName
+    elseif FieldName isa Int
+        FieldName == 1 ? :x : FieldName == 2 ? :a : throw(ArgumentError("lsetfield!: Invalid integer field '$FieldName' for type A."))
+    else
+        throw(ArgumentError("lsetfield!: Unsupported field type for lsetfield!"))
+    end
+
+    old_val = getfield(a, field_sym)
+    old_tangent = if field_sym === :x
+        a_t.x
+    elseif field_sym === :a
+        a_t.a
+    else
+        throw(ArgumentError("lsetfield!: Unknown field '$field_sym' for type A."))
+    end
+
+    Mooncake.lsetfield!(a, Val(field_sym), new_val_primal)
+    new_field_tangent = if (new_val_tangent isa Mooncake.NoTangent) || (new_val_tangent isa Mooncake.NoFData)
+        Mooncake.zero_tangent(new_val_primal)
+    else
+        new_val_tangent
+    end
+    if field_sym === :x
+        a_t.x = new_field_tangent
+    elseif field_sym === :a
+        a_t.a = new_field_tangent
+    end
+
+    y_fdata = Mooncake.fdata(new_field_tangent)
+    y_cd = Mooncake.CoDual(new_val_primal, y_fdata)
+
+    function lsetfield_A_pullback(dy_rdata)
+        Mooncake.lsetfield!(a, Val(field_sym), old_val)
+        if field_sym === :x
+            a_t.x = old_tangent
+        elseif field_sym === :a
+            a_t.a = old_tangent
+        end
+        return (Mooncake.NoRData(), Mooncake.NoRData(), Mooncake.NoRData(), dy_rdata)
+    end
+
+    return y_cd, lsetfield_A_pullback
+end
+
+function Mooncake.TestUtils.populate_address_map_internal(m::Mooncake.TestUtils.AddressMap, p::A{T}, t::TangentForA{Tx}) where {T,Tx}
+    k = Base.pointer_from_objref(p)
+    v = Base.pointer_from_objref(t)
+    if haskey(m, k)
+        @assert m[k] == v
+        return m
+    end
+    m[k] = v
+    Mooncake.TestUtils.populate_address_map_internal(m, p.x, t.x)
+    if !(t.a isa Mooncake.NoTangent)
+        Mooncake.TestUtils.populate_address_map_internal(m, p.a, t.a)
+    end
+    return m
+end
+
+function Mooncake.TestUtils.has_equal_data_internal(x::A{T}, y::A{T}, equal_undefs::Bool, d::Dict{Tuple{UInt,UInt},Bool}) where {T}
+    id_pair = (objectid(x), objectid(y))
+    haskey(d, id_pair) && return d[id_pair]
+    d[id_pair] = true
+    eq = Mooncake.TestUtils.has_equal_data_internal(x.x, y.x, equal_undefs, d)
+    if (x.a === nothing) != (y.a === nothing)
+        return false
+    elseif x.a === nothing
+        return eq
+    else
+        return eq && Mooncake.TestUtils.has_equal_data_internal(x.a, y.a, equal_undefs, d)
+    end
+end
+
+function Mooncake.TestUtils.has_equal_data_internal(t::TangentForA{Tx}, s::TangentForA{Tx}, equal_undefs::Bool, d::Dict{Tuple{UInt,UInt},Bool}) where {Tx}
+    id_pair = (objectid(t), objectid(s))
+    haskey(d, id_pair) && return d[id_pair]
+    d[id_pair] = true
+    eq = Mooncake.TestUtils.has_equal_data_internal(t.x, s.x, equal_undefs, d)
+    if (t.a isa Mooncake.NoTangent) != (s.a isa Mooncake.NoTangent)
+        return false
+    elseif t.a isa Mooncake.NoTangent
+        return eq
+    else
+        return eq && Mooncake.TestUtils.has_equal_data_internal(t.a, s.a, equal_undefs, d)
+    end
+end
+```
+
+Now we can run it again,
+
+```@example custom_tangent_type
+Mooncake.TestUtils.test_data(Random.default_rng(), A(1.0, A(2.0, A(3.0))))
+```
