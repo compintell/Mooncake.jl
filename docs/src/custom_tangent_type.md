@@ -1,4 +1,4 @@
-# Supporting Recursive Tangent Types in Mooncake.jl
+# Writing Custom Tangent Types
 
 Mooncake.jl associates each **primal type** (the original data structure) with a unique **tangent type** (the type that stores its derivative information). By default, Mooncake can automatically derive tangent types for most Julia structs. However, for *recursive types*—that is, types that reference themselves (directly or indirectly)—the default mechanism can fail, often resulting in a stack overflow. In such cases, you must manually define a custom tangent type and implement the required interface.
 
