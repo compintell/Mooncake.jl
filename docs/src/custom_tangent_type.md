@@ -1,5 +1,9 @@
 # Writing Custom Tangent Types
 
+```@meta
+CurrentModule = Mooncake
+```
+
 Mooncake.jl associates each **primal type** (the original data structure) with a unique **tangent type** (the type that stores its derivative information). By default, Mooncake can automatically derive tangent types for most Julia structs. However, for *recursive types*—that is, types that reference themselves (directly or indirectly)—the default mechanism can fail, often resulting in a stack overflow. In such cases, you must manually define a custom tangent type and implement the required interface.
 
 This guide walks you through the process, from understanding Mooncake’s tangent design to testing your custom tangent type.
@@ -234,11 +238,14 @@ By following this process—starting with a minimal set of methods and expanding
 Before defining the full implementation, `TestUtils.test_data` will fail.
 
 ```@example custom_tangent_type
-Mooncake.TestUtils.test_data(Random.default_rng(), A(1.0, A(2.0, A(3.0))))
+try
+    Mooncake.TestUtils.test_data(Random.default_rng(), A(1.0, A(2.0, A(3.0))))
+catch e
+    @show e
+end
 ```
 
 ```@example custom_tangent_type
-
 Mooncake.rdata(::TangentForA{Tx}) where {Tx} = Mooncake.NoRData()
 Mooncake.tangent(t::TangentForA{Tx}, ::Mooncake.NoRData) where {Tx} = t
 
