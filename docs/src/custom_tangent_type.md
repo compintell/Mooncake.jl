@@ -1,5 +1,9 @@
 # Writing Custom Tangent Types
 
+```@meta
+CurrentModule = Mooncake
+```
+
 Mooncake.jl associates each **primal type** (the original data structure) with a unique **tangent type** (the type that stores its derivative information). By default, Mooncake can automatically derive tangent types for most Julia structs. However, for *recursive types*—that is, types that reference themselves (directly or indirectly)—the default mechanism can fail, often resulting in a stack overflow. In such cases, you must manually define a custom tangent type and implement the required interface.
 
 This guide walks you through the process, from understanding Mooncake’s tangent design to testing your custom tangent type.
@@ -27,6 +31,11 @@ Consider `Tuple{Float64, Vector{Float64}, Int}`. Its tangent type is `Tuple{Floa
 ## 2. Why Recursive Types Are Challenging
 
 A *recursive type* is a struct that contains itself (directly or indirectly) as a field. For example:
+
+```@setup custom_tangent_type
+using Mooncake: Mooncake
+using DifferentiationInterface
+```
 
 ```@example custom_tangent_type
 mutable struct A{T}
@@ -186,7 +195,7 @@ val_f5, grad_f5 = DifferentiationInterface.value_and_gradient(prod_x, AutoMoonca
 
 Depending on your use case, this may be sufficient.
 
-## 6. From "It Works!" to Passing [`test_data`](@ref)
+## 6. From "It Works!" to Passing [`TestUtils.test_data`](@ref)
 
 To fully integrate with Mooncake, you must implement additional operations on your tangent type so Mooncake’s algorithms can manipulate it robustly. At minimum, Mooncake expects the following functions for any custom tangent type:
 
@@ -201,8 +210,8 @@ You must provide adjoints for every `getfield`/`lgetfield` variant that appears 
 | Primitive            | Variants to implement                                                      |
 | -------------------- | -------------------------------------------------------------------------- |
 | [`lgetfield`](@ref)  | `(A, Val{:x})`, `(A, Val{:a})`, plus Symbol, Int, and (Val, Val) fallbacks |
-| [`getfield`](@ref)   | Same coverage as `lgetfield`                                               |
-| [`_new_`](@ref)      | `A(x)`, `A(x, a::A)`, `A(x, nothing)`—three separate `rrule!!` methods     |
+| `Base.getfield`      | Same coverage as `lgetfield`                                               |
+| [`Core._new_`](@ref) | `A(x)`, `A(x, a::A)`, `A(x, nothing)`—three separate `rrule!!` methods     |
 | [`lsetfield!`](@ref) | `(A, Val{:field}, new_value)` including both Symbol & Int field IDs        |
 
 #### Core Tangent Operations
