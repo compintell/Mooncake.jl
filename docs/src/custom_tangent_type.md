@@ -229,7 +229,7 @@ You must provide adjoints for every `getfield`/`lgetfield` variant that appears 
 | Override                                             | What it proves                                             |
 | ---------------------------------------------------- | ---------------------------------------------------------- |
 | [`TestUtils.populate_address_map_internal`](@ref)              | Tangent-to-primal pointer correspondence (cycle safety)    |
-| [`TestUtils.has_equal_data_internal!!`](@ref Mooncake.has_equal_data!!) (primal & tangent) | Deep equality ignoring pointer identity; handles recursion |
+| [`TestUtils.has_equal_data_internal!!`](@ref Mooncake.TestUtils.has_equal_data!!) (primal & tangent) | Deep equality ignoring pointer identity; handles recursion |
 
 By following this process—starting with a minimal set of methods and expanding as Mooncake requests more—you can support recursive types robustly in Mooncake.jl.
 
