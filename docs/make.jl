@@ -56,6 +56,7 @@ makedocs(;
             joinpath("developer_documentation", "internal_docstrings.md"),
         ],
         "known_limitations.md",
+        "recursive_type_demo.md"
     ],
 )
 
