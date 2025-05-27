@@ -28,7 +28,7 @@ Consider `Tuple{Float64, Vector{Float64}, Int}`. Its tangent type is `Tuple{Floa
 
 A *recursive type* is a struct that contains itself (directly or indirectly) as a field. For example:
 
-```julia
+```@example custom_tangent_type
 mutable struct A{T}
     x::T
     a::Union{A{T},Nothing}
@@ -46,7 +46,7 @@ To solve this, you must manually define a custom tangent type that breaks this c
 
 The first step is to define a new type to represent the tangent of `A`. This custom tangent should mimic the structure of `A`, but in a way that resolves the recursion:
 
-```julia
+```@example custom_tangent_type
 mutable struct TangentForA{Tx}
     x::Tx
     a::Union{TangentForA{Tx}, Mooncake.NoTangent}
@@ -65,17 +65,17 @@ mutable struct TangentForA{Tx}
 end
 ```
 
-This `TangentForA` type mirrors `A`'s fields. Its `a` field is either another `TangentForA` (for nested or cyclic primal structures) or `Mooncake.NoTangent` (if the primal `A.a` is `nothing`). This explicit definition breaks the infinite type recursion that would occur with naive tangent derivation.
+This `TangentForA` type mirrors `A`'s fields. Its `a` field is either another `TangentForA` (for nested or cyclic primal structures) or [`Mooncake.NoTangent`](@ref) (if the primal `A.a` is `nothing`). This explicit definition breaks the infinite type recursion that would occur with naive tangent derivation.
 
 ## 4. Registering Your Tangent Type with Mooncake
 
-Defining the tangent type is not enough—you must **register it with Mooncake’s interface** so Mooncake knows to use it and how to split it into `fdata`/`rdata`. Implement these methods:
+Defining the tangent type is not enough—you must **register it with Mooncake’s interface** so Mooncake knows to use it and how to split it into [`fdata`](@ref)/[`rdata`](@ref). Implement these methods:
 
 ### 4.1. `tangent_type`
 
 Tell Mooncake that the tangent of `A` is `TangentForA`:
 
-```julia
+```@example custom_tangent_type
 function Mooncake.tangent_type(::Type{A{T}}) where {T}
     Tx = Mooncake.tangent_type(T)
     return Tx == Mooncake.NoTangent ? Mooncake.NoTangent : TangentForA{Tx}
@@ -86,13 +86,13 @@ This overrides the default mechanism and associates `A` with your custom tangent
 
 ### 4.2. `fdata_type` and `rdata_type`
 
-Define the types of forward and reverse data for `TangentForA`. In this example, since both `A` and `TangentForA` are mutable, all updates can be done in-place, so the `fdata` is the tangent itself and `rdata` is `NoRData`. In other cases, you may need to split these more carefully.
+Define the types of forward and reverse data for `TangentForA`. In this example, since both `A` and `TangentForA` are mutable, all updates can be done in-place, so the `fdata` is the tangent itself and `rdata` is [`NoRData`](@ref). In other cases, you may need to split these more carefully.
 
 ### 4.3. `tangent` (Combining Function)
 
-Mooncake provides `Mooncake.tangent(f, r)` to reassemble a tangent from `fdata` and `rdata`. For your type:
+Mooncake provides [`Mooncake.tangent`](@ref) to reassemble a tangent from `fdata` and `rdata`. For your type:
 
-```julia
+```@example custom_tangent_type
 Mooncake.tangent(t::TangentForA{Tx}, ::Mooncake.NoRData) where {Tx} = t
 ```
 
@@ -104,7 +104,7 @@ With these methods, your custom type is now connected to Mooncake’s AD system.
 
 Mooncake provides extensive coverage and thorough testing. To get started, you can implement just enough to differentiate simple functions and add more as needed. For example, consider:
 
-```julia
+```@example custom_tangent_type
 f1(a::A) = 2.0 * a.x
 ```
 
@@ -112,7 +112,7 @@ When you try to differentiate this, Mooncake will complain it lacks an `rrule!!`
 
 ### 5.1. Field Access (`lgetfield`) Rule
 
-```julia
+```@example custom_tangent_type
 Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{typeof(Mooncake.lgetfield),A{T},Val} where {T}
 
 function Mooncake.rrule!!(
@@ -147,9 +147,9 @@ end
 
 ### 5.2. Zeroing Out the Tangent
 
-Mooncake will next require `set_to_zero!!`:
+Mooncake will next require [`set_to_zero!!`](@ref):
 
-```julia
+```@example custom_tangent_type
 function Mooncake.set_to_zero!!(t::TangentForA{Tx}) where Tx
     t.x = Mooncake.set_to_zero!!(t.x)
     if !(t.a isa Mooncake.NoTangent)
@@ -161,17 +161,17 @@ end
 
 With these, you can now differentiate simple functions:
 
-```julia
+```@example custom_tangent_type
 a = A(1.0)
 val, grad = DifferentiationInterface.value_and_gradient(f1, AutoMooncake(; config=nothing), a)
-@show val        # → 2.0
-@show grad.x     # → 2.0
-@show grad.a     # → Mooncake.NoTangent()
+@show val
+@show grad.x
+@show grad.a
 ```
 
 Another example:
 
-```julia
+```@example custom_tangent_type
 function prod_x(a::A{T}) where {T}
     a_val = a.x
     return a.a === nothing ? a_val : a_val * prod_x(a.a)
@@ -179,20 +179,20 @@ end
 sum_a = A(1.0, A(2.0, A(3.0)))
 val_f5, grad_f5 = DifferentiationInterface.value_and_gradient(prod_x, AutoMooncake(; config=nothing), sum_a)
 @show val_f5
-@test grad_f5.x
-@test grad_f5.a.x
-@test grad_f5.a.a.x
+@show grad_f5.x
+@show grad_f5.a.x
+@show grad_f5.a.a.x
 ```
 
 Depending on your use case, this may be sufficient.
 
-## 6. From "It Works!" to Passing `test_data`
+## 6. From "It Works!" to Passing [`test_data`](@ref)
 
 To fully integrate with Mooncake, you must implement additional operations on your tangent type so Mooncake’s algorithms can manipulate it robustly. At minimum, Mooncake expects the following functions for any custom tangent type:
 
 ### Checklist: Functions Needed for Recursive Struct Support
 
-Below is a checklist of most functions you need to make `Mooncake.TestUtils.test_data` pass for the recursive struct `A` and its tangent `TangentForA`. They are grouped by their role in Mooncake’s test suite.
+Below is a checklist of most functions you need to make [`Mooncake.TestUtils.test_data`](@ref) pass for the recursive struct `A` and its tangent `TangentForA`. They are grouped by their role in Mooncake’s test suite.
 
 #### Primitive rrules (Mandatory Differentiation Hooks)
 
@@ -200,29 +200,29 @@ You must provide adjoints for every `getfield`/`lgetfield` variant that appears 
 
 | Primitive     | Variants to implement                                                                           |
 |-------------- |-----------------------------------------------------------------------------------------------|
-| `lgetfield`   | `(A, Val{:x})`, `(A, Val{:a})`, plus Symbol, Int, and (Val, Val) fallbacks                     |
-| `getfield`    | Same coverage as `lgetfield`                                                                   |
-| `_new_`       | `A(x)`, `A(x, a::A)`, `A(x, nothing)`—three separate `rrule!!` methods                        |
-| `lsetfield!`  | `(A, Val{:field}, new_value)` including both Symbol & Int field IDs                            |
+| [`lgetfield`](@ref)   | `(A, Val{:x})`, `(A, Val{:a})`, plus Symbol, Int, and (Val, Val) fallbacks                     |
+| [`getfield`](@ref)    | Same coverage as `lgetfield`                                                                   |
+| [`_new_`](@ref)       | `A(x)`, `A(x, a::A)`, `A(x, nothing)`—three separate `rrule!!` methods                        |
+| [`lsetfield!`](@ref)  | `(A, Val{:field}, new_value)` including both Symbol & Int field IDs                            |
 
 #### Core Tangent Operations
 
 | Function                  | Purpose/feature tested                                                      |
 |---------------------------|-----------------------------------------------------------------------------|
-| `zero_tangent_internal`   | Structure-preserving zero generation with cycle cache                       |
-| `randn_tangent_internal`  | Random tangent generator (for stochastic interface tests)                   |
-| `set_to_zero_internal!!`  | Recursive in-place reset with cycle protection                              |
-| `increment_internal!!`    | In-place accumulation used in reverse pass                                  |
-| `_add_to_primal_internal` | Adds a tangent to a primal (needed for finite-difference checks)            |
-| `_diff_internal`          | Structural diff between two primals → tangent                               |
-| `_dot_internal`           | Inner-product between tangents (dual-number consistency)                    |
-| `_scale_internal`         | Scalar × tangent scaling                                                    |
+| [`zero_tangent_internal`](@ref)   | Structure-preserving zero generation with cycle cache                       |
+| [`randn_tangent_internal`](@ref)  | Random tangent generator (for stochastic interface tests)                   |
+| [`set_to_zero_internal!!`](@ref)  | Recursive in-place reset with cycle protection                              |
+| [`increment_internal!!`](@ref)    | In-place accumulation used in reverse pass                                  |
+| [`_add_to_primal_internal`](@ref) | Adds a tangent to a primal (needed for finite-difference checks)            |
+| [`_diff_internal`](@ref)          | Structural diff between two primals → tangent                               |
+| [`_dot_internal`](@ref)           | Inner-product between tangents (dual-number consistency)                    |
+| [`_scale_internal`](@ref)         | Scalar × tangent scaling                                                    |
 
 #### Test Utilities
 
 | Override                                          | What it proves                                         |
 |---------------------------------------------------|--------------------------------------------------------|
-| `populate_address_map_internal`                   | Tangent-to-primal pointer correspondence (cycle safety)|
-| `has_equal_data_internal` (primal & tangent)      | Deep equality ignoring pointer identity; handles recursion |
+| [`populate_address_map_internal`](@ref)                   | Tangent-to-primal pointer correspondence (cycle safety)|
+| [`has_equal_data_internal`](@ref) (primal & tangent)      | Deep equality ignoring pointer identity; handles recursion |
 
 By following this process—starting with a minimal set of methods and expanding as Mooncake requests more—you can support recursive types robustly in Mooncake.jl.
