@@ -198,31 +198,31 @@ Below is a checklist of most functions you need to make [`Mooncake.TestUtils.tes
 
 You must provide adjoints for every `getfield`/`lgetfield` variant that appears in tests.
 
-| Primitive     | Variants to implement                                                                           |
-|-------------- |-----------------------------------------------------------------------------------------------|
-| [`lgetfield`](@ref)   | `(A, Val{:x})`, `(A, Val{:a})`, plus Symbol, Int, and (Val, Val) fallbacks                     |
-| [`getfield`](@ref)    | Same coverage as `lgetfield`                                                                   |
-| [`_new_`](@ref)       | `A(x)`, `A(x, a::A)`, `A(x, nothing)`—three separate `rrule!!` methods                        |
-| [`lsetfield!`](@ref)  | `(A, Val{:field}, new_value)` including both Symbol & Int field IDs                            |
+| Primitive            | Variants to implement                                                      |
+| -------------------- | -------------------------------------------------------------------------- |
+| [`lgetfield`](@ref)  | `(A, Val{:x})`, `(A, Val{:a})`, plus Symbol, Int, and (Val, Val) fallbacks |
+| [`getfield`](@ref)   | Same coverage as `lgetfield`                                               |
+| [`_new_`](@ref)      | `A(x)`, `A(x, a::A)`, `A(x, nothing)`—three separate `rrule!!` methods     |
+| [`lsetfield!`](@ref) | `(A, Val{:field}, new_value)` including both Symbol & Int field IDs        |
 
 #### Core Tangent Operations
 
-| Function                  | Purpose/feature tested                                                      |
-|---------------------------|-----------------------------------------------------------------------------|
-| [`zero_tangent_internal`](@ref)   | Structure-preserving zero generation with cycle cache                       |
-| [`randn_tangent_internal`](@ref)  | Random tangent generator (for stochastic interface tests)                   |
-| [`set_to_zero_internal!!`](@ref)  | Recursive in-place reset with cycle protection                              |
-| [`increment_internal!!`](@ref)    | In-place accumulation used in reverse pass                                  |
-| [`_add_to_primal_internal`](@ref) | Adds a tangent to a primal (needed for finite-difference checks)            |
-| [`_diff_internal`](@ref)          | Structural diff between two primals → tangent                               |
-| [`_dot_internal`](@ref)           | Inner-product between tangents (dual-number consistency)                    |
-| [`_scale_internal`](@ref)         | Scalar × tangent scaling                                                    |
+| Function                          | Purpose/feature tested                                           |
+| --------------------------------- | ---------------------------------------------------------------- |
+| [`zero_tangent_internal`](@ref)   | Structure-preserving zero generation with cycle cache            |
+| [`randn_tangent_internal`](@ref)  | Random tangent generator (for stochastic interface tests)        |
+| [`set_to_zero_internal!!`](@ref)  | Recursive in-place reset with cycle protection                   |
+| [`increment_internal!!`](@ref)    | In-place accumulation used in reverse pass                       |
+| [`_add_to_primal_internal`](@ref) | Adds a tangent to a primal (needed for finite-difference checks) |
+| [`_diff_internal`](@ref)          | Structural diff between two primals → tangent                    |
+| [`_dot_internal`](@ref)           | Inner-product between tangents (dual-number consistency)         |
+| [`_scale_internal`](@ref)         | Scalar × tangent scaling                                         |
 
 #### Test Utilities
 
-| Override                                          | What it proves                                         |
-|---------------------------------------------------|--------------------------------------------------------|
-| [`populate_address_map_internal`](@ref)                   | Tangent-to-primal pointer correspondence (cycle safety)|
-| [`has_equal_data_internal`](@ref) (primal & tangent)      | Deep equality ignoring pointer identity; handles recursion |
+| Override                                             | What it proves                                             |
+| ---------------------------------------------------- | ---------------------------------------------------------- |
+| [`populate_address_map_internal`](@ref)              | Tangent-to-primal pointer correspondence (cycle safety)    |
+| [`has_equal_data_internal`](@ref) (primal & tangent) | Deep equality ignoring pointer identity; handles recursion |
 
 By following this process—starting with a minimal set of methods and expanding as Mooncake requests more—you can support recursive types robustly in Mooncake.jl.
