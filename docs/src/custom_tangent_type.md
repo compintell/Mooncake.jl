@@ -67,6 +67,10 @@ mutable struct TangentForA{Tx}
     function TangentForA{Tx}(x_tangent::Tx, a_tangent::Union{TangentForA{Tx}, Mooncake.NoTangent}) where {Tx}
         new{Tx}(x_tangent, a_tangent)
     end
+
+    function TangentForA{Tx}(nt::@NamedTuple{x::Tx, a::Union{Mooncake.NoTangent, TangentForA{Tx}}}) where {Tx}
+        return new{Tx}(nt.x, nt.a)
+    end
 end
 ```
 
