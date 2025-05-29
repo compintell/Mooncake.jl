@@ -695,7 +695,7 @@ function Mooncake.TestUtils.has_equal_data_internal(t::TangentForA{Tx}, s::Tange
 end
 ```
 
-Now we can run it again,
+Now we can run it again and successfully check if all the tangent / fdata / rdata and other required functionality works correctly for the self-referential type A.
 
 ```@example custom_tangent_type
 Mooncake.TestUtils.test_data(Random.default_rng(), A(1.0, A(2.0, A(3.0))))
