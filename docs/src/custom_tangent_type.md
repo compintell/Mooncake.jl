@@ -288,7 +288,6 @@ function _rrule_getfield_common(obj_cd::Mooncake.CoDual{A{T},TangentForA{Tx}},
 end
 
 Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{typeof(Mooncake.lgetfield),A{T},Val{S}} where {T,S<:Symbol}
-
 function Mooncake.rrule!!(
     ::Mooncake.CoDual{typeof(Mooncake.lgetfield),Mooncake.NoFData},
     obj_cd::Mooncake.CoDual{A{T},TangentForA{Tx}},
