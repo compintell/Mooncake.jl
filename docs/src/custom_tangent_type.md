@@ -235,7 +235,7 @@ By following this process—starting with a minimal set of methods and expanding
 
 ## Appendix: Full Implementations
 
-Before defining the full implementation, `TestUtils.test_data` will fail.
+Before defining the full implementation, [`TestUtils.test_data`](@ref) will fail.
 
 ```@example custom_tangent_type
 try
