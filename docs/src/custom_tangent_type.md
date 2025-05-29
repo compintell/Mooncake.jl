@@ -209,7 +209,7 @@ You must provide adjoints for every `getfield`/`lgetfield` variant that appears 
 | -------------------- | -------------------------------------------------------------------------- |
 | [`lgetfield`](@ref)  | `(A, Val{:x})`, `(A, Val{:a})`, plus Symbol, Int, and (Val, Val) fallbacks |
 | `Base.getfield`      | Same coverage as `lgetfield`                                               |
-| [`_new_`](@ref) | `A(x)`, `A(x, a::A)`, `A(x, nothing)`—three separate `rrule!!` methods     |
+| [`_new_`](@ref)      | `A(x)`, `A(x, a::A)`, `A(x, nothing)`—three separate `rrule!!` methods     |
 | [`lsetfield!`](@ref) | `(A, Val{:field}, new_value)` including both Symbol & Int field IDs        |
 
 #### Core Tangent Operations
@@ -227,10 +227,10 @@ You must provide adjoints for every `getfield`/`lgetfield` variant that appears 
 
 #### Test Utilities
 
-| Override                                             | What it proves                                             |
-| ---------------------------------------------------- | ---------------------------------------------------------- |
-| [`TestUtils.populate_address_map_internal`](@ref)              | Tangent-to-primal pointer correspondence (cycle safety)    |
-| [`TestUtils.has_equal_data_internal`](@ref Mooncake.TestUtils.has_equal_data) (primal & tangent) | Deep equality ignoring pointer identity; handles recursion |
+| Override                                                                                                       | What it proves                                             |
+| -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| [`TestUtils.populate_address_map_internal`](@ref)                                                              | Tangent-to-primal pointer correspondence (cycle safety)    |
+| `TestUtils.has_equal_data_internal` (internal version of [`TestUtils.has_equal_data`](@ref) (primal & tangent) | Deep equality ignoring pointer identity; handles recursion |
 
 By following this process—starting with a minimal set of methods and expanding as Mooncake requests more—you can support recursive types robustly in Mooncake.jl.
 
