@@ -54,6 +54,7 @@ makedocs(;
             joinpath("developer_documentation", "reverse_mode_design.md"),
             joinpath("developer_documentation", "misc_internals_notes.md"),
             joinpath("developer_documentation", "internal_docstrings.md"),
+            joinpath("developer_documentation", "custom_tangent_type.md"),
         ],
         "known_limitations.md",
     ],

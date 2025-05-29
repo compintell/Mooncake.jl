@@ -87,6 +87,7 @@ end
 ```
 The point here is that you can manually resolve the circular dependency using a data structure which mimics the primal type.
 You will, however, need to implement similar methods for `zero_tangent`, `randn_tangent`, etc, and presumably need to implement additional `getfield` and `setfield` rules which are specific to this type.
+An example implementation of this is provided [here](developer_documentation/custom_tangent_type.md).
 
 ### Circular References in General
 
