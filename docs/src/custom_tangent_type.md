@@ -72,6 +72,7 @@ mutable struct TangentForA{Tx}
         new{Tx}(x_tangent, a_tangent)
     end
 
+    # This constructor is required by Mooncake's internal machinery for constructing tangents from named tuples
     function TangentForA{Tx}(nt::@NamedTuple{x::Tx, a::Union{Mooncake.NoTangent, TangentForA{Tx}}}) where {Tx}
         return new{Tx}(nt.x, nt.a)
     end
@@ -109,7 +110,7 @@ Mooncake provides [`Mooncake.tangent`](@ref) to reassemble a tangent from `fdata
 Mooncake.tangent(t::TangentForA{Tx}, ::Mooncake.NoRData) where {Tx} = t
 ```
 
-This ensures that `Mooncake.tangent(Mooncake.fdata(t), Mooncake.rdata(t)) === t`, which is crucial for correctness. Mooncake’s tests will check that the reassembled tangent is the exact same object as the original.
+This ensures that `Mooncake.tangent(Mooncake.fdata(t), Mooncake.rdata(t)) === t`, which is a core requirement of Mooncake's tangent interface (see [`fdata_type`](@ref)). Mooncake’s tests will check that the reassembled tangent is the exact same object as the original.
 
 With these methods, your custom type is now connected to Mooncake’s AD system.
 
@@ -121,7 +122,7 @@ Mooncake provides extensive coverage and thorough testing. To get started, you c
 f1(a::A) = 2.0 * a.x
 ```
 
-When you try to differentiate this, Mooncake will complain it lacks an `rrule!!` for [`lgetfield`](@ref). Implement it:
+When you try to differentiate this, Mooncake will complain it lacks an `rrule!!` for [`lgetfield`](@ref). The `lgetfield` function is Mooncake's internal version of `getfield` that accepts a `Val` type for the field name, enabling better type stability. You need to implement it:
 
 ### 5.1. Field Access (`lgetfield`) Rule
 
@@ -245,6 +246,10 @@ catch e
 end
 ```
 
+### Basic tangent interface methods
+
+First, implement the core tangent interface methods:
+
 ```@example custom_tangent_type
 Mooncake.rdata(::TangentForA{Tx}) where {Tx} = Mooncake.NoRData()
 Mooncake.tangent(t::TangentForA{Tx}, ::Mooncake.NoRData) where {Tx} = t
@@ -253,13 +258,26 @@ function Mooncake.tangent_type(::Type{TangentForA{Tx}}) where {Tx}
     return TangentForA{Tx}
 end
 Mooncake.tangent_type(::Type{TangentForA{Tx}}, ::Type{Mooncake.NoRData}) where {Tx} = TangentForA{Tx}
+```
+
+### Field access helper functions
+
+Define utility functions for field access:
+
+```@example custom_tangent_type
 
 _field_symbol(f::Symbol) = f
 _field_symbol(i::Int) = i == 1 ? :x : i == 2 ? :a :
     throw(ArgumentError("Invalid field index '$i' for type A."))
 _field_symbol(::Type{Val{F}}) where F = _field_symbol(F)
 _field_symbol(::Val{F}) where F = _field_symbol(F)
+```
 
+### Common getfield rule implementation
+
+Define a shared helper for getfield rules:
+
+```@example custom_tangent_type
 function _rrule_getfield_common(obj_cd::Mooncake.CoDual{A{T},TangentForA{Tx}},
                                 field_sym::Symbol,
                                 n_args::Int) where {T,Tx}
@@ -286,7 +304,13 @@ function _rrule_getfield_common(obj_cd::Mooncake.CoDual{A{T},TangentForA{Tx}},
 
     return y_cd, pb
 end
+```
 
+### lgetfield and getfield rules
+
+Implement the various field access rules:
+
+```@example custom_tangent_type
 Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{typeof(Mooncake.lgetfield),A{T},Val{S}} where {T,S<:Symbol}
 function Mooncake.rrule!!(
     ::Mooncake.CoDual{typeof(Mooncake.lgetfield),Mooncake.NoFData},
@@ -354,7 +378,13 @@ function Mooncake.rrule!!(
     field_sym = _field_symbol(Mooncake.primal(field_idx_cd))
     return _rrule_getfield_common(obj_cd, field_sym, 4)
 end
+```
 
+### Core tangent operations
+
+Implement the essential tangent manipulation functions:
+
+```@example custom_tangent_type
 function Mooncake.zero_tangent_internal(p::A{T}, dict::Mooncake.MaybeCache) where {T}
     Tx = Mooncake.tangent_type(T)
     Tx == Mooncake.NoTangent && return Mooncake.NoTangent()
@@ -471,7 +501,13 @@ end
 end
 
 Mooncake.__verify_fdata_value(::IdDict{Any,Nothing}, ::A{T}, ::TangentForA{Tx}) where {T,Tx} = nothing
+```
 
+### Constructor rules
+
+Implement rrules for the A constructors:
+
+```@example custom_tangent_type
 # rrule for A(x::T)
 Mooncake.@is_primitive Mooncake.DefaultCtx Tuple{typeof(Mooncake._new_),Type{A{T}},T} where {T}
 
@@ -650,7 +686,13 @@ function Mooncake.rrule!!(
 
     return y_cd, lsetfield_A_pullback
 end
+```
 
+### Test utilities
+
+Implement the test utility functions:
+
+```@example custom_tangent_type
 function Mooncake.TestUtils.populate_address_map_internal(m::Mooncake.TestUtils.AddressMap, p::A{T}, t::TangentForA{Tx}) where {T,Tx}
     k = Base.pointer_from_objref(p)
     v = Base.pointer_from_objref(t)
