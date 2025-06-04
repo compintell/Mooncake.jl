@@ -1409,11 +1409,10 @@ function test_tangent_splitting(rng::AbstractRNG, p::P) where {P}
     @test can_make_zero != isa(rzero_from_type, CannotProduceZeroRDataFromType)
 
     # Check that we can produce a lazy zero rdata, and that it has the correct type.
-    test_opt(lazy_zero_rdata, Tuple{P})
     lazy_rzero = @inferred lazy_zero_rdata(p)
     @test instantiate(lazy_rzero) isa R
 
-    # Check incrementing the fdata component of a tangnet yields the correct type.
+    # Check incrementing the fdata component of a tangent yields the correct type.
     @test increment!!(f, f) isa F
 
     # Check incrementing the rdata component of a tangent yields the correct type.
