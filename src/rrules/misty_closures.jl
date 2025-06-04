@@ -1,6 +1,20 @@
+"""
+    MistyClosureTangent(captures_tangent::Any, dual_callable::Any)
+
+The tangent type for `MistyClosure`. `captures_tangent` contains the tangent to the captures
+varibles, and `dual_callable` contains a callable object which performs forwards-mode AD.
+
+That the field type of `captures_tangent` is `Any` is unavoidable since the `captures`
+field of an `OpaqueClosure` has field type `Any`.
+
+That the field type of `dual_callable` is `Any` is a limitation of the current
+implementation. The concrete type of `dual_callable` might be one of a couple of things,
+notably either `typeof(frule!!)` or `DerivedFRule`. It might be possible to figure out which
+it is, and use this information to improve the type stability of this function.
+"""
 struct MistyClosureTangent
     captures_tangent::Any
-    dual_mc::Any
+    dual_callable::Any
 end
 
 _dual_mc(p::MistyClosure) = build_frule(get_interpreter(), p)
@@ -17,12 +31,12 @@ end
 
 function increment_internal!!(c::IncCache, t::T, s::T) where {T<:MistyClosureTangent}
     new_captures_tangent = increment_internal!!(c, t.captures_tangent, s.captures_tangent)
-    return MistyClosureTangent(new_captures_tangent, t.dual_mc)
+    return MistyClosureTangent(new_captures_tangent, t.dual_callable)
 end
 
 function set_to_zero_internal!!(c::IncCache, t::MistyClosureTangent)
     new_captures_tangent = set_to_zero_internal!!(c, t.captures_tangent)
-    return MistyClosureTangent(new_captures_tangent, t.dual_mc)
+    return MistyClosureTangent(new_captures_tangent, t.dual_callable)
 end
 
 function _add_to_primal_internal(
@@ -44,7 +58,7 @@ end
 
 function _scale_internal(c::MaybeCache, a::Float64, t::T) where {T<:MistyClosureTangent}
     captures_tangent = _scale_internal(c, a, t.captures_tangent)
-    return T(captures_tangent, t.dual_mc)
+    return T(captures_tangent, t.dual_callable)
 end
 
 import .TestUtils: populate_address_map_internal, AddressMap
@@ -56,7 +70,7 @@ end
 
 struct MistyClosureFData
     captures_fdata::Any
-    dual_mc::Any
+    dual_callable::Any
 end
 
 struct MistyClosureRData{Tr}
@@ -64,7 +78,7 @@ struct MistyClosureRData{Tr}
 end
 
 fdata_type(::Type{<:MistyClosureTangent}) = MistyClosureFData
-fdata(t::MistyClosureTangent) = MistyClosureFData(fdata(t.captures_tangent), t.dual_mc)
+fdata(t::MistyClosureTangent) = MistyClosureFData(fdata(t.captures_tangent), t.dual_callable)
 
 rdata_type(::Type{<:MistyClosureTangent}) = MistyClosureRData
 rdata(t::MistyClosureTangent) = MistyClosureRData(rdata(t.captures_tangent))
@@ -73,7 +87,7 @@ rdata(t::MistyClosureTangent) = MistyClosureRData(rdata(t.captures_tangent))
     return MistyClosureTangent
 end
 function tangent(f::MistyClosureFData, r::MistyClosureRData)
-    return MistyClosureTangent(tangent(f.captures_fdata, r.captures_rdata), f.dual_mc)
+    return MistyClosureTangent(tangent(f.captures_fdata, r.captures_rdata), f.dual_callable)
 end
 
 function __verify_fdata_value(::IdDict{Any,Nothing}, p::MistyClosure, t::MistyClosureFData)
@@ -84,7 +98,7 @@ _verify_rdata_value(p::MistyClosure, r::MistyClosureRData) = nothing
 zero_rdata(p::MistyClosure) = MistyClosureRData(zero_rdata(p.oc.captures))
 
 function increment!!(x::MistyClosureFData, y::MistyClosureFData)
-    return MistyClosureFData(increment!!(x.captures_fdata, y.captures_fdata), x.dual_mc)
+    return MistyClosureFData(increment!!(x.captures_fdata, y.captures_fdata), x.dual_callable)
 end
 
 function increment_internal!!(c::IncCache, x::MistyClosureRData, y::MistyClosureRData)
@@ -127,5 +141,5 @@ end
 @is_primitive MinimalCtx Tuple{MistyClosure, Vararg{Any, N}} where {N}
 function frule!!(f::Dual{<:MistyClosure}, x::Dual...)
     dual_captures = Dual(primal(f).oc.captures, tangent(f).captures_tangent)
-    return tangent(f).dual_mc(dual_captures, x...)
+    return tangent(f).dual_callable(dual_captures, x...)
 end
