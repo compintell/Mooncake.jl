@@ -19,7 +19,7 @@ function __value_and_pullback!!(
     v = if y_cache === nothing
         _copy_output(primal(out))
     else
-        _copy_to_output!(y_cache, primal(out))
+        _copy_to_output!!(y_cache, primal(out))
     end
     return v, tuple_map((f, r) -> tangent(fdata(tangent(f)), r), fx, pb!!(rdata(ȳ)))
 end
@@ -240,36 +240,36 @@ end
 const _BuiltinArrays = @static VERSION >= v"1.11" ? Union{Array,Memory} : Array
 
 """
-    _copy_to_output!(dst::T, src::T)
+    _copy_to_output!!(dst::T, src::T)
 
 Copy the contents of `src` to `dst`, with zero or minimal new memory allocation. The type of `dst` and `src` must be the same.
 Required as Base.copy!() does not work for all supported primal types. For example, `Base.copy!` does not work for `Core.svec`.
 """
-_copy_to_output!(dst::Number, src::Number) = src
+_copy_to_output!!(dst::Number, src::Number) = src
 
 # explicit copy for Core.svec
-function _copy_to_output!(dst::SimpleVector, src::SimpleVector)
-    return Core.svec(map(_copy_to_output!, dst, src)...)
+function _copy_to_output!!(dst::SimpleVector, src::SimpleVector)
+    return Core.svec(map(_copy_to_output!!, dst, src)...)
 end
 
 # copy for Array, Memory
-function _copy_to_output!(dst::P, src::P) where {P<:_BuiltinArrays}
+function _copy_to_output!!(dst::P, src::P) where {P<:_BuiltinArrays}
     @inbounds for i in eachindex(src)
         if isassigned(src, i)
-            dst[i] = _copy_to_output!(dst[i], src[i])
+            dst[i] = _copy_to_output!!(dst[i], src[i])
         end
     end
     return dst
 end
 
 # Tuple, NamedTuple
-function _copy_to_output!(dst::P, src::P) where {P<:Union{Tuple,NamedTuple}}
+function _copy_to_output!!(dst::P, src::P) where {P<:Union{Tuple,NamedTuple}}
     isbitstype(P) && return src
-    return map(_copy_to_output!, dst, src)
+    return map(_copy_to_output!!, dst, src)
 end
 
 # Handling structs
-function _copy_to_output!(dst::P, src::P) where {P}
+function _copy_to_output!!(dst::P, src::P) where {P}
     isbitstype(P) && return src
     nf = nfields(P)
 
@@ -283,7 +283,7 @@ function _copy_to_output!(dst::P, src::P) where {P}
                     (Any, Csize_t, Any),
                     dst,
                     src_sub - 1,
-                    _copy_to_output!(getfield(dst, src_sub), getfield(src, src_sub)),
+                    _copy_to_output!!(getfield(dst, src_sub), getfield(src, src_sub)),
                 )
             end
         end
@@ -294,7 +294,7 @@ function _copy_to_output!(dst::P, src::P) where {P}
         flds = Vector{Any}(undef, nf)
         for src_sub in 1:nf
             if isdefined(src, src_sub)
-                flds[src_sub] = _copy_to_output!(
+                flds[src_sub] = _copy_to_output!!(
                     getfield(dst, src_sub), getfield(src, src_sub)
                 )
             else
@@ -419,9 +419,9 @@ function prepare_pullback_cache(fx...; kwargs...)
     # Run reverse-pass in order to reset stacks + state.
     rvs!!(zero_rdata(primal(y)))
 
-    # Construct cache for output. Check that `_copy_to_output!`ing appears to work.
+    # Construct cache for output. Check that `_copy_to_output!!`ing appears to work.
     y_cache = _copy_output(primal(y))
-    return Cache(rule, _copy_to_output!(y_cache, primal(y)), tangents)
+    return Cache(rule, _copy_to_output!!(y_cache, primal(y)), tangents)
 end
 
 """
