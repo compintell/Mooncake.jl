@@ -21,14 +21,16 @@ using Random: AbstractRNG
 mutable struct TangentNode{Tv,D}
     const degree::UInt8
     val::Union{Tv,NoTangent}
-    children::NTuple{D,Union{TangentNode{Tv,D},NoTangent}}
+    children::NTuple{D,Union{@NamedTuple{null::NoTangent, x::TangentNode{Tv,D}},NoTangent}}
 end
 
 function TangentNode{Tv,D}(
     val_tan::Union{Tv,NoTangent}, children::Vararg{Union{TangentNode{Tv,D},NoTangent},deg}
 ) where {Tv,D,deg}
     return TangentNode{Tv,D}(
-        UInt8(deg), val_tan, ntuple(i -> i <= deg ? children[i] : NoTangent(), Val(D))
+        UInt8(deg),
+        val_tan,
+        ntuple(i -> i <= deg ? _wrap_nullable(children[i]) : NoTangent(), Val(D)),
     )
 end
 
@@ -38,10 +40,6 @@ function Mooncake.tangent_type(::Type{<:AbstractExpressionNode{T,D}}) where {T,D
 end
 function Mooncake.tangent_type(::Type{TangentNode{Tv,D}}) where {Tv,D}
     return TangentNode{Tv,D}
-end
-function Mooncake.tangent_type(::Type{Nullable{T}}) where {T}
-    Tx = Mooncake.tangent_type(T)
-    return Tx === NoTangent ? NoTangent : @NamedTuple{null::NoTangent, x::Tx}
 end
 function Mooncake.tangent_type(
     ::Type{TangentNode{Tv,D}}, ::Type{Mooncake.NoRData}
@@ -55,12 +53,19 @@ function Mooncake.rdata(::TangentNode)
     return Mooncake.NoRData()
 end
 
+_unwrap_nullable(c::NoTangent) = c
+_unwrap_nullable(c::NamedTuple{(:null, :x)}) = c.x
+_wrap_nullable(c::NoTangent) = c
+_wrap_nullable(c::TangentNode) = (; null=NoTangent(), x=c)
+
 function DE.get_child(t::TangentNode, i::Int)
-    return t.children[i]
+    return _unwrap_nullable(t.children[i])
 end
-_get_child(t, ::Val{i}) where {i} = get_child(t, i)
+function _get_child(t, ::Val{i}) where {i}
+    return get_child(t, i)
+end
 function DE.get_children(t::TangentNode, ::Val{d}) where {d}
-    return t.children[1:d]
+    return ntuple(i -> _unwrap_nullable(t.children[i]), Val(d))
 end
 function DE.set_children!(
     t::TangentNode{Tv,D},
@@ -70,11 +75,11 @@ function DE.set_children!(
     },
 ) where {Tv,D,deg_m_1}
     deg = deg_m_1 + 1
-    if deg == D
-        t.children = children
-    else
-        t.children = ntuple(i -> i <= deg ? children[i] : NoTangent(), Val(D))
-    end
+    #! format: off
+    t.children = ntuple(
+        i -> i <= deg ? _wrap_nullable(children[i]) : NoTangent(), Val(D)
+    )
+    #! format: on
 end
 
 ################################################################################
@@ -339,16 +344,6 @@ function (pb::Pullback{T,field_sym,n_args})(Δy_rdata) where {T,field_sym,n_args
     return ntuple(_ -> Mooncake.NoRData(), Val(n_args))
 end
 
-function _wrap_nullable(::Nullable{N}, tchild) where {T,D,N<:AbstractExpressionNode{T,D}}
-    if tchild isa NoTangent
-        Tv = Mooncake.tangent_type(T)
-        stub = Tv === NoTangent ? NoTangent() : TangentNode{Tv,D}(NoTangent())
-        return (; null=NoTangent(), x=stub)
-    else
-        return (; null=NoTangent(), x=tchild)
-    end
-end
-
 function _rrule_getfield_common(
     obj_cd::Mooncake.CoDual{N,TangentNode{Tv,D}}, ::Val{field_sym}, ::Val{n_args}
 ) where {T,D,N<:AbstractExpressionNode{T,D},Tv,field_sym,n_args}
@@ -362,7 +357,7 @@ function _rrule_getfield_common(
     elseif field_sym === :val
         pt.val
     elseif field_sym === :children
-        ntuple(i -> _wrap_nullable(value_primal[i], pt.children[i]), Val(D))
+        pt.children
     else
         NoTangent()
     end
