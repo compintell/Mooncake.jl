@@ -3,6 +3,7 @@ module MooncakeDynamicExpressionsExt
 using DynamicExpressions:
     DynamicExpressions as DE,
     AbstractExpressionNode,
+    Nullable,
     constructorof,
     branch_copy,
     leaf_copy,
@@ -23,32 +24,12 @@ mutable struct TangentNode{Tv,D}
     children::NTuple{D,Union{TangentNode{Tv,D},NoTangent}}
 end
 
-const MaybeTangentNode{Tv,D} = Union{TangentNode{Tv,D},NoTangent}
-
 function TangentNode{Tv,D}(
-    val_tan::Union{Tv,NoTangent}, children::Vararg{MaybeTangentNode{Tv,D},deg}
+    val_tan::Union{Tv,NoTangent}, children::Vararg{Union{TangentNode{Tv,D},NoTangent},deg}
 ) where {Tv,D,deg}
     return TangentNode{Tv,D}(
         UInt8(deg), val_tan, ntuple(i -> i <= deg ? children[i] : NoTangent(), Val(D))
     )
-end
-
-function DE.get_child(t::TangentNode, i::Int)
-    return t.children[i]
-end
-function DE.get_children(t::TangentNode, ::Val{d}) where {d}
-    return t.children[1:d]
-end
-function DE.set_children!(
-    t::TangentNode{Tv,D},
-    children::Tuple{MaybeTangentNode{Tv,D},Vararg{MaybeTangentNode{Tv,D},deg_m_1}},
-) where {Tv,D,deg_m_1}
-    deg = deg_m_1 + 1
-    if deg == D
-        t.children = children
-    else
-        t.children = ntuple(i -> i <= deg ? children[i] : NoTangent(), Val(D))
-    end
 end
 
 function Mooncake.tangent_type(::Type{<:AbstractExpressionNode{T,D}}) where {T,D}
@@ -57,6 +38,10 @@ function Mooncake.tangent_type(::Type{<:AbstractExpressionNode{T,D}}) where {T,D
 end
 function Mooncake.tangent_type(::Type{TangentNode{Tv,D}}) where {Tv,D}
     return TangentNode{Tv,D}
+end
+function Mooncake.tangent_type(::Type{Nullable{T}}) where {T}
+    Tx = Mooncake.tangent_type(T)
+    return Tx === NoTangent ? NoTangent : @NamedTuple{null::NoTangent, x::Tx}
 end
 function Mooncake.tangent_type(
     ::Type{TangentNode{Tv,D}}, ::Type{Mooncake.NoRData}
@@ -68,6 +53,28 @@ function Mooncake.tangent(t::TangentNode, ::Mooncake.NoRData)
 end
 function Mooncake.rdata(::TangentNode)
     return Mooncake.NoRData()
+end
+
+function DE.get_child(t::TangentNode, i::Int)
+    return t.children[i]
+end
+_get_child(t, ::Val{i}) where {i} = get_child(t, i)
+function DE.get_children(t::TangentNode, ::Val{d}) where {d}
+    return t.children[1:d]
+end
+function DE.set_children!(
+    t::TangentNode{Tv,D},
+    children::Tuple{
+        Union{TangentNode{Tv,D},NoTangent},
+        Vararg{Union{TangentNode{Tv,D},NoTangent},deg_m_1},
+    },
+) where {Tv,D,deg_m_1}
+    deg = deg_m_1 + 1
+    if deg == D
+        t.children = children
+    else
+        t.children = ntuple(i -> i <= deg ? children[i] : NoTangent(), Val(D))
+    end
 end
 
 ################################################################################
@@ -140,7 +147,7 @@ end
         ts = (t, s...)
         deg = t.degree
         if deg == 0
-            t.val = helper_call(map(ti -> ti.val, ts)...)
+            t.val = helper_call(helper, ts...)
         else
             Base.Cartesian.@nif(
                 $D,
@@ -148,7 +155,7 @@ end
                 i -> set_children!(
                     t,
                     Base.Cartesian.@ntuple(
-                        $i, c -> helper(map(ti -> get_child(ti, c), ts)...),
+                        i, c -> helper(map(Base.Fix2(_get_child, Val(c)), ts)...),
                     )
                 )
             )
@@ -157,7 +164,7 @@ end
     end
 end
 function helper_call(helper::IncrementHelper, t, s...)
-    return helper.f(helper.cache, t, s...)
+    return helper.f(helper.cache, t.val, map(ti -> ti.val, s)...)
 end
 
 function Mooncake.increment_internal!!(c::Mooncake.IncCache, t::TangentNode, s::TangentNode)
@@ -180,10 +187,10 @@ end
         c[key] = 0.0
         deg = t.degree
         res = if deg == 0
-            if t.constant
-                Mooncake._dot_internal(c, t.val, s.val)
-            else
+            if (t.val isa NoTangent || s.val isa NoTangent)
                 0.0
+            else
+                Mooncake._dot_internal(c, t.val, s.val)
             end
         else
             Base.Cartesian.@nif(
@@ -270,17 +277,19 @@ function Mooncake._diff_internal(
     c::Mooncake.MaybeCache, p::N, q::N
 ) where {T,D,N<:AbstractExpressionNode{T,D}}
     Tv = Mooncake.tangent_type(T)
-    Tv === NoTangent() && return NoTangent()
+    Tv === NoTangent && return NoTangent()
     key = (p, q)
     return get!(c, key) do
         _diff_internal_helper(c, p, q)
-    end::MaybeTangentNode{Tv,D}
+    end::Union{TangentNode{Tv,D},NoTangent}
 end
 
 @generated function _diff_internal_helper(
     c::Mooncake.MaybeCache, p::N, q::N
 ) where {T,D,N<:AbstractExpressionNode{T,D}}
     quote
+        Tv = Mooncake.tangent_type(T)
+        deg = p.degree
         if p.degree == 0
             if p.constant
                 TangentNode{Tv,D}(Mooncake._diff_internal(c, p.val, q.val))
@@ -330,6 +339,16 @@ function (pb::Pullback{T,field_sym,n_args})(Δy_rdata) where {T,field_sym,n_args
     return ntuple(_ -> Mooncake.NoRData(), Val(n_args))
 end
 
+function _wrap_nullable(::Nullable{N}, tchild) where {T,D,N<:AbstractExpressionNode{T,D}}
+    if tchild isa NoTangent
+        Tv = Mooncake.tangent_type(T)
+        stub = Tv === NoTangent ? NoTangent() : TangentNode{Tv,D}(NoTangent())
+        return (; null=NoTangent(), x=stub)
+    else
+        return (; null=NoTangent(), x=tchild)
+    end
+end
+
 function _rrule_getfield_common(
     obj_cd::Mooncake.CoDual{N,TangentNode{Tv,D}}, ::Val{field_sym}, ::Val{n_args}
 ) where {T,D,N<:AbstractExpressionNode{T,D},Tv,field_sym,n_args}
@@ -343,7 +362,7 @@ function _rrule_getfield_common(
     elseif field_sym === :val
         pt.val
     elseif field_sym === :children
-        pt.children
+        ntuple(i -> _wrap_nullable(value_primal[i], pt.children[i]), Val(D))
     else
         NoTangent()
     end
