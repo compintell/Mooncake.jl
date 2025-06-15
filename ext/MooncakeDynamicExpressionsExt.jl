@@ -446,7 +446,7 @@ function Mooncake.TestUtils.has_equal_data_internal(
     return get!(() -> x == y, d, idp)
 end
 
-@generated function Mooncake.TestUtils.has_equal_data_internal(
+function Mooncake.TestUtils.has_equal_data_internal(
     t::TangentNode{Tv,D},
     s::TangentNode{Tv,D},
     equndef::Bool,
