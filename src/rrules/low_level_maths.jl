@@ -45,7 +45,7 @@ for (M, f, arity) in DiffRules.diffrules(; filter_modules=nothing)
     end
 end
 
-@is_primitive MinimalCtx Tuple{typeof(sin),<:IEEEFloat}
+@is_primitive MinimalCtx Mode Tuple{typeof(sin),<:IEEEFloat}
 function frule!!(::Dual{typeof(sin)}, x::Dual{<:IEEEFloat})
     s, c = sincos(primal(x))
     return Dual(s, c * tangent(x))
@@ -56,7 +56,7 @@ function rrule!!(::CoDual{typeof(sin),NoFData}, x::CoDual{P,NoFData}) where {P<:
     return CoDual(s, NoFData()), sin_pullback!!
 end
 
-@is_primitive MinimalCtx Tuple{typeof(cos),<:IEEEFloat}
+@is_primitive MinimalCtx Mode Tuple{typeof(cos),<:IEEEFloat}
 function frule!!(::Dual{typeof(cos)}, x::Dual{<:IEEEFloat})
     s, c = sincos(primal(x))
     return Dual(c, -s * tangent(x))
@@ -67,7 +67,7 @@ function rrule!!(::CoDual{typeof(cos),NoFData}, x::CoDual{P,NoFData}) where {P<:
     return CoDual(c, NoFData()), cos_pullback!!
 end
 
-@is_primitive MinimalCtx Tuple{typeof(exp),<:IEEEFloat}
+@is_primitive MinimalCtx Mode Tuple{typeof(exp),<:IEEEFloat}
 function frule!!(::Dual{typeof(exp)}, x::Dual{P}) where {P<:IEEEFloat}
     y = exp(primal(x))
     return Dual(y, y * tangent(x))
@@ -78,7 +78,7 @@ function rrule!!(::CoDual{typeof(exp)}, x::CoDual{P}) where {P<:IEEEFloat}
     return zero_fcodual(y), exp_pb!!
 end
 
-@from_rrule MinimalCtx Tuple{typeof(^),P,P} where {P<:IEEEFloat}
+@from_chain_rule MinimalCtx Tuple{typeof(^),P,P} where {P<:IEEEFloat}
 function frule!!(::Dual{typeof(^)}, x::Dual{P}, y::Dual{P}) where {P<:IEEEFloat}
     t = (ChainRules.NoTangent(), tangent(x), tangent(y))
     z, dz = ChainRules.frule(t, ^, primal(x), primal(y))
