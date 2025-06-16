@@ -1567,9 +1567,9 @@ end
 """
     test_data(rng::AbstractRNG, p::P)
 
-Verify that all tangent / fdata / rdata functionality work properly for `x`. Furthermore,
+Verify that all tangent / fdata / rdata functionality work properly for `p`. Furthermore,
 verify that all primitives listed in `TestUtils.test_rule_and_type_interactions` work
-correctly on `x`. This functionality is particularly useful if you are writing your own
+correctly on `p`. This functionality is particularly useful if you are writing your own
 custom tangent / fdata / rdata types and want to be confident that you have implemented the
 functionality that you need in order to make these custom types work with all the rules
 written in Mooncake itself.
