@@ -45,7 +45,7 @@ sr(n::Int) = StableRNG(n)
             ]
         end...,
     )
-        test_rule(sr(123456), f, x...; perf_flag, is_primitive=false, forward=true)
-        test_rule(sr(123456), f, x...; perf_flag, is_primitive=false)
+        test_rule(sr(123456), f, x...; perf_flag, is_primitive=false, mode=ForwardMode)
+        test_rule(sr(123456), f, x...; perf_flag, is_primitive=false, mode=ReverseMode)
     end
 end

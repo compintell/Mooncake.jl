@@ -662,17 +662,11 @@ _getter() = 5.0
     )
     @testset for (interface_only, perf_flag, f, x...) in test_cases
         @info Mooncake._typeof((f, x...))
-        # test_rule(
-        #     sr(123456),
-        #     f,
-        #     x...;
-        #     interface_only,
-        #     is_primitive=false,
-        #     debug_mode=false,
-        #     perf_flag,
-        # )
         test_rule(
-            StableRNG(123456), f, x...; interface_only, is_primitive=false, forward=true
+            sr(123456), f, x...; interface_only, is_primitive=false, perf_flag, mode=ReverseMode,
+        )
+        test_rule(
+            sr(123456), f, x...; interface_only, is_primitive=false, mode=ForwardMode
         )
     end
 end

@@ -36,7 +36,7 @@ end
         is_primitive=true,
         perf_flag=:none,
         unsafe_perturb=true,
-        forward=true,
+        mode=ForwardMode,
     )
     TestUtils.test_rule(
         StableRNG(123), run_misty_closure, mc, 5.0;
@@ -44,7 +44,7 @@ end
         is_primitive=false,
         perf_flag=:none,
         unsafe_perturb=true,
-        forward=true,
+        mode=ForwardMode,
     )
 
     # Construct a MistyClosure which accesses its captures. We achieve this by collecting
@@ -60,7 +60,7 @@ end
         is_primitive=true,
         perf_flag=:none,
         unsafe_perturb=true,
-        forward=true,
+        mode=ForwardMode,
     )
 
     # Construct a callable which performs reverse-mode, and apply forwards-mode over it.
@@ -71,7 +71,7 @@ end
         is_primitive=false,
         perf_flag=:none,
         unsafe_perturb=true,
-        forward=true,
+        mode=ForwardMode,
     )
 
     # Manually test that this correectly computes the second derivative.

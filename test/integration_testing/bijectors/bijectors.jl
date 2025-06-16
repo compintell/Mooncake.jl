@@ -111,23 +111,21 @@ end
         ),
     ]
 
-    @testset "$(case.name)" for case in test_cases
-        if case.broken
+    @testset "$(c.name)" for c in test_cases
+        if c.broken
             @test_broken begin
-                test_rule(StableRNG(123456), case.func, case.arg; is_primitive=false)
+                test_rule(StableRNG(123456), c.func, c.arg; is_primitive=false)
                 true
             end
         else
             rng = StableRNG(123456)
+            is_primitive = false
             test_rule(
-                rng,
-                case.func,
-                case.arg;
-                is_primitive=false,
-                unsafe_perturb=true,
-                forward=true,
+                rng, c.func, c.arg; is_primitive, unsafe_perturb=true, mode=ForwardMode
             )
-            test_rule(rng, case.func, case.arg; is_primitive=false, unsafe_perturb=true)
+            test_rule(
+                rng, c.func, c.arg; is_primitive, unsafe_perturb=true, mode=ReverseMode
+            )
         end
     end
 end
