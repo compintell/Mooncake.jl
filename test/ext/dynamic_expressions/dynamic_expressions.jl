@@ -85,14 +85,13 @@ end
         make_eval_sum(expr) = X -> sum(expr(X))
         test_cases = [
             (;
-                interface_only = false,
-                perf_flag = :none,
-                is_primitive = false,
-                unsafe_perturb = true,
-                fargs = (make_eval_sum(expr), X),
-                label = string(expr),
-            )
-            for expr in expressions
+                interface_only=false,
+                perf_flag=:none,
+                is_primitive=false,
+                unsafe_perturb=true,
+                fargs=(make_eval_sum(expr), X),
+                label=string(expr),
+            ) for expr in expressions
         ]
 
         @testset "$(test_case.label)" for test_case in test_cases
