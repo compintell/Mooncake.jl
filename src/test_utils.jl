@@ -853,6 +853,9 @@ function test_rule(
     # Check we have a mode that we know how to handle.
     mode <: Union{ForwardMode,ReverseMode} || error("Unhandled mode $mode")
 
+    # Take a copy of `x` to ensure that we do not mutate the original.
+    x = deepcopy(x)
+
     # Construct the rule.
     sig = _typeof(__get_primals(x))
     if mode == ForwardMode
