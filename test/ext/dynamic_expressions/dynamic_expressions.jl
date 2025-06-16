@@ -50,6 +50,6 @@ end
     prep = prepare_gradient(eval_sum_c, backend, expr)
     dexpr = gradient(eval_sum_c, prep, backend, expr)
 
-    const_tangent = dexpr.fields.tree.children[2].val
+    const_tangent = dexpr.fields.tree.children[2].x.val
     @test const_tangent ≈ N
 end
