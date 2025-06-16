@@ -183,6 +183,8 @@ end
 # Algebraic helpers (_dot / _scale / _add_to_primal / _diff)
 ################################################################################
 
+Mooncake._dot_internal(c::Mooncake.MaybeCache, t::NoTangent, s::TangentNode) = 0.0
+Mooncake._dot_internal(c::Mooncake.MaybeCache, t::TangentNode, s::NoTangent) = 0.0
 @generated function Mooncake._dot_internal(
     c::Mooncake.MaybeCache, t::TangentNode{Tv,D}, s::TangentNode{Tv,D}
 ) where {Tv,D}
