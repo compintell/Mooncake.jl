@@ -214,7 +214,7 @@ function benchmark_rules!!(test_case_data, default_ratios, include_other_framewo
             # Benchmark AD via Mooncake.
             @info "Mooncake (Forward)"
             rule = Mooncake.build_frule(args...)
-            duals = map(x -> x isa CoDual ? Dual(x.primal, x.tangent) : zero_dual(x), args)
+            duals = map(x -> x isa CoDual ? Dual(x.x, x.dx) : zero_dual(x), args)
             to_benchmark(rule, duals...)
             include_other_frameworks && GC.gc(true)
             suite["mooncake_fwd"] = Chairmarks.benchmark(
