@@ -5,6 +5,7 @@ Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 using AllocCheck,
     JET, Distributions, FillArrays, Mooncake, LinearAlgebra, PDMats, StableRNGs, Test
 
+using Mooncake: ForwardMode, ReverseMode
 using Mooncake.TestUtils: test_rule
 
 _sym(A) = A'A

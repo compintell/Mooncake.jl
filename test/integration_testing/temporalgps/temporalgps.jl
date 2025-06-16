@@ -3,6 +3,7 @@ Pkg.activate(@__DIR__)
 Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 
 using AbstractGPs, KernelFunctions, Mooncake, StableRNGs, TemporalGPs, Test
+using Mooncake: ForwardMode, ReverseMode
 using Mooncake.TestUtils: test_rule
 
 build_gp(k) = to_sde(GP(k), SArrayStorage(Float64))

@@ -3,6 +3,7 @@ Pkg.activate(@__DIR__)
 Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 
 using Bijectors, LinearAlgebra, Mooncake, StableRNGs, Test
+using Mooncake: ForwardMode, ReverseMode
 using Mooncake.TestUtils: test_rule
 
 """
