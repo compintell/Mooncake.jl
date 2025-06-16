@@ -21,7 +21,7 @@ using Random: AbstractRNG
 mutable struct TangentNode{Tv,D}
     const degree::UInt8
     val::Union{Tv,NoTangent}
-    children::NTuple{D,Union{@NamedTuple{null::NoTangent, x::TangentNode{Tv,D}},NoTangent}}
+    children::NTuple{D,Union{@NamedTuple{null::NoTangent,x::TangentNode{Tv,D}},NoTangent}}
 end
 
 function TangentNode{Tv,D}(

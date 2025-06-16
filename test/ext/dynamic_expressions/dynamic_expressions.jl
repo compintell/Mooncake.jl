@@ -13,9 +13,7 @@ using Test
 @testset "Basic usage checks" begin
     # Build up expression
     operators = OperatorEnum(1 => (cos, sin), 2 => (+, -, *, /))
-    x1, x2 = (
-        Expression(Node{Float64}(; feature=i); operators) for i in 1:2
-    )
+    x1, x2 = (Expression(Node{Float64}(; feature=i); operators) for i in 1:2)
 
     f = x1 + cos(x2 - 0.2) + 0.5
     X = randn(MersenneTwister(0), 3, 100)
