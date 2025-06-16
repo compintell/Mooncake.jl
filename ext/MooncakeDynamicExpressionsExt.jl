@@ -18,8 +18,9 @@ using Random: AbstractRNG
 # Main tangent type
 ################################################################################
 
-mutable struct TangentNode{Tv,D}
+mutable struct TangentNode{Tv,D} <: AbstractExpressionNode{Union{Tv,NoTangent},D}
     const degree::UInt8
+    const constant::Bool
     val::Union{Tv,NoTangent}
     children::NTuple{D,Union{@NamedTuple{null::NoTangent,x::TangentNode{Tv,D}},NoTangent}}
 end
@@ -29,6 +30,7 @@ function TangentNode{Tv,D}(
 ) where {Tv,D,deg}
     return TangentNode{Tv,D}(
         UInt8(deg),
+        !(val_tan isa NoTangent),
         val_tan,
         ntuple(i -> i <= deg ? _wrap_nullable(children[i]) : NoTangent(), Val(D)),
     )
@@ -37,9 +39,6 @@ end
 function Mooncake.tangent_type(::Type{<:AbstractExpressionNode{T,D}}) where {T,D}
     Tv = Mooncake.tangent_type(T)
     return Tv === NoTangent ? NoTangent : TangentNode{Tv,D}
-end
-function Mooncake.tangent_type(::Type{TangentNode{Tv,D}}) where {Tv,D}
-    return TangentNode{Tv,D}
 end
 function Mooncake.tangent_type(
     ::Type{TangentNode{Tv,D}}, ::Type{Mooncake.NoRData}
