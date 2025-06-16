@@ -42,7 +42,7 @@ using Mooncake.TestUtils: test_rule
         ],
     )
         fx = GP(k)(x1, 1.1)
-        @testset "$(typeof(args))" for x in Any[
+        @testset "$(typeof(x))" for x in Any[
             (kernelmatrix, k, x1, x2),
             (kernelmatrix_diag, k, x1, x2),
             (kernelmatrix, k, x1),
