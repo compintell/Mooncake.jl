@@ -51,7 +51,10 @@ using Mooncake:
     rdata_type,
     fdata,
     rdata,
-    get_interpreter
+    get_interpreter,
+    Mode,
+    ForwardMode,
+    ReverseMode
 
 using Mooncake:
     CC,

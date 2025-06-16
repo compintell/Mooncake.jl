@@ -1,6 +1,6 @@
 function build_frule(args...; debug_mode=false)
     sig = _typeof(TestUtils.__get_primals(args))
-    return build_frule(get_interpreter(), sig; debug_mode)
+    return build_frule(get_interpreter(ForwardMode), sig; debug_mode)
 end
 
 struct DualRuleInfo
@@ -32,7 +32,7 @@ function build_frule(
 
     # If we have a hand-coded rule, just use that.
     sig = _get_sig(sig_or_mi)
-    is_primitive(C, sig) && return (debug_mode ? DebugFRule(frule!!) : frule!!)
+    is_primitive(C, ForwardMode, sig) && return (debug_mode ? DebugFRule(frule!!) : frule!!)
 
     # We don't have a hand-coded rule, so derived one.
     lock(MOONCAKE_INFERENCE_LOCK)
@@ -293,7 +293,7 @@ function modify_fwd_ad_stmts!(
             return uninit_dual(get_const_primal_value(arg))
         end
 
-        if is_primitive(context_type(info.interp), sig)
+        if is_primitive(context_type(info.interp), ForwardMode, sig)
             replace_call!(dual_ir, ssa, Expr(:call, frule!!, dual_args...))
         else
             dm = info.debug_mode
@@ -345,7 +345,7 @@ mutable struct LazyFRule{primal_sig,Trule}
     mi::Core.MethodInstance
     rule::Trule
     function LazyFRule(mi::Core.MethodInstance, debug_mode::Bool)
-        interp = get_interpreter()
+        interp = get_interpreter(ForwardMode)
         return new{mi.specTypes,frule_type(interp, mi; debug_mode)}(debug_mode, mi)
     end
     function LazyFRule{Tprimal_sig,Trule}(
@@ -362,7 +362,8 @@ _copy(x::P) where {P<:LazyFRule} = P(x.mi, x.debug_mode)
 end
 
 @noinline function _build_rule!(rule::LazyFRule{sig,Trule}, args) where {sig,Trule}
-    rule.rule = build_frule(get_interpreter(), rule.mi; debug_mode=rule.debug_mode)
+    interp = get_interpreter(ForwardMode)
+    rule.rule = build_frule(interp, rule.mi; debug_mode=rule.debug_mode)
     return rule.rule(args...)
 end
 
@@ -374,7 +375,7 @@ function frule_type(
     interp::MooncakeInterpreter{C}, mi::CC.MethodInstance; debug_mode
 ) where {C}
     primal_sig = _get_sig(mi)
-    if is_primitive(C, primal_sig)
+    if is_primitive(C, ForwardMode, primal_sig)
         return debug_mode ? DebugFRule{typeof(frule!!)} : typeof(frule!!)
     end
     ir, _ = lookup_ir(interp, mi)
@@ -400,7 +401,8 @@ function (dynamic_rule::DynamicFRule)(args::Vararg{Dual,N}) where {N}
     sig = Tuple{map(_typeof ∘ primal, args)...}
     rule = get(dynamic_rule.cache, sig, nothing)
     if rule === nothing
-        rule = build_frule(get_interpreter(), sig; debug_mode=dynamic_rule.debug_mode)
+        interp = get_interpreter(ForwardMode)
+        rule = build_frule(interp, sig; debug_mode=dynamic_rule.debug_mode)
         dynamic_rule.cache[sig] = rule
     end
     return rule(args...)

@@ -17,7 +17,7 @@ struct MistyClosureTangent
     dual_callable::Any
 end
 
-_dual_mc(p::MistyClosure) = build_frule(get_interpreter(), p)
+_dual_mc(p::MistyClosure) = build_frule(get_interpreter(ForwardMode), p)
 
 tangent_type(::Type{<:MistyClosure}) = MistyClosureTangent
 

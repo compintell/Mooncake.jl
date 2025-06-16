@@ -152,7 +152,10 @@ using Mooncake:
     NoRData,
     rdata_type,
     rdata,
-    Dual
+    Dual,
+    Mode,
+    ForwardMode,
+    ReverseMode
 
 struct Shim end
 
@@ -824,7 +827,8 @@ This function uses [`Mooncake.build_rrule`](@ref) to construct a rule. This will
     this to `:stability` (at present we cannot verify whether a derived rule is type stable
     for technical reasons). If you believe that a hand-written rule should be _both_
     allocation-free and type-stable, set this to `:stability_and_allocs`.
-- `interp::Mooncake.MooncakeInterpreter=Mooncake.get_interpreter()`: the abstract
+- `mode::Type{<:Mode}=ReverseMode`: the mode of AD to test.
+- `interp::Mooncake.MooncakeInterpreter=Mooncake.get_interpreter(mode)`: the abstract
     interpreter to be used when testing this rule. The default should generally be used.
 - `debug_mode::Bool=false`: whether or not the rule should be tested in debug mode.
     Typically this should be left at its default `false` value, but if you are finding that
@@ -840,14 +844,17 @@ function test_rule(
     interface_only::Bool=false,
     is_primitive::Bool=true,
     perf_flag::Symbol=:none,
-    interp::Mooncake.MooncakeInterpreter=Mooncake.get_interpreter(),
+    mode::Type{<:Mode}=ReverseMode,
+    interp::Mooncake.MooncakeInterpreter=Mooncake.get_interpreter(mode),
     debug_mode::Bool=false,
     unsafe_perturb::Bool=false,
-    forward::Bool=false,
 )
+    # Check we have a mode that we know how to handle.
+    mode <: Union{ForwardMode,ReverseMode} || error("Unhandled mode $mode")
+
     # Construct the rule.
     sig = _typeof(__get_primals(x))
-    if forward
+    if mode == ForwardMode
         frule = Mooncake.build_frule(interp, sig; debug_mode)
         rrule = missing
     else
@@ -856,7 +863,7 @@ function test_rule(
     end
 
     # If something is primitive, then the rule should be `rrule!!`.
-    if forward
+    if mode == ForwardMode
         is_primitive && @test frule == frule!!
     else
         is_primitive && @test rrule == (debug_mode ? Mooncake.DebugRRule(rrule!!) : rrule!!)
@@ -876,7 +883,7 @@ function test_rule(
     testset = @testset "$(typeof(x))" begin
         # Test that the interface is basically satisfied (checks types / memory addresses).
         @testset "Interface (1)" begin
-            if forward
+            if mode == ForwardMode
                 test_frule_interface(x_ẋ...; frule)
             else
                 test_rrule_interface(x_x̄...; rrule)
@@ -885,7 +892,7 @@ function test_rule(
 
         # Test that answers are numerically correct / consistent.
         @testset "Correctness" begin
-            if forward
+            if mode == ForwardMode
                 interface_only ||
                     test_frule_correctness(rng, x_ẋ...; frule, unsafe_perturb)
             else
@@ -896,7 +903,7 @@ function test_rule(
 
         # Test the performance of the rule.
         @testset "Performance" begin
-            if forward
+            if mode == ForwardMode
                 test_frule_performance(perf_flag, frule, x_ẋ...)
             else
                 test_rrule_performance(perf_flag, rrule, x_x̄...)
@@ -905,14 +912,12 @@ function test_rule(
 
         # Test the interface again, in order to verify that caching is working correctly.
         @testset "Interface (2)" begin
-            if forward
-                test_frule_interface(
-                    x_ẋ...; frule=Mooncake.build_frule(interp, sig; debug_mode)
-                )
+            if mode == ForwardMode
+                frule = Mooncake.build_frule(interp, sig; debug_mode)
+                test_frule_interface(x_ẋ...; frule)
             else
-                test_rrule_interface(
-                    x_x̄...; rrule=Mooncake.build_rrule(interp, sig; debug_mode)
-                )
+                rrule = Mooncake.build_rrule(interp, sig; debug_mode)
+                test_rrule_interface(x_x̄...; rrule)
             end
         end
     end
@@ -920,32 +925,32 @@ function test_rule(
     return testset
 end
 
-function run_hand_written_rule_test_cases(rng_ctor, v::Val, forward=false)
+function run_hand_written_rule_test_cases(rng_ctor, v::Val, mode::Type{<:Mode})
     test_cases, memory = Mooncake.generate_hand_written_rrule!!_test_cases(rng_ctor, v)
     GC.@preserve memory @testset "$f, $(_typeof(x))" for (
         interface_only, perf_flag, _, f, x...
     ) in test_cases
-        test_rule(rng_ctor(123), f, x...; interface_only, perf_flag, forward)
-        test_rule(rng_ctor(123), f, x...; interface_only, perf_flag, forward)
+        test_rule(rng_ctor(123), f, x...; interface_only, perf_flag, mode)
+        test_rule(rng_ctor(123), f, x...; interface_only, perf_flag, mode)
     end
 end
 
-function run_derived_rule_test_cases(rng_ctor, v::Val, forward=false)
+function run_derived_rule_test_cases(rng_ctor, v::Val, mode::Type{<:Mode})
     test_cases, memory = Mooncake.generate_derived_rrule!!_test_cases(rng_ctor, v)
     GC.@preserve memory @testset "$f, $(typeof(x))" for (
         interface_only, perf_flag, _, f, x...
     ) in test_cases
         test_rule(
-            rng_ctor(123), f, x...; interface_only, perf_flag, is_primitive=false, forward
+            rng_ctor(123), f, x...; interface_only, perf_flag, is_primitive=false, mode
         )
     end
 end
 
 function run_rule_test_cases(rng_ctor, v::Val)
-    run_hand_written_rule_test_cases(rng_ctor, v, true)
-    run_hand_written_rule_test_cases(rng_ctor, v)
-    run_derived_rule_test_cases(rng_ctor, v, true)
-    run_derived_rule_test_cases(rng_ctor, v)
+    run_hand_written_rule_test_cases(rng_ctor, v, ForwardMode)
+    run_hand_written_rule_test_cases(rng_ctor, v, ReverseMode)
+    run_derived_rule_test_cases(rng_ctor, v, ForwardMode)
+    run_derived_rule_test_cases(rng_ctor, v, ReverseMode)
     return nothing
 end
 
@@ -1471,7 +1476,7 @@ function test_rule_and_type_interactions(rng::AbstractRNG, p::P) where {P}
                 interface_only=true,
                 is_primitive=true,
                 perf_flag=:none,
-                interp=Mooncake.get_interpreter(),
+                interp=Mooncake.get_interpreter(ReverseMode),
             )
         end
     end

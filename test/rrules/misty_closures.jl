@@ -76,7 +76,7 @@ end
 
     # Manually test that this correectly computes the second derivative.
     frule = Mooncake.build_frule(
-        Mooncake.get_interpreter(),
+        Mooncake.get_interpreter(Mooncake.ForwardMode),
         Tuple{typeof(low_level_gradient), typeof(rule), typeof(quadratic), Float64}
     )
     result = frule(

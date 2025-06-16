@@ -667,7 +667,7 @@ function make_ad_stmts!(stmt::Expr, line::ID, info::ADInfo)
 
         # Construct signature, and determine how the rrule is to be computed.
         sig = Tuple{arg_types...}
-        raw_rule = if is_primitive(context_type(info.interp), sig)
+        raw_rule = if is_primitive(context_type(info.interp), ReverseMode, sig)
             rrule!! # intrinsic / builtin / thing we provably have rule for
         elseif is_invoke
             mi = stmt.args[1]::Core.MethodInstance
@@ -1045,16 +1045,19 @@ Helper method: equivalent to extracting the signature from `args` and calling
 `build_rrule(sig; kwargs...)`.
 """
 function build_rrule(args...; kwargs...)
-    interp = get_interpreter()
+    interp = get_interpreter(ReverseMode)
     return build_rrule(interp, _typeof(TestUtils.__get_primals(args)); kwargs...)
 end
 
 """
     build_rrule(sig::Type{<:Tuple}; kwargs...)
 
-Helper method: Equivalent to `build_rrule(Mooncake.get_interpreter(), sig; kwargs...)`.
+Helper method: Equivalent to
+`build_rrule(Mooncake.get_interpreter(ReverseMode), sig; kwargs...)`.
 """
-build_rrule(sig::Type{<:Tuple}; kwargs...) = build_rrule(get_interpreter(), sig; kwargs...)
+function build_rrule(sig::Type{<:Tuple}; kwargs...)
+    return build_rrule(get_interpreter(ReverseMode), sig; kwargs...)
+end
 
 const MOONCAKE_INFERENCE_LOCK = ReentrantLock()
 
@@ -1099,7 +1102,7 @@ function build_rrule(
 
     # If we have a hand-coded rule, just use that.
     sig = _get_sig(sig_or_mi)
-    if is_primitive(C, sig)
+    if is_primitive(C, ReverseMode, sig)
         rule = build_primitive_rrule(sig)
         return (debug_mode ? DebugRRule(rule) : rule)
     end
@@ -1736,7 +1739,8 @@ function (dynamic_rule::DynamicDerivedRule)(args::Vararg{Any,N}) where {N}
     sig = Tuple{map(_typeof ∘ primal, args)...}
     rule = get(dynamic_rule.cache, sig, nothing)
     if rule === nothing
-        rule = build_rrule(get_interpreter(), sig; debug_mode=dynamic_rule.debug_mode)
+        interp = get_interpreter(ReverseMode)
+        rule = build_rrule(interp, sig; debug_mode=dynamic_rule.debug_mode)
         dynamic_rule.cache[sig] = rule
     end
     return rule(args...)
@@ -1809,7 +1813,7 @@ mutable struct LazyDerivedRule{primal_sig,Trule}
     mi::Core.MethodInstance
     rule::Trule
     function LazyDerivedRule(mi::Core.MethodInstance, debug_mode::Bool)
-        interp = get_interpreter()
+        interp = get_interpreter(ReverseMode)
         return new{mi.specTypes,rule_type(interp, mi;debug_mode)}(debug_mode, mi)
     end
     function LazyDerivedRule{Tprimal_sig,Trule}(
@@ -1826,7 +1830,8 @@ _copy(x::P) where {P<:LazyDerivedRule} = P(x.mi, x.debug_mode)
 end
 
 @noinline function _build_rule!(rule::LazyDerivedRule{sig,Trule}, args) where {sig,Trule}
-    rule.rule = build_rrule(get_interpreter(), rule.mi; debug_mode=rule.debug_mode)
+    interp = get_interpreter(ReverseMode)
+    rule.rule = build_rrule(interp, rule.mi; debug_mode=rule.debug_mode)
     return rule.rule(args...)
 end
 
@@ -1838,7 +1843,7 @@ important for performance in dynamic dispatch, and to ensure that recursion work
 properly.
 """
 function rule_type(interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode) where {C}
-    if is_primitive(C, _get_sig(sig_or_mi))
+    if is_primitive(C, ReverseMode, _get_sig(sig_or_mi))
         rule = build_primitive_rrule(_get_sig(sig_or_mi))
         return debug_mode ? DebugRRule{typeof(rule)} : typeof(rule)
     end

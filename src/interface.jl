@@ -407,7 +407,8 @@ Returns a cache used with [`value_and_pullback!!`](@ref). See that function for 
 function prepare_pullback_cache(fx...; kwargs...)
 
     # Construct rule and tangents.
-    rule = build_rrule(get_interpreter(), Tuple{map(_typeof, fx)...}; kwargs...)
+    interp = get_interpreter(ReverseMode)
+    rule = build_rrule(interp, Tuple{map(_typeof, fx)...}; kwargs...)
     tangents = map(zero_tangent, fx)
 
     # Run the rule forwards -- this should do a decent chunk of pre-allocation.

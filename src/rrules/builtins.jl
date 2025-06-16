@@ -111,7 +111,8 @@ import ..Mooncake:
     increment_rdata!!,
     zero_fcodual,
     zero_dual,
-    NoTangent
+    NoTangent,
+    Mode
 
 using Core.Intrinsics: atomic_pointerref
 
@@ -134,7 +135,7 @@ end
 macro intrinsic(name)
     expr = quote
         $name(x...) = Intrinsics.$name(x...)
-        (is_primitive)(::Type{MinimalCtx}, ::Type{<:Tuple{typeof($name),Vararg}}) = true
+        (is_primitive)(::Type{MinimalCtx}, ::Type{<:Mode}, ::Type{<:Tuple{typeof($name),Vararg}}) = true
         translate(::Val{Intrinsics.$name}) = $name
     end
     return esc(expr)
@@ -143,7 +144,7 @@ end
 macro inactive_intrinsic(name)
     expr = quote
         $name(x...) = Intrinsics.$name(x...)
-        (is_primitive)(::Type{MinimalCtx}, ::Type{<:Tuple{typeof($name),Vararg}}) = true
+        (is_primitive)(::Type{MinimalCtx}, ::Type{<:Mode}, ::Type{<:Tuple{typeof($name),Vararg}}) = true
         translate(::Val{Intrinsics.$name}) = $name
         function rrule!!(f::CoDual{typeof($name)}, args::Vararg{Any,N}) where {N}
             return Mooncake.zero_adjoint(f, args...)
@@ -287,7 +288,11 @@ special handling of `cglobal` is used.
 __cglobal(::Val{s}, x::Vararg{Any,N}) where {s,N} = cglobal(s, x...)
 
 translate(::Val{Intrinsics.cglobal}) = __cglobal
-Mooncake.is_primitive(::Type{MinimalCtx}, ::Type{<:Tuple{typeof(__cglobal),Vararg}}) = true
+function Mooncake.is_primitive(
+    ::Type{MinimalCtx}, ::Type{<:Mode}, ::Type{<:Tuple{typeof(__cglobal),Vararg}}
+)
+    return true
+end
 function frule!!(::Dual{typeof(__cglobal)}, args...)
     return Mooncake.uninit_dual(__cglobal(map(primal, args)...))
 end

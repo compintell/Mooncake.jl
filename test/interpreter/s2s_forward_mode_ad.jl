@@ -10,7 +10,7 @@
             perf_flag=pf,
             interface_only=int_only,
             is_primitive=false,
-            forward=true,
+            mode=ForwardMode,
         )
     end
 end;
