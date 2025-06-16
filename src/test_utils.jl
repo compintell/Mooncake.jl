@@ -848,6 +848,7 @@ function test_rule(
     interp::Mooncake.MooncakeInterpreter=Mooncake.get_interpreter(mode),
     debug_mode::Bool=false,
     unsafe_perturb::Bool=false,
+    print_results=true,
 )
     # Check we have a mode that we know how to handle.
     mode <: Union{ForwardMode,ReverseMode} || error("Unhandled mode $mode")
@@ -880,49 +881,52 @@ function test_rule(
         zero_codual(x)
     end, x)
 
-    testset = @testset "$(typeof(x))" begin
-        # Test that the interface is basically satisfied (checks types / memory addresses).
-        @testset "Interface (1)" begin
-            if mode == ForwardMode
-                test_frule_interface(x_ẋ...; frule)
-            else
-                test_rrule_interface(x_x̄...; rrule)
+    redirector = print_results ? ((f, x) -> f()) : redirect_stdout
+    ts = redirector(devnull) do
+        @testset "$(typeof(x))" begin
+            # Test that the interface is basically satisfied (checks types / memory addresses).
+            @testset "Interface (1)" begin
+                if mode == ForwardMode
+                    test_frule_interface(x_ẋ...; frule)
+                else
+                    test_rrule_interface(x_x̄...; rrule)
+                end
             end
-        end
 
-        # Test that answers are numerically correct / consistent.
-        @testset "Correctness" begin
-            if mode == ForwardMode
-                interface_only ||
-                    test_frule_correctness(rng, x_ẋ...; frule, unsafe_perturb)
-            else
-                interface_only ||
-                    test_rrule_correctness(rng, x_x̄...; rrule, unsafe_perturb)
+            # Test that answers are numerically correct / consistent.
+            @testset "Correctness" begin
+                if mode == ForwardMode
+                    interface_only ||
+                        test_frule_correctness(rng, x_ẋ...; frule, unsafe_perturb)
+                else
+                    interface_only ||
+                        test_rrule_correctness(rng, x_x̄...; rrule, unsafe_perturb)
+                end
             end
-        end
 
-        # Test the performance of the rule.
-        @testset "Performance" begin
-            if mode == ForwardMode
-                test_frule_performance(perf_flag, frule, x_ẋ...)
-            else
-                test_rrule_performance(perf_flag, rrule, x_x̄...)
+            # Test the performance of the rule.
+            @testset "Performance" begin
+                if mode == ForwardMode
+                    test_frule_performance(perf_flag, frule, x_ẋ...)
+                else
+                    test_rrule_performance(perf_flag, rrule, x_x̄...)
+                end
             end
-        end
 
-        # Test the interface again, in order to verify that caching is working correctly.
-        @testset "Interface (2)" begin
-            if mode == ForwardMode
-                frule = Mooncake.build_frule(interp, sig; debug_mode)
-                test_frule_interface(x_ẋ...; frule)
-            else
-                rrule = Mooncake.build_rrule(interp, sig; debug_mode)
-                test_rrule_interface(x_x̄...; rrule)
+            # Test the interface again, in order to verify that caching is working correctly.
+            @testset "Interface (2)" begin
+                if mode == ForwardMode
+                    frule = Mooncake.build_frule(interp, sig; debug_mode)
+                    test_frule_interface(x_ẋ...; frule)
+                else
+                    rrule = Mooncake.build_rrule(interp, sig; debug_mode)
+                    test_rrule_interface(x_x̄...; rrule)
+                end
             end
         end
     end
 
-    return testset
+    return ts
 end
 
 function run_hand_written_rule_test_cases(rng_ctor, v::Val, mode::Type{<:Mode})

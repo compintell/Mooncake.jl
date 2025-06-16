@@ -163,14 +163,14 @@ as `ChainRulesCore.@non_differentiable`.
 
 For example:
 ```jldoctest
-julia> using Mooncake: @zero_adjoint, DefaultCtx, zero_fcodual, rrule!!, is_primitive
+julia> using Mooncake: @zero_adjoint, DefaultCtx, zero_fcodual, rrule!!, is_primitive, ReverseMode
 
 julia> foo(x) = 5
 foo (generic function with 1 method)
 
 julia> @zero_adjoint DefaultCtx Tuple{typeof(foo), Any}
 
-julia> is_primitive(DefaultCtx, Tuple{typeof(foo), Any})
+julia> is_primitive(DefaultCtx, ReverseMode, Tuple{typeof(foo), Any})
 true
 
 julia> rrule!!(zero_fcodual(foo), zero_fcodual(3.0))[2](NoRData())
@@ -179,14 +179,14 @@ julia> rrule!!(zero_fcodual(foo), zero_fcodual(3.0))[2](NoRData())
 
 Limited support for `Vararg`s is also available. For example
 ```jldoctest
-julia> using Mooncake: @zero_adjoint, DefaultCtx, zero_fcodual, rrule!!, is_primitive
+julia> using Mooncake: @zero_adjoint, DefaultCtx, zero_fcodual, rrule!!, is_primitive, ReverseMode
 
 julia> foo_varargs(x...) = 5
 foo_varargs (generic function with 1 method)
 
 julia> @zero_adjoint DefaultCtx Tuple{typeof(foo_varargs), Vararg}
 
-julia> is_primitive(DefaultCtx, Tuple{typeof(foo_varargs), Any, Float64, Int})
+julia> is_primitive(DefaultCtx, ReverseMode, Tuple{typeof(foo_varargs), Any, Float64, Int})
 true
 
 julia> rrule!!(zero_fcodual(foo_varargs), zero_fcodual(3.0), zero_fcodual(5))[2](NoRData())
@@ -462,8 +462,7 @@ julia> rrule!!(zero_fcodual(foo), zero_fcodual(5.0))[2](1.0)
 (NoRData(), 5.0)
 
 julia> # Check that the rule works as intended.
-       TestUtils.test_rule(Xoshiro(123), foo, 5.0; is_primitive=true)
-Test Passed
+       TestUtils.test_rule(Xoshiro(123), foo, 5.0; is_primitive=true, print_results=false);
 ```
 
 ## An Example with Keyword Arguments
@@ -494,9 +493,9 @@ julia> pb(3.0)
 
 julia> # Check that the rule works as intended.
        TestUtils.test_rule(
-           Xoshiro(123), Core.kwcall, (cond=false, ), foo, 5.0; is_primitive=true
-       )
-Test Passed
+           Xoshiro(123), Core.kwcall, (cond=false, ), foo, 5.0;
+           is_primitive=true, print_results=false,
+       );
 ```
 Notice that, in order to access the kwarg method we must call the method of `Core.kwcall`,
 as Mooncake's `rrule!!` does not itself permit the use of kwargs.
@@ -548,7 +547,7 @@ macro from_rrule(ctx, sig::Expr, has_kwargs::Bool=false)
     if has_kwargs
         kw_sig = Expr(:curly, :Tuple, :(typeof(Core.kwcall)), :NamedTuple, arg_type_syms...)
         kw_sig = where_params === nothing ? kw_sig : Expr(:where, kw_sig, where_params...)
-        kw_is_primitive = :(Mooncake.is_primitive(::Type{$ctx}, ::Type{<:$kw_sig}) = true)
+        kw_is_primitive = :(Mooncake.is_primitive(::Type{$ctx}, ::Type{Mooncake.ReverseMode}, ::Type{<:$kw_sig}) = true)
         kwcall_type = :(Mooncake.CoDual{typeof(Core.kwcall)})
         nt_type = :(Mooncake.CoDual{<:NamedTuple})
         kwargs_rule_expr = construct_rrule_wrapper_def(
@@ -562,7 +561,7 @@ macro from_rrule(ctx, sig::Expr, has_kwargs::Bool=false)
     end
 
     ex = quote
-        Mooncake.is_primitive(::Type{$(esc(ctx))}, ::Type{ReverseMode}, ::Type{<:($(esc(sig)))}) = true
+        Mooncake.is_primitive(::Type{$(esc(ctx))}, ::Type{Mooncake.ReverseMode}, ::Type{<:($(esc(sig)))}) = true
         $rule_expr
         $kw_is_primitive
         $kwargs_rule_expr
@@ -603,14 +602,13 @@ julia> function ChainRulesCore.rrule(::typeof(foo), x::Real)
            return foo(x), foo_pb
        end;
 
-julia> @from_rrule DefaultCtx Tuple{typeof(foo), Base.IEEEFloat}
+julia> @from_chain_rule DefaultCtx Tuple{typeof(foo), Base.IEEEFloat}
 
 julia> rrule!!(zero_fcodual(foo), zero_fcodual(5.0))[2](1.0)
 (NoRData(), 5.0)
 
 julia> # Check that the rule works as intended.
-       TestUtils.test_rule(Xoshiro(123), foo, 5.0; is_primitive=true)
-Test Passed
+       TestUtils.test_rule(Xoshiro(123), foo, 5.0; is_primitive=true, print_results=false);
 ```
 
 ## An Example with Keyword Arguments
@@ -641,9 +639,9 @@ julia> pb(3.0)
 
 julia> # Check that the rule works as intended.
        TestUtils.test_rule(
-           Xoshiro(123), Core.kwcall, (cond=false, ), foo, 5.0; is_primitive=true
-       )
-Test Passed
+           Xoshiro(123), Core.kwcall, (cond=false, ), foo, 5.0;
+           is_primitive=true, print_results=false,
+       );
 ```
 Notice that, in order to access the kwarg method we must call the method of `Core.kwcall`,
 as Mooncake's `rrule!!` does not itself permit the use of kwargs.
@@ -687,7 +685,7 @@ composite types. If `@from_rrule` does not work in your case because the require
 either of these functions does not exist, please open an issue.
 """
 macro from_chain_rule(
-    ctx, mode_type, sig::Expr, has_kwargs::Bool=false
+    ctx, sig::Expr, has_kwargs::Bool=false
 )
     arg_type_syms, where_params = parse_signature_expr(sig)
     arg_names = map(n -> Symbol("x_$n"), eachindex(arg_type_syms))
@@ -699,7 +697,7 @@ macro from_chain_rule(
     if has_kwargs
         kw_sig = Expr(:curly, :Tuple, :(typeof(Core.kwcall)), :NamedTuple, arg_type_syms...)
         kw_sig = where_params === nothing ? kw_sig : Expr(:where, kw_sig, where_params...)
-        kw_is_primitive = :(Mooncake.is_primitive(::Type{$ctx}, ::Type{<:$mode_type}, ::Type{<:$kw_sig}) = true)
+        kw_is_primitive = :(Mooncake.is_primitive(::Type{$ctx}, ::Type{<:$Mooncake.Mode}, ::Type{<:$kw_sig}) = true)
         kwargs_frule_expr = construct_frule_wrapper_def(
             vcat(:_kwcall, :kwargs, arg_names),
             vcat(
@@ -725,7 +723,7 @@ macro from_chain_rule(
     end
 
     ex = quote
-        Mooncake.is_primitive(::Type{$(esc(ctx))}, ::Type{<:$mode_type}, ::Type{<:($(esc(sig)))}) = true
+        Mooncake.is_primitive(::Type{$(esc(ctx))}, ::Type{<:$Mooncake.Mode}, ::Type{<:($(esc(sig)))}) = true
         $frule_expr
         $rrule_expr
         $kw_is_primitive

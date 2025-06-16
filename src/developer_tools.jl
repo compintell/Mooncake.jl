@@ -11,9 +11,11 @@ Roughly equivalent to `Base.code_ircode_by_type(sig; interp)`.
 For example, if you wanted to get the IR associated to the call `map(sin, randn(10))`, you
 could do one of the following calls:
 ```jldoctest
-julia> Mooncake.primal_ir(Tuple{typeof(map), typeof(sin), Vector{Float64}}) isa Core.Compiler.IRCode
+julia> using Mooncake: primal_ir, get_interpreter, ReverseMode
+
+julia> primal_ir(get_interpreter(ReverseMode), Tuple{typeof(map), typeof(sin), Vector{Float64}}) isa Core.Compiler.IRCode
 true
-julia> Mooncake.primal_ir(typeof((map, sin, randn(10)))) isa Core.Compiler.IRCode
+julia> primal_ir(get_interpreter(ReverseMode), typeof((map, sin, randn(10)))) isa Core.Compiler.IRCode
 true
 ```
 """
