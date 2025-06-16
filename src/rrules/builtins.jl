@@ -135,7 +135,11 @@ end
 macro intrinsic(name)
     expr = quote
         $name(x...) = Intrinsics.$name(x...)
-        (is_primitive)(::Type{MinimalCtx}, ::Type{<:Mode}, ::Type{<:Tuple{typeof($name),Vararg}}) = true
+        function is_primitive(
+            ::Type{MinimalCtx}, ::Type{<:Mode}, ::Type{<:Tuple{typeof($name),Vararg}}
+        )
+            true
+        end
         translate(::Val{Intrinsics.$name}) = $name
     end
     return esc(expr)
@@ -144,7 +148,11 @@ end
 macro inactive_intrinsic(name)
     expr = quote
         $name(x...) = Intrinsics.$name(x...)
-        (is_primitive)(::Type{MinimalCtx}, ::Type{<:Mode}, ::Type{<:Tuple{typeof($name),Vararg}}) = true
+        function is_primitive(
+            ::Type{MinimalCtx}, ::Type{<:Mode}, ::Type{<:Tuple{typeof($name),Vararg}}
+        )
+            true
+        end
         translate(::Val{Intrinsics.$name}) = $name
         function rrule!!(f::CoDual{typeof($name)}, args::Vararg{Any,N}) where {N}
             return Mooncake.zero_adjoint(f, args...)

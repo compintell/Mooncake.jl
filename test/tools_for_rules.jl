@@ -189,7 +189,9 @@ end
             (ToolsForRulesResources.test_kwargs_conditional, 5.0),
         ]
             test_rule(sr(1), fargs...; perf_flag=:none, is_primitive=true, mode=ForwardMode)
-            test_rule(sr(1), fargs...; perf_flag=:stability, is_primitive=true, mode=ReverseMode)
+            test_rule(
+                sr(1), fargs...; perf_flag=:stability, is_primitive=true, mode=ReverseMode
+            )
         end
         @testset "bad rdata" begin
             f = ToolsForRulesResources.test_bad_rdata

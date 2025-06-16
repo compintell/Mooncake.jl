@@ -33,7 +33,8 @@ struct MooncakeInterpreter{C,M<:Mode} <: CC.AbstractInterpreter
     code_cache::MooncakeCache
     oc_cache::Dict{ClosureCacheKey,Any}
     function MooncakeInterpreter(
-        ::Type{C}, ::Type{M};
+        ::Type{C},
+        ::Type{M};
         meta=nothing,
         world::UInt=Base.get_world_counter(),
         inf_params::CC.InferenceParams=CC.InferenceParams(),

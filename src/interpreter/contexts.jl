@@ -39,7 +39,6 @@ function is a primitive in reverse-mode AD.
 """
 struct ReverseMode <: Mode end
 
-
 """
     is_primitive(::Type{Ctx}, ::Type{Mode}, sig) where {Ctx,Mode}
 

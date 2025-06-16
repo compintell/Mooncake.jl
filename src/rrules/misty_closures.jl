@@ -78,7 +78,9 @@ struct MistyClosureRData{Tr}
 end
 
 fdata_type(::Type{<:MistyClosureTangent}) = MistyClosureFData
-fdata(t::MistyClosureTangent) = MistyClosureFData(fdata(t.captures_tangent), t.dual_callable)
+function fdata(t::MistyClosureTangent)
+    return MistyClosureFData(fdata(t.captures_tangent), t.dual_callable)
+end
 
 rdata_type(::Type{<:MistyClosureTangent}) = MistyClosureRData
 rdata(t::MistyClosureTangent) = MistyClosureRData(rdata(t.captures_tangent))
@@ -98,7 +100,9 @@ _verify_rdata_value(p::MistyClosure, r::MistyClosureRData) = nothing
 zero_rdata(p::MistyClosure) = MistyClosureRData(zero_rdata(p.oc.captures))
 
 function increment!!(x::MistyClosureFData, y::MistyClosureFData)
-    return MistyClosureFData(increment!!(x.captures_fdata, y.captures_fdata), x.dual_callable)
+    return MistyClosureFData(
+        increment!!(x.captures_fdata, y.captures_fdata), x.dual_callable
+    )
 end
 
 function increment_internal!!(c::IncCache, x::MistyClosureRData, y::MistyClosureRData)
@@ -118,7 +122,8 @@ function rrule!!(
 end
 
 function misty_closure_getfield_rrule_exception()
-    msg = "rrule!! for `lgetfield` and `getfield` not implemented for " *
+    msg =
+        "rrule!! for `lgetfield` and `getfield` not implemented for " *
         "`MistyClosure`s. That is, you cannot currently query a field of a " *
         "`MistyClosure` in code which you differentiate. If this is a " *
         "problem for your use-case, please open an issue on the Mooncake.jl " *
@@ -131,14 +136,15 @@ function rrule!!(::CoDual{typeof(_new_)}, p::CoDual{<:MistyClosure}, x::Vararg{C
 end
 
 function misty_closure_new_rrule_exception()
-    msg = "rrule!! for `_new_` not implemented for `MistyClosure`. That is, " *
+    msg =
+        "rrule!! for `_new_` not implemented for `MistyClosure`. That is, " *
         "you cannot currently construct a `MistyClosure` in code that you " *
         "differentiate. If this is a problem for your use-case, please open " *
         "an issue on the Mooncake.jl repository."
     throw(UnhandledLanguageFeatureException(msg))
 end
 
-@is_primitive MinimalCtx Tuple{MistyClosure, Vararg{Any, N}} where {N}
+@is_primitive MinimalCtx Tuple{MistyClosure,Vararg{Any,N}} where {N}
 function frule!!(f::Dual{<:MistyClosure}, x::Dual...)
     dual_captures = Dual(primal(f).oc.captures, tangent(f).captures_tangent)
     return tangent(f).dual_callable(dual_captures, x...)

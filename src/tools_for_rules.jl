@@ -230,7 +230,11 @@ macro zero_adjoint(ctx, sig)
 
     # Return code to create a method of is_primitive and a rule.
     ex = quote
-        Mooncake.is_primitive(::Type{$(esc(ctx))}, ::Type{ReverseMode}, ::Type{<:$(esc(sig))}) = true
+        function Mooncake.is_primitive(
+            ::Type{$(esc(ctx))}, ::Type{ReverseMode}, ::Type{<:$(esc(sig))}
+        )
+            true
+        end
         $(construct_rrule_def(arg_names, arg_types, where_params, body))
     end
     return ex
@@ -265,7 +269,11 @@ macro zero_derivative(ctx, sig)
 
     # Return code to create a method of is_primitive and a rule.
     ex = quote
-        Mooncake.is_primitive(::Type{$(esc(ctx))}, ::Type{<:Mode}, ::Type{<:$(esc(sig))}) = true
+        function Mooncake.is_primitive(
+            ::Type{$(esc(ctx))}, ::Type{<:Mode}, ::Type{<:$(esc(sig))}
+        )
+            true
+        end
         $(construct_frule_def(arg_names, arg_types_deriv, where_params, body_deriv))
         $(construct_rrule_def(arg_names, arg_types_adjoint, where_params, body_adjoint))
     end
@@ -547,7 +555,13 @@ macro from_rrule(ctx, sig::Expr, has_kwargs::Bool=false)
     if has_kwargs
         kw_sig = Expr(:curly, :Tuple, :(typeof(Core.kwcall)), :NamedTuple, arg_type_syms...)
         kw_sig = where_params === nothing ? kw_sig : Expr(:where, kw_sig, where_params...)
-        kw_is_primitive = :(Mooncake.is_primitive(::Type{$ctx}, ::Type{Mooncake.ReverseMode}, ::Type{<:$kw_sig}) = true)
+        kw_is_primitive = :(
+            function Mooncake.is_primitive(
+                ::Type{$ctx}, ::Type{Mooncake.ReverseMode}, ::Type{<:$kw_sig}
+            )
+                true
+            end
+        )
         kwcall_type = :(Mooncake.CoDual{typeof(Core.kwcall)})
         nt_type = :(Mooncake.CoDual{<:NamedTuple})
         kwargs_rule_expr = construct_rrule_wrapper_def(
@@ -561,7 +575,11 @@ macro from_rrule(ctx, sig::Expr, has_kwargs::Bool=false)
     end
 
     ex = quote
-        Mooncake.is_primitive(::Type{$(esc(ctx))}, ::Type{Mooncake.ReverseMode}, ::Type{<:($(esc(sig)))}) = true
+        function Mooncake.is_primitive(
+            ::Type{$(esc(ctx))}, ::Type{Mooncake.ReverseMode}, ::Type{<:($(esc(sig)))}
+        )
+            true
+        end
         $rule_expr
         $kw_is_primitive
         $kwargs_rule_expr
@@ -684,9 +702,7 @@ work well for simple types, but has not been tested to a great extent on complic
 composite types. If `@from_rrule` does not work in your case because the required method of
 either of these functions does not exist, please open an issue.
 """
-macro from_chain_rule(
-    ctx, sig::Expr, has_kwargs::Bool=false
-)
+macro from_chain_rule(ctx, sig::Expr, has_kwargs::Bool=false)
     arg_type_syms, where_params = parse_signature_expr(sig)
     arg_names = map(n -> Symbol("x_$n"), eachindex(arg_type_syms))
     dual_arg_types = map(t -> :(Mooncake.Dual{<:$t}), arg_type_syms)
@@ -697,7 +713,13 @@ macro from_chain_rule(
     if has_kwargs
         kw_sig = Expr(:curly, :Tuple, :(typeof(Core.kwcall)), :NamedTuple, arg_type_syms...)
         kw_sig = where_params === nothing ? kw_sig : Expr(:where, kw_sig, where_params...)
-        kw_is_primitive = :(Mooncake.is_primitive(::Type{$ctx}, ::Type{<:$Mooncake.Mode}, ::Type{<:$kw_sig}) = true)
+        kw_is_primitive = :(
+            function Mooncake.is_primitive(
+                ::Type{$ctx}, ::Type{<:$Mooncake.Mode}, ::Type{<:$kw_sig}
+            )
+                true
+            end
+        )
         kwargs_frule_expr = construct_frule_wrapper_def(
             vcat(:_kwcall, :kwargs, arg_names),
             vcat(
@@ -723,7 +745,11 @@ macro from_chain_rule(
     end
 
     ex = quote
-        Mooncake.is_primitive(::Type{$(esc(ctx))}, ::Type{<:$Mooncake.Mode}, ::Type{<:($(esc(sig)))}) = true
+        function Mooncake.is_primitive(
+            ::Type{$(esc(ctx))}, ::Type{<:$Mooncake.Mode}, ::Type{<:($(esc(sig)))}
+        )
+            true
+        end
         $frule_expr
         $rrule_expr
         $kw_is_primitive
