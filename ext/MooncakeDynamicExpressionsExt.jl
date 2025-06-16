@@ -352,19 +352,18 @@ function _rrule_getfield_common(
 
     value_primal = getfield(p, field_sym)
 
-    tangent_for_field = if field_sym === :degree
-        NoTangent()
-    elseif field_sym === :val
-        pt.val
+    fdata_for_output = if field_sym === :val
+        Mooncake.fdata(pt.val)
     elseif field_sym === :children
-        pt.children
+        map(value_primal, pt.children) do child_p, child_t
+            if child_t isa Mooncake.NoTangent
+                Mooncake.uninit_fdata(child_p)
+            else
+                Mooncake.FData(Mooncake.fdata(child_t))
+            end
+        end
     else
-        NoTangent()
-    end
-    fdata_for_output = if tangent_for_field isa NoTangent
         Mooncake.NoFData()
-    else
-        Mooncake.fdata(tangent_for_field)
     end
     y_cd = Mooncake.CoDual(value_primal, fdata_for_output)
     return y_cd, Pullback{typeof(pt),field_sym,n_args}(pt)
