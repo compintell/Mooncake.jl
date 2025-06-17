@@ -531,3 +531,15 @@ function value_and_gradient!!(cache::Cache, f::F, x::Vararg{Any,N}) where {F,N}
     coduals = tuple_map(CoDual, (f, x...), tuple_map(set_to_zero!!, cache.tangents))
     return __value_and_gradient!!(cache.rule, coduals...)
 end
+
+"""
+    prepare_derivative_cache(f, x...)
+
+Returns a cache used with [`value_and_gradient!!`](@ref). See that function for more info.
+"""
+prepare_derivative_cache(fx...; kwargs...) = build_frule(fx...; kwargs...)
+
+"""
+
+"""
+value_and_derivative!!(rule::R, fx::Vararg{Dual,N}) where {R,N} = rule(fx...)
