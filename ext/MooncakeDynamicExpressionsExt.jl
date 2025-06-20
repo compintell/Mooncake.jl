@@ -3,6 +3,7 @@ module MooncakeDynamicExpressionsExt
 using DynamicExpressions:
     DynamicExpressions as DE,
     AbstractExpressionNode,
+    Expression,
     Nullable,
     constructorof,
     branch_copy,
@@ -84,6 +85,50 @@ function DE.set_children!(
         i -> i <= deg ? _wrap_nullable(children[i]) : NoTangent(), Val(D)
     )
     #! format: on
+end
+function DE.extract_gradient(
+    gradient::Mooncake.Tangent{@NamedTuple{tree::TN, metadata::Mooncake.NoTangent}},
+    tree::Expression{T},
+) where {Tv,TN<:TangentNode{Tv},T}
+    return DE.extract_gradient(gradient.fields.tree, DE.get_tree(tree))
+end
+function DE.extract_gradient(
+    dtree::TangentNode{Tv,D}, tree::AbstractExpressionNode{T,D}
+) where {Tv,D,T}
+    num_constants = count(t -> t.degree == 0 && t.constant, tree)
+    ar = Vector{Tv}(undef, num_constants)
+    _extract_gradient!(ar, dtree, tree)
+    return ar
+end
+@generated function _extract_gradient!(
+    ar, gradient::TangentNode{Tv,D}, tree::AbstractExpressionNode{T,D}, idx=firstindex(ar)
+) where {Tv,D,T}
+    quote
+        if tree.degree == 0
+            if tree.constant
+                ar[idx] = gradient.val::Tv
+                idx = nextind(ar, idx)
+            end
+        else
+            deg = tree.degree
+            Base.Cartesian.@nif(
+                $D,
+                i -> i == deg,
+                i -> Base.Cartesian.@nexprs(
+                    i,
+                    j -> begin
+                        idx = _extract_gradient!(
+                            ar,
+                            DE.get_child(gradient, j),
+                            DE.get_child(tree, j),
+                            idx,
+                        )
+                    end
+                )
+            )
+        end
+        return idx
+    end
 end
 
 ################################################################################

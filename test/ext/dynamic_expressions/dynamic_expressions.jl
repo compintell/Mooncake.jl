@@ -6,6 +6,7 @@ using Mooncake
 using Mooncake: Mooncake
 using Mooncake.TestUtils
 using Mooncake.TestUtils: test_rule
+using Optim: Optim
 using DynamicExpressions
 using StableRNGs: StableRNG
 using DifferentiationInterface: AutoMooncake, gradient, prepare_gradient
@@ -57,6 +58,40 @@ end
 
         const_tangent = dexpr.fields.tree.children[2].x.val
         @test const_tangent ≈ N
+    end
+end
+
+@testset "Use in DynamicExpressions + Optim optimization" begin
+    let
+        operators = OperatorEnum(1 => (cos, sin, exp), 2 => (+, -, *, /))
+        x1 = Expression(Node{Float64}(; feature=1); operators)
+        x2 = Expression(Node{Float64}(; feature=2); operators)
+        init = x1 * exp(0.7 + 0.5 * x1) + 0.9 * x2
+        target = x1 * exp(0.3 + (-0.2) * x1) + 1.5 * x2
+
+        X = randn(StableRNG(0), 2, 128)
+        y = target(X)
+        backend = AutoMooncake(; config=nothing)
+
+        f = let X = X, y = y
+            function (ex)
+                pred = ex(X)
+                return sum(i -> abs2(pred[i] - y[i]), axes(X, 2))
+            end
+        end
+        prep = prepare_gradient(f, backend, init)
+        g! = let prep = prep, f = f
+            function (G, ex)
+                grad = gradient(f, prep, backend, ex)
+                G .= extract_gradient(grad, ex)
+                return nothing
+            end
+        end
+        ex0 = copy(init)
+        result = Optim.optimize(f, g!, ex0, Optim.BFGS())
+        constants_final = get_scalar_constants(result.minimizer)[1]
+        constants_target = get_scalar_constants(get_tree(target))[1]
+        @test isapprox(constants_final, constants_target, atol=1e-5)
     end
 end
 
