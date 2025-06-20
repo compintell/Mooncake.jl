@@ -80,7 +80,7 @@ end
             end
         end
         prep = prepare_gradient(f, backend, init)
-        g! = let prep = prep, f = f
+        g! = let prep = prep, backend = backend, f = f
             function (G, ex)
                 grad = gradient(f, prep, backend, ex)
                 G .= extract_gradient(grad, ex)
