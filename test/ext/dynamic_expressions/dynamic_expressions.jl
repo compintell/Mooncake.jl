@@ -5,11 +5,12 @@ Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 using Mooncake
 using Mooncake: Mooncake
 using Mooncake.TestUtils
-using Mooncake.TestUtils: test_rule
+using Mooncake.TestUtils: test_rule, test_tangent_interface
 using Optim: Optim
 using DynamicExpressions
 using StableRNGs: StableRNG
 using DifferentiationInterface: AutoMooncake, gradient, prepare_gradient
+using JET: JET
 
 using Test
 
@@ -95,49 +96,59 @@ end
     end
 end
 
-@testset "TestUtils systematic tests" begin
+@testset "TestUtils systematic tests - $(T)" for T in [Float32, Float64]
     let
         operators = OperatorEnum(
             1 => (cos, sin, exp, log, abs), 2 => (+, -, *, /), 3 => (fma, max)
         )
 
-        x1 = Expression(Node{Float64,3}(; feature=1); operators)
-        x2 = Expression(Node{Float64,3}(; feature=2); operators)
+        x1 = Expression(Node{T,3}(; feature=1); operators)
+        x2 = Expression(Node{T,3}(; feature=2); operators)
 
         # Various expression types - using only operators that exist
         expressions = [
+            Expression(Node{T,3}(; val=T(1.0)); operators),
             x1,
-            x1 + 1.0,
+            x1 + T(1.0),
             cos(x1),
-            x1 * x2 + sin(x1 - 0.5),
+            x1 * x2 + sin(x1 - T(0.5)),
             fma(x1, x2, x2 + x2),
-            fma(max(x1, x2, 2.0 * x1), x2 * 2.1, x1 * 3.2),
+            fma(max(x1, x2, T(2.0) * x1), x2 * T(2.1), x1 * T(3.2)),
         ]
 
-        # Test cases for expression evaluation
-        X = randn(StableRNG(0), 3, 20)
+        X = randn(StableRNG(0), T, 3, 20)
 
-        make_eval_sum(expr) = X -> sum(expr(X))
-        test_cases = [
-            (;
+        # Test derivative with respect to X
+        make_eval_sum_on_X(expr) = X -> sum(expr(X))
+        @testset "test_rule - dX - $(expr)" for expr in expressions
+            test_rule(
+                StableRNG(1),
+                make_eval_sum_on_X(expr),
+                X;
                 interface_only=false,
                 perf_flag=:none,
                 is_primitive=false,
                 unsafe_perturb=true,
-                fargs=(make_eval_sum(expr), X),
-                label=string(expr),
-            ) for expr in expressions
-        ]
-
-        @testset "$(test_case.label)" for test_case in test_cases
-            test_rule(
-                StableRNG(1),
-                test_case.fargs...;
-                test_case.interface_only,
-                test_case.perf_flag,
-                test_case.is_primitive,
-                test_case.unsafe_perturb,
             )
+        end
+
+        # Test derivative with respect to an expression object
+        make_eval_sum_on_expr(X) = expr -> sum(expr(X))
+        @testset "test_rule - dexpr - $(expr)" for expr in expressions
+            test_rule(
+                StableRNG(2),
+                make_eval_sum_on_expr(X),
+                expr;
+                interface_only=false,
+                perf_flag=:none,
+                is_primitive=false,
+                unsafe_perturb=true,
+            )
+        end
+
+        # Tangent interface tests
+        @testset "test tangent interface - $(expr)" for expr in expressions
+            test_tangent_interface(StableRNG(3), expr; interface_only=false)
         end
     end
 end
