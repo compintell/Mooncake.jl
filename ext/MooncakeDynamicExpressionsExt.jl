@@ -248,9 +248,7 @@ end
 function Mooncake._scale_internal(
     c::Mooncake.MaybeCache, a::Number, t::TangentNode{Tv,D}
 ) where {Tv,D}
-    return get!(c, t) do
-        _scale_internal_helper(c, a, t)
-    end::TangentNode{Tv,D}
+    return get!(() -> _scale_internal_helper(c, a, t), c, t)::TangentNode{Tv,D}
 end
 @generated function _scale_internal_helper(
     c::Mooncake.MaybeCache, a::Number, t::TangentNode{Tv,D}
@@ -282,9 +280,7 @@ function Mooncake._add_to_primal_internal(
     c::Mooncake.MaybeCache, p::N, t::TangentNode{Tv,D}, unsafe::Bool
 ) where {T,D,N<:AbstractExpressionNode{T,D},Tv}
     key = (p, t, unsafe)
-    return get!(c, key) do
-        _add_to_primal_internal_helper(c, p, t, unsafe)
-    end::N
+    return get!(() -> _add_to_primal_internal_helper(c, p, t, unsafe), c, key)::N
 end
 @generated function _add_to_primal_internal_helper(
     c::Mooncake.MaybeCache, p::N, t::TangentNode{Tv,D}, unsafe::Bool
@@ -320,9 +316,7 @@ function Mooncake._diff_internal(
     Tv = Mooncake.tangent_type(T)
     Tv === NoTangent && return NoTangent()
     key = (p, q)
-    return get!(c, key) do
-        _diff_internal_helper(c, p, q)
-    end::TangentNode{Tv,D}
+    return get!(() -> _diff_internal_helper(c, p, q), c, key)::TangentNode{Tv,D}
 end
 
 @generated function _diff_internal_helper(
@@ -488,9 +482,7 @@ function Mooncake.TestUtils.has_equal_data_internal(
     d::Dict{Tuple{UInt,UInt},Bool},
 ) where {Tv,D}
     idp = (objectid(t), objectid(s))
-    return get!(d, idp) do
-        _has_equal_data_internal_helper(t, s, equndef, d)
-    end
+    return get!(() -> _has_equal_data_internal_helper(t, s, equndef, d), d, idp)
 end
 @generated function _has_equal_data_internal_helper(
     t::TangentNode{Tv,D},
