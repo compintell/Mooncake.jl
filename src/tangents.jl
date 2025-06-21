@@ -339,6 +339,14 @@ tangent_type(::Type{Method}) = NoTangent
 
 tangent_type(::Type{<:Enum}) = NoTangent
 
+tangent_type(::Type{<:Base.TTY}) = NoTangent
+
+## Handling the `Union{Nothing, T<:Base.IEEEFloat}` type
+tangent_type(::Type{NoFData}, ::Type{Union{NoRData, T}}) where T<:Base.IEEEFloat = Union{NoTangent, tangent_type(T)}
+
+## Handling the `Union{Nothing, T<:Any}` type
+tangent_type(::Type{Union{NoFData, T}}, ::Type{NoRData}) where T = Union{NoTangent, tangent_type(T)}
+
 function split_union_tuple_type(tangent_types)
 
     # Create first split.
