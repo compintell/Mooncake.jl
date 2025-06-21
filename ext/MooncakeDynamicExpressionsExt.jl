@@ -21,18 +21,23 @@ using Random: AbstractRNG
 
 mutable struct TangentNode{Tv,D}
     const degree::UInt8
-    val::Union{Tv,NoTangent}
+    const constant::Bool
+    val::Tv
     children::NTuple{D,Union{@NamedTuple{null::NoTangent,x::TangentNode{Tv,D}},NoTangent}}
-end
 
-function TangentNode{Tv,D}(
-    val_tan::Union{Tv,NoTangent}, children::Vararg{Union{TangentNode{Tv,D},NoTangent},deg}
-) where {Tv,D,deg}
-    return TangentNode{Tv,D}(
-        UInt8(deg),
-        val_tan,
-        ntuple(i -> i <= deg ? _wrap_nullable(children[i]) : NoTangent(), Val(D)),
-    )
+    function TangentNode{Tv,D}(
+        val_tan::Union{Tv,Nothing}, children::Vararg{Union{TangentNode{Tv,D},NoTangent},deg}
+    ) where {Tv,D,deg}
+        t = if isnothing(val_tan)
+            new{Tv,D}(UInt8(deg), false)
+        else
+            new{Tv,D}(UInt8(deg), true, val_tan)
+        end
+        t.children = ntuple(
+            i -> i <= deg ? _wrap_nullable(children[i]) : NoTangent(), Val(D)
+        )
+        return t
+    end
 end
 
 function Mooncake.tangent_type(::Type{<:AbstractExpressionNode{T,D}}) where {T,D}
@@ -162,14 +167,13 @@ end
             if p.constant
                 TangentNode{Tv,D}(helper_call(helper, p.val))
             else
-                TangentNode{Tv,D}(NoTangent())
+                TangentNode{Tv,D}(nothing)
             end
         else
             Base.Cartesian.@nif(
                 $D,
                 i -> i == deg,
-                i ->
-                    TangentNode{Tv,D}(NoTangent(), map(helper, get_children(p, Val(i)))...),
+                i -> TangentNode{Tv,D}(nothing, map(helper, get_children(p, Val(i)))...),
             )
         end
     end
@@ -206,7 +210,9 @@ end
         ts = (t, s...)
         deg = t.degree
         if deg == 0
-            t.val = helper_call(helper, ts...)
+            if t.constant
+                t.val = helper_call(helper, ts...)
+            end
         else
             Base.Cartesian.@nif(
                 $D,
@@ -248,10 +254,10 @@ Mooncake._dot_internal(c::Mooncake.MaybeCache, t::TangentNode, s::NoTangent) = 0
         c[key] = 0.0
         deg = t.degree
         res = if deg == 0
-            if (t.val isa NoTangent || s.val isa NoTangent)
-                0.0
-            else
+            if t.constant && s.constant
                 Mooncake._dot_internal(c, t.val, s.val)
+            else
+                0.0
             end
         else
             Base.Cartesian.@nif(
@@ -282,7 +288,11 @@ end
     quote
         deg = t.degree
         if deg == 0
-            TangentNode{Tv,D}(Mooncake._scale_internal(c, a, t.val))
+            if t.constant
+                TangentNode{Tv,D}(Mooncake._scale_internal(c, a, t.val))
+            else
+                TangentNode{Tv,D}(nothing)
+            end
         else
             Base.Cartesian.@nif(
                 $D,
@@ -290,7 +300,7 @@ end
                 i -> Base.Cartesian.@ncall(
                     i,
                     TangentNode{Tv,D},
-                    NoTangent(),
+                    nothing,
                     j -> Mooncake._scale_internal(c, a, get_child(t, j))
                 )
             )
@@ -355,7 +365,7 @@ end
             if p.constant
                 TangentNode{Tv,D}(Mooncake._diff_internal(c, p.val, q.val))
             else
-                TangentNode{Tv,D}(NoTangent())
+                TangentNode{Tv,D}(nothing)
             end
         else
             Base.Cartesian.@nif(
@@ -364,7 +374,7 @@ end
                 i -> Base.Cartesian.@ncall(
                     i,
                     TangentNode{Tv,D},
-                    NoTangent(),
+                    nothing,
                     j -> Mooncake._diff_internal(c, get_child(p, j), get_child(q, j))
                 )
             )
@@ -521,7 +531,12 @@ end
     quote
         deg = t.degree
         deg == s.degree && if t.degree == 0
-            Mooncake.TestUtils.has_equal_data_internal(t.val, s.val, equndef, d)
+            if t.constant
+                s.constant &&
+                    Mooncake.TestUtils.has_equal_data_internal(t.val, s.val, equndef, d)
+            else
+                !s.constant
+            end
         else
             Base.Cartesian.@nif(
                 $D,
