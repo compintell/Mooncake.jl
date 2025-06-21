@@ -100,6 +100,11 @@ function DE.extract_gradient(
     _extract_gradient!(ar, dtree, tree)
     return ar
 end
+function _extract_gradient!(
+    ar, ::NoTangent, ::AbstractExpressionNode{T,D}, idx=firstindex(ar)
+) where {D,T}
+    return idx
+end
 @generated function _extract_gradient!(
     ar, gradient::TangentNode{Tv,D}, tree::AbstractExpressionNode{T,D}, idx=firstindex(ar)
 ) where {Tv,D,T}
