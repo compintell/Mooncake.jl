@@ -860,6 +860,12 @@ tangent type. This method must be equivalent to `tangent_type(_typeof(primal))`.
 @foldable tangent_type(::Type{NoFData}, ::Type{R}) where {R<:IEEEFloat} = R
 @foldable tangent_type(::Type{F}, ::Type{NoRData}) where {F<:Array} = F
 
+# Union type: `Union{Nothing, T<:Base.IEEEFloat}`
+@foldable tangent_type(::Type{NoFData}, ::Type{Union{NoRData, T}}) where T<:Base.IEEEFloat = Union{NoTangent, tangent_type(T)}
+
+# Union type: `Union{Nothing, T<:Array}`
+@foldable tangent_type(::Type{Union{NoFData, T}}, ::Type{NoRData}) where T<:Array = Union{NoTangent, tangent_type(T)}
+
 # Tuples
 @foldable @generated function tangent_type(::Type{F}, ::Type{R}) where {F<:Tuple,R<:Tuple}
     tt_exprs = map((f, r) -> :(tangent_type($f, $r)), fieldtypes(F), fieldtypes(R))
