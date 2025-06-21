@@ -439,32 +439,57 @@ end
 # Test‑utility helpers
 ################################################################################
 
-@generated function Mooncake.TestUtils.populate_address_map_internal(
+function Mooncake.__verify_fdata_value(
+    c::IdDict{Any,Nothing}, p::AbstractExpressionNode, f::TangentNode
+)
+    haskey(c, p) && return nothing
+    c[p] = nothing
+
+    deg = p.degree
+    deg != f.degree &&
+        throw(Mooncake.InvalidFDataException("degree mismatch between node and tangent"))
+
+    if deg == 0
+        p.constant != f.constant && throw(
+            Mooncake.InvalidFDataException("constant mismatch between node and tangent")
+        )
+        if p.constant
+            Mooncake._verify_fdata_value(c, p.val, Mooncake.fdata(f.val))
+        end
+    else
+        for i in 1:deg
+            Mooncake._verify_fdata_value(c, DE.get_child(p, i), get_child(f, i))
+        end
+    end
+    return nothing
+end
+
+function Mooncake.__verify_fdata_value(
+    c::IdDict{Any,Nothing}, p::AbstractExpressionNode, f::NoTangent
+)
+    !haskey(c, p) && (c[p] = nothing)
+    return nothing
+end
+
+function Mooncake.TestUtils.populate_address_map_internal(
     m::Mooncake.TestUtils.AddressMap, p::N, t::TangentNode{Tv,D}
 ) where {T,D,N<:AbstractExpressionNode{T,D},Tv}
-    quote
-        kp = Base.pointer_from_objref(p)
-        kt = Base.pointer_from_objref(t)
-        !haskey(m, kp) && (m[kp] = kt)
-        deg = p.degree
-        if deg == 0
-            if p.constant
-                Mooncake.TestUtils.populate_address_map_internal(m, p.val, t.val)
-            end
-        else
-            Base.Cartesian.@nif(
-                $D,
-                i -> i == deg,
-                i -> Base.Cartesian.@nexprs(
-                    i,
-                    j -> Mooncake.TestUtils.populate_address_map_internal(
-                        m, DE.get_child(p, j), get_child(t, j)
-                    )
-                )
+    kp = Base.pointer_from_objref(p)
+    kt = Base.pointer_from_objref(t)
+    !haskey(m, kp) && (m[kp] = kt)
+    deg = p.degree
+    if deg == 0
+        if p.constant
+            Mooncake.TestUtils.populate_address_map_internal(m, p.val, t.val)
+        end
+    else
+        for i in 1:deg
+            Mooncake.TestUtils.populate_address_map_internal(
+                m, DE.get_child(p, i), get_child(t, i)
             )
         end
-        return m
     end
+    return m
 end
 
 function Mooncake.TestUtils.has_equal_data_internal(
@@ -484,33 +509,27 @@ function Mooncake.TestUtils.has_equal_data_internal(
     idp = (objectid(t), objectid(s))
     return get!(() -> _has_equal_data_internal_helper(t, s, equndef, d), d, idp)
 end
-@generated function _has_equal_data_internal_helper(
+function _has_equal_data_internal_helper(
     t::TangentNode{Tv,D},
     s::TangentNode{Tv,D},
     equndef::Bool,
     d::Dict{Tuple{UInt,UInt},Bool},
 ) where {Tv,D}
-    quote
-        deg = t.degree
-        deg == s.degree && if t.degree == 0
-            if t.constant
-                s.constant &&
-                    Mooncake.TestUtils.has_equal_data_internal(t.val, s.val, equndef, d)
-            else
-                !s.constant
-            end
+    deg = t.degree
+    deg == s.degree && if t.degree == 0
+        if t.constant
+            s.constant &&
+                Mooncake.TestUtils.has_equal_data_internal(t.val, s.val, equndef, d)
         else
-            Base.Cartesian.@nif(
-                $D,
-                i -> i == deg,
-                i -> Base.Cartesian.@nall(
-                    i,
-                    j -> Mooncake.TestUtils.has_equal_data_internal(
-                        get_child(t, j), get_child(s, j), equndef, d
-                    )
-                )
-            )
+            !s.constant
         end
+    else
+        all(
+            i -> Mooncake.TestUtils.has_equal_data_internal(
+                get_child(t, i), get_child(s, i), equndef, d
+            ),
+            1:deg,
+        )
     end
 end
 

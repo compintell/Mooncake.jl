@@ -5,12 +5,15 @@ Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 using Mooncake
 using Mooncake: Mooncake
 using Mooncake.TestUtils
-using Mooncake.TestUtils: test_rule, test_tangent_interface
+using Mooncake.TestUtils: test_rule, test_tangent_interface, test_tangent_splitting
 using Optim: Optim
 using DynamicExpressions
 using StableRNGs: StableRNG
 using DifferentiationInterface: AutoMooncake, gradient, prepare_gradient
+
+# Needed for certain parts of TestUtils
 using JET: JET
+using AllocCheck: AllocCheck
 
 using Test
 
@@ -147,8 +150,9 @@ end
         end
 
         # Tangent interface tests
-        @testset "test tangent interface - $(expr)" for expr in expressions
+        @testset "test full tangent interface - $(expr)" for expr in expressions
             test_tangent_interface(StableRNG(3), expr; interface_only=false)
+            test_tangent_splitting(StableRNG(4), expr)
         end
     end
 end
