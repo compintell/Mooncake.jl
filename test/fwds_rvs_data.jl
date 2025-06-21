@@ -25,6 +25,9 @@ end
     end
     @testset "$(typeof(p))" for (_, p, _...) in Mooncake.tangent_test_cases()
         TestUtils.test_tangent_splitting(Xoshiro(123456), p)
+        # See, https://github.com/chalk-lab/Mooncake.jl/issues/597 
+        TestUtils.test_tangent_splitting(Xoshiro(123456), Union{Base.IEEEFloat, Nothing})
+        TestUtils.test_tangent_splitting(Xoshiro(123456), Union{Array, Nothing})
     end
     @testset "zero_rdata_from_type checks" begin
         @test can_produce_zero_rdata_from_type(Vector) == true
