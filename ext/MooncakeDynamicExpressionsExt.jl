@@ -5,12 +5,10 @@ using DynamicExpressions:
     AbstractExpressionNode,
     Expression,
     Nullable,
-    constructorof,
     branch_copy,
     leaf_copy,
     get_child,
-    get_children,
-    set_children!
+    get_children
 using Mooncake
 using Mooncake: NoTangent
 using Random: AbstractRNG
