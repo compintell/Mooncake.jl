@@ -7,7 +7,6 @@ using DynamicExpressions:
     Nullable,
     branch_copy,
     leaf_copy,
-    get_child,
     get_children
 using Mooncake
 using Mooncake: NoTangent
@@ -56,23 +55,17 @@ end
 function Mooncake.tangent(t::TangentNode, ::Mooncake.NoRData)
     return t
 end
-function Mooncake.rdata(::TangentNode)
-    return Mooncake.NoRData()
-end
 
 _unwrap_nullable(c::NoTangent) = c
 _unwrap_nullable(c::NamedTuple{(:null, :x)}) = c.x
 _wrap_nullable(c::NoTangent) = c
 _wrap_nullable(c::TangentNode) = (; null=NoTangent(), x=c)
 
-function DE.get_child(t::TangentNode, i::Int)
+function get_child(t::TangentNode, i::Int)
     return _unwrap_nullable(t.children[i])
 end
 function _get_child(t, ::Val{i}) where {i}
     return get_child(t, i)
-end
-function DE.get_children(t::TangentNode, ::Val{d}) where {d}
-    return ntuple(i -> _unwrap_nullable(t.children[i]), Val(d))
 end
 function DE.extract_gradient(
     gradient::Mooncake.Tangent{@NamedTuple{tree::TN,metadata::Mooncake.NoTangent}},
@@ -111,10 +104,7 @@ end
                     i,
                     j -> begin
                         idx = _extract_gradient!(
-                            ar,
-                            DE.get_child(gradient, j),
-                            DE.get_child(tree, j),
-                            idx,
+                            ar, get_child(gradient, j), DE.get_child(tree, j), idx
                         )
                     end
                 )
@@ -136,9 +126,7 @@ end
 function (helper::InitHelper)(p::N) where {T,D,N<:AbstractExpressionNode{T,D}}
     Tv = Mooncake.tangent_type(T)
     Tv === NoTangent && return NoTangent()
-    return get!(helper.dict, p) do
-        helper_inner(helper, p)
-    end::TangentNode{Tv,D}
+    return get!(() -> helper_inner(helper, p), helper.dict, p)::TangentNode{Tv,D}
 end
 @generated function helper_inner(
     helper::InitHelper, p::N
@@ -318,7 +306,7 @@ end
                     branch_copy,
                     p,
                     j -> Mooncake._add_to_primal_internal(
-                        c, get_child(p, j), get_child(t, j), unsafe
+                        c, DE.get_child(p, j), get_child(t, j), unsafe
                     )
                 )
             )
@@ -357,7 +345,7 @@ end
                     i,
                     TangentNode{Tv,D},
                     nothing,
-                    j -> Mooncake._diff_internal(c, get_child(p, j), get_child(q, j))
+                    j -> Mooncake._diff_internal(c, DE.get_child(p, j), DE.get_child(q, j))
                 )
             )
         end
@@ -476,7 +464,7 @@ end
                 i -> Base.Cartesian.@nexprs(
                     i,
                     j -> Mooncake.TestUtils.populate_address_map_internal(
-                        m, get_child(p, j), get_child(t, j)
+                        m, DE.get_child(p, j), get_child(t, j)
                     )
                 )
             )
