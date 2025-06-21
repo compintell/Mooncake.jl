@@ -22,21 +22,20 @@ using Random: AbstractRNG
 mutable struct TangentNode{Tv,D}
     const degree::UInt8
     const constant::Bool
+    const children::NTuple{
+        D,Union{@NamedTuple{null::NoTangent,x::TangentNode{Tv,D}},NoTangent}
+    }
     val::Tv
-    children::NTuple{D,Union{@NamedTuple{null::NoTangent,x::TangentNode{Tv,D}},NoTangent}}
 
     function TangentNode{Tv,D}(
         val_tan::Union{Tv,Nothing}, children::Vararg{Union{TangentNode{Tv,D},NoTangent},deg}
     ) where {Tv,D,deg}
-        t = if isnothing(val_tan)
-            new{Tv,D}(UInt8(deg), false)
+        children = ntuple(i -> i <= deg ? _wrap_nullable(children[i]) : NoTangent(), Val(D))
+        if isnothing(val_tan)
+            new{Tv,D}(UInt8(deg), false, children)
         else
-            new{Tv,D}(UInt8(deg), true, val_tan)
+            new{Tv,D}(UInt8(deg), true, children, val_tan)
         end
-        t.children = ntuple(
-            i -> i <= deg ? _wrap_nullable(children[i]) : NoTangent(), Val(D)
-        )
-        return t
     end
 end
 
@@ -76,20 +75,6 @@ function _get_child(t, ::Val{i}) where {i}
 end
 function DE.get_children(t::TangentNode, ::Val{d}) where {d}
     return ntuple(i -> _unwrap_nullable(t.children[i]), Val(d))
-end
-function DE.set_children!(
-    t::TangentNode{Tv,D},
-    children::Tuple{
-        Union{TangentNode{Tv,D},NoTangent},
-        Vararg{Union{TangentNode{Tv,D},NoTangent},deg_m_1},
-    },
-) where {Tv,D,deg_m_1}
-    deg = deg_m_1 + 1
-    #! format: off
-    t.children = ntuple(
-        i -> i <= deg ? _wrap_nullable(children[i]) : NoTangent(), Val(D)
-    )
-    #! format: on
 end
 function DE.extract_gradient(
     gradient::Mooncake.Tangent{@NamedTuple{tree::TN,metadata::Mooncake.NoTangent}},
@@ -217,12 +202,11 @@ end
             Base.Cartesian.@nif(
                 $D,
                 i -> i == deg,
-                i -> set_children!(
-                    t,
-                    Base.Cartesian.@ntuple(
+                i -> begin
+                    Base.Cartesian.@nexprs(
                         i, c -> helper(map(Base.Fix2(_get_child, Val(c)), ts)...),
                     )
-                )
+                end
             )
         end
         return t
