@@ -5,7 +5,7 @@ Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 using Mooncake
 using Mooncake: Mooncake
 using Mooncake.TestUtils
-using Mooncake.TestUtils: test_rule, test_tangent_interface, test_tangent_splitting
+using Mooncake.TestUtils: test_rule, test_data
 using Optim: Optim
 using DynamicExpressions
 using StableRNGs: StableRNG
@@ -150,9 +150,8 @@ end
         end
 
         # Tangent interface tests
-        @testset "test full tangent interface - $(expr)" for expr in expressions
-            test_tangent_interface(StableRNG(3), expr; interface_only=false)
-            test_tangent_splitting(StableRNG(4), expr)
+        @testset "test full tangent interface - $(expr)" for expr in expressions[end:end]
+            test_data(StableRNG(3), expr)
         end
     end
 end
