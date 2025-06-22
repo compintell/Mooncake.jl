@@ -151,7 +151,7 @@ end
 
         # Tangent interface tests
         @testset "test full tangent interface - $(expr)" for expr in expressions[end:end]
-            test_data(StableRNG(3), expr)
+            test_data(StableRNG(3), expr.tree)
         end
     end
 end
