@@ -109,18 +109,22 @@ end
     return findfirst(==(s), fieldnames(Tfields))
 end
 
-function tangent_field_types_exprs(P::Type)
-    tangent_type_exprs = map(fieldtypes(P), always_initialised(P)) do _P, init
-        T_expr = Expr(:call, :tangent_type, _P)
-        return init ? T_expr : Expr(:curly, PossiblyUninitTangent, T_expr)
-    end
-    return tangent_type_exprs
+function _possibly_uninit(::Type{T}, init::Bool) where {T}
+    return init ? T : PossiblyUninitTangent{T}
+end
+
+function _resolve_tangent_field_types(::Type{P}) where {P}
+    return map(
+        _possibly_uninit,
+        map(tangent_type, fieldtypes(P)),
+        always_initialised(P)
+    )
 end
 
 # It is essential that this gets inlined. If it does not, then we run into performance
 # issues with the recursion to compute tangent types for nested types.
 @generated function tangent_field_types(::Type{P}) where {P}
-    return Expr(:call, :tuple, tangent_field_types_exprs(P)...)
+    return _resolve_tangent_field_types(P)
 end
 
 function build_tangent(::Type{P}, fields...) where {P}
@@ -359,10 +363,9 @@ end
 # Generated functions cannot emit closures, so this is defined here for use below.
 isconcrete_or_union(p) = p isa Union || isconcretetype(p)
 
-@foldable @generated function tangent_type(::Type{P}) where {N,P<:Tuple{Vararg{Any,N}}}
-
+function _resolve_tangent_type_tuple(::Type{P}) where {N,P<:Tuple{Vararg{Any,N}}}
     # As with other types, tangent type of Union is Union of tangent types.
-    P isa Union && return :(Union{tangent_type($(P.a)),tangent_type($(P.b))})
+    P isa Union && return Union{tangent_type(P.a),tangent_type(P.b)}
 
     # Determine whether P isa a Tuple with a Vararg, e.g, Tuple, or Tuple{Float64, Vararg}.
     # Need to exclude `UnionAll`s from this, by checking `isa(P, DataType)`, in order to
@@ -374,35 +377,34 @@ isconcrete_or_union(p) = p isa Union || isconcretetype(p)
     isa(P, DataType) && N == 0 && return NoTangent
 
     # Expression to construct `Tuple` type containing tangent type for all fields.
-    tangent_type_exprs = map(n -> :(tangent_type(fieldtype(P, $n))), 1:N)
-    tangent_types = Expr(:call, tuple, tangent_type_exprs...)
+    tangent_types = ntuple(n -> tangent_type(fieldtype(P, n)), Val(N))
 
     # Construct a Tuple type of the same length as `P`, containing all `NoTangent`s.
     T_all_notangent = Tuple{Vararg{NoTangent,N}}
 
-    return quote
+    # Get tangent types for all fields. If they're all `NoTangent`, return `NoTangent`.
+    # i.e. if `P = Tuple{Int, Int}`, do not return `Tuple{NoTangent, NoTangent}`.
+    # Simplify and return `NoTangent`.
+    T = Tuple{tangent_types...}
+    T <: T_all_notangent && return NoTangent
 
-        # Get tangent types for all fields. If they're all `NoTangent`, return `NoTangent`.
-        # i.e. if `P = Tuple{Int, Int}`, do not return `Tuple{NoTangent, NoTangent}`.
-        # Simplify and return `NoTangent`.
-        tangent_types = $tangent_types
-        T = Tuple{tangent_types...}
-        T <: $T_all_notangent && return NoTangent
-
-        # If exactly one of the field types is a Union, then split.
-        union_fields = _findall(Base.Fix2(isa, Union), tangent_types)
-        if length(union_fields) == 1 && all(tuple_map(isconcrete_or_union, tangent_types))
-            return split_union_tuple_type(tangent_types)
-        end
-
-        # If it's _possible_ for a subtype of `P` to have tangent type `NoTangent`, then we
-        # must account for that by returning the union of `NoTangent` and `T`. For example,
-        # if `P = Tuple{Any, Int}`, then `P2 = Tuple{Int, Int}` is a subtype. Since `P2` has
-        # tangent type `NoTangent`, it must be true that `NoTangent <: tangent_type(P)`. If,
-        # on the other hand, it's not possible for `NoTangent` to be the tangent type, e.g.
-        # for `Tuple{Float64, Any}`, then there's no need to take the union.
-        return $T_all_notangent <: T ? Union{T,NoTangent} : T
+    # If exactly one of the field types is a Union, then split.
+    union_fields = _findall(Base.Fix2(isa, Union), tangent_types)
+    if length(union_fields) == 1 && all(tuple_map(isconcrete_or_union, tangent_types))
+        return split_union_tuple_type(tangent_types)
     end
+
+    # If it's _possible_ for a subtype of `P` to have tangent type `NoTangent`, then we
+    # must account for that by returning the union of `NoTangent` and `T`. For example,
+    # if `P = Tuple{Any, Int}`, then `P2 = Tuple{Int, Int}` is a subtype. Since `P2` has
+    # tangent type `NoTangent`, it must be true that `NoTangent <: tangent_type(P)`. If,
+    # on the other hand, it's not possible for `NoTangent` to be the tangent type, e.g.
+    # for `Tuple{Float64, Any}`, then there's no need to take the union.
+    return T_all_notangent <: T ? Union{T,NoTangent} : T
+end
+
+@foldable @generated function tangent_type(::Type{P}) where {N,P<:Tuple{Vararg{Any,N}}}
+    return _resolve_tangent_type_tuple(P)
 end
 
 @foldable function tangent_type(::Type{P}) where {N,P<:NamedTuple{N}}
@@ -413,34 +415,34 @@ end
     return isconcretetype(TT) ? NamedTuple{N,TT} : Any
 end
 
-@foldable @generated function tangent_type(::Type{P}) where {P}
 
+function _resolve_tangent_type_any(::Type{P}) where {P}
     # This method can only handle struct types. Something has gone wrong if P is primitive.
     if isprimitivetype(P)
         return error("$P is a primitive type. Implement a method of `tangent_type` for it.")
     end
 
     # If the type is a Union, then take the union type of its arguments.
-    P isa Union && return :(Union{tangent_type($(P.a)),tangent_type($(P.b))})
+    P isa Union && return Union{tangent_type(P.a),tangent_type(P.b)}
 
     # If the type is itself abstract, it's tangent could be anything.
     # The same goes for if the type has any undetermined type parameters.
     (isabstracttype(P) || !isconcretetype(P)) && return Any
 
-    tangent_fields_types_expr = Expr(:curly, Tuple, tangent_field_types_exprs(P)...)
     T_all_notangent = Tuple{Vararg{NoTangent,fieldcount(P)}}
-    return quote
 
-        # Construct a `Tuple{...}` whose fields are the tangent types of the fields of `P`.
-        tangent_field_types_tuple = $tangent_fields_types_expr
+    # Construct a `Tuple{...}` whose fields are the tangent types of the fields of `P`.
+    tangent_field_types_tuple = Tuple{tangent_field_types(P)...}
 
-        # If all fields are definitely `NoTangent`s, then return `NoTangent`.
-        tangent_field_types_tuple <: $T_all_notangent && return NoTangent
+    # If all fields are definitely `NoTangent`s, then return `NoTangent`.
+    tangent_field_types_tuple <: T_all_notangent && return NoTangent
 
-        # Derive tangent type.
-        bt = NamedTuple{$(fieldnames(P)),tangent_field_types_tuple}
-        return $(ismutabletype(P) ? MutableTangent : Tangent){bt}
-    end
+    # Derive tangent type.
+    bt = NamedTuple{fieldnames(P),tangent_field_types_tuple}
+    return ismutabletype(P) ? MutableTangent{bt} : Tangent{bt}
+end
+@foldable @generated function tangent_type(::Type{P}) where {P}
+    return _resolve_tangent_type_any(P)
 end
 
 backing_type(P::Type) = NamedTuple{fieldnames(P),Tuple{tangent_field_types(P)...}}
