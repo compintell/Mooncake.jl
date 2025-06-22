@@ -406,7 +406,7 @@ Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{
 function Mooncake.rrule!!(
     ::Mooncake.CoDual{typeof(Mooncake.lgetfield)},
     obj_cd::Mooncake.CoDual{N,TangentNode{Tv,D}},
-    vfield_cd::Mooncake.CoDual{Val{F},Mooncake.NoFData},
+    vfield_cd::Mooncake.CoDual{Val{F}},
 ) where {T,D,N<:AbstractExpressionNode{T,D},Tv,F}
     return _rrule_getfield_common(obj_cd, Val(_field_sym(F)), Val(3))
 end
@@ -418,7 +418,7 @@ Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{
 function Mooncake.rrule!!(
     ::Mooncake.CoDual{typeof(getfield)},
     obj_cd::Mooncake.CoDual{N,TangentNode{Tv,D}},
-    sym_cd::Mooncake.CoDual{Symbol,Mooncake.NoFData},
+    sym_cd::Mooncake.CoDual{Symbol},
 ) where {T,D,N<:AbstractExpressionNode{T,D},Tv}
     return _rrule_getfield_common(obj_cd, Val(Mooncake.primal(sym_cd)), Val(3))
 end
@@ -430,7 +430,7 @@ Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{
 function Mooncake.rrule!!(
     ::Mooncake.CoDual{typeof(getfield)},
     obj_cd::Mooncake.CoDual{N,TangentNode{Tv,D}},
-    idx_cd::Mooncake.CoDual{Int,Mooncake.NoFData},
+    idx_cd::Mooncake.CoDual{Int},
 ) where {T,D,N<:AbstractExpressionNode{T,D},Tv}
     return _rrule_getfield_common(obj_cd, _field_sym(Mooncake.primal(idx_cd)), 3)
 end
