@@ -20,9 +20,7 @@ mutable struct TangentNode{Tv,D}
     degree::UInt8
     constant::Bool
     val::Tv
-    children::NTuple{
-        D,Union{@NamedTuple{null::NoTangent,x::TangentNode{Tv,D}},NoTangent}
-    }
+    children::NTuple{D,Union{@NamedTuple{null::NoTangent,x::TangentNode{Tv,D}},NoTangent}}
 
     TangentNode{Tv,D}() where {Tv,D} = new{Tv,D}()
 end
@@ -419,10 +417,10 @@ function Mooncake.rrule!!(
     obj_cd::Mooncake.CoDual{N,TangentNode{Tv,D}},
     idx_or_sym_cd::Mooncake.CoDual{<:Union{Symbol,Int}},
 ) where {T,D,N<:AbstractExpressionNode{T,D},Tv}
-    return _rrule_getfield_common(obj_cd, _map_to_sym(N, Val(Mooncake.primal(idx_or_sym_cd))), Val(3))
+    return _rrule_getfield_common(
+        obj_cd, _map_to_sym(N, Val(Mooncake.primal(idx_or_sym_cd))), Val(3)
+    )
 end
-
-
 
 # lgetfield(AEN, Val{field}, Val{order})
 Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{
@@ -432,12 +430,11 @@ function Mooncake.rrule!!(
     ::Mooncake.CoDual{typeof(Mooncake.lgetfield)},
     obj_cd::Mooncake.CoDual{N,TangentNode{Tv,D}},
     ::Mooncake.CoDual{Val{FieldName}},
-    ::Mooncake.CoDual{Val{order}}
+    ::Mooncake.CoDual{Val{order}},
 ) where {T,D,N<:AbstractExpressionNode{T,D},Tv,FieldName,order}
     @assert order === :not_atomic "MooncakeDynamicExpressionsExt.jl does not support `order` other than `:not_atomic`"
     return _rrule_getfield_common(obj_cd, _map_to_sym(N, Val(FieldName)), Val(4))
 end
-
 
 # lsetfield!(AEN, Val{field}, Any)
 Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{
@@ -447,7 +444,7 @@ function Mooncake.rrule!!(
     ::Mooncake.CoDual{typeof(Mooncake.lsetfield!)},
     obj_cd::Mooncake.CoDual{N,TangentNode{Tv,D}},
     ::Mooncake.CoDual{Val{FieldName}},
-    new_val_cd::Mooncake.CoDual
+    new_val_cd::Mooncake.CoDual,
 ) where {T,D,N<:AbstractExpressionNode{T,D},Tv,FieldName}
     obj = Mooncake.primal(obj_cd)
     obj_t = Mooncake.tangent(obj_cd)
@@ -487,7 +484,7 @@ Mooncake.@is_primitive Mooncake.DefaultCtx Tuple{
 function Mooncake.rrule!!(
     ::Mooncake.CoDual{typeof(Mooncake._new_)},
     ::Mooncake.CoDual{Type{N}},
-    args::Vararg{Mooncake.CoDual,nargs}
+    args::Vararg{Mooncake.CoDual,nargs},
 ) where {T,D,N<:AbstractExpressionNode{T,D},nargs}
     @assert nargs == 0 "MooncakeDynamicExpressionsExt.jl does not support non-empty `new` for AbstractExpressionNode types"
 
