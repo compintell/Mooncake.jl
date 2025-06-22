@@ -67,6 +67,11 @@ function _wrap_nullable(
 ) where {Tv,D}
     return (; null=NoTangent(), x=fd.data.x)
 end
+function _wrap_nullable(
+    fd::@NamedTuple{null::Mooncake.NoTangent, x::TangentNode{Tv,D}}
+) where {Tv,D}
+    return fd
+end
 
 function get_child(t::TangentNode, i::Int)
     return _unwrap_nullable(t.children[i])
@@ -501,7 +506,13 @@ function _rrule_setfield_common(
         Mooncake.lsetfield!(obj_t, v_field_sym, new_val_primal)
     end
 
-    y_fdata = Mooncake.fdata(new_field_tangent)
+    y_fdata = if FieldName === :children
+        Mooncake.fdata(obj_t.children)
+    elseif FieldName === :val
+        Mooncake.fdata(new_field_tangent)
+    else
+        Mooncake.NoFData()
+    end
     y_cd = Mooncake.CoDual(new_val_primal, y_fdata)
 
     function lsetfield_node_pb(dy_rdata)
