@@ -17,23 +17,26 @@ using Random: AbstractRNG
 ################################################################################
 
 mutable struct TangentNode{Tv,D}
-    const degree::UInt8
-    const constant::Bool
-    const children::NTuple{
+    degree::UInt8
+    constant::Bool
+    val::Tv
+    children::NTuple{
         D,Union{@NamedTuple{null::NoTangent,x::TangentNode{Tv,D}},NoTangent}
     }
-    val::Tv
 
-    function TangentNode{Tv,D}(
-        val_tan::Union{Tv,Nothing}, children::Vararg{Union{TangentNode{Tv,D},NoTangent},deg}
-    ) where {Tv,D,deg}
-        children = ntuple(i -> i <= deg ? _wrap_nullable(children[i]) : NoTangent(), Val(D))
-        if isnothing(val_tan)
-            new{Tv,D}(UInt8(deg), false, children)
-        else
-            new{Tv,D}(UInt8(deg), true, children, val_tan)
-        end
+    TangentNode{Tv,D}() where {Tv,D} = new{Tv,D}()
+end
+function TangentNode{Tv,D}(
+    val_tan::Union{Tv,Nothing}, children::Vararg{Union{TangentNode{Tv,D},NoTangent},deg}
+) where {Tv,D,deg}
+    n = TangentNode{Tv,D}()
+    n.degree = UInt8(deg)
+    n.children = ntuple(i -> i <= deg ? _wrap_nullable(children[i]) : NoTangent(), Val(D))
+    n.constant = !isnothing(val_tan)
+    if !isnothing(val_tan)
+        n.val = val_tan
     end
+    return n
 end
 
 function Mooncake.tangent_type(::Type{<:AbstractExpressionNode{T,D}}) where {T,D}
@@ -402,24 +405,40 @@ Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{
 function Mooncake.rrule!!(
     ::Mooncake.CoDual{typeof(Mooncake.lgetfield)},
     obj_cd::Mooncake.CoDual{N,TangentNode{Tv,D}},
-    vfield_cd::Mooncake.CoDual{Val{F}},
-) where {T,D,N<:AbstractExpressionNode{T,D},Tv,F}
-    return _rrule_getfield_common(obj_cd, _map_to_sym(N, Val(F)), Val(3))
+    ::Mooncake.CoDual{Val{FieldName}},
+) where {T,D,N<:AbstractExpressionNode{T,D},Tv,FieldName}
+    return _rrule_getfield_common(obj_cd, _map_to_sym(N, Val(FieldName)), Val(3))
 end
 
-# getfield by Symbol
+# getfield(AEN, Symbol) or getfield(AEN, Int)
 Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{
-    typeof(getfield),AbstractExpressionNode,Symbol
+    typeof(getfield),AbstractExpressionNode,Union{Symbol,Int}
 }
 function Mooncake.rrule!!(
     ::Mooncake.CoDual{typeof(getfield)},
     obj_cd::Mooncake.CoDual{N,TangentNode{Tv,D}},
-    sym_cd::Mooncake.CoDual{Symbol},
+    idx_or_sym_cd::Mooncake.CoDual{<:Union{Symbol,Int}},
 ) where {T,D,N<:AbstractExpressionNode{T,D},Tv}
-    return _rrule_getfield_common(obj_cd, _map_to_sym(N, Val(Mooncake.primal(sym_cd))), Val(3))
+    return _rrule_getfield_common(obj_cd, _map_to_sym(N, Val(Mooncake.primal(idx_or_sym_cd))), Val(3))
 end
 
-# getfield by Int
+
+
+# lgetfield(AEN, Val{field}, Val{order})
+Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{
+    typeof(Mooncake.lgetfield),AbstractExpressionNode,Val,Val
+}
+function Mooncake.rrule!!(
+    ::Mooncake.CoDual{typeof(Mooncake.lgetfield)},
+    obj_cd::Mooncake.CoDual{N,TangentNode{Tv,D}},
+    ::Mooncake.CoDual{Val{FieldName}},
+    ::Mooncake.CoDual{Val{order}}
+) where {T,D,N<:AbstractExpressionNode{T,D},Tv,FieldName,order}
+    @assert order === :not_atomic "MooncakeDynamicExpressionsExt.jl does not support `order` other than `:not_atomic`"
+    return _rrule_getfield_common(obj_cd, _map_to_sym(N, Val(FieldName)), Val(4))
+end
+
+
 Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{
     typeof(getfield),AbstractExpressionNode,Int
 }
