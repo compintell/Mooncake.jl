@@ -350,19 +350,15 @@ end
 # getfield / lgetfield rrules
 ################################################################################
 
-@inline _field_sym(x::Symbol) = x
-@inline _field_sym(i::Int) =
-    if i == 1
-        :degree
-    elseif i == 2
-        :val
-    elseif i == 3
-        :children
+@generated function _map_to_sym(::Type{N}, ::Val{F}) where {N<:AbstractExpressionNode,F}
+    if F isa Symbol
+        return Val(F)
+    elseif F isa Int
+        return Val(fieldname(N, F))
     else
-        :non_differentiable
+        throw(ArgumentError("Unsupported field type: `$F::$(typeof(F))`"))
     end
-@inline _field_sym(::Type{Val{F}}) where {F} = _field_sym(F)
-@inline _field_sym(::Val{F}) where {F} = _field_sym(F)
+end
 
 struct Pullback{T,field_sym,n_args}
     pt::T
@@ -408,7 +404,7 @@ function Mooncake.rrule!!(
     obj_cd::Mooncake.CoDual{N,TangentNode{Tv,D}},
     vfield_cd::Mooncake.CoDual{Val{F}},
 ) where {T,D,N<:AbstractExpressionNode{T,D},Tv,F}
-    return _rrule_getfield_common(obj_cd, Val(_field_sym(F)), Val(3))
+    return _rrule_getfield_common(obj_cd, _map_to_sym(N, Val(F)), Val(3))
 end
 
 # getfield by Symbol
@@ -420,7 +416,7 @@ function Mooncake.rrule!!(
     obj_cd::Mooncake.CoDual{N,TangentNode{Tv,D}},
     sym_cd::Mooncake.CoDual{Symbol},
 ) where {T,D,N<:AbstractExpressionNode{T,D},Tv}
-    return _rrule_getfield_common(obj_cd, Val(Mooncake.primal(sym_cd)), Val(3))
+    return _rrule_getfield_common(obj_cd, _map_to_sym(N, Val(Mooncake.primal(sym_cd))), Val(3))
 end
 
 # getfield by Int
@@ -432,7 +428,8 @@ function Mooncake.rrule!!(
     obj_cd::Mooncake.CoDual{N,TangentNode{Tv,D}},
     idx_cd::Mooncake.CoDual{Int},
 ) where {T,D,N<:AbstractExpressionNode{T,D},Tv}
-    return _rrule_getfield_common(obj_cd, _field_sym(Mooncake.primal(idx_cd)), 3)
+    return _rrule_getfield_common(obj_cd, _map_to_sym(N, Val(Mooncake.primal(idx_cd))), Val(3))
+end
 end
 
 ################################################################################
