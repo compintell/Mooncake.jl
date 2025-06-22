@@ -3,6 +3,7 @@ Pkg.activate(@__DIR__)
 Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 
 using LinearAlgebra, Mooncake, StableRNGs, Test
+using Mooncake: ForwardMode, ReverseMode
 using Mooncake.TestUtils: test_rule
 
 sr(n::Int) = StableRNG(n)
@@ -662,14 +663,10 @@ _getter() = 5.0
     )
     @testset for (interface_only, perf_flag, f, x...) in test_cases
         @info Mooncake._typeof((f, x...))
+        is_primitive = false
         test_rule(
-            sr(123456),
-            f,
-            x...;
-            interface_only,
-            is_primitive=false,
-            debug_mode=false,
-            perf_flag,
+            sr(123456), f, x...; interface_only, is_primitive, perf_flag, mode=ReverseMode
         )
+        test_rule(sr(123456), f, x...; interface_only, is_primitive, mode=ForwardMode)
     end
 end
