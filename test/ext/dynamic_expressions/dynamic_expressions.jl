@@ -150,8 +150,11 @@ end
         end
 
         # Tangent interface tests
-        @testset "test full tangent interface - $(expr)" for expr in expressions[end:end]
+        @testset "test full tangent interface - $(expr.tree)::$(typeof(expr.tree))" for expr in expressions[end:end]
             test_data(StableRNG(3), expr.tree)
+        end
+        @testset "test full tangent interface - $(expr)::$(typeof(expr))" for expr in expressions[end:end]
+            test_data(StableRNG(3), expr)
         end
     end
 end
