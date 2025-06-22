@@ -114,11 +114,7 @@ function _possibly_uninit(::Type{T}, init::Bool) where {T}
 end
 
 function _resolve_tangent_field_types(::Type{P}) where {P}
-    return map(
-        _possibly_uninit,
-        map(tangent_type, fieldtypes(P)),
-        always_initialised(P)
-    )
+    return map(_possibly_uninit, map(tangent_type, fieldtypes(P)), always_initialised(P))
 end
 
 # It is essential that this gets inlined. If it does not, then we run into performance
@@ -414,7 +410,6 @@ end
     TT == NoTangent && return NoTangent
     return isconcretetype(TT) ? NamedTuple{N,TT} : Any
 end
-
 
 function _resolve_tangent_type_any(::Type{P}) where {P}
     # This method can only handle struct types. Something has gone wrong if P is primitive.
