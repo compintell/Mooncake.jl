@@ -507,7 +507,13 @@ function _rrule_setfield_common(
     end
 
     y_fdata = if FieldName === :children
-        Mooncake.fdata(obj_t.children)
+        map(new_val_primal, obj_t.children) do child_p, child_t
+            if child_t isa Mooncake.NoTangent
+                Mooncake.uninit_fdata(child_p)
+            else
+                Mooncake.FData(Mooncake.fdata(child_t))
+            end
+        end
     elseif FieldName === :val
         Mooncake.fdata(new_field_tangent)
     else
