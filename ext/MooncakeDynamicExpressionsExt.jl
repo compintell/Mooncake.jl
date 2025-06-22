@@ -29,7 +29,7 @@ function TangentNode{Tv,D}(
 ) where {Tv,D,deg}
     n = TangentNode{Tv,D}()
     n.degree = UInt8(deg)
-    n.children = ntuple(i -> i <= deg ? _wrap_nullable(children[i]) : NoTangent(), Val(D))
+    set_children!(n, children)
     n.constant = !isnothing(val_tan)
     if !isnothing(val_tan)
         n.val = val_tan
@@ -60,7 +60,13 @@ end
 _unwrap_nullable(c::NoTangent) = c
 _unwrap_nullable(c::NamedTuple{(:null, :x)}) = c.x
 _wrap_nullable(c::NoTangent) = c
+_wrap_nullable(::Mooncake.NoFData) = NoTangent()
 _wrap_nullable(c::TangentNode) = (; null=NoTangent(), x=c)
+function _wrap_nullable(
+    fd::Mooncake.FData{@NamedTuple{null::Mooncake.NoFData,x::TangentNode{Tv,D}}}
+) where {Tv,D}
+    return (; null=NoTangent(), x=fd.data.x)
+end
 
 function get_child(t::TangentNode, i::Int)
     return _unwrap_nullable(t.children[i])
@@ -68,6 +74,15 @@ end
 function _get_child(t, ::Val{i}) where {i}
     return get_child(t, i)
 end
+function set_children!(t::TangentNode{Tv,D}, fdata::Mooncake.FData) where {Tv,D}
+    return set_children!(t, fdata.data)
+end
+function set_children!(t::TangentNode{Tv,D}, fdata::Tuple{Vararg{Any,deg}}) where {Tv,D,deg}
+    return t.children = ntuple(
+        i -> i <= deg ? _wrap_nullable(fdata[i]) : NoTangent(), Val(D)
+    )
+end
+
 function DE.extract_gradient(
     gradient::Mooncake.Tangent{@NamedTuple{tree::TN,metadata::Mooncake.NoTangent}},
     tree::Expression{T},
@@ -452,6 +467,56 @@ function Mooncake.rrule!!(
     return _rrule_getfield_common(obj_cd, _map_to_sym(N, Val(FieldName)), Val(4))
 end
 
+function _rrule_setfield_common(
+    obj_cd::Mooncake.CoDual{N,TangentNode{Tv,D}},
+    ::Val{FieldName},
+    new_val_cd::Mooncake.CoDual,
+) where {T,D,N<:AbstractExpressionNode{T,D},Tv,FieldName}
+    obj = Mooncake.primal(obj_cd)
+    obj_t = Mooncake.tangent(obj_cd)
+    new_val_primal = Mooncake.primal(new_val_cd)
+    new_val_tangent = Mooncake.tangent(new_val_cd)
+
+    v_field_sym = Val(FieldName)
+
+    old_val = Mooncake.lgetfield(obj, v_field_sym)
+    old_tangent = if FieldName in (:children, :val, :degree, :constant)
+        Mooncake.lgetfield(obj_t, v_field_sym)
+    else
+        nothing
+    end
+
+    Mooncake.lsetfield!(obj, v_field_sym, new_val_primal)
+    new_field_tangent = if (new_val_tangent isa Union{Mooncake.NoTangent,Mooncake.NoFData})
+        Mooncake.zero_tangent(new_val_primal)
+    else
+        new_val_tangent
+    end
+
+    if FieldName === :children
+        set_children!(obj_t, new_field_tangent)
+    elseif FieldName === :val
+        Mooncake.lsetfield!(obj_t, v_field_sym, new_field_tangent)
+    elseif FieldName in (:degree, :constant)
+        Mooncake.lsetfield!(obj_t, v_field_sym, new_val_primal)
+    end
+
+    y_fdata = Mooncake.fdata(new_field_tangent)
+    y_cd = Mooncake.CoDual(new_val_primal, y_fdata)
+
+    function lsetfield_node_pb(dy_rdata)
+        Mooncake.lsetfield!(obj, v_field_sym, old_val)
+        if FieldName === :children
+            set_children!(obj_t, old_tangent)
+        elseif FieldName in (:val, :degree, :constant)
+            Mooncake.lsetfield!(obj_t, v_field_sym, old_tangent)
+        end
+        return (Mooncake.NoRData(), Mooncake.NoRData(), Mooncake.NoRData(), dy_rdata)
+    end
+
+    return y_cd, lsetfield_node_pb
+end
+
 # lsetfield!(AEN, Val{field}, Any)
 Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{
     typeof(Mooncake.lsetfield!),AbstractExpressionNode,Val,Any
@@ -462,55 +527,28 @@ function Mooncake.rrule!!(
     ::Mooncake.CoDual{Val{FieldName}},
     new_val_cd::Mooncake.CoDual,
 ) where {T,D,N<:AbstractExpressionNode{T,D},Tv,FieldName}
-    obj = Mooncake.primal(obj_cd)
-    obj_t = Mooncake.tangent(obj_cd)
-    new_val_primal = Mooncake.primal(new_val_cd)
-    new_val_tangent = Mooncake.tangent(new_val_cd)
+    return _rrule_setfield_common(obj_cd, _map_to_sym(N, Val(FieldName)), new_val_cd)
+end
 
-    v_field_sym = _map_to_sym(N, Val(FieldName))
-
-    old_val = Mooncake.lgetfield(obj, v_field_sym)
-    old_tangent = Mooncake.lgetfield(obj_t, v_field_sym)
-
-    Mooncake.lsetfield!(obj, v_field_sym, new_val_primal)
-    new_field_tangent = if (new_val_tangent isa Union{Mooncake.NoTangent,Mooncake.NoFData})
-        Mooncake.zero_tangent(new_val_primal)
-    else
-        new_val_tangent
-    end
-    Mooncake.lsetfield!(obj_t, v_field_sym, new_field_tangent)
-
-    y_fdata = Mooncake.fdata(new_field_tangent)
-    y_cd = Mooncake.CoDual(new_val_primal, y_fdata)
-
-    function lsetfield_node_pb(dy_rdata)
-        Mooncake.lsetfield!(obj, v_field_sym, old_val)
-        Mooncake.lsetfield!(obj_t, v_field_sym, old_tangent)
-        return (Mooncake.NoRData(), Mooncake.NoRData(), Mooncake.NoRData(), dy_rdata)
-    end
-
-    return y_cd, lsetfield_node_pb
+# setfield!(AEN, Symbol, Any) or setfield!(AEN, Integer, Any)
+Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{
+    typeof(setfield!),AbstractExpressionNode,Union{Symbol,Integer},Any
+}
+function Mooncake.rrule!!(
+    ::Mooncake.CoDual{typeof(setfield!)},
+    obj_cd::Mooncake.CoDual{N,TangentNode{Tv,D}},
+    idx_or_sym_cd::Mooncake.CoDual{Union{Symbol,Integer}},
+    new_val_cd::Mooncake.CoDual,
+) where {T,D,N<:AbstractExpressionNode{T,D},Tv}
+    return _rrule_setfield_common(
+        obj_cd, _map_to_sym(N, Val(Mooncake.primal(idx_or_sym_cd))), new_val_cd
+    )
 end
 
 # _new_
 Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{
     typeof(Mooncake._new_),Type{N},UInt8,Bool,T,UInt16,UInt8,Tuple
 } where {T,D,N<:AbstractExpressionNode{T,D}}
-
-#! format: off
-function _set_children_from_fdata!(t::TangentNode{Tv,D}, fdata::Mooncake.FData) where {Tv,D}
-    _set_children_from_fdata!(t, fdata.data)
-end
-function _set_children_from_fdata!(
-    t::TangentNode{Tv,D}, fdata::Tuple{Vararg{Any,deg}}
-) where {Tv,D,deg}
-    t.children = ntuple(i -> i <= deg ? _child_from_fdata(fdata[i]) : NoTangent(), Val(D))
-end
-_child_from_fdata(::NoTangent) = NoTangent()
-_child_from_fdata(::Mooncake.NoFData) = NoTangent()
-_child_from_fdata(fd::Mooncake.FData{@NamedTuple{null::Mooncake.NoFData, x::TangentNode{Tv,D}}}) = (; null=NoTangent(), x=fd.data.x)
-_child_from_fdata(fd) = throw(ArgumentError("Unsupported FData type: `$fd::$(typeof(fd))`"))
-#! format: on
 
 function Mooncake.rrule!!(
     ::Mooncake.CoDual{typeof(Mooncake._new_)},
@@ -552,7 +590,7 @@ function Mooncake.rrule!!(
         if deg == 0 && constant
             tn.val = Mooncake.tangent(val_cd)
         elseif deg > 0
-            _set_children_from_fdata!(tn, Mooncake.tangent(children_cd))
+            set_children!(tn, Mooncake.tangent(children_cd))
         end
 
         tn
@@ -567,12 +605,16 @@ function Mooncake.rrule!!(
             Mooncake.NoRData(),  # degree
             Mooncake.NoRData(),  # constant
             let
-                val_tangent = Mooncake.tangent(val_cd)
-                if val_tangent isa Union{Mooncake.NoTangent,Mooncake.NoFData}
-                    Mooncake.NoRData()
+                if T <: Union{AbstractFloat,Integer}
+                    zero(T)
                 else
-                    # TODO: Is this generic enough? What if Tv is Vector{Float32}?
-                    zero(Mooncake.rdata(val_tangent))
+                    val_tangent = Mooncake.tangent(val_cd)
+                    if val_tangent isa Union{Mooncake.NoTangent,Mooncake.NoFData}
+                        Mooncake.NoRData()
+                    else
+                        # TODO: Is this generic enough? What if Tv is Vector{Float32}?
+                        zero(Mooncake.rdata(val_tangent))
+                    end
                 end
             end, # val
             Mooncake.NoRData(),  # feature
@@ -689,10 +731,10 @@ function _has_equal_data_internal_helper(
     d::Dict{Tuple{UInt,UInt},Bool},
 ) where {Tv,D}
     deg = t.degree
-    deg == s.degree && if t.degree == 0
+    return deg == s.degree && if t.degree == 0
         if t.constant
             s.constant &&
-                Mooncake.TestUtils.has_equal_data_internal(t.val, s.val, equndef, d)
+            Mooncake.TestUtils.has_equal_data_internal(t.val, s.val, equndef, d)
         else
             !s.constant
         end
