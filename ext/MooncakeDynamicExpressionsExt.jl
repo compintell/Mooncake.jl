@@ -396,18 +396,6 @@ function _rrule_getfield_common(
     return y_cd, Pullback{typeof(pt),field_sym,n_args}(pt)
 end
 
-# lgetfield(AEN, Val{field})
-Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{
-    typeof(Mooncake.lgetfield),AbstractExpressionNode,Val
-}
-function Mooncake.rrule!!(
-    ::Mooncake.CoDual{typeof(Mooncake.lgetfield)},
-    obj_cd::Mooncake.CoDual{N,TangentNode{Tv,D}},
-    ::Mooncake.CoDual{Val{FieldName}},
-) where {T,D,N<:AbstractExpressionNode{T,D},Tv,FieldName}
-    return _rrule_getfield_common(obj_cd, _map_to_sym(N, Val(FieldName)), Val(3))
-end
-
 # getfield(AEN, Symbol) or getfield(AEN, Int)
 Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{
     typeof(getfield),AbstractExpressionNode,Union{Symbol,Int}
@@ -420,6 +408,34 @@ function Mooncake.rrule!!(
     return _rrule_getfield_common(
         obj_cd, _map_to_sym(N, Val(Mooncake.primal(idx_or_sym_cd))), Val(3)
     )
+end
+
+# getfield(AEN, Symbol, Symbol) or getfield(AEN, Int, Symbol)
+Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{
+    typeof(getfield),AbstractExpressionNode,Union{Symbol,Int},Symbol
+}
+function Mooncake.rrule!!(
+    ::Mooncake.CoDual{typeof(getfield)},
+    obj_cd::Mooncake.CoDual{N,TangentNode{Tv,D}},
+    idx_or_sym_cd::Mooncake.CoDual{<:Union{Symbol,Int}},
+    order_cd::Mooncake.CoDual{Symbol},
+) where {T,D,N<:AbstractExpressionNode{T,D},Tv}
+    @assert Mooncake.primal(order_cd) === :not_atomic "MooncakeDynamicExpressionsExt.jl does not support `order` other than `:not_atomic`"
+    return _rrule_getfield_common(
+        obj_cd, _map_to_sym(N, Val(Mooncake.primal(idx_or_sym_cd))), Val(4)
+    )
+end
+
+# lgetfield(AEN, Val{field})
+Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{
+    typeof(Mooncake.lgetfield),AbstractExpressionNode,Val
+}
+function Mooncake.rrule!!(
+    ::Mooncake.CoDual{typeof(Mooncake.lgetfield)},
+    obj_cd::Mooncake.CoDual{N,TangentNode{Tv,D}},
+    ::Mooncake.CoDual{Val{FieldName}},
+) where {T,D,N<:AbstractExpressionNode{T,D},Tv,FieldName}
+    return _rrule_getfield_common(obj_cd, _map_to_sym(N, Val(FieldName)), Val(3))
 end
 
 # lgetfield(AEN, Val{field}, Val{order})
@@ -477,27 +493,119 @@ function Mooncake.rrule!!(
 end
 
 # _new_
-Mooncake.@is_primitive Mooncake.DefaultCtx Tuple{
-    typeof(Mooncake._new_),Type{N},Vararg{Any,nargs}
-} where {T,D,N<:AbstractExpressionNode{T,D},nargs}
+Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{
+    typeof(Mooncake._new_),Type{N},UInt8,Bool,T,UInt16,UInt8,Tuple
+} where {T,D,N<:AbstractExpressionNode{T,D}}
+
+#! format: off
+function _set_children_from_fdata!(t::TangentNode{Tv,D}, fdata::Mooncake.FData) where {Tv,D}
+    _set_children_from_fdata!(t, fdata.data)
+end
+function _set_children_from_fdata!(
+    t::TangentNode{Tv,D}, fdata::Tuple{Vararg{Any,deg}}
+) where {Tv,D,deg}
+    t.children = ntuple(i -> i <= deg ? _child_from_fdata(fdata[i]) : NoTangent(), Val(D))
+end
+_child_from_fdata(::NoTangent) = NoTangent()
+_child_from_fdata(::Mooncake.NoFData) = NoTangent()
+_child_from_fdata(fd::Mooncake.FData{@NamedTuple{null::Mooncake.NoFData, x::TangentNode{Tv,D}}}) = (; null=NoTangent(), x=fd.data.x)
+_child_from_fdata(fd) = throw(ArgumentError("Unsupported FData type: `$fd::$(typeof(fd))`"))
+#! format: on
 
 function Mooncake.rrule!!(
     ::Mooncake.CoDual{typeof(Mooncake._new_)},
     ::Mooncake.CoDual{Type{N}},
-    args::Vararg{Mooncake.CoDual,nargs},
-) where {T,D,N<:AbstractExpressionNode{T,D},nargs}
-    @assert nargs == 0 "MooncakeDynamicExpressionsExt.jl does not support non-empty `new` for AbstractExpressionNode types"
-
-    primal_node = N()
+    degree_cd::Mooncake.CoDual{UInt8},
+    constant_cd::Mooncake.CoDual{Bool},
+    val_cd::Mooncake.CoDual{T},
+    feature_cd::Mooncake.CoDual{UInt16},
+    op_cd::Mooncake.CoDual{UInt8},
+    children_cd::Mooncake.CoDual,
+) where {T,D,N<:AbstractExpressionNode{T,D}}
+    deg = Mooncake.primal(degree_cd)
+    constant = Mooncake.primal(constant_cd)
+    n = N()
+    n.degree = deg
+    n.constant = constant
+    if deg == 0
+        if constant
+            n.val = Mooncake.primal(val_cd)
+        else
+            n.feature = Mooncake.primal(feature_cd)
+        end
+    else
+        n.op = Mooncake.primal(op_cd)
+        DE.set_children!(n, Mooncake.primal(children_cd))
+    end
 
     Tv = Mooncake.tangent_type(T)
-    fdt = Tv === Mooncake.NoTangent ? Mooncake.NoTangent() : TangentNode{Tv,D}(nothing)
+    fdt = if Tv === Mooncake.NoTangent
+        Mooncake.NoTangent()
+    else
+        tn = TangentNode{Tv,D}(nothing)
 
-    node_cd = Mooncake.CoDual(primal_node, fdt)
+        # Propagate metadata
+        tn.degree = deg
+        tn.constant = constant
 
-    new_node_pb(::Mooncake.NoRData) = (Mooncake.NoRData(), Mooncake.NoRData())
+        # Actual tangents
+        if deg == 0 && constant
+            tn.val = Mooncake.tangent(val_cd)
+        elseif deg > 0
+            _set_children_from_fdata!(tn, Mooncake.tangent(children_cd))
+        end
 
-    return node_cd, new_node_pb
+        tn
+    end
+
+    node_cd = Mooncake.CoDual(n, fdt)
+
+    function _new_node_pullback(dy_rdata)
+        return (
+            Mooncake.NoRData(),  # [_new_]
+            Mooncake.NoRData(),  # [type]
+            Mooncake.NoRData(),  # degree
+            Mooncake.NoRData(),  # constant
+            let
+                val_tangent = Mooncake.tangent(val_cd)
+                if val_tangent isa Union{Mooncake.NoTangent,Mooncake.NoFData}
+                    Mooncake.NoRData()
+                else
+                    # TODO: Is this generic enough? What if Tv is Vector{Float32}?
+                    zero(Mooncake.rdata(val_tangent))
+                end
+            end, # val
+            Mooncake.NoRData(),  # feature
+            Mooncake.NoRData(),  # op
+            Mooncake.NoRData(),  # children
+        )
+    end
+
+    return node_cd, _new_node_pullback
+end
+
+Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{
+    typeof(Mooncake._new_),Type{N}
+} where {T,D,N<:AbstractExpressionNode{T,D}}
+@generated function Mooncake.rrule!!(
+    ::Mooncake.CoDual{typeof(Mooncake._new_)}, ::Mooncake.CoDual{Type{N}}
+) where {T,D,N<:AbstractExpressionNode{T,D}}
+    quote
+        n = N()
+
+        Tv = Mooncake.tangent_type(T)
+        fdt = if Tv === Mooncake.NoTangent
+            Mooncake.NoTangent()
+        else
+            tn = TangentNode{Tv,D}(nothing)
+        end
+
+        node_cd = Mooncake.CoDual(n, fdt)
+
+        new_node_pb(::Mooncake.NoRData) = (Mooncake.NoRData(), Mooncake.NoRData())
+
+        return node_cd, new_node_pb
+    end
 end
 
 ################################################################################
