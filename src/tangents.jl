@@ -439,7 +439,7 @@ end
 @foldable @generated function tangent_type(::Type{P}) where {P}
     return quote 
         return _resolve_tangent_type_any($P)
-     end
+    end
 end
 
 backing_type(P::Type) = NamedTuple{fieldnames(P),Tuple{tangent_field_types(P)...}}
