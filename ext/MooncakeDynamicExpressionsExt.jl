@@ -646,25 +646,23 @@ end
 Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{
     typeof(Mooncake._new_),Type{N}
 } where {T,D,N<:AbstractExpressionNode{T,D}}
-@generated function Mooncake.rrule!!(
+function Mooncake.rrule!!(
     ::Mooncake.CoDual{typeof(Mooncake._new_)}, ::Mooncake.CoDual{Type{N}}
 ) where {T,D,N<:AbstractExpressionNode{T,D}}
-    quote
-        n = N()
+    n = N()
 
-        Tv = Mooncake.tangent_type(T)
-        fdt = if Tv === Mooncake.NoTangent
-            Mooncake.NoTangent()
-        else
-            tn = TangentNode{Tv,D}(nothing)
-        end
-
-        node_cd = Mooncake.CoDual(n, fdt)
-
-        new_node_pb(::Mooncake.NoRData) = (Mooncake.NoRData(), Mooncake.NoRData())
-
-        return node_cd, new_node_pb
+    Tv = Mooncake.tangent_type(T)
+    fdt = if Tv === Mooncake.NoTangent
+        Mooncake.NoTangent()
+    else
+        TangentNode{Tv,D}(nothing)
     end
+
+    node_cd = Mooncake.CoDual(n, fdt)
+
+    new_node_pb(::Mooncake.NoRData) = (Mooncake.NoRData(), Mooncake.NoRData())
+
+    return node_cd, new_node_pb
 end
 
 ################################################################################
