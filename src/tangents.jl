@@ -437,7 +437,9 @@ function _resolve_tangent_type_any(::Type{P}) where {P}
     return ismutabletype(P) ? MutableTangent{bt} : Tangent{bt}
 end
 @foldable @generated function tangent_type(::Type{P}) where {P}
-    return _resolve_tangent_type_any(P)
+    return quote 
+        return _resolve_tangent_type_any($P)
+     end
 end
 
 backing_type(P::Type) = NamedTuple{fieldnames(P),Tuple{tangent_field_types(P)...}}
