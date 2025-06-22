@@ -350,7 +350,7 @@ end
 end
 
 ################################################################################
-# getfield / lgetfield rrules
+# getfield / lgetfield / lsetfield! / _new_ rrules
 ################################################################################
 
 @generated function _map_to_sym(::Type{N}, ::Val{F}) where {N<:AbstractExpressionNode,F}
@@ -439,16 +439,68 @@ function Mooncake.rrule!!(
 end
 
 
+# lsetfield!(AEN, Val{field}, Any)
 Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{
-    typeof(getfield),AbstractExpressionNode,Int
+    typeof(Mooncake.lsetfield!),AbstractExpressionNode,Val,Any
 }
 function Mooncake.rrule!!(
-    ::Mooncake.CoDual{typeof(getfield)},
+    ::Mooncake.CoDual{typeof(Mooncake.lsetfield!)},
     obj_cd::Mooncake.CoDual{N,TangentNode{Tv,D}},
-    idx_cd::Mooncake.CoDual{Int},
-) where {T,D,N<:AbstractExpressionNode{T,D},Tv}
-    return _rrule_getfield_common(obj_cd, _map_to_sym(N, Val(Mooncake.primal(idx_cd))), Val(3))
+    ::Mooncake.CoDual{Val{FieldName}},
+    new_val_cd::Mooncake.CoDual
+) where {T,D,N<:AbstractExpressionNode{T,D},Tv,FieldName}
+    obj = Mooncake.primal(obj_cd)
+    obj_t = Mooncake.tangent(obj_cd)
+    new_val_primal = Mooncake.primal(new_val_cd)
+    new_val_tangent = Mooncake.tangent(new_val_cd)
+
+    v_field_sym = _map_to_sym(N, Val(FieldName))
+
+    old_val = Mooncake.lgetfield(obj, v_field_sym)
+    old_tangent = Mooncake.lgetfield(obj_t, v_field_sym)
+
+    Mooncake.lsetfield!(obj, v_field_sym, new_val_primal)
+    new_field_tangent = if (new_val_tangent isa Union{Mooncake.NoTangent,Mooncake.NoFData})
+        Mooncake.zero_tangent(new_val_primal)
+    else
+        new_val_tangent
+    end
+    Mooncake.lsetfield!(obj_t, v_field_sym, new_field_tangent)
+
+    y_fdata = Mooncake.fdata(new_field_tangent)
+    y_cd = Mooncake.CoDual(new_val_primal, y_fdata)
+
+    function lsetfield_node_pb(dy_rdata)
+        Mooncake.lsetfield!(obj, v_field_sym, old_val)
+        Mooncake.lsetfield!(obj_t, v_field_sym, old_tangent)
+        return (Mooncake.NoRData(), Mooncake.NoRData(), Mooncake.NoRData(), dy_rdata)
+    end
+
+    return y_cd, lsetfield_node_pb
 end
+
+# _new_
+Mooncake.@is_primitive Mooncake.DefaultCtx Tuple{
+    typeof(Mooncake._new_),Type{N},Vararg{Any,nargs}
+} where {T,D,N<:AbstractExpressionNode{T,D},nargs}
+
+function Mooncake.rrule!!(
+    ::Mooncake.CoDual{typeof(Mooncake._new_)},
+    ::Mooncake.CoDual{Type{N}},
+    args::Vararg{Mooncake.CoDual,nargs}
+) where {T,D,N<:AbstractExpressionNode{T,D},nargs}
+    @assert nargs == 0 "MooncakeDynamicExpressionsExt.jl does not support non-empty `new` for AbstractExpressionNode types"
+
+    primal_node = N()
+
+    Tv = Mooncake.tangent_type(T)
+    fdt = Tv === Mooncake.NoTangent ? Mooncake.NoTangent() : TangentNode{Tv,D}(nothing)
+
+    node_cd = Mooncake.CoDual(primal_node, fdt)
+
+    new_node_pb(::Mooncake.NoRData) = (Mooncake.NoRData(), Mooncake.NoRData())
+
+    return node_cd, new_node_pb
 end
 
 ################################################################################
