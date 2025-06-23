@@ -8,7 +8,7 @@ using DynamicExpressions:
     leaf_copy,
     get_children
 using Mooncake
-using Mooncake: NoTangent
+using Mooncake: NoTangent, @foldable
 using Random: AbstractRNG
 
 ################################################################################
@@ -36,11 +36,11 @@ function TangentNode{Tv,D}(
     return n
 end
 
-function Mooncake.tangent_type(::Type{<:AbstractExpressionNode{T,D}}) where {T,D}
+@foldable function Mooncake.tangent_type(::Type{<:AbstractExpressionNode{T,D}}) where {T,D}
     Tv = Mooncake.tangent_type(T)
     return Tv === NoTangent ? NoTangent : TangentNode{Tv,D}
 end
-function Mooncake.tangent_type(::Type{TangentNode{Tv,D}}) where {Tv,D}
+@foldable function Mooncake.tangent_type(::Type{TangentNode{Tv,D}}) where {Tv,D}
     return TangentNode{Tv,D}
 end
 function Mooncake.tangent_type(
