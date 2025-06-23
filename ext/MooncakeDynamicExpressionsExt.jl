@@ -4,7 +4,6 @@ using DynamicExpressions:
     DynamicExpressions as DE,
     AbstractExpressionNode,
     Expression,
-    Nullable,
     branch_copy,
     leaf_copy,
     get_children
@@ -40,10 +39,6 @@ end
 function Mooncake.tangent_type(::Type{<:AbstractExpressionNode{T,D}}) where {T,D}
     Tv = Mooncake.tangent_type(T)
     return Tv === NoTangent ? NoTangent : TangentNode{Tv,D}
-end
-function Mooncake.tangent_type(::Type{Nullable{<:AbstractExpressionNode{T,D}}}) where {T,D}
-    Tv = Mooncake.tangent_type(T)
-    return Union{@NamedTuple{null::NoTangent,x::TangentNode{Tv,D}},NoTangent}
 end
 function Mooncake.tangent_type(::Type{TangentNode{Tv,D}}) where {Tv,D}
     return TangentNode{Tv,D}
