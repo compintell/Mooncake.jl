@@ -34,21 +34,14 @@ function rrule!!(
 end
 
 @inline function build_fdata(::Type{P}, x::Tuple, fdata::Tuple) where {P}
-    return _build_fdata_cartesian(
-        P,
-        x,
-        fdata,
-        Val(fieldcount(P)),
-        Val(fieldnames(P))
-    )
+    return _build_fdata_cartesian(P, x, fdata, Val(fieldcount(P)), Val(fieldnames(P)))
 end
 @generated function _build_fdata_cartesian(
     ::Type{P}, x::Tuple, fdata::Tuple{Vararg{Any,N}}, ::Val{nfield}, ::Val{names}
 ) where {P,N,nfield,names}
     quote
         processed_fdata = Base.Cartesian.@ntuple(
-            $nfield,
-            n -> let
+            $nfield, n -> let
                 F = fdata_field_type(P, n)
                 if n <= $N
                     data = __get_data(P, x, fdata, n)
