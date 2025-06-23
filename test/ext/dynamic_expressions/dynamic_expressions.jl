@@ -62,6 +62,12 @@ end
 
         const_tangent = dexpr.fields.tree.children[2].x.val
         @test const_tangent ≈ N
+
+        # Propagate gradients through a tree copy
+        eval_sum_copy = let X = X
+            f -> sum(copy(f)(X))
+        end
+        @test gradient(eval_sum_copy, backend, expr).fields.tree.children[2].x.val ≈ N
     end
 end
 
