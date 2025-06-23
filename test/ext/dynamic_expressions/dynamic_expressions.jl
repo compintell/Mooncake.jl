@@ -8,6 +8,7 @@ using Mooncake.TestUtils
 using Mooncake.TestUtils: test_rule, test_data
 using Optim: Optim
 using DynamicExpressions
+using DynamicExpressions: Nullable
 using StableRNGs: StableRNG
 using DifferentiationInterface: AutoMooncake, gradient, prepare_gradient
 
@@ -16,6 +17,22 @@ using JET: JET
 using AllocCheck: AllocCheck
 
 using Test
+
+@testset "test_data on key types" begin
+    let
+        test_data(StableRNG(0), Nullable{Float64}(true, 1.0))
+        test_data(StableRNG(0), Nullable{Float64}(false, 1.0))
+        test_data(StableRNG(0), Node{Float64}(; feature=1))
+        test_data(StableRNG(0), Node{Float64}(; val=1.0))
+        test_data(StableRNG(0), Node{Float64}(; op=1, children=(Node{Float64}(; val=1.0),)))
+        test_data(
+            StableRNG(0),
+            Node{Float64}(;
+                op=1, children=(Node{Float64}(; val=1.0), Node{Float64}(; val=1.0))
+            ),
+        )
+    end
+end
 
 @testset "Basic usage checks" begin
     let
@@ -155,13 +172,7 @@ end
             )
         end
 
-        # Tangent interface tests
-        @testset "test full tangent interface - $(expr.tree)::$(typeof(expr.tree))" for expr in
-                                                                                        expressions[end:end]
-            test_data(StableRNG(3), expr.tree)
-        end
-        @testset "test full tangent interface - $(expr)::$(typeof(expr))" for expr in
-                                                                              expressions[end:end]
+        @testset "test full tangent interface - $(expr)" for expr in expressions
             test_data(StableRNG(3), expr)
         end
     end
