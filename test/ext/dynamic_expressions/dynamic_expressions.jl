@@ -69,24 +69,54 @@ end
         X = randn(StableRNG(0), 3, N)
         expr = x1 + 0.0      # constant in the tree
 
-        eval_sum = let X = X
-            f -> sum(f(X))
+        @testset "Simple sum" begin
+            eval_sum = let X = X
+                f -> sum(f(X))
+            end
+
+            backend = AutoMooncake(; config=nothing)
+            prep = prepare_gradient(eval_sum, backend, expr)
+            dexpr = gradient(eval_sum, prep, backend, expr)
+
+            const_tangent = dexpr.fields.tree.children[2].x.val
+            @test const_tangent ≈ N
         end
 
-        backend = AutoMooncake(; config=nothing)
-        prep = prepare_gradient(eval_sum, backend, expr)
-        dexpr = gradient(eval_sum, prep, backend, expr)
-
-        const_tangent = dexpr.fields.tree.children[2].x.val
-        @test const_tangent ≈ N
-
-        # Propagate gradients through a tree copy.
-        eval_sum_copy = let X = X
-            f -> sum(copy(f)(X))
+        @testset "Propagate through a tree copy" begin
+            eval_sum_copy = let X = X
+                f -> sum(copy(f)(X))
+            end
+            backend = AutoMooncake(; config=nothing)
+            full_tangent = gradient(eval_sum_copy, backend, expr)
+            const_tangent = full_tangent.fields.tree.children[2].x.val
+            @test const_tangent ≈ 100
         end
-        full_tangent = gradient(eval_sum_copy, backend, expr)
-        const_tangent = full_tangent.fields.tree.children[2].x.val
-        @test const_tangent ≈ 100
+
+        @testset "Propagate through multiple tree operations" begin
+            expr = (x1 + 1.0) + 2.0
+            function multi_operations(f)
+                tree = copy(f.tree)
+
+                # First, we double all constants
+                foreach(tree) do node
+                    if node.degree == 0 && node.constant
+                        node.val *= 2.0
+                    end
+                end
+
+                # Then, we sum the constants
+                return sum(n -> n.degree == 0 && n.constant ? n.val : 0.0, tree)
+            end
+            backend = AutoMooncake(; config=nothing)
+            tangent_multi_op = gradient(multi_operations, backend, expr)
+
+            # [x, y] -> [2x, 2y] -> 2x + 2y
+            # Thus, the gradient is [2, 2]
+            grad_1 = tangent_multi_op.fields.tree.children[2].x.val  # The 2.0
+            grad_2 = tangent_multi_op.fields.tree.children[1].x.children[2].x.val
+            @test grad_1 ≈ 2.0
+            @test grad_2 ≈ 2.0
+        end
     end
 end
 
