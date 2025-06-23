@@ -43,7 +43,7 @@ end
 @foldable function Mooncake.tangent_type(::Type{TangentNode{Tv,D}}) where {Tv,D}
     return TangentNode{Tv,D}
 end
-function Mooncake.tangent_type(
+@foldable function Mooncake.tangent_type(
     ::Type{TangentNode{Tv,D}}, ::Type{Mooncake.NoRData}
 ) where {Tv,D}
     return TangentNode{Tv,D}
