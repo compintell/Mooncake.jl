@@ -267,6 +267,11 @@ function fdata(t::T) where {T<:Union{Tuple,NamedTuple}}
     return fdata_type(T) == NoFData ? NoFData() : tuple_map(fdata, t)
 end
 
+"""
+    uninit_fdata(p)
+
+Equivalent to `fdata(uninit_tangent(p))`.
+"""
 uninit_fdata(p) = fdata(uninit_tangent(p))
 
 """
@@ -854,6 +859,14 @@ tangent type. This method must be equivalent to `tangent_type(_typeof(primal))`.
 @foldable tangent_type(::Type{NoFData}, ::Type{NoRData}) = NoTangent
 @foldable tangent_type(::Type{NoFData}, ::Type{R}) where {R<:IEEEFloat} = R
 @foldable tangent_type(::Type{F}, ::Type{NoRData}) where {F<:Array} = F
+
+# Union type: `Union{Nothing, T}` where T could be, eg, Array or Float
+@foldable tangent_type(::Type{NoFData}, ::Type{T}) where {T<:Union{NoRData,Base.IEEEFloat,RData}} = Union{
+    NoTangent,tangent_type(T)
+}
+@foldable tangent_type(::Type{T}, ::Type{NoRData}) where {T<:Union{NoFData,Array,MutableTangent,FData}} = Union{
+    NoTangent,tangent_type(T)
+}
 
 # Tuples
 @foldable @generated function tangent_type(::Type{F}, ::Type{R}) where {F<:Tuple,R<:Tuple}

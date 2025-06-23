@@ -48,6 +48,8 @@ makedocs(;
         "Developer Documentation" => [
             joinpath("developer_documentation", "running_tests_locally.md"),
             joinpath("developer_documentation", "developer_tools.md"),
+            joinpath("developer_documentation", "tangents.md"),
+            joinpath("developer_documentation", "custom_tangent_type.md"),
             joinpath("developer_documentation", "ir_representation.md"),
             joinpath("developer_documentation", "forwards_mode_design.md"),
             joinpath("developer_documentation", "reverse_mode_design.md"),
