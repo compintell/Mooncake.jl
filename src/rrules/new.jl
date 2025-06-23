@@ -34,17 +34,33 @@ function rrule!!(
 end
 
 @inline function build_fdata(::Type{P}, x::Tuple, fdata::Tuple) where {P}
-    processed_fdata = ntuple(Val(fieldcount(P))) do n
-        F = fdata_field_type(P, n)
-        if n <= length(fdata)
-            data = __get_data(P, x, fdata, n)
-            return F <: PossiblyUninitTangent ? F(data) : data
-        else
-            return F()
-        end
+    return _build_fdata_cartesian(
+        P,
+        x,
+        fdata,
+        Val(fieldcount(P)),
+        Val(fieldnames(P))
+    )
+end
+@generated function _build_fdata_cartesian(
+    ::Type{P}, x::Tuple, fdata::Tuple{Vararg{Any,N}}, ::Val{nfield}, ::Val{names}
+) where {P,N,nfield,names}
+    quote
+        processed_fdata = Base.Cartesian.@ntuple(
+            $nfield,
+            n -> let
+                F = fdata_field_type(P, n)
+                if n <= $N
+                    data = __get_data(P, x, fdata, n)
+                    F <: PossiblyUninitTangent ? F(data) : data
+                else
+                    F()
+                end
+            end
+        )
+        F_out = fdata_type(tangent_type(P))
+        return F_out(NamedTuple{$names}(processed_fdata))
     end
-    F_out = fdata_type(tangent_type(P))
-    return F_out(NamedTuple{fieldnames(P)}(processed_fdata))
 end
 
 # Helper for build_fdata
