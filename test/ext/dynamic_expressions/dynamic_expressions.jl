@@ -81,12 +81,12 @@ end
         @test const_tangent ≈ N
 
         # Propagate gradients through a tree copy.
-        # TODO: This apparently cuts the gradients off. Is that expected?
         eval_sum_copy = let X = X
             f -> sum(copy(f)(X))
         end
         full_tangent = gradient(eval_sum_copy, backend, expr)
-        @test full_tangent.fields.tree.children[2].x.val ≈ 0.0  # Is this correct?
+        const_tangent = full_tangent.fields.tree.children[2].x.val
+        @test const_tangent ≈ 100
     end
 end
 
