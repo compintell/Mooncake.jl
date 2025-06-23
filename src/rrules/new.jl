@@ -44,7 +44,7 @@ end
             return :($F())
         end
     end
-    F_out = fdata_type(tangent_type(P))
+    F_out = :(fdata_type(tangent_type($P)))
     return :($F_out(NamedTuple{$names}($(Expr(:call, tuple, fdata_exprs...)))))
 end
 
