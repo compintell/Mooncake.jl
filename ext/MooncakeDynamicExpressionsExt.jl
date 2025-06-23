@@ -558,106 +558,129 @@ function Mooncake.rrule!!(
 end
 
 # _new_
-Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{
-    typeof(Mooncake._new_),Type{N},UInt8,Bool,T,UInt16,UInt8,Tuple
-} where {T,D,N<:AbstractExpressionNode{T,D}}
-
-function Mooncake.rrule!!(
-    ::Mooncake.CoDual{typeof(Mooncake._new_)},
+function _rrule_new_common(
     ::Mooncake.CoDual{Type{N}},
-    degree_cd::Mooncake.CoDual{UInt8},
-    constant_cd::Mooncake.CoDual{Bool},
-    val_cd::Mooncake.CoDual{T},
-    feature_cd::Mooncake.CoDual{UInt16},
-    op_cd::Mooncake.CoDual{UInt8},
-    children_cd::Mooncake.CoDual,
-) where {T,D,N<:AbstractExpressionNode{T,D}}
-    deg = Mooncake.primal(degree_cd)
-    constant = Mooncake.primal(constant_cd)
-    n = N()
-    n.degree = deg
-    n.constant = constant
-    if deg == 0
-        if constant
-            n.val = Mooncake.primal(val_cd)
+    ::Val{nargs};
+    degree_cd=nothing,
+    constant_cd=nothing,
+    val_cd=nothing,
+    feature_cd=nothing,
+    op_cd=nothing,
+    children_cd=nothing,
+) where {T,D,N<:AbstractExpressionNode{T,D},nargs}
+    if isnothing(degree_cd)
+        Tv = Mooncake.tangent_type(T)
+        n = N()
+        fdt = if Tv === Mooncake.NoTangent
+            Mooncake.NoTangent()
         else
-            n.feature = Mooncake.primal(feature_cd)
+            TangentNode{Tv,D}(nothing)
         end
+        new_node_pb(::Mooncake.NoRData) = ntuple(_ -> Mooncake.NoRData(), Val(nargs))
+        return Mooncake.CoDual(n, fdt), new_node_pb
     else
-        n.op = Mooncake.primal(op_cd)
-        DE.set_children!(n, Mooncake.primal(children_cd))
-    end
+        @assert !isnothing(constant_cd)
 
-    Tv = Mooncake.tangent_type(T)
-    fdt = if Tv === Mooncake.NoTangent
-        Mooncake.NoTangent()
-    else
-        tn = TangentNode{Tv,D}(nothing)
+        deg = Mooncake.primal(degree_cd)
+        constant = Mooncake.primal(constant_cd)
 
-        # Propagate metadata
-        tn.degree = deg
-        tn.constant = constant
-
-        # Actual tangents
-        if deg == 0 && constant
-            tn.val = Mooncake.tangent(val_cd)
-        elseif deg > 0
-            set_children!(tn, Mooncake.tangent(children_cd))
+        n = N()
+        n.degree = deg
+        n.constant = constant
+        if deg == 0
+            if constant
+                @assert !isnothing(val_cd)
+                n.val = Mooncake.primal(val_cd)
+            else
+                @assert !isnothing(feature_cd)
+                n.feature = Mooncake.primal(feature_cd)
+            end
+        else
+            @assert !isnothing(op_cd)
+            @assert !isnothing(children_cd)
+            n.op = Mooncake.primal(op_cd)
+            DE.set_children!(n, Mooncake.primal(children_cd))
         end
 
-        tn
-    end
+        Tv = Mooncake.tangent_type(T)
+        fdt = if Tv === Mooncake.NoTangent
+            Mooncake.NoTangent()
+        else
+            tn = TangentNode{Tv,D}()
 
-    node_cd = Mooncake.CoDual(n, fdt)
+            # Propagate metadata
+            tn.degree = deg
+            tn.constant = constant
 
-    function _new_node_pullback(dy_rdata)
-        return (
-            Mooncake.NoRData(),  # [_new_]
-            Mooncake.NoRData(),  # [type]
-            Mooncake.NoRData(),  # degree
-            Mooncake.NoRData(),  # constant
-            let
-                if T <: Union{AbstractFloat,Integer}
-                    zero(T)
-                else
+            # Actual tangents
+            if deg == 0
+                if constant
                     val_tangent = Mooncake.tangent(val_cd)
                     if val_tangent isa Union{Mooncake.NoTangent,Mooncake.NoFData}
-                        Mooncake.NoRData()
+                        tn.val = Mooncake.zero_tangent(n.val)
                     else
-                        # TODO: Is this generic enough? What if Tv is Vector{Float32}?
-                        zero(Mooncake.rdata(val_tangent))
+                        tn.val = val_tangent
                     end
                 end
-            end, # val
-            Mooncake.NoRData(),  # feature
-            Mooncake.NoRData(),  # op
-            Mooncake.NoRData(),  # children
-        )
-    end
+            else
+                set_children!(tn, Mooncake.tangent(children_cd))
+            end
 
-    return node_cd, _new_node_pullback
+            tn
+        end
+
+        node_cd = Mooncake.CoDual(n, fdt)
+
+        function _new_node_pullback(dy_rdata)
+            return ntuple(Val(nargs)) do i
+                if i != 5
+                    Mooncake.NoRData()
+                else
+                    if T <: Union{AbstractFloat,Integer}
+                        zero(T)
+                    else
+                        @assert !isnothing(val_cd)
+                        val_tangent = Mooncake.tangent(val_cd)
+                        if val_tangent isa Union{Mooncake.NoTangent,Mooncake.NoFData}
+                            Mooncake.NoRData()
+                        else
+                            # TODO: Is this generic enough? What if Tv is Vector{Float32}?
+                            zero(Mooncake.rdata(val_tangent))
+                        end
+                    end
+                end
+            end
+        end
+
+        return node_cd, _new_node_pullback
+    end
 end
 
 Mooncake.@is_primitive Mooncake.MinimalCtx Tuple{
-    typeof(Mooncake._new_),Type{N}
+    typeof(Mooncake._new_),Type{N},Vararg{Any}
 } where {T,D,N<:AbstractExpressionNode{T,D}}
 function Mooncake.rrule!!(
-    ::Mooncake.CoDual{typeof(Mooncake._new_)}, ::Mooncake.CoDual{Type{N}}
-) where {T,D,N<:AbstractExpressionNode{T,D}}
-    n = N()
-
-    Tv = Mooncake.tangent_type(T)
-    fdt = if Tv === Mooncake.NoTangent
-        Mooncake.NoTangent()
-    else
-        TangentNode{Tv,D}(nothing)
-    end
-
-    node_cd = Mooncake.CoDual(n, fdt)
-
-    new_node_pb(::Mooncake.NoRData) = (Mooncake.NoRData(), Mooncake.NoRData())
-
-    return node_cd, new_node_pb
+    ::Mooncake.CoDual{typeof(Mooncake._new_)},
+    type_cd::Mooncake.CoDual{Type{N}},
+    args_cd::Vararg{Mooncake.CoDual,n_extra_args},
+) where {T,D,N<:AbstractExpressionNode{T,D},n_extra_args}
+    degree_cd = n_extra_args > 0 ? args_cd[1] : nothing
+    constant_cd = n_extra_args > 1 ? args_cd[2] : nothing
+    val_cd = n_extra_args > 2 ? args_cd[3] : nothing
+    feature_cd = n_extra_args > 3 ? args_cd[4] : nothing
+    op_cd = n_extra_args > 4 ? args_cd[5] : nothing
+    children_cd = n_extra_args > 5 ? args_cd[6] : nothing
+    @assert n_extra_args <= 6
+    return _rrule_new_common(
+        type_cd,
+        Val(2 + n_extra_args);
+        degree_cd,
+        constant_cd,
+        val_cd,
+        feature_cd,
+        op_cd,
+        children_cd,
+    )
 end
 
 ################################################################################
