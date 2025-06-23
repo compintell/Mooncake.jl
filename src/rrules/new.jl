@@ -33,19 +33,18 @@ function rrule!!(
     return CoDual(y, dy), pb!!
 end
 
-@generated function build_fdata(::Type{P}, x::Tuple, fdata::Tuple) where {P}
-    names = fieldnames(P)
-    fdata_exprs = map(eachindex(names)) do n
+@inline function build_fdata(::Type{P}, x::Tuple, fdata::Tuple) where {P}
+    processed_fdata = ntuple(Val(fieldcount(P))) do n
         F = fdata_field_type(P, n)
-        if n <= length(fdata.parameters)
-            data_expr = Expr(:call, __get_data, P, :x, :fdata, n)
-            return F <: PossiblyUninitTangent ? Expr(:call, F, data_expr) : data_expr
+        if n <= length(fdata)
+            data = __get_data(P, x, fdata, n)
+            return F <: PossiblyUninitTangent ? F(data) : data
         else
-            return :($F())
+            return F()
         end
     end
-    F_out = :(fdata_type(tangent_type($P)))
-    return :($F_out(NamedTuple{$names}($(Expr(:call, tuple, fdata_exprs...)))))
+    F_out = fdata_type(tangent_type(P))
+    return F_out(NamedTuple{fieldnames(P)}(processed_fdata))
 end
 
 # Helper for build_fdata
