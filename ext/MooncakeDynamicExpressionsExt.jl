@@ -517,6 +517,25 @@ function _rrule_setfield_common(
     y_cd = Mooncake.CoDual(new_val_primal, y_fdata)
 
     function lsetfield_node_pb(dy_rdata)
+        new_val_rdata =
+            if !(dy_rdata isa Mooncake.NoRData) && FieldName in (:val, :children)
+                current_field_tangent = if FieldName === :children
+                    obj_t.children
+                else
+                    obj_t.val
+                end
+
+                # Use increment!! to accumulate gradients like core Mooncake
+                if !(current_field_tangent isa Mooncake.NoTangent)
+                    Mooncake.increment!!(dy_rdata, Mooncake.rdata(current_field_tangent))
+                else
+                    dy_rdata
+                end
+            else
+                Mooncake.NoRData()
+            end
+
+        # Restore old state
         if !isnothing(old_val)
             Mooncake.lsetfield!(obj, v_field_sym, old_val)
         end
@@ -527,7 +546,8 @@ function _rrule_setfield_common(
                 Mooncake.lsetfield!(obj_t, v_field_sym, old_tangent)
             end
         end
-        return (Mooncake.NoRData(), Mooncake.NoRData(), Mooncake.NoRData(), dy_rdata)
+
+        return (Mooncake.NoRData(), Mooncake.NoRData(), Mooncake.NoRData(), new_val_rdata)
     end
 
     return y_cd, lsetfield_node_pb
