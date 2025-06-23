@@ -479,9 +479,9 @@ function _rrule_setfield_common(
 
     v_field_sym = Val(FieldName)
 
-    old_val = Mooncake.lgetfield(obj, v_field_sym)
+    old_val = isdefined(obj, FieldName) ? getfield(obj, FieldName) : nothing
     old_tangent = if FieldName in (:children, :val, :degree, :constant)
-        Mooncake.lgetfield(obj_t, v_field_sym)
+        isdefined(obj_t, FieldName) ? getfield(obj_t, FieldName) : nothing
     else
         nothing
     end
@@ -517,11 +517,15 @@ function _rrule_setfield_common(
     y_cd = Mooncake.CoDual(new_val_primal, y_fdata)
 
     function lsetfield_node_pb(dy_rdata)
-        Mooncake.lsetfield!(obj, v_field_sym, old_val)
-        if FieldName === :children
-            set_children!(obj_t, old_tangent)
-        elseif FieldName in (:val, :degree, :constant)
-            Mooncake.lsetfield!(obj_t, v_field_sym, old_tangent)
+        if !isnothing(old_val)
+            Mooncake.lsetfield!(obj, v_field_sym, old_val)
+        end
+        if !isnothing(old_tangent)
+            if FieldName === :children
+                set_children!(obj_t, old_tangent)
+            elseif FieldName in (:val, :degree, :constant)
+                Mooncake.lsetfield!(obj_t, v_field_sym, old_tangent)
+            end
         end
         return (Mooncake.NoRData(), Mooncake.NoRData(), Mooncake.NoRData(), dy_rdata)
     end
