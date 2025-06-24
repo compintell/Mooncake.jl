@@ -258,7 +258,7 @@ initial rdata directly into the statement, which is safe because it is always a 
 """
 function reverse_data_ref_stmts(info::ADInfo)
     function make_ref_stmt(id, P)
-        ref_type = Base.RefValue{P<:Type ? NoRData : zero_like_rdata_type(P)}
+        ref_type = Base.RefValue{P <: Type ? NoRData : zero_like_rdata_type(P)}
         init_ref_val = P <: Type ? NoRData() : Mooncake.zero_like_rdata_from_type(P)
         return (id, new_inst(Expr(:new, ref_type, QuoteNode(init_ref_val))))
     end
@@ -1041,7 +1041,7 @@ end
 Helper method: equivalent to extracting the signature from `args` and calling
 `build_rrule(sig; kwargs...)`.
 """
-function build_rrule(args...; kwargs...)
+function build_rrule(args::Vararg{Any,N}; kwargs...) where {N}
     interp = get_interpreter()
     return build_rrule(interp, _typeof(TestUtils.__get_primals(args)); kwargs...)
 end
@@ -1051,7 +1051,8 @@ end
 
 Helper method: Equivalent to `build_rrule(Mooncake.get_interpreter(), sig; kwargs...)`.
 """
-build_rrule(sig::Type{<:Tuple}; kwargs...) = build_rrule(get_interpreter(), sig; kwargs...)
+build_rrule(sig::Type{T}; kwargs...) where {T<:Tuple} =
+    build_rrule(get_interpreter(), sig; kwargs...)
 
 const MOONCAKE_INFERENCE_LOCK = ReentrantLock()
 
@@ -1075,8 +1076,11 @@ docstring for `rrule!!` for more info.
 If `debug_mode` is `true`, then all calls to rules are replaced with calls to `DebugRRule`s.
 """
 function build_rrule(
-    interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode=false, silence_debug_messages=true
-) where {C}
+    interp::MooncakeInterpreter{C},
+    sig_or_mi::S;
+    debug_mode=false,
+    silence_debug_messages=true,
+) where {C,S}
 
     # To avoid segfaults, ensure that we bail out if the interpreter's world age is greater
     # than the current world age.
@@ -1147,8 +1151,8 @@ end
 Used by `build_rrule`, and the various debugging tools: primal_ir, fwds_ir, adjoint_ir.
 """
 function generate_ir(
-    interp::MooncakeInterpreter, sig_or_mi; debug_mode=false, do_inline=true
-)
+    interp::MooncakeInterpreter, sig_or_mi::S; debug_mode=false, do_inline=true
+) where {S}
     # Reset id count. This ensures that the IDs generated are the same each time this
     # function runs.
     seed_id!()
@@ -1807,7 +1811,7 @@ mutable struct LazyDerivedRule{primal_sig,Trule}
     rule::Trule
     function LazyDerivedRule(mi::Core.MethodInstance, debug_mode::Bool)
         interp = get_interpreter()
-        return new{mi.specTypes,rule_type(interp, mi;debug_mode)}(debug_mode, mi)
+        return new{mi.specTypes,rule_type(interp, mi; debug_mode)}(debug_mode, mi)
     end
     function LazyDerivedRule{Tprimal_sig,Trule}(
         mi::Core.MethodInstance, debug_mode::Bool

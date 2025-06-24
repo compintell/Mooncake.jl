@@ -404,7 +404,7 @@ end
 
 Returns a cache used with [`value_and_pullback!!`](@ref). See that function for more info.
 """
-function prepare_pullback_cache(fx...; kwargs...)
+function prepare_pullback_cache(fx::Vararg{Any,N}; kwargs...) where {N}
 
     # Construct rule and tangents.
     rule = build_rrule(get_interpreter(), Tuple{map(_typeof, fx)...}; kwargs...)
@@ -479,7 +479,7 @@ end
 
 Returns a cache used with [`value_and_gradient!!`](@ref). See that function for more info.
 """
-function prepare_gradient_cache(fx...; kwargs...)
+function prepare_gradient_cache(fx::Vararg{Any,N}; kwargs...) where {N}
     rule = build_rrule(fx...; kwargs...)
     tangents = map(zero_tangent, fx)
     y, rvs!! = rule(map((x, dx) -> CoDual(x, fdata(dx)), fx, tangents)...)
