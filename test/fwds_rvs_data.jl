@@ -32,7 +32,7 @@ end
     struct P_union_nothing
         x::Union{Base.IEEEFloat,Nothing}
     end
-    T_union_nothing = Mooncake.Tangent{@NamedTuple{x::Union{NoTangent,Base.IEEEFloat}}}
+    T_union_nothing = Mooncake.Tangent{@NamedTuple{x::Union{Mooncake.NoTangent,Base.IEEEFloat}}}
     TestUtils.test_tangent_splitting(Xoshiro(123456), P_union_nothing(1.0))
 
     @testset "zero_rdata_from_type checks" begin
