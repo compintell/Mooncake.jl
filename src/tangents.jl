@@ -1107,6 +1107,15 @@ function tangent_test_cases()
     N_large = 33
     _names = Tuple(map(n -> Symbol("x$n"), 1:N_large))
 
+    # Test for unions involving `Nothing`. See, 
+    # https://github.com/chalk-lab/Mooncake.jl/issues/597 for the reason.
+    struct P_union_nothing
+        x::Union{Base.IEEEFloat,Nothing}
+    end
+    T_union_nothing = Mooncake.Tangent{
+        @NamedTuple{x::Union{Mooncake.NoTangent,Float16,Float32,Float64}}
+    }
+
     abs_test_cases = [
         (sin, NoTangent),
         (Float16(5.0), Float16),
@@ -1140,6 +1149,7 @@ function tangent_test_cases()
         # Tests for Base.TTY
         (Base.stdout, NoTangent),
         (Base.stdin, NoTangent),
+        (P_union_nothing(1.0), T_union_nothing),
     ]
     # Construct test cases containing circular references. These typically require multiple
     # lines of code to construct, so we build them before adding them to `rel_test_cases`.
