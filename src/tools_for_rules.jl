@@ -37,6 +37,11 @@ Define a method of a function which only Mooncake can see. This can be used to w
 versions of methods which can be successfully differentiated by Mooncake if the original
 cannot be.
 
+!!! note
+    This macro works only within the module's namespace from which it is called from.
+    In case it is called within a package's extension to overlay a method, the overlay effect is only valid within that extension module.
+    To use it in the `Main` module you must explicitly apply `Mooncake.@mooncake_overlay` again.
+
 For example, suppose that you have a function
 ```jldoctest overlay
 julia> foo(x::Float64) = bar(x)
