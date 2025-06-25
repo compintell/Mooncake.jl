@@ -148,9 +148,7 @@ end
 struct P_union_nothing
     x::Union{Base.IEEEFloat,Nothing}
 end
-T_union_nothing = Mooncake.Tangent{
-    @NamedTuple{x::Union{Mooncake.NoTangent,Base.IEEEFloat}}
-}
+T_union_nothing = Mooncake.Tangent{@NamedTuple{x::Union{Mooncake.NoTangent,Base.IEEEFloat}}}
 
 function build_big_isbits_struct()
     return FourFields(
