@@ -1122,10 +1122,11 @@ function test_equality_comparison(x)
 end
 
 """
-    test_tangent_splitting(rng::AbstractRNG, p::P) where {P}
+    test_tangent_splitting(rng::AbstractRNG, p::P; test_opt_flag=true) where {P}
 
 Verify that tangent splitting functionality associated to primal `p` works correctly.
 Ensure that [`test_tangent_interface`](@ref) runs for `p` before running these tests.
+`test_opt_flag` controls whether to run JET-based checks. 
 
 # Extended Help
 
@@ -1138,7 +1139,7 @@ Ensure that [`test_tangent_interface`](@ref) runs for `p` before running these t
 - [`Mooncake.tangent_type`](@ref) (binary method)
 - [`Mooncake.tangent`](@ref) (binary method)
 """
-function test_tangent_splitting(rng::AbstractRNG, p::P) where {P}
+function test_tangent_splitting(rng::AbstractRNG, p::P; test_opt_flag=true) where {P}
 
     # Check that fdata_type and rdata_type run and produce types.
     T = tangent_type(P)
@@ -1199,13 +1200,13 @@ function test_tangent_splitting(rng::AbstractRNG, p::P) where {P}
 
     # Check that when the zero element is asked from the primal type alone, the result is
     # either an instance of R _or_ a `CannotProduceZeroRDataFromType`.
-    test_opt(zero_rdata_from_type, Tuple{Type{P}})
+    test_opt_flag && test_opt(zero_rdata_from_type, Tuple{Type{P}})
     rzero_from_type = @inferred zero_rdata_from_type(P)
     @test rzero_from_type isa R || rzero_from_type isa CannotProduceZeroRDataFromType
     @test can_make_zero != isa(rzero_from_type, CannotProduceZeroRDataFromType)
 
     # Check that we can produce a lazy zero rdata, and that it has the correct type.
-    test_opt(lazy_zero_rdata, Tuple{P})
+    test_opt_flag && test_opt(lazy_zero_rdata, Tuple{P})
     lazy_rzero = @inferred lazy_zero_rdata(p)
     @test instantiate(lazy_rzero) isa R
 
