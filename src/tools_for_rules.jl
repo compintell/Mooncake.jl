@@ -219,6 +219,9 @@ macro zero_adjoint(ctx, sig)
 
     # Return code to create a method of is_primitive and a rule.
     ex = quote
+        # decouple `is_noinline` with `is_primitive`, so `is_noinline` is less rigid  
+        sig_noinline = (sig[1], fill(Any, length(sig)-1)...)
+        Mooncake.is_noinline(::Type{$(esc(ctx))}, ::Type{<:$(esc(sig_noinline))}) = true
         Mooncake.is_primitive(::Type{$(esc(ctx))}, ::Type{<:$(esc(sig))}) = true
         $(construct_def(arg_names, arg_types, where_params, body))
     end
