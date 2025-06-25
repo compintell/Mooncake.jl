@@ -475,7 +475,7 @@ macro from_rrule(ctx, sig::Expr, has_kwargs::Bool=false)
     ex = quote
         # widen input argument types to `Any` for `is_noinline` to avoid false negatives in noinlining
         sig_noinline = ($(esc(sig))[1], fill(Any, length($(esc(sig)))-1)...)
-        Mooncake.is_noinline(::Type{$(esc(ctx))}, ::Type{<:sig_noinline}) = true
+        Mooncake.is_noinline(::Type{$(esc(ctx))}, ::Type{<:(sig_noinline)}) = true
         Mooncake.is_primitive(::Type{$(esc(ctx))}, ::Type{<:($(esc(sig)))}) = true
         $rule_expr
         $kw_is_primitive
