@@ -27,9 +27,9 @@ end
         TestUtils.test_tangent_splitting(Xoshiro(123456), p)
         # Test for unions involving `Nothing`. See, 
         # https://github.com/chalk-lab/Mooncake.jl/issues/597 for the reason.
-        # `TestUtils.test_tangent_splitting(p)` # currently JET fails since it is union type 
-        p, T = TestResources.P_union_nothing(1.0), TestResources.T_union_nothing
-        @test Mooncake.tangent_type(Mooncake.fdata_type(T), Mooncake.rdata_type(T)) == T
+        TestUtils.test_tangent_splitting(
+            TestResources.P_union_nothing(1.0); test_opt_flag=false
+        )
     end
 
     @testset "zero_rdata_from_type checks" begin
