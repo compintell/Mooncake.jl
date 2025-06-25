@@ -67,11 +67,5 @@ is_primitive(::Type{MinimalCtx}, ::Type{<:Tuple{typeof(foo), Float64}}) = true
 You should implemented more complicated method of `is_primitive` in the usual way.
 """
 macro is_primitive(Tctx, sig)
-    return quote
-        # widen input argument types to Any for `is_noinline` to reduce false negatives 
-        # inlining in type-unstable functions 
-        sig_noinline = ($(esc(sig))[1], fill(Any, length($(esc(sig)))-1)...)
-        Mooncake.is_noinline(::Type{$(esc(Tctx))}, ::Type{<:sig_noinline}) = true
-        Mooncake.is_primitive(::Type{$(esc(Tctx))}, ::Type{<:$(esc(sig))}) = true
-    end
+    return :(Mooncake.is_primitive(::Type{$(esc(Tctx))}, ::Type{<:$(esc(sig))}) = true)
 end
