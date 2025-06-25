@@ -144,7 +144,7 @@ function Core.Compiler.abstract_call_gf_by_type(
 
     # Check to see whether the call in question is a Mooncake primitive. If it is, set its
     # call info such that in the `CC.inlining_policy` it is not inlined away.
-    callinfo = is_primitive(C, atype) ? NoInlineCallInfo(cm.info, atype) : cm.info
+    callinfo = is_noinline(C, atype) || is_primitive(C, atype) ? NoInlineCallInfo(cm.info, atype) : cm.info
 
     # Construct a CallMeta correctly depending on the version of Julia.
     @static if VERSION ≥ v"1.11-"
