@@ -71,7 +71,7 @@ macro is_primitive(Tctx, sig)
         # widen input argument types to Any for `is_noinline` to reduce false negatives 
         # inlining in type-unstable functions 
         sig_noinline = ($(esc(sig))[1], fill(Any, length($(esc(sig)))-1)...)
-        Mooncake.is_noinline(::Type{$(esc(ctx))}, ::Type{<:sig_noinline}) = true
+        Mooncake.is_noinline(::Type{$(esc(Tctx))}, ::Type{<:sig_noinline}) = true
         Mooncake.is_primitive(::Type{$(esc(Tctx))}, ::Type{<:$(esc(sig))}) = true
     end
 end
