@@ -1109,9 +1109,7 @@ function tangent_test_cases()
 
     # Test for unions involving `Nothing`. See, 
     # https://github.com/chalk-lab/Mooncake.jl/issues/597 for the reason.
-    struct P_union_nothing
-        x::Union{Base.IEEEFloat,Nothing}
-    end
+    P_union_nothing = NamedTuple{(:x,),Tuple{Union{Base.IEEEFloat,Nothing}}}
     T_union_nothing = Mooncake.Tangent{
         @NamedTuple{x::Union{Mooncake.NoTangent,Float16,Float32,Float64}}
     }
