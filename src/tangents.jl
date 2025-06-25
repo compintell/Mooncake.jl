@@ -341,6 +341,8 @@ tangent_type(::Type{<:Enum}) = NoTangent
 
 tangent_type(::Type{<:Base.TTY}) = NoTangent
 
+tangent_type(::Type{<:IOStream}) = NoTangent
+
 function split_union_tuple_type(tangent_types)
 
     # Create first split.
@@ -1138,6 +1140,7 @@ function tangent_test_cases()
         (UnionAll, NoTangent),
         (typeof(<:), NoTangent),
         (Base.TTY, NoTangent),
+        (IOStream(""), NoTangent),
     ]
     # Construct test cases containing circular references. These typically require multiple
     # lines of code to construct, so we build them before adding them to `rel_test_cases`.
