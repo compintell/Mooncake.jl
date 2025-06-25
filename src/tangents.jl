@@ -1140,6 +1140,7 @@ function tangent_test_cases()
         (UnionAll, NoTangent),
         (typeof(<:), NoTangent),
         (IOStream(""), NoTangent),
+        (TestResources.P_union_nothing(1.), TestResources.T_union_nothing),
     ]
     # Construct test cases containing circular references. These typically require multiple
     # lines of code to construct, so we build them before adding them to `rel_test_cases`.
