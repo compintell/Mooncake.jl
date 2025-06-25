@@ -1137,7 +1137,9 @@ function tangent_test_cases()
         (Union, NoTangent),
         (UnionAll, NoTangent),
         (typeof(<:), NoTangent),
-        (Base.TTY, NoTangent),
+        # Tests for Base.TTY
+        (Base.stdout, NoTangent),
+        (Base.stdin, NoTangent),
     ]
     # Construct test cases containing circular references. These typically require multiple
     # lines of code to construct, so we build them before adding them to `rel_test_cases`.
