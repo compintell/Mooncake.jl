@@ -860,7 +860,10 @@ tangent type. This method must be equivalent to `tangent_type(_typeof(primal))`.
 @foldable tangent_type(::Type{NoFData}, ::Type{R}) where {R<:IEEEFloat} = R
 @foldable tangent_type(::Type{F}, ::Type{NoRData}) where {F<:Array} = F
 
-# Union type: `Union{Nothing, T}` where T could be, eg, Array or Float
+# Handling union types: `Union{Nothing, T}`
+# NOTE: Only the union of `Nothing`, `Array{<:IEEEFloat}` and `Base.IEEEFloat` are 
+# supported; these union types are also only supported for struct field annotation. 
+# Other use cases may fail.
 @foldable tangent_type(::Type{NoFData}, ::Type{T}) where {T<:Union{NoRData,Base.IEEEFloat,RData}} = Union{
     NoTangent,tangent_type(T)
 }
