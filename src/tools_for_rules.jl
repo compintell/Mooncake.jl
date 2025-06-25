@@ -216,6 +216,7 @@ macro zero_adjoint(ctx, sig)
         arg_types = map(t -> :(Mooncake.CoDual{<:$t}), arg_type_symbols)
         body = Expr(:call, Mooncake.zero_adjoint, arg_names...)
     end
+
     # Return code to create a method of is_primitive and a rule.
     ex = quote
         Mooncake.is_primitive(::Type{$(esc(ctx))}, ::Type{<:$(esc(sig))}) = true
