@@ -216,7 +216,6 @@ macro zero_adjoint(ctx, sig)
         arg_types = map(t -> :(Mooncake.CoDual{<:$t}), arg_type_symbols)
         body = Expr(:call, Mooncake.zero_adjoint, arg_names...)
     end
-    
     # Return code to create a method of is_primitive and a rule.
     ex = quote
         # widen input argument types to `Any` for `is_noinline` to avoid false negatives in noinlining
