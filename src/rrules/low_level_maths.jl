@@ -59,7 +59,7 @@ end
 
 @is_primitive MinimalCtx Tuple{typeof(Base.eps),<:IEEEFloat}
 function rrule!!(::CoDual{typeof(Base.eps)}, x::CoDual{P}) where {P<:IEEEFloat}
-    eps_pb!!(dy::P) = NoRData(), isinteger(log2(primal(x))) ? Inf : 0.0
+    eps_pb!!(dy::P) = NoRData(), isinteger(log2(primal(x))) ? Inf : P(0.0)
     return CoDual(Base.eps(primal(x)), NoFData()), eps_pb!!
 end
 
