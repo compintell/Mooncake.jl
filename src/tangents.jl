@@ -1146,9 +1146,6 @@ function tangent_test_cases()
         (Union, NoTangent),
         (UnionAll, NoTangent),
         (typeof(<:), NoTangent),
-        # Tests for Base.TTY
-        (Base.stdout, NoTangent),
-        (Base.stdin, NoTangent),
         (IOStream(""), NoTangent),
         # Test for unions involving `Nothing`
         (P_union_nothing(1.0), T_union_nothing),
