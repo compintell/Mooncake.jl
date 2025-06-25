@@ -36,6 +36,22 @@ is_primitive(::Type{MinimalCtx}, sig::Type{<:Tuple}) = false
 is_primitive(::Type{DefaultCtx}, sig) = is_primitive(MinimalCtx, sig)
 
 """
+    is_noinline(::Type{Ctx}, sig) where {Ctx}
+
+Returns a `Bool` specifying whether the methods specified by `sig` should not be inlined 
+when the context is a `Ctx`.
+
+```julia
+is_noinline(DefaultCtx, Tuple{typeof(sin), Float64})
+```
+will return if calling `sin(5.0)` should not be inlined when the context is a
+`DefaultCtx`.
+"""
+is_noinline(::Type{MinimalCtx}, sig::Type{<:Tuple}) = false
+is_noinline(::Type{DefaultCtx}, sig) = is_noinline(MinimalCtx, sig)
+
+
+"""
     @is_primitive context_type signature
 
 Creates a method of `is_primitive` which always returns `true` for the context_type and
