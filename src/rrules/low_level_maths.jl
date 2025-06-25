@@ -57,6 +57,12 @@ end
 
 @from_rrule MinimalCtx Tuple{typeof(^),P,P} where {P<:IEEEFloat}
 
+@is_primitive MinimalCtx Tuple{typeof(Base.eps),<:IEEEFloat}
+function rrule!!(::CoDual{typeof(Base.eps)}, x::CoDual{P}) where {P<:IEEEFloat}
+    eps_pb!!(dy::P) = NoRData(), isinteger(log2(primal(x))) ? Inf : 0.0
+    return CoDual(Base.eps(primal(x)), NoFData()), eps_pb!!
+end
+
 rand_inputs(rng, P::Type{<:IEEEFloat}, f, arity) = randn(rng, P, arity)
 rand_inputs(rng, P::Type{<:IEEEFloat}, ::typeof(acosh), _) = (rand(rng) + 1 + 1e-3,)
 rand_inputs(rng, P::Type{<:IEEEFloat}, ::typeof(asech), _) = (rand(rng) * 0.9,)
@@ -75,9 +81,6 @@ rand_inputs(rng, P::Type{<:IEEEFloat}, ::typeof(asec), _) = (rand(rng) + 1.001,)
 rand_inputs(rng, P::Type{<:IEEEFloat}, ::typeof(acosd), _) = (2 * 0.9 * rand(rng) - 0.9,)
 rand_inputs(rng, P::Type{<:IEEEFloat}, ::typeof(acos), _) = (2 * 0.9 * rand(rng) - 0.9,)
 rand_inputs(rng, P::Type{<:IEEEFloat}, ::typeof(sqrt), _) = (rand(rng) + 1e-3,)
-
-# required method overlays
-Mooncake.@mooncake_overlay Base.eps(t) = zero(t)
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:low_level_maths})
     rng = Xoshiro(123)
