@@ -143,6 +143,13 @@ struct OneField{A}
     a::A
 end
 
+# Test for unions involving `Nothing`. See, 
+# https://github.com/chalk-lab/Mooncake.jl/issues/597 for the reason.
+struct P_union_nothing
+    x::Union{Base.IEEEFloat,Nothing}
+end
+T_union_nothing = Mooncake.Tangent{@NamedTuple{x::Union{Mooncake.NoTangent,Base.IEEEFloat}}}
+
 function build_big_isbits_struct()
     return FourFields(
         FiveFields(

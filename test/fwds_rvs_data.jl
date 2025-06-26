@@ -25,12 +25,13 @@ end
     end
     @testset "$(typeof(p))" for (_, p, _...) in Mooncake.tangent_test_cases()
         TestUtils.test_tangent_splitting(Xoshiro(123456), p)
-        # See, https://github.com/chalk-lab/Mooncake.jl/issues/597 
-        T1 = Mooncake.tangent_type(Union{Base.IEEEFloat,Nothing})
-        T2 = Mooncake.tangent_type(Union{Vector{Float32},Nothing})
-        @test Mooncake.tangent_type(Mooncake.fdata_type(T1), Mooncake.rdata_type(T1)) == T1
-        @test Mooncake.tangent_type(Mooncake.fdata_type(T2), Mooncake.rdata_type(T2)) == T2
+        # Test for unions involving `Nothing`. See, 
+        # https://github.com/chalk-lab/Mooncake.jl/issues/597 for the reason.
+        TestUtils.test_tangent_splitting(
+            Xoshiro(123456), TestResources.P_union_nothing(1.0); test_opt_flag=false
+        )
     end
+
     @testset "zero_rdata_from_type checks" begin
         @test can_produce_zero_rdata_from_type(Vector) == true
         check_allocs(can_produce_zero_rdata_from_type, Vector)
