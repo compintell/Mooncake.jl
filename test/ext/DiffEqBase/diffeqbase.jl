@@ -20,12 +20,3 @@ using Mooncake.TestUtils: test_rule
         test_rule(StableRNG(123), f, fargs; interface_only, perf_flag, is_primitive)
     end
 end
-
-# test_rule(
-#     StableRNG(123),
-#     DiffEqBase.set_mooncakeoriginator_if_mooncake,
-#     SciMLBase.ChainRulesOriginator();
-#     interface_only=false,
-#     perf_flag=:allocs,
-#     is_primitive=true,
-# )
