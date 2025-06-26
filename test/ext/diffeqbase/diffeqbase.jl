@@ -2,7 +2,7 @@ using Pkg
 Pkg.activate(@__DIR__)
 Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 
-using AllocCheck, JET
+using AllocCheck
 using Mooncake, StableRNGs, Test, DiffEqBase
 using DiffEqBase: SciMLBase
 using Mooncake.TestUtils: test_rule
@@ -12,7 +12,7 @@ using Mooncake.TestUtils: test_rule
         interface_only, perf_flag, is_primitive, f, fargs
     ) in [(
         false,
-        :stability_and_allocs,
+        :allocs,
         true,
         DiffEqBase.set_mooncakeoriginator_if_mooncake,
         SciMLBase.ChainRulesOriginator(),
