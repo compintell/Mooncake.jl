@@ -861,12 +861,14 @@ tangent type. This method must be equivalent to `tangent_type(_typeof(primal))`.
 @foldable tangent_type(::Type{F}, ::Type{NoRData}) where {F<:Array} = F
 
 # Union types. NOTE: Only `Union{Nothing, Array{<:Base.IEEEFloat}, Base.IEEEFloat}` are supported. 
-@foldable tangent_type(::Type{NoFData}, ::Type{Union{NoRData,T}}) where {T<:Base.IEEEFloat} = Union{
-    NoTangent,tangent_type(T)
-}
-@foldable tangent_type(::Type{Union{NoFData,T}}, ::Type{NoRData}) where {T<:Array{<:Base.IEEEFloat}} = Union{
-    NoTangent,tangent_type(T)
-}
+for T in [Float16, Float32, Float64]
+    @eval @foldable tangent_type(::Type{NoFData}, ::Type{Union{NoRData,$T}}) = Union{
+        NoTangent,tangent_type($T)
+    }
+    @eval @foldable tangent_type(::Type{Union{NoFData,Array{$T}}}, ::Type{NoRData}) = Union{
+        NoTangent,tangent_type(Array{$T})
+    }
+end
 
 # Tuples
 @foldable @generated function tangent_type(::Type{F}, ::Type{R}) where {F<:Tuple,R<:Tuple}
