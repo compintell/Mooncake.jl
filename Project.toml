@@ -21,11 +21,13 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 [weakdeps]
 AllocCheck = "9b6a8646-10ed-4001-bbdc-1d2f46dfbb1a"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+DiffEqBase = "2b5f629d-d688-5b77-993f-72d75c75574e"
 DynamicExpressions = "a40a106e-89c9-4ca8-8020-a735e8728b6b"
 Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
 JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
 LuxLib = "82251201-b29d-42c6-8e01-566dec8acb11"
 NNlib = "872c559c-99b0-510c-b3b7-b6c96a88d5cd"
+SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
 SLEEFPirates = "476501e8-09a2-5ece-8869-fb82de89a1fa"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 
@@ -38,6 +40,7 @@ MooncakeJETExt = "JET"
 MooncakeLuxLibExt = "LuxLib"
 MooncakeLuxLibSLEEFPiratesExtension = ["LuxLib", "SLEEFPirates"]
 MooncakeNNlibExt = "NNlib"
+MooncakeDiffEqBaseExt = ["SciMLBase", "DiffEqBase"]
 MooncakeSpecialFunctionsExt = "SpecialFunctions"
 
 [compat]
