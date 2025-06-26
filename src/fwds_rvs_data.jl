@@ -865,9 +865,11 @@ for T in [Float16, Float32, Float64]
     @eval @foldable tangent_type(::Type{NoFData}, ::Type{Union{NoRData,$T}}) = Union{
         NoTangent,tangent_type($T)
     }
-    @eval @foldable tangent_type(::Type{Union{NoFData,Array{$T}}}, ::Type{NoRData}) = Union{
-        NoTangent,tangent_type(Array{$T})
-    }
+    for N in 0:5  # Just go up to N=5 until general solution to https://github.com/chalk-lab/Mooncake.jl/pull/620 available
+        @eval @foldable tangent_type(::Type{Union{NoFData,Array{$T,$N}}}, ::Type{NoRData}) = Union{
+            NoTangent,tangent_type(Array{$T,$N})
+        }
+    end
 end
 
 # Tuples
