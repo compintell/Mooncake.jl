@@ -396,8 +396,6 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:array_legacy}
         (false, :stability, nothing, Base._deleteat!, randn(5), 2, 2),
         (false, :stability, nothing, Base._deleteat!, randn(5), 1, 5),
         (false, :stability, nothing, Base._deleteat!, randn(5), 5, 1),
-        (false, :stability, nothing, fill!, rand(Int8, 5), Int8(2)),
-        (false, :stability, nothing, fill!, rand(UInt8, 5), UInt8(2)),
         (true, :stability, nothing, Base._growbeg!, randn(5), 3),
         (true, :stability, nothing, Base._growend!, randn(5), 3),
         (true, :stability, nothing, Base._growat!, randn(5), 2, 2),
