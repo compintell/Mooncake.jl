@@ -663,6 +663,18 @@ function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Array})
     return y, copy_pullback!!
 end
 
+@is_primitive MinimalCtx Tuple{typeof(copy),Union{Dict,Set}}
+function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Union{Dict,Set}})
+    dx = tangent(a)
+    dy = deepcopy(dx)
+    y = CoDual(copy(primal(a)), dy)
+    function copy_pullback!!(::NoRData)
+        increment!!(dx, dy)
+        return NoRData(), NoRData()
+    end
+    return y, copy_pullback!!
+end
+
 @is_primitive MinimalCtx Tuple{typeof(fill!),Array{<:Union{UInt8,Int8}},Integer}
 @is_primitive MinimalCtx Tuple{typeof(fill!),Memory{<:Union{UInt8,Int8}},Integer}
 function rrule!!(
@@ -891,6 +903,8 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:memory})
         (true, :none, nothing, Array{Float64,4}, undef, (2, 3, 4, 5)),
         (true, :none, nothing, Array{Float64,5}, undef, (2, 3, 4, 5, 6)),
         (false, :none, nothing, copy, randn(5, 4)),
+        (false, :none, nothing, copy, Dict()),
+        (false, :none, nothing, copy, Set(randn(5))),
         (false, :none, nothing, Base._deletebeg!, randn(5), 0),
         (false, :none, nothing, Base._deletebeg!, randn(5), 2),
         (false, :none, nothing, Base._deletebeg!, randn(5), 5),
