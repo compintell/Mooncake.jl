@@ -147,12 +147,16 @@ end
 # https://github.com/chalk-lab/Mooncake.jl/issues/597 for the reason.
 struct P_union_nothing_float{T<:Base.IEEEFloat}
     x::Union{T,Nothing}
+    y::T
 end
-make_P_union_nothing() = P_union_nothing_float(Float32(1.0))
+make_P_union_nothing() = P_union_nothing_float{Float32}(Float32(1.0), Float32(1.0))
 struct P_union_nothing_array{T<:Base.IEEEFloat}
-    x::Union{Array{T},Nothing}
+    x::Union{Array{T,1},Nothing}
+    y::T
 end
-make_P_union_nothing_array() = P_union_nothing_array(randn(Xoshiro(1), Float32, 2))
+function make_P_union_nothing_array()
+    P_union_nothing_array{Float32}(randn(Xoshiro(1), Float32, 2), Float32(1.0))
+end
 
 function build_big_isbits_struct()
     return FourFields(
