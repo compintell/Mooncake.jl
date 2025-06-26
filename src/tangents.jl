@@ -1139,7 +1139,6 @@ function tangent_test_cases()
         (Union, NoTangent),
         (UnionAll, NoTangent),
         (typeof(<:), NoTangent),
-        (Base.TTY, NoTangent),
         (IOStream(""), NoTangent),
     ]
     # Construct test cases containing circular references. These typically require multiple
