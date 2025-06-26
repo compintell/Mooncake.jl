@@ -30,6 +30,11 @@ end
         TestUtils.test_tangent_splitting(
             Xoshiro(123456), TestResources.P_union_nothing(1.0); test_opt_flag=false
         )
+        TestUtils.test_tangent_splitting(
+            Xoshiro(123456),
+            TestResources.P_union_nothing_float32(Float32(1.0));
+            test_opt_flag=false,
+        )
     end
 
     @testset "zero_rdata_from_type checks" begin
