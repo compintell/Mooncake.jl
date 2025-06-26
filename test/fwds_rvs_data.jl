@@ -28,7 +28,7 @@ end
         # Test for unions involving `Nothing`. See, 
         # https://github.com/chalk-lab/Mooncake.jl/issues/597 for the reason.
         TestUtils.test_tangent_splitting(
-            Xoshiro(123456), TestResources.P_union_nothing(1.0); test_opt_flag=false
+            Xoshiro(123456), TestResources.make_P_union_nothing(); test_opt_flag=false
         )
     end
 

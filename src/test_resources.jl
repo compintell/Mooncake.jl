@@ -145,10 +145,26 @@ end
 
 # Test for unions involving `Nothing`. See, 
 # https://github.com/chalk-lab/Mooncake.jl/issues/597 for the reason.
-struct P_union_nothing
-    x::Union{Base.IEEEFloat,Nothing}
+struct P_union_nothing_float{T<:Base.IEEEFloat}
+    x::Union{T,Nothing}
+    x2::Union{T,Nothing}
+    y::T
+    z::Union{Array{T,1},Nothing}
+    z2::Union{Array{T,1},Nothing}
+    w::Union{Array{T,2},Nothing}
+    w2::Union{Array{T,2},Nothing}
 end
-T_union_nothing = Mooncake.Tangent{@NamedTuple{x::Union{Mooncake.NoTangent,Base.IEEEFloat}}}
+function make_P_union_nothing(T=Float32)
+    P_union_nothing_float{T}(
+        T(1.0),
+        nothing,
+        T(1.0),
+        randn(Xoshiro(1), T, 2),
+        nothing,
+        randn(Xoshiro(1), T, 2, 2),
+        nothing,
+    )
+end
 
 function build_big_isbits_struct()
     return FourFields(
