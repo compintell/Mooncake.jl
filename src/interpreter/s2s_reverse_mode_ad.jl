@@ -1051,7 +1051,7 @@ end
 
 Helper method: Equivalent to `build_rrule(Mooncake.get_interpreter(), sig; kwargs...)`.
 """
-build_rrule(sig::Type{<:Tuple}; kwargs...) = build_rrule(get_interpreter(), sig; kwargs...)
+@unstable build_rrule(sig::Type{<:Tuple}; kwargs...) = build_rrule(get_interpreter(), sig; kwargs...)
 
 const MOONCAKE_INFERENCE_LOCK = ReentrantLock()
 
@@ -1074,7 +1074,7 @@ docstring for `rrule!!` for more info.
 
 If `debug_mode` is `true`, then all calls to rules are replaced with calls to `DebugRRule`s.
 """
-function build_rrule(
+@unstable function build_rrule(
     interp::MooncakeInterpreter{C}, sig_or_mi; debug_mode=false, silence_debug_messages=true
 ) where {C}
 

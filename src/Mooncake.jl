@@ -38,6 +38,7 @@ using Core.Intrinsics: pointerref, pointerset
 using LinearAlgebra.BLAS: @blasfunc, BlasInt, trsm!, BlasFloat
 using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!, potrf!, potrs!
 using FunctionWrappers: FunctionWrapper
+using DispatchDoctor: @stable, @unstable
 
 # Needs to be defined before various other things.
 function _foreigncall_ end
@@ -90,6 +91,8 @@ programming (e.g. via `@generated` functions) more generally.
 """
 build_primitive_rrule(::Type{<:Tuple}) = rrule!!
 
+#! format: off
+@stable default_mode = "disable" begin
 include("utils.jl")
 include("tangents.jl")
 include("fwds_rvs_data.jl")
@@ -109,8 +112,8 @@ include(joinpath("interpreter", "zero_like_rdata.jl"))
 include(joinpath("interpreter", "s2s_reverse_mode_ad.jl"))
 
 include("tools_for_rules.jl")
-include("test_utils.jl")
-include("test_resources.jl")
+@unstable include("test_utils.jl")
+@unstable include("test_resources.jl")
 
 include(joinpath("rrules", "avoiding_non_differentiable_code.jl"))
 include(joinpath("rrules", "blas.jl"))
@@ -140,6 +143,9 @@ include("developer_tools.jl")
 
 # Public, not exported
 include("public.jl")
+end
+#! format: on
+
 @public Config, value_and_pullback!!, prepare_pullback_cache
 
 # Public, exported

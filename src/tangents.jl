@@ -123,7 +123,7 @@ end
     return Expr(:call, :tuple, tangent_field_types_exprs(P)...)
 end
 
-function build_tangent(::Type{P}, fields...) where {P}
+@unstable function build_tangent(::Type{P}, fields...) where {P}
     fields = map(enumerate(tangent_field_types(P))) do (n, tt)
         tt <: PossiblyUninitTangent && return n <= length(fields) ? tt(fields[n]) : tt()
         return fields[n]
@@ -131,7 +131,7 @@ function build_tangent(::Type{P}, fields...) where {P}
     return tangent_type(P)(NamedTuple{fieldnames(P)}(fields))
 end
 
-function build_tangent(::Type{P}, fields...) where {P<:Union{Tuple,NamedTuple}}
+@unstable function build_tangent(::Type{P}, fields...) where {P<:Union{Tuple,NamedTuple}}
     tangent_type(P) == NoTangent && return NoTangent()
     isconcretetype(P) && return tangent_type(P)(fields)
     return __tangent_from_non_concrete(P, fields)
@@ -287,7 +287,7 @@ tangent_type(::Type{<:Type}) = NoTangent
 
 tangent_type(::Type{<:TypeVar}) = NoTangent
 
-@foldable tangent_type(::Type{Ptr{P}}) where {P} = Ptr{tangent_type(P)}
+@unstable @foldable tangent_type(::Type{Ptr{P}}) where {P} = Ptr{tangent_type(P)}
 
 tangent_type(::Type{<:Ptr}) = NoTangent
 
@@ -309,7 +309,7 @@ tangent_type(::Type{Expr}) = NoTangent
 
 tangent_type(::Type{Core.TypeofVararg}) = NoTangent
 
-tangent_type(::Type{SimpleVector}) = Vector{Any}
+@unstable tangent_type(::Type{SimpleVector}) = Vector{Any}
 
 tangent_type(::Type{P}) where {P<:Union{UInt8,UInt16,UInt32,UInt64,UInt128}} = NoTangent
 
@@ -325,7 +325,7 @@ tangent_type(::Type{String}) = NoTangent
 
 @foldable tangent_type(::Type{<:Array{P,N}}) where {P,N} = Array{tangent_type(P),N}
 
-tangent_type(::Type{<:Array{P,N} where {P}}) where {N} = Array
+@unstable tangent_type(::Type{<:Array{P,N} where {P}}) where {N} = Array
 
 tangent_type(::Type{<:MersenneTwister}) = NoTangent
 
@@ -409,7 +409,7 @@ isconcrete_or_union(p) = p isa Union || isconcretetype(p)
     end
 end
 
-@foldable function tangent_type(::Type{P}) where {N,P<:NamedTuple{N}}
+@unstable @foldable function tangent_type(::Type{P}) where {N,P<:NamedTuple{N}}
     P isa Union && return Union{tangent_type(P.a),tangent_type(P.b)}
     !isconcretetype(P) && return Union{NoTangent,NamedTuple{N}}
     TT = tangent_type(Tuple{fieldtypes(P)...})
@@ -1105,7 +1105,7 @@ If the returned tuple has 5 elements, then the elements are interpreted as follo
 Test cases in the first format make use of `zero_tangent` / `randn_tangent` etc to generate
 tangents, but they're unable to check that `increment!!` is correct in an absolute sense.
 """
-function tangent_test_cases()
+@unstable function tangent_test_cases()
     N_large = 33
     _names = Tuple(map(n -> Symbol("x$n"), 1:N_large))
 
