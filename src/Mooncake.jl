@@ -103,13 +103,15 @@ include("stack.jl")
 include(joinpath("interpreter", "bbcode.jl"))
 using .BasicBlockCode
 
+@unstable begin
 include(joinpath("interpreter", "contexts.jl"))
-@unstable include(joinpath("interpreter", "abstract_interpretation.jl"))
+include(joinpath("interpreter", "abstract_interpretation.jl"))
 include(joinpath("interpreter", "patch_for_319.jl"))
 include(joinpath("interpreter", "ir_utils.jl"))
 include(joinpath("interpreter", "ir_normalisation.jl"))
 include(joinpath("interpreter", "zero_like_rdata.jl"))
 include(joinpath("interpreter", "s2s_reverse_mode_ad.jl"))
+end
 
 include("tools_for_rules.jl")
 @unstable include("test_utils.jl")
