@@ -19,7 +19,7 @@ permissions:
   
 jobs:
   test:
-    name: ${{ matrix.test_group }}-${{ matrix.version }}-${{ matrix.arch }}-${{ matrix.preferences }}
+    name: ${{ matrix.test_group }}-${{ matrix.version }}-${{ matrix.arch }}${{ matrix.preferences }}
     runs-on: ubuntu-latest
     if: github.event_name != 'schedule'
     strategy:
@@ -59,7 +59,7 @@ jobs:
             arch: x86
             preferences: ''
           - test_group: 'basic'
-            version: 'lts'
+            version: '1'
             arch: x64
             preferences: 'dispatch_doctor_mode="warn"'
           - test_group: 'rrules/array_legacy'
