@@ -749,7 +749,7 @@ Implementation for [`_scale`](@ref). Use `c` to handle circular references and a
 _scale_internal(::MaybeCache, ::Float64, ::NoTangent) = NoTangent()
 _scale_internal(::MaybeCache, a::Float64, t::T) where {T<:IEEEFloat} = T(a * t)
 function _scale_internal(c::MaybeCache, a::Float64, t::Union{Tuple,NamedTuple})
-    return map(t -> _scale_internal(c, a, t)::typeof(t), t)
+    return map(ti -> _scale_internal(c, a, ti)::typeof(ti), t)
 end
 function _scale_internal(c::MaybeCache, a::Float64, t::T) where {T<:PossiblyUninitTangent}
     return is_init(t) ? T(_scale_internal(c, a, val(t))) : T()
