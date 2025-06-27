@@ -37,6 +37,20 @@ function _scale_internal(c::MaybeCache, a::Float64, t::Array{T,N}) where {T,N}
     return _map_if_assigned!(t -> _scale_internal(c, a, t), t′, t)
 end
 
+function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:Array}
+    key = (t, s)
+    haskey(c, key) && return c[key]::Float64
+    c[key] = 0.0
+    bitstype = isbitstype(eltype(T))
+    return sum(eachindex(t); init=0.0) do i
+        if bitstype || (isassigned(t, i) && isassigned(s, i))
+            _dot_internal(c, t[i], s[i])::Float64
+        else
+            0.0
+        end
+    end
+end
+
 function _add_to_primal_internal(
     c::MaybeCache, x::Array{P,N}, t::Array{<:Any,N}, unsafe::Bool
 ) where {P,N}
