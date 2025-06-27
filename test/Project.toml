@@ -23,6 +23,3 @@ JuliaFormatter = "1.0, 2.1"
 Pkg = "1"
 StableRNGs = "1"
 Test = "1"
-
-[preferences.Mooncake]
-dispatch_doctor_mode = "warn"
