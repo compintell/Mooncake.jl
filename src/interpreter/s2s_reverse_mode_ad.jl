@@ -1051,7 +1051,9 @@ end
 
 Helper method: Equivalent to `build_rrule(Mooncake.get_interpreter(), sig; kwargs...)`.
 """
-@unstable build_rrule(sig::Type{<:Tuple}; kwargs...) = build_rrule(get_interpreter(), sig; kwargs...)
+@unstable build_rrule(sig::Type{<:Tuple}; kwargs...) = build_rrule(
+    get_interpreter(), sig; kwargs...
+)
 
 const MOONCAKE_INFERENCE_LOCK = ReentrantLock()
 

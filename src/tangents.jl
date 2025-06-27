@@ -749,7 +749,7 @@ Implementation for [`_scale`](@ref). Use `c` to handle circular references and a
 _scale_internal(::MaybeCache, ::Float64, ::NoTangent) = NoTangent()
 _scale_internal(::MaybeCache, a::Float64, t::T) where {T<:IEEEFloat} = T(a * t)
 function _scale_internal(c::MaybeCache, a::Float64, t::Union{Tuple,NamedTuple})
-    return map(t -> _scale_internal(c, a, t), t)
+    return map(t -> _scale_internal(c, a, t)::typeof(t), t)
 end
 function _scale_internal(c::MaybeCache, a::Float64, t::T) where {T<:PossiblyUninitTangent}
     return is_init(t) ? T(_scale_internal(c, a, val(t))) : T()
@@ -788,17 +788,19 @@ or aliasing.
 _dot_internal(::MaybeCache, ::NoTangent, ::NoTangent) = 0.0
 _dot_internal(::MaybeCache, t::T, s::T) where {T<:IEEEFloat} = Float64(t * s)
 function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:Union{Tuple,NamedTuple}}
-    return sum(map((t, s) -> _dot_internal(c, t, s), t, s); init=0.0)
+    return sum(map((t, s) -> _dot_internal(c, t, s)::Float64, t, s); init=0.0)::Float64
 end
 function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:PossiblyUninitTangent}
-    is_init(t) && is_init(s) && return _dot_internal(c, val(t), val(s))
+    is_init(t) && is_init(s) && return _dot_internal(c, val(t), val(s))::Float64
     return 0.0
 end
 function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:Union{Tangent,MutableTangent}}
     key = (t, s)
     haskey(c, key) && return c[key]::Float64
     c[key] = 0.0
-    return sum(_map((t, s) -> _dot_internal(c, t, s), t.fields, s.fields); init=0.0)
+    return sum(
+        _map((t, s) -> _dot_internal(c, t, s)::Float64, t.fields, s.fields); init=0.0
+    )::Float64
 end
 
 """
