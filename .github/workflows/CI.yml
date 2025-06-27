@@ -19,7 +19,7 @@ permissions:
   
 jobs:
   test:
-    name: ${{ matrix.test_group }}-${{ matrix.version }}-${{ matrix.arch }}
+    name: ${{ matrix.test_group }}-${{ matrix.version }}-${{ matrix.arch }}-${{ matrix.preferences }}
     runs-on: ubuntu-latest
     if: github.event_name != 'schedule'
     strategy:
