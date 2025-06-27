@@ -861,32 +861,28 @@ tangent type. This method must be equivalent to `tangent_type(_typeof(primal))`.
 @foldable tangent_type(::Type{F}, ::Type{NoRData}) where {F<:Array} = F
 
 # Union types. NOTE: Only `Union{Nothing, Array{<:Base.IEEEFloat}, Base.IEEEFloat}` are supported. 
-@foldable @generated function tangent_type(
+@foldable function tangent_type(
     ::Type{NoFData}, ::Type{R}
 ) where {R<:Union{NoRData,T} where {T<:Base.IEEEFloat}}
     if R == NoRData || R == Union{NoRData} || R == Union{}
-        return :(NoTangent)
+        return NoTangent
     elseif R isa Union # R <: Union{NoRData,<:Base.IEEEFloat}
-        return quote
-            T = R.a isa Base.IEEEFloat ? R.a : R.b
-            Union{NoTangent,tangent_type(T)}
-        end
+        T = R.a isa Base.IEEEFloat ? R.a : R.b
+        return Union{NoTangent,tangent_type(T)}
     else # R <: Base.IEEEFloat
-        return :(tangent_type(R))
+        return tangent_type(R)
     end
 end
-@foldable @generated function tangent_type(
+@foldable function tangent_type(
     ::Type{F}, ::Type{NoRData}
 ) where {F<:Union{NoFData,T} where {T<:Array{<:Base.IEEEFloat}}}
     if F == NoFData || F == Union{NoFData} || F == Union{}
-        return :(NoTangent)
+        return NoTangent
     elseif F isa Union # F <: Union{NoFData,Array{<:Base.IEEEFloat}}
-        return quote
-            T = F.a isa Array{<:Base.IEEEFloat} ? F.a : F.b
-            Union{NoTangent,tangent_type(T)}
-        end
+        T = F.a isa Array{<:Base.IEEEFloat} ? F.a : F.b
+        return Union{NoTangent,tangent_type(T)}
     else # F <: Array{<:Base.IEEEFloat}
-        return :(tangent_type(F))
+        return tangent_type(F)
     end
 end
 
