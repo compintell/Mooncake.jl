@@ -77,7 +77,11 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
       - name: Set Preferences
         if: matrix.preferences != ''
-        run: echo -e "[preferences.Mooncake]\\n${{ matrix.preferences }}" >> test/LocalPreferences.toml
+        run: |
+          cat <<EOF >> test/LocalPreferences.toml
+          [Mooncake]
+          ${{ matrix.preferences }}
+          EOF
       - uses: julia-actions/julia-runtest@v1
         env:
           TEST_GROUP: ${{ matrix.test_group }}
