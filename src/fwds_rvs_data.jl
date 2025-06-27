@@ -862,12 +862,12 @@ tangent type. This method must be equivalent to `tangent_type(_typeof(primal))`.
 
 @foldable function tangent_type(
     ::Type{NoFData}, ::Type{R}
-) where {T,R<:Union{NoRData,T}}
+) where {R<:Union{NoRData,T} where {T<:Any}}
     return tangent_type(R)
 end
 @foldable function tangent_type(
     ::Type{F}, ::Type{NoRData}
-) where {T,F<:Union{NoFData,T}}
+) where {F<:Union{NoFData,T} where {T<:Any}}
     return tangent_type(F)
 end
 
