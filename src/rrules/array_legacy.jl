@@ -41,9 +41,9 @@ function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:Array}
     key = (t, s)
     haskey(c, key) && return c[key]::Float64
     c[key] = 0.0
-    bitstype = isbitstype(eltype(T))
+    bitstype = Val(isbitstype(eltype(T)))
     return sum(eachindex(t); init=0.0) do i
-        if bitstype || (isassigned(t, i) && isassigned(s, i))
+        if bitstype isa Val{true} || (isassigned(t, i) && isassigned(s, i))
             _dot_internal(c, t[i], s[i])::Float64
         else
             0.0
