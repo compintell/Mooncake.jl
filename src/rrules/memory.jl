@@ -190,9 +190,9 @@ for A in (Array, Memory)
         key = (t, s)
         haskey(c, key) && return c[key]::Float64
         c[key] = 0.0
-        bitstype = isbitstype(eltype(T))
-        return sum(eachindex(t); init=0.0) do i
-            if bitstype || (isassigned(t, i) && isassigned(s, i))
+        bitstype = Val(isbitstype(eltype(T)))
+        return sum(eachindex(t, s); init=0.0) do i
+            if bitstype isa Val{true} || (isassigned(t, i) && isassigned(s, i))
                 _dot_internal(c, t[i], s[i])::Float64
             else
                 0.0
