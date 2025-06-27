@@ -104,7 +104,7 @@ include(joinpath("interpreter", "bbcode.jl"))
 using .BasicBlockCode
 
 include(joinpath("interpreter", "contexts.jl"))
-include(joinpath("interpreter", "abstract_interpretation.jl"))
+@unstable include(joinpath("interpreter", "abstract_interpretation.jl"))
 include(joinpath("interpreter", "patch_for_319.jl"))
 include(joinpath("interpreter", "ir_utils.jl"))
 include(joinpath("interpreter", "ir_normalisation.jl"))
