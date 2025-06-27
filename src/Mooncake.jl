@@ -92,7 +92,7 @@ programming (e.g. via `@generated` functions) more generally.
 build_primitive_rrule(::Type{<:Tuple}) = rrule!!
 
 #! format: off
-@stable default_mode = "disable" begin
+@stable default_mode = "disable" default_union_limit = 2 begin
 include("utils.jl")
 include("tangents.jl")
 include("fwds_rvs_data.jl")
