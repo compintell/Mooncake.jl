@@ -866,10 +866,7 @@ tangent type. This method must be equivalent to `tangent_type(_typeof(primal))`.
 ) where {R<:Union{NoRData,T} where {T<:Base.IEEEFloat}}
     if R == NoRData || R == Union{NoRData} || R == Union{}
         return NoTangent
-    elseif R isa Union # R <: Union{NoRData,<:Base.IEEEFloat}
-        T = R.a isa Base.IEEEFloat ? R.a : R.b
-        return Union{NoTangent,tangent_type(T)}
-    else # R <: Base.IEEEFloat
+    else # R <: Base.IEEEFloat, or <: Union{NoRData,<:Base.IEEEFloat}
         return tangent_type(R)
     end
 end
@@ -878,10 +875,7 @@ end
 ) where {F<:Union{NoFData,T} where {T<:Array{<:Base.IEEEFloat}}}
     if F == NoFData || F == Union{NoFData} || F == Union{}
         return NoTangent
-    elseif F isa Union # F <: Union{NoFData,Array{<:Base.IEEEFloat}}
-        T = F.a isa Array{<:Base.IEEEFloat} ? F.a : F.b
-        return Union{NoTangent,tangent_type(T)}
-    else # F <: Array{<:Base.IEEEFloat}
+    else # F <: Array{<:Base.IEEEFloat}, or <: Union{NoFData,Array{<:Base.IEEEFloat}}
         return tangent_type(F)
     end
 end
