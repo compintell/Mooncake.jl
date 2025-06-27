@@ -864,20 +864,12 @@ tangent type. This method must be equivalent to `tangent_type(_typeof(primal))`.
 @foldable function tangent_type(
     ::Type{NoFData}, ::Type{R}
 ) where {R<:Union{NoRData,T} where {T<:Base.IEEEFloat}}
-    if R == NoRData || R == Union{NoRData} || R == Union{}
-        return NoTangent
-    else # R <: Base.IEEEFloat, or <: Union{NoRData,<:Base.IEEEFloat}
-        return tangent_type(R)
-    end
+    return tangent_type(R)
 end
 @foldable function tangent_type(
     ::Type{F}, ::Type{NoRData}
-) where {F<:Union{NoFData,T} where {T<:Array{<:Base.IEEEFloat}}}
-    if F == NoFData || F == Union{NoFData} || F == Union{}
-        return NoTangent
-    else # F <: Array{<:Base.IEEEFloat}, or <: Union{NoFData,Array{<:Base.IEEEFloat}}
-        return tangent_type(F)
-    end
+) where {F<:Union{NoFData,T} where {T<:Array{<:Base.IEEEFloat,N} where {N}}}
+    return tangent_type(F)
 end
 
 # Tuples
