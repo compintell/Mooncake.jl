@@ -100,10 +100,10 @@ include("codual.jl")
 include("debug_mode.jl")
 include("stack.jl")
 
+@unstable begin
 include(joinpath("interpreter", "bbcode.jl"))
 using .BasicBlockCode
 
-@unstable begin
 include(joinpath("interpreter", "contexts.jl"))
 include(joinpath("interpreter", "abstract_interpretation.jl"))
 include(joinpath("interpreter", "patch_for_319.jl"))
