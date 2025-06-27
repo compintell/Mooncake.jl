@@ -160,7 +160,7 @@ function lsetfield_rrule(
     return y, pb!!
 end
 
-function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
+@unstable function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
 
     # Data which needs to not be GC'd.
     _x = Ref(5.0)

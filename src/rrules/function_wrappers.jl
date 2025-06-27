@@ -169,7 +169,9 @@ function rrule!!(f::CoDual{<:FunctionWrapper}, x::Vararg{CoDual})
     return y, function_wrapper_eval_pb
 end
 
-function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:function_wrappers})
+@unstable function generate_hand_written_rrule!!_test_cases(
+    rng_ctor, ::Val{:function_wrappers}
+)
     test_cases = Any[
         (false, :none, nothing, FunctionWrapper{Float64,Tuple{Float64}}, sin),
         (false, :none, nothing, FunctionWrapper{Float64,Tuple{Float64}}(sin), 5.0),
@@ -178,7 +180,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:function_wrap
     return test_cases, memory
 end
 
-function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:function_wrappers})
+@unstable function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:function_wrappers})
     test_cases = Any[
         (
             false,
