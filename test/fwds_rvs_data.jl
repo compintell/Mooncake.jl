@@ -30,6 +30,10 @@ end
         TestUtils.test_tangent_splitting(
             Xoshiro(123456), TestResources.make_P_union_nothing(); test_opt_flag=false
         )
+        # https://github.com/chalk-lab/Mooncake.jl/issues/598
+        TestUtils.test_tangent_splitting(
+            Xoshiro(123456), TestResources.make_P_union_array(); test_opt_flag=false
+        )
     end
 
     @testset "zero_rdata_from_type checks" begin
