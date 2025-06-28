@@ -160,6 +160,7 @@ using Mooncake:
     NoRData,
     rdata_type,
     rdata
+using Preferences: load_preference, get_uuid
 
 struct Shim end
 
@@ -1077,9 +1078,21 @@ function test_get_tangent_field_performance(t::Union{MutableTangent,Tangent})
     end
 end
 
+const DD_ENABLED = let uuid = get_uuid(@__MODULE__)
+    mode = load_preference(uuid, "dispatch_doctor_mode")
+
+    mode ∉ (nothing, "disable")
+end
+
 # Function barrier to ensure inference in value types.
 function count_allocs(f::F, x::Vararg{Any,N}) where {F,N}
-    @allocations f(x...)
+    @static if DD_ENABLED
+        # If DispatchDoctor is enabled on this package, the allocations are meaningless,
+        # so we return 0 instead.
+        (f(x...); 0)
+    else
+        @allocations f(x...)
+    end
 end
 
 # Returns true if both `zero_tangent` and `randn_tangent` should allocate when run on
