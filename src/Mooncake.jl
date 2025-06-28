@@ -38,7 +38,31 @@ using Core.Intrinsics: pointerref, pointerset
 using LinearAlgebra.BLAS: @blasfunc, BlasInt, trsm!, BlasFloat
 using LinearAlgebra.LAPACK: getrf!, getrs!, getri!, trtrs!, potrf!, potrs!
 using FunctionWrappers: FunctionWrapper
-using DispatchDoctor: @stable, @unstable
+using Preferences: load_preference, get_uuid
+
+
+const DD_ENABLED = let uuid = get_uuid(@__MODULE__)
+    mode = load_preference(uuid, "dispatch_doctor_mode")
+
+    mode ∉ (nothing, "disable")
+end
+@static if DD_ENABLED
+    # We avoid making DispatchDoctor a direct dependency to avoid
+    # a circular dependency, since DispatchDoctor has an extension
+    # that declares zero adjoint for internal calls.
+    using DispatchDoctor: DispatchDoctor
+end
+macro stable(args...)
+    @static if DD_ENABLED
+        esc(:($(DispatchDoctor).@stable($(args...))))
+    else
+        esc(args[end])
+    end
+end
+macro unstable(args...)
+    esc(args[end])
+end
+
 
 # Needs to be defined before various other things.
 function _foreigncall_ end
