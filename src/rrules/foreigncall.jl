@@ -234,6 +234,7 @@ for name in [
     :(:jl_new_array),
     :(:jl_array_grow_end),
     :(:jl_array_del_end),
+    :(:jl_array_copy),
     :(:jl_object_id),
     :(:jl_type_intersection),
     :(:memset),

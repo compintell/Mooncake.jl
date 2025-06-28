@@ -6,6 +6,7 @@
         :jl_alloc_array_2d,
         :jl_alloc_array_3d,
         :jl_new_array,
+        :jl_array_copy,
         :jl_type_intersection,
         :memset,
         :jl_get_tls_world_age,

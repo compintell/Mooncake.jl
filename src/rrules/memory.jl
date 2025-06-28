@@ -904,7 +904,6 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:memory})
         (true, :none, nothing, Array{Float64,5}, undef, (2, 3, 4, 5, 6)),
         (false, :none, nothing, copy, randn(5, 4)),
         (false, :none, nothing, copy, Dict()),
-        (false, :none, nothing, copy, Set(randn(5))),
         (false, :none, nothing, Base._deletebeg!, randn(5), 0),
         (false, :none, nothing, Base._deletebeg!, randn(5), 2),
         (false, :none, nothing, Base._deletebeg!, randn(5), 5),
