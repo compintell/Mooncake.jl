@@ -78,8 +78,8 @@ jobs:
       - name: Set Preferences
         if: matrix.preferences != ''
         run: |
-          cat <<EOF >> test/LocalPreferences.toml
-          [Mooncake]
+          cat <<EOF >> Project.toml
+          [preferences.Mooncake]
           ${{ matrix.preferences }}
           EOF
       - uses: julia-actions/julia-runtest@v1
