@@ -125,17 +125,20 @@ end
 
 function build_tangent(::Type{P}, fields::Vararg{Any,N}) where {P,N}
     TP = tangent_type(P)
-    ftypes = tangent_field_types(P)
+    _ftypes = tangent_field_types(P)
+    ftypes = Tuple{_ftypes...}
     fnames = fieldnames(P)
-    return _build_tangent_cartesian(TP, fields, ftypes, Val(fnames), Val(length(ftypes)))::TP
+    return _build_tangent_cartesian(
+        TP, fields, ftypes, Val(fnames), Val(length(_ftypes))
+    )::TP
 end
 @generated function _build_tangent_cartesian(
-    ::Type{TP}, fields::Tuple{Vararg{Any,N}}, ftypes, ::Val{fnames}, ::Val{nfields}
-) where {TP,N,fnames,nfields}
+    ::Type{TP}, fields::Tuple{Vararg{Any,N}}, ::Type{ftypes}, ::Val{fnames}, ::Val{nfields}
+) where {TP,N,ftypes,fnames,nfields}
     quote
         full_fields = Base.Cartesian.@ntuple(
             $nfields, n -> let
-                tt = ftypes[n]
+                tt = ftypes.types[n]
                 if tt <: PossiblyUninitTangent
                     n <= $N ? tt(fields[n]) : tt()
                 else
@@ -1022,12 +1025,10 @@ function _diff_internal(c::MaybeCache, p::P, q::P) where {P<:Union{Tuple,NamedTu
 end
 
 function _containerlike_diff(c::MaybeCache, p::P, q::P) where {P}
-    return _containerlike_diff_cartesian(
-        c, p, q, Val(ismutabletype(P)), Val(fieldcount(P)),
-    )
+    return _containerlike_diff_cartesian(c, p, q, Val(ismutabletype(P)), Val(fieldcount(P)))
 end
 @generated function _containerlike_diff_cartesian(
-    c::MaybeCache, p::P, q::P, ::Val{mutable}, ::Val{nfield},
+    c::MaybeCache, p::P, q::P, ::Val{mutable}, ::Val{nfield}
 ) where {P,mutable,nfield}
     quote
         t = if mutable
@@ -1050,7 +1051,7 @@ end
             # if n == $(nfield + 1), then we have found the last field,
             # and all fields are defined.
             n -> _containerlike_diff_cartesian_internal(
-                Val(n), c, p, q, t, Val(mutable), Val(nfield),
+                Val(n), c, p, q, t, Val(mutable), Val(nfield)
             )
         )
     end
