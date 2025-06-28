@@ -159,8 +159,8 @@ using Mooncake:
     fdata,
     NoRData,
     rdata_type,
-    rdata,
-    DD_ENABLED
+    rdata
+using Preferences: load_preference, get_uuid
 
 struct Shim end
 
@@ -1076,6 +1076,12 @@ function test_get_tangent_field_performance(t::Union{MutableTangent,Tangent})
         @inferred _get_tangent_field(t, s)
         @test count_allocs(_get_tangent_field, t, s) == 0
     end
+end
+
+const DD_ENABLED = let uuid = get_uuid(@__MODULE__)
+    mode = load_preference(uuid, "dispatch_doctor_mode")
+
+    mode ∉ (nothing, "disable")
 end
 
 # Function barrier to ensure inference in value types.
