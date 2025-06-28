@@ -347,10 +347,12 @@ function __verify_fdata_value(c::IdDict{Any,Nothing}, p::Array, f::Array)
 end
 
 # (mutable) structs, Tuples, and NamedTuples all have slightly different storage.
-_get_fdata_field(f::NamedTuple, name) = getfield(f, name)
-_get_fdata_field(f::Tuple, name) = getfield(f, name)
-_get_fdata_field(f::FData, name) = val(getfield(f.data, name))
-_get_fdata_field(f::MutableTangent, name) = fdata(val(getfield(f.fields, name)))
+@unstable @inline _get_fdata_field(f::NamedTuple, name) = getfield(f, name)
+@unstable @inline _get_fdata_field(f::Tuple, name) = getfield(f, name)
+@unstable @inline _get_fdata_field(f::FData, name) = val(getfield(f.data, name))
+@unstable @inline _get_fdata_field(f::MutableTangent, name) = fdata(
+    val(getfield(f.fields, name))
+)
 
 function __verify_fdata_value(c::IdDict{Any,Nothing}, p, f)
 

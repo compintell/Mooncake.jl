@@ -28,8 +28,9 @@ _copy(x::P) where {P<:PossiblyUninitTangent} = is_init(x) ? P(_copy(x.tangent)) 
 @inline is_init(t::PossiblyUninitTangent) = isdefined(t, :tangent)
 is_init(t) = true
 
-val(x::PossiblyUninitTangent) = is_init(x) ? x.tangent : error("Uninitialised")
-val(x) = x
+@unstable @inline val(x::PossiblyUninitTangent) =
+    is_init(x) ? x.tangent : error("Uninitialised")
+@unstable @inline val(x) = x
 
 """
     Tangent{Tfields<:NamedTuple}
@@ -77,9 +78,13 @@ Has the same semantics that `getfield!` would have if the data in the `fields` f
 were actually fields of `t`. This is the moral equivalent of `getfield` for
 `MutableTangent`.
 """
-@inline get_tangent_field(t::PossiblyMutableTangent, i::Int) = val(getfield(t.fields, i))
+@unstable @inline get_tangent_field(t::PossiblyMutableTangent, i::Int) = val(
+    getfield(t.fields, i)
+)
 
-@inline function get_tangent_field(t::PossiblyMutableTangent{F}, s::Symbol) where {F}
+@unstable @inline function get_tangent_field(
+    t::PossiblyMutableTangent{F}, s::Symbol
+) where {F}
     return get_tangent_field(t, _sym_to_int(F, Val(s)))
 end
 
