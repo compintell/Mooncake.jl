@@ -368,32 +368,6 @@ function rrule!!(f::CoDual{typeof(Core.arraysize)}, X, dim)
     return zero_fcodual(Core.arraysize(primal(X), primal(dim))), NoPullback(f, X, dim)
 end
 
-@is_primitive MinimalCtx Tuple{typeof(copy),Array}
-function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Array})
-    dx = tangent(a)
-    dy = copy(dx)
-    y = CoDual(copy(primal(a)), dy)
-    function copy_pullback!!(::NoRData)
-        increment!!(dx, dy)
-        return NoRData(), NoRData()
-    end
-    return y, copy_pullback!!
-end
-
-@is_primitive MinimalCtx Tuple{typeof(fill!),Array{<:Union{UInt8,Int8}},Integer}
-function rrule!!(
-    ::CoDual{typeof(fill!)}, a::CoDual{T}, x::CoDual{<:Integer}
-) where {V<:Union{UInt8,Int8},T<:Array{V}}
-    pa = primal(a)
-    old_value = copy(pa)
-    fill!(pa, primal(x))
-    function fill!_pullback!!(::NoRData)
-        pa .= old_value
-        return NoRData(), NoRData(), NoRData()
-    end
-    return a, fill!_pullback!!
-end
-
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:array_legacy})
     _x = Ref(5.0)
     _dx = randn_tangent(Xoshiro(123456), _x)
@@ -413,7 +387,6 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:array_legacy}
         (true, :stability, nothing, Array{Float64,0}, undef, ()),
         (true, :stability, nothing, Array{Float64,4}, undef, (2, 3, 4, 5)),
         (true, :stability, nothing, Array{Float64,5}, undef, (2, 3, 4, 5, 6)),
-        (false, :stability, nothing, copy, randn(5, 4)),
         (false, :stability, nothing, Base._deletebeg!, randn(5), 0),
         (false, :stability, nothing, Base._deletebeg!, randn(5), 2),
         (false, :stability, nothing, Base._deletebeg!, randn(5), 5),
@@ -423,8 +396,6 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:array_legacy}
         (false, :stability, nothing, Base._deleteat!, randn(5), 2, 2),
         (false, :stability, nothing, Base._deleteat!, randn(5), 1, 5),
         (false, :stability, nothing, Base._deleteat!, randn(5), 5, 1),
-        (false, :stability, nothing, fill!, rand(Int8, 5), Int8(2)),
-        (false, :stability, nothing, fill!, rand(UInt8, 5), UInt8(2)),
         (true, :stability, nothing, Base._growbeg!, randn(5), 3),
         (true, :stability, nothing, Base._growend!, randn(5), 3),
         (true, :stability, nothing, Base._growat!, randn(5), 2, 2),
