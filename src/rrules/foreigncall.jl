@@ -139,6 +139,25 @@ end
 
 function rrule!!(
     ::CoDual{typeof(_foreigncall_)},
+    ::CoDual{Val{:jl_reshape_array}},
+    ::CoDual{Val{Array{P,M}}},
+    ::CoDual{Tuple{Val{Any},Val{Any},Val{Any}}},
+    ::CoDual, # nreq
+    ::CoDual, # calling convention
+    x::CoDual{Type{Array{P,M}}},
+    a::CoDual{Array{P,N},Array{T,N}},
+    dims::CoDual,
+) where {P,T,M,N}
+    d = primal(dims)
+    y = CoDual(
+        ccall(:jl_reshape_array, Array{P,M}, (Any, Any, Any), Array{P,M}, primal(a), d),
+        ccall(:jl_reshape_array, Array{T,M}, (Any, Any, Any), Array{T,M}, tangent(a), d),
+    )
+    return y, NoPullback(ntuple(_ -> NoRData(), 9))
+end
+
+function rrule!!(
+    ::CoDual{typeof(_foreigncall_)},
     ::CoDual{Val{:jl_genericmemory_copy}},
     ::CoDual,
     ::CoDual{Tuple{Val{Any}}},
