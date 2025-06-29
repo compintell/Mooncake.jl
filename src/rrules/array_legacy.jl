@@ -369,9 +369,20 @@ function rrule!!(f::CoDual{typeof(Core.arraysize)}, X, dim)
 end
 
 @is_primitive MinimalCtx Tuple{typeof(copy),Array}
+@is_primitive MinimalCtx Tuple{typeof(copy),Dict}
 function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Array})
     dx = tangent(a)
     dy = copy(dx)
+    y = CoDual(copy(primal(a)), dy)
+    function copy_pullback!!(::NoRData)
+        increment!!(dx, dy)
+        return NoRData(), NoRData()
+    end
+    return y, copy_pullback!!
+end
+function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Dict})
+    dx = tangent(a)
+    dy = deepcopy(dx)
     y = CoDual(copy(primal(a)), dy)
     function copy_pullback!!(::NoRData)
         increment!!(dx, dy)
