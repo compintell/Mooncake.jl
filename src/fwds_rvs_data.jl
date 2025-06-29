@@ -868,7 +868,7 @@ tangent type. This method must be equivalent to `tangent_type(_typeof(primal))`.
 end
 @foldable function tangent_type(
     ::Type{F}, ::Type{NoRData}
-) where {F<:Union{NoFData,T} where {T<:Array{<:Any,N} where N}}
+) where {F<:Union{NoFData,T} where {T<:Array{<:Any,N} where {N}}}
     return tangent_type(F)
 end
 
