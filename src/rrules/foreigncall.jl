@@ -156,7 +156,7 @@ function rrule!!(
     return y, NoPullback(ntuple(_ -> NoRData(), 9))
 end
 
-@static if VERSION >= v"1.11.rc4"
+@static if VERSION >= v"1.11-rc4"
     function rrule!!(
         ::CoDual{typeof(_foreigncall_)},
         ::CoDual{Val{:jl_genericmemory_copy}},
