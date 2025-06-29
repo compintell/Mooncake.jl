@@ -139,21 +139,18 @@ end
 
 function rrule!!(
     ::CoDual{typeof(_foreigncall_)},
-    ::CoDual{Val{:jl_reshape_array}},
-    ::CoDual{Val{Array{P,M}}},
-    ::CoDual{Tuple{Val{Any},Val{Any},Val{Any}}},
-    ::CoDual, # nreq
-    ::CoDual, # calling convention
-    x::CoDual{Type{Array{P,M}}},
-    a::CoDual{Array{P,N},Array{T,N}},
-    dims::CoDual,
-) where {P,T,M,N}
-    d = primal(dims)
+    ::CoDual{Val{:jl_genericmemory_copy}},
+    ::CoDual,
+    ::CoDual{Tuple{Val{Any}}},
+    ::CoDual{Val{0}},
+    ::CoDual{Val{:ccall}},
+    x::CoDual{<:Memory},
+)
     y = CoDual(
-        ccall(:jl_reshape_array, Array{P,M}, (Any, Any, Any), Array{P,M}, primal(a), d),
-        ccall(:jl_reshape_array, Array{T,M}, (Any, Any, Any), Array{T,M}, tangent(a), d),
+        ccall(:jl_genericmemory_copy, Ref{Memory}, (Any,), primal(x)),
+        ccall(:jl_genericmemory_copy, Ref{Memory}, (Any,), tangent(x)),
     )
-    return y, NoPullback(ntuple(_ -> NoRData(), 9))
+    return y, NoPullback(ntuple(_ -> NoRData(), 7))
 end
 
 function rrule!!(
@@ -362,6 +359,8 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:foreigncall})
             _x,
         ),
         (false, :none, nothing, isassigned, randn(5), 4),
+        (false, :none, nothing, copy, Dict()),
+        (false, :none, nothing, copy, Set(randn(5))),
         (false, :none, nothing, x -> (Base._growbeg!(x, 2); x[1:2].=2.0), randn(5)),
         (
             false,
