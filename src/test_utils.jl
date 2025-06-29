@@ -299,6 +299,14 @@ function has_equal_data_internal(
 ) where {T,P}
     return false
 end
+function has_equal_data_internal(
+    x::T, y::T, equal_undefs::Bool, d::Dict{Tuple{UInt,UInt},Bool}
+) where {T<:Dict}
+    f(x, y) = has_equal_data_internal(x, y, equal_undefs, d)
+    return length(x) == length(y) &&
+        all(map(f, keys(x), keys(y))) &&
+        all(map(f, values(x), values(y)))
+end
 
 has_equal_data_up_to_undefs(x::T, y::T) where {T} = has_equal_data(x, y; equal_undefs=false)
 
