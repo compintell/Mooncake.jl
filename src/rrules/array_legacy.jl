@@ -382,7 +382,7 @@ function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Array})
 end
 function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Dict})
     dx = tangent(a)
-    dy = deepcopy(dx)
+    dy = MutableTangent(dx.fields)
     y = CoDual(copy(primal(a)), dy)
     function copy_pullback!!(::NoRData)
         increment!!(dx, dy)
@@ -425,6 +425,7 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:array_legacy}
         (true, :stability, nothing, Array{Float64,4}, undef, (2, 3, 4, 5)),
         (true, :stability, nothing, Array{Float64,5}, undef, (2, 3, 4, 5, 6)),
         (false, :stability, nothing, copy, randn(5, 4)),
+        (false, :stability, nothing, copy, Dict{Any,Any}("A"=>[5.0], [3.0] => 5.0)),
         (false, :stability, nothing, Base._deletebeg!, randn(5), 0),
         (false, :stability, nothing, Base._deletebeg!, randn(5), 2),
         (false, :stability, nothing, Base._deletebeg!, randn(5), 5),
