@@ -382,7 +382,11 @@ function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Array})
 end
 function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Dict})
     dx = tangent(a)
-    dy = MutableTangent(dx.fields)
+    t = dx.fields
+    new_fields = typeof(t)((
+        copy(t.slots), copy(t.keys), copy(t.vals), tuple_fill(NoTangent(), Val(5))...
+    ))
+    dy = MutableTangent(new_fields)
     y = CoDual(copy(primal(a)), dy)
     function copy_pullback!!(::NoRData)
         increment!!(dx, dy)

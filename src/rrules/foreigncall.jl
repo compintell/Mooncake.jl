@@ -166,10 +166,7 @@ end
         ::CoDual{Val{:ccall}},
         x::CoDual{<:Memory},
     )
-        y = CoDual(
-            ccall(:jl_genericmemory_copy, Ref{Memory}, (Any,), primal(x)),
-            ccall(:jl_genericmemory_copy, Ref{Memory}, (Any,), tangent(x)),
-        )
+        y = CoDual(primal(x), tangent(x))
         return y, NoPullback(ntuple(_ -> NoRData(), 7))
     end
 end
