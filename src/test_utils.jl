@@ -164,10 +164,17 @@ using Preferences: load_preference, get_uuid
 
 struct Shim end
 
-test_opt(x...) = test_opt_internal(Shim(), x...)
+const DD_ENABLED = let uuid = get_uuid(@__MODULE__)
+    mode = load_preference(uuid, "dispatch_doctor_mode")
+
+    mode ∉ (nothing, "disable")
+end
+
+
+test_opt(x...) = DD_ENABLED ? test_opt_internal(Shim(), x...) : nothing
 test_opt_internal(::Any, x...) = throw(error("Load JET to use this function."))
 
-report_opt(tt) = report_opt_internal(Shim(), tt)
+report_opt(tt) = DD_ENABLED ? report_opt_internal(Shim(), tt) : nothing
 report_opt_internal(::Any, tt) = throw(error("Load JET to use this function."))
 
 """
@@ -967,7 +974,7 @@ function test_set_tangent_field!_correctness(t1::T, t2::T) where {T<:MutableTang
     end
 end
 
-check_allocs(f, x...) = check_allocs_internal(Shim(), f, x...)
+check_allocs(f, x...) = DD_ENABLED ? check_allocs_internal(Shim(), f, x...) : f(x...)
 function check_allocs_internal(::Any, f::F, x::Vararg{Any,N}) where {F,N}
     throw(error("Load AllocCheck.jl to use this functionality."))
 end
@@ -1076,12 +1083,6 @@ function test_get_tangent_field_performance(t::Union{MutableTangent,Tangent})
         @inferred _get_tangent_field(t, s)
         @test count_allocs(_get_tangent_field, t, s) == 0
     end
-end
-
-const DD_ENABLED = let uuid = get_uuid(@__MODULE__)
-    mode = load_preference(uuid, "dispatch_doctor_mode")
-
-    mode ∉ (nothing, "disable")
 end
 
 # Function barrier to ensure inference in value types.
