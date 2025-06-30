@@ -40,20 +40,9 @@ end
         )
 
         # https://github.com/chalk-lab/Mooncake.jl/issues/631
-        T2 = Mooncake.tangent_type(TestResources.P_adam_like_union)
-        T3 = Mooncake.tangent_type(Mooncake.fdata_type(T2), Mooncake.rdata_type(T2))
-        @test T3 == Union{
-            Mooncake.NoTangent,
-            Mooncake.Tangent{
-                @NamedTuple{
-                    data::@NamedTuple{
-                        alphas::Vector{Float64},
-                        values::Vector{Float64},
-                        slopes::Vector{Float64},
-                    }
-                }
-            },
-        }
+TestUtils.test_tangent_splitting(
+            Xoshiro(123456), TestResources.P_adam_like_union; test_opt_flag=false
+        )
     end
 
     @testset "zero_rdata_from_type checks" begin
