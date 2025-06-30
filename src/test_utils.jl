@@ -170,7 +170,6 @@ const DD_ENABLED = let uuid = get_uuid(@__MODULE__)
     mode ∉ (nothing, "disable")
 end
 
-
 test_opt(x...) = DD_ENABLED ? test_opt_internal(Shim(), x...) : nothing
 test_opt_internal(::Any, x...) = throw(error("Load JET to use this function."))
 
