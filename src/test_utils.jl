@@ -778,9 +778,17 @@ function allow_unstable_given_unstable_type(f::F, ::Type{T}) where {F,T}
         end
     end
 end
-skip_instability_check(::Type{T}) where {T} = type_instability(T)
+function skip_instability_check(::Type{T}) where {T}
+    return type_instability(T)
+end
+function skip_instability_check(::Type{<:Tangent{Tfields}}) where {Tfields}
+    return skip_instability_check(Tfields)
+end
+function skip_instability_check(::Type{NT}) where {NT<:NamedTuple}
+    return true  # UnionAll
+end
 function skip_instability_check(::Type{NT}) where {K,V,NT<:NamedTuple{K,V}}
-    skip_instability_check(V)
+    return skip_instability_check(V)
 end
 
 """
