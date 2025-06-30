@@ -305,7 +305,7 @@ function _copy_to_output!!(dst::P, src::P) where {P}
 
         # when immutable struct object created by non initializing inner constructor. (Base.deepcopy misses this out)
         !isassigned(flds, 1) && return src
-        return ccall(:jl_new_structv, Any, (Any, Ptr{Any}, UInt32), P, flds, nf)
+        return ccall(:jl_new_structv, Any, (Any, Ptr{Any}, UInt32), P, flds, nf)::P
     end
 end
 
