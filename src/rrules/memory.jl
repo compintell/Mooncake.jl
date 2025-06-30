@@ -566,7 +566,6 @@ function rrule!!(
     return y, jl_genericmemory_copy_pullback
 end
 
-
 # getfield / lgetfield rules for Memory, MemoryRef, and Array.
 
 function rrule!!(
