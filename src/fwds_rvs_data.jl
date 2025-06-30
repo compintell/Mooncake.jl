@@ -862,16 +862,16 @@ tangent type. This method must be equivalent to `tangent_type(_typeof(primal))`.
 @foldable tangent_type(::Type{NoFData}, ::Type{R}) where {R<:IEEEFloat} = R
 @foldable tangent_type(::Type{F}, ::Type{NoRData}) where {F<:Array} = F
 
-# Union types. NOTE: Only `Union{Nothing, Array{<:Base.IEEEFloat}, Base.IEEEFloat}` are supported. 
-for T in [Float16, Float32, Float64]
-    @eval @foldable tangent_type(::Type{NoFData}, ::Type{Union{NoRData,$T}}) = Union{
-        NoTangent,tangent_type($T)
-    }
-    for N in 0:5  # Just go up to N=5 until general solution to https://github.com/chalk-lab/Mooncake.jl/pull/620 available
-        @eval @foldable tangent_type(::Type{Union{NoFData,Array{$T,$N}}}, ::Type{NoRData}) = Union{
-            NoTangent,tangent_type(Array{$T,$N})
-        }
-    end
+# Union types. NOTE: Only `Union{Nothing, Array{<:Any,N}, Base.IEEEFloat}` are supported.
+@foldable function tangent_type(
+    ::Type{NoFData}, ::Type{R}
+) where {R<:Union{NoRData,T} where {T<:Base.IEEEFloat}}
+    return tangent_type(R)
+end
+@foldable function tangent_type(
+    ::Type{F}, ::Type{NoRData}
+) where {F<:Union{NoFData,T} where {T<:Array{<:Any,N} where {N}}}
+    return tangent_type(F)
 end
 
 # Tuples

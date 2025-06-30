@@ -156,6 +156,21 @@ function rrule!!(
     return y, NoPullback(ntuple(_ -> NoRData(), 9))
 end
 
+@static if VERSION >= v"1.11-rc4"
+    function rrule!!(
+        ::CoDual{typeof(_foreigncall_)},
+        ::CoDual{Val{:jl_genericmemory_copy}},
+        ::CoDual,
+        ::CoDual{Tuple{Val{Any}}},
+        ::CoDual{Val{0}},
+        ::CoDual{Val{:ccall}},
+        x::CoDual{<:Memory},
+    )
+        y = CoDual(primal(x), tangent(x))
+        return y, NoPullback(ntuple(_ -> NoRData(), 7))
+    end
+end
+
 function rrule!!(
     ::CoDual{typeof(_foreigncall_)},
     ::CoDual{Val{:jl_array_isassigned}},
@@ -362,6 +377,7 @@ end
             _x,
         ),
         (false, :none, nothing, isassigned, randn(5), 4),
+        (false, :none, nothing, copy, Dict{Any,Any}("A" => [5.0], [3.0] => 5.0)),
         (false, :none, nothing, x -> (Base._growbeg!(x, 2); x[1:2].=2.0), randn(5)),
         (
             false,

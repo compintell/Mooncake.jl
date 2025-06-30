@@ -155,7 +155,7 @@ struct P_union_nothing_float{T<:Base.IEEEFloat}
     w2::Union{Array{T,2},Nothing}
 end
 function make_P_union_nothing(T=Float32)
-    P_union_nothing_float{T}(
+    return P_union_nothing_float{T}(
         T(1.0),
         nothing,
         T(1.0),
@@ -164,6 +164,15 @@ function make_P_union_nothing(T=Float32)
         randn(Xoshiro(1), T, 2, 2),
         nothing,
     )
+end
+
+# https://github.com/chalk-lab/Mooncake.jl/issues/598
+struct P_union_nothing_array{T}
+    w::T
+    w2::Union{Vector{Tuple{Int,Int,Vector{Tuple{Int,Int}}}},Nothing}
+end
+function make_P_union_array(T=Float32)
+    return P_union_nothing_array{T}(T(1.0), nothing)
 end
 
 function build_big_isbits_struct()
