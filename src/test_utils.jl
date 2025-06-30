@@ -1023,7 +1023,15 @@ function test_set_tangent_field!_correctness(t1::T, t2::T) where {T<:MutableTang
     end
 end
 
-check_allocs(f, x...) = DD_ENABLED ? f(x...) : check_allocs_internal(Shim(), f, x...)
+function check_allocs(f, x...)
+    if DD_ENABLED
+        allow_unstable_given_unstable_type(typeof(x)) do
+            f(x...)
+        end
+    else
+        check_allocs_internal(Shim(), f, x...)
+    end
+end
 function check_allocs_internal(::Any, f::F, x::Vararg{Any,N}) where {F,N}
     throw(error("Load AllocCheck.jl to use this functionality."))
 end
@@ -1139,7 +1147,9 @@ function count_allocs(f::F, x::Vararg{Any,N}) where {F,N}
     @static if DD_ENABLED
         # If DispatchDoctor is enabled on this package, the allocations are meaningless,
         # so we return 0 instead.
-        (f(x...); 0)
+        allow_unstable_given_unstable_type(typeof(x)) do
+            (f(x...); 0)
+        end
     else
         @allocations f(x...)
     end

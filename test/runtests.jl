@@ -30,6 +30,8 @@ include("front_matter.jl")
         @test Mooncake.TestUtils.DD_ENABLED
         include("utils.jl")
         include("tangents.jl")
+        include("codual.jl")
+        include("stack.jl")
     elseif test_group == "rrules/array_legacy"
         include(joinpath("rrules", "array_legacy.jl"))
     elseif test_group == "rrules/avoiding_non_differentiable_code"
