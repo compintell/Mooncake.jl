@@ -25,7 +25,17 @@ end
     end
     @testset "$(typeof(p))" for (_, p, _...) in Mooncake.tangent_test_cases()
         TestUtils.test_tangent_splitting(Xoshiro(123456), p)
+        # Test for unions involving `Nothing`. See, 
+        # https://github.com/chalk-lab/Mooncake.jl/issues/597 for the reason.
+        TestUtils.test_tangent_splitting(
+            Xoshiro(123456), TestResources.make_P_union_nothing(); test_opt_flag=false
+        )
+        # https://github.com/chalk-lab/Mooncake.jl/issues/598
+        TestUtils.test_tangent_splitting(
+            Xoshiro(123456), TestResources.make_P_union_array(); test_opt_flag=false
+        )
     end
+
     @testset "zero_rdata_from_type checks" begin
         @test can_produce_zero_rdata_from_type(Vector) == true
         check_allocs(can_produce_zero_rdata_from_type, Vector)

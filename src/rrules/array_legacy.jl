@@ -41,13 +41,14 @@ function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:Array}
     key = (t, s)
     haskey(c, key) && return c[key]::Float64
     c[key] = 0.0
-    isbitstype(T) && return sum(_map((t, s) -> _dot_internal(c, t, s), t, s))
-    return sum(
-        _map(eachindex(t)) do n
-            (isassigned(t, n) && isassigned(s, n)) ? _dot_internal(c, t[n], s[n]) : 0.0
-        end;
-        init=0.0,
-    )
+    bitstype = Val(isbitstype(eltype(T)))
+    return sum(eachindex(t, s); init=0.0) do i
+        if bitstype isa Val{true} || (isassigned(t, i) && isassigned(s, i))
+            _dot_internal(c, t[i], s[i])::Float64
+        else
+            0.0
+        end
+    end
 end
 
 function _add_to_primal_internal(
@@ -477,6 +478,29 @@ function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Array})
     return y, copy_pullback!!
 end
 
+@is_primitive MinimalCtx Tuple{typeof(copy),Dict}
+function frule!!(::Dual{typeof(copy)}, a::Dual{<:Dict})
+    return Dual(copy(primal(a)), _copy_dict_tangent(tangent(a)))
+end
+function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Dict})
+    dx = tangent(a)
+    dy = _copy_dict_tangent(tangent(a))
+    y = CoDual(copy(primal(a)), dy)
+    function copy_pullback!!(::NoRData)
+        increment!!(dx, dy)
+        return NoRData(), NoRData()
+    end
+    return y, copy_pullback!!
+end
+
+function _copy_dict_tangent(mt::MutableTangent)
+    t = mt.fields
+    new_fields = typeof(t)((
+        copy(t.slots), copy(t.keys), copy(t.vals), tuple_fill(NoTangent(), Val(5))...
+    ))
+    return MutableTangent(new_fields)
+end
+
 @is_primitive MinimalCtx Tuple{typeof(fill!),Array{<:Union{UInt8,Int8}},Integer}
 function frule!!(
     ::Dual{typeof(fill!)}, a::Dual{<:Array{<:Union{UInt8,Int8}}}, x::Dual{<:Integer}
@@ -517,6 +541,8 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:array_legacy}
         (true, :stability, nothing, Array{Float64,4}, undef, (2, 3, 4, 5)),
         (true, :stability, nothing, Array{Float64,5}, undef, (2, 3, 4, 5, 6)),
         (false, :stability, nothing, copy, randn(5, 4)),
+        (false, :stability, nothing, copy, Dict("A" => 5.0, "B" => 5.0)),
+        (false, :none, nothing, copy, Dict{Any,Any}("A" => [5.0], [3.0] => 5.0)),
         (false, :stability, nothing, Base._deletebeg!, randn(5), 0),
         (false, :stability, nothing, Base._deletebeg!, randn(5), 2),
         (false, :stability, nothing, Base._deletebeg!, randn(5), 5),

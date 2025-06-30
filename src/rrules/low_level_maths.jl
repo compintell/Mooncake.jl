@@ -85,6 +85,13 @@ function frule!!(::Dual{typeof(^)}, x::Dual{P}, y::Dual{P}) where {P<:IEEEFloat}
     return Dual(z, dz)
 end
 
+@is_primitive MinimalCtx Tuple{typeof(Base.eps),<:IEEEFloat}
+function rrule!!(::CoDual{typeof(Base.eps)}, x::CoDual{P}) where {P<:IEEEFloat}
+    y = Base.eps(primal(x))
+    eps_pb!!(dy::P) = NoRData(), zero(y)
+    return zero_fcodual(y), eps_pb!!
+end
+
 rand_inputs(rng, P::Type{<:IEEEFloat}, f, arity) = randn(rng, P, arity)
 rand_inputs(rng, P::Type{<:IEEEFloat}, ::typeof(acosh), _) = (rand(rng) + 1 + 1e-3,)
 rand_inputs(rng, P::Type{<:IEEEFloat}, ::typeof(asech), _) = (rand(rng) * 0.9,)
@@ -135,6 +142,8 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:low_level_mat
     push!(test_cases, (false, :stability_and_allocs, nothing, exp, 1.0f1))
     push!(test_cases, (false, :stability_and_allocs, nothing, ^, 4.0, 5.0))
     push!(test_cases, (false, :stability_and_allocs, nothing, ^, 4.0f0, 5.0f0))
+    # push!(test_cases, (false, :stability_and_allocs, nothing, Base.eps, 4.0f0)) correctness tests fail as we compare against FDM, run manually to verify
+    push!(test_cases, (false, :stability_and_allocs, nothing, Base.eps, 5.0f0))
     memory = Any[]
     return test_cases, memory
 end
