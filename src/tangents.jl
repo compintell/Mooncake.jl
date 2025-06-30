@@ -1025,8 +1025,9 @@ function _diff_internal(c::MaybeCache, p::P, q::P) where {P<:SimpleVector}
     return t
 end
 function _diff_internal(c::MaybeCache, p::P, q::P) where {P<:Union{Tuple,NamedTuple}}
-    tangent_type(P) == NoTangent && return NoTangent()
-    return _map((p, q) -> _diff_internal(c, p, q), p, q)
+    TP = tangent_type(P)
+    TP == NoTangent && return NoTangent()
+    return _map((p, q) -> _diff_internal(c, p, q), p, q)::TP
 end
 
 function _containerlike_diff(c::MaybeCache, p::P, q::P) where {P}
