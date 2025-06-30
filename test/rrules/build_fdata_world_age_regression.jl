@@ -1,6 +1,7 @@
+using Test
+
 # Regression test for build_fdata world age issue (#606, #608)
 # Tests that @generated functions can see custom tangent_type definitions for recursive types
-
 
 @testset "build_fdata world age regression test (#606)" begin
     # Define the recursive type A from the documentation
