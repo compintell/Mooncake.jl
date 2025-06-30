@@ -148,7 +148,7 @@ end
 Same as `map` but requires all elements of `x` to have equal length.
 The usual function `map` doesn't enforce this for `Array`s.
 """
-@inline function _map(f::F, x::Vararg{Any,N}) where {F,N}
+@unstable @inline function _map(f::F, x::Vararg{Any,N}) where {F,N}
     @assert allequal(map(length, x))
     return map(f, x...)
 end
