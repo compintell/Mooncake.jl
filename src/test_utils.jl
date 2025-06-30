@@ -161,6 +161,7 @@ using Mooncake:
     rdata_type,
     rdata
 using Preferences: load_preference, get_uuid
+using DispatchDoctor: type_instability, allow_unstable
 
 struct Shim end
 
@@ -761,6 +762,20 @@ function run_rrule!!_test_cases(rng_ctor, v::Val)
 end
 
 """
+    allow_unstable_given_unstable_type(f::F, ::Type{T}) where {F,T}
+
+Automatically skip instability checks for types which are themselves unstable.
+Only relevant if `DD_ENABLED` is `true`.
+"""
+function allow_unstable_given_unstable_type(f::F, ::Type{T}) where {F,T}
+    if !DD_ENABLED || type_instability(T)
+        return f()
+    else
+        return allow_unstable(f)
+    end
+end
+
+"""
     test_tangent(rng::AbstractRNG, p, T; interface_only=false, perf=true)
 
 Like `test_tangent(rng, p)`, but also checks that `tangent_type(typeof(p)) == T`.
@@ -845,6 +860,13 @@ at any given point in time, but the best way to verify that you've implemented e
 simply to run this function, and see whether it errors / produces a failing test.
 """
 function test_tangent_interface(rng::AbstractRNG, p::P; interface_only=false) where {P}
+    @nospecialize rng p
+    return allow_unstable_given_unstable_type(P) do
+        _test_tangent_interface(rng, p; interface_only)
+    end
+end
+
+function _test_tangent_interface(rng::AbstractRNG, p::P; interface_only=false) where {P}
     @nospecialize rng p
 
     # Define helpers which call internal methods directly. Doing this ensures that we know
@@ -1161,7 +1183,14 @@ Ensure that [`test_tangent_interface`](@ref) runs for `p` before running these t
 - [`Mooncake.tangent`](@ref) (binary method)
 """
 function test_tangent_splitting(rng::AbstractRNG, p::P; test_opt_flag=true) where {P}
+    return allow_unstable_given_unstable_type(P) do
+        _test_tangent_splitting_internal(rng, p; test_opt_flag)
+    end
+end
 
+function _test_tangent_splitting_internal(
+    rng::AbstractRNG, p::P; test_opt_flag=true
+) where {P}
     # Check that fdata_type and rdata_type run and produce types.
     T = tangent_type(P)
     F = Mooncake.fdata_type(T)

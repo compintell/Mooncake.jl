@@ -28,7 +28,8 @@ _copy(x::P) where {P<:PossiblyUninitTangent} = is_init(x) ? P(_copy(x.tangent)) 
 @inline is_init(t::PossiblyUninitTangent) = isdefined(t, :tangent)
 is_init(t) = true
 
-@inline val(x::PossiblyUninitTangent) = (!is_init(x) && error("Uninitialised"); x.tangent)
+@unstable @inline val(x::PossiblyUninitTangent) =
+    (!is_init(x) && error("Uninitialised"); x.tangent)
 @inline val(x) = x
 
 """
@@ -113,7 +114,7 @@ end
     return findfirst(==(s), fieldnames(Tfields))
 end
 
-function tangent_field_types_exprs(P::Type)
+@unstable function tangent_field_types_exprs(P::Type)
     tangent_type_exprs = map(fieldtypes(P), always_initialised(P)) do _P, init
         T_expr = Expr(:call, :tangent_type, _P)
         return init ? T_expr : Expr(:curly, PossiblyUninitTangent, T_expr)
