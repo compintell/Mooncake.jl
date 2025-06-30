@@ -768,10 +768,14 @@ Automatically skip instability checks for types which are themselves unstable.
 Only relevant if `DD_ENABLED` is `true`.
 """
 function allow_unstable_given_unstable_type(f::F, ::Type{T}) where {F,T}
-    if !DD_ENABLED || type_instability(T)
+    @static if !DD_ENABLED
         return f()
     else
-        return allow_unstable(f)
+        if type_instability(T)
+            return allow_unstable(f)
+        else
+            return f()
+        end
     end
 end
 
