@@ -28,9 +28,8 @@ _copy(x::P) where {P<:PossiblyUninitTangent} = is_init(x) ? P(_copy(x.tangent)) 
 @inline is_init(t::PossiblyUninitTangent) = isdefined(t, :tangent)
 is_init(t) = true
 
-@unstable @inline val(x::PossiblyUninitTangent) =
-    is_init(x) ? x.tangent : error("Uninitialised")
-@unstable @inline val(x) = x
+@inline val(x::PossiblyUninitTangent) = (!is_init(x) && error("Uninitialised"); x.tangent)
+@inline val(x) = x
 
 """
     Tangent{Tfields<:NamedTuple}
