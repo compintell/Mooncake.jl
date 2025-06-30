@@ -856,7 +856,7 @@ Here, the value returned by `_add_to_primal` will satisfy the invariant asserted
 inner constructor for `Foo`.
 """
 function _add_to_primal(p, t, unsafe::Bool=false)
-    return _add_to_primal_internal(IdDict{Any,Any}(), p, t, unsafe)
+    return _add_to_primal_internal(IdDict{Any,Any}(), p, t, unsafe)::typeof(p)
 end
 
 """
@@ -877,10 +877,10 @@ function _add_to_primal_internal(
     return x′
 end
 function _add_to_primal_internal(c::MaybeCache, x::Tuple, t::Tuple, unsafe::Bool)
-    return _map((x, t) -> _add_to_primal_internal(c, x, t, unsafe), x, t)
+    return _map((x, t) -> _add_to_primal_internal(c, x, t, unsafe), x, t)::typeof(x)
 end
 function _add_to_primal_internal(c::MaybeCache, x::NamedTuple, t::NamedTuple, unsafe::Bool)
-    return _map((x, t) -> _add_to_primal_internal(c, x, t, unsafe), x, t)
+    return _map((x, t) -> _add_to_primal_internal(c, x, t, unsafe), x, t)::typeof(x)
 end
 
 struct AddToPrimalException <: Exception
@@ -940,7 +940,7 @@ function _add_to_primal_internal(
         !isdefined(p, f) && !is_init(tf) && return FieldUndefined()
         throw(error("unable to handle undefined-ness"))
     end
-    return __construct_type(P, unsafe, fields...)
+    return __construct_type(P, unsafe, fields...)::P
 end
 
 function _add_to_primal_internal(
@@ -987,7 +987,7 @@ function _add_to_primal_internal(
             setfield!(p′, f, _add_to_primal_internal(c, getfield(p, f), val(tf), unsafe))
         end
     end
-    return p′
+    return p′::P
 end
 
 """
