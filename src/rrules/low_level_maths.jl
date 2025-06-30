@@ -86,6 +86,9 @@ function frule!!(::Dual{typeof(^)}, x::Dual{P}, y::Dual{P}) where {P<:IEEEFloat}
 end
 
 @is_primitive MinimalCtx Tuple{typeof(Base.eps),<:IEEEFloat}
+function frule!!(::Dual{typeof(Base.eps)}, x::Dual{<:IEEEFloat})
+    return Dual(eps(primal(x)), zero(primal(x)))
+end
 function rrule!!(::CoDual{typeof(Base.eps)}, x::CoDual{P}) where {P<:IEEEFloat}
     y = Base.eps(primal(x))
     eps_pb!!(dy::P) = NoRData(), zero(y)
