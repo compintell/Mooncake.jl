@@ -3,6 +3,7 @@ Pkg.activate(@__DIR__)
 Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 
 using DiffTests, LinearAlgebra, Mooncake, Random, StableRNGs, Test
+using Mooncake: ForwardMode, ReverseMode
 using Mooncake.TestUtils: test_rule
 
 # Tests brought in from DiffTests.jl
@@ -76,6 +77,7 @@ const TEST_CASES = vcat(
         vcat(TEST_CASES[1:66], TEST_CASES[68:89], TEST_CASES[91:end])
     )
         @info "$n: $(typeof((f, x...)))"
-        test_rule(StableRNG(123456), f, x...; is_primitive=false)
+        test_rule(StableRNG(123456), f, x...; is_primitive=false, mode=ForwardMode)
+        test_rule(StableRNG(123456), f, x...; is_primitive=false, mode=ReverseMode)
     end
 end

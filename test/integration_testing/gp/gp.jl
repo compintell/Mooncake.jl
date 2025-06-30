@@ -3,6 +3,7 @@ Pkg.activate(@__DIR__)
 Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 
 using AbstractGPs, KernelFunctions, LinearAlgebra, Mooncake, StableRNGs, Test
+using Mooncake: ForwardMode, ReverseMode
 using Mooncake.TestUtils: test_rule
 
 @testset "gp" begin
@@ -41,7 +42,7 @@ using Mooncake.TestUtils: test_rule
         ],
     )
         fx = GP(k)(x1, 1.1)
-        @testset "$(typeof(args))" for args in Any[
+        @testset "$(typeof(x))" for x in Any[
             (kernelmatrix, k, x1, x2),
             (kernelmatrix_diag, k, x1, x2),
             (kernelmatrix, k, x1),
@@ -49,8 +50,9 @@ using Mooncake.TestUtils: test_rule
             (fx -> rand(StableRNG(123456), fx), fx),
             (logpdf, fx, rand(rng, fx)),
         ]
-            @info typeof(args)
-            test_rule(rng, args...; is_primitive=false, unsafe_perturb=true)
+            @info typeof(x)
+            test_rule(rng, x...; is_primitive=false, unsafe_perturb=true, mode=ForwardMode)
+            test_rule(rng, x...; is_primitive=false, unsafe_perturb=true, mode=ReverseMode)
         end
     end
 end

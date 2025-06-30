@@ -5,6 +5,7 @@ Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 using AllocCheck,
     JET, Distributions, FillArrays, Mooncake, LinearAlgebra, PDMats, StableRNGs, Test
 
+using Mooncake: ForwardMode, ReverseMode
 using Mooncake.TestUtils: test_rule
 
 _sym(A) = A'A
@@ -284,11 +285,15 @@ sr(n::Int) = StableRNG(n)
 
     @testset "$(typeof(d))" for (perf_flag, d, x) in logpdf_test_cases
         @info "$(map(typeof, (d, x)))"
-        test_rule(StableRNG(123456), logpdf, d, x; perf_flag, is_primitive=false)
+        rng = StableRNG(123546)
+        test_rule(rng, logpdf, d, x; perf_flag, is_primitive=false, mode=ForwardMode)
+        test_rule(rng, logpdf, d, x; perf_flag, is_primitive=false, mode=ReverseMode)
     end
 
     @testset "$name" for (perf_flag, name, f, x) in work_around_test_cases
         @info "$name"
-        test_rule(StableRNG(123456), f, x...; perf_flag=perf_flag, is_primitive=false)
+        rng = StableRNG(123456)
+        test_rule(rng, f, x...; perf_flag, is_primitive=false, mode=ForwardMode)
+        test_rule(rng, f, x...; perf_flag, is_primitive=false, mode=ReverseMode)
     end
 end
