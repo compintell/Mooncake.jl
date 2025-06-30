@@ -24,8 +24,12 @@ end
         @test rdata_type(tangent_type(P)) == R
     end
     @testset "$(typeof(p))" for (_, p, _...) in Mooncake.tangent_test_cases()
-        TestUtils.test_tangent_splitting(Xoshiro(123456), p)
-        # Test for unions involving `Nothing`. See, 
+        skip_dd = (p isa NamedTuple && length(keys(p)) > 20)
+        caller(skip_dd) do
+            TestUtils.test_tangent_splitting(Xoshiro(123456), p)
+        end
+    end
+    @testset "Test for unions involving `Nothing`" begin
         # https://github.com/chalk-lab/Mooncake.jl/issues/597 for the reason.
         TestUtils.test_tangent_splitting(
             Xoshiro(123456), TestResources.make_P_union_nothing(); test_opt_flag=false
@@ -34,6 +38,22 @@ end
         TestUtils.test_tangent_splitting(
             Xoshiro(123456), TestResources.make_P_union_array(); test_opt_flag=false
         )
+
+        # https://github.com/chalk-lab/Mooncake.jl/issues/631
+        T2 = Mooncake.tangent_type(TestResources.P_adam_like_union)
+        T3 = Mooncake.tangent_type(Mooncake.fdata_type(T2), Mooncake.rdata_type(T2))
+        @test T3 == Union{
+            Mooncake.NoTangent,
+            Mooncake.Tangent{
+                @NamedTuple{
+                    data::@NamedTuple{
+                        alphas::Vector{Float64},
+                        values::Vector{Float64},
+                        slopes::Vector{Float64},
+                    }
+                }
+            },
+        }
     end
 
     @testset "zero_rdata_from_type checks" begin
