@@ -27,6 +27,7 @@ include("front_matter.jl")
         include("test_utils.jl")
     elseif test_group == "basic-dd"
         # A minimal set of tests for DispatchDoctor to verify stability
+        @test Mooncake.TestUtils.DD_ENABLED
         include("utils.jl")
     elseif test_group == "rrules/array_legacy"
         include(joinpath("rrules", "array_legacy.jl"))
