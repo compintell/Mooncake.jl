@@ -319,7 +319,7 @@ _copy_output(x::SimpleVector) = Core.svec([map(_copy_output, x_sub) for x_sub in
 
 # Array, Memory
 function _copy_output(x::P) where {P<:_BuiltinArrays}
-    temp = P(undef, size(x)...)
+    temp = similar(x)
     Tx = eltype(P)
     @inbounds for i in eachindex(temp)
         if isassigned(x, i)
