@@ -71,29 +71,29 @@ function _function_wrapper_tangent(R, obj::Tobj, A, obj_tangent) where {Tobj}
     return t, obj_tangent_ref
 end
 
-function zero_tangent_internal(p::FunctionWrapper{R,A}, stackdict::StackDict) where {R,A}
+function zero_tangent_internal(p::FunctionWrapper{R,A}, dict::MaybeCache) where {R,A}
 
     # If we've seen this primal before, then we must return that tangent.
-    haskey(stackdict, p) && return stackdict[p]::tangent_type(typeof(p))
+    haskey(dict, p) && return dict[p]::tangent_type(typeof(p))
 
     # We have not seen this primal before, create it and log it.
-    obj_tangent = zero_tangent_internal(p.obj[], stackdict)
+    obj_tangent = zero_tangent_internal(p.obj[], dict)
     t, _ = _function_wrapper_tangent(R, p.obj[], A, obj_tangent)
-    stackdict === nothing || setindex!(stackdict, t, p)
+    dict === nothing || setindex!(dict, t, p)
     return t
 end
 
 function randn_tangent_internal(
-    rng::AbstractRNG, p::FunctionWrapper{R,A}, stackdict::Union{Nothing,IdDict}
+    rng::AbstractRNG, p::FunctionWrapper{R,A}, dict::MaybeCache
 ) where {R,A}
 
     # If we've seen this primal before, then we must return that tangent.
-    haskey(stackdict, p) && return stackdict[p]::tangent_type(typeof(p))
+    haskey(dict, p) && return dict[p]::tangent_type(typeof(p))
 
     # We have not seen this primal before, create it and log it.
-    obj_tangent = randn_tangent_internal(rng, p.obj[], stackdict)
+    obj_tangent = randn_tangent_internal(rng, p.obj[], dict)
     t, _ = _function_wrapper_tangent(R, p.obj[], A, obj_tangent)
-    stackdict === nothing || setindex!(stackdict, t, p)
+    dict === nothing || setindex!(dict, t, p)
     return t
 end
 
@@ -120,7 +120,7 @@ function _diff_internal(c::MaybeCache, p::P, q::P) where {R,A,P<:FunctionWrapper
 end
 
 function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:FunctionWrapperTangent}
-    return _dot_internal(c, t.dobj_ref[], s.dobj_ref[])
+    return _dot_internal(c, t.dobj_ref[], s.dobj_ref[])::Float64
 end
 
 function _scale_internal(c::MaybeCache, a::Float64, t::T) where {T<:FunctionWrapperTangent}

@@ -135,6 +135,7 @@ dropout_tester_3(Trng, x, p) = dropout(Trng(1), x, p; dims=(1, 2))
     end
     @testset "$(typeof(fargs))" for (interface_only, perf_flag, is_primitive, fargs...) in
                                     test_cases
+
         @info "$(typeof(fargs))"
         perf_flag = cuda ? :none : perf_flag
         test_rule(StableRNG(123), fargs...; perf_flag, is_primitive, interface_only)

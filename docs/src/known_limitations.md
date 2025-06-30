@@ -2,6 +2,13 @@
 
 Mooncake.jl has a number of known qualitative limitations, which we document here.
 
+## Coverage of Julia Syntax and Standard Library
+
+While `Mooncake.jl` should now work on a very large subset of the language, there remain things that you should expect not to work. A non-exhaustive list of things to bear in mind includes:
+1. It is always necessary to produce hand-written rules for `ccall`s (and, more generally, foreigncall nodes). We have rules for many `ccall`s, but not all. If you encounter a foreigncall without a hand-written rule, you should get an informative error message which tells you what is going on and how to deal with it.
+1. Builtins which require rules. The vast majority of them have rules now, but some don't. You should get a sensible error if you encounter a primitive without a rule.
+1. Anything involving tasks / threading -- we have no thread safety guarantees and, at the time of writing, I'm not entirely sure what error you will find if you attempt to AD through code which uses Julia's task / thread system. The same applies to distributed computing. These limitations ought to be possible to resolve.
+
 ## Mutation of Global Variables
 
 ```@meta
@@ -80,6 +87,7 @@ end
 ```
 The point here is that you can manually resolve the circular dependency using a data structure which mimics the primal type.
 You will, however, need to implement similar methods for `zero_tangent`, `randn_tangent`, etc, and presumably need to implement additional `getfield` and `setfield` rules which are specific to this type.
+An example implementation of this is provided [here](developer_documentation/custom_tangent_type.md).
 
 ### Circular References in General
 
@@ -154,3 +162,4 @@ Honestly, your best bet is just to avoid differentiating functions whose argumen
 ```@meta
 DocTestSetup = nothing
 ```
+

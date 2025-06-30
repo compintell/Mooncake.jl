@@ -2,24 +2,24 @@
 
 @foldable tangent_type(::Type{<:IdDict{K,V}}) where {K,V} = IdDict{K,tangent_type(V)}
 
-function zero_tangent_internal(d::P, stackdict::StackDict) where {P<:IdDict}
+function zero_tangent_internal(d::P, dict::MaybeCache) where {P<:IdDict}
     T = tangent_type(P)
-    if haskey(stackdict, d)
-        return stackdict[d]::T
+    if haskey(dict, d)
+        return dict[d]::T
     else
-        t = T([k => zero_tangent_internal(v, stackdict) for (k, v) in d])
-        stackdict[d] = t
+        t = T([k => zero_tangent_internal(v, dict) for (k, v) in d])
+        dict[d] = t
         return t
     end
 end
 
-function randn_tangent_internal(rng::AbstractRNG, d::P, stackdict::Any) where {P<:IdDict}
+function randn_tangent_internal(rng::AbstractRNG, d::P, dict::MaybeCache) where {P<:IdDict}
     T = tangent_type(P)
-    if haskey(stackdict, d)
-        return stackdict[d]::T
+    if haskey(dict, d)
+        return dict[d]::T
     else
-        t = T([k => randn_tangent_internal(rng, v, stackdict) for (k, v) in d])
-        stackdict[d] = t
+        t = T([k => randn_tangent_internal(rng, v, dict) for (k, v) in d])
+        dict[d] = t
         return t
     end
 end
@@ -52,7 +52,9 @@ function _dot_internal(c::MaybeCache, p::T, q::T) where {T<:IdDict}
     key = (p, q)
     haskey(c, key) && return c[key]::Float64
     c[key] = 0.0
-    return sum([_dot_internal(c, p[k], q[k]) for k in keys(p)]; init=0.0)
+    return sum(keys(p); init=0.0) do k
+        _dot_internal(c, p[k], q[k])::Float64
+    end
 end
 function _add_to_primal_internal(
     c::MaybeCache, p::IdDict{K,V}, t::IdDict{K}, unsafe::Bool

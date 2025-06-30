@@ -16,33 +16,33 @@ const Maybe{T} = Union{Nothing,T}
 
 @foldable tangent_type(::Type{<:Memory{P}}) where {P} = Memory{tangent_type(P)}
 
-function zero_tangent_internal(x::Memory{P}, stackdict::StackDict) where {P}
+function zero_tangent_internal(x::Memory{P}, dict::MaybeCache) where {P}
     T = tangent_type(typeof(x))
 
-    # If no stackdict is provided, then the caller promises that there is no need for it.
-    if stackdict === nothing
+    # If no dict is provided, then the caller promises that there is no need for it.
+    if dict === nothing
         t = T(undef, length(x))
-        return _map_if_assigned!(Base.Fix2(zero_tangent_internal, stackdict), t, x)::T
+        return _map_if_assigned!(Base.Fix2(zero_tangent_internal, dict), t, x)::T
     end
 
     # If we've seen this primal before, then we have a circular reference, and must return
     # the tangent which has already been allocated for it.
-    haskey(stackdict, x) && return stackdict[x]::T
+    haskey(dict, x) && return dict[x]::T
 
     # We have not seen this primal before, so allocate + store the tangent for it, and zero
     # out the elements.
     t = T(undef, length(x))
-    stackdict[x] = t
-    return _map_if_assigned!(Base.Fix2(zero_tangent_internal, stackdict), t, x)::T
+    dict[x] = t
+    return _map_if_assigned!(Base.Fix2(zero_tangent_internal, dict), t, x)::T
 end
 
-function randn_tangent_internal(rng::AbstractRNG, x::Memory, stackdict::Maybe{IdDict})
+function randn_tangent_internal(rng::AbstractRNG, x::Memory, dict::MaybeCache)
     T = tangent_type(typeof(x))
-    haskey(stackdict, x) && return stackdict[x]::T
+    haskey(dict, x) && return dict[x]::T
 
     t = T(undef, length(x))
-    stackdict[x] = t
-    return _map_if_assigned!(x -> randn_tangent_internal(rng, x, stackdict), t, x)::T
+    dict[x] = t
+    return _map_if_assigned!(x -> randn_tangent_internal(rng, x, dict), t, x)::T
 end
 
 function TestUtils.has_equal_data_internal(
@@ -95,19 +95,6 @@ function _diff_internal(c::MaybeCache, p::Memory{P}, q::Memory{P}) where {P}
     return _map_if_assigned!((p, q) -> _diff_internal(c, p, q), t, p, q)
 end
 
-function _dot_internal(c::MaybeCache, t::Memory{T}, s::Memory{T}) where {T}
-    key = (t, s)
-    haskey(c, key) && return c[key]::Float64
-    c[key] = 0.0
-    isbitstype(T) && return sum(_map((t, s) -> _dot_internal(c, t, s), t, s))
-    return sum(
-        _map(eachindex(t)) do n
-            (isassigned(t, n) && isassigned(s, n)) ? _dot_internal(c, t[n], s[n]) : 0.0
-        end;
-        init=0.0,
-    )
-end
-
 function _scale_internal(c::MaybeCache, a::Float64, t::Memory{T}) where {T}
     haskey(c, t) && return c[t]::Memory{T}
     t′ = Memory{T}(undef, length(t))
@@ -150,31 +137,31 @@ end
 # Array -- tangent interface implementation
 #
 
-@inline function zero_tangent_internal(x::Array, stackdict::StackDict)
+@inline function zero_tangent_internal(x::Array, dict::MaybeCache)
     T = tangent_type(typeof(x))
 
     # If we already have a tangent for this, just return that.
-    haskey(stackdict, x) && return stackdict[x]::T
+    haskey(dict, x) && return dict[x]::T
 
-    # Construct a new tangent, log it in the `stackdict`, and return it.
+    # Construct a new tangent, log it in the `dict`, and return it.
     dx = _new_(T)
     Base.setfield!(dx, :size, x.size)
-    stackdict[x] = dx
-    Base.setfield!(dx, :ref, zero_tangent_internal(x.ref, stackdict))
+    dict[x] = dx
+    Base.setfield!(dx, :ref, zero_tangent_internal(x.ref, dict))
     return dx::T
 end
 
-function randn_tangent_internal(rng::AbstractRNG, x::Array, stackdict::Maybe{IdDict})
+function randn_tangent_internal(rng::AbstractRNG, x::Array, dict::MaybeCache)
     T = tangent_type(typeof(x))
 
     # If we already have a tangent for this, just return that.
-    haskey(stackdict, x) && return stackdict[x]::T
+    haskey(dict, x) && return dict[x]::T
 
-    # Construct a new tangent, log it in the `stackdict`, and return it.
+    # Construct a new tangent, log it in the `dict`, and return it.
     dx = _new_(T)
     Base.setfield!(dx, :size, x.size)
-    stackdict[x] = dx
-    Base.setfield!(dx, :ref, randn_tangent_internal(rng, x.ref, stackdict))
+    dict[x] = dx
+    Base.setfield!(dx, :ref, randn_tangent_internal(rng, x.ref, dict))
     return dx::T
 end
 
@@ -198,17 +185,20 @@ function _scale_internal(c::MaybeCache, a::Float64, t::T) where {T<:Array}
     return _map_if_assigned!(t -> _scale_internal(c, a, t), t′, t)
 end
 
-function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:Array}
-    key = (t, s)
-    haskey(c, key) && return c[key]::Float64
-    c[key] = 0.0
-    isbitstype(T) && return sum(_map((t, s) -> _dot_internal(c, t, s), t, s))
-    return sum(
-        _map(eachindex(t)) do n
-            (isassigned(t, n) && isassigned(s, n)) ? _dot_internal(c, t[n], s[n]) : 0.0
-        end;
-        init=0.0,
-    )
+for A in (Array, Memory)
+    @eval function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:$A}
+        key = (t, s)
+        haskey(c, key) && return c[key]::Float64
+        c[key] = 0.0
+        bitstype = Val(isbitstype(eltype(T)))
+        return sum(eachindex(t, s); init=0.0) do i
+            if bitstype isa Val{true} || (isassigned(t, i) && isassigned(s, i))
+                _dot_internal(c, t[i], s[i])::Float64
+            else
+                0.0
+            end
+        end
+    end
 end
 
 function _add_to_primal_internal(
@@ -300,12 +290,12 @@ function construct_ref(x::MemoryRef, m::Memory)
     return isempty(m) ? memoryref(m) : memoryref(m, Core.memoryrefoffset(x))
 end
 
-function zero_tangent_internal(x::MemoryRef, stackdict::StackDict)
-    return construct_ref(x, zero_tangent_internal(x.mem, stackdict))
+function zero_tangent_internal(x::MemoryRef, dict::MaybeCache)
+    return construct_ref(x, zero_tangent_internal(x.mem, dict))
 end
 
-function randn_tangent_internal(rng::AbstractRNG, x::MemoryRef, stackdict::Maybe{IdDict})
-    return construct_ref(x, randn_tangent_internal(rng, x.mem, stackdict))
+function randn_tangent_internal(rng::AbstractRNG, x::MemoryRef, dict::MaybeCache)
+    return construct_ref(x, randn_tangent_internal(rng, x.mem, dict))
 end
 
 function TestUtils.has_equal_data_internal(
@@ -336,7 +326,7 @@ end
 
 function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:MemoryRef}
     @assert Core.memoryrefoffset(t) == Core.memoryrefoffset(s)
-    return _dot_internal(c, t.mem, s.mem)
+    return _dot_internal(c, t.mem, s.mem)::Float64
 end
 
 function _scale_internal(c::MaybeCache, a::Float64, t::MemoryRef)

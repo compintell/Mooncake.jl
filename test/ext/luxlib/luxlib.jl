@@ -66,7 +66,7 @@ using Mooncake.TestUtils: test_rule
         vec(
             map(
                 Iterators.product(
-                    [LuxLib.LoopedArrayOp(), LuxLib.GenericBroadcastOp()],
+                    [LuxLib.LoopedArrayOp(), LuxLib.GenericBroadcastOp{Lux.CPUDevice()}()],
                     [randn(5), nothing],
                     [Lux.relu, tanh, NNlib.gelu],
                 ),

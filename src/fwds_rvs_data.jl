@@ -155,6 +155,8 @@ fdata_type(T)
 
 fdata_type(x) = throw(error("$x is not a type. Perhaps you meant typeof(x)?"))
 
+@foldable fdata_type(::Type{Union{}}) = Union{}
+
 fdata_type(::Type{T}) where {T<:IEEEFloat} = NoFData
 
 function fdata_type(::Type{PossiblyUninitTangent{T}}) where {T}
@@ -265,6 +267,11 @@ function fdata(t::T) where {T<:Union{Tuple,NamedTuple}}
     return fdata_type(T) == NoFData ? NoFData() : tuple_map(fdata, t)
 end
 
+"""
+    uninit_fdata(p)
+
+Equivalent to `fdata(uninit_tangent(p))`.
+"""
 uninit_fdata(p) = fdata(uninit_tangent(p))
 
 """
@@ -418,6 +425,8 @@ See extended help in [`fdata_type`](@ref) docstring.
 rdata_type(T)
 
 rdata_type(x) = throw(error("$x is not a type. Perhaps you meant typeof(x)?"))
+
+@foldable rdata_type(::Type{Union{}}) = Union{}
 
 rdata_type(::Type{T}) where {T<:IEEEFloat} = T
 
@@ -850,6 +859,18 @@ tangent type. This method must be equivalent to `tangent_type(_typeof(primal))`.
 @foldable tangent_type(::Type{NoFData}, ::Type{NoRData}) = NoTangent
 @foldable tangent_type(::Type{NoFData}, ::Type{R}) where {R<:IEEEFloat} = R
 @foldable tangent_type(::Type{F}, ::Type{NoRData}) where {F<:Array} = F
+
+# Union types. NOTE: Only `Union{Nothing, Array{<:Any,N}, Base.IEEEFloat}` are supported.
+@foldable function tangent_type(
+    ::Type{NoFData}, ::Type{R}
+) where {R<:Union{NoRData,T} where {T<:Base.IEEEFloat}}
+    return tangent_type(R)
+end
+@foldable function tangent_type(
+    ::Type{F}, ::Type{NoRData}
+) where {F<:Union{NoFData,T} where {T<:Array{<:Any,N} where {N}}}
+    return tangent_type(F)
+end
 
 # Tuples
 @foldable @generated function tangent_type(::Type{F}, ::Type{R}) where {F<:Tuple,R<:Tuple}

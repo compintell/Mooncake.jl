@@ -12,6 +12,7 @@ end
 
 @testset "fwds_rvs_data" begin
     @testset "fdata_type / rdata_type($P)" for (P, F, R) in Any[
+        (Union{}, Union{}, Union{}),
         (
             Tuple{Any,Vector{Float64}},
             Tuple{Any,Vector{Float64}},
@@ -23,8 +24,18 @@ end
         @test rdata_type(tangent_type(P)) == R
     end
     @testset "$(typeof(p))" for (_, p, _...) in Mooncake.tangent_test_cases()
-        TestUtils.test_fwds_rvs_data(Xoshiro(123456), p)
+        TestUtils.test_tangent_splitting(Xoshiro(123456), p)
+        # Test for unions involving `Nothing`. See, 
+        # https://github.com/chalk-lab/Mooncake.jl/issues/597 for the reason.
+        TestUtils.test_tangent_splitting(
+            Xoshiro(123456), TestResources.make_P_union_nothing(); test_opt_flag=false
+        )
+        # https://github.com/chalk-lab/Mooncake.jl/issues/598
+        TestUtils.test_tangent_splitting(
+            Xoshiro(123456), TestResources.make_P_union_array(); test_opt_flag=false
+        )
     end
+
     @testset "zero_rdata_from_type checks" begin
         @test can_produce_zero_rdata_from_type(Vector) == true
         check_allocs(can_produce_zero_rdata_from_type, Vector)
@@ -122,7 +133,7 @@ end
     end
 
     # Tests that the static type of an fdata / rdata is correct happen in
-    # test_fwds_rvs_data, so here we only need to test the specific quirks for a given type.
+    # test_tangent_splitting, so here we only need to test the specific quirks for a given type.
     @testset "fdata and rdata verification" begin
         @testset "Array" begin
             @test_throws InvalidFDataException verify_fdata_value(randn(10), randn(11))

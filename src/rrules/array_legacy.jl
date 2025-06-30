@@ -1,21 +1,21 @@
-@inline function zero_tangent_internal(x::Array{P,N}, stackdict::IdDict) where {P,N}
-    haskey(stackdict, x) && return stackdict[x]::tangent_type(typeof(x))
+@inline function zero_tangent_internal(x::Array{P,N}, dict::MaybeCache) where {P,N}
+    haskey(dict, x) && return dict[x]::tangent_type(typeof(x))
 
     zt = Array{tangent_type(P),N}(undef, size(x)...)
-    stackdict[x] = zt
+    dict[x] = zt
     return _map_if_assigned!(
-        Base.Fix2(zero_tangent_internal, stackdict), zt, x
+        Base.Fix2(zero_tangent_internal, dict), zt, x
     )::Array{tangent_type(P),N}
 end
 
 function randn_tangent_internal(
-    rng::AbstractRNG, x::Array{T,N}, stackdict::IdDict
+    rng::AbstractRNG, x::Array{T,N}, dict::MaybeCache
 ) where {T,N}
-    haskey(stackdict, x) && return stackdict[x]::tangent_type(typeof(x))
+    haskey(dict, x) && return dict[x]::tangent_type(typeof(x))
 
     dx = Array{tangent_type(T),N}(undef, size(x)...)
-    stackdict[x] = dx
-    return _map_if_assigned!(x -> randn_tangent_internal(rng, x, stackdict), dx, x)
+    dict[x] = dx
+    return _map_if_assigned!(x -> randn_tangent_internal(rng, x, dict), dx, x)
 end
 
 function increment_internal!!(c::IncCache, x::T, y::T) where {P,N,T<:Array{P,N}}
@@ -41,13 +41,14 @@ function _dot_internal(c::MaybeCache, t::T, s::T) where {T<:Array}
     key = (t, s)
     haskey(c, key) && return c[key]::Float64
     c[key] = 0.0
-    isbitstype(T) && return sum(_map((t, s) -> _dot_internal(c, t, s), t, s))
-    return sum(
-        _map(eachindex(t)) do n
-            (isassigned(t, n) && isassigned(s, n)) ? _dot_internal(c, t[n], s[n]) : 0.0
-        end;
-        init=0.0,
-    )
+    bitstype = Val(isbitstype(eltype(T)))
+    return sum(eachindex(t, s); init=0.0) do i
+        if bitstype isa Val{true} || (isassigned(t, i) && isassigned(s, i))
+            _dot_internal(c, t[i], s[i])::Float64
+        else
+            0.0
+        end
+    end
 end
 
 function _add_to_primal_internal(
@@ -369,9 +370,24 @@ function rrule!!(f::CoDual{typeof(Core.arraysize)}, X, dim)
 end
 
 @is_primitive MinimalCtx Tuple{typeof(copy),Array}
+@is_primitive MinimalCtx Tuple{typeof(copy),Dict}
 function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Array})
     dx = tangent(a)
     dy = copy(dx)
+    y = CoDual(copy(primal(a)), dy)
+    function copy_pullback!!(::NoRData)
+        increment!!(dx, dy)
+        return NoRData(), NoRData()
+    end
+    return y, copy_pullback!!
+end
+function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Dict})
+    dx = tangent(a)
+    t = dx.fields
+    new_fields = typeof(t)((
+        copy(t.slots), copy(t.keys), copy(t.vals), tuple_fill(NoTangent(), Val(5))...
+    ))
+    dy = MutableTangent(new_fields)
     y = CoDual(copy(primal(a)), dy)
     function copy_pullback!!(::NoRData)
         increment!!(dx, dy)
@@ -414,6 +430,8 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:array_legacy}
         (true, :stability, nothing, Array{Float64,4}, undef, (2, 3, 4, 5)),
         (true, :stability, nothing, Array{Float64,5}, undef, (2, 3, 4, 5, 6)),
         (false, :stability, nothing, copy, randn(5, 4)),
+        (false, :stability, nothing, copy, Dict("A" => 5.0, "B" => 5.0)),
+        (false, :none, nothing, copy, Dict{Any,Any}("A" => [5.0], [3.0] => 5.0)),
         (false, :stability, nothing, Base._deletebeg!, randn(5), 0),
         (false, :stability, nothing, Base._deletebeg!, randn(5), 2),
         (false, :stability, nothing, Base._deletebeg!, randn(5), 5),

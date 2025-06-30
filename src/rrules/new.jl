@@ -33,19 +33,27 @@ function rrule!!(
     return CoDual(y, dy), pb!!
 end
 
-@generated function build_fdata(::Type{P}, x::Tuple, fdata::Tuple) where {P}
-    names = fieldnames(P)
-    fdata_exprs = map(eachindex(names)) do n
-        F = fdata_field_type(P, n)
-        if n <= length(fdata.parameters)
-            data_expr = Expr(:call, __get_data, P, :x, :fdata, n)
-            return F <: PossiblyUninitTangent ? Expr(:call, F, data_expr) : data_expr
-        else
-            return :($F())
-        end
+@inline function build_fdata(::Type{P}, x::Tuple, fdata::Tuple) where {P}
+    return _build_fdata_cartesian(P, x, fdata, Val(fieldcount(P)), Val(fieldnames(P)))
+end
+@generated function _build_fdata_cartesian(
+    ::Type{P}, x::Tuple, fdata::Tuple{Vararg{Any,N}}, ::Val{nfield}, ::Val{names}
+) where {P,N,nfield,names}
+    quote
+        processed_fdata = Base.Cartesian.@ntuple(
+            $nfield, n -> let
+                F = fdata_field_type(P, n)
+                if n <= $N
+                    data = __get_data(P, x, fdata, n)
+                    F <: PossiblyUninitTangent ? F(data) : data
+                else
+                    F()
+                end
+            end
+        )
+        F_out = fdata_type(tangent_type(P))
+        return F_out(NamedTuple{$names}(processed_fdata))
     end
-    F_out = fdata_type(tangent_type(P))
-    return :($F_out(NamedTuple{$names}($(Expr(:call, tuple, fdata_exprs...)))))
 end
 
 # Helper for build_fdata
