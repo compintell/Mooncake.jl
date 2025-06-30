@@ -170,10 +170,10 @@ const DD_ENABLED = let uuid = get_uuid(@__MODULE__)
     mode ∉ (nothing, "disable")
 end
 
-test_opt(x...) = DD_ENABLED ? test_opt_internal(Shim(), x...) : nothing
+test_opt(x...) = DD_ENABLED ? nothing : test_opt_internal(Shim(), x...)
 test_opt_internal(::Any, x...) = throw(error("Load JET to use this function."))
 
-report_opt(tt) = DD_ENABLED ? report_opt_internal(Shim(), tt) : nothing
+report_opt(tt) = DD_ENABLED ? nothing : report_opt_internal(Shim(), tt)
 report_opt_internal(::Any, tt) = throw(error("Load JET to use this function."))
 
 """
@@ -973,7 +973,7 @@ function test_set_tangent_field!_correctness(t1::T, t2::T) where {T<:MutableTang
     end
 end
 
-check_allocs(f, x...) = DD_ENABLED ? check_allocs_internal(Shim(), f, x...) : f(x...)
+check_allocs(f, x...) = DD_ENABLED ? f(x...) : check_allocs_internal(Shim(), f, x...)
 function check_allocs_internal(::Any, f::F, x::Vararg{Any,N}) where {F,N}
     throw(error("Load AllocCheck.jl to use this functionality."))
 end
