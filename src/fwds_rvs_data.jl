@@ -869,7 +869,17 @@ end
 @foldable function tangent_type(
     ::Type{F}, ::Type{NoRData}
 ) where {F<:Union{NoFData,T} where {T}}
+    _validate_union(F)
     return tangent_type(F)
+end
+function _validate_union(::Type{F}) where {F<:Union{NoFData,T} where {T}}
+    _T = F isa Union ? (F.a == NoFData ? F.b : F.a) : F
+    if rdata_type(tangent_type(_T)) != NoRData
+        throw(
+            InvalidFDataException("Something went wrong: called tangent_type($F, NoRData)")
+        )
+    end
+    return nothing
 end
 
 # Tuples
