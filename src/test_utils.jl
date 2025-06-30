@@ -771,12 +771,16 @@ function allow_unstable_given_unstable_type(f::F, ::Type{T}) where {F,T}
     @static if !DD_ENABLED
         return f()
     else
-        if type_instability(T)
+        if skip_instability_check(T)
             return allow_unstable(f)
         else
             return f()
         end
     end
+end
+skip_instability_check(::Type{T}) where {T} = type_instability(T)
+function skip_instability_check(::Type{NT}) where {K,V,NT<:NamedTuple{K,V}}
+    skip_instability_check(V)
 end
 
 """
