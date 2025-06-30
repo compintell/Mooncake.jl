@@ -4,7 +4,7 @@
 
     @testset "mixed complex-real" begin
         TestUtils.test_rule(
-            StableRNG(123456), x->sum(complex(x)*x), rand(5, 5), is_primitive=false
+            StableRNG(123456), x -> sum(complex(x) * x), rand(5, 5); is_primitive=false
         )
     end
 end
