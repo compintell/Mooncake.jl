@@ -40,7 +40,7 @@ end
         )
 
         # https://github.com/chalk-lab/Mooncake.jl/issues/631
-TestUtils.test_tangent_splitting(
+        TestUtils.test_tangent_splitting(
             Xoshiro(123456), TestResources.P_adam_like_union; test_opt_flag=false
         )
     end
