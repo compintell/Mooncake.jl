@@ -1136,8 +1136,8 @@ function increment_field!!(x::MutableTangent{T}, y, f::V) where {T,F,V<:Val{F}}
     return x
 end
 
-increment_field!!(x, y, f::Symbol) = increment_field!!(x, y, Val(f))
-increment_field!!(x, y, n::Int) = increment_field!!(x, y, Val(n))
+@unstable @inline increment_field!!(x, y, f::Symbol) = increment_field!!(x, y, Val(f))
+@unstable @inline increment_field!!(x, y, n::Int) = increment_field!!(x, y, Val(n))
 
 # Fallback method for when a tangent type for a struct is declared to be `NoTangent`.
 for T in [Symbol, Int, Val]
