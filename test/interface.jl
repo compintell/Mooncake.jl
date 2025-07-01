@@ -110,6 +110,11 @@ end
     end
 
     @testset "prepare_pullback_cache errors" begin
+        test_func = cache = x -> Ptr{Float64}(x)
+        cache = Mooncake.prepare_pullback_cache(test_func, 1)
+        res = Mooncake.value_and_pullback!!(cache, Ptr{Float64}(1), test_func, 1)
+        @test res == (Ptr{Float64}(1), (Mooncake.NoTangent(), Mooncake.NoTangent()))
+
         # Test when function outputs a valid type.
         struct UserDefinedStruct
             a::Int64
@@ -180,7 +185,6 @@ end
 
         @testset "__exclude_unsupported_output , $(test_set)" for test_set in
                                                                   additional_test_set
-
             try
                 Mooncake.__exclude_unsupported_output(test_set[2])
             catch err
@@ -190,7 +194,6 @@ end
 
         @testset "_copy_output & _copy_to_output!!, $(test_set)" for test_set in
                                                                      additional_test_set
-
             original = test_set[2]
             try
                 if isnothing(Mooncake.__exclude_unsupported_output(original))

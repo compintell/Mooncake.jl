@@ -219,6 +219,9 @@ function rrule!!(f::CoDual{typeof(bitcast)}, t::CoDual{Type{T}}, x) where {T}
     v = bitcast(T, _x)
     if T <: Ptr && _x isa Ptr
         dv = bitcast(Ptr{tangent_type(eltype(T))}, tangent(x))
+    elseif T <: Ptr && _x isa Union{Int,UInt}
+        @warn "Creating Core.bitcast's primal tangent from a raw integer to a pointer is potentially unsafe."
+        dv = bitcast(Ptr{tangent_type(eltype(T))}, _x)
     else
         dv = NoFData()
     end
