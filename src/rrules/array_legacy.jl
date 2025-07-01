@@ -370,24 +370,9 @@ function rrule!!(f::CoDual{typeof(Core.arraysize)}, X, dim)
 end
 
 @is_primitive MinimalCtx Tuple{typeof(copy),Array}
-@is_primitive MinimalCtx Tuple{typeof(copy),Dict}
 function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Array})
     dx = tangent(a)
     dy = copy(dx)
-    y = CoDual(copy(primal(a)), dy)
-    function copy_pullback!!(::NoRData)
-        increment!!(dx, dy)
-        return NoRData(), NoRData()
-    end
-    return y, copy_pullback!!
-end
-function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Dict})
-    dx = tangent(a)
-    t = dx.fields
-    new_fields = typeof(t)((
-        copy(t.slots), copy(t.keys), copy(t.vals), tuple_fill(NoTangent(), Val(5))...
-    ))
-    dy = MutableTangent(new_fields)
     y = CoDual(copy(primal(a)), dy)
     function copy_pullback!!(::NoRData)
         increment!!(dx, dy)
@@ -430,8 +415,6 @@ end
         (true, :stability, nothing, Array{Float64,4}, undef, (2, 3, 4, 5)),
         (true, :stability, nothing, Array{Float64,5}, undef, (2, 3, 4, 5, 6)),
         (false, :stability, nothing, copy, randn(5, 4)),
-        (false, :stability, nothing, copy, Dict("A" => 5.0, "B" => 5.0)),
-        (false, :none, nothing, copy, Dict{Any,Any}("A" => [5.0], [3.0] => 5.0)),
         (false, :stability, nothing, Base._deletebeg!, randn(5), 0),
         (false, :stability, nothing, Base._deletebeg!, randn(5), 2),
         (false, :stability, nothing, Base._deletebeg!, randn(5), 5),
