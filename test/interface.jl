@@ -110,7 +110,7 @@ end
     end
 
     @testset "prepare_pullback_cache errors" begin
-        test_func = cache = x -> Ptr{Float64}(x)
+        test_func = x -> Ptr{Float64}(x)
         cache = Mooncake.prepare_pullback_cache(test_func, 1)
         res = Mooncake.value_and_pullback!!(cache, Ptr{Float64}(1), test_func, 1)
         @test res == (Ptr{Float64}(1), (Mooncake.NoTangent(), Mooncake.NoTangent()))
