@@ -315,12 +315,12 @@ By specifying the return type ourselves, we remove this dependence. The price we
 this is the potential for segfaults etc if we fail to specify `ret_type` correctly.
 """
 function opaque_closure(
-    ret_type::Type,
+    ::Type{RetType},
     ir::IRCode,
     @nospecialize env...;
     isva::Bool=false,
     do_compile::Bool=true,
-)
+) where {RetType}
     # This implementation is copied over directly from `Core.OpaqueClosure`.
     ir = CC.copy(ir)
     nargs = length(ir.argtypes) - 1
@@ -329,11 +329,11 @@ function opaque_closure(
     src.slotnames = fill(:none, nargs + 1)
     src.slotflags = fill(zero(UInt8), length(ir.argtypes))
     src.slottypes = copy(ir.argtypes)
-    src.rettype = ret_type
+    src.rettype = RetType
     src = CC.ir_to_codeinf!(src, ir)
     return Base.Experimental.generate_opaque_closure(
-        sig, Union{}, ret_type, src, nargs, isva, env...; do_compile
-    )::Core.OpaqueClosure{sig,ret_type}
+        sig, Union{}, RetType, src, nargs, isva, env...; do_compile
+    )::Core.OpaqueClosure{sig,RetType}
 end
 
 """
@@ -349,11 +349,11 @@ Identical to [`Mooncake.opaque_closure`](@ref), but returns a `MistyClosure` clo
 than a `Core.OpaqueClosure`.
 """
 function misty_closure(
-    ret_type::Type,
+    ::Type{RetType},
     ir::IRCode,
     @nospecialize env...;
     isva::Bool=false,
     do_compile::Bool=true,
-)
-    return MistyClosure(opaque_closure(ret_type, ir, env...; isva, do_compile), Ref(ir))
+) where {RetType}
+    return MistyClosure(opaque_closure(RetType, ir, env...; isva, do_compile), Ref(ir))
 end

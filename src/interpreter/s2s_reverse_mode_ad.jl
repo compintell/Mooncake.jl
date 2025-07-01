@@ -1102,7 +1102,8 @@ function build_rrule(
     sig = _get_sig(sig_or_mi)
     if is_primitive(C, sig)
         rule = build_primitive_rrule(sig)
-        return (debug_mode ? DebugRRule(rule) : rule)
+        return rule  # TODO: toggle below
+        # return (debug_mode ? DebugRRule(rule) : rule)
     end
 
     # We don't have a hand-coded rule, so derived one.
@@ -1111,7 +1112,8 @@ function build_rrule(
         # If we've already derived the OpaqueClosures and info, do not re-derive, just
         # create a copy and pass in new shared data.
         oc_cache_key = ClosureCacheKey(interp.world, (sig_or_mi, debug_mode))
-        if haskey(interp.oc_cache, oc_cache_key)
+        # TODO: toggle below
+        if false && haskey(interp.oc_cache, oc_cache_key)
             return _copy(interp.oc_cache[oc_cache_key])
         else
             # Derive forwards- and reverse-pass IR, and shove in `MistyClosure`s.
@@ -1128,7 +1130,8 @@ function build_rrule(
             end
 
             raw_rule = DerivedRule(sig, fwd_oc, Ref(rvs_oc), dri.isva, Val(nargs))
-            rule = debug_mode ? DebugRRule(raw_rule) : raw_rule
+            rule = raw_rule  # TODO: toggle below
+            # rule = debug_mode ? DebugRRule(raw_rule) : raw_rule
             interp.oc_cache[oc_cache_key] = rule
             return rule
         end
