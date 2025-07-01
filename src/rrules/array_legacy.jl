@@ -478,21 +478,6 @@ function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Array})
     return y, copy_pullback!!
 end
 
-@is_primitive MinimalCtx Tuple{typeof(copy),Dict}
-function frule!!(::Dual{typeof(copy)}, a::Dual{<:Dict})
-    return Dual(copy(primal(a)), _copy_dict_tangent(tangent(a)))
-end
-function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Dict})
-    dx = tangent(a)
-    dy = _copy_dict_tangent(tangent(a))
-    y = CoDual(copy(primal(a)), dy)
-    function copy_pullback!!(::NoRData)
-        increment!!(dx, dy)
-        return NoRData(), NoRData()
-    end
-    return y, copy_pullback!!
-end
-
 function _copy_dict_tangent(mt::MutableTangent)
     t = mt.fields
     new_fields = typeof(t)((
@@ -541,8 +526,6 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:array_legacy}
         (true, :stability, nothing, Array{Float64,4}, undef, (2, 3, 4, 5)),
         (true, :stability, nothing, Array{Float64,5}, undef, (2, 3, 4, 5, 6)),
         (false, :stability, nothing, copy, randn(5, 4)),
-        (false, :stability, nothing, copy, Dict("A" => 5.0, "B" => 5.0)),
-        (false, :none, nothing, copy, Dict{Any,Any}("A" => [5.0], [3.0] => 5.0)),
         (false, :stability, nothing, Base._deletebeg!, randn(5), 0),
         (false, :stability, nothing, Base._deletebeg!, randn(5), 2),
         (false, :stability, nothing, Base._deletebeg!, randn(5), 5),

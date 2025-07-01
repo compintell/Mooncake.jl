@@ -639,6 +639,36 @@ function rrule!!(
     return CoDual(y, dy), NoPullback(ntuple(_ -> NoRData(), 4))
 end
 
+function frule!!(
+    ::Dual{typeof(_foreigncall_)},
+    ::Dual{Val{:jl_genericmemory_copy}},
+    ::Dual,
+    ::Dual{Tuple{Val{Any}}},
+    ::Dual{Val{0}},
+    ::Dual{Val{:ccall}},
+    x::Dual{<:Memory},
+)
+    return Dual(primal(copy(x)), tangent(copy(x)))
+end
+function rrule!!(
+    ::CoDual{typeof(_foreigncall_)},
+    ::CoDual{Val{:jl_genericmemory_copy}},
+    ::CoDual,
+    ::CoDual{Tuple{Val{Any}}},
+    ::CoDual{Val{0}},
+    ::CoDual{Val{:ccall}},
+    x::CoDual{<:Memory},
+)
+    dx = x.dx
+    dx_copy = copy(dx)
+    y = CoDual(copy(x.x), dx_copy)
+    function jl_genericmemory_copy_pullback(::NoRData)
+        _map_if_assigned!(increment!!, dx, dx, dx_copy)
+        return tuple_fill(NoRData(), Val(7))
+    end
+    return y, jl_genericmemory_copy_pullback
+end
+
 # getfield / lgetfield rules for Memory, MemoryRef, and Array.
 
 function frule!!(
@@ -1043,6 +1073,8 @@ function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:memory})
         (true, :none, nothing, Array{Float64,0}, undef, ()),
         (true, :none, nothing, Array{Float64,4}, undef, (2, 3, 4, 5)),
         (true, :none, nothing, Array{Float64,5}, undef, (2, 3, 4, 5, 6)),
+        (false, :none, nothing, copy, Memory{Float64}(randn(5))),
+        (false, :none, nothing, copy, Memory{Any}([randn(5), 5.0])),
         (false, :none, nothing, copy, randn(5, 4)),
         (false, :none, nothing, Base._deletebeg!, randn(5), 0),
         (false, :none, nothing, Base._deletebeg!, randn(5), 2),
