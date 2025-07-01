@@ -56,6 +56,23 @@ foo_throws(e) = throw(e)
         )
     end
 
+    @testset "bitcast for Ptr->Ptr, Float->Ptr" begin
+        test_cases = [
+            (zero_fcodual(bitcast), zero_fcodual(Ptr{Float64}), zero_fcodual(5)),
+            (
+                zero_fcodual(bitcast),
+                zero_fcodual(Ptr{Float64}),
+                CoDual(Ptr{Float32}(5), Ptr{Float32}(5)),
+            ),
+        ]
+
+        map(test_cases) do (Intrinsic_bitcast, bitpattern_type, val)
+            res, pb = rrule!!(Intrinsic_bitcast, bitpattern_type, val)
+            @test pb isa Mooncake.NoPullback
+            @test res == CoDual(Ptr{Float64}(5), Ptr{Float64}(5))
+        end
+    end
+
     @testset "throw" begin
         # Throw primitive continues to throw the exception it is meant to.
         @test_throws(
