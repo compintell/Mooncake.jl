@@ -158,6 +158,24 @@ function lsetfield_rrule(
     return y, pb!!
 end
 
+@static if VERSION < v"1.11"
+    @is_primitive MinimalCtx Tuple{typeof(copy),Dict}
+    function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Dict})
+        dx = tangent(a)
+        t = dx.fields
+        new_fields = typeof(t)((
+            copy(t.slots), copy(t.keys), copy(t.vals), tuple_fill(NoTangent(), Val(5))...
+        ))
+        dy = MutableTangent(new_fields)
+        y = CoDual(copy(primal(a)), dy)
+        function copy_pullback!!(::NoRData)
+            increment!!(dx, dy)
+            return NoRData(), NoRData()
+        end
+        return y, copy_pullback!!
+    end
+end
+
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
 
     # Data which needs to not be GC'd.
@@ -322,4 +340,11 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
     return test_cases, memory
 end
 
-generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:misc}) = Any[], Any[]
+function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:misc})
+    test_cases = Any[
+        (false, :none, nothing, copy, Dict("A" => 5.0, "B" => 5.0)),
+        (false, :none, nothing, copy, Dict{Any,Any}("A" => [5.0], [3.0] => 5.0)),
+        (false, :none, nothing, () -> copy(Set())),
+    ]
+    return test_cases, Any[]
+end
