@@ -38,7 +38,7 @@ function rrule!!(
     return zero_fcodual(sum(abs2, x.x)), sum_abs2_pb!!
 end
 
-@unstable @unstable function generate_hand_written_rrule!!_test_cases(
+@unstable function generate_hand_written_rrule!!_test_cases(
     rng_ctor, ::Val{:performance_patches}
 )
     rng = rng_ctor(123)
