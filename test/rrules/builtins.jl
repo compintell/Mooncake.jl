@@ -54,17 +54,18 @@ foo_throws(e) = throw(e)
             ArgumentError,
             rrule!!(zero_fcodual(bitcast), zero_fcodual(Float64), zero_fcodual(5))
         )
-    end
-
-    @testset "bitcast for Ptr->Ptr, Float->Ptr" begin
-        test_cases = [
-            (zero_fcodual(bitcast), zero_fcodual(Ptr{Float64}), zero_fcodual(5)),
-            (
+        @test_throws(
+            ArgumentError,
+            rrule!!(
                 zero_fcodual(bitcast),
                 zero_fcodual(Ptr{Float64}),
                 CoDual(Ptr{Float32}(5), Ptr{Float32}(5)),
-            ),
-        ]
+            )
+        )
+    end
+
+    @testset "bitcast for Ptr->Ptr, Float->Ptr" begin
+        test_cases = [(zero_fcodual(bitcast), zero_fcodual(Ptr{Float64}), zero_fcodual(5))]
 
         map(test_cases) do (Intrinsic_bitcast, bitpattern_type, val)
             res, pb = rrule!!(Intrinsic_bitcast, bitpattern_type, val)
