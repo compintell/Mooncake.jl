@@ -1807,7 +1807,7 @@ mutable struct LazyDerivedRule{primal_sig,Trule}
     rule::Trule
     function LazyDerivedRule(mi::Core.MethodInstance, debug_mode::Bool)
         interp = get_interpreter()
-        return new{mi.specTypes,rule_type(interp, mi;  debug_mode)}(debug_mode, mi)
+        return new{mi.specTypes,rule_type(interp, mi;debug_mode)}(debug_mode, mi)
     end
     function LazyDerivedRule{Tprimal_sig,Trule}(
         mi::Core.MethodInstance, debug_mode::Bool
