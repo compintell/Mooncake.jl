@@ -60,6 +60,4 @@ function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:performance_p
     return test_cases, memory
 end
 
-function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:performance_patches})
-    return Any[], Any[]
-end
+generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:performance_patches}) = Any[], Any[]

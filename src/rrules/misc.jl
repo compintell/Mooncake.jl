@@ -179,6 +179,7 @@ end
 end
 
 function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
+
     # Data which needs to not be GC'd.
     _x = Ref(5.0)
     _dx = Ref(4.0)
