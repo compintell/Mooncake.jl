@@ -672,7 +672,7 @@ counting". If `c` is a `NoCache`, assume no aliasing or circular referencing.
 increment_internal!!(::IncCache, ::NoTangent, ::NoTangent) = NoTangent()
 increment_internal!!(::IncCache, x::T, y::T) where {T<:IEEEFloat} = x + y
 function increment_internal!!(::IncCache, x::Ptr{T}, y::Ptr{T}) where {T}
-    return x === y ? x : throw(error("eurgh"))
+    return x === y ? x : throw(error("Incrementing pointers is not supported!"))
 end
 @generated function increment_internal!!(c::IncCache, x::T, y::T) where {T<:Tuple}
     inc_exprs = map(n -> :(increment_internal!!(c, x[$n], y[$n])), 1:fieldcount(T))
