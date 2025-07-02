@@ -430,7 +430,7 @@ function prepare_pullback_cache(fx...; kwargs...)
     y, rvs!! = rule(map((x, dx) -> CoDual(x, fdata(dx)), fx, tangents)...)
 
     # Handle forward pass's primal exceptions
-    __exclude_unsupported_output(y)
+    __exclude_unsupported_output(primal(y))
 
     # Run reverse-pass in order to reset stacks + state.
     rvs!!(zero_rdata(primal(y)))

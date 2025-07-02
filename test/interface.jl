@@ -148,10 +148,6 @@ end
         alias_vector[2] = alias_vector[1]
         push!(test_to_fail_cases, alias_vector)
 
-        alias_tuple = ((1.0, 2.0), (3.0, 4.0))
-        alias_tuple = (alias_tuple[1], alias_tuple[1])
-        push!(test_to_fail_cases, alias_tuple)
-
         # ---- Circular Referencing Cases ----
         circular_vector = Any[[1.0, 2.0]]
         push!(circular_vector, circular_vector)
@@ -166,21 +162,34 @@ end
         circ_obj.data = circ_obj  # Self-referential struct
         push!(test_to_fail_cases, circ_obj)
 
-        # ---- Unsupported Types ----
+        alias_tuple = ([1.0, 2.0], [3.0, 4.0])
+        alias_tuple = (alias_tuple[1], alias_tuple[1])
+        push!(test_to_fail_cases, alias_tuple)
+
+        # testing sep as rule called on pointers before checking function!!
+        @testset "prepare_pullback_cache checks 1" for test_case in test_to_fail_cases
+            @test_throws(
+                Mooncake.ValueAndPullbackReturnTypeError,
+                Mooncake.prepare_pullback_cache(identity, test_case)
+            )
+        end
+
+        # ---- include Ptr Unsupported Types ----
         push!(test_to_fail_cases, Ptr{Float64}(12345))
         push!(test_to_fail_cases, (1, Ptr{Float64}(12345)))
         push!(test_to_fail_cases, [Ptr{Float64}(12345)])
 
-        @test_throws(
-            Mooncake.ValueAndPullbackReturnTypeError,
-            Mooncake.__exclude_unsupported_output.(test_to_fail_cases)
-        )
+        @testset "prepare_pullback_cache checks 2" for test_case in test_to_fail_cases
+            @test_throws(
+                Mooncake.ValueAndPullbackReturnTypeError,
+                Mooncake.__exclude_unsupported_output(test_case)
+            )
+        end
 
         additional_test_set = Mooncake.tangent_test_cases()
 
         @testset "__exclude_unsupported_output , $(test_set)" for test_set in
                                                                   additional_test_set
-
             try
                 Mooncake.__exclude_unsupported_output(test_set[2])
             catch err
@@ -190,7 +199,6 @@ end
 
         @testset "_copy_output & _copy_to_output!!, $(test_set)" for test_set in
                                                                      additional_test_set
-
             original = test_set[2]
             try
                 if isnothing(Mooncake.__exclude_unsupported_output(original))
