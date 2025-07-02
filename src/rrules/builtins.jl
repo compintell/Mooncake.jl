@@ -730,7 +730,7 @@ end
 
 @zero_adjoint MinimalCtx Tuple{typeof(typeof),Any}
 
-@unstable function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
+function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
     _x = Ref(5.0) # data used in tests which aren't protected by GC.
     _dx = Ref(4.0)
     _a = Vector{Vector{Float64}}(undef, 3)
@@ -1034,7 +1034,7 @@ end
     return test_cases, memory
 end
 
-@unstable function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
+function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:builtins})
     test_cases = Any[
         (false, :none, nothing, _apply_iterate_equivalent, Base.iterate, *, 5.0, 4.0),
         (false, :none, nothing, _apply_iterate_equivalent, Base.iterate, *, (5.0, 4.0)),

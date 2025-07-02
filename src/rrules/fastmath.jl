@@ -35,7 +35,7 @@ end
 @is_primitive MinimalCtx Tuple{typeof(Base.log),Union{IEEEFloat,Int}}
 @zero_adjoint MinimalCtx Tuple{typeof(log),Int}
 
-@unstable function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:fastmath})
+function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:fastmath})
     test_cases = reduce(
         vcat,
         map([Float64, Float32]) do P
@@ -53,7 +53,7 @@ end
     return test_cases, memory
 end
 
-@unstable function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:fastmath})
+function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:fastmath})
     test_cases = reduce(
         vcat,
         map([Float64, Float32]) do P

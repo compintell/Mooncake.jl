@@ -95,7 +95,7 @@ set_tangent_field!(t::TaskTangent, f, ::NoTangent) = NoTangent()
 
 __verify_fdata_value(::IdDict{Any,Nothing}, ::Task, ::TaskTangent) = nothing
 
-@unstable function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:tasks})
+function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:tasks})
     test_cases = Any[
         (false, :none, nothing, lgetfield, Task(() -> nothing), Val(:rngState1)),
         (false, :none, nothing, getfield, Task(() -> nothing), :rngState1),
@@ -114,7 +114,7 @@ __verify_fdata_value(::IdDict{Any,Nothing}, ::Task, ::TaskTangent) = nothing
     return test_cases, memory
 end
 
-@unstable function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:tasks})
+function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:tasks})
     test_cases = Any[(
         false,
         :none,

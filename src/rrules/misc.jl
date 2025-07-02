@@ -81,7 +81,9 @@ end
 @unstable @inline _get_fdata_field(_, t::Union{Tuple,NamedTuple}, f) = getfield(t, f)
 @unstable @inline _get_fdata_field(_, data::FData, f) = val(getfield(data.data, f))
 @unstable @inline _get_fdata_field(primal, ::NoFData, f) = uninit_fdata(getfield(primal, f))
-@unstable @inline _get_fdata_field(_, t::MutableTangent, f) = fdata(val(getfield(t.fields, f)))
+@unstable @inline _get_fdata_field(_, t::MutableTangent, f) = fdata(
+    val(getfield(t.fields, f))
+)
 
 increment_field_rdata!(dx::MutableTangent, ::NoRData, ::Val) = dx
 increment_field_rdata!(dx::NoFData, ::NoRData, ::Val) = dx
@@ -158,7 +160,6 @@ function lsetfield_rrule(
     return y, pb!!
 end
 
-
 @static if VERSION < v"1.11"
     @is_primitive MinimalCtx Tuple{typeof(copy),Dict}
     function rrule!!(::CoDual{typeof(copy)}, a::CoDual{<:Dict})
@@ -177,7 +178,7 @@ end
     end
 end
 
-@unstable function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
+function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:misc})
     # Data which needs to not be GC'd.
     _x = Ref(5.0)
     _dx = Ref(4.0)

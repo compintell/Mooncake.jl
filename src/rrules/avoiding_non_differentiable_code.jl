@@ -14,7 +14,7 @@ end
 @zero_adjoint MinimalCtx Tuple{Type{Float16},Any,RoundingMode}
 @zero_adjoint MinimalCtx Tuple{typeof(==),Type,Type}
 
-@unstable function generate_hand_written_rrule!!_test_cases(
+function generate_hand_written_rrule!!_test_cases(
     rng_ctor, ::Val{:avoiding_non_differentiable_code}
 )
     _x = Ref(5.0)
@@ -63,7 +63,7 @@ end
     return test_cases, memory
 end
 
-@unstable function generate_derived_rrule!!_test_cases(
+function generate_derived_rrule!!_test_cases(
     rng_ctor, ::Val{:avoiding_non_differentiable_code}
 )
     return Any[], Any[]

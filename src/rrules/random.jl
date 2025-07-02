@@ -26,7 +26,7 @@ for f in [randn!, randexp!]
     end
 end
 
-@unstable function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:random})
+function generate_hand_written_rrule!!_test_cases(rng_ctor, ::Val{:random})
     rngs = [MersenneTwister(123), TaskLocalRNG(), Xoshiro(123)]
     all_rngs = vcat(rngs, RandomDevice())
     test_cases = vcat(
@@ -49,7 +49,7 @@ end
     return test_cases, Any[]
 end
 
-@unstable function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:random})
+function generate_derived_rrule!!_test_cases(rng_ctor, ::Val{:random})
     test_cases = Any[
 
         # Random number generation.

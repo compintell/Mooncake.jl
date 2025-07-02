@@ -737,7 +737,9 @@ function test_rule(
 end
 
 function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)
-    test_cases, memory = Mooncake.generate_hand_written_rrule!!_test_cases(rng_ctor, v)
+    test_cases, memory = allow_unstable() do
+        Mooncake.generate_hand_written_rrule!!_test_cases(rng_ctor, v)
+    end
     GC.@preserve memory @testset "$f, $(_typeof(x))" for (
         interface_only, perf_flag, _, f, x...
     ) in test_cases
@@ -747,7 +749,9 @@ function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)
 end
 
 function run_derived_rrule!!_test_cases(rng_ctor, v::Val)
-    test_cases, memory = Mooncake.generate_derived_rrule!!_test_cases(rng_ctor, v)
+    test_cases, memory = allow_unstable() do
+        Mooncake.generate_derived_rrule!!_test_cases(rng_ctor, v)
+    end
     GC.@preserve memory @testset "$f, $(typeof(x))" for (
         interface_only, perf_flag, _, f, x...
     ) in test_cases
