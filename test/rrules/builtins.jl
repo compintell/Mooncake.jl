@@ -61,17 +61,13 @@ foo_throws(e) = throw(e)
     end
 
     @testset "bitcast for Ptr->Ptr" begin
-        test_cases = [(
+        res, pb = rrule!!(
             zero_fcodual(bitcast),
             zero_fcodual(Ptr{Float64}),
             CoDual(Ptr{Float32}(5), Ptr{Float32}(5)),
-        )]
-
-        map(test_cases) do (Intrinsic_bitcast, bitpattern_type, val)
-            res, pb = rrule!!(Intrinsic_bitcast, bitpattern_type, val)
-            @test pb isa Mooncake.NoPullback
-            @test res == CoDual(Ptr{Float64}(5), Ptr{Float64}(5))
-        end
+        )
+        @test pb isa Mooncake.NoPullback
+        @test res == CoDual(Ptr{Float64}(5), Ptr{Float64}(5))
     end
 
     @testset "throw" begin
