@@ -49,23 +49,23 @@ foo_throws(e) = throw(e)
         invoke(Mooncake.IntrinsicsWrappers.translate, Tuple{Any}, Val(:foo)),
     )
 
-    @testset "Disable bitcast to differentiable type" begin
+    @testset "Disable bitcast to differentiable type & Int->Ptr" begin
         @test_throws(
             ArgumentError,
             rrule!!(zero_fcodual(bitcast), zero_fcodual(Float64), zero_fcodual(5))
         )
         @test_throws(
             ArgumentError,
-            rrule!!(
-                zero_fcodual(bitcast),
-                zero_fcodual(Ptr{Float64}),
-                CoDual(Ptr{Float32}(5), Ptr{Float32}(5)),
-            )
+            rrule!!(zero_fcodual(bitcast), zero_fcodual(Ptr{Float64}), zero_fcodual(5))
         )
     end
 
-    @testset "bitcast for Ptr->Ptr, Float->Ptr" begin
-        test_cases = [(zero_fcodual(bitcast), zero_fcodual(Ptr{Float64}), zero_fcodual(5))]
+    @testset "bitcast for Ptr->Ptr" begin
+        test_cases = [(
+            zero_fcodual(bitcast),
+            zero_fcodual(Ptr{Float64}),
+            CoDual(Ptr{Float32}(5), Ptr{Float32}(5)),
+        )]
 
         map(test_cases) do (Intrinsic_bitcast, bitpattern_type, val)
             res, pb = rrule!!(Intrinsic_bitcast, bitpattern_type, val)
