@@ -170,10 +170,7 @@ end
         rand_int = push!(test_to_fail_cases, ((x) -> Ptr{Float64}(x[1]), rand(Int64, 1)))
         push!(
             test_to_fail_cases,
-            (
-                (x) -> (rand(Int64, 1), [Ptr{Float64}(x_i) for x_i in eachindex(x)]),
-                rand(Int64, 5),
-            ),
+            ((x) -> (rand(Int64, 1), [Ptr{Float64}(x_i) for x_i in x]), rand(Int64, 5)),
         )
 
         @testset "prepare_pullback_cache checks" for (f, test_case) in test_to_fail_cases
