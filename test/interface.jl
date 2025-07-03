@@ -144,9 +144,13 @@ end
         test_to_fail_cases = []
 
         # ---- Aliasing Cases ----
-        alias_vector = [rand(UInt, 2), rand(UInt, 2)]
+        alias_vector = [rand(Int64, 2), rand(Int64, 2)]
         alias_vector[2] = alias_vector[1]
         push!(test_to_fail_cases, (identity, alias_vector))
+
+        alias_tuple = (rand(2), rand(2))
+        alias_tuple = (alias_tuple[1], alias_tuple[1])
+        push!(test_to_fail_cases, (identity, alias_tuple))
 
         # ---- Circular Referencing Cases ----
         circular_vector = Any[rand(2)]
@@ -158,13 +162,9 @@ end
             numeric::Int64
         end
 
-        circ_obj = CircularStruct(nothing, rand(UInt, 1)[1])
+        circ_obj = CircularStruct(nothing, rand(Int64, 1)[1])
         circ_obj.data = circ_obj  # Self-referential struct
         push!(test_to_fail_cases, (identity, circ_obj))
-
-        alias_tuple = (rand(2), rand(2))
-        alias_tuple = (alias_tuple[1], alias_tuple[1])
-        push!(test_to_fail_cases, (identity, alias_tuple))
 
         # ---- include Ptr Unsupported Types ----
         push!(test_to_fail_cases, ((x) -> Ptr{Float64}(x[1]), rand(UInt, 1)))
