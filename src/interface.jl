@@ -421,6 +421,9 @@ end
 Returns a cache used with [`value_and_pullback!!`](@ref). See that function for more info.
 """
 function prepare_pullback_cache(fx...; kwargs...)
+    # Handle forward pass's primal exceptions before rule construction (zero_tangent is not defined for Ptr)
+    arg_copy = deepcopy.(fx)
+    __exclude_unsupported_output((arg_copy[1])(arg_copy[2:end]...))
 
     # Construct rule and tangents.
     rule = build_rrule(get_interpreter(), Tuple{map(_typeof, fx)...}; kwargs...)
@@ -428,9 +431,6 @@ function prepare_pullback_cache(fx...; kwargs...)
 
     # Run the rule forwards -- this should do a decent chunk of pre-allocation.
     y, rvs!! = rule(map((x, dx) -> CoDual(x, fdata(dx)), fx, tangents)...)
-
-    # Handle forward pass's primal exceptions
-    __exclude_unsupported_output(primal(y))
 
     # Run reverse-pass in order to reset stacks + state.
     rvs!!(zero_rdata(primal(y)))

@@ -144,45 +144,46 @@ end
         test_to_fail_cases = []
 
         # ---- Aliasing Cases ----
-        alias_vector = [[1, 2], [3, 4]]
+        alias_vector = [rand(Int64, 2), rand(Int64, 2)]
         alias_vector[2] = alias_vector[1]
-        push!(test_to_fail_cases, alias_vector)
+        push!(test_to_fail_cases, (identity, alias_vector))
 
         # ---- Circular Referencing Cases ----
-        circular_vector = Any[[1.0, 2.0]]
+        circular_vector = Any[rand(2)]
         push!(circular_vector, circular_vector)
-        push!(test_to_fail_cases, circular_vector)
+        push!(test_to_fail_cases, (identity, circular_vector))
 
         mutable struct CircularStruct
             data::Any
             numeric::Int64
         end
 
-        circ_obj = CircularStruct(nothing, 1)
+        circ_obj = CircularStruct(nothing, rand(Int64, 1)[1])
         circ_obj.data = circ_obj  # Self-referential struct
-        push!(test_to_fail_cases, circ_obj)
+        push!(test_to_fail_cases, (identity, circ_obj))
 
-        alias_tuple = ([1.0, 2.0], [3.0, 4.0])
+        alias_tuple = (rand(2), rand(2))
         alias_tuple = (alias_tuple[1], alias_tuple[1])
-        push!(test_to_fail_cases, alias_tuple)
-
-        # testing sep as rule called on pointers before checking function!!
-        @testset "prepare_pullback_cache checks 1" for test_case in test_to_fail_cases
-            @test_throws(
-                Mooncake.ValueAndPullbackReturnTypeError,
-                Mooncake.prepare_pullback_cache(identity, test_case)
-            )
-        end
+        push!(test_to_fail_cases, (identity, alias_tuple))
 
         # ---- include Ptr Unsupported Types ----
-        push!(test_to_fail_cases, Ptr{Float64}(12345))
-        push!(test_to_fail_cases, (1, Ptr{Float64}(12345)))
-        push!(test_to_fail_cases, [Ptr{Float64}(12345)])
+        rand_int = push!(test_to_fail_cases, ((x) -> Ptr{Float64}(x[1]), rand(Int64, 1)))
+        push!(
+            test_to_fail_cases,
+            (
+                (x) -> (rand(Int64, 1), [Ptr{Float64}(x_i) for x_i in eachindex(x)]),
+                rand(Int64, 5),
+            ),
+        )
 
-        @testset "prepare_pullback_cache checks 2" for test_case in test_to_fail_cases
+        @testset "prepare_pullback_cache checks" for (f, test_case) in test_to_fail_cases
             @test_throws(
                 Mooncake.ValueAndPullbackReturnTypeError,
-                Mooncake.__exclude_unsupported_output(test_case)
+                Mooncake.__exclude_unsupported_output(f(test_case))
+            )
+            @test_throws(
+                Mooncake.ValueAndPullbackReturnTypeError,
+                Mooncake.prepare_pullback_cache(f, test_case)
             )
         end
 
