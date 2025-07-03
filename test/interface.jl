@@ -144,7 +144,7 @@ end
         test_to_fail_cases = []
 
         # ---- Aliasing Cases ----
-        alias_vector = [rand(Int64, 2), rand(Int64, 2)]
+        alias_vector = [rand(UInt, 2), rand(UInt, 2)]
         alias_vector[2] = alias_vector[1]
         push!(test_to_fail_cases, (identity, alias_vector))
 
@@ -158,7 +158,7 @@ end
             numeric::Int64
         end
 
-        circ_obj = CircularStruct(nothing, rand(Int64, 1)[1])
+        circ_obj = CircularStruct(nothing, rand(UInt, 1)[1])
         circ_obj.data = circ_obj  # Self-referential struct
         push!(test_to_fail_cases, (identity, circ_obj))
 
@@ -167,10 +167,10 @@ end
         push!(test_to_fail_cases, (identity, alias_tuple))
 
         # ---- include Ptr Unsupported Types ----
-        rand_int = push!(test_to_fail_cases, ((x) -> Ptr{Float64}(x[1]), rand(Int64, 1)))
+        push!(test_to_fail_cases, ((x) -> Ptr{Float64}(x[1]), rand(UInt, 1)))
         push!(
             test_to_fail_cases,
-            ((x) -> (rand(Int64, 1), [Ptr{Float64}(x_i) for x_i in x]), rand(Int64, 5)),
+            ((x) -> (rand(UInt, 1), [Ptr{Float64}(x_i) for x_i in x]), rand(UInt, 5)),
         )
 
         @testset "prepare_pullback_cache checks" for (f, test_case) in test_to_fail_cases
