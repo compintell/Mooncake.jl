@@ -1,4 +1,3 @@
-using DispatchDoctor: DispatchDoctor as DD
 using Mooncake.TestUtils: count_allocs
 
 @testset "interface" begin
