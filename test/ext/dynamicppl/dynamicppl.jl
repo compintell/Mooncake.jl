@@ -5,22 +5,22 @@ Pkg.develop(; path=joinpath(@__DIR__, "..", "..", ".."))
 using BenchmarkTools, Distributions, DynamicPPL, Mooncake, Random, Test
 using Mooncake: NoCache, set_to_zero!!, set_to_zero_internal!!, zero_tangent
 
+# Define models globally to avoid closure issues
+@model function test_model1(x)
+    s ~ InverseGamma(2, 3)
+    m ~ Normal(0, sqrt(s))
+    return x .~ Normal(m, sqrt(s))
+end
+
+@model function test_model2(x, y)
+    τ ~ Gamma(1, 1)
+    σ ~ InverseGamma(2, 3)
+    μ ~ Normal(0, τ)
+    x .~ Normal(μ, σ)
+    return y .~ Normal(μ, σ)
+end
+
 @testset "MooncakeDynamicPPLExt" begin
-    # Create test models
-    @model function test_model1(x)
-        s ~ InverseGamma(2, 3)
-        m ~ Normal(0, sqrt(s))
-        return x .~ Normal(m, sqrt(s))
-    end
-
-    @model function test_model2(x, y)
-        τ ~ Gamma(1, 1)
-        σ ~ InverseGamma(2, 3)
-        μ ~ Normal(0, τ)
-        x .~ Normal(μ, σ)
-        return y .~ Normal(μ, σ)
-    end
-
     @testset "Validation functions" begin
         # Test with a real DynamicPPL model
         model = test_model1([1.0, 2.0, 3.0])
@@ -144,5 +144,62 @@ using Mooncake: NoCache, set_to_zero!!, set_to_zero_internal!!, zero_tangent
                 end
             end
         end
+    end
+
+    @testset "Closure handling" begin
+        # Test that closure models are correctly handled
+
+        # Create closure model (captures environment, has circular references)
+        function create_closure_model()
+            local_var = 42
+            @model function closure_model(x)
+                s ~ InverseGamma(2, 3)
+                m ~ Normal(0, sqrt(s))
+                return x .~ Normal(m, sqrt(s))
+            end
+            return closure_model
+        end
+
+        closure_fn = create_closure_model()
+        model_closure = closure_fn([1.0, 2.0, 3.0])
+        vi_closure = DynamicPPL.VarInfo(Random.default_rng(), model_closure)
+        ldf_closure = DynamicPPL.LogDensityFunction(
+            model_closure, vi_closure, DynamicPPL.DefaultContext()
+        )
+        tangent_closure = zero_tangent(ldf_closure)
+
+        # Test that it works without stack overflow
+        @test_nowarn set_to_zero!!(deepcopy(tangent_closure))
+
+        # Compare with global model (no closure)
+        model_global = test_model1([1.0, 2.0, 3.0])
+        vi_global = DynamicPPL.VarInfo(Random.default_rng(), model_global)
+        ldf_global = DynamicPPL.LogDensityFunction(
+            model_global, vi_global, DynamicPPL.DefaultContext()
+        )
+        tangent_global = zero_tangent(ldf_global)
+
+        # Verify model.f tangent types differ
+        f_tangent_closure = tangent_closure.fields.model.fields.f
+        f_tangent_global = tangent_global.fields.model.fields.f
+
+        @test f_tangent_global isa Mooncake.NoTangent  # Global function
+        @test f_tangent_closure isa Mooncake.Tangent   # Closure function
+
+        # Performance comparison
+        time_global = @elapsed for _ in 1:100
+            set_to_zero!!(tangent_global)
+        end
+
+        time_closure = @elapsed for _ in 1:100
+            set_to_zero!!(tangent_closure)
+        end
+
+        # Global should be faster (uses NoCache)
+        @test time_global < time_closure
+
+        println(
+            "Closure handling: Global $(round(time_global*1000, digits=2))ms vs Closure $(round(time_closure*1000, digits=2))ms",
+        )
     end
 end

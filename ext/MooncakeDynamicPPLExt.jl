@@ -80,9 +80,31 @@ function is_dppl_metadata_tangent(x)
 end
 
 function Mooncake.set_to_zero!!(x)
-    # Check if it's a DynamicPPL tangent type that we can optimize
-    if x isa Tangent &&
-        (is_dppl_ldf_tangent(x) || is_dppl_varinfo_tangent(x) || is_dppl_model_tangent(x))
+    if x isa Tangent && is_dppl_ldf_tangent(x)
+        model_f_tangent = x.fields.model.fields.f
+        is_closure = false
+        if model_f_tangent isa MutableTangent
+            is_closure = true
+        elseif model_f_tangent isa Tangent && hasfield(typeof(model_f_tangent), :fields)
+            # Check if any field is a MutableTangent with PossiblyUninitTangent{Any}
+            for (_, fval) in pairs(model_f_tangent.fields)
+                if fval isa MutableTangent &&
+                    hasfield(typeof(fval), :fields) &&
+                    hasfield(typeof(fval.fields), :contents) &&
+                    fval.fields.contents isa Mooncake.PossiblyUninitTangent{Any}
+                    is_closure = true
+                    break
+                end
+            end
+        end
+
+        if is_closure
+            return set_to_zero_internal!!(IdDict{Any,Bool}(), x)
+        else
+            return set_to_zero_internal!!(NoCache(), x)
+        end
+    elseif x isa Tangent && (is_dppl_varinfo_tangent(x) || is_dppl_model_tangent(x))
+        # VarInfo and Model
         return set_to_zero_internal!!(NoCache(), x)
     elseif x isa MutableTangent && is_dppl_metadata_tangent(x)
         return set_to_zero_internal!!(NoCache(), x)
