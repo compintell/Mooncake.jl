@@ -86,6 +86,7 @@ jobs:
         test_group: [
           {test_type: 'ext', label: 'differentiation_interface'},
           {test_type: 'ext', label: 'dynamic_expressions'},
+          {test_type: 'ext', label: 'dynamicppl'},
           {test_type: 'ext', label: 'flux'},
           {test_type: 'ext', label: 'luxlib'},
           {test_type: 'ext', label: 'nnlib'},
