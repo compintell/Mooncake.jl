@@ -789,7 +789,8 @@ function allow_unstable_given_unstable_type(f::F, ::Type{T}) where {F,T}
 end
 function skip_instability_check(::Type{T}) where {T}
     return type_instability(T) ||
-           (isstructtype(T) && any(skip_instability_check, fieldtypes(T)))
+           !isstructtype(T) ||
+           any(skip_instability_check, fieldtypes(T))
 end
 
 function skip_instability_check(::Type{<:Tangent{Tfields}}) where {Tfields}
