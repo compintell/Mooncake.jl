@@ -1,5 +1,7 @@
 module MooncakeDynamicPPLExt
 
+__precompile__(false)
+
 using DynamicPPL
 using Mooncake
 import Mooncake: set_to_zero!!
