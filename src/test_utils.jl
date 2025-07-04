@@ -171,6 +171,9 @@ const DD_ENABLED = let uuid = get_uuid(@__MODULE__)
     mode ∉ (nothing, "disable")
 end
 
+# Note: When you run JET on code that actively has DispatchDoctor checking for type
+# instabilities, there are a lot of "errors" that get raised but which aren't real errors.
+# Therefore, we disable the JET tests when DispatchDoctor is enabled.
 test_opt(x...) = DD_ENABLED ? nothing : test_opt_internal(Shim(), x...)
 test_opt_internal(::Any, x...) = throw(error("Load JET to use this function."))
 
