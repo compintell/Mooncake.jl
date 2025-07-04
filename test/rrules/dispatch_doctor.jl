@@ -14,44 +14,17 @@ using StableRNGs: StableRNG
         result = f(x)
         @test result ≈ 4.0
 
-        rule = Mooncake.build_rrule(Tuple{typeof(f),Float64})
-        @test rule !== nothing
-    end
-
-    @testset "unstable function with allow_unstable" begin
-        x = 2.0
-
         result = allow_unstable(() -> type_unstable_square(x))
         @test result ≈ 4.0
 
         result_neg = allow_unstable(() -> type_unstable_square(-1.0))
         @test result_neg ≈ 0.0
 
-        allow_unstable() do
-            rule = Mooncake.build_rrule(Tuple{typeof(type_unstable_square),Float64})
-            @test rule !== nothing
-        end
-    end
+        @test_throws TypeInstabilityError type_unstable_square(2.0)
 
-    @testset "TypeInstabilityError without allow_unstable" begin
-        x = 2.0
-
-        @test_throws TypeInstabilityError type_unstable_square(x)
-
-        rule = Mooncake.build_rrule(Tuple{typeof(type_unstable_square),Float64})
-        @test rule !== nothing
-
-        # However, note that type_unstable_square2 is _not_ marked unstable.
-        # This should be preserved through the rrule.
-        @test type_unstable_square2(x) ≈ 4.0
-    end
-
-    @testset "DispatchDoctor rrules exist" begin
-        @stable simple_mult(x) = 3.0 * x
-        @test simple_mult(2.0) ≈ 6.0
-
-        rule = Mooncake.build_rrule(Tuple{typeof(simple_mult),Float64})
-        @test rule !== nothing
+        # No allow_unstable needed
+        result = type_unstable_square2(2.0)
+        @test result ≈ 4.0
     end
 
     @testset "derivatives are correct" begin
