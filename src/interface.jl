@@ -421,9 +421,12 @@ end
 Returns a cache used with [`value_and_pullback!!`](@ref). See that function for more info.
 """
 function prepare_pullback_cache(fx...; kwargs...)
-    # Handle forward pass's primal exceptions before rule construction (zero_tangent is not defined for Ptr)
-    arg_copy = deepcopy.(fx)
-    __exclude_unsupported_output((arg_copy[1])(arg_copy[2:end]...))
+    # Exclude specific primals; this needs to be handled before rule construction because
+    # `zero_tangent` is not defined for some argument types like `Ptr` and will error. 
+    _fx = deepcopy(fx)
+    _func, _args = _fx[1], _fx[2:end]
+    _y = _func(_args...)
+    __exclude_unsupported_output(_y)
 
     # Construct rule and tangents.
     rule = build_rrule(get_interpreter(), Tuple{map(_typeof, fx)...}; kwargs...)

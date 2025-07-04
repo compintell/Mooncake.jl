@@ -166,7 +166,7 @@ end
         circ_obj.data = circ_obj  # Self-referential struct
         push!(test_to_fail_cases, (identity, circ_obj))
 
-        # ---- include Ptr Unsupported Types ----
+        # ---- Exclude `Ptr` typed input arguments and returned values ----
         push!(test_to_fail_cases, ((x) -> Ptr{Float64}(x[1]), rand(UInt, 1)))
         push!(
             test_to_fail_cases,
