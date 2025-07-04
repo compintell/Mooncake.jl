@@ -143,7 +143,7 @@ end
         # Test when function outputs an invalid type. 
         test_to_fail_cases = []
 
-        # ---- Aliasing Cases ----
+        # Aliasing Cases
         alias_vector = [rand(Int64, 2), rand(Int64, 2)]
         alias_vector[2] = alias_vector[1]
         push!(test_to_fail_cases, (identity, alias_vector))
@@ -152,7 +152,7 @@ end
         alias_tuple = (alias_tuple[1], alias_tuple[1])
         push!(test_to_fail_cases, (identity, alias_tuple))
 
-        # ---- Circular Referencing Cases ----
+        # Circular Referencing Cases
         circular_vector = Any[rand(2)]
         push!(circular_vector, circular_vector)
         push!(test_to_fail_cases, (identity, circular_vector))
@@ -166,7 +166,7 @@ end
         circ_obj.data = circ_obj  # Self-referential struct
         push!(test_to_fail_cases, (identity, circ_obj))
 
-        # ---- Exclude `Ptr` typed input arguments and returned values ----
+        # Exclude `Ptr` typed input arguments and returned values
         push!(test_to_fail_cases, ((x) -> Ptr{Float64}(x[1]), rand(UInt, 1)))
         push!(
             test_to_fail_cases,

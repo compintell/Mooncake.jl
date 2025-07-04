@@ -196,9 +196,10 @@ end
 
 """
     __exclude_unsupported_output(y)
+    __exclude_func_with_unsupported_output(fx)
 
 Required for the robust design of [`value_and_pullback`](@ref), [`prepare_pullback_cache`](@ref).  
-Ensures that `y` contains no aliasing, circular references, `Ptr`s or non differentiable datatypes. 
+Ensures that `y` or returned value of `fx::Tuple{f, Targs...}` contains no aliasing, circular references, `Ptr`s or non differentiable datatypes. 
 In the forward pass f(args...) output can only return a "Tree" like datastructure with leaf nodes as primitive types.  
 Refer https://github.com/chalk-lab/Mooncake.jl/issues/517#issuecomment-2715202789 and related issue for details.  
 Internally calls [`__exclude_unsupported_output_internal!`](@ref).
@@ -207,6 +208,13 @@ The design is modelled after `zero_tangent`.
 function __exclude_unsupported_output(y::T) where {T}
     __exclude_unsupported_output_internal!(y, Set{UInt}())
     return nothing
+end
+
+function __exclude_func_with_unsupported_output(fx)
+    _fx = deepcopy(fx)
+    _func, _args = _fx[1], _fx[2:end]
+    _y = _func(_args...)
+    __exclude_unsupported_output(_y)
 end
 
 """
@@ -421,12 +429,9 @@ end
 Returns a cache used with [`value_and_pullback!!`](@ref). See that function for more info.
 """
 function prepare_pullback_cache(fx...; kwargs...)
-    # Exclude specific primals; this needs to be handled before rule construction because
-    # `zero_tangent` is not defined for some argument types like `Ptr` and will error. 
-    _fx = deepcopy(fx)
-    _func, _args = _fx[1], _fx[2:end]
-    _y = _func(_args...)
-    __exclude_unsupported_output(_y)
+
+    # Check that the output of `fx` is supported.
+    __exclude_func_with_unsupported_output(fx)
 
     # Construct rule and tangents.
     rule = build_rrule(get_interpreter(), Tuple{map(_typeof, fx)...}; kwargs...)
