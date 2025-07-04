@@ -161,7 +161,7 @@ using Mooncake:
     rdata_type,
     rdata
 using Preferences: load_preference, get_uuid
-using DispatchDoctor: type_instability, allow_unstable
+using DispatchDoctor: type_instability, allow_unstable as _allow_unstable
 
 struct Shim end
 
@@ -171,13 +171,15 @@ const DD_ENABLED = let uuid = get_uuid(@__MODULE__)
     mode ∉ (nothing, "disable")
 end
 
+allow_unstable(f) = @static DD_ENABLED ? _allow_unstable(f) : f()
+
 # Note: When you run JET on code that actively has DispatchDoctor checking for type
 # instabilities, there are a lot of "errors" that get raised but which aren't real errors.
 # Therefore, we disable the JET tests when DispatchDoctor is enabled.
-test_opt(x...) = DD_ENABLED ? nothing : test_opt_internal(Shim(), x...)
+test_opt(x...) = @static DD_ENABLED ? nothing : test_opt_internal(Shim(), x...)
 test_opt_internal(::Any, x...) = throw(error("Load JET to use this function."))
 
-report_opt(tt) = DD_ENABLED ? nothing : report_opt_internal(Shim(), tt)
+report_opt(tt) = @static DD_ENABLED ? nothing : report_opt_internal(Shim(), tt)
 report_opt_internal(::Any, tt) = throw(error("Load JET to use this function."))
 
 """
@@ -1031,6 +1033,9 @@ function test_set_tangent_field!_correctness(t1::T, t2::T) where {T<:MutableTang
 end
 
 function check_allocs(f, x...)
+    # Note: When you are running DispatchDoctor checking for type instabilities, there can
+    # be extra allocations which are not "real". So when DD is enabled,
+    # we skip the allocation checks.
     if DD_ENABLED
         allow_unstable_given_unstable_type(typeof(x)) do
             f(x...)
