@@ -313,7 +313,7 @@ function _copy_to_output!!(dst::P, src::P) where {P}
 
         # when immutable struct object created by non initializing inner constructor. (Base.deepcopy misses this out)
         !isassigned(flds, 1) && return src
-        return ccall(:jl_new_structv, Any, (Any, Ptr{Any}, UInt32), P, flds, nf)
+        return ccall(:jl_new_structv, Any, (Any, Ptr{Any}, UInt32), P, flds, nf)::P
     end
 end
 
@@ -428,7 +428,7 @@ end
 
 Returns a cache used with [`value_and_pullback!!`](@ref). See that function for more info.
 """
-function prepare_pullback_cache(fx...; kwargs...)
+@unstable function prepare_pullback_cache(fx...; kwargs...)
 
     # Check that the output of `fx` is supported.
     __exclude_func_with_unsupported_output(fx)
@@ -503,7 +503,7 @@ end
 
 Returns a cache used with [`value_and_gradient!!`](@ref). See that function for more info.
 """
-function prepare_gradient_cache(fx...; kwargs...)
+@unstable function prepare_gradient_cache(fx...; kwargs...)
     rule = build_rrule(fx...; kwargs...)
     tangents = map(zero_tangent, fx)
     y, rvs!! = rule(map((x, dx) -> CoDual(x, fdata(dx)), fx, tangents)...)

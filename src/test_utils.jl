@@ -160,13 +160,26 @@ using Mooncake:
     NoRData,
     rdata_type,
     rdata
+using Preferences: load_preference, get_uuid
+using DispatchDoctor: type_instability, allow_unstable as _allow_unstable
 
 struct Shim end
 
-test_opt(x...) = test_opt_internal(Shim(), x...)
+const DD_ENABLED = let uuid = get_uuid(@__MODULE__)
+    mode = load_preference(uuid, "dispatch_doctor_mode")
+
+    mode ∉ (nothing, "disable")
+end
+
+allow_unstable(f) = @static DD_ENABLED ? _allow_unstable(f) : f()
+
+# Note: When you run JET on code that actively has DispatchDoctor checking for type
+# instabilities, there are a lot of "errors" that get raised but which aren't real errors.
+# Therefore, we disable the JET tests when DispatchDoctor is enabled.
+test_opt(x...) = @static DD_ENABLED ? nothing : test_opt_internal(Shim(), x...)
 test_opt_internal(::Any, x...) = throw(error("Load JET to use this function."))
 
-report_opt(tt) = report_opt_internal(Shim(), tt)
+report_opt(tt) = @static DD_ENABLED ? nothing : report_opt_internal(Shim(), tt)
 report_opt_internal(::Any, tt) = throw(error("Load JET to use this function."))
 
 """
@@ -729,7 +742,9 @@ function test_rule(
 end
 
 function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)
-    test_cases, memory = Mooncake.generate_hand_written_rrule!!_test_cases(rng_ctor, v)
+    test_cases, memory = allow_unstable() do
+        Mooncake.generate_hand_written_rrule!!_test_cases(rng_ctor, v)
+    end
     GC.@preserve memory @testset "$f, $(_typeof(x))" for (
         interface_only, perf_flag, _, f, x...
     ) in test_cases
@@ -739,7 +754,9 @@ function run_hand_written_rrule!!_test_cases(rng_ctor, v::Val)
 end
 
 function run_derived_rrule!!_test_cases(rng_ctor, v::Val)
-    test_cases, memory = Mooncake.generate_derived_rrule!!_test_cases(rng_ctor, v)
+    test_cases, memory = allow_unstable() do
+        Mooncake.generate_derived_rrule!!_test_cases(rng_ctor, v)
+    end
     GC.@preserve memory @testset "$f, $(typeof(x))" for (
         interface_only, perf_flag, _, f, x...
     ) in test_cases
@@ -751,6 +768,38 @@ end
 function run_rrule!!_test_cases(rng_ctor, v::Val)
     run_hand_written_rrule!!_test_cases(rng_ctor, v)
     return run_derived_rrule!!_test_cases(rng_ctor, v)
+end
+
+"""
+    allow_unstable_given_unstable_type(f::F, ::Type{T}) where {F,T}
+
+Automatically skip instability checks for types which are themselves unstable.
+Only relevant if `DD_ENABLED` is `true`.
+"""
+function allow_unstable_given_unstable_type(f::F, ::Type{T}) where {F,T}
+    @static if !DD_ENABLED
+        return f()
+    else
+        if skip_instability_check(T)
+            return allow_unstable(f)
+        else
+            return f()
+        end
+    end
+end
+function skip_instability_check(::Type{T}) where {T}
+    return type_instability(T) ||
+           (isstructtype(T) && any(skip_instability_check, fieldtypes(T)))
+end
+
+function skip_instability_check(::Type{<:Tangent{Tfields}}) where {Tfields}
+    return skip_instability_check(Tfields)
+end
+function skip_instability_check(::Type{NT}) where {NT<:NamedTuple}
+    return true  # UnionAll
+end
+function skip_instability_check(::Type{NT}) where {K,V,NT<:NamedTuple{K,V}}
+    return skip_instability_check(V)
 end
 
 """
@@ -838,6 +887,13 @@ at any given point in time, but the best way to verify that you've implemented e
 simply to run this function, and see whether it errors / produces a failing test.
 """
 function test_tangent_interface(rng::AbstractRNG, p::P; interface_only=false) where {P}
+    @nospecialize rng p
+    return allow_unstable_given_unstable_type(P) do
+        _test_tangent_interface(rng, p; interface_only)
+    end
+end
+
+function _test_tangent_interface(rng::AbstractRNG, p::P; interface_only=false) where {P}
     @nospecialize rng p
 
     # Define helpers which call internal methods directly. Doing this ensures that we know
@@ -974,7 +1030,18 @@ function test_set_tangent_field!_correctness(t1::T, t2::T) where {T<:MutableTang
     end
 end
 
-check_allocs(f, x...) = check_allocs_internal(Shim(), f, x...)
+function check_allocs(f, x...)
+    # Note: When you are running DispatchDoctor checking for type instabilities, there can
+    # be extra allocations which are not "real". So when DD is enabled,
+    # we skip the allocation checks.
+    if DD_ENABLED
+        allow_unstable_given_unstable_type(typeof(x)) do
+            f(x...)
+        end
+    else
+        check_allocs_internal(Shim(), f, x...)
+    end
+end
 function check_allocs_internal(::Any, f::F, x::Vararg{Any,N}) where {F,N}
     throw(error("Load AllocCheck.jl to use this functionality."))
 end
@@ -1087,7 +1154,15 @@ end
 
 # Function barrier to ensure inference in value types.
 function count_allocs(f::F, x::Vararg{Any,N}) where {F,N}
-    @allocations f(x...)
+    @static if DD_ENABLED
+        # If DispatchDoctor is enabled on this package, the allocations are meaningless,
+        # so we return 0 instead.
+        allow_unstable_given_unstable_type(typeof(x)) do
+            (f(x...); 0)
+        end
+    else
+        @allocations f(x...)
+    end
 end
 
 # Returns true if both `zero_tangent` and `randn_tangent` should allocate when run on
@@ -1148,7 +1223,14 @@ Ensure that [`test_tangent_interface`](@ref) runs for `p` before running these t
 - [`Mooncake.tangent`](@ref) (binary method)
 """
 function test_tangent_splitting(rng::AbstractRNG, p::P; test_opt_flag=true) where {P}
+    return allow_unstable_given_unstable_type(P) do
+        _test_tangent_splitting_internal(rng, p; test_opt_flag)
+    end
+end
 
+function _test_tangent_splitting_internal(
+    rng::AbstractRNG, p::P; test_opt_flag=true
+) where {P}
     # Check that fdata_type and rdata_type run and produce types.
     T = tangent_type(P)
     F = Mooncake.fdata_type(T)

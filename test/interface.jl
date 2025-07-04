@@ -1,8 +1,4 @@
-function count_allocs(fargs::P) where {P<:Tuple}
-    f, args... = fargs
-    f(args...) # warmup
-    return @allocations f(args...)
-end
+using Mooncake.TestUtils: count_allocs
 
 @testset "interface" begin
     @testset "$(typeof((f, x...)))" for (ȳ, f, x...) in Any[
@@ -56,7 +52,7 @@ end
             for (arg, darg) in zip(fargs, _dfargs)
                 @test tangent_type(typeof(arg)) == typeof(darg)
             end
-            alloc_count = count_allocs((value_and_gradient!!, cache, fargs...))
+            alloc_count = count_allocs(value_and_gradient!!, cache, fargs...)
             if alloc_count > 0
                 @test_broken alloc_count == 0
             else
@@ -100,7 +96,7 @@ end
             for (arg, darg) in zip(fargs, _dfargs)
                 @test tangent_type(typeof(arg)) == typeof(darg)
             end
-            alloc_count = count_allocs((value_and_pullback!!, cache, ȳ, fargs...))
+            alloc_count = count_allocs(value_and_pullback!!, cache, ȳ, fargs...)
             if alloc_count > 0
                 @test_broken alloc_count == 0
             else

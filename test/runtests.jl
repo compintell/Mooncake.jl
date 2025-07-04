@@ -25,6 +25,13 @@ include("front_matter.jl")
         include("config.jl")
         include("developer_tools.jl")
         include("test_utils.jl")
+    elseif test_group == "basic-dd"
+        # A minimal set of tests for DispatchDoctor to verify stability
+        @test Mooncake.TestUtils.DD_ENABLED
+        include("utils.jl")
+        include("tangents.jl")
+        include("codual.jl")
+        include("stack.jl")
     elseif test_group == "rrules/array_legacy"
         include(joinpath("rrules", "array_legacy.jl"))
     elseif test_group == "rrules/avoiding_non_differentiable_code"
@@ -63,6 +70,8 @@ include("front_matter.jl")
         end
     elseif test_group == "rrules/performance_patches"
         include(joinpath("rrules", "performance_patches.jl"))
+    elseif test_group == "rrules/dispatch_doctor"
+        include(joinpath("rrules", "dispatch_doctor.jl"))
     else
         throw(error("test_group=$(test_group) is not recognised"))
     end
