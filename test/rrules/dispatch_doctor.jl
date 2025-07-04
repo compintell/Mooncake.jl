@@ -1,6 +1,5 @@
 using DispatchDoctor: @stable, @unstable, allow_unstable, TypeInstabilityError
 using Test
-using Mooncake
 using StableRNGs: StableRNG
 
 @stable stable_square(x) = x^2
